@@ -1,7 +1,9 @@
 use rusqlite::{params, Connection};
 use crate::context;
+use anyhow::Context as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -16,6 +18,30 @@ pub struct SessionRecord {
   pub title: String,
   pub created_at: i64,
   pub updated_at: i64,
+}
+
+#[derive(serde::Serialize)]
+pub struct ThreadRecord {
+  pub id: String,
+  pub title: Option<String>,
+  pub engine_id: String,
+  pub model_id: Option<String>,
+  pub workspace_path: Option<String>,
+  pub community_id: Option<String>,
+  pub created_at: i64,
+  pub updated_at: i64,
+  pub last_event_at: Option<i64>,
+}
+
+#[derive(serde::Serialize)]
+pub struct EventRecord {
+  pub id: String,
+  pub thread_id: String,
+  pub r#type: String,
+  pub created_at: i64,
+  pub text: Option<String>,
+  pub payload_json: Option<String>,
+  pub blob_ref: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -34,24 +60,6 @@ pub struct ProjectRecord {
   pub git_root: Option<String>,
   pub git_remote: Option<String>,
   pub fingerprint: String,
-  pub created_at: i64,
-  pub updated_at: i64,
-}
-
-#[derive(serde::Serialize)]
-pub struct ToolCallRecord {
-  pub id: String,
-  pub session_id: String,
-  pub tool_name: String,
-  pub args_json: String,
-  pub status: String,
-  pub output_summary_json: Option<String>,
-  pub stdout_excerpt: Option<String>,
-  pub stderr_excerpt: Option<String>,
-  pub exit_code: Option<i32>,
-  pub duration_ms: Option<i64>,
-  pub raw_output_file_id: Option<String>,
-  pub egress_policy: String,
   pub created_at: i64,
   pub updated_at: i64,
 }
@@ -92,129 +100,130 @@ pub struct MemoryNoteRecord {
 }
 
 #[derive(serde::Serialize)]
-pub struct AuditRecord {
+pub struct PersonalMemoryItemRecord {
   pub id: String,
-  pub session_id: String,
-  pub event_type: String,
-  pub tool_name: Option<String>,
-  pub risk_level: String,
-  pub user_approved: i64,
+  pub content: String,
+  pub scope: String,
+  pub scope_id: Option<String>,
+  pub pinned: i64,
+  pub provenance_event_id: Option<String>,
   pub created_at: i64,
-}
-
-fn map_tool_call_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ToolCallRecord> {
-  Ok(ToolCallRecord {
-    id: row.get(0)?,
-    session_id: row.get(1)?,
-    tool_name: row.get(2)?,
-    args_json: row.get(3)?,
-    status: row.get(4)?,
-    output_summary_json: row.get(5)?,
-    stdout_excerpt: row.get(6)?,
-    stderr_excerpt: row.get(7)?,
-    exit_code: row.get(8)?,
-    duration_ms: row.get(9)?,
-    raw_output_file_id: row.get(10)?,
-    egress_policy: row.get(11)?,
-    created_at: row.get(12)?,
-    updated_at: row.get(13)?,
-  })
+  pub updated_at: i64,
 }
 
 pub fn init_db(db_dir: &Path, key: &str) -> anyhow::Result<DbState> {
   fs::create_dir_all(db_dir)?;
   let db_path = db_dir.join("arx.db");
-  let conn = open_conn(&db_path, key)?;
-  run_migrations(&conn)?;
+  init_db_at(&db_path, key)
+}
+
+pub fn init_db_at(db_path: &Path, key: &str) -> anyhow::Result<DbState> {
+  let conn = open_conn(db_path, key)?;
+  run_migrations(&conn).with_context(|| {
+    format!(
+      "db migrations failed for {}",
+      db_path.to_string_lossy().to_string()
+    )
+  })?;
 
   Ok(DbState {
-    db_path,
+    db_path: db_path.to_path_buf(),
     key: key.to_string(),
   })
 }
 
+pub fn backup_db_files(db_dir: &Path) -> anyhow::Result<bool> {
+  let db_path = db_dir.join("arx.db");
+  if !db_path.exists() {
+    return Ok(true);
+  }
+  let ts = now_ts();
+  for suffix in ["", "-wal", "-shm"] {
+    let from = db_dir.join(format!("arx.db{}", suffix));
+    if !from.exists() {
+      continue;
+    }
+    let to = db_dir.join(format!("arx.db.bak.{}{}", ts, suffix));
+    match fs::rename(&from, &to) {
+      Ok(()) => {}
+      Err(rename_err) => {
+        fs::copy(&from, &to).with_context(|| {
+          format!(
+            "failed to back up DB file {} to {} after rename error: {rename_err}",
+            from.to_string_lossy(),
+            to.to_string_lossy()
+          )
+        })?;
+        fs::remove_file(&from).with_context(|| {
+          format!(
+            "failed to remove original DB file after backup ({}); the DB may be locked",
+            from.to_string_lossy()
+          )
+        })?;
+      }
+    }
+  }
+  Ok(true)
+}
+
 fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
-  conn.execute_batch(
-    "
+  migrate_legacy_personal_memory_items(conn)
+    .context("migrations: migrate legacy personal_memory_items schema")?;
+  migrate_threads_harness_to_engine(conn)
+    .context("migrations: migrate threads harness_id to engine_id/model_id")?;
+
+  conn
+    .execute_batch(
+      "
     CREATE TABLE IF NOT EXISTS ui_state (
       key TEXT PRIMARY KEY,
       value TEXT,
       updated_at INTEGER
     );
 
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS session_state (
-      session_id TEXT PRIMARY KEY,
-      last_message_id TEXT,
-      last_message_at INTEGER,
-      last_response_id TEXT,
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS session_tags (
-      session_id TEXT NOT NULL,
-      community_id TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      UNIQUE(session_id, community_id),
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      role TEXT NOT NULL,
-      content_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS tool_calls (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      tool_name TEXT NOT NULL,
-      args_json TEXT NOT NULL,
-      status TEXT NOT NULL,
-      output_summary_json TEXT,
-      stdout_excerpt TEXT,
-      stderr_excerpt TEXT,
-      exit_code INTEGER,
-      duration_ms INTEGER,
-      raw_output_file_id TEXT,
-      egress_policy TEXT NOT NULL DEFAULT 'redact_then_send',
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      tool_name TEXT,
-      risk_level TEXT NOT NULL,
-      user_approved INTEGER NOT NULL,
-      args_hash TEXT,
-      command_preview_redacted TEXT,
-      command_full_encrypted TEXT,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
+    -- Legacy internal tool tables removed for MVP (threads/events are the only truth).
 
     CREATE TABLE IF NOT EXISTS personal_memory_items (
       id TEXT PRIMARY KEY,
-      key TEXT NOT NULL,
-      value TEXT NOT NULL,
+      content TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      scope_id TEXT,
+      pinned INTEGER DEFAULT 0,
+      provenance_event_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_personal_memory_items_scope_updated_at
+      ON personal_memory_items(scope, scope_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_personal_memory_items_pinned_updated_at
+      ON personal_memory_items(pinned DESC, updated_at DESC);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS personal_memory_items_fts
+    USING fts5(
+      content,
+      content='personal_memory_items',
+      content_rowid='rowid'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS personal_memory_items_ai AFTER INSERT ON personal_memory_items BEGIN
+      INSERT INTO personal_memory_items_fts(rowid, content)
+      VALUES (new.rowid, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS personal_memory_items_ad AFTER DELETE ON personal_memory_items BEGIN
+      INSERT INTO personal_memory_items_fts(personal_memory_items_fts, rowid, content)
+      VALUES('delete', old.rowid, old.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS personal_memory_items_au AFTER UPDATE ON personal_memory_items BEGIN
+      INSERT INTO personal_memory_items_fts(personal_memory_items_fts, rowid, content)
+      VALUES('delete', old.rowid, old.content);
+      INSERT INTO personal_memory_items_fts(rowid, content)
+      VALUES (new.rowid, new.content);
+    END;
+
+    -- Legacy UI feature: local notes (not part of MVP contract truth yet).
     CREATE TABLE IF NOT EXISTS memory_notes (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -249,6 +258,7 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       VALUES (new.rowid, new.title, new.body_md);
     END;
 
+    -- Legacy UI feature: workspace/project cache (threads.workspace_path is the contract primitive).
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT,
@@ -261,6 +271,7 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       UNIQUE(fingerprint)
     );
 
+    -- Legacy UI feature: template-backed blocks (contract target is flat personal_memory_items).
     CREATE TABLE IF NOT EXISTS memory_blocks (
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
@@ -277,53 +288,368 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       UNIQUE(label, scope, scope_id)
     );
 
-    CREATE TABLE IF NOT EXISTS context_injections (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      trigger_message_id TEXT,
-      project_id TEXT,
-      injected_blocks_json TEXT NOT NULL,
-      injected_tool_calls_json TEXT NOT NULL,
-      injected_notes_json TEXT NOT NULL,
-      token_estimate INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-    );
+    -- ============================================================
+    -- Contract-aligned schema (MVP ground truth)
+    -- ============================================================
 
-    CREATE TABLE IF NOT EXISTS files (
+    CREATE TABLE IF NOT EXISTS threads (
       id TEXT PRIMARY KEY,
-      owner_user_id TEXT NOT NULL,
-      session_id TEXT,
+      title TEXT,
+      engine_id TEXT NOT NULL,
+      model_id TEXT,
+      workspace_path TEXT,
       community_id TEXT,
-      kind TEXT NOT NULL,
-      local_path TEXT,
-      cloud_object_key TEXT,
-      sha256 TEXT,
-      size_bytes INTEGER NOT NULL,
-      pinned_local INTEGER NOT NULL,
-      cache_evictable INTEGER NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
+      updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
+      last_event_at INTEGER
     );
-    ",
-  )?;
 
-  let _ = conn.execute("ALTER TABLE session_state ADD COLUMN last_response_id TEXT", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN output_summary_json TEXT", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN stdout_excerpt TEXT", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN stderr_excerpt TEXT", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN exit_code INTEGER", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN duration_ms INTEGER", []);
-  let _ = conn.execute("ALTER TABLE tool_calls ADD COLUMN raw_output_file_id TEXT", []);
-  let _ = conn.execute(
-    "ALTER TABLE tool_calls ADD COLUMN egress_policy TEXT NOT NULL DEFAULT 'redact_then_send'",
-    [],
-  );
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      text TEXT,
+      payload_json TEXT,
+      blob_ref TEXT,
+      FOREIGN KEY(thread_id) REFERENCES threads(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_thread_created_at
+      ON events(thread_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_events_thread_type_created_at
+      ON events(thread_id, type, created_at);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
+    USING fts5(
+      text,
+      thread_id UNINDEXED,
+      content='events',
+      content_rowid='rowid'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS events_ai AFTER INSERT ON events BEGIN
+      INSERT INTO events_fts(rowid, text, thread_id)
+      VALUES (new.rowid, new.text, new.thread_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS events_ad AFTER DELETE ON events BEGIN
+      INSERT INTO events_fts(events_fts, rowid, text, thread_id)
+      VALUES('delete', old.rowid, old.text, old.thread_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS events_au AFTER UPDATE ON events BEGIN
+      INSERT INTO events_fts(events_fts, rowid, text, thread_id)
+      VALUES('delete', old.rowid, old.text, old.thread_id);
+      INSERT INTO events_fts(rowid, text, thread_id)
+      VALUES (new.rowid, new.text, new.thread_id);
+    END;
+
+    CREATE TABLE IF NOT EXISTS community_artifacts_cache (
+      artifact_id TEXT PRIMARY KEY,
+      community_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body_md TEXT NOT NULL,
+      visibility TEXT NOT NULL,
+      injectable INTEGER NOT NULL,
+      pinned INTEGER NOT NULL,
+      helpful_count INTEGER DEFAULT 0,
+      unhelpful_count INTEGER DEFAULT 0,
+      author_name TEXT,
+      content_hash TEXT,
+      fetched_at INTEGER NOT NULL
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS community_artifacts_cache_fts
+    USING fts5(
+      title,
+      body_md,
+      content='community_artifacts_cache',
+      content_rowid='rowid'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_ai AFTER INSERT ON community_artifacts_cache BEGIN
+      INSERT INTO community_artifacts_cache_fts(rowid, title, body_md)
+      VALUES (new.rowid, new.title, new.body_md);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_ad AFTER DELETE ON community_artifacts_cache BEGIN
+      INSERT INTO community_artifacts_cache_fts(community_artifacts_cache_fts, rowid, title, body_md)
+      VALUES('delete', old.rowid, old.title, old.body_md);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_au AFTER UPDATE ON community_artifacts_cache BEGIN
+      INSERT INTO community_artifacts_cache_fts(community_artifacts_cache_fts, rowid, title, body_md)
+      VALUES('delete', old.rowid, old.title, old.body_md);
+      INSERT INTO community_artifacts_cache_fts(rowid, title, body_md)
+      VALUES (new.rowid, new.title, new.body_md);
+    END;
+    ",
+    )
+    .context("migrations: create/update tables + FTS triggers")?;
+
+  // Old ALTERs left intentionally removed; legacy tables may still exist in older DBs.
   let _ = conn.execute(
     "INSERT INTO memory_notes_fts(memory_notes_fts) VALUES('rebuild')",
     [],
   );
 
+  backfill_contract_tables(conn).context("migrations: backfill threads/events from legacy tables")?;
+
   Ok(())
+}
+
+fn migrate_legacy_personal_memory_items(conn: &Connection) -> anyhow::Result<()> {
+  if !table_exists(conn, "personal_memory_items")? {
+    return Ok(());
+  }
+
+  let mut stmt = conn.prepare("PRAGMA table_info('personal_memory_items')")?;
+  let cols = stmt
+    .query_map([], |row| row.get::<_, String>(1))?
+    .collect::<Result<Vec<_>, _>>()?;
+
+  // Contract schema already present.
+  if cols.iter().any(|c| c == "content") {
+    return Ok(());
+  }
+
+  // Known legacy schema (key/value).
+  let has_key = cols.iter().any(|c| c == "key");
+  let has_value = cols.iter().any(|c| c == "value");
+  if !(has_key && has_value) {
+    // Unknown legacy shape; leave untouched.
+    return Ok(());
+  }
+
+  if table_exists(conn, "personal_memory_items_kv")? {
+    return Ok(());
+  }
+
+  conn.execute(
+    "ALTER TABLE personal_memory_items RENAME TO personal_memory_items_kv",
+    [],
+  )?;
+
+  Ok(())
+}
+
+fn table_exists(conn: &Connection, name: &str) -> anyhow::Result<bool> {
+  let mut stmt = conn.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+  )?;
+  let result = stmt.query_row(params![name], |row| row.get::<_, i64>(0));
+  match result {
+    Ok(_) => Ok(true),
+    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+    Err(err) => Err(err.into()),
+  }
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> anyhow::Result<bool> {
+  let mut stmt = conn.prepare(&format!("PRAGMA table_info('{}')", table))?;
+  let cols = stmt
+    .query_map([], |row| row.get::<_, String>(1))?
+    .collect::<Result<Vec<_>, _>>()?;
+  Ok(cols.iter().any(|c| c == column))
+}
+
+fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
+  if !table_exists(conn, "threads")? {
+    return Ok(());
+  }
+
+  let has_engine_id = column_exists(conn, "threads", "engine_id")?;
+  let has_harness_id = column_exists(conn, "threads", "harness_id")?;
+  let has_model_id = column_exists(conn, "threads", "model_id")?;
+
+  // Already in contract shape; add model_id if older DB predates OpenRouter support.
+  if has_engine_id {
+    if !has_model_id {
+      let _ = conn.execute("ALTER TABLE threads ADD COLUMN model_id TEXT", []);
+    }
+    return Ok(());
+  }
+
+  // Migrate Claude's harness_id schema back to contract engine_id.
+  if has_harness_id {
+    conn.execute_batch(
+      "
+      CREATE TABLE threads_new (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        engine_id TEXT NOT NULL,
+        model_id TEXT,
+        workspace_path TEXT,
+        community_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
+        updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
+        last_event_at INTEGER
+      );
+
+      INSERT INTO threads_new (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+      SELECT
+        id,
+        title,
+        CASE
+          WHEN harness_id IS NOT NULL AND TRIM(harness_id) <> '' THEN harness_id
+          WHEN model_id IS NOT NULL AND TRIM(model_id) <> '' THEN 'openrouter_chat'
+          ELSE 'codex_cli'
+        END,
+        model_id,
+        workspace_path,
+        community_id,
+        created_at,
+        updated_at,
+        last_event_at
+      FROM threads;
+
+      DROP TABLE threads;
+
+      ALTER TABLE threads_new RENAME TO threads;
+      "
+    )?;
+  }
+
+  Ok(())
+}
+
+fn backfill_contract_tables(conn: &Connection) -> anyhow::Result<()> {
+  let has_sessions = table_exists(conn, "sessions")?;
+  let has_messages = table_exists(conn, "messages")?;
+
+  // Threads: 1:1 with legacy sessions (same id), best-effort defaults.
+  if has_sessions {
+    if table_exists(conn, "session_state")? {
+      conn.execute(
+        "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+         SELECT
+           s.id,
+           s.title,
+           'codex_cli',
+           NULL,
+           NULL,
+           NULL,
+           COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+           COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+           COALESCE(ss.last_message_at, COALESCE(s.updated_at, s.created_at))
+         FROM sessions s
+         LEFT JOIN session_state ss ON ss.session_id = s.id
+         WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
+        [],
+      )
+      .context("backfill: insert threads from sessions + session_state")?;
+    } else {
+      conn.execute(
+        "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+         SELECT
+           s.id,
+           s.title,
+           'codex_cli',
+           NULL,
+           NULL,
+           NULL,
+           COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+           COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+           COALESCE(s.updated_at, s.created_at)
+         FROM sessions s
+         WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
+        [],
+      )
+      .context("backfill: insert threads from sessions")?;
+    }
+  }
+
+  // Events: mirror legacy messages. Uses the message id as event id for dedupe.
+  if has_messages {
+    let mut stmt = conn
+      .prepare(
+      "SELECT id, session_id, role, content_json, created_at
+       FROM messages
+       ORDER BY created_at ASC",
+      )
+      .context("backfill: prepare legacy messages query")?;
+    let rows = stmt.query_map([], |row| {
+      Ok((
+        row.get::<_, String>(0)?,
+        row.get::<_, String>(1)?,
+        row.get::<_, String>(2)?,
+        row.get::<_, String>(3)?,
+        row.get::<_, i64>(4)?,
+      ))
+    })?;
+
+    for row in rows {
+      let (id, thread_id, role, content_json, created_at) = row?;
+      // Dedupe: if an event already exists with this id, skip.
+      let exists = conn.query_row(
+        "SELECT 1 FROM events WHERE id = ?1 LIMIT 1",
+        params![id],
+        |_r| Ok(true),
+      );
+      if matches!(exists, Ok(true)) {
+        continue;
+      }
+
+      let event_type = match role.trim().to_ascii_lowercase().as_str() {
+        "user" => "user_message",
+        "assistant" => "assistant_message",
+        _ => "engine_io_chunk",
+      };
+
+      let text = extract_text_from_content_json(&content_json);
+      let payload = serde_json::json!({
+        "role": role,
+        "content": serde_json::from_str::<serde_json::Value>(&content_json).unwrap_or(serde_json::Value::Null)
+      });
+      let payload_json = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
+
+      conn.execute(
+        "INSERT INTO events (id, thread_id, type, created_at, text, payload_json, blob_ref)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)",
+        params![id, thread_id, event_type, created_at, text.as_deref(), payload_json],
+      )
+      .with_context(|| format!("backfill: insert event from legacy message {id}"))?;
+    }
+  }
+
+  // Ensure last_event_at is consistent with events.
+  conn.execute(
+    "UPDATE threads
+     SET last_event_at = (
+       SELECT MAX(created_at) FROM events e WHERE e.thread_id = threads.id
+     )",
+    [],
+  )
+  .context("backfill: set threads.last_event_at from events")?;
+
+  // Some legacy DBs may have NULL timestamps even if columns are now NOT NULL.
+  conn.execute(
+    "UPDATE threads
+     SET created_at = COALESCE(created_at, updated_at, last_event_at, CAST(strftime('%s','now') AS INTEGER))",
+    [],
+  )
+  .context("backfill: heal threads.created_at NULLs")?;
+
+  // Keep updated_at >= last_event_at for sorting/resume semantics.
+  conn.execute(
+    "UPDATE threads
+     SET updated_at = COALESCE(MAX(updated_at, last_event_at), created_at, CAST(strftime('%s','now') AS INTEGER))",
+    [],
+  )
+  .context("backfill: heal threads.updated_at NULLs")?;
+
+  Ok(())
+}
+
+fn extract_text_from_content_json(content_json: &str) -> Option<String> {
+  let value: serde_json::Value = serde_json::from_str(content_json).ok()?;
+  value
+    .get("text")
+    .and_then(|v| v.as_str())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
 }
 
 pub fn now_ts() -> i64 {
@@ -331,6 +657,150 @@ pub fn now_ts() -> i64 {
   now.duration_since(std::time::UNIX_EPOCH)
     .unwrap_or_default()
     .as_secs() as i64
+}
+
+pub fn create_personal_memory_item(
+  conn: &Connection,
+  content: &str,
+  scope: &str,
+  scope_id: Option<&str>,
+  pinned: bool,
+  provenance_event_id: Option<&str>,
+) -> anyhow::Result<PersonalMemoryItemRecord> {
+  let trimmed = content.trim();
+  if trimmed.is_empty() {
+    return Err(anyhow::anyhow!("content is required"));
+  }
+  let id = Uuid::new_v4().to_string();
+  let ts = now_ts();
+  conn.execute(
+    "INSERT INTO personal_memory_items (id, content, scope, scope_id, pinned, provenance_event_id, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+    params![
+      id,
+      trimmed,
+      scope.trim(),
+      scope_id,
+      if pinned { 1 } else { 0 },
+      provenance_event_id,
+      ts,
+      ts
+    ],
+  )?;
+
+  Ok(PersonalMemoryItemRecord {
+    id,
+    content: trimmed.to_string(),
+    scope: scope.trim().to_string(),
+    scope_id: scope_id.map(|v| v.to_string()),
+    pinned: if pinned { 1 } else { 0 },
+    provenance_event_id: provenance_event_id.map(|v| v.to_string()),
+    created_at: ts,
+    updated_at: ts,
+  })
+}
+
+pub fn list_personal_memory_items(
+  conn: &Connection,
+  scope: Option<&str>,
+  scope_id: Option<&str>,
+  limit: usize,
+) -> anyhow::Result<Vec<PersonalMemoryItemRecord>> {
+  let mut sql =
+    "SELECT id, content, scope, scope_id, pinned, provenance_event_id, created_at, updated_at
+     FROM personal_memory_items"
+      .to_string();
+  let mut where_clauses: Vec<&str> = Vec::new();
+  if scope.is_some() {
+    where_clauses.push("scope = ?1");
+  }
+  if scope_id.is_some() {
+    where_clauses.push("scope_id = ?2");
+  }
+  if !where_clauses.is_empty() {
+    sql.push_str(" WHERE ");
+    sql.push_str(&where_clauses.join(" AND "));
+  }
+  sql.push_str(" ORDER BY pinned DESC, updated_at DESC LIMIT ?3");
+
+  let mut stmt = conn.prepare(&sql)?;
+  let rows = stmt.query_map(
+    params![scope, scope_id, limit as i64],
+    |row| {
+      Ok(PersonalMemoryItemRecord {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        scope: row.get(2)?,
+        scope_id: row.get(3)?,
+        pinned: row.get(4)?,
+        provenance_event_id: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+      })
+    },
+  )?;
+
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
+}
+
+pub fn search_personal_memory_items(
+  conn: &Connection,
+  query: &str,
+  limit: usize,
+) -> anyhow::Result<Vec<PersonalMemoryItemRecord>> {
+  let q = query.trim();
+  if q.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let mut stmt = conn.prepare(
+    "SELECT p.id, p.content, p.scope, p.scope_id, p.pinned, p.provenance_event_id, p.created_at, p.updated_at
+     FROM personal_memory_items_fts fts
+     JOIN personal_memory_items p ON p.rowid = fts.rowid
+     WHERE personal_memory_items_fts MATCH ?1
+     ORDER BY p.pinned DESC, p.updated_at DESC
+     LIMIT ?2",
+  )?;
+  let rows = stmt.query_map(params![q, limit as i64], |row| {
+    Ok(PersonalMemoryItemRecord {
+      id: row.get(0)?,
+      content: row.get(1)?,
+      scope: row.get(2)?,
+      scope_id: row.get(3)?,
+      pinned: row.get(4)?,
+      provenance_event_id: row.get(5)?,
+      created_at: row.get(6)?,
+      updated_at: row.get(7)?,
+    })
+  })?;
+
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
+}
+
+pub fn set_personal_memory_item_pinned(
+  conn: &Connection,
+  id: &str,
+  pinned: bool,
+) -> anyhow::Result<()> {
+  let ts = now_ts();
+  conn.execute(
+    "UPDATE personal_memory_items SET pinned = ?1, updated_at = ?2 WHERE id = ?3",
+    params![if pinned { 1 } else { 0 }, ts, id],
+  )?;
+  Ok(())
+}
+
+pub fn delete_personal_memory_item(conn: &Connection, id: &str) -> anyhow::Result<()> {
+  conn.execute("DELETE FROM personal_memory_items WHERE id = ?1", params![id])?;
+  Ok(())
 }
 
 pub fn get_ui_state(conn: &Connection, key: &str) -> anyhow::Result<Option<String>> {
@@ -358,26 +828,50 @@ pub fn delete_ui_state(conn: &Connection, key: &str) -> anyhow::Result<()> {
   Ok(())
 }
 
-pub fn create_session(conn: &Connection, title: &str) -> anyhow::Result<SessionRecord> {
+pub fn create_thread(
+  conn: &Connection,
+  title: &str,
+  engine_id: &str,
+  model_id: Option<&str>,
+) -> anyhow::Result<ThreadRecord> {
   let id = Uuid::new_v4().to_string();
   let ts = now_ts();
 
   conn.execute(
-    "INSERT INTO sessions (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-    params![id, title, ts, ts],
+    "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+     VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, ?6, NULL)",
+    params![id, title, engine_id, model_id, ts, ts],
   )?;
 
-  Ok(SessionRecord {
+  Ok(ThreadRecord {
     id,
-    title: title.to_string(),
+    title: Some(title.to_string()),
+    engine_id: engine_id.to_string(),
+    model_id: model_id.map(|s| s.to_string()),
+    workspace_path: None,
+    community_id: None,
     created_at: ts,
     updated_at: ts,
+    last_event_at: None,
+  })
+}
+
+/// Legacy wrapper for backward compatibility
+pub fn create_session(conn: &Connection, title: &str) -> anyhow::Result<SessionRecord> {
+  let thread = create_thread(conn, title, "codex_cli", None)?;
+  Ok(SessionRecord {
+    id: thread.id,
+    title: thread.title.unwrap_or_default(),
+    created_at: thread.created_at,
+    updated_at: thread.updated_at,
   })
 }
 
 pub fn list_sessions(conn: &Connection) -> anyhow::Result<Vec<SessionRecord>> {
   let mut stmt = conn.prepare(
-    "SELECT id, title, created_at, updated_at FROM sessions ORDER BY updated_at DESC",
+    "SELECT id, COALESCE(title, 'Untitled thread'), created_at, updated_at
+     FROM threads
+     ORDER BY COALESCE(last_event_at, updated_at) DESC",
   )?;
 
   let rows = stmt.query_map([], |row| {
@@ -488,6 +982,18 @@ pub fn upsert_project(
     created_at: ts,
     updated_at: ts,
   })
+}
+
+pub fn list_projects(conn: &Connection) -> anyhow::Result<Vec<ProjectRecord>> {
+  let mut stmt = conn.prepare(
+    "SELECT id, name, root_path, git_root, git_remote, fingerprint, created_at, updated_at FROM projects ORDER BY updated_at DESC",
+  )?;
+  let rows = stmt.query_map([], map_project_row)?;
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
 }
 
 fn map_memory_block_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryBlockRecord> {
@@ -846,278 +1352,246 @@ pub fn add_message(
   let id = Uuid::new_v4().to_string();
   let ts = now_ts();
 
+  // Ground truth: events. (messages/session_state are legacy tables and are no longer written.)
+  let event_type = match role.trim().to_ascii_lowercase().as_str() {
+    "user" => "user_message",
+    "assistant" => "assistant_message",
+    _ => "engine_io_chunk",
+  };
+  let text = extract_text_from_content_json(content_json);
+  let payload = serde_json::json!({
+    "role": role,
+    "content": serde_json::from_str::<serde_json::Value>(content_json).unwrap_or(serde_json::Value::Null)
+  });
   conn.execute(
-    "INSERT INTO messages (id, session_id, role, content_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-    params![id, session_id, role, content_json, ts],
+    "INSERT INTO events (id, thread_id, type, created_at, text, payload_json, blob_ref)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)",
+    params![
+      id,
+      session_id,
+      event_type,
+      ts,
+      text.as_deref(),
+      serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
+    ],
   )?;
-
   conn.execute(
-    "INSERT INTO session_state (session_id, last_message_id, last_message_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4)
-     ON CONFLICT(session_id) DO UPDATE SET last_message_id = excluded.last_message_id, last_message_at = excluded.last_message_at, updated_at = excluded.updated_at",
-    params![session_id, id, ts, ts],
-  )?;
-
-  conn.execute(
-    "UPDATE sessions SET updated_at = ?1 WHERE id = ?2",
+    "UPDATE threads SET updated_at = ?1, last_event_at = ?1 WHERE id = ?2",
     params![ts, session_id],
   )?;
 
   Ok(())
 }
 
-pub fn get_session_resume(conn: &Connection, session_id: &str) -> anyhow::Result<SessionResume> {
-  let mut stmt = conn.prepare(
-    "SELECT session_id, last_message_id, last_message_at, last_response_id FROM session_state WHERE session_id = ?1",
-  )?;
-  let result = stmt.query_row(params![session_id], |row| {
-    Ok(SessionResume {
-      session_id: row.get(0)?,
-      last_message_id: row.get(1).ok(),
-      last_message_at: row.get(2).ok(),
-      last_response_id: row.get(3).ok(),
-    })
-  });
-  match result {
-    Ok(value) => Ok(value),
-    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(SessionResume {
-      session_id: session_id.to_string(),
-      last_message_id: None,
-      last_message_at: None,
-      last_response_id: None,
-    }),
-    Err(err) => Err(err.into()),
-  }
-}
-
-pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<MessageRecord>> {
-  let mut stmt = conn.prepare(
-    "SELECT id, session_id, role, content_json, created_at FROM messages WHERE session_id = ?1 ORDER BY created_at ASC",
-  )?;
-
-  let rows = stmt.query_map(params![session_id], |row| {
-    Ok(MessageRecord {
-      id: row.get(0)?,
-      session_id: row.get(1)?,
-      role: row.get(2)?,
-      content_json: row.get(3)?,
-      created_at: row.get(4)?,
-    })
-  })?;
-
-  let mut out = Vec::new();
-  for row in rows {
-    out.push(row?);
-  }
-
-  Ok(out)
-}
-
-pub fn propose_tool_call(
+pub fn append_event(
   conn: &Connection,
-  session_id: &str,
-  tool_name: &str,
-  args_json: &str,
-  risk_level: &str,
-  command_preview_redacted: &str,
-  tool_call_id_override: Option<&str>,
-) -> anyhow::Result<ToolCallRecord> {
-  validate_tool_call(tool_name, args_json)?;
-  let id = tool_call_id_override
-    .map(|value| value.to_string())
-    .unwrap_or_else(|| Uuid::new_v4().to_string());
-  let ts = now_ts();
-
-  conn.execute(
-    "INSERT INTO tool_calls (id, session_id, tool_name, args_json, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?6)",
-    params![id, session_id, tool_name, args_json, ts, ts],
-  )?;
-
-  append_audit_log(
-    conn,
-    session_id,
-    "propose",
-    Some(tool_name),
-    risk_level,
-    0,
-    None,
-    Some(command_preview_redacted),
-    None,
-  )?;
-
-  Ok(ToolCallRecord {
-    id,
-    session_id: session_id.to_string(),
-    tool_name: tool_name.to_string(),
-    args_json: args_json.to_string(),
-    status: "proposed".to_string(),
-    output_summary_json: None,
-    stdout_excerpt: None,
-    stderr_excerpt: None,
-    exit_code: None,
-    duration_ms: None,
-    raw_output_file_id: None,
-    egress_policy: "redact_then_send".to_string(),
-    created_at: ts,
-    updated_at: ts,
-  })
-}
-
-fn validate_tool_call(tool_name: &str, args_json: &str) -> anyhow::Result<()> {
-  crate::tool_handlers::validate_tool_args_json(tool_name, args_json)
-}
-
-pub fn list_tool_calls(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<ToolCallRecord>> {
-  let mut stmt = conn.prepare(
-    "SELECT id, session_id, tool_name, args_json, status, output_summary_json, stdout_excerpt, stderr_excerpt, exit_code, duration_ms, raw_output_file_id, egress_policy, created_at, updated_at FROM tool_calls WHERE session_id = ?1 ORDER BY created_at DESC",
-  )?;
-
-  let rows = stmt.query_map(params![session_id], map_tool_call_row)?;
-
-  let mut out = Vec::new();
-  for row in rows {
-    out.push(row?);
-  }
-
-  Ok(out)
-}
-
-pub fn list_tool_calls_by_status_since(
-  conn: &Connection,
-  session_id: &str,
-  status: &str,
-  min_created_at: i64,
-) -> anyhow::Result<Vec<ToolCallRecord>> {
-  let mut stmt = conn.prepare(
-    "SELECT id, session_id, tool_name, args_json, status, output_summary_json, stdout_excerpt, stderr_excerpt, exit_code, duration_ms, raw_output_file_id, egress_policy, created_at, updated_at FROM tool_calls WHERE session_id = ?1 AND status = ?2 AND created_at >= ?3 ORDER BY created_at ASC",
-  )?;
-  let rows = stmt.query_map(params![session_id, status, min_created_at], map_tool_call_row)?;
-  let mut out = Vec::new();
-  for row in rows {
-    out.push(row?);
-  }
-  Ok(out)
-}
-
-pub fn get_tool_call_status(conn: &Connection, tool_call_id: &str) -> anyhow::Result<String> {
-  let mut stmt = conn.prepare("SELECT status FROM tool_calls WHERE id = ?1")?;
-  let status = stmt.query_row(params![tool_call_id], |row| row.get(0))?;
-  Ok(status)
-}
-
-pub fn get_tool_call(conn: &Connection, tool_call_id: &str) -> anyhow::Result<ToolCallRecord> {
-  let mut stmt = conn.prepare(
-    "SELECT id, session_id, tool_name, args_json, status, output_summary_json, stdout_excerpt, stderr_excerpt, exit_code, duration_ms, raw_output_file_id, egress_policy, created_at, updated_at FROM tool_calls WHERE id = ?1",
-  )?;
-  let record = stmt.query_row(params![tool_call_id], map_tool_call_row)?;
-  Ok(record)
-}
-
-pub fn list_tool_calls_with_output(
-  conn: &Connection,
-  session_id: &str,
-  limit: usize,
-) -> anyhow::Result<Vec<ToolCallRecord>> {
-  let mut stmt = conn.prepare(
-    "SELECT id, session_id, tool_name, args_json, status, output_summary_json, stdout_excerpt, stderr_excerpt, exit_code, duration_ms, raw_output_file_id, egress_policy, created_at, updated_at FROM tool_calls WHERE session_id = ?1 ORDER BY created_at DESC LIMIT ?2",
-  )?;
-  let rows = stmt.query_map(params![session_id, limit as i64], map_tool_call_row)?;
-  let mut out = Vec::new();
-  for row in rows {
-    out.push(row?);
-  }
-  Ok(out)
-}
-
-pub fn update_tool_call_status(
-  conn: &Connection,
-  tool_call_id: &str,
-  status: &str,
-) -> anyhow::Result<()> {
-  let ts = now_ts();
-  conn.execute(
-    "UPDATE tool_calls SET status = ?1, updated_at = ?2 WHERE id = ?3",
-    params![status, ts, tool_call_id],
-  )?;
-  Ok(())
-}
-
-pub fn update_tool_call_output(
-  conn: &Connection,
-  tool_call_id: &str,
-  output_summary_json: Option<&str>,
-  stdout_excerpt: Option<&str>,
-  stderr_excerpt: Option<&str>,
-  exit_code: Option<i32>,
-  duration_ms: Option<i64>,
-  raw_output_file_id: Option<&str>,
-  egress_policy: Option<&str>,
-) -> anyhow::Result<()> {
-  let ts = now_ts();
-  conn.execute(
-    "UPDATE tool_calls SET output_summary_json = ?1, stdout_excerpt = ?2, stderr_excerpt = ?3, exit_code = ?4, duration_ms = ?5, raw_output_file_id = ?6, egress_policy = ?7, updated_at = ?8 WHERE id = ?9",
-    params![
-      output_summary_json,
-      stdout_excerpt,
-      stderr_excerpt,
-      exit_code,
-      duration_ms,
-      raw_output_file_id,
-      egress_policy,
-      ts,
-      tool_call_id,
-    ],
-  )?;
-  Ok(())
-}
-
-pub fn append_audit_log(
-  conn: &Connection,
-  session_id: &str,
+  thread_id: &str,
   event_type: &str,
-  tool_name: Option<&str>,
-  risk_level: &str,
-  user_approved: i32,
-  args_hash: Option<&str>,
-  command_preview_redacted: Option<&str>,
-  command_full_encrypted: Option<&str>,
-) -> anyhow::Result<()> {
+  text: Option<&str>,
+  payload_json: Option<&str>,
+  blob_ref: Option<&str>,
+) -> anyhow::Result<EventRecord> {
   let id = Uuid::new_v4().to_string();
   let ts = now_ts();
 
   conn.execute(
-    "INSERT INTO audit_log (id, session_id, event_type, tool_name, risk_level, user_approved, args_hash, command_preview_redacted, command_full_encrypted, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-    params![
-      id,
-      session_id,
-      event_type,
-      tool_name,
-      risk_level,
-      user_approved,
-      args_hash,
-      command_preview_redacted,
-      command_full_encrypted,
-      ts
-    ],
+    "INSERT INTO events (id, thread_id, type, created_at, text, payload_json, blob_ref)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    params![id, thread_id, event_type, ts, text, payload_json, blob_ref],
   )?;
+  conn.execute(
+    "UPDATE threads SET updated_at = ?1, last_event_at = ?1 WHERE id = ?2",
+    params![ts, thread_id],
+  )?;
+
+  Ok(EventRecord {
+    id,
+    thread_id: thread_id.to_string(),
+    r#type: event_type.to_string(),
+    created_at: ts,
+    text: text.map(|v| v.to_string()),
+    payload_json: payload_json.map(|v| v.to_string()),
+    blob_ref: blob_ref.map(|v| v.to_string()),
+  })
+}
+
+pub fn list_threads(conn: &Connection) -> anyhow::Result<Vec<ThreadRecord>> {
+  let mut stmt = conn.prepare(
+    "SELECT id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at
+     FROM threads ORDER BY COALESCE(last_event_at, updated_at) DESC",
+  )?;
+  let rows = stmt.query_map([], |row| {
+    Ok(ThreadRecord {
+      id: row.get(0)?,
+      title: row.get(1)?,
+      engine_id: row.get(2)?,
+      model_id: row.get(3)?,
+      workspace_path: row.get(4)?,
+      community_id: row.get(5)?,
+      created_at: row.get(6)?,
+      updated_at: row.get(7)?,
+      last_event_at: row.get(8)?,
+    })
+  })?;
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
+}
+
+pub fn get_thread_by_id(conn: &Connection, thread_id: &str) -> anyhow::Result<Option<ThreadRecord>> {
+  let mut stmt = conn.prepare(
+    "SELECT id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at
+     FROM threads WHERE id = ?1",
+  )?;
+  let result = stmt.query_row(params![thread_id], |row| {
+    Ok(ThreadRecord {
+      id: row.get(0)?,
+      title: row.get(1)?,
+      engine_id: row.get(2)?,
+      model_id: row.get(3)?,
+      workspace_path: row.get(4)?,
+      community_id: row.get(5)?,
+      created_at: row.get(6)?,
+      updated_at: row.get(7)?,
+      last_event_at: row.get(8)?,
+    })
+  });
+  match result {
+    Ok(record) => Ok(Some(record)),
+    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+    Err(err) => Err(err.into()),
+  }
+}
+
+pub fn list_events(conn: &Connection, thread_id: &str, limit: usize) -> anyhow::Result<Vec<EventRecord>> {
+  let clamped = std::cmp::min(std::cmp::max(limit, 1), 2000);
+  let mut stmt = conn.prepare(
+    "SELECT id, thread_id, type, created_at, text, payload_json, blob_ref
+     FROM events WHERE thread_id = ?1 ORDER BY created_at ASC LIMIT ?2",
+  )?;
+  let rows = stmt.query_map(params![thread_id, clamped as i64], |row| {
+    Ok(EventRecord {
+      id: row.get(0)?,
+      thread_id: row.get(1)?,
+      r#type: row.get(2)?,
+      created_at: row.get(3)?,
+      text: row.get(4)?,
+      payload_json: row.get(5)?,
+      blob_ref: row.get(6)?,
+    })
+  })?;
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
+}
+
+pub fn delete_thread(conn: &Connection, thread_id: &str) -> anyhow::Result<()> {
+  // Contract tables first (events cascades via FK).
+  conn.execute("DELETE FROM threads WHERE id = ?1", params![thread_id])?;
+
+  // Legacy tables (messages cascades via FK).
+  let _ = conn.execute("DELETE FROM sessions WHERE id = ?1", params![thread_id]);
+  let _ = conn.execute("DELETE FROM session_state WHERE session_id = ?1", params![thread_id]);
+  let _ = conn.execute("DELETE FROM session_tags WHERE session_id = ?1", params![thread_id]);
+  let _ = conn.execute("DELETE FROM messages WHERE session_id = ?1", params![thread_id]);
+
+  // Harness-era tables (optional cleanup; safe no-ops if absent).
+  // Internal tool/audit tables removed in MVP. Older DBs may still have them; leave untouched.
+  let _ = conn.execute("DELETE FROM context_injections WHERE session_id = ?1", params![thread_id]);
 
   Ok(())
 }
 
-pub fn list_audit_log(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<AuditRecord>> {
+pub fn set_thread_workspace_path(
+  conn: &Connection,
+  thread_id: &str,
+  workspace_path: Option<&str>,
+) -> anyhow::Result<()> {
+  let ts = now_ts();
+  let cleaned = workspace_path.map(|p| p.trim()).filter(|p| !p.is_empty());
+  conn.execute(
+    "UPDATE threads
+     SET workspace_path = ?1, updated_at = ?2
+     WHERE id = ?3",
+    params![cleaned, ts, thread_id],
+  )?;
+  Ok(())
+}
+
+pub fn get_session_resume(conn: &Connection, session_id: &str) -> anyhow::Result<SessionResume> {
+  // Ground truth: events. session_state is legacy and is not updated in MVP.
+  let (last_message_id, last_message_at) = conn
+    .query_row(
+      "SELECT id, created_at
+       FROM events
+       WHERE thread_id = ?1 AND type = 'user_message'
+       ORDER BY created_at DESC
+       LIMIT 1",
+      params![session_id],
+      |row| Ok((Some(row.get::<_, String>(0)?), Some(row.get::<_, i64>(1)?))),
+    )
+    .unwrap_or((None, None));
+
+  let last_response_id = conn
+    .query_row(
+      "SELECT id
+       FROM events
+       WHERE thread_id = ?1 AND type = 'assistant_message'
+       ORDER BY created_at DESC
+       LIMIT 1",
+      params![session_id],
+      |row| Ok(Some(row.get::<_, String>(0)?)),
+    )
+    .unwrap_or(None);
+
+  Ok(SessionResume {
+    session_id: session_id.to_string(),
+    last_message_id,
+    last_message_at,
+    last_response_id,
+  })
+}
+
+pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<MessageRecord>> {
+  // Ground truth: events. Keep legacy command for UI compatibility.
   let mut stmt = conn.prepare(
-    "SELECT id, session_id, event_type, tool_name, risk_level, user_approved, created_at FROM audit_log WHERE session_id = ?1 ORDER BY created_at DESC LIMIT 100",
+    "SELECT id, thread_id, type, created_at, text, payload_json
+     FROM events
+     WHERE thread_id = ?1 AND (type = 'user_message' OR type = 'assistant_message')
+     ORDER BY created_at ASC",
   )?;
 
   let rows = stmt.query_map(params![session_id], |row| {
-    Ok(AuditRecord {
-      id: row.get(0)?,
-      session_id: row.get(1)?,
-      event_type: row.get(2)?,
-      tool_name: row.get(3)?,
-      risk_level: row.get(4)?,
-      user_approved: row.get(5)?,
-      created_at: row.get(6)?,
+    let event_id: String = row.get(0)?;
+    let thread_id: String = row.get(1)?;
+    let event_type: String = row.get(2)?;
+    let created_at: i64 = row.get(3)?;
+    let text: Option<String> = row.get(4)?;
+    let payload_json: Option<String> = row.get(5)?;
+
+    let role = if event_type == "user_message" {
+      "user".to_string()
+    } else {
+      "assistant".to_string()
+    };
+
+    let content_value = payload_json
+      .as_deref()
+      .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+      .and_then(|v| v.get("content").cloned())
+      .unwrap_or_else(|| serde_json::json!({ "text": text.unwrap_or_default() }));
+
+    Ok(MessageRecord {
+      id: event_id,
+      session_id: thread_id,
+      role,
+      content_json: serde_json::to_string(&content_value)
+        .unwrap_or_else(|_| "{\"text\":\"\"}".to_string()),
+      created_at,
     })
   })?;
 
@@ -1137,40 +1611,11 @@ pub fn open_conn(db_path: &Path, key: &str) -> anyhow::Result<Connection> {
   let conn = Connection::open(db_path)?;
   conn.pragma_update(None, "key", key)?;
   conn.pragma_update(None, "foreign_keys", "ON")?;
+  conn.busy_timeout(Duration::from_secs(5))?;
+  // Best-effort concurrency improvements; ignore failures (e.g., older SQLite builds).
+  let _ = conn.pragma_update(None, "journal_mode", "WAL");
+  let _ = conn.pragma_update(None, "synchronous", "NORMAL");
   Ok(conn)
 }
 
-#[cfg(test)]
-mod tests {
-  use super::validate_tool_call;
-
-  #[test]
-  fn validates_run_shell_command_fields() {
-    // command is required; shell/cwd are optional (defaulted in agent.rs)
-    let ok = r#"{"command":"rg --files","shell":"zsh","cwd":"."}"#;
-    assert!(validate_tool_call("run_shell_command", ok).is_ok());
-    let missing_cmd = r#"{"command":"","shell":"zsh","cwd":"."}"#;
-    assert!(validate_tool_call("run_shell_command", missing_cmd).is_err());
-    let minimal = r#"{"command":"rg --files"}"#;
-    assert!(validate_tool_call("run_shell_command", minimal).is_ok());
-  }
-
-  #[test]
-  fn validates_read_file_fields() {
-    // file_path is required; offset/limit are optional (defaulted in agent.rs)
-    let ok = r#"{"file_path":"src/lib.rs","offset":1,"limit":1}"#;
-    assert!(validate_tool_call("read_file", ok).is_ok());
-    let missing_path = r#"{"file_path":"","offset":1,"limit":1}"#;
-    assert!(validate_tool_call("read_file", missing_path).is_err());
-    let minimal = r#"{"file_path":"src/lib.rs"}"#;
-    assert!(validate_tool_call("read_file", minimal).is_ok());
-  }
-
-  #[test]
-  fn validates_grep_files_fields() {
-    let ok = r#"{"pattern":"foo","path":"."}"#;
-    assert!(validate_tool_call("grep_files", ok).is_ok());
-    let missing_pattern = r#"{"pattern":"","path":"."}"#;
-    assert!(validate_tool_call("grep_files", missing_pattern).is_err());
-  }
-}
+// (tests removed) legacy internal harness validation no longer applies in MVP.

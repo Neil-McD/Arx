@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, TauriEvent } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -14,6 +14,18 @@ type SessionRecord = {
   title: string;
   created_at: number;
   updated_at: number;
+};
+
+type ThreadRecord = {
+  id: string;
+  title: string | null;
+  engine_id: string;
+  model_id: string | null;
+  workspace_path: string | null;
+  community_id: string | null;
+  created_at: number;
+  updated_at: number;
+  last_event_at: number | null;
 };
 
 type ProjectRecord = {
@@ -74,6 +86,16 @@ type MessageRecord = {
   created_at: number;
 };
 
+type EventRecord = {
+  id: string;
+  thread_id: string;
+  type: string;
+  created_at: number;
+  text: string | null;
+  payload_json: string | null;
+  blob_ref: string | null;
+};
+
 type SessionResume = {
   session_id: string;
   last_message_id: string | null;
@@ -81,17 +103,13 @@ type SessionResume = {
   last_response_id: string | null;
 };
 
-type MemoryBlockRecord = {
+type PersonalMemoryItemRecord = {
   id: string;
-  label: string;
+  content: string;
   scope: string;
   scope_id: string | null;
-  value: string;
-  format: string;
-  char_limit: number;
-  read_only: number;
-  egress_policy: string;
-  description?: string | null;
+  pinned: number;
+  provenance_event_id: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -147,6 +165,31 @@ type SupabaseSession = {
   user: SupabaseUser;
 };
 
+type OpenRouterStreamPayload = {
+  session_id: string;
+  chunk: string;
+  full_content: string;
+  seq: number;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  max_tokens: number;
+};
+
+type SessionIdPayload = {
+  session_id: string;
+};
+
+type SecretScanRedaction = {
+  kind: string;
+  count: number;
+};
+
+type SecretScanResult = {
+  redacted: string;
+  blocked: boolean;
+  redactions: SecretScanRedaction[];
+};
+
 type CommunityRecord = {
   id: string;
   slug: string;
@@ -183,13 +226,13 @@ const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 const OUTPUT_MAX_CHARS = 60000;
 const OUTPUT_TRUNCATION_MARKER = "\n<<<OUTPUT TRUNCATED>>>\n";
 const MODEL_PROVIDERS: Record<string, string> = {
-  "gpt-5.1": "openai",
-  "gpt-5.2": "openai",
-  "sonnet-4.5": "anthropic",
-  "opus-4.5": "anthropic",
-  "gemini-3-flash": "google",
-  "gemini-3-pro": "google",
-  "grok-4.1": "xai"
+  "gpt-5.1": "openrouter",
+  "gpt-5.2": "openrouter",
+  "sonnet-4.5": "openrouter",
+  "opus-4.5": "openrouter",
+  "gemini-3-flash": "openrouter",
+  "gemini-3-pro": "openrouter",
+  "grok-4.1": "openrouter"
 };
 const SLASH_COMMAND_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape"]);
 const SLASH_COMMANDS = [
@@ -291,10 +334,12 @@ type ArtifactVersion = {
   created_by: string;
 };
 
+type SettingsPage = "models" | "apiKeys" | "community" | "execution" | "session" | "memory";
+
 function App() {
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [newSessionTitle, setNewSessionTitle] = useState("Untitled session");
+  const [threads, setThreads] = useState<SessionRecord[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [newThreadTitle, setNewThreadTitle] = useState("Untitled thread");
   const [commandInput, setCommandInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallRecord[]>([]);
@@ -303,17 +348,21 @@ function App() {
   const [auditLog, setAuditLog] = useState<AuditRecord[]>([]);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [streamingTokens, setStreamingTokens] = useState<{
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    max_tokens?: number;
+  } | null>(null);
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
   const [activePage, setActivePage] = useState<"workspace" | "community">("workspace");
   const [communityTab, setCommunityTab] = useState<"chat" | "library" | "resources">("chat");
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>([]);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [activeEngineId, setActiveEngineId] = useState<string>("codex_cli"); // Default to Codex for MVP
   const [toolDebug, setToolDebug] = useState<ToolDebug | null>(null);
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([
-    { id: "openai", label: "OpenAI", hasKey: false, inputValue: "", error: null },
-    { id: "anthropic", label: "Anthropic", hasKey: false, inputValue: "", error: null },
-    { id: "google", label: "Google", hasKey: false, inputValue: "", error: null },
-    { id: "xai", label: "xAI", hasKey: false, inputValue: "", error: null }
+    { id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }
   ]);
   const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -398,13 +447,15 @@ function App() {
     { decision: "allow" | "prompt" | "forbid"; reason: string; matched_rule?: string | null }
   >>({});
   const [sessionResume, setSessionResume] = useState<SessionResume | null>(null);
-  const [memoryBlocks, setMemoryBlocks] = useState<MemoryBlockRecord[]>([]);
-  const [memoryBlocksError, setMemoryBlocksError] = useState<string | null>(null);
-  const [memoryEditorBlock, setMemoryEditorBlock] = useState<MemoryBlockRecord | null>(null);
-  const [memoryEditorValue, setMemoryEditorValue] = useState("");
-  const [memoryEditorError, setMemoryEditorError] = useState<string | null>(null);
-  const [memoryEditorSuccess, setMemoryEditorSuccess] = useState<string | null>(null);
-  const [isSavingMemoryProposal, setIsSavingMemoryProposal] = useState(false);
+  const [personalMemoryItems, setPersonalMemoryItems] = useState<PersonalMemoryItemRecord[]>([]);
+  const [personalMemoryQuery, setPersonalMemoryQuery] = useState("");
+  const [personalMemoryError, setPersonalMemoryError] = useState<string | null>(null);
+  const [isLoadingPersonalMemory, setIsLoadingPersonalMemory] = useState(false);
+  const [newPersonalMemoryContent, setNewPersonalMemoryContent] = useState("");
+  const [newPersonalMemoryScope, setNewPersonalMemoryScope] = useState<"global" | "workspace">(
+    "workspace"
+  );
+  const [newPersonalMemoryPinned, setNewPersonalMemoryPinned] = useState(false);
   const [isExportingLog, setIsExportingLog] = useState(false);
   const [exportLogMessage, setExportLogMessage] = useState<string | null>(null);
   const [slashPanel, setSlashPanel] = useState<{
@@ -437,6 +488,23 @@ function App() {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const autoScrollEnabledRef = useRef(true);
 
+  // Throttled streaming: accumulate content in ref, update state via RAF
+  const streamingContentRef = useRef<string | null>(null);
+  const streamingTokensRef = useRef<{prompt_tokens?: number; completion_tokens?: number; max_tokens?: number} | null>(null);
+  const streamingRafRef = useRef<number | null>(null);
+
+  // Throttled streaming update: accumulate in refs, flush to state on next animation frame
+  const scheduleStreamingUpdate = useCallback(() => {
+    if (streamingRafRef.current !== null) return; // Already scheduled
+    streamingRafRef.current = requestAnimationFrame(() => {
+      streamingRafRef.current = null;
+      setStreamingContent(streamingContentRef.current);
+      if (streamingTokensRef.current) {
+        setStreamingTokens(streamingTokensRef.current);
+      }
+    });
+  }, []);
+
   const slashState = useMemo(() => {
     const trimmed = commandInput.trim();
     const query = trimmed.startsWith("/")
@@ -459,50 +527,171 @@ function App() {
     return { query, filtered, active };
   }, [commandInput, slashIndex]);
 
-  const globalMemoryBlocks = useMemo(
-    () => memoryBlocks.filter((block) => block.scope === "global"),
-    [memoryBlocks]
-  );
-
-  const projectMemoryBlocks = useMemo(
-    () => memoryBlocks.filter((block) => block.scope === "project"),
-    [memoryBlocks]
-  );
-
-
-
-
-
   useEffect(() => {
-    void loadSessions();
+    void loadThreads();
     void loadWorkspaceRoot();
     void loadActiveProject();
     void loadModelToggles();
     void loadActiveModel();
     void loadProviderKeys();
     void loadExecPolicyRules();
-    void loadMemoryBlocks();
     void consumeOAuthHash();
     void loadSupabaseSession();
   }, []);
 
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     resetOutputState();
-    void loadToolCalls(activeSessionId);
-    void loadAuditLog(activeSessionId);
-    void loadMessages(activeSessionId);
-    void loadSessionResume(activeSessionId);
-    void loadSessionExecPolicyRules(activeSessionId);
-  }, [activeSessionId, activeProject?.id]);
+    void loadMessages(activeThreadId);
+    void loadSessionResume(activeThreadId);
+    void loadSessionExecPolicyRules(activeThreadId);
+  }, [activeThreadId, activeProject?.id]);
 
   useEffect(() => {
-    void loadMemoryBlocks();
-  }, [activeProject?.id, activeView]);
+    if (activeView !== "settings" || settingsPage !== "memory") return;
+    const q = personalMemoryQuery.trim();
+    const handle = window.setTimeout(() => {
+      void searchPersonalMemoryItems(q);
+    }, 150);
+    return () => window.clearTimeout(handle);
+  }, [activeView, settingsPage, personalMemoryQuery, activeProject?.id, workspaceRoot]);
 
   useEffect(() => {
     void loadApprovalMode();
   }, []);
+
+  function getEffectiveWorkspacePath(): string {
+    return activeProject?.root_path ?? workspaceRoot ?? ".";
+  }
+
+  function sortPersonalMemory(items: PersonalMemoryItemRecord[]): PersonalMemoryItemRecord[] {
+    return [...items].sort((a, b) => {
+      const pinnedDiff = (b.pinned ?? 0) - (a.pinned ?? 0);
+      if (pinnedDiff !== 0) return pinnedDiff;
+      return (b.updated_at ?? 0) - (a.updated_at ?? 0);
+    });
+  }
+
+  async function loadPersonalMemoryItems() {
+    setIsLoadingPersonalMemory(true);
+    setPersonalMemoryError(null);
+    try {
+      const workspacePath = getEffectiveWorkspacePath();
+      const [globalItems, workspaceItems] = await Promise.all([
+        invoke<PersonalMemoryItemRecord[]>("list_personal_memory_items_cmd", {
+          scope: "global",
+          scopeId: null,
+          limit: 200
+        }),
+        invoke<PersonalMemoryItemRecord[]>("list_personal_memory_items_cmd", {
+          scope: "workspace",
+          scopeId: workspacePath,
+          limit: 200
+        })
+      ]);
+      setPersonalMemoryItems(sortPersonalMemory([...globalItems, ...workspaceItems]));
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Unknown error";
+      setPersonalMemoryError(message);
+    } finally {
+      setIsLoadingPersonalMemory(false);
+    }
+  }
+
+  async function searchPersonalMemoryItems(query: string) {
+    const q = query.trim();
+    if (!q) {
+      await loadPersonalMemoryItems();
+      return;
+    }
+    setIsLoadingPersonalMemory(true);
+    setPersonalMemoryError(null);
+    try {
+      const results = await invoke<PersonalMemoryItemRecord[]>("search_personal_memory_items_cmd", {
+        query: q,
+        limit: 200
+      });
+      setPersonalMemoryItems(sortPersonalMemory(results));
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Unknown error";
+      setPersonalMemoryError(message);
+    } finally {
+      setIsLoadingPersonalMemory(false);
+    }
+  }
+
+  async function handleCreatePersonalMemoryItem() {
+    const content = newPersonalMemoryContent.trim();
+    if (!content) return;
+    setPersonalMemoryError(null);
+    try {
+      const scope = newPersonalMemoryScope;
+      const scopeId = scope === "workspace" ? getEffectiveWorkspacePath() : null;
+      await invoke("create_personal_memory_item_cmd", {
+        content,
+        scope,
+        scopeId,
+        pinned: newPersonalMemoryPinned,
+        provenanceEventId: null
+      });
+      setNewPersonalMemoryContent("");
+      setNewPersonalMemoryPinned(false);
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Unknown error";
+      setPersonalMemoryError(message);
+    }
+  }
+
+  async function handleTogglePersonalMemoryPinned(item: PersonalMemoryItemRecord) {
+    setPersonalMemoryError(null);
+    try {
+      await invoke("set_personal_memory_item_pinned_cmd", {
+        id: item.id,
+        pinned: item.pinned === 0
+      });
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Unknown error";
+      setPersonalMemoryError(message);
+    }
+  }
+
+  async function handleDeletePersonalMemoryItem(id: string) {
+    setPersonalMemoryError(null);
+    try {
+      await invoke("delete_personal_memory_item_cmd", { id });
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Unknown error";
+      setPersonalMemoryError(message);
+    }
+  }
 
   useEffect(() => {
     if (!supabaseSession) return;
@@ -821,8 +1010,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!activeSessionId) return;
-    void invoke<string>("get_agent_mode_cmd", { sessionId: activeSessionId })
+    if (!activeThreadId) return;
+    void invoke<string>("get_agent_mode_cmd", { sessionId: activeThreadId })
       .then((mode) => {
         const normalized = (mode || "build").toLowerCase();
         if (normalized === "plan" || normalized === "explore" || normalized === "build") {
@@ -834,7 +1023,7 @@ function App() {
       .catch(() => {
         setAgentMode("build");
       });
-  }, [activeSessionId]);
+  }, [activeThreadId]);
 
   useEffect(() => {
     outputRef.current = outputByToolCallId;
@@ -879,7 +1068,12 @@ function App() {
 
   useEffect(() => {
     const width = windowWidth;
-    const wantsLeft = activePage === "community" ? true : userWantsSessions;
+    const wantsLeft =
+      activeView === "settings"
+        ? true
+        : activePage === "community"
+          ? true
+          : userWantsSessions;
     const wantsRight = activePage === "community" ? true : userWantsCommunity;
 
     if (activePage === "community") {
@@ -930,7 +1124,7 @@ function App() {
       setShowCommunityPanel(false);
       setSessionsCompact(false);
     }
-  }, [windowWidth, userWantsSessions, userWantsCommunity, activePage]);
+  }, [windowWidth, userWantsSessions, userWantsCommunity, activePage, activeView]);
 
   useEffect(() => {
     if (!terminalRootRef.current) return;
@@ -960,7 +1154,7 @@ function App() {
           event.payload.tool_call_id,
           { type: "output", chunk: event.payload.chunk, seq: event.payload.seq },
           term,
-          activeSessionId
+          activeThreadId
         );
       }
     );
@@ -972,7 +1166,7 @@ function App() {
           toolCallId,
           { type: "exit", exitCode: event.payload.exit_code, seq: event.payload.seq },
           term,
-          activeSessionId
+          activeThreadId
         );
       }
     );
@@ -981,6 +1175,13 @@ function App() {
       "agent-turn-finished",
       async (event) => {
         if (!event.payload.session_id) return;
+        // Cancel any pending RAF and clear refs
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
+        }
+        streamingContentRef.current = null;
+        streamingTokensRef.current = null;
         // Load messages first, then clear streaming to avoid flicker
         await loadMessages(event.payload.session_id);
         setStreamingContent(null);
@@ -990,14 +1191,55 @@ function App() {
     const unlistenStream = listen<{ session_id: string; chunk: string; full_content: string }>(
       "agent-stream",
       (event) => {
-        if (event.payload.session_id !== activeSessionId) return;
-        setStreamingContent(event.payload.full_content);
+        if (event.payload.session_id !== activeThreadId) return;
+        // Use throttled updates to avoid React batching all updates together
+        streamingContentRef.current = event.payload.full_content;
+        scheduleStreamingUpdate();
+      }
+    );
+
+    const unlistenOpenRouterStream = listen<OpenRouterStreamPayload>(
+      "openrouter-stream",
+      (event) => {
+        if (event.payload.session_id !== activeThreadId) return;
+        // Use throttled updates to ensure smooth token-by-token streaming
+        streamingContentRef.current = event.payload.full_content;
+        streamingTokensRef.current = {
+          prompt_tokens: event.payload.prompt_tokens ?? undefined,
+          completion_tokens: event.payload.completion_tokens ?? undefined,
+          max_tokens: event.payload.max_tokens
+        };
+        scheduleStreamingUpdate();
+      }
+    );
+
+    const unlistenOpenRouterDone = listen<SessionIdPayload>(
+      "openrouter-turn-finished",
+      async (event) => {
+        if (event.payload.session_id !== activeThreadId) return;
+        // Cancel any pending RAF and clear refs
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
+        }
+        streamingContentRef.current = null;
+        streamingTokensRef.current = null;
+        await loadMessages(event.payload.session_id);
+        setStreamingContent(null);
+        setStreamingTokens(null);
       }
     );
     const unlistenCancelled = listen<{ session_id: string }>(
       "agent-cancelled",
       (event) => {
-        if (event.payload.session_id !== activeSessionId) return;
+        if (event.payload.session_id !== activeThreadId) return;
+        // Cancel any pending RAF and clear refs
+        if (streamingRafRef.current !== null) {
+          cancelAnimationFrame(streamingRafRef.current);
+          streamingRafRef.current = null;
+        }
+        streamingContentRef.current = null;
+        streamingTokensRef.current = null;
         setStreamingContent(null);
         setMemoryToast("Operation cancelled.");
         if (memoryToastTimeoutRef.current) {
@@ -1011,7 +1253,7 @@ function App() {
     const unlistenMemory = listen<{ session_id: string; label: string; scope: string }>(
       "memory-updated",
       (event) => {
-        if (event.payload.session_id !== activeSessionId) return;
+        if (event.payload.session_id !== activeThreadId) return;
         const label = event.payload.label?.trim() || "memory";
         const scope = event.payload.scope?.trim();
         const message = scope ? `Memory updated: ${label} (${scope})` : `Memory updated: ${label}`;
@@ -1028,7 +1270,7 @@ function App() {
     const unlistenPlan = listen<{ session_id: string; args: TaskPlanPayload }>(
       "plan-updated",
       (event) => {
-        if (event.payload.session_id !== activeSessionId) return;
+        if (event.payload.session_id !== activeThreadId) return;
         setTaskPlan(event.payload.args);
       }
     );
@@ -1036,18 +1278,35 @@ function App() {
     const unlistenToolCallsUpdated = listen<{ session_id: string }>(
       "tool-calls-updated",
       async (event) => {
-        if (event.payload.session_id !== activeSessionId) return;
+        if (event.payload.session_id !== activeThreadId) return;
         await loadToolCalls(event.payload.session_id);
       }
     );
 
+    const dataDisposable = term.onData((data) => {
+      if (!activeThreadId) return;
+      void invoke("engine_write_stdin_cmd", { threadId: activeThreadId, input: data }).catch(() => {
+        // Ignore write errors; engine may not be running yet.
+      });
+    });
+
     return () => {
       window.removeEventListener("resize", handleResize);
       term.dispose();
+      dataDisposable.dispose();
+      // Cancel any pending streaming RAF
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingContentRef.current = null;
+      streamingTokensRef.current = null;
       void unlistenOutput.then((fn) => fn());
       void unlistenExit.then((fn) => fn());
       void unlistenAgent.then((fn) => fn());
       void unlistenStream.then((fn) => fn());
+      void unlistenOpenRouterStream.then((fn) => fn());
+      void unlistenOpenRouterDone.then((fn) => fn());
       void unlistenCancelled.then((fn) => fn());
       void unlistenMemory.then((fn) => fn());
       void unlistenPlan.then((fn) => fn());
@@ -1057,14 +1316,24 @@ function App() {
         memoryToastTimeoutRef.current = null;
       }
     };
-  }, [activeSessionId]);
+  }, [activeThreadId, scheduleStreamingUpdate]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    void invoke("engine_start_cmd", {
+      threadId: activeThreadId,
+      cwd: activeProject?.root_path ?? workspaceRoot ?? "."
+    }).catch(() => {
+      // Engine might not be installed/configured yet.
+    });
+  }, [activeThreadId, activeProject?.root_path, workspaceRoot]);
 
   useEffect(() => {
     const handleGlobalEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (event.defaultPrevented) return;
       if (activePage !== "workspace") return;
-      if (!activeSessionId) return;
+      if (!activeThreadId) return;
 
       // If the slash menu is active, let the input handler consume Escape.
       if (slashState.query !== null) return;
@@ -1072,77 +1341,104 @@ function App() {
       // Cancel a running tool call if present, otherwise cancel the agent turn.
       if (runningToolCallId) {
         event.preventDefault();
-        void invoke("cancel_tool_call_cmd", {
-          sessionId: activeSessionId,
-          toolCallId: runningToolCallId
-        });
         setRunningToolCallId(null);
         return;
       }
 
       if (isSending || streamingContent) {
         event.preventDefault();
-        void invoke("cancel_session_cmd", { sessionId: activeSessionId });
+        void invoke("cancel_session_cmd", { sessionId: activeThreadId });
       }
     };
 
     window.addEventListener("keydown", handleGlobalEscape);
     return () => window.removeEventListener("keydown", handleGlobalEscape);
-  }, [activePage, activeSessionId, isSending, runningToolCallId, slashState.query, streamingContent]);
+  }, [activePage, activeThreadId, isSending, runningToolCallId, slashState.query, streamingContent]);
 
-  async function loadSessions() {
+  async function loadThreads() {
+    try {
+      const threads = await invoke<ThreadRecord[]>("list_threads_cmd");
+      const mapped: SessionRecord[] = threads.map((t) => ({
+        id: t.id,
+        title: (t.title ?? "").trim() || "Untitled thread",
+        created_at: t.created_at,
+        updated_at: t.updated_at
+      }));
+      setThreads(mapped);
+      if (!activeThreadId && mapped.length > 0) {
+        setActiveThreadId(mapped[0].id);
+      }
+      return;
+    } catch {
+      // Fallback for older builds/DBs.
+    }
+
     const data = await invoke<SessionRecord[]>("list_sessions_cmd");
-    setSessions(data);
-    if (!activeSessionId && data.length > 0) {
-      setActiveSessionId(data[0].id);
+    setThreads(data);
+    if (!activeThreadId && data.length > 0) {
+      setActiveThreadId(data[0].id);
     }
   }
 
   async function loadToolCalls(sessionId: string) {
-    const data = await invoke<ToolCallRecord[]>("list_tool_calls_cmd", {
-      sessionId
-    });
-    setToolCalls(data);
+    const _ = sessionId;
+    setToolCalls([]);
   }
 
   async function loadAuditLog(sessionId: string) {
-    const data = await invoke<AuditRecord[]>("list_audit_log_cmd", {
-      sessionId
-    });
-    setAuditLog(data);
+    const _ = sessionId;
+    setAuditLog([]);
   }
 
   async function loadMessages(sessionId: string) {
+    const eventToMessage = (evt: EventRecord): MessageRecord | null => {
+      const evtType = (evt.type ?? "").trim();
+      const role =
+        evtType === "user_message" ? "user" : evtType === "assistant_message" ? "assistant" : null;
+      if (!role) return null;
+
+      let contentJson: string | null = null;
+      if (evt.payload_json) {
+        try {
+          const parsed = JSON.parse(evt.payload_json) as { content?: unknown };
+          if (parsed && typeof parsed === "object" && "content" in parsed) {
+            contentJson = JSON.stringify((parsed as { content: unknown }).content ?? { text: evt.text ?? "" });
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (!contentJson) {
+        contentJson = JSON.stringify({ text: evt.text ?? "" });
+      }
+
+      return {
+        id: evt.id,
+        session_id: evt.thread_id,
+        role,
+        content_json: contentJson,
+        created_at: evt.created_at
+      };
+    };
+
+    try {
+      const events = await invoke<EventRecord[]>("list_events_cmd", {
+        threadId: sessionId,
+        limit: 2000
+      });
+      const mapped = events.map(eventToMessage).filter(Boolean) as MessageRecord[];
+      if (mapped.length > 0) {
+        setMessages(mapped);
+        return;
+      }
+    } catch {
+      // Fallback for older builds/DBs.
+    }
+
     const data = await invoke<MessageRecord[]>("list_messages_cmd", {
       sessionId
     });
     setMessages(data);
-  }
-
-  async function loadMemoryBlocks() {
-    try {
-      const globalBlocks = await invoke<MemoryBlockRecord[]>("list_memory_blocks_cmd", {
-        scope: "global",
-        scopeId: null
-      });
-      let projectBlocks: MemoryBlockRecord[] = [];
-      if (activeProject) {
-        projectBlocks = await invoke<MemoryBlockRecord[]>("list_memory_blocks_cmd", {
-          scope: "project",
-          scopeId: activeProject.id
-        });
-      }
-      setMemoryBlocks([...globalBlocks, ...projectBlocks]);
-      setMemoryBlocksError(null);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load memory blocks";
-      setMemoryBlocksError(message);
-    }
   }
 
   async function loadSessionResume(sessionId: string) {
@@ -1157,12 +1453,12 @@ function App() {
   }
 
   async function handleExportEventLog() {
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     setIsExportingLog(true);
     setExportLogMessage(null);
     try {
       const data = await invoke<string>("export_event_log_cmd", {
-        sessionId: activeSessionId
+        sessionId: activeThreadId
       });
       await navigator.clipboard.writeText(data);
       setExportLogMessage("Exported to clipboard.");
@@ -1202,11 +1498,10 @@ function App() {
     setProviderKeys(updated);
   }
 
-  function isProviderReady(providerId: string | undefined): boolean {
-    if (!providerId) return false;
-    const provider = providerKeys.find((item) => item.id === providerId);
-    return !!provider?.hasKey;
-  }
+function isProviderReady(providerId: string | undefined): boolean {
+  if (!providerId) return false;
+  return providerId === "openrouter" && providerKeys[0]?.hasKey === true;
+}
 
   async function loadExecPolicyRules() {
     try {
@@ -1256,12 +1551,12 @@ function App() {
   }
 
   async function handleSaveSessionExecPolicyRules() {
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     setIsSavingSessionExecPolicy(true);
     setSessionExecPolicyError(null);
     try {
       await invoke("set_session_exec_policy_rules_cmd", {
-        sessionId: activeSessionId,
+        sessionId: activeThreadId,
         rules: sessionExecPolicyRules
       });
     } catch (error) {
@@ -1286,7 +1581,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     const run = async () => {
       const next: Record<
         string,
@@ -1306,7 +1601,7 @@ function App() {
             reason: string;
             matched_rule?: string | null;
           }>("classify_command_cmd", {
-            sessionId: activeSessionId,
+            sessionId: activeThreadId,
             command: details.command
           });
           next[toolCall.id] = result;
@@ -1317,11 +1612,11 @@ function App() {
       setPolicyByToolCallId(next);
     };
     void run();
-  }, [activeSessionId, execPolicyRules, sessionExecPolicyRules, toolCalls]);
+  }, [activeThreadId, execPolicyRules, sessionExecPolicyRules, toolCalls]);
 
   // Auto-execute tool calls when policy decision is "allow" or read_file within workspace
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     const autoExecute = async () => {
       for (const toolCall of toolCalls) {
         // Skip if not proposed or already auto-executed
@@ -1373,18 +1668,47 @@ function App() {
       }
     };
     void autoExecute();
-  }, [activeSessionId, toolCalls, policyByToolCallId, runningToolCallId]);
+  }, [activeThreadId, toolCalls, policyByToolCallId, runningToolCallId]);
 
   async function loadSupabaseSession() {
-    const stored = localStorage.getItem("arx_supabase_session");
+    let stored: string | null = null;
+    try {
+      stored = await invoke<string | null>("get_supabase_session_cmd");
+    } catch {
+      stored = null;
+    }
+
+    // Legacy migration: move any localStorage session into the OS keychain.
+    if (!stored) {
+      const legacy = localStorage.getItem("arx_supabase_session");
+      if (legacy) {
+        stored = legacy;
+        try {
+          await invoke("set_supabase_session_cmd", { sessionJson: legacy });
+          localStorage.removeItem("arx_supabase_session");
+        } catch {
+          // Keep legacy storage if keychain write fails, but don't crash.
+        }
+      }
+    }
+
     if (!stored) return;
     try {
       const parsed = JSON.parse(stored) as SupabaseSession;
       const refreshed = await ensureFreshSession(parsed);
       if (!refreshed) return;
       setSupabaseSession(refreshed);
-      localStorage.setItem("arx_supabase_session", JSON.stringify(refreshed));
+      try {
+        await invoke("set_supabase_session_cmd", { sessionJson: JSON.stringify(refreshed) });
+      } catch {
+        // If keychain write fails, keep session in memory only.
+      }
     } catch {
+      try {
+        await invoke("clear_supabase_session_cmd");
+      } catch {
+        // ignore
+      }
       localStorage.removeItem("arx_supabase_session");
     }
   }
@@ -1457,7 +1781,13 @@ function App() {
       expires_at: Math.floor(Date.now() / 1000) + Number(expiresIn),
       user
     };
-    localStorage.setItem("arx_supabase_session", JSON.stringify(session));
+    try {
+      await invoke("set_supabase_session_cmd", { sessionJson: JSON.stringify(session) });
+      localStorage.removeItem("arx_supabase_session");
+    } catch {
+      // If keychain write fails (e.g., permissions), fall back to legacy localStorage.
+      localStorage.setItem("arx_supabase_session", JSON.stringify(session));
+    }
     setSupabaseSession(session);
     window.history.replaceState({}, document.title, window.location.pathname);
   }
@@ -1491,6 +1821,11 @@ function App() {
           Authorization: `Bearer ${accessToken}`
         }
       });
+    }
+    try {
+      await invoke("clear_supabase_session_cmd");
+    } catch {
+      // ignore
     }
     localStorage.removeItem("arx_supabase_session");
     setSupabaseSession(null);
@@ -1806,6 +2141,11 @@ function App() {
       setArtifactError("Title and body are required.");
       return;
     }
+    const scan = await scanPublishContent(`${title}\n\n${body}`);
+    if (scan?.blocked) {
+      setArtifactError(formatSecretScanError(scan));
+      return;
+    }
     setArtifactError(null);
     setIsSavingArtifact(true);
     const url = getSupabaseUrl();
@@ -1981,6 +2321,11 @@ function App() {
     if (!supabaseSession || !activeCommunityId) return;
     const text = communityMessageInput.trim();
     if (!text) return;
+    const scan = await scanPublishContent(text);
+    if (scan?.blocked) {
+      setCommunityChatError(formatSecretScanError(scan));
+      return;
+    }
 
     // Optimistic update: add message immediately with pending state
     const optimisticId = `pending-${Date.now()}`;
@@ -2056,6 +2401,13 @@ function App() {
     }
     if ((resourceTypeInput === "link" || resourceTypeInput === "embed") && !resourceUrlInput.trim()) {
       setResourceError("URL is required for links and embeds.");
+      return;
+    }
+    const scan = await scanPublishContent(
+      [title, resourceBodyInput.trim(), resourceUrlInput.trim()].filter(Boolean).join("\n\n")
+    );
+    if (scan?.blocked) {
+      setResourceError(formatSecretScanError(scan));
       return;
     }
     setResourceError(null);
@@ -2232,6 +2584,25 @@ function App() {
 
   const enabledModels = modelToggles.filter((toggle) => toggle.enabled);
   const activeCommunity = communities.find((item) => item.id === activeCommunityId) ?? null;
+  const effectiveCwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+  const lastThreadWorkspaceRef = useRef<string | null>(null);
+
+  function settingsPageLabel(page: SettingsPage): string {
+    switch (page) {
+      case "models":
+        return "Models";
+      case "apiKeys":
+        return "API Keys";
+      case "community":
+        return "Community";
+      case "execution":
+        return "Execution";
+      case "session":
+        return "Session";
+      case "memory":
+        return "Memory";
+    }
+  }
 
   async function loadWorkspaceRoot() {
     const root = await invoke<string>("get_workspace_root_cmd");
@@ -2260,6 +2631,10 @@ function App() {
     setWorkspaceRoot(selected);
     setActiveProject(null);
     await invoke("set_active_project_cmd", { projectId: null });
+    if (activeThreadId) {
+      await invoke("set_thread_workspace_cmd", { threadId: activeThreadId, workspacePath: selected });
+      lastThreadWorkspaceRef.current = selected;
+    }
     void loadProjects();
   }
 
@@ -2368,15 +2743,36 @@ function App() {
     setNewProjectName("");
     setActiveProject(created);
     await invoke("set_active_project_cmd", { projectId: created.id });
+    if (activeThreadId) {
+      await invoke("set_thread_workspace_cmd", {
+        threadId: activeThreadId,
+        workspacePath: created.root_path
+      });
+      lastThreadWorkspaceRef.current = created.root_path;
+    }
     void loadProjects();
   }
 
-  async function handleCreateSession() {
-    const session = await invoke<SessionRecord>("create_session_cmd", {
-      title: newSessionTitle
+  async function handleCreateThread() {
+    const thread = await invoke<ThreadRecord>("create_thread_cmd", {
+      title: newThreadTitle,
+      engineId: activeEngineId,
+      modelId: activeEngineId === "openrouter_chat" ? activeModelId : null
     });
-    setSessions((prev) => [session, ...prev]);
-    setActiveSessionId(session.id);
+    const mapped: SessionRecord = {
+      id: thread.id,
+      title: (thread.title ?? "").trim() || "Untitled thread",
+      created_at: thread.created_at,
+      updated_at: thread.updated_at
+    };
+    setThreads((prev) => [mapped, ...prev]);
+    setActiveThreadId(thread.id);
+    const nextWorkspace = effectiveCwd;
+    await invoke("set_thread_workspace_cmd", {
+      threadId: thread.id,
+      workspacePath: nextWorkspace
+    });
+    lastThreadWorkspaceRef.current = nextWorkspace;
     setMessages([]);
     setToolCalls([]);
     setOutputByToolCallId({});
@@ -2384,19 +2780,32 @@ function App() {
     setActiveOutputId(null);
   }
 
-  async function handleDeleteSession(sessionId: string) {
-    // For now, just remove from local state
-    // TODO: Add backend delete command
-    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    if (activeSessionId === sessionId) {
-      const remaining = sessions.filter((s) => s.id !== sessionId);
-      setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
+  useEffect(() => {
+    if (!activeThreadId) return;
+    const nextWorkspace = effectiveCwd;
+    if (!nextWorkspace) return;
+    if (lastThreadWorkspaceRef.current === nextWorkspace) return;
+    lastThreadWorkspaceRef.current = nextWorkspace;
+    void invoke("set_thread_workspace_cmd", {
+      threadId: activeThreadId,
+      workspacePath: nextWorkspace
+    }).catch(() => {
+      // Non-fatal; workspace is best-effort metadata.
+    });
+  }, [activeThreadId, effectiveCwd]);
+
+  async function handleDeleteThread(threadId: string) {
+    await invoke("delete_thread_cmd", { threadId });
+    setThreads((prev) => prev.filter((t) => t.id !== threadId));
+    if (activeThreadId === threadId) {
+      const remaining = threads.filter((t) => t.id !== threadId);
+      setActiveThreadId(remaining.length > 0 ? remaining[0].id : null);
       setMessages([]);
     }
   }
 
-  function getSessionPreview(sessionId: string): string {
-    if (sessionId !== activeSessionId) return "";
+  function getThreadPreview(threadId: string): string {
+    if (threadId !== activeThreadId) return "";
     const firstUserMsg = messages.find((m) => m.role === "user");
     if (!firstUserMsg) return "No messages";
     const text = parseMessageText(firstUserMsg.content_json);
@@ -2439,26 +2848,8 @@ function App() {
     command: string,
     output: string
   ) {
-    if (!activeModelIdRef.current) return;
-    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
-    const truncatedOutput = output.length > 8000 ? output.slice(-8000) : output;
-    const response = await invoke<string>("submit_tool_output_cmd", {
-      sessionId,
-      modelId: activeModelIdRef.current,
-      command,
-      output: truncatedOutput,
-      toolCallId,
-      cwd
-    });
-    if (response && response.trim()) {
-      await invoke("add_message_cmd", {
-        sessionId,
-        role: "assistant",
-        contentJson: JSON.stringify({ text: response })
-      });
-      await loadMessages(sessionId);
-    }
-    await loadToolCalls(sessionId);
+    const _ = (sessionId, toolCallId, command, output);
+    // Internal tool follow-up is disabled in MVP.
   }
 
   function handleExitEvent(
@@ -2531,21 +2922,29 @@ function App() {
     outputSeqRef.current[toolCallId] = next;
   }
 
-  async function ensureSessionId(): Promise<string | null> {
-    if (activeSessionId) return activeSessionId;
-    const session = await invoke<SessionRecord>("create_session_cmd", {
-      title: newSessionTitle
+  async function ensureThreadId(): Promise<string | null> {
+    if (activeThreadId) return activeThreadId;
+    const thread = await invoke<ThreadRecord>("create_thread_cmd", {
+      title: newThreadTitle,
+      engineId: activeEngineId,
+      modelId: activeEngineId === "openrouter_chat" ? activeModelId : null
     });
-    setSessions((prev) => [session, ...prev]);
-    setActiveSessionId(session.id);
-    return session.id;
+    const mapped: SessionRecord = {
+      id: thread.id,
+      title: (thread.title ?? "").trim() || "Untitled thread",
+      created_at: thread.created_at,
+      updated_at: thread.updated_at
+    };
+    setThreads((prev) => [mapped, ...prev]);
+    setActiveThreadId(thread.id);
+    return thread.id;
   }
 
   async function handleSendMessage() {
     const hasText = commandInput.trim().length > 0;
     const hasAttachments = attachments.length > 0;
     if (!hasText && !hasAttachments) return;
-    const sessionId = await ensureSessionId();
+    const sessionId = await ensureThreadId();
     if (!sessionId) return;
     const userText = commandInput.trim();
     const currentAttachments = [...attachments];
@@ -2577,42 +2976,15 @@ function App() {
       if (handledSlash) {
         return;
       }
-      if (!activeModelId) {
-        await invoke("add_message_cmd", {
-          sessionId,
-          role: "assistant",
-          contentJson: JSON.stringify({
-            text: "No model selected. Enable a model in Settings to get a response."
-          })
-        });
-        await loadMessages(sessionId);
-        return;
-      }
-      const provider = MODEL_PROVIDERS[activeModelId];
-      if (!provider || !isProviderReady(provider)) {
-        await invoke("add_message_cmd", {
-          sessionId,
-          role: "assistant",
-          contentJson: JSON.stringify({
-            text: "Provider not configured. Add the API key in Settings."
-          })
-        });
-        await loadMessages(sessionId);
-        return;
-      }
 
-      const assistantText = await invoke<string>("generate_assistant_message_cmd", {
-        sessionId,
-        modelId: activeModelId,
-        cwd: activeProject?.root_path ?? workspaceRoot ?? "."
-      });
-      await invoke("add_message_cmd", {
-        sessionId,
-        role: "assistant",
-        contentJson: JSON.stringify({ text: assistantText })
-      });
-      await loadMessages(sessionId);
-      await loadToolCalls(sessionId);
+      if (userText.length > 0) {
+        await invoke("engine_send_turn_cmd", {
+          threadId: sessionId,
+          cwd: activeProject?.root_path ?? workspaceRoot ?? ".",
+          input: userText
+        });
+        await loadMessages(sessionId);
+      }
     } catch (error) {
       const message =
         typeof error === "string"
@@ -2623,7 +2995,7 @@ function App() {
       await invoke("add_message_cmd", {
         sessionId,
         role: "assistant",
-        contentJson: JSON.stringify({ text: `LLM error: ${message}` })
+        contentJson: JSON.stringify({ text: `Engine error: ${message}` })
       });
       await loadMessages(sessionId);
     } finally {
@@ -2631,74 +3003,13 @@ function App() {
     }
   }
 
-  function openMemoryEditor(block: MemoryBlockRecord, prefill?: string) {
-    setMemoryEditorBlock(block);
-    setMemoryEditorValue(prefill ?? block.value);
-    setMemoryEditorError(null);
-    setMemoryEditorSuccess(null);
-  }
-
-  function resetMemoryEditor() {
-    setMemoryEditorBlock(null);
-    setMemoryEditorValue("");
-    setMemoryEditorError(null);
-    setMemoryEditorSuccess(null);
-  }
-
-  function extractLastAction(value: string): string | null {
-    const match = value.match(/^\s*last_action:\s*(.+)\s*$/m);
-    if (!match) return null;
-    const raw = match[1].trim();
-    return raw.replace(/^['"]|['"]$/g, "").trim() || null;
-  }
-
-  async function handleSaveMemoryUpdate() {
-    if (!memoryEditorBlock) return;
-    setMemoryEditorError(null);
-    setMemoryEditorSuccess(null);
-    setIsSavingMemoryProposal(true);
-    try {
-      const updated = await invoke<MemoryBlockRecord>("save_memory_block_update_cmd", {
-        sessionId: activeSessionId,
-        label: memoryEditorBlock.label,
-        scope: memoryEditorBlock.scope,
-        scopeId: memoryEditorBlock.scope_id,
-        value: memoryEditorValue
-      });
-      setMemoryEditorBlock(updated);
-      setMemoryEditorValue(updated.value);
-      setMemoryEditorSuccess("Saved.");
-      await loadMemoryBlocks();
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save memory update";
-      setMemoryEditorError(message);
-    } finally {
-      setIsSavingMemoryProposal(false);
-    }
-  }
-
   async function proposeShellCommand(sessionId: string, command: string) {
-    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
-    const args = {
-      tool: "run_shell_command",
-      command,
-      shell: "zsh",
-      cwd,
-      timeout_ms: 120000
-    };
-    await invoke("propose_tool_call_cmd", {
-      sessionId,
-      toolName: "run_shell_command",
-      argsJson: JSON.stringify(args),
-      riskLevel: "high",
-      commandPreviewRedacted: command
+    const _ = (sessionId, command);
+    setSlashPanel({
+      kind: "info",
+      title: "Disabled",
+      body: "Internal tool execution is disabled in MVP; use the engine terminal."
     });
-    await loadToolCalls(sessionId);
   }
 
   async function handleSlashCommand(userText: string, sessionId: string): Promise<boolean> {
@@ -2712,19 +3023,6 @@ function App() {
     };
 
     if (name === "status") {
-      const counts = toolCalls.reduce(
-        (acc, tool) => {
-          acc[tool.status] = (acc[tool.status] ?? 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>
-      );
-      const running = runningToolCallId
-        ? toolCalls.find((tool) => tool.id === runningToolCallId)
-        : null;
-      const runningLabel = running
-        ? parseToolCall(running).command || running.tool_name
-        : "none";
       const lastMsg = sessionResume?.last_message_at
         ? formatRelativeTime(sessionResume.last_message_at)
         : "—";
@@ -2738,8 +3036,7 @@ function App() {
         `Project: ${activeProject?.name ?? activeProject?.root_path ?? "none"}`,
         `Last message: ${lastMsg}`,
         `Last response: ${responseId}`,
-        `Running: ${runningLabel}`,
-        `Tool calls: proposed ${counts.proposed ?? 0}, approved ${counts.approved ?? 0}, executed ${counts.executed ?? 0}, failed ${counts.failed ?? 0}, canceled ${counts.canceled ?? 0}`
+        "Internal tool system: disabled (use engine terminal)"
       ].join("\n");
       showPanel("status", "Status", text);
       return true;
@@ -2803,103 +3100,68 @@ function App() {
 
     if (name === "remember") {
       const rest = userText.slice(userText.indexOf("remember") + "remember".length).trim();
-      if (rest.includes("::")) {
-        const parts = rest.split("::");
-        const title = (parts[0] ?? "").trim();
-        const body = parts.slice(1).join("::").trim();
-        if (!title || !body) {
-          showPanel("info", "Memory", "Usage: /remember <title> :: <body>");
-          return true;
-        }
-        try {
-          await invoke("create_memory_note_cmd", {
-            sessionId,
-            title,
-            bodyMd: body,
-            tags: null
-          });
-          showPanel("info", "Memory", `Saved note: ${title}`);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to save memory note";
-          showPanel("info", "Memory", message);
-        }
-        return true;
-      }
-      setActiveView("settings");
-      let targetLabel: string | null = null;
-      let prefillValue: string | null = null;
-      const match = rest.match(/^([a-z_]+)\s*:\s*([\s\S]*)$/i);
-      if (match) {
-        targetLabel = match[1].toLowerCase();
-        prefillValue = match[2];
-      }
-      const allowedLabels = new Set(["persona", "preferences", "codebase_context"]);
-      if (!targetLabel || !allowedLabels.has(targetLabel)) {
-        resetMemoryEditor();
-        showPanel("info", "Memory", "Open Settings → Memory to propose an update.");
-        return true;
-      }
-      if (targetLabel === "codebase_context" && !activeProject) {
-        resetMemoryEditor();
-        showPanel("info", "Memory", "Select a project before updating codebase_context.");
-        return true;
-      }
       try {
-        const globalBlocks = await invoke<MemoryBlockRecord[]>("list_memory_blocks_cmd", {
-          scope: "global",
-          scopeId: null
-        });
-        const projectBlocks = activeProject
-          ? await invoke<MemoryBlockRecord[]>("list_memory_blocks_cmd", {
-              scope: "project",
-              scopeId: activeProject.id
-            })
-          : [];
-        const combined = [...globalBlocks, ...projectBlocks];
-        setMemoryBlocks(combined);
-        const target = combined.find(
-          (block) =>
-            block.label === targetLabel &&
-            block.scope === (targetLabel === "codebase_context" ? "project" : "global")
-        );
-        if (!target) {
-          resetMemoryEditor();
-          showPanel("info", "Memory", "Memory block not found. Open Settings → Memory.");
+        if (!rest) {
+          showPanel(
+            "info",
+            "Memory",
+            "Usage:\n/remember <content>\n/remember global: <content>\n/remember workspace: <content>"
+          );
           return true;
         }
-        openMemoryEditor(target, prefillValue ?? undefined);
-        showPanel("info", "Memory", `Editing ${target.label}.`);
-        return true;
+
+        let scope: "global" | "workspace" = "workspace";
+        let content = rest;
+        const scopeMatch = rest.match(/^(global|workspace)\s*:\s*([\s\S]+)$/i);
+        if (scopeMatch) {
+          scope = scopeMatch[1].toLowerCase() as "global" | "workspace";
+          content = scopeMatch[2];
+        }
+        content = content.trim();
+        if (!content) {
+          showPanel(
+            "info",
+            "Memory",
+            "Usage:\n/remember <content>\n/remember global: <content>\n/remember workspace: <content>"
+          );
+          return true;
+        }
+
+        await invoke("create_personal_memory_item_cmd", {
+          content,
+          scope,
+          scopeId: scope === "workspace" ? getEffectiveWorkspacePath() : null,
+          pinned: false,
+          provenanceEventId: null
+        });
+        setActiveView("settings");
+        setSettingsPage("memory");
+        setPersonalMemoryQuery("");
+        await loadPersonalMemoryItems();
+        showPanel("info", "Memory", `Saved to ${scope} memory.`);
       } catch (error) {
         const message =
           typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
-              : "Failed to load memory blocks";
-        resetMemoryEditor();
+              : "Failed to save memory";
         showPanel("info", "Memory", message);
-        return true;
       }
+      return true;
     }
 
     showPanel("info", "Slash command", `Unknown slash command: /${name}`);
     return true;
   }
 
-  async function clearSessionApprovals() {
+  async function clearThreadApprovals() {
     setSessionExecPolicyRules("");
-    if (!activeSessionId) return;
+    if (!activeThreadId) return;
     await invoke("set_session_exec_policy_rules_cmd", {
-      sessionId: activeSessionId,
+      sessionId: activeThreadId,
       rules: ""
     });
-    void loadToolCalls(activeSessionId);
   }
 
   async function applyApprovalMode(mode: "read-only" | "agent" | "agent-full") {
@@ -2908,13 +3170,10 @@ function App() {
     setExecPolicyRules(preset.rules);
     await invoke("set_approval_mode_cmd", { mode });
     await invoke("set_exec_policy_rules_cmd", { rules: preset.rules });
-    if (activeSessionId) {
-      void loadToolCalls(activeSessionId);
-    }
   }
 
   async function handleSlashSelect(command: string) {
-    const sessionId = await ensureSessionId();
+    const sessionId = await ensureThreadId();
     if (!sessionId) return;
     setCommandInput("");
     setIsSending(true);
@@ -2923,144 +3182,44 @@ function App() {
     } finally {
       setIsSending(false);
     }
-  }
+	  }
 
-	  async function handleApprove(toolCall: ToolCallRecord) {
-	    await invoke("approve_tool_call_cmd", {
-	      sessionId: toolCall.session_id,
-	      toolCallId: toolCall.id
-	    });
-	    setToolCalls((prev) =>
-	      prev.map((item) =>
-        item.id === toolCall.id ? { ...item, status: "approved" } : item
-      )
-    );
-    void loadAuditLog(toolCall.session_id);
-  }
-
-  async function runToolCallThroughBackend(toolCall: ToolCallRecord) {
-    if (!activeModelIdRef.current) {
-      throw new Error("No model selected.");
-    }
-    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
-    const details = parseToolCall(toolCall);
-
-    // Prepare terminal view for shell runs
-    if (details.toolName === "run_shell_command") {
-      setActiveOutputId(toolCall.id);
-      terminalRef.current?.reset();
-      terminalRef.current?.write(`$ ${details.command}\r\n`);
-    }
-
-    setRunningToolCallId(toolCall.id);
-    try {
-      const response = await invoke<string>("approve_and_run_tool_call_cmd", {
-        sessionId: toolCall.session_id,
-        modelId: activeModelIdRef.current,
-        toolCallId: toolCall.id,
-        cwd
-      });
-
-      if (response && response.trim()) {
-        await invoke("add_message_cmd", {
-          sessionId: toolCall.session_id,
-          role: "assistant",
-          contentJson: JSON.stringify({ text: response })
+		  async function handleApprove(_toolCall: ToolCallRecord) {
+        setSlashPanel({
+          kind: "info",
+          title: "Disabled",
+          body: "Internal tool execution is disabled in MVP; use the engine terminal."
         });
-        await loadMessages(toolCall.session_id);
-      }
+	  }
 
-      await loadToolCalls(toolCall.session_id);
-      void loadAuditLog(toolCall.session_id);
-    } finally {
-      setRunningToolCallId((prev) => (prev === toolCall.id ? null : prev));
-    }
-  }
+	  async function runToolCallThroughBackend(toolCall: ToolCallRecord) {
+      const _ = toolCall;
+      throw new Error("Internal tool execution is disabled in MVP; use the engine terminal.");
+	  }
 
-  async function respondPermission(toolCall: ToolCallRecord, response: "session" | "always") {
-    if (!activeModelIdRef.current) {
-      throw new Error("No model selected.");
-    }
-    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
-    const details = parseToolCall(toolCall);
-
-    // Prepare terminal view for shell runs
-    if (details.toolName === "run_shell_command") {
-      setActiveOutputId(toolCall.id);
-      terminalRef.current?.reset();
-      terminalRef.current?.write(`$ ${details.command}\r\n`);
-    }
-
-    setRunningToolCallId(toolCall.id);
-    try {
-      const result = await invoke<string>("respond_permission_cmd", {
-        sessionId: toolCall.session_id,
-        modelId: activeModelIdRef.current,
-        toolCallId: toolCall.id,
-        response,
-        cwd
-      });
-
-      if (result && result.trim()) {
-        await invoke("add_message_cmd", {
-          sessionId: toolCall.session_id,
-          role: "assistant",
-          contentJson: JSON.stringify({ text: result })
-        });
-        await loadMessages(toolCall.session_id);
-      }
-
-      await loadToolCalls(toolCall.session_id);
-      void loadAuditLog(toolCall.session_id);
-    } finally {
-      setRunningToolCallId((prev) => (prev === toolCall.id ? null : prev));
-    }
-  }
+	  async function respondPermission(toolCall: ToolCallRecord, response: "session" | "always") {
+      const _ = (toolCall, response);
+      throw new Error("Internal tool execution is disabled in MVP; use the engine terminal.");
+	  }
 
   async function handleApproveAndRun(toolCall: ToolCallRecord) {
     await runToolCallThroughBackend(toolCall);
   }
 
-  async function handleRejectToolCall(toolCall: ToolCallRecord) {
-    if (!activeModelIdRef.current) {
-      throw new Error("No model selected.");
-    }
-    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+	  async function handleRejectToolCall(toolCall: ToolCallRecord) {
+      const _ = toolCall;
+      throw new Error("Internal tool execution is disabled in MVP; use the engine terminal.");
+	  }
 
-    setRunningToolCallId(toolCall.id);
-    try {
-      const response = await invoke<string>("reject_tool_call_cmd", {
-        sessionId: toolCall.session_id,
-        modelId: activeModelIdRef.current,
-        toolCallId: toolCall.id,
-        reason: null,
-        cwd
-      });
+	  async function handleExecute(toolCall: ToolCallRecord) {
+      const _ = toolCall;
+      throw new Error("Internal tool execution is disabled in MVP; use the engine terminal.");
+	  }
 
-      if (response && response.trim()) {
-        await invoke("add_message_cmd", {
-          sessionId: toolCall.session_id,
-          role: "assistant",
-          contentJson: JSON.stringify({ text: response })
-        });
-        await loadMessages(toolCall.session_id);
-      }
-
-      await loadToolCalls(toolCall.session_id);
-      void loadAuditLog(toolCall.session_id);
-    } finally {
-      setRunningToolCallId((prev) => (prev === toolCall.id ? null : prev));
-    }
-  }
-
-  async function handleExecute(toolCall: ToolCallRecord) {
-    await runToolCallThroughBackend(toolCall);
-  }
-
-  const activeToolCalls = useMemo(() => {
-    if (!activeSessionId) return [];
-    return toolCalls.filter((toolCall) => toolCall.session_id === activeSessionId);
-  }, [toolCalls, activeSessionId]);
+	  const activeToolCalls = useMemo(() => {
+	    const _ = (toolCalls, activeThreadId);
+	    return [] as ToolCallRecord[];
+	  }, [toolCalls, activeThreadId]);
 
   // Combined feed: messages + tool calls sorted by created_at
   type FeedItem =
@@ -3120,44 +3279,66 @@ function App() {
       <header className="app-topbar" data-tauri-drag-region>
         <div className="topbar-left" data-tauri-drag-region>
           {activePage === "workspace" ? (
-            <>
+            activeView === "settings" ? (
               <button
-                className={`icon-button${userWantsSessions ? " active" : ""}`}
+                className="back-to-workspace"
                 data-tauri-drag-region="false"
-                onClick={() => setUserWantsSessions((prev) => !prev)}
-                aria-label="Toggle sessions panel"
-                title="Toggle sessions panel"
+                onClick={() => setActiveView("home")}
+                title="Back"
               >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <path d="M9 4v16" />
+                <svg viewBox="0 0 24 24" className="back-icon">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
-              </button>
-              <button
-                className="workspace-selector"
-                data-tauri-drag-region="false"
-                onClick={handleChangeWorkspace}
-                title="Select directory"
-              >
-                <svg viewBox="0 0 24 24" className="workspace-icon">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-                <span className="workspace-name">
-                  {workspaceRoot?.split("/").pop() ?? "Select directory..."}
+                <span className="back-path">
+                  settings / {settingsPageLabel(settingsPage)}
                 </span>
               </button>
-              <button
-                className="new-session-header-btn"
-                data-tauri-drag-region="false"
-                onClick={handleCreateSession}
-                title="New session"
-              >
-                <svg viewBox="0 0 24 24">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
-            </>
+            ) : (
+              <>
+                <button
+                  className={`icon-button${userWantsSessions ? " active" : ""}`}
+                  data-tauri-drag-region="false"
+                  onClick={() => setUserWantsSessions((prev) => !prev)}
+                  aria-label="Toggle threads panel"
+                  title="Toggle threads panel"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M9 4v16" />
+                  </svg>
+                </button>
+                <button
+                  className="workspace-selector"
+                  data-tauri-drag-region="false"
+                  onClick={handleChangeWorkspace}
+                  title={
+                    workspaceRoot
+                      ? `CWD: ${effectiveCwd}\nWorkspace root: ${workspaceRoot}`
+                      : `CWD: ${effectiveCwd}`
+                  }
+                >
+                  <svg viewBox="0 0 24 24" className="workspace-icon">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span className="workspace-name">
+                    {effectiveCwd === "."
+                      ? "Select directory..."
+                      : effectiveCwd.split("/").pop() ?? effectiveCwd}
+                  </span>
+                </button>
+                <button
+                  className="new-session-header-btn"
+                  data-tauri-drag-region="false"
+                  onClick={handleCreateThread}
+                  title="New thread"
+                >
+                  <svg viewBox="0 0 24 24">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              </>
+            )
           ) : (
             <button
               className="back-to-workspace"
@@ -3206,46 +3387,71 @@ function App() {
         </div>
       </header>
       <div className={`app-shell${(activePage === "workspace" && !showSidePanel) ? " no-left" : ""}${(activePage === "workspace" || !showCommunityPanel) ? " no-right" : ""}${sessionsCompact ? " sessions-compact" : ""}`}>
-      {showSidePanel && activePage === "workspace" && (
+            {showSidePanel && activePage === "workspace" && (
         <aside className="sessions">
-          <div className="panel-title">Sessions</div>
-          <div className="session-list">
-            {groupSessionsByDate(sessions).map((group) => (
-              <div key={group.label} className="session-group">
-                <div className="session-group-label">{group.label}</div>
-                {group.sessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`session-item${session.id === activeSessionId ? " active" : ""}`}
-                    onClick={() => setActiveSessionId(session.id)}
+          {activeView === "settings" ? (
+            <>
+              <div className="panel-title">Settings</div>
+              <div className="session-list">
+                {(
+                  ["models", "apiKeys", "community", "execution", "session", "memory"] as const
+                ).map((page) => (
+                  <button
+                    key={page}
+                    className={settingsPage === page ? "nav-item active" : "nav-item"}
+                    onClick={() => setSettingsPage(page)}
+                    type="button"
                   >
-                    <div className="session-content">
-                      <div className="session-title">{session.title}</div>
-                      <div className="session-preview">
-                        {getSessionPreview(session.id)}
-                      </div>
-                    </div>
-                    <div className="session-meta">
-                      <div className="session-actions">
-                        <button
-                          className="session-action"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }}
-                          title="Delete session"
-                        >
-                          <svg viewBox="0 0 24 24">
-                            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    {settingsPageLabel(page)}
+                  </button>
                 ))}
               </div>
-            ))}
-            {sessions.length === 0 && (
-              <div className="empty-state">No sessions yet. Click + to start.</div>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <div className="panel-title">Threads</div>
+              <div className="session-list">
+                {groupThreadsByDate(threads).map((group) => (
+                  <div key={group.label} className="session-group">
+                    <div className="session-group-label">{group.label}</div>
+                    {group.threads.map((thread) => (
+                      <div
+                        key={thread.id}
+                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                        onClick={() => setActiveThreadId(thread.id)}
+                      >
+                        <div className="session-content">
+                          <div className="session-title">{thread.title}</div>
+                          <div className="session-preview">
+                            {getThreadPreview(thread.id)}
+                          </div>
+                        </div>
+                        <div className="session-meta">
+                          <div className="session-actions">
+                            <button
+                              className="session-action"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteThread(thread.id);
+                              }}
+                              title="Delete thread"
+                            >
+                              <svg viewBox="0 0 24 24">
+                                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {threads.length === 0 && (
+                  <div className="empty-state">No threads yet. Click + to start.</div>
+                )}
+              </div>
+            </>
+          )}
           <div className="sessions-footer">
             <button
               className={`icon-button${activeView === "settings" ? " active" : ""}`}
@@ -3287,323 +3493,333 @@ function App() {
       <main className={`workspace${activePage === "community" ? " community-mode" : ""}`}>
         {activeView === "settings" ? (
           <div className="settings-panel">
-            <div className="panel-title">Models</div>
-            <div className="model-list">
-              {modelToggles.map((toggle) => (
-                <label key={toggle.id} className="model-toggle">
-                  <input
-                    type="checkbox"
-                    checked={toggle.enabled}
-                    onChange={() => void handleToggleModel(toggle.id)}
-                  />
-                  <span>
-                    {toggle.label}
-                    {!isProviderReady(MODEL_PROVIDERS[toggle.id]) && " (missing key)"}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="panel-title">API Keys</div>
-            <div className="key-list">
-              {providerKeys.map((provider) => (
-                <div key={provider.id} className="key-row">
-                  <div className="key-label">{provider.label}</div>
-                  <input
-                    type="password"
-                    value={provider.inputValue}
-                    placeholder={provider.hasKey ? "Key saved" : "Enter key"}
-                    onChange={(event) =>
-                      setProviderKeys((prev) =>
-                        prev.map((item) =>
-                          item.id === provider.id
-                            ? { ...item, inputValue: event.target.value }
-                            : item
-                        )
-                      )
-                    }
-                  />
-                  <button onClick={() => void handleSaveProviderKey(provider.id)}>
-                    Save
-                  </button>
-                  <button
-                    className="secondary"
-                    onClick={() => void handleClearProviderKey(provider.id)}
-                  >
-                    Clear
-                  </button>
-                  {provider.error && <div className="key-error">{provider.error}</div>}
-                </div>
-              ))}
-            </div>
-            <div className="panel-title">Community Account</div>
-            <div className="auth-panel">
-              {supabaseSession ? (
-                <div className="auth-row">
-                  <div className="auth-status">
-                    Signed in as {supabaseSession.user.email ?? "user"}
-                  </div>
-                  <button onClick={() => void handleSignOut()}>Sign out</button>
-                </div>
-              ) : (
-                <>
-                <div className="auth-row">
-                  <button onClick={() => void handleSignIn()}>
-                    Continue with Google
-                  </button>
-                </div>
-                {authError && <div className="auth-error">{authError}</div>}
-              </>
-              )}
-            </div>
-            <div className="panel-title">Create Community</div>
-            <div className="create-community">
-              <input
-                type="text"
-                placeholder="Community name"
-                value={communityNameInput}
-                onChange={(event) => setCommunityNameInput(event.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Slug (optional)"
-                value={communitySlugInput}
-                onChange={(event) => setCommunitySlugInput(event.target.value)}
-              />
-              <button onClick={() => void handleCreateCommunity()}>
-                Create community
-              </button>
-              {communityError && <div className="auth-error">{communityError}</div>}
-            </div>
-            <div className="panel-title">Execution Rules</div>
-            <div className="approval-selector">
-              <div className="approval-title">Select Approval Mode</div>
-              {(["read-only", "agent", "agent-full"] as const).map((mode) => {
-                const preset = APPROVAL_PRESETS[mode];
-                const isActive = approvalMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    className={`approval-option${isActive ? " active" : ""}`}
-                    onClick={() => void applyApprovalMode(mode)}
-                  >
-                    <div className="approval-option-title">{preset.label}</div>
-                    <div className="approval-option-desc">{preset.description}</div>
-                  </button>
-                );
-              })}
-              <div className="approval-note">
-                Approval mode updates global exec policy rules (commands still require explicit approval).
-              </div>
-            </div>
-            <div className="exec-policy">
-              <textarea
-                className="exec-policy-input"
-                value={execPolicyRules}
-                onChange={(event) => setExecPolicyRules(event.target.value)}
-                placeholder="prompt\ndefault\nallow git status\nforbid rm -rf /"
-              />
-              <div className="exec-policy-actions">
-                <button onClick={() => void handleSaveExecPolicyRules()} disabled={isSavingExecPolicy}>
-                  {isSavingExecPolicy ? "Saving..." : "Save rules"}
-                </button>
-                {execPolicyError && <div className="exec-policy-error">{execPolicyError}</div>}
-              </div>
-            </div>
-            <div className="panel-title">Session Allow Rules</div>
-            <div className="exec-policy">
-              <textarea
-                className="exec-policy-input"
-                value={sessionExecPolicyRules}
-                onChange={(event) => setSessionExecPolicyRules(event.target.value)}
-                placeholder="allow git status\nallow ls"
-              />
-              <div className="exec-policy-actions">
-                <button
-                  onClick={() => void handleSaveSessionExecPolicyRules()}
-                  disabled={isSavingSessionExecPolicy || !activeSessionId}
-                >
-                  {isSavingSessionExecPolicy ? "Saving..." : "Save session rules"}
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    setSessionExecPolicyRules("");
-                    if (activeSessionId) {
-                      void invoke("set_session_exec_policy_rules_cmd", {
-                        sessionId: activeSessionId,
-                        rules: ""
-                      });
-                    }
-                  }}
-                  disabled={!activeSessionId}
-                >
-                  Clear session rules
-                </button>
-                {sessionExecPolicyError && (
-                  <div className="exec-policy-error">{sessionExecPolicyError}</div>
-                )}
-              </div>
-            </div>
-            <div className="panel-title">Session Resume</div>
-            <div className="session-resume">
-              {sessionResume ? (
-                <>
-                  <div className="session-resume-row">
-                    <span>Last message</span>
-                    <span>
-                      {sessionResume.last_message_at
-                        ? formatRelativeTime(sessionResume.last_message_at)
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="session-resume-row">
-                    <span>Last response</span>
-                    <span>{sessionResume.last_response_id ?? "—"}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="session-resume-empty">No resume data.</div>
-              )}
-              <button
-                className="secondary"
-                onClick={() => void handleExportEventLog()}
-                disabled={!activeSessionId || isExportingLog}
-              >
-                {isExportingLog ? "Exporting..." : "Copy event log JSONL"}
-              </button>
-              {exportLogMessage && (
-                <div className="session-resume-msg">{exportLogMessage}</div>
-              )}
-            </div>
-            <div className="panel-title">Memory</div>
-            <div className="memory-panel">
-              {memoryBlocksError && (
-                <div className="memory-error">{memoryBlocksError}</div>
-              )}
-              <div className="memory-blocks">
-                <div className="memory-block-group">
-                  <div className="memory-block-group-title">Global</div>
-                  {globalMemoryBlocks.length === 0 ? (
-                    <div className="memory-block-empty">No global blocks.</div>
-                  ) : (
-                    globalMemoryBlocks.map((block) => (
-                      <div
-                        key={block.id}
-                        className={`memory-block${block.read_only ? " read-only" : ""}`}
-                      >
-                        <div className="memory-block-header">
-                          <div className="memory-block-label">{block.label}</div>
-                          <div className="memory-block-actions">
-                            <button
-                              className="secondary"
-                              onClick={() => openMemoryEditor(block)}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                        {block.description && (
-                          <div className="memory-block-desc">{block.description}</div>
-                        )}
-                        <div className="memory-block-meta">
-                          {block.format} · limit {block.char_limit}
-                          {block.read_only ? " · read-only" : ""}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="memory-block-group">
-                  <div className="memory-block-group-title">Project</div>
-                  {!activeProject && (
-                    <div className="memory-block-empty">Select a project to view project memory.</div>
-                  )}
-                  {activeProject && projectMemoryBlocks.length === 0 && (
-                    <div className="memory-block-empty">No project blocks yet.</div>
-                  )}
-                  {activeProject && projectMemoryBlocks.map((block) => (
-                    <div
-                      key={block.id}
-                      className={`memory-block${block.read_only ? " read-only" : ""}`}
-                    >
-                      <div className="memory-block-header">
-                        <div className="memory-block-label">{block.label}</div>
-                        <div className="memory-block-actions">
-                          <button
-                            className="secondary"
-                            onClick={() => openMemoryEditor(block)}
-                          >
-                            Edit
-                          </button>
-                        </div>
-                      </div>
-                      {block.description && (
-                        <div className="memory-block-desc">{block.description}</div>
-                      )}
-                      {block.label === "working_set" && (
-                        <div className="memory-block-preview">
-                          last_action: {extractLastAction(block.value) ?? "—"}
-                        </div>
-                      )}
-                      <div className="memory-block-meta">
-                        {block.format} · limit {block.char_limit}
-                        {block.read_only ? " · read-only" : ""}
-                      </div>
-                    </div>
+            {settingsPage === "models" && (
+              <>
+                <div className="panel-title">Models</div>
+                <div className="model-list">
+                  {modelToggles.map((toggle) => (
+                    <label key={toggle.id} className="model-toggle">
+                      <input
+                        type="checkbox"
+                        checked={toggle.enabled}
+                        onChange={() => void handleToggleModel(toggle.id)}
+                      />
+                      <span>
+                        {toggle.label}
+                        {!isProviderReady(MODEL_PROVIDERS[toggle.id]) && " (missing key)"}
+                      </span>
+                    </label>
                   ))}
                 </div>
-              </div>
-              <div className="memory-editor">
-                {memoryEditorBlock ? (
-                  <>
+              </>
+            )}
+            {settingsPage === "apiKeys" && (
+              <>
+                <div className="panel-title">OpenRouter API Key</div>
+                <div className="key-list">
+                  <div className="key-row">
+                    <div className="key-label">OpenRouter</div>
+                    <input
+                      type="password"
+                      value={providerKeys[0]?.inputValue ?? ""}
+                      placeholder={providerKeys[0]?.hasKey ? "Key saved" : "Enter key"}
+                      onChange={(event) =>
+                        setProviderKeys((prev) => [
+                          { ...prev[0], inputValue: event.target.value }
+                        ])
+                      }
+                    />
+                    <button onClick={() => void handleSaveProviderKey("openrouter")}>
+                      Save
+                    </button>
+                    <button
+                      className="secondary"
+                      onClick={() => void handleClearProviderKey("openrouter")}
+                    >
+                      Clear
+                    </button>
+                    {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+                  </div>
+                </div>
+              </>
+            )}
+            {settingsPage === "community" && (
+              <>
+                <div className="panel-title">Community Account</div>
+                <div className="auth-panel">
+                  {supabaseSession ? (
+                    <div className="auth-row">
+                      <div className="auth-status">
+                        Signed in as {supabaseSession.user.email ?? "user"}
+                      </div>
+                      <button onClick={() => void handleSignOut()}>Sign out</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="auth-row">
+                        <button onClick={() => void handleSignIn()}>
+                          Continue with Google
+                        </button>
+                      </div>
+                      {authError && <div className="auth-error">{authError}</div>}
+                    </>
+                  )}
+                </div>
+                <div className="panel-title">Create Community</div>
+                <div className="create-community">
+                  <input
+                    type="text"
+                    placeholder="Community name"
+                    value={communityNameInput}
+                    onChange={(event) => setCommunityNameInput(event.target.value)}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Slug (optional)"
+                    value={communitySlugInput}
+                    onChange={(event) => setCommunitySlugInput(event.target.value)}
+                  />
+                  <button onClick={() => void handleCreateCommunity()}>
+                    Create community
+                  </button>
+                  {communityError && <div className="auth-error">{communityError}</div>}
+                </div>
+              </>
+            )}
+            {settingsPage === "execution" && (
+              <>
+                <div className="panel-title">Execution Rules</div>
+                <div className="approval-selector">
+                  <div className="approval-title">Select Approval Mode</div>
+                  {(["read-only", "agent", "agent-full"] as const).map((mode) => {
+                    const preset = APPROVAL_PRESETS[mode];
+                    const isActive = approvalMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        className={`approval-option${isActive ? " active" : ""}`}
+                        onClick={() => void applyApprovalMode(mode)}
+                      >
+                        <div className="approval-option-title">{preset.label}</div>
+                        <div className="approval-option-desc">{preset.description}</div>
+                      </button>
+                    );
+                  })}
+                  <div className="approval-note">
+                    Approval mode updates global exec policy rules (commands still require explicit approval).
+                  </div>
+                </div>
+                <div className="exec-policy">
+                  <textarea
+                    className="exec-policy-input"
+                    value={execPolicyRules}
+                    onChange={(event) => setExecPolicyRules(event.target.value)}
+                    placeholder="prompt\ndefault\nallow git status\nforbid rm -rf /"
+                  />
+                  <div className="exec-policy-actions">
+                    <button onClick={() => void handleSaveExecPolicyRules()} disabled={isSavingExecPolicy}>
+                      {isSavingExecPolicy ? "Saving..." : "Save rules"}
+                    </button>
+                    {execPolicyError && <div className="exec-policy-error">{execPolicyError}</div>}
+                  </div>
+                </div>
+              </>
+            )}
+            {settingsPage === "session" && (
+              <>
+                <div className="panel-title">Session Allow Rules</div>
+                <div className="exec-policy">
+                  <textarea
+                    className="exec-policy-input"
+                    value={sessionExecPolicyRules}
+                    onChange={(event) => setSessionExecPolicyRules(event.target.value)}
+                    placeholder="allow git status\nallow ls"
+                  />
+                  <div className="exec-policy-actions">
+                    <button
+                      onClick={() => void handleSaveSessionExecPolicyRules()}
+                      disabled={isSavingSessionExecPolicy || !activeThreadId}
+                    >
+                      {isSavingSessionExecPolicy ? "Saving..." : "Save session rules"}
+                    </button>
+                    <button
+                      className="secondary"
+                      onClick={() => {
+                        setSessionExecPolicyRules("");
+                        if (activeThreadId) {
+                          void invoke("set_session_exec_policy_rules_cmd", {
+                            sessionId: activeThreadId,
+                            rules: ""
+                          });
+                        }
+                      }}
+                      disabled={!activeThreadId}
+                    >
+                      Clear session rules
+                    </button>
+                    {sessionExecPolicyError && (
+                      <div className="exec-policy-error">{sessionExecPolicyError}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="panel-title">Session Resume</div>
+                <div className="session-resume">
+                  {sessionResume ? (
+                    <>
+                      <div className="session-resume-row">
+                        <span>Last message</span>
+                        <span>
+                          {sessionResume.last_message_at
+                            ? formatRelativeTime(sessionResume.last_message_at)
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="session-resume-row">
+                        <span>Last response</span>
+                        <span>{sessionResume.last_response_id ?? "—"}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="session-resume-empty">No resume data.</div>
+                  )}
+                  <button
+                    className="secondary"
+                    onClick={() => void handleExportEventLog()}
+                    disabled={!activeThreadId || isExportingLog}
+                  >
+                    {isExportingLog ? "Exporting..." : "Copy event log JSONL"}
+                  </button>
+                  {exportLogMessage && (
+                    <div className="session-resume-msg">{exportLogMessage}</div>
+                  )}
+                </div>
+              </>
+            )}
+            {settingsPage === "memory" && (
+              <>
+                <div className="panel-title">Memory</div>
+                <div className="memory-panel">
+                  {personalMemoryError && (
+                    <div className="memory-error">{personalMemoryError}</div>
+                  )}
+
+                  <div className="memory-editor">
                     <div className="memory-editor-header">
-                      <div className="memory-editor-title">{memoryEditorBlock.label}</div>
+                      <div className="memory-editor-title">Personal memory</div>
                       <div className="memory-editor-meta">
-                        {memoryEditorBlock.scope}
+                        {isLoadingPersonalMemory
+                          ? "loading…"
+                          : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
                       </div>
                     </div>
-                    <textarea
-                      value={memoryEditorValue}
-                      onChange={(event) => setMemoryEditorValue(event.target.value)}
-                      placeholder="Update memory block content..."
+                    <input
+                      value={personalMemoryQuery}
+                      onChange={(event) => setPersonalMemoryQuery(event.target.value)}
+                      placeholder="Search memory…"
                     />
-                    <div className="memory-editor-count">
-                      {memoryEditorValue.length}/{memoryEditorBlock.char_limit}
+                    <div className="memory-block-meta">
+                      Workspace scope uses: {getEffectiveWorkspacePath()}
                     </div>
                     <div className="memory-editor-actions">
                       <button
-                        onClick={() => void handleSaveMemoryUpdate()}
-                        disabled={
-                          isSavingMemoryProposal ||
-                          memoryEditorBlock.read_only !== 0 ||
-                          !memoryEditorValue.trim()
+                        className="secondary"
+                        onClick={() => {
+                          setPersonalMemoryQuery("");
+                          void loadPersonalMemoryItems();
+                        }}
+                        disabled={isLoadingPersonalMemory}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="memory-block-group">
+                    {personalMemoryItems.length === 0 ? (
+                      <div className="memory-block-empty">No personal memory items yet.</div>
+                    ) : (
+                      personalMemoryItems.map((item) => (
+                        <div key={item.id} className="memory-block">
+                          <div className="memory-block-header">
+                            <div className="memory-block-label">{item.content}</div>
+                            <div className="memory-block-actions">
+                              <button
+                                className="secondary"
+                                onClick={() => void handleTogglePersonalMemoryPinned(item)}
+                              >
+                                {item.pinned ? "Unpin" : "Pin"}
+                              </button>
+                              <button
+                                className="secondary"
+                                onClick={() => void handleDeletePersonalMemoryItem(item.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          <div className="memory-block-meta">
+                            {item.scope}
+                            {item.scope === "workspace" && item.scope_id
+                              ? ` · ${item.scope_id}`
+                              : ""}
+                            {" · "}
+                            updated {formatRelativeTime(item.updated_at)}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="memory-editor">
+                    <div className="memory-editor-header">
+                      <div className="memory-editor-title">Add memory</div>
+                      <div className="memory-editor-meta">
+                        {newPersonalMemoryScope}
+                      </div>
+                    </div>
+                    <textarea
+                      value={newPersonalMemoryContent}
+                      onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
+                      placeholder="Write a durable preference/fact…"
+                    />
+                    <div className="memory-editor-actions">
+                      <select
+                        value={newPersonalMemoryScope}
+                        onChange={(event) =>
+                          setNewPersonalMemoryScope(event.target.value as "global" | "workspace")
                         }
                       >
-                        {isSavingMemoryProposal ? "Saving..." : "Save update"}
+                        <option value="workspace">Workspace</option>
+                        <option value="global">Global</option>
+                      </select>
+                      <label className="memory-pin-toggle">
+                        <input
+                          type="checkbox"
+                          checked={newPersonalMemoryPinned}
+                          onChange={(event) => setNewPersonalMemoryPinned(event.target.checked)}
+                        />
+                        Pinned
+                      </label>
+                      <button
+                        onClick={() => void handleCreatePersonalMemoryItem()}
+                        disabled={!newPersonalMemoryContent.trim()}
+                      >
+                        Save memory
                       </button>
-                      <button className="secondary" onClick={() => resetMemoryEditor()}>
+                      <button
+                        className="secondary"
+                        onClick={() => {
+                          setNewPersonalMemoryContent("");
+                          setNewPersonalMemoryPinned(false);
+                        }}
+                      >
                         Clear
                       </button>
                     </div>
-                    {memoryEditorBlock.read_only !== 0 && (
-                      <div className="memory-editor-note">
-                        This block is read-only.
-                      </div>
-                    )}
-                    {memoryEditorError && (
-                      <div className="memory-editor-error">{memoryEditorError}</div>
-                    )}
-                    {memoryEditorSuccess && (
-                      <div className="memory-editor-success">{memoryEditorSuccess}</div>
-                    )}
-                  </>
-                ) : (
-                  <div className="memory-editor-empty">
-                    Select a block to update.
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              </>
+            )}
           </div>
         ) : activePage === "workspace" ? (
           <>
@@ -3881,10 +4097,6 @@ function App() {
                         <button
                           className="tool-action danger"
                           onClick={async () => {
-                            await invoke("cancel_tool_call_cmd", {
-                              sessionId: toolCall.session_id,
-                              toolCallId: toolCall.id
-                            });
                             setRunningToolCallId(null);
                             setToolCalls((prev) =>
                               prev.map((item) =>
@@ -3947,6 +4159,19 @@ function App() {
               return (
                 <div className="message-item streaming">
                   <div className="message-text">
+                    {streamingTokens && (
+                      <div className="streaming-meta">
+                        {typeof streamingTokens.prompt_tokens === "number" && (
+                          <span>in: {streamingTokens.prompt_tokens}</span>
+                        )}
+                        {typeof streamingTokens.completion_tokens === "number" && (
+                          <span>out: {streamingTokens.completion_tokens}</span>
+                        )}
+                        {typeof streamingTokens.max_tokens === "number" && (
+                          <span>max: {streamingTokens.max_tokens}</span>
+                        )}
+                      </div>
+                    )}
                     {cleaned && renderMarkdown(cleaned)}
                     {hasToolCall && (
                       <details className="tool-call-indicator">
@@ -4138,27 +4363,44 @@ function App() {
               </button>
               <div className="model-select">
                 <select
-                  value={activeModelId ?? ""}
+                  value={
+                    activeEngineId === "openrouter_chat"
+                      ? `model:${activeModelId ?? ""}`
+                      : `engine:${activeEngineId}`
+                  }
                   onChange={async (event) => {
-                    const nextId = event.target.value;
-                    setActiveModelId(nextId);
-                    await invoke("set_active_model_cmd", { modelId: nextId });
+                    const raw = event.target.value;
+                    if (raw.startsWith("engine:")) {
+                      const engineId = raw.slice("engine:".length);
+                      setActiveEngineId(engineId);
+                      return;
+                    }
+
+                    if (raw.startsWith("model:")) {
+                      const modelId = raw.slice("model:".length).trim();
+                      if (!modelId) return;
+                      setActiveEngineId("openrouter_chat");
+                      setActiveModelId(modelId);
+                      await invoke("set_active_model_cmd", { modelId });
+                    }
                   }}
-                  disabled={enabledModels.length === 0}
                 >
-                  {enabledModels.length === 0 && (
-                    <option value="">No models</option>
-                  )}
-                  {enabledModels.map((toggle) => (
-                    <option
-                      key={toggle.id}
-                      value={toggle.id}
-                      disabled={!isProviderReady(MODEL_PROVIDERS[toggle.id])}
-                    >
-                      {toggle.label}
-                      {!isProviderReady(MODEL_PROVIDERS[toggle.id]) && " (missing key)"}
-                    </option>
-                  ))}
+                  <optgroup label="Harness">
+                    <option value="engine:codex_cli">Codex CLI</option>
+                  </optgroup>
+                  <optgroup label="Models (OpenRouter)">
+                    {enabledModels.length === 0 && <option value="model:" disabled>No models enabled</option>}
+                    {enabledModels.map((toggle) => (
+                      <option
+                        key={toggle.id}
+                        value={`model:${toggle.id}`}
+                        disabled={!isProviderReady(MODEL_PROVIDERS[toggle.id])}
+                      >
+                        {toggle.label}
+                        {!isProviderReady(MODEL_PROVIDERS[toggle.id]) && " (missing key)"}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -5336,33 +5578,33 @@ function shouldShowSender(
   return currTime - prevTime > 5 * 60 * 1000;
 }
 
-function groupSessionsByDate(sessions: SessionRecord[]): { label: string; sessions: SessionRecord[] }[] {
+function groupThreadsByDate(threads: SessionRecord[]): { label: string; threads: SessionRecord[] }[] {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);
   const weekAgo = new Date(today.getTime() - 7 * 86400000);
 
-  const groups: { label: string; sessions: SessionRecord[] }[] = [
-    { label: "Today", sessions: [] },
-    { label: "Yesterday", sessions: [] },
-    { label: "This Week", sessions: [] },
-    { label: "Older", sessions: [] }
+  const groups: { label: string; threads: SessionRecord[] }[] = [
+    { label: "Today", threads: [] },
+    { label: "Yesterday", threads: [] },
+    { label: "This Week", threads: [] },
+    { label: "Older", threads: [] }
   ];
 
-  for (const session of sessions) {
-    const date = new Date(session.updated_at * 1000);
+  for (const thread of threads) {
+    const date = new Date(thread.updated_at * 1000);
     if (date >= today) {
-      groups[0].sessions.push(session);
+      groups[0].threads.push(thread);
     } else if (date >= yesterday) {
-      groups[1].sessions.push(session);
+      groups[1].threads.push(thread);
     } else if (date >= weekAgo) {
-      groups[2].sessions.push(session);
+      groups[2].threads.push(thread);
     } else {
-      groups[3].sessions.push(session);
+      groups[3].threads.push(thread);
     }
   }
 
-  return groups.filter((g) => g.sessions.length > 0);
+  return groups.filter((g) => g.threads.length > 0);
 }
 
 function getSupabaseUrl(): string | null {
@@ -5371,4 +5613,20 @@ function getSupabaseUrl(): string | null {
 
 function getSupabaseAnonKey(): string | null {
   return import.meta.env.VITE_SUPABASE_ANON_KEY ?? null;
+}
+
+function formatSecretScanError(scan: SecretScanResult): string {
+  if (!scan.redactions || scan.redactions.length === 0) {
+    return "Blocked: sensitive content detected. Remove secrets before sending.";
+  }
+  const parts = scan.redactions.map((r) => `${r.kind}(${r.count})`);
+  return `Blocked: sensitive content detected (${parts.join(", ")}). Remove secrets before sending.`;
+}
+
+async function scanPublishContent(text: string): Promise<SecretScanResult | null> {
+  try {
+    return await invoke<SecretScanResult>("scan_publish_content_cmd", { text });
+  } catch {
+    return null;
+  }
 }

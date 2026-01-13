@@ -3206,6 +3206,26 @@ h3.md-header {
   background: #fff;
 }
 
+.memory-editor select {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.memory-pin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.memory-pin-toggle input {
+  margin: 0;
+}
+
 .memory-editor-count {
   font-size: 11px;
   color: var(--text-muted);
@@ -3460,4 +3480,12 @@ h3.md-header {
   border-radius: 3px;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.streaming-meta {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  opacity: 0.7;
 }
