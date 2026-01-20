@@ -35,11 +35,22 @@ function getSupabaseUrl(): string {
   ).trim();
 }
 
+function normalizeJoinPageUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  if (trimmed.endsWith(".html")) return trimmed;
+  return `${trimmed}/join.html`;
+}
+
 function getJoinPageUrl(): string | null {
-  const supabaseUrl = getSupabaseUrl();
-  if (!supabaseUrl) return null;
-  const base = supabaseUrl.replace(/\/+$/, "");
-  return `${base}/storage/v1/object/public/public-pages/join.html`;
+  const fromEnv = normalizeJoinPageUrl(
+    Deno.env.get("ARX_JOIN_PAGE_URL") ??
+      Deno.env.get("ARX_JOIN_PAGE_URL".toLowerCase()) ??
+      ""
+  );
+  if (fromEnv) return fromEnv;
+
+  return "https://arx-teal.vercel.app/join.html";
 }
 
 function buildRedirectUrl(joinPageUrl: string, ctx: InviteContext): string {

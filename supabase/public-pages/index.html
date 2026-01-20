@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Join on Arx</title>
+    <meta http-equiv="refresh" content="0; url=/join.html" />
+    <script>
+      try {
+        const target = new URL("/join.html", window.location.origin);
+        target.search = window.location.search || "";
+        target.hash = window.location.hash || "";
+        window.location.replace(target.toString());
+      } catch {
+        // ignore
+      }
+    </script>
+  </head>
+  <body></body>
+</html>
