@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Join on Arx</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Join on Arx" />
+    <meta
+      property="og:description"
+      content="Open this invite in the Arx desktop app to join."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Join on Arx" />
+    <meta
+      name="twitter:description"
+      content="Open this invite in the Arx desktop app to join."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f0f10;
+        --card: rgba(255, 255, 255, 0.06);
+        --border: rgba(255, 255, 255, 0.1);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.62);
+        --accent: #d6b55f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(
+            circle at 30% 20%,
+            rgba(214, 181, 95, 0.15),
+            transparent 45%
+          ),
+          radial-gradient(
+            circle at 70% 80%,
+            rgba(86, 180, 255, 0.1),
+            transparent 45%
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+          Arial;
+      }
+
+      .wrap {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 18px;
+      }
+
+      .card {
+        width: min(760px, 100%);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.06),
+          rgba(255, 255, 255, 0.04)
+        );
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+      }
+
+      .title {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+      }
+
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 6px;
+        line-height: 1.5;
+      }
+
+      .code-row {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        padding: 14px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+      }
+
+      .code-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .label {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 16px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 38px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        text-decoration: none;
+        color: var(--text);
+        font-weight: 700;
+        font-size: 13px;
+        background: rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+      }
+
+      .btn.primary {
+        background: var(--accent);
+        border-color: transparent;
+        color: #121212;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .hint {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .hint strong {
+        color: var(--text);
+      }
+
+      .field {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+
+      input[type="text"] {
+        height: 42px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+        color: var(--text);
+        padding: 0 12px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      input[type="text"]:focus {
+        border-color: rgba(214, 181, 95, 0.55);
+        box-shadow: 0 0 0 3px rgba(214, 181, 95, 0.16);
+      }
+
+      @media (max-width: 560px) {
+        .code-row {
+          grid-template-columns: 1fr;
+        }
+        .actions {
+          justify-content: flex-start;
+        }
+        .field {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="title">Join on Arx</div>
+        <div class="sub">Open this invite in the Arx desktop app to join.</div>
+
+        <div class="code-row" role="region" aria-label="Invite">
+          <div class="code-meta">
+            <div class="label">Invite code</div>
+            <div class="code" id="invite-code">—</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="open-btn" type="button" disabled>
+              Open in Arx
+            </button>
+            <button class="btn" id="copy-btn" type="button" disabled>Copy</button>
+          </div>
+        </div>
+
+        <div class="hint">
+          If the button doesn’t work, open Arx and paste the invite code.
+        </div>
+
+        <div class="hint" id="missing-hint" style="display: none">
+          This link is missing an invite code. Paste one below.
+        </div>
+
+        <div class="field" id="paste-field" style="display: none">
+          <input
+            id="invite-input"
+            type="text"
+            inputmode="latin"
+            autocomplete="off"
+            autocapitalize="characters"
+            placeholder="Paste invite code"
+          />
+          <button class="btn primary" id="use-btn" type="button">Use code</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function normalizeInvite(raw) {
+        const cleaned = String(raw || "")
+          .trim()
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        if (!cleaned) return null;
+        if (cleaned.length > 128) return null;
+        if (!/^[A-Z0-9]+$/.test(cleaned)) return null;
+        return cleaned;
+      }
+
+      function readInviteFromUrl() {
+        const hashParams = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+        const inviteFromHash = hashParams.get("invite") || hashParams.get("join");
+        if (inviteFromHash) return normalizeInvite(inviteFromHash);
+
+        const searchParams = new URLSearchParams(location.search || "");
+        const inviteFromQuery = searchParams.get("invite") || searchParams.get("join");
+        if (inviteFromQuery) return normalizeInvite(inviteFromQuery);
+
+        return null;
+      }
+
+      function setInvite(invite) {
+        const codeEl = document.getElementById("invite-code");
+        const openBtn = document.getElementById("open-btn");
+        const copyBtn = document.getElementById("copy-btn");
+        const missingHint = document.getElementById("missing-hint");
+        const pasteField = document.getElementById("paste-field");
+
+        if (!invite) {
+          codeEl.textContent = "—";
+          openBtn.disabled = true;
+          copyBtn.disabled = true;
+          missingHint.style.display = "block";
+          pasteField.style.display = "grid";
+          return;
+        }
+
+        codeEl.textContent = invite;
+        openBtn.disabled = false;
+        copyBtn.disabled = false;
+        missingHint.style.display = "none";
+        pasteField.style.display = "none";
+
+        openBtn.onclick = () => {
+          const url = `arx://join?invite=${encodeURIComponent(invite)}`;
+          window.location.href = url;
+        };
+        copyBtn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(invite);
+          } catch {
+            window.prompt("Copy invite code:", invite);
+          }
+        };
+      }
+
+      const initialInvite = readInviteFromUrl();
+      setInvite(initialInvite);
+
+      const useBtn = document.getElementById("use-btn");
+      const inputEl = document.getElementById("invite-input");
+      if (useBtn && inputEl) {
+        useBtn.onclick = () => {
+          const normalized = normalizeInvite(inputEl.value);
+          if (!normalized) return;
+
+          inputEl.value = "";
+          setInvite(normalized);
+          try {
+            const next = new URL(location.href);
+            next.search = "";
+            next.hash = `invite=${encodeURIComponent(normalized)}`;
+            history.replaceState({}, document.title, next.toString());
+          } catch {
+            // ignore
+          }
+        };
+
+        inputEl.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            useBtn.click();
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
+
