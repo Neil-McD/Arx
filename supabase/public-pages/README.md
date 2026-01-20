@@ -1,14 +1,18 @@
-# Public Pages (Supabase Storage)
+# Public Pages (Vercel)
 
-This directory contains static web pages intended to be uploaded to the Supabase Storage bucket `public-pages`.
+This directory contains static web pages intended to be hosted on Vercel.
 
-## Upload (manual, one-time)
+## Deploy
 
-1. Supabase Dashboard → Storage → open bucket `public-pages`.
-2. Upload `join.html` to the bucket root.
+Create a Vercel project with the repository root directory set to `supabase/public-pages` and deploy.
 
 The public URL should look like:
 
-`https://<project_ref>.supabase.co/storage/v1/object/public/public-pages/join.html`
+`https://<your-project>.vercel.app/join.html`
 
-The invite link Edge Function (`/c/...`) will redirect here.
+## Edge Function redirect
+
+The Supabase Edge Function at `/c/...` redirects to the join page using:
+
+- `ARX_JOIN_PAGE_URL` env var (preferred), or
+- a code fallback URL in `supabase/functions/c/index.ts`
