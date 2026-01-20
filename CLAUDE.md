@@ -1,371 +1,579 @@
-# Arx MVP — Architecture Contract
+# Arx MVP — Architecture Contract v1.5.2
+
+*(v1.4 + Arx-native harness + tool protocol + skills + blob/projection hardening + correctness clarifications)*
 
 You are the AI coding agent for **Arx (MVP)**.
 
-Arx is a **local-first desktop app** that wraps AI coding CLIs (Codex CLI, Claude Code) and provides what they lack: **continuity**, **memory**, and **community**.
+Arx is a **local-first desktop app** that runs an Arx-native coding harness (model + tools) and provides what existing shells/CLIs lack: **continuity**, **memory**, and **community** (including discovery + monetization).
 
-Engines handle execution. **Arx is the state + identity + memory layer above them.**
+Models handle generation. Tools handle side-effects. **Arx is the truth + identity + memory layer above them.**
 
-Default mode is **BUILD**. Only switch to **EXPLORE** when explicitly asked.
+Default mode is **BUILD**. Only switch to **EXPLORE** when explicitly asked. *(In v1.5.2, EXPLORE implies “read-only / no side-effects” policy for tools.)*
 
 ---
 
 ## 0) First Principles (Invariants)
 
-These must always be true. If implementation violates any of these, it's wrong.
+These must always be true. If implementation violates any of these, it’s wrong.
 
-1. **Arx owns truth**: the canonical record is Arx's data, not any engine's transcript format.
-2. **Continuity beats cleverness**: resumability/search must work even if the engine crashes or changes.
-3. **Memory is retrieval + injection**: with provenance and strict scoping. No magic.
-4. **Community is curated artifacts only**: chat, PTY logs, and raw transcripts are non-memory evidence unless explicitly published.
-5. **Safety is fail-closed**: anything leaving the device (publish) is blocked on secrets; anything injected is redacted/omitted.
-6. **Backends are swappable**: community coordination is Supabase now, something else later (including crypto rails), without rewriting local truth.
-7. **Identity is linkable**: Arx user identity can be email/OAuth today and wallet later; backend auth is an implementation detail, not the data model.
+### Truth & Evidence
+
+- **Arx owns truth:** the canonical record is Arx’s data, not any model/provider transcript format.
+- **Truth = what happened:** inputs sent, outputs received, and user actions taken, recorded as **Events**.
+- **Model output is canonical evidence, not canonical belief.** Anything interpretive is a derived view.
+- **Continuity beats cleverness:** resumability/search must work even if the model/provider changes or crashes.
+- **Deterministic ordering:** events have a stable total order within a thread (independent of timestamps).
+- **Reproducibility is non-negotiable:** every run persists the exact engine/model input bytes (what was sent) and output bytes (what was received).
+- **Derived views are rebuildable:** messages/turns/tool cards/summaries are projections and must be derivable from the event stream.
+- **Events are append-only:** treat `events` as immutable (no silent edits).
+
+### Memory & Community
+
+- **Memory is retrieval + injection** with provenance and strict scoping. No magic.
+- **No silent durable memory edits** by the agent: durable writes require explicit user action or explicit user approval.
+- **Community is curated artifacts only:** raw chat/transcripts/logs are non-memory evidence unless explicitly published as artifacts.
+
+### Safety & Permissions
+
+- **Safety is fail-closed:**
+  - anything leaving the device (publish) is blocked on secrets (**no override**)
+  - anything injected is redacted/omitted
+- **Tool execution is permissioned:** side-effectful operations (writes, shell, network) are governed by workspace policy and/or explicit user approval, and all approvals/denials are recorded as events.
+- **Sandbox boundaries are real:** workspace scope defines the default boundary; outside-scope access is denied unless explicitly approved and recorded.
+- **Truthfulness under uncertainty:** after crashes/recovery, Arx must never claim “success” without evidence.
+
+### Swappability & Identity
+
+- **Backends are swappable:** Supabase now, something else later (including crypto rails), without rewriting local truth.
+- **Identity is linkable:** Arx identity can be email/OAuth today and wallet later; backend auth is an implementation detail, not the data model.
+- **Money controls access, not truth:**
+  - monetization influences **entitlements** only
+  - monetization must not bias memory injection ranking or “what the agent believes”
+
+### Single-writer discipline (non-negotiable)
+
+- There is exactly **one authoritative EventWriter** for the local database at all times.
+- **All event writes** (user actions, thread edits, memory writes, tool approvals, publish metadata, etc.) must go through the same EventWriter interface.
+- UI and other clients are **controllers/viewers** only; they never write to SQLite directly.
+
+Implementation note (MVP-friendly):
+- The “writer” may be an OS daemon (future) or an in-process service (today), but the API/semantics must be identical so extraction is packaging, not redesign.
+
+### Concurrency (MVP rule)
+
+- At most one active run per thread.
+- Tools execute serially within a run.
+- Parallel tool execution, subagents, and multiplexed runs are deferred.
+- MVP MAY enforce **one active run total across all threads** (stricter than required) to simplify approvals and UX.
 
 ---
 
 ## 1) Durable Primitives
 
-Everything reduces to four things. Everything else is a projection (lists, search, summaries, UI views).
+Everything reduces to four things. Everything else is a projection (lists, search, summaries, UI views, discovery feeds, analytics).
 
 | Primitive | What it is | Where it lives |
-|-----------|------------|----------------|
-| **Thread** | An ongoing work context (engine + workspace + optional community) | Local |
-| **Event** | An append-only record of what happened (canonical truth) | Local |
-| **PersonalMemoryItem** | A durable user-controlled fact/preference | Local |
-| **CommunityArtifact** | A durable curated knowledge unit (explicit + sanitized) | Cloud |
+|---|---|---|
+| **Thread** | Ongoing work context (engine + workspace + optional community) | Local |
+| **Event** | Append-only record of what happened (canonical truth) | Local |
+| **PersonalMemoryItem** | Durable user-controlled fact/preference | Local |
+| **CommunityArtifact** | Durable curated knowledge unit (explicit + sanitized) | Cloud |
+
+Notes:
+- “Discovery,” “Monetization,” “Entitlements,” “Retention loops,” “Conversion surfaces,” and “Moderation” are cloud coordination projections, not canonical truth.
+- **Skills are not a primitive.** Skills are local instruction packs (and optionally community artifacts) loaded on-demand as tool evidence.
 
 ---
 
 ## 2) Local Database (SQLite)
 
-The foundation: append-only events + small tables for fast reads + FTS indexes.
+Foundation: append-only events + small tables for fast reads + FTS indexes + **content-addressed blobs** + rebuildable projections.
 
-### threads
+### 2.0 Definitions (v1.5.2)
+
+**workspace_scope_id (non-negotiable)**  
+A single stable identifier for “the sandbox boundary”:
+- If `threads.workspace_fingerprint` is present: `workspace_scope_id = threads.workspace_fingerprint`
+- Else (MVP fallback): `workspace_scope_id = normalized_realpath(threads.workspace_path)`
+- If `threads.workspace_path` is NULL: `workspace_scope_id` is NULL and **all workspace/file tools are disabled** for that thread/run.
+
+This same `workspace_scope_id` is used for:
+- `workspace_policies.workspace_scope_id`
+- `run_started.workspace_scope_id`
+- `tool_call_started.workspace_scope_id`
+
+**device_salt (MVP rule)**  
+Generated once per device and stored in OS keychain (or equivalent secure store). Used only for `workspace_fingerprint` derivation.
+
+### 2.1 threads
+
 ```sql
-id              TEXT PRIMARY KEY
-title           TEXT
-engine_id       TEXT NOT NULL        -- 'codex_cli' | 'claude_code'
-workspace_path  TEXT
-community_id    TEXT                 -- nullable; the firewall switch
-created_at      INTEGER NOT NULL
-updated_at      INTEGER NOT NULL
-last_event_at   INTEGER              -- for fast thread lists
+threads
+id                    TEXT PRIMARY KEY
+title                 TEXT
+engine_id             TEXT NOT NULL        -- e.g. 'arx_harness' (default) or future external engines
+model_id              TEXT                 -- optional default model for UX (not canonical truth)
+workspace_path        TEXT
+workspace_fingerprint TEXT                 -- optional stable ID for scoping across folder moves
+community_id          TEXT                 -- nullable; the firewall switch
+created_at            INTEGER NOT NULL
+updated_at            INTEGER NOT NULL
+last_event_at         INTEGER              -- for fast thread lists
+last_seq              INTEGER NOT NULL      -- per-thread monotonic allocator cache
 ```
 
-### events (canonical truth ledger)
+Engine vs model clarity (MVP rule):
+- `engine_id` identifies the execution backend (Arx harness today; other engines later).
+- Per-message model/provider attribution is stored in event payloads (e.g. `provider_id`, `model_id`), not in the thread row.
+- `threads.model_id` MAY exist as a UX default, but it is not canonical truth.
+
+workspace_fingerprint (v1.5.2):
+- MAY be NULL for pure chat with no tools.
+- If **any tool use** is enabled for a thread, a stable workspace boundary is required:
+  - if missing at run start, generate baseline `SHA256(device_salt + normalized_realpath)`, persist to thread, and append `thread_metadata_changed`.
+- No aliasing/merging in MVP.
+
+### 2.2 blobs (content-addressed; v1.5.2)
+
+Large I/O is first-class: diffs, file snapshots, stdout/stderr, streamed chunks, serialized request/response payloads.
+
 ```sql
+CREATE TABLE blobs (
+  id         TEXT PRIMARY KEY,   -- sha256(bytes)
+  rel_path   TEXT NOT NULL,       -- e.g. blobs/ab/cd/<id>
+  byte_len   INTEGER NOT NULL,
+  mime       TEXT,
+  created_at INTEGER NOT NULL
+);
+```
+
+Blob correctness rule (non-negotiable):
+1) **No committed event may reference a missing blob.**
+   - Implementation ordering: write temp → fsync → rename final → then commit event referencing `blob_ref` (or `blob_id`).
+2) **Orphan blobs are acceptable.**
+   - If blob write succeeds but the referencing event never commits (crash/error), the blob may remain on disk unreferenced.
+3) **GC is required.**
+   - Periodic mark-and-sweep deletes unreferenced blobs older than a safety threshold (avoid racing in-flight writes).
+
+Blob reference rule (v1.5.2):
+- Prefer a single “primary blob” pointer on the event row (`events.blob_ref` preferred; `events.blob_id` optional) *plus* explicit, typed blob references inside `payload_json` where needed (e.g. `sent_blob_ref`, `chunk_blob_ref`, `stdout_blob_ref`, `stderr_blob_ref`, `diff_blob_ref`). Blob IDs (sha256) MAY also be included as `*_blob_id` for convenience.
+- **EventWriter must validate** that every blob reference (`blob_ref` and `*_blob_ref` / `*_blob_id`) exists before committing the event.
+
+### 2.3 events (canonical truth ledger)
+
+```sql
+events
 id              TEXT PRIMARY KEY
 thread_id       TEXT NOT NULL
-type            TEXT NOT NULL        -- see event types below
+seq             INTEGER NOT NULL           -- per-thread monotonic total order
+type            TEXT NOT NULL              -- see event types below
 created_at      INTEGER NOT NULL
-text            TEXT                 -- nullable; for previews + FTS
-payload_json    TEXT                 -- versioned, provider-agnostic
-blob_ref        TEXT                 -- nullable; file path for huge PTY chunks
+
+text            TEXT                       -- nullable; previews + FTS (high-signal only)
+payload_json    TEXT                       -- versioned, provider-agnostic (payload includes {"v": 1})
+
+blob_ref        TEXT                       -- nullable; references blobs.rel_path (blob id is derived from sha256 filename)
 ```
 
-**Event types (MVP)**:
-- `user_message` — user submitted input
-- `engine_io_chunk` — raw engine output (always valid, fallback truth)
-- `assistant_message` — segmented response (only when confident)
-- `thread_metadata_changed` — title, engine, workspace updates
-- `memory_write` — personal memory created/updated
-- `memory_retrieval` — what was injected (IDs + snippets + provenance)
-- `artifact_published` — artifact sent to community
-- `artifact_viewed` — user opened artifact in UI
-- `artifact_feedback` — 👍/👎 recorded for an artifact
+Ordering rule (non-negotiable):
+- Display/query events via: `ORDER BY seq ASC`
+- `seq` is assigned transactionally by Storage/EventWriter.
 
-### personal_memory_items
+Truth hierarchy rule (non-negotiable):
+- Canonical truth is the event stream, including:
+  - `engine_input` (exact bytes sent)
+  - `engine_io_chunk` (exact bytes received)
+  - tool lifecycle events with stdout/stderr/diffs referenced by blobs
+- Views/summaries (`assistant_message`, `handoff_summary`) are derived and must be traceable to evidence.
+
+Events columns vs payload_json (MVP rule):
+- MVP MAY keep `run_id` and `tool_call_id` only inside `payload_json`.
+- If query performance becomes an issue, Arx MAY add real columns and indexes (`run_id`, `tool_call_id`) as an optimization only.
+
+### 2.4 Event payload conventions (v1.5.2)
+
+- Every event payload MUST include `"v": 1`.
+- Canonical/raw content lives in `payload_json` and/or referenced `blob_ref` / `*_blob_ref`.
+- `events.text` is a sanitized preview for FTS, not the canonical record.
+
+run_id requirement (non-negotiable):
+- All events emitted **after** `run_started` and **before** `run_finished` MUST include `run_id` in `payload_json`.
+- `user_message` and `memory_retrieval` MAY omit `run_id` (they can occur outside a run).
+
+Event types (MVP canonical list):
+- Core work loop: `user_message`, `memory_retrieval`, `engine_input`, `engine_io_chunk`, `assistant_message`, `handoff_summary`, `thread_metadata_changed`
+- Runs: `run_started`, `run_finished`
+- Tools: `tool_call_requested`, `tool_call_approved`, `tool_call_denied`, `tool_call_started`, `tool_call_finished`
+- Policy: `workspace_policy_changed`
+- Memory: `memory_write`
+- Community interactions: `artifact_published`, `artifact_viewed`, `artifact_feedback`
+
+Optional event types (MAY emit):
+- Engine lifecycle: `engine_started`, `engine_exited`
+
+Minimum payload expectations by type (MVP):
+
+Core evidence:
+- `engine_input`: `{ v, engine_id, run_id, provider_id?, model_id?, request_format, sent_text? , sent_blob_id? }` *(mandatory)*
+- `engine_io_chunk`: `{ v, engine_id, run_id, stream, chunk_text_preview?, chunk_blob_id? }`
+
+Derived:
+- `assistant_message`: `{ v, text, source_event_ids:[...] }` *(required)*
+
+Context provenance:
+- `memory_retrieval`: `{ v, personal:[...], community:[...], redactions_applied:[...] }`
+
+Run lifecycle:
+- `run_started`: `{ v, run_id, runtime_id:'arx_harness', thread_id, workspace_scope_id, mode:'build'|'explore', policy_snapshot?:{...} }`
+- `run_finished`: `{ v, run_id, status:'ok'|'cancelled'|'error', reason? }`
+
+Tool lifecycle (see Appendix A):
+- `tool_call_requested`: `{ v, run_id, tool_call_id, tool_call_key, tool_name, args, requires_approval, policy_basis, reason? }`
+- `tool_call_approved` / `tool_call_denied`: `{ v, run_id, tool_call_id, approved:boolean, approved_by:'user'|'policy', note? }`
+- `tool_call_started`: `{ v, run_id, tool_call_id, attempt, cwd, workspace_scope_id, sandbox:{...} }`
+- `tool_call_finished`: `{ v, run_id, tool_call_id, attempt, status:'ok'|'error'|'unknown', reason?, stdout_blob_id?, stderr_blob_id?, exit_code?, artifacts:[...] }`
+
+Tool call identity & idempotency (non-negotiable):
+- `tool_call_id` is a unique identifier for an execution attempt series.
+- `tool_call_key` is a **stable idempotency key** for the logical tool call (assigned by the runtime, not the model).
+  - It must be computed from canonicalized inputs (tool name + normalized args + workspace_scope_id + relevant preconditions like `expected_before_sha256`).
+- `attempt` increments on retry and is stored on `started/finished`.
+
+Dedupe rules (MVP baseline):
+- If a repeated request arrives with the same `tool_call_key`:
+  - if an earlier `tool_call_finished(status='ok')` exists → do not re-execute; reuse result.
+  - otherwise → pause for recovery/user confirmation (especially for non-idempotent tools like `bash`).
+
+### 2.5 Crash recovery (non-negotiable)
+
+On EventWriter startup:
+1) Reconcile runs:
+   - find `run_started` without `run_finished` → append `run_finished(status='error', reason='crash_recovery')`
+2) Reconcile tool calls:
+   - find `tool_call_started` without `tool_call_finished` → append `tool_call_finished(status='unknown', reason='crash_recovery')`
+3) UI must render these as interrupted/partial (never pretend success).
+
+Truthfulness rule (v1.5.2):
+- A recovered `tool_call_finished(status='unknown')` must not claim stdout/stderr or file artifacts unless independently verified after restart.
+- Any verification is recorded as new events (never retroactive edits).
+
+### 2.6 Projections (rebuildable UI performance layer; v1.5.2)
+
+Derived views; rebuild from events.
+
+messages projection:
 ```sql
-id                  TEXT PRIMARY KEY
-content             TEXT NOT NULL    -- human-readable sentence
-scope               TEXT NOT NULL    -- 'global' | 'workspace'
-scope_id            TEXT             -- workspace path when scope='workspace'
-pinned              INTEGER DEFAULT 0
-provenance_event_id TEXT             -- which event created this
-created_at          INTEGER NOT NULL
-updated_at          INTEGER NOT NULL
+CREATE TABLE messages_projection (
+  id         TEXT PRIMARY KEY,
+  thread_id  TEXT NOT NULL,
+  role       TEXT NOT NULL,        -- 'user'|'assistant'
+  content_json TEXT NOT NULL,      -- structured content (text + tool cards)
+  engine_id  TEXT,
+  model_id   TEXT,
+  run_id     TEXT,
+  created_at INTEGER NOT NULL,
+  seq        INTEGER NOT NULL
+);
+CREATE INDEX idx_messages_projection_thread_seq ON messages_projection(thread_id, seq);
 ```
 
-### community_artifacts_cache (offline + fast search)
+turns projection:
 ```sql
-artifact_id     TEXT PRIMARY KEY
-community_id    TEXT NOT NULL
-type            TEXT NOT NULL
-title           TEXT NOT NULL
-body_md         TEXT NOT NULL
-visibility      TEXT NOT NULL
-injectable      INTEGER NOT NULL
-pinned          INTEGER NOT NULL
-helpful_count   INTEGER DEFAULT 0
-unhelpful_count INTEGER DEFAULT 0
-author_name     TEXT
-content_hash    TEXT             -- SHA256 for cache invalidation
-fetched_at      INTEGER NOT NULL
+CREATE TABLE turns_projection (
+  id                    TEXT PRIMARY KEY,
+  thread_id             TEXT NOT NULL,
+  user_event_id         TEXT NOT NULL,
+  memory_retrieval_event_id TEXT,
+  engine_input_event_id TEXT,
+  assistant_event_id    TEXT,
+  seq_start             INTEGER NOT NULL,
+  seq_end               INTEGER,
+  created_at            INTEGER NOT NULL
+);
+CREATE INDEX idx_turns_projection_thread_seq_start ON turns_projection(thread_id, seq_start);
 ```
 
-### ui_state
+tool_calls projection (recommended):
 ```sql
-key             TEXT PRIMARY KEY
-value           TEXT
-updated_at      INTEGER
+CREATE TABLE tool_calls (
+  tool_call_id TEXT PRIMARY KEY,
+  thread_id    TEXT NOT NULL,
+  run_id       TEXT NOT NULL,
+  tool_name    TEXT NOT NULL,
+  status       TEXT,               -- 'requested'|'approved'|'denied'|'started'|'finished'
+  first_seq    INTEGER NOT NULL,
+  last_seq     INTEGER,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX idx_tool_calls_thread_first_seq ON tool_calls(thread_id, first_seq);
+CREATE INDEX idx_tool_calls_run_id ON tool_calls(run_id);
 ```
 
-### FTS Indexes
-- `events.text` — thread/message search
-- `personal_memory_items.content` — memory search
-- `community_artifacts_cache(title, body_md)` — artifact search
+Projection update rule:
+- Projection updates happen transactionally alongside event writes so they never drift.
+- Provide `rebuild_projections` that deletes and rebuilds projections from events.
+
+### 2.7 workspace_policies (permissions state; v1.5.2)
+
+```sql
+CREATE TABLE workspace_policies (
+  workspace_scope_id TEXT PRIMARY KEY,  -- workspace_fingerprint preferred; fallback normalized path
+  policy_json        TEXT NOT NULL,     -- ask/allow/deny per tool + sandbox knobs
+  updated_at         INTEGER NOT NULL
+);
+```
+
+Canonical truth of changes is recorded via `workspace_policy_changed` events.
+MVP note:
+- Session-scoped approvals (e.g. “allow write/edit for this session”) MAY be kept in runtime memory; persisting workspace policies is still the target state.
+
+### 2.8 personal_memory_items / users / ui_state
+
+Unchanged from v1.4.
+
+### 2.9 FTS discipline (unchanged, reaffirmed)
+
+FTS-indexable event types (MVP):
+- `user_message`
+- `assistant_message`
+- `handoff_summary`
+- `thread_metadata_changed`
+
+Do not index by default:
+- `engine_io_chunk`
+- tool stdout/stderr blobs
+
+If secret-like content detected:
+- store raw in payload/blobs (canonical)
+- set `events.text` to redacted preview or NULL (not indexed)
 
 ---
 
 ## 3) Cloud Database (Supabase — replaceable)
 
-Cloud exists for coordination + sharing, not canonical truth.
+Cloud exists for coordination + sharing + discovery + monetization—not canonical truth.
 
-### communities
-```sql
-id              UUID PRIMARY KEY
-slug            TEXT UNIQUE NOT NULL
-name            TEXT NOT NULL
-owner_id        UUID NOT NULL
-created_at      TIMESTAMPTZ DEFAULT NOW()
-```
-
-### community_memberships
-```sql
-id              UUID PRIMARY KEY
-community_id    UUID NOT NULL
-user_id         UUID NOT NULL
-role            TEXT DEFAULT 'member'  -- 'owner' | 'admin' | 'member'
-created_at      TIMESTAMPTZ DEFAULT NOW()
-UNIQUE(community_id, user_id)
-```
-
-### community_artifacts
-```sql
-id              UUID PRIMARY KEY
-community_id    UUID NOT NULL
-author_id       UUID NOT NULL
-type            TEXT NOT NULL          -- 'vision' | 'decision' | 'playbook' | 'outcome'
-title           TEXT NOT NULL
-body_md         TEXT NOT NULL
-tags_json       TEXT
-visibility      TEXT DEFAULT 'draft'   -- 'draft' | 'published' | 'archived'
-injectable      INTEGER DEFAULT 1      -- only meaningful when published
-pinned          INTEGER DEFAULT 0      -- admin-only
-helpful_count   INTEGER DEFAULT 0
-unhelpful_count INTEGER DEFAULT 0
-source_type     TEXT NOT NULL          -- 'thread' | 'chat' | 'manual'
-source_event_id TEXT                   -- nullable
-content_hash    TEXT NOT NULL          -- SHA256 of canonical artifact content (crypto-ready)
-created_at      TIMESTAMPTZ DEFAULT NOW()
-updated_at      TIMESTAMPTZ DEFAULT NOW()
-```
-
-### artifact_versions (immutable history)
-```sql
-id              UUID PRIMARY KEY
-artifact_id     UUID NOT NULL
-body_md         TEXT NOT NULL
-content_hash    TEXT NOT NULL          -- SHA256
-created_at      TIMESTAMPTZ NOT NULL
-created_by      UUID NOT NULL
-```
-
-### chat_messages (ephemeral, hard-walled from memory)
-```sql
-id              UUID PRIMARY KEY
-community_id    UUID NOT NULL
-author_id       UUID NOT NULL
-content         TEXT NOT NULL
-created_at      TIMESTAMPTZ DEFAULT NOW()
-```
-
-**Chat boundary (non-negotiable)**:
-- Chat is never injected into handoff packet
-- Chat is never auto-published
-- "Save to Community" from chat goes through full sanitization gate
-- Chat is social layer, not memory layer
-
-**Ephemeral definition (MVP)**:
-- Chat content is not used for memory injection and not considered durable knowledge.
-- Provide a retention policy: either TTL delete (e.g. 30–90 days) or explicit “Delete message / Delete history” controls.
-- Export/backup focuses on artifacts; chat export is optional and off by default.
-
-**Provenance wiring (MVP)**:
-- `source_type='thread'` → `source_event_id` references local `events.id` (the selection that was published)
-- `source_type='chat'` → `source_event_id` references `chat_messages.id`
-- `source_type='manual'` → `source_event_id` is NULL
+Same as v1.4, with one optional addition:
+- `community_artifacts.type` MAY include `'skill'` (curated skill packs), but cloud skill distribution is optional for MVP.
 
 ---
 
 ## 4) Components (5 only)
 
 | Component | Responsibility |
-|-----------|----------------|
-| **Storage** | SQLite access, migrations, FTS indexes |
-| **PTY Engine Adapter** | Spawn/attach engine, send input, capture output → append events |
-| **Context Builder** | Build handoff packet each turn (memory + artifacts → text) |
-| **Community Backend Adapter** | Interface for artifacts/membership (Supabase now, swappable later) |
-| **UI** | Render threads, events, memory list, artifact library, PTY panel, chat |
+|---|---|
+| **Storage** | SQLite access, migrations, FTS, blob writes + GC, deterministic `seq`, transactional projection updates |
+| **Execution Runtime Service (Arx Harness)** | Serial run loop (model → tools → model), permission enforcement, skill discovery/load, streams events; calls Storage/EventWriter for all writes |
+| **Context Builder** | Build handoff packet (memory + artifacts), apply redactions, append `memory_retrieval` |
+| **Community Backend Adapter** | Directory, plans, entitlements, artifacts, retention, moderation (Supabase now; swappable later) |
+| **UI** | Threads/messages/turn inspector, memory, artifact library, discovery, paywall/join, weekly check-ins, chat, approvals panel, run console |
 
-No internal tool protocol. Engines own execution.
-
----
-
-## 5) Flows (2 only)
-
-Everything the app does reduces to two flows.
-
-### 5.1 Turn / Injection Flow
-
-```
-1. User submits message
-   └─→ Append user_message event
-
-2. Context Builder runs:
-   ├─→ Retrieve personal_memory_items (filter by scope → rank pinned/recency → budget ~2000 chars)
-   ├─→ If thread.community_id set:
-   │   └─→ Retrieve artifacts (published + injectable → rank pinned/helpful/recency → budget ~1500 chars)
-   ├─→ Redact/omit secrets
-   └─→ Append memory_retrieval event (IDs + snippets + provenance)
-
-3. Send handoff packet + user message to engine via PTY
-
-4. Engine outputs chunks
-   └─→ Append engine_io_chunk events
-```
-
-### 5.2 Publish Flow (fail-closed)
-
-```
-1. User explicitly chooses "Publish to Community"
-   └─→ Source can be: thread selection, chat message, manual entry
-
-2. Client sanitizer scans for secrets
-   └─→ Block if detected; user must fix
-
-3. Server re-checks sanitizer (defense in depth)
-   └─→ Reject if secrets found
-
-4. Write to community_artifacts + artifact_versions
-   └─→ content_hash = SHA256(canonical_string(type,title,body_md,tags_json))
-
-5. Append artifact_published event locally (provenance + hash)
-```
+Event writer rule (non-negotiable):
+- Only Storage/EventWriter appends events and assigns `seq` transactionally.
 
 ---
 
-## 6) Handoff Packet Format
+## 5) Flows (MVP)
 
-```
-You're helping [user] with [workspace].
+### 5.0 Control plane (local)
 
-Memory:
-- [memory item 1]
-- [memory item 2]
+The UI controls the runtime via a small local API and subscribes to a live event stream.
 
-[If community active:]
-Community ([name]):
-- [playbook] "Title" — excerpt... (@author)
-- [decision] "Title" — excerpt... (@author)
+Minimum operations:
+- start run (thread_id, mode, provider/model, workspace scope)
+- send user input to active run
+- approve/deny tool requests
+- cancel run
+- subscribe to run events (stream)
 
-[If resuming:]
-Last session: [1-2 sentence summary]
-```
+Cancellation rule (v1.5.2):
+- Cancelling a run MUST append `run_finished(status='cancelled', reason='user_cancel')` (and MAY omit `assistant_message`).
 
----
+### 5.1 Turn / Injection Flow (audit-grade)
 
-## 7) Crypto Readiness (no chain commitment)
+1) User submits message (UI → runtime)
+   - append `user_message`
+2) Context Builder runs (runtime)
+   - retrieve personal memory (+ community artifacts if entitled)
+   - redact/omit secrets from injected context
+   - append `memory_retrieval`
+3) Runtime starts a run
+   - append `run_started` (mode + workspace scope + policy snapshot)
+4) Construct engine/model input (handoff + user message + tool schemas + policy summary)
+   - append `engine_input` (**mandatory**, exact bytes via blob if needed)
+5) Model outputs streaming chunks
+   - append `engine_io_chunk*` (blob-backed for large chunks)
+6) Tool use (optional)
+   - append `tool_call_*` events + blob-backed outputs/diffs
+   - feed tool results back via next `engine_input`
+7) Completion
+   - append `assistant_message` (derived, includes `source_event_ids`)
+   - append `run_finished`
 
-Rule: **chains store proofs; Arx stores meaning**.
+### 5.2 Tool permission & approval flow (MVP baseline)
 
-Already baked into schema:
-- `content_hash` on every artifact/version (SHA256 of canonical content) — enables anchoring anywhere
-- `source_type` + `source_event_id` — clear provenance
-- `CommunityBackendAdapter` interface — backend swappable
+Mode enforcement (non-negotiable):
+- BUILD mode: tools may execute subject to policy/approval.
+- EXPLORE mode: side-effect tools are denied (not “ask”):
+  - denied: `write`, `edit`, `bash`, any network tool
+  - allowed: `read`, `list_dir`, `glob`, `grep`, `task`, `sha256`, `skill_load`
 
-Future additions (schema-compatible):
-- `author_signature`, `author_pubkey` — verifiable authorship
-- `external_refs` JSON — `{ type: "tx", chain: "X", id: "..." }`
+Allowed by default (within workspace scope):
+- `read`, `list_dir`, `glob`, `grep`, `task`, `sha256`, `skill_load`
 
----
+Approval required:
+- `write`, `edit`, `bash`
 
-## 8) Acceptance Criteria
+Denied by default:
+- access outside workspace scope
+- networked tools (until explicitly enabled later)
 
-The system is correct when all of these pass.
+Guardrails:
+- outside-scope path → deny/ask with explicit user confirmation + event record
+- doom-loop detection → pause and require explicit user confirmation
 
-### Continuity
-- [ ] Thread list shows all threads sorted by `last_event_at`
-- [ ] Clicking a thread loads all events
-- [ ] Resume works after crash (events persisted before ack)
-- [ ] Search finds threads by title and event text
+Scope rule (v1.5.2):
+- “Allowed” read tools are still workspace-scope limited by default; outside-scope reads must be denied or explicitly approved and recorded (same as writes).
+- `skill_load` is an exception: it MAY read from the allowlisted skills roots (`.claude/skills` in-workspace, `~/.claude/skills`, and `~/.config/arx/skills`) as read-only inputs.
 
-### Personal Memory
-- [ ] User can pin a fact ("Remember this")
-- [ ] Pinned facts appear in handoff packet on next turn
-- [ ] Memory scoped: global always, workspace only when matched
-- [ ] Memory list viewable/searchable/deletable in Settings
+### 5.3 Skills (Claude-style SKILL.md packs)
 
-### Community Artifacts
-- [ ] User can publish artifact (explicit action)
-- [ ] Publish blocked if secrets detected (client)
-- [ ] Publish rejected if secrets detected (server)
-- [ ] Published artifacts appear in library for members
-- [ ] Artifacts injected when `thread.community_id` matches
+Skills are local packs compatible with the `SKILL.md` convention.
 
-### Injection Attribution
-- [ ] Every turn logs `memory_retrieval` event with IDs + snippets
-- [ ] User can see "Sources used" after response
-- [ ] Sources link back to origin
+Discovery:
+- project: `.claude/skills/<name>/SKILL.md`
+- user: `~/.claude/skills/<name>/SKILL.md`
+- optional: `~/.config/arx/skills/<name>/SKILL.md`
 
-### Community Isolation
-- [ ] User only sees artifacts from their communities
-- [ ] RLS enforces `community_id` isolation
-- [ ] RLS enforces `community_id` isolation for chat_messages too
-- [ ] Switching communities updates injection scope
+Rules:
+- skills load on-demand via tool `skill_load`
+- skill content is returned as a blob (`blob_id`) and is auditable via tool events
+- skills never grant privileges; all side-effects still go through tools + permissions
+- skills are not injected wholesale into handoff packets
 
-### Chat Isolation
-- [ ] Chat messages never in handoff packet
-- [ ] Chat never auto-published
-- [ ] "Save to Community" from chat requires sanitization gate
+### 5.4 Publish / Discovery / Retention / Moderation / Chat
 
-### Engine Agnosticism
-- [ ] Thread works with Codex CLI
-- [ ] Thread works with Claude Code
-- [ ] Switching engine mid-thread inserts handoff summary
-- [ ] Events stored in Arx format, not engine format
-
-### Auth + Identity
-- [ ] Supabase session tokens are stored in OS keychain (not localStorage)
-- [ ] Local user profile can link multiple auth methods over time (email/OAuth now; wallets later)
+Unchanged from v1.4 (fail-closed publish; entitlements gate access; chat is hard-walled).
 
 ---
 
-## 9) Build Order
+## 6) Handoff Packet Format (v1)
 
-1. **threads + events** — the conversation store + FTS
-2. **PTY Engine Adapter** — spawn, capture, append events
-3. **personal_memory_items + Context Builder** — memory injection
-4. **Community Backend Adapter** — communities, memberships, artifacts
-5. **artifacts_cache + sync** — offline search
-6. **chat_messages** — community chat (hard-walled)
-7. **Polish** — onboarding, resume UX, engine switching, export
+Unchanged from v1.4, with the addition:
+- Skills are loaded on-demand via `skill_load` and referenced as evidence; they are not injected wholesale by default.
+
+---
+
+## 7) Crypto Readiness
+
+Unchanged from v1.4.
+
+---
+
+## 8) Acceptance Criteria (v1.5.2)
+
+Continuity + auditability:
+- Thread list sorted by `last_event_at`
+- Thread loads events ordered by `seq`
+- Resume works after crash (events persisted before ack)
+- Every turn logs: `user_message → memory_retrieval → run_started → engine_input → engine_io_chunk* → assistant_message → run_finished`
+- `assistant_message` always includes `source_event_ids`
+
+Tools + permissions:
+- executed tool calls include `tool_call_requested` → `tool_call_started` → `tool_call_finished`; denied calls include `tool_call_requested` → `tool_call_denied` (no started/finished)
+- approvals recorded when required
+- outputs/diffs referenced via blobs
+- outside-scope access is denied/explicitly gated and recorded
+
+Single-writer:
+- only EventWriter assigns `seq`; UI never writes SQLite directly
+
+Blob correctness:
+- events never reference missing blobs
+- orphan blobs are cleaned by GC
+
+Projections:
+- thread view uses messages projection
+- turn inspector uses turns projection
+- projections can be rebuilt from events
+
+Skills:
+- discover local skills
+- load via `skill_load` with blob evidence
+- never bypass tool permissions
+
+Community + monetization:
+- directory, landing surfaces, plans, entitlements, retention, moderation present (per v1.4)
+
+---
+
+## 9) Build Order (v1.5.2)
+
+1) Storage hardening:
+   - content-addressed blobs + GC
+   - deterministic `seq` (single writer)
+   - messages/turns/tool_calls projections + rebuild
+2) Arx harness runtime (serial loop):
+   - local API + event stream
+   - model adapter (MVP: OpenRouter provider)
+   - protocol routing (MVP): use OpenRouter `/v1/messages` for `anthropic/*` models; use OpenRouter `/v1/chat/completions` (OpenAI-compatible) for everything else; record the choice in `engine_input.request_format`
+3) Tool suite (minimal):
+   - `read`, `list_dir`, `glob`, `grep`, `task`, `sha256`, `write`, `edit`, `bash`, `skill_load`
+4) Permissions engine:
+   - workspace policies + approval UI + guardrails
+5) Context Builder:
+   - injection + redaction + `memory_retrieval` logging
+6) Community backend + artifacts:
+   - directory, entitlements, publish gating, artifact library
+7) Retention + moderation + chat:
+   - unchanged MVP features
 
 ---
 
 ## 10) What We Defer
 
-- Internal agent loop / tool orchestration / approval cards
-- Payments / Stripe entitlements (manual allowlist for now)
-- DMs (private 1:1 messaging)
-- Cloud vault for generated files
-- Deep-linking funnel, repo mirroring, vector search, E2EE sync
-- Community skills (shareable workflows)
+- Parallel tool execution / concurrency inside a run
+- Subagents / multi-agent orchestration
+- MCP / external tool servers
+- Cloud runners / remote execution
+- Deep workflow execution engine (playbooks remain content)
+- Repo mirroring, vector search, E2EE sync
+- Advanced reputation systems / anti-abuse ML
+- On-chain commitments (optional anchors later)
 
 ---
 
-## 11) Modes
+## Appendix A — Minimal Tool Contract (v1.5.2)
 
-**BUILD** (default): ship MVP features with minimal complexity.
-**EXPLORE**: only when user explicitly asks to brainstorm product direction.
+Tools (MVP):
+- Read-only:
+  - `read(path, offset?, limit?)` → line-numbered text
+  - `list_dir(path)` → files vs folders
+  - `glob(pat, path?)`
+  - `grep(pat, path?, include?)` → regex search (ripgrep-first)
+  - `sha256(path)` → file content hash helper
+  - `task(path?, pat?, query?, list?)` → read-only helper (bundles common exploration)
+- Approval-gated:
+  - `write(path, content, expected_before_sha256?)` (or `write(writes:[{path, content}, ...])`)
+  - `edit(path, old, new, all?, expected_before_sha256?)`
+  - `bash(cmd, cwd?)`
+- Optional / deferred (MVP):
+  - `skill_load(name)` → returns `SKILL.md` content + metadata
+
+Tool evidence requirements:
+- Every tool execution produces:
+  - `tool_call_requested` with args
+  - `tool_call_started` before execution
+  - `tool_call_finished` with stdout/stderr blobs (if any) and file artifacts/diff blobs when changed
+
+Expected-before semantics (v1.5.2):
+- If `expected_before_sha256` is provided:
+  - For overwrites: it must match current content hash (fail safely if not).
+  - For creates: `expected_before_sha256 = null` means “must not exist”.
+  - Any mismatch must produce a non-destructive error and a `tool_call_finished(status='error')` (no partial writes).
+- If `expected_before_sha256` is omitted or empty:
+  - MVP MAY proceed “nano-style” (subject to approval), using current file contents as the base.
+
+Tool schema compatibility (v1.5.2):
+- Keep tool schemas within the widely-supported JSON Schema subset (object `properties` + `required`); avoid `anyOf`/`oneOf`/`allOf` to prevent provider 400s via OpenRouter.
+- Represent “nullable” inputs by omitting the field (or using empty string) rather than schema unions.
