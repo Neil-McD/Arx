@@ -388,6 +388,20 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       last_seq INTEGER NOT NULL DEFAULT 0
     );
 
+    -- Device-local workspace binding (contract primitive in v2.0).
+    -- This is intentionally separate from cloud-canonical threads/messages.
+    CREATE TABLE IF NOT EXISTS workspace_bindings (
+      thread_id TEXT PRIMARY KEY,
+      workspace_path TEXT,
+      workspace_scope_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(thread_id) REFERENCES threads(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_workspace_bindings_scope_id
+      ON workspace_bindings(workspace_scope_id);
+
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
       thread_id TEXT NOT NULL,
@@ -1338,6 +1352,36 @@ pub fn create_thread(
   })
 }
 
+pub fn upsert_thread_from_cloud(
+  conn: &Connection,
+  thread_id: &str,
+  title: Option<&str>,
+  engine_id: &str,
+  model_id: Option<&str>,
+  community_id: Option<&str>,
+  created_at: Option<i64>,
+  updated_at: Option<i64>,
+) -> anyhow::Result<ThreadRecord> {
+  let ts = now_ts();
+  let created = created_at.unwrap_or(ts);
+  let updated = updated_at.unwrap_or(ts);
+
+  conn.execute(
+    "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+     VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, NULL)
+     ON CONFLICT(id) DO UPDATE SET
+       title = COALESCE(excluded.title, threads.title),
+       engine_id = COALESCE(NULLIF(excluded.engine_id, ''), threads.engine_id),
+       model_id = COALESCE(excluded.model_id, threads.model_id),
+       community_id = COALESCE(excluded.community_id, threads.community_id),
+       updated_at = MAX(threads.updated_at, excluded.updated_at)",
+    params![thread_id, title, engine_id, model_id, community_id, created, updated],
+  )?;
+
+  get_thread_by_id(conn, thread_id)?
+    .ok_or_else(|| anyhow::anyhow!("upsert_thread_from_cloud: thread not found after upsert"))
+}
+
 fn map_project_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectRecord> {
   Ok(ProjectRecord {
     id: row.get(0)?,
@@ -2109,6 +2153,28 @@ pub fn set_thread_workspace_path(
      SET workspace_path = ?1, updated_at = ?2
      WHERE id = ?3",
     params![cleaned, ts, thread_id],
+  )?;
+  Ok(())
+}
+
+pub fn upsert_workspace_binding(
+  conn: &Connection,
+  thread_id: &str,
+  workspace_path: Option<&str>,
+  workspace_scope_id: Option<&str>,
+) -> anyhow::Result<()> {
+  let ts = now_ts();
+  let cleaned_path = workspace_path.map(|p| p.trim()).filter(|p| !p.is_empty());
+  let cleaned_scope = workspace_scope_id.map(|p| p.trim()).filter(|p| !p.is_empty());
+
+  conn.execute(
+    "INSERT INTO workspace_bindings (thread_id, workspace_path, workspace_scope_id, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)
+     ON CONFLICT(thread_id) DO UPDATE SET
+       workspace_path = excluded.workspace_path,
+       workspace_scope_id = excluded.workspace_scope_id,
+       updated_at = excluded.updated_at",
+    params![thread_id, cleaned_path, cleaned_scope, ts, ts],
   )?;
   Ok(())
 }

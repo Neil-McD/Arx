@@ -12,7 +12,7 @@ use db::{
   get_project_by_id, get_session_resume, get_ui_state, list_events,
   list_messages, list_threads, open_conn, set_ui_state,
   get_thread_by_id,
-  upsert_project, set_thread_community_id, set_thread_engine_model, set_thread_workspace_path, DbState,
+  upsert_project, set_thread_community_id, set_thread_engine_model, set_thread_workspace_path, upsert_workspace_binding, DbState,
 };
 use keyring::Entry;
 	use once_cell::sync::Lazy;
@@ -6351,6 +6351,49 @@ fn create_thread_cmd(
 }
 
 #[tauri::command]
+fn upsert_thread_cmd(
+  state: tauri::State<DbState>,
+  thread_id: String,
+  title: Option<String>,
+  engine_id: Option<String>,
+  model_id: Option<String>,
+  community_id: Option<String>,
+  created_at: Option<i64>,
+  updated_at: Option<i64>,
+) -> Result<db::ThreadRecord, String> {
+  let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
+  let cleaned_engine_id = engine_id
+    .as_deref()
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty())
+    .unwrap_or(ENGINE_OPENROUTER_CHAT);
+
+  let cleaned_model_id = model_id
+    .as_deref()
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty());
+
+  let cleaned_community_id = community_id
+    .as_deref()
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty());
+
+  let cleaned_title = title.as_deref().map(|v| v.trim()).filter(|v| !v.is_empty());
+
+  db::upsert_thread_from_cloud(
+    &conn,
+    &thread_id,
+    cleaned_title,
+    cleaned_engine_id,
+    cleaned_model_id,
+    cleaned_community_id,
+    created_at,
+    updated_at,
+  )
+  .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn list_threads_cmd(state: tauri::State<DbState>) -> Result<Vec<db::ThreadRecord>, String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
   list_threads(&conn).map_err(|e| e.to_string())
@@ -6421,6 +6464,18 @@ fn set_thread_workspace_cmd(
 ) -> Result<(), String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
   let cleaned = workspace_path.as_deref().map(|p| p.trim()).filter(|p| !p.is_empty());
+  let scope_id = cleaned.map(|p| {
+    std::path::Path::new(p)
+      .canonicalize()
+      .ok()
+      .map(|v| v.to_string_lossy().to_string())
+      .unwrap_or_else(|| p.to_string())
+  });
+
+  // Contract primitive: device-local binding for workspace scope enforcement.
+  let _ = upsert_workspace_binding(&conn, &thread_id, cleaned, scope_id.as_deref());
+
+  // Legacy metadata (kept for backwards compatibility with the current UI).
   set_thread_workspace_path(&conn, &thread_id, cleaned).map_err(|e| e.to_string())?;
   let payload = serde_json::json!({
     "v": 1,
@@ -7574,6 +7629,7 @@ fn main() {
     .plugin(tauri_plugin_dialog::init())
       .invoke_handler(tauri::generate_handler![
       create_thread_cmd,
+      upsert_thread_cmd,
       delete_thread_cmd,
       list_threads_cmd,
       get_thread_cmd,

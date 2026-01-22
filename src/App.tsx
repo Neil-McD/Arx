@@ -921,6 +921,11 @@ function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    if (!supabaseSession) return;
+    void loadThreads();
+  }, [supabaseSession]);
+
+  useEffect(() => {
     if (supabaseAutoRefreshTimeoutRef.current) {
       window.clearTimeout(supabaseAutoRefreshTimeoutRef.current);
       supabaseAutoRefreshTimeoutRef.current = null;
@@ -977,6 +982,12 @@ function App() {
 	    void maybeAutoJoinPendingInvites(supabaseSession);
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
 	  }, [supabaseSession]);
+
+	  useEffect(() => {
+	    if (!supabaseSession) return;
+	    if (threads.length === 0) return;
+	    void syncLocalThreadsToCloud(threads, supabaseSession);
+	  }, [supabaseSession, threads]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
@@ -1688,17 +1699,219 @@ function App() {
       .catch(() => setAutoApproveWriteEdit(false));
   }, [activeThreadId]);
 
+  function toUnixSecondsFromIso(value: string | null | undefined): number | null {
+    if (!value) return null;
+    const ms = Date.parse(value);
+    if (!Number.isFinite(ms)) return null;
+    return Math.floor(ms / 1000);
+  }
+
   async function loadThreads() {
-    try {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+
+    type CloudThreadRow = {
+      id: string;
+      title: string | null;
+      engine_id: string | null;
+      model_id: string | null;
+      community_id: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+
+    const loadLocal = async (): Promise<ThreadRecord[]> => {
       const data = await invoke<ThreadRecord[]>("list_threads_cmd");
-      const visible = data.filter((t) => t.id !== "system" && t.engine_id !== "system");
+      return data.filter((t) => t.id !== "system" && t.engine_id !== "system");
+    };
+
+    const loadCloud = async (auth: SupabaseSession): Promise<ThreadRecord[]> => {
+      if (!url) return [];
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc`,
+        { method: "GET" },
+        auth,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as CloudThreadRow[];
+      return rows
+        .filter((row) => row.id && row.id !== "system")
+        .map((row) => ({
+          id: row.id,
+          title: row.title ?? null,
+          engine_id: (row.engine_id ?? "").trim() || "arx_harness",
+          model_id: (row.model_id ?? "").trim() || null,
+          workspace_path: null,
+          community_id: (row.community_id ?? "").trim() || null,
+          created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
+          updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
+          last_event_at: null,
+        }));
+    };
+
+    try {
+      if (!session || !url) {
+        const localThreads = await loadLocal();
+        setThreads(localThreads);
+        if (!activeThreadId && localThreads.length > 0) {
+          setActiveThreadId(localThreads[0].id);
+        }
+        return;
+      }
+
+      const [cloudResult, localResult] = await Promise.allSettled([
+        loadCloud(session),
+        loadLocal(),
+      ]);
+      const cloudThreads = cloudResult.status === "fulfilled" ? cloudResult.value : [];
+      const localThreads = localResult.status === "fulfilled" ? localResult.value : [];
+
+      const merged = new Map<string, ThreadRecord>();
+      for (const thread of cloudThreads) merged.set(thread.id, thread);
+
+      for (const localThread of localThreads) {
+        const existing = merged.get(localThread.id);
+        if (!existing) {
+          merged.set(localThread.id, localThread);
+          continue;
+        }
+        merged.set(localThread.id, {
+          ...existing,
+          title: existing.title ?? localThread.title ?? null,
+          engine_id: existing.engine_id || localThread.engine_id,
+          model_id: existing.model_id ?? localThread.model_id ?? null,
+          community_id: existing.community_id ?? localThread.community_id ?? null,
+          workspace_path: localThread.workspace_path ?? existing.workspace_path ?? null,
+          updated_at: Math.max(existing.updated_at, localThread.updated_at),
+          last_event_at: localThread.last_event_at ?? existing.last_event_at ?? null,
+        });
+      }
+
+      const visible = Array.from(merged.values()).filter((t) => t.id !== "system" && t.engine_id !== "system");
+      visible.sort((a, b) => b.updated_at - a.updated_at);
+
       setThreads(visible);
       if (!activeThreadId && visible.length > 0) {
         setActiveThreadId(visible[0].id);
       }
+      // Ensure cloud threads are hydrated into the local DB so the desktop runtime can operate on them.
+      for (const thread of cloudThreads) {
+        void invoke("upsert_thread_cmd", {
+          threadId: thread.id,
+          title: thread.title,
+          engineId: thread.engine_id,
+          modelId: thread.model_id,
+          communityId: thread.community_id,
+          createdAt: thread.created_at,
+          updatedAt: thread.updated_at,
+        }).catch(() => {
+          // best-effort
+        });
+      }
+      void syncLocalThreadsToCloud(localThreads, session);
     } catch (error) {
       console.error("Failed to load threads:", error);
       setThreads([]);
+    }
+  }
+
+  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
+    if (!value || !Number.isFinite(value)) return null;
+    return new Date(value * 1000).toISOString();
+  }
+
+  async function syncLocalThreadsToCloud(localThreads: ThreadRecord[], session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    if (!localThreads || localThreads.length === 0) return;
+
+    // Best-effort sync: cloud is the long-term canonical store, but local can be used offline.
+    try {
+      const payload = localThreads.map((t) => ({
+        id: t.id,
+        owner_id: session.user.id,
+        title: t.title ?? null,
+        engine_id: (t.engine_id ?? "").trim() || "arx_harness",
+        model_id: (t.model_id ?? "").trim() || null,
+        community_id: (t.community_id ?? "").trim() || null,
+      }));
+
+      await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads?on_conflict=id`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(payload),
+        },
+        session,
+      );
+    } catch {
+      // Best-effort only; local UX must not break if cloud sync fails.
+    }
+  }
+
+  async function syncLocalMessagesToCloud(
+    threadId: string,
+    localMessages: MessageRecord[],
+    session: SupabaseSession,
+  ): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    if (!threadId) return;
+    if (!localMessages || localMessages.length === 0) return;
+
+    // Ensure the thread exists in cloud (best-effort).
+    try {
+      const localThread =
+        threads.find((t) => t.id === threadId) ??
+        (await invoke<ThreadRecord | null>("get_thread_cmd", { threadId }).catch(() => null));
+      if (localThread) {
+        await syncLocalThreadsToCloud([localThread], session);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const sorted = [...localMessages].sort((a, b) => a.created_at - b.created_at);
+      const payload = sorted.slice(-500).map((m) => {
+        let content: unknown = null;
+        try {
+          content = JSON.parse(m.content_json);
+        } catch {
+          content = { text: m.content_json };
+        }
+        return {
+          id: m.id,
+          thread_id: threadId,
+          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
+          seq: 0,
+          role: m.role,
+          content_json: content ?? { text: "" },
+          engine_id: m.engine_id ?? null,
+          model_id: m.model_id ?? null,
+          run_id: m.run_id ?? null,
+          created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
+        };
+      });
+
+      await fetchWithSupabaseAuth(
+        `${url}/rest/v1/messages?on_conflict=id`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "resolution=ignore-duplicates,return=minimal",
+          },
+          body: JSON.stringify(payload),
+        },
+        session,
+      );
+    } catch {
+      // Best-effort only; local UX must not break if cloud sync fails.
     }
   }
 
@@ -1707,6 +1920,9 @@ function App() {
   }
 
 	  async function loadMessages(sessionId: string) {
+      const session = supabaseSessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+
 	    const buildAgentToolCallsFromEvents = (events: EventRecord[]): ToolCallRecord[] => {
 	      type AgentToolCallState = {
 	        id: string;
@@ -1890,26 +2106,87 @@ function App() {
       };
     };
 
+    type CloudMessageRow = {
+      id: string;
+      thread_id: string;
+      seq: number;
+      role: string;
+      content_json: unknown;
+      engine_id: string | null;
+      model_id: string | null;
+      run_id: string | null;
+      created_at: string;
+    };
+
+    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
+      if (!url) return [];
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.asc`,
+        { method: "GET" },
+        auth,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as CloudMessageRow[];
+      return rows.map((row) => ({
+        id: row.id,
+        session_id: row.thread_id,
+        role: row.role,
+        content_json: JSON.stringify(row.content_json ?? { text: "" }),
+        created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
+        engine_id: row.engine_id,
+        model_id: row.model_id,
+        run_id: row.run_id,
+      }));
+    };
+
+    let cloudMessages: MessageRecord[] = [];
+    if (session && url) {
+      try {
+        cloudMessages = await loadCloudMessages(session);
+      } catch {
+        cloudMessages = [];
+      }
+    }
+
+    let localMessages: MessageRecord[] = [];
+    let toolCalls: ToolCallRecord[] = [];
+
     try {
       const events = await invoke<EventRecord[]>("list_events_cmd", {
         threadId: sessionId,
-        limit: 2000
+        limit: 2000,
       });
       const mapped = events.map(eventToMessage).filter(Boolean) as MessageRecord[];
       if (mapped.length > 0) {
-        setMessages(mapped);
-        setToolCalls(buildAgentToolCallsFromEvents(events));
-        return;
+        localMessages = mapped;
+        toolCalls = buildAgentToolCallsFromEvents(events);
       }
     } catch {
-      // Fallback for older builds/DBs.
+      // ignore
     }
 
-    const data = await invoke<MessageRecord[]>("list_messages_cmd", {
-      sessionId
-    });
-    setMessages(data);
-    setToolCalls([]);
+    if (localMessages.length === 0) {
+      try {
+        localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
+      } catch {
+        localMessages = [];
+      }
+    }
+
+    const mergedById = new Map<string, MessageRecord>();
+    for (const msg of cloudMessages) mergedById.set(msg.id, msg);
+    for (const msg of localMessages) {
+      if (!mergedById.has(msg.id)) mergedById.set(msg.id, msg);
+    }
+    const merged = Array.from(mergedById.values());
+    merged.sort((a, b) => a.created_at - b.created_at);
+
+    setMessages(merged);
+    setToolCalls(toolCalls);
+
+    if (session && localMessages.length > 0) {
+      void syncLocalMessagesToCloud(sessionId, localMessages, session);
+    }
   }
 
   async function loadTurns(sessionId: string) {
@@ -4706,6 +4983,9 @@ function isModelReady(modelId: string): boolean {
     });
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
+    if (supabaseSessionRef.current) {
+      void syncLocalThreadsToCloud([thread], supabaseSessionRef.current);
+    }
     const nextWorkspace = effectiveCwd;
     await invoke("set_thread_workspace_cmd", {
       threadId: thread.id,
