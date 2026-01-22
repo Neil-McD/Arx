@@ -1,0 +1,2 @@
+/* Reuse the desktop app's styling verbatim to keep the web UI visually identical. */
+@import "../../../src/index.css";
