@@ -2096,7 +2096,7 @@ export default function App() {
   const hasLeftPanel = showSessionsPanel || showCommunityNav;
 
   return (
-    <div className="app">
+    <div className="app-root">
       <header className="app-topbar">
         <div className="topbar-left">
           <button
