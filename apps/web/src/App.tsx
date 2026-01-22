@@ -2097,76 +2097,34 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <header className="app-topbar">
-        <div className="topbar-left">
-          <button
-            className={`icon-button${activePage === "workspace" ? " active" : ""}`}
-            onClick={() => {
-              setActiveView("home");
-              setActivePage("workspace");
-            }}
-            aria-label="Agent"
-            title="Agent"
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2l9 4.9v5.8c0 5-3.8 9.5-9 11.3C6.8 22.2 3 17.7 3 12.7V6.9L12 2z" />
-              <path d="M9 12h6M12 9v6" />
-            </svg>
-          </button>
-          <button
-            className={`icon-button community-btn${activePage !== "workspace" ? " active" : ""}`}
-            onClick={() => {
-              setActiveView("home");
-              if (activeView === "settings") setActiveView("home");
-              if (activePage !== "workspace") {
-                setActivePage("workspace");
-                return;
-              }
-              if (communities.length === 0) {
-                setActivePage("discover");
-                return;
-              }
-              setActivePage("community");
-              setCommunityTab("chat");
-              setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
-            }}
-            aria-label="Community"
-            title="Community"
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="topbar-center">
-          <div className="workspace-title">
-            <span className="workspace-name">Arx</span>
-          </div>
-        </div>
-
-        <div className="topbar-right">
-          {supabaseSession ? (
-            <>
-              <span className="topbar-status">
-                {supabaseSession.user.email ?? supabaseSession.user.id}
-              </span>
-              <button className="topbar-button" type="button" onClick={() => void handleSignOut()}>
-                Sign out
-              </button>
-            </>
-          ) : (
-            <button className="topbar-button" type="button" onClick={handleSignIn}>
-              Sign in
-            </button>
-          )}
-        </div>
-      </header>
+      <button
+        className={`icon-button web-community-toggle${activePage !== "workspace" ? " active" : ""}`}
+        onClick={() => {
+          setActiveView("home");
+          if (activeView === "settings") setActiveView("home");
+          if (activePage !== "workspace") {
+            setActivePage("workspace");
+            return;
+          }
+          if (communities.length === 0) {
+            setActivePage("discover");
+            return;
+          }
+          setActivePage("community");
+          setCommunityTab("chat");
+          setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
+        }}
+        aria-label="Community"
+        title="Community"
+        type="button"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      </button>
 
       <div
         className={`app-shell${showCommunityRail ? " with-community-rail" : ""}${!hasLeftPanel ? " no-left" : ""} no-right`}

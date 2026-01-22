@@ -1,2 +1,17 @@
 /* Reuse the desktop app's styling verbatim to keep the web UI visually identical. */
 @import "../../../src/index.css";
+
+/* Web UX: no global topbar */
+.app-root {
+  grid-template-rows: 1fr;
+}
+
+.web-community-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 50;
+  background: var(--bg-panel, var(--bg-app));
+  border: 1px solid var(--border-default);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
