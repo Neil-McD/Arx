@@ -777,6 +777,8 @@ html, body {
   stroke: currentColor;
   fill: none;
   stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .nav-item.active .nav-icon {
@@ -4356,6 +4358,12 @@ h3.md-header {
   color: var(--text-muted);
   margin-top: -8px;
   margin-bottom: 4px;
+}
+
+.export-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Settings panel buttons - consistent styling */

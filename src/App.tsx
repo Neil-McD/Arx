@@ -582,7 +582,6 @@ function App() {
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const resizeRaf = useRef<number | null>(null);
-  const [expandedToolCallId, setExpandedToolCallId] = useState<string | null>(null);
   const [expandedCommandIds, setExpandedCommandIds] = useState<Set<string>>(new Set());
   const [actionErrors] = useState<Record<string, string>>({});
   const memoryToastTimeoutRef = useRef<number | null>(null);
@@ -793,24 +792,73 @@ function App() {
     });
   }
 
+  type CloudPersonalMemoryRow = {
+    id: string;
+    content: string;
+    scope: string;
+    scope_id: string | null;
+    pinned: boolean;
+    created_at: string;
+    updated_at: string;
+  };
+
+  async function fetchCloudPersonalMemoryItems(session: SupabaseSession): Promise<PersonalMemoryItemRecord[]> {
+    const url = getSupabaseUrl();
+    if (!url) return [];
+
+    const userId = getSupabaseAuthUid(session);
+    const workspacePath = getEffectiveWorkspacePath();
+    const baseSelect = "id,content,scope,scope_id,pinned,created_at,updated_at";
+
+    const fetchRows = async (query: string): Promise<CloudPersonalMemoryRow[]> => {
+      const response = await fetchWithSupabaseAuth(`${url}/rest/v1/personal_memory_items?${query}`, { method: "GET" }, session);
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      return (await response.json()) as CloudPersonalMemoryRow[];
+    };
+
+    const [globalRows, workspaceRows] = await Promise.all([
+      fetchRows(
+        `select=${baseSelect}` +
+          `&user_id=eq.${encodeURIComponent(userId)}` +
+          `&scope=eq.global` +
+          `&order=pinned.desc,updated_at.desc` +
+          `&limit=200`,
+      ),
+      fetchRows(
+        `select=${baseSelect}` +
+          `&user_id=eq.${encodeURIComponent(userId)}` +
+          `&scope=eq.workspace` +
+          `&scope_id=eq.${encodeURIComponent(workspacePath)}` +
+          `&order=pinned.desc,updated_at.desc` +
+          `&limit=200`,
+      ),
+    ]);
+
+    const toRecord = (row: CloudPersonalMemoryRow): PersonalMemoryItemRecord => ({
+      id: row.id,
+      content: row.content,
+      scope: row.scope,
+      scope_id: row.scope_id ?? null,
+      pinned: row.pinned ? 1 : 0,
+      provenance_event_id: null,
+      created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
+      updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
+    });
+
+    return [...globalRows, ...workspaceRows].map(toRecord);
+  }
+
   async function loadPersonalMemoryItems() {
     setIsLoadingPersonalMemory(true);
     setPersonalMemoryError(null);
     try {
-      const workspacePath = getEffectiveWorkspacePath();
-      const [globalItems, workspaceItems] = await Promise.all([
-        invoke<PersonalMemoryItemRecord[]>("list_personal_memory_items_cmd", {
-          scope: "global",
-          scopeId: null,
-          limit: 200
-        }),
-        invoke<PersonalMemoryItemRecord[]>("list_personal_memory_items_cmd", {
-          scope: "workspace",
-          scopeId: workspacePath,
-          limit: 200
-        })
-      ]);
-      setPersonalMemoryItems(sortPersonalMemory([...globalItems, ...workspaceItems]));
+      const session = supabaseSessionRef.current;
+      if (!session) {
+        setPersonalMemoryItems([]);
+        return;
+      }
+      const items = await fetchCloudPersonalMemoryItems(session);
+      setPersonalMemoryItems(sortPersonalMemory(items));
     } catch (error) {
       const message =
         typeof error === "string"
@@ -833,11 +881,15 @@ function App() {
     setIsLoadingPersonalMemory(true);
     setPersonalMemoryError(null);
     try {
-      const results = await invoke<PersonalMemoryItemRecord[]>("search_personal_memory_items_cmd", {
-        query: q,
-        limit: 200
-      });
-      setPersonalMemoryItems(sortPersonalMemory(results));
+      const session = supabaseSessionRef.current;
+      if (!session) {
+        setPersonalMemoryItems([]);
+        return;
+      }
+      const items = await fetchCloudPersonalMemoryItems(session);
+      const needle = q.toLowerCase();
+      const filtered = items.filter((item) => item.content.toLowerCase().includes(needle));
+      setPersonalMemoryItems(sortPersonalMemory(filtered));
     } catch (error) {
       const message =
         typeof error === "string"
@@ -856,16 +908,31 @@ function App() {
     if (!content) return;
     setPersonalMemoryError(null);
     try {
+      const session = supabaseSessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to save memory.");
+        await handleSignIn();
+        return;
+      }
       const scope = newPersonalMemoryScope;
       const scopeId = scope === "workspace" ? getEffectiveWorkspacePath() : null;
-      await invoke("create_personal_memory_item_cmd", {
-        threadId: activeThreadId ?? null,
-        content,
-        scope,
-        scopeId,
-        pinned: newPersonalMemoryPinned,
-        provenanceEventId: null
-      });
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            user_id: getSupabaseAuthUid(session),
+            content,
+            scope,
+            scope_id: scopeId,
+            pinned: Boolean(newPersonalMemoryPinned),
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
       setNewPersonalMemoryContent("");
       setNewPersonalMemoryPinned(false);
       await loadPersonalMemoryItems();
@@ -883,11 +950,26 @@ function App() {
   async function handleTogglePersonalMemoryPinned(item: PersonalMemoryItemRecord) {
     setPersonalMemoryError(null);
     try {
-      await invoke("set_personal_memory_item_pinned_cmd", {
-        threadId: activeThreadId ?? null,
-        id: item.id,
-        pinned: item.pinned === 0
-      });
+      const session = supabaseSessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to update memory.");
+        await handleSignIn();
+        return;
+      }
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(item.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            pinned: item.pinned === 0,
+            updated_at: new Date().toISOString(),
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
       await loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -903,7 +985,19 @@ function App() {
   async function handleDeletePersonalMemoryItem(id: string) {
     setPersonalMemoryError(null);
     try {
-      await invoke("delete_personal_memory_item_cmd", { threadId: activeThreadId ?? null, id });
+      const session = supabaseSessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to delete memory.");
+        await handleSignIn();
+        return;
+      }
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(id)}`,
+        { method: "DELETE", headers: { Prefer: "return=minimal" } },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
       await loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -913,6 +1007,121 @@ function App() {
             ? error.message
             : "Unknown error";
       setPersonalMemoryError(message);
+    }
+  }
+
+  async function exportThreadsCsv() {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to export.");
+      await handleSignIn();
+      return;
+    }
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=2000`,
+        { method: "GET" },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      const csv = buildCsv(
+        ["id", "title", "engine_id", "model_id", "community_id", "created_at", "updated_at"],
+        rows,
+      );
+      downloadTextFile("arx_threads.csv", csv);
+      setMemoryToast("Exported threads CSV.");
+    } catch (error) {
+      setMemoryToast(error instanceof Error ? error.message : "Failed to export threads.");
+    }
+  }
+
+  async function exportMessagesCsv() {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to export.");
+      await handleSignIn();
+      return;
+    }
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=20000`,
+        { method: "GET" },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rawRows = (await response.json()) as Array<{
+        id: string;
+        thread_id: string;
+        seq: number;
+        role: string;
+        content_json: unknown;
+        engine_id: string | null;
+        model_id: string | null;
+        run_id: string | null;
+        created_at: string;
+      }>;
+      const rows = rawRows.map((row) => ({
+        id: row.id,
+        thread_id: row.thread_id,
+        seq: row.seq,
+        role: row.role,
+        content: parseMessageText(JSON.stringify(row.content_json ?? { text: "" })),
+        engine_id: row.engine_id ?? "",
+        model_id: row.model_id ?? "",
+        run_id: row.run_id ?? "",
+        created_at: row.created_at,
+      }));
+      const csv = buildCsv(
+        ["id", "thread_id", "seq", "role", "content", "engine_id", "model_id", "run_id", "created_at"],
+        rows,
+      );
+      downloadTextFile("arx_messages.csv", csv);
+      setMemoryToast("Exported messages CSV.");
+    } catch (error) {
+      setMemoryToast(error instanceof Error ? error.message : "Failed to export messages.");
+    }
+  }
+
+  async function exportPersonalMemoryCsv() {
+    const session = supabaseSessionRef.current;
+    if (!session) {
+      setAuthError("Sign in to export.");
+      await handleSignIn();
+      return;
+    }
+    try {
+      const items = await fetchCloudPersonalMemoryItems(session);
+      const rows = items.map((item) => ({
+        id: item.id,
+        scope: item.scope,
+        scope_id: item.scope_id ?? "",
+        pinned: item.pinned ? "true" : "false",
+        content: item.content,
+        created_at: new Date(item.created_at * 1000).toISOString(),
+        updated_at: new Date(item.updated_at * 1000).toISOString(),
+      }));
+      const csv = buildCsv(["id", "scope", "scope_id", "pinned", "content", "created_at", "updated_at"], rows);
+      downloadTextFile("arx_personal_memory.csv", csv);
+      setMemoryToast("Exported memory CSV.");
+    } catch (error) {
+      setMemoryToast(error instanceof Error ? error.message : "Failed to export memory.");
+    }
+  }
+
+  async function resetLocalCache() {
+    if (isSending) return;
+    const ok = window.confirm(
+      "Reset local cache? This deletes local tool evidence and UI state. Your cloud threads/messages/memory remain.",
+    );
+    if (!ok) return;
+    try {
+      await invoke("reset_local_db_cmd");
+      window.location.reload();
+    } catch (error) {
+      setMemoryToast(error instanceof Error ? error.message : "Failed to reset local cache.");
     }
   }
 
@@ -963,18 +1172,18 @@ function App() {
     };
   }, [supabaseSession]);
 
-  useEffect(() => {
-    const onFocus = () => {
-      const current = supabaseSessionRef.current;
-      if (!current) return;
+	  useEffect(() => {
+	    const onFocus = () => {
+	      const current = supabaseSessionRef.current;
+	      if (!current) return;
       const now = Math.floor(Date.now() / 1000);
       if (current.expires_at <= now + 60) {
         void refreshSupabaseSessionLocked(current.refresh_token);
       }
     };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
+	    return () => window.removeEventListener("focus", onFocus);
+	  }, []);
 
 	  useEffect(() => {
 	    if (!supabaseSession) return;
@@ -982,12 +1191,6 @@ function App() {
 	    void maybeAutoJoinPendingInvites(supabaseSession);
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
 	  }, [supabaseSession]);
-
-	  useEffect(() => {
-	    if (!supabaseSession) return;
-	    if (threads.length === 0) return;
-	    void syncLocalThreadsToCloud(threads, supabaseSession);
-	  }, [supabaseSession, threads]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
@@ -1706,9 +1909,9 @@ function App() {
     return Math.floor(ms / 1000);
   }
 
-  async function loadThreads() {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
+	  async function loadThreads() {
+	    const session = supabaseSessionRef.current;
+	    const url = session ? getSupabaseUrl() : null;
 
     type CloudThreadRow = {
       id: string;
@@ -1718,11 +1921,6 @@ function App() {
       community_id: string | null;
       created_at: string;
       updated_at: string;
-    };
-
-    const loadLocal = async (): Promise<ThreadRecord[]> => {
-      const data = await invoke<ThreadRecord[]>("list_threads_cmd");
-      return data.filter((t) => t.id !== "system" && t.engine_id !== "system");
     };
 
     const loadCloud = async (auth: SupabaseSession): Promise<ThreadRecord[]> => {
@@ -1751,49 +1949,22 @@ function App() {
 
     try {
       if (!session || !url) {
-        const localThreads = await loadLocal();
-        setThreads(localThreads);
-        if (!activeThreadId && localThreads.length > 0) {
-          setActiveThreadId(localThreads[0].id);
-        }
+        // Cloud-canonical cognition: threads are available only when signed in.
+        setThreads([]);
+        setActiveThreadId(null);
         return;
       }
 
-      const [cloudResult, localResult] = await Promise.allSettled([
-        loadCloud(session),
-        loadLocal(),
-      ]);
-      const cloudThreads = cloudResult.status === "fulfilled" ? cloudResult.value : [];
-      const localThreads = localResult.status === "fulfilled" ? localResult.value : [];
-
-      const merged = new Map<string, ThreadRecord>();
-      for (const thread of cloudThreads) merged.set(thread.id, thread);
-
-      for (const localThread of localThreads) {
-        const existing = merged.get(localThread.id);
-        if (!existing) {
-          merged.set(localThread.id, localThread);
-          continue;
-        }
-        merged.set(localThread.id, {
-          ...existing,
-          title: existing.title ?? localThread.title ?? null,
-          engine_id: existing.engine_id || localThread.engine_id,
-          model_id: existing.model_id ?? localThread.model_id ?? null,
-          community_id: existing.community_id ?? localThread.community_id ?? null,
-          workspace_path: localThread.workspace_path ?? existing.workspace_path ?? null,
-          updated_at: Math.max(existing.updated_at, localThread.updated_at),
-          last_event_at: localThread.last_event_at ?? existing.last_event_at ?? null,
-        });
-      }
-
-      const visible = Array.from(merged.values()).filter((t) => t.id !== "system" && t.engine_id !== "system");
-      visible.sort((a, b) => b.updated_at - a.updated_at);
-
+      const cloudThreads = await loadCloud(session);
+      const visible = cloudThreads.filter((t) => t.id !== "system" && t.engine_id !== "system");
       setThreads(visible);
-      if (!activeThreadId && visible.length > 0) {
+
+      if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
+        setActiveThreadId(visible.length > 0 ? visible[0].id : null);
+      } else if (!activeThreadId && visible.length > 0) {
         setActiveThreadId(visible[0].id);
       }
+
       // Ensure cloud threads are hydrated into the local DB so the desktop runtime can operate on them.
       for (const thread of cloudThreads) {
         void invoke("upsert_thread_cmd", {
@@ -1808,122 +1979,82 @@ function App() {
           // best-effort
         });
       }
-      void syncLocalThreadsToCloud(localThreads, session);
     } catch (error) {
       console.error("Failed to load threads:", error);
       setThreads([]);
     }
   }
 
-  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
-    if (!value || !Number.isFinite(value)) return null;
-    return new Date(value * 1000).toISOString();
-  }
+	  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
+	    if (!value || !Number.isFinite(value)) return null;
+	    return new Date(value * 1000).toISOString();
+	  }
 
-  async function syncLocalThreadsToCloud(localThreads: ThreadRecord[], session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    if (!localThreads || localThreads.length === 0) return;
+	  async function syncRecentLocalMessagesToCloud(
+	    threadId: string,
+	    session: SupabaseSession,
+	    limit: number,
+	  ): Promise<void> {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    if (!threadId) return;
+	    if (!Number.isFinite(limit) || limit <= 0) return;
 
-    // Best-effort sync: cloud is the long-term canonical store, but local can be used offline.
-    try {
-      const payload = localThreads.map((t) => ({
-        id: t.id,
-        owner_id: session.user.id,
-        title: t.title ?? null,
-        engine_id: (t.engine_id ?? "").trim() || "arx_harness",
-        model_id: (t.model_id ?? "").trim() || null,
-        community_id: (t.community_id ?? "").trim() || null,
-      }));
+	    let localMessages: MessageRecord[] = [];
+	    try {
+	      localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
+	    } catch {
+	      return;
+	    }
+	    if (localMessages.length === 0) return;
 
-      await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?on_conflict=id`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates,return=minimal",
-          },
-          body: JSON.stringify(payload),
-        },
-        session,
-      );
-    } catch {
-      // Best-effort only; local UX must not break if cloud sync fails.
-    }
-  }
+	    const payload = localMessages.slice(-limit).map((m) => {
+	      let content: unknown = null;
+	      try {
+	        content = JSON.parse(m.content_json);
+	      } catch {
+	        content = { text: m.content_json };
+	      }
+	      return {
+	        id: m.id,
+	        thread_id: threadId,
+	        // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
+	        seq: 0,
+	        role: m.role,
+	        content_json: content ?? { text: "" },
+	        engine_id: m.engine_id ?? null,
+	        model_id: m.model_id ?? null,
+	        run_id: m.run_id ?? null,
+	        created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
+	      };
+	    });
 
-  async function syncLocalMessagesToCloud(
-    threadId: string,
-    localMessages: MessageRecord[],
-    session: SupabaseSession,
-  ): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    if (!threadId) return;
-    if (!localMessages || localMessages.length === 0) return;
-
-    // Ensure the thread exists in cloud (best-effort).
-    try {
-      const localThread =
-        threads.find((t) => t.id === threadId) ??
-        (await invoke<ThreadRecord | null>("get_thread_cmd", { threadId }).catch(() => null));
-      if (localThread) {
-        await syncLocalThreadsToCloud([localThread], session);
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
-      const sorted = [...localMessages].sort((a, b) => a.created_at - b.created_at);
-      const payload = sorted.slice(-500).map((m) => {
-        let content: unknown = null;
-        try {
-          content = JSON.parse(m.content_json);
-        } catch {
-          content = { text: m.content_json };
-        }
-        return {
-          id: m.id,
-          thread_id: threadId,
-          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
-          seq: 0,
-          role: m.role,
-          content_json: content ?? { text: "" },
-          engine_id: m.engine_id ?? null,
-          model_id: m.model_id ?? null,
-          run_id: m.run_id ?? null,
-          created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
-        };
-      });
-
-      await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?on_conflict=id`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "resolution=ignore-duplicates,return=minimal",
-          },
-          body: JSON.stringify(payload),
-        },
-        session,
-      );
-    } catch {
-      // Best-effort only; local UX must not break if cloud sync fails.
-    }
-  }
+	    const response = await fetchWithSupabaseAuth(
+	      `${url}/rest/v1/messages?on_conflict=id`,
+	      {
+	        method: "POST",
+	        headers: {
+	          "Content-Type": "application/json",
+	          Prefer: "resolution=ignore-duplicates,return=minimal",
+	        },
+	        body: JSON.stringify(payload),
+	      },
+	      session,
+	    );
+	    if (!response.ok) {
+	      throw new Error(await readSupabaseError(response));
+	    }
+	  }
 
   async function loadToolCalls(_sessionId: string) {
     setToolCalls([]);
   }
 
-	  async function loadMessages(sessionId: string) {
-      const session = supabaseSessionRef.current;
-      const url = session ? getSupabaseUrl() : null;
+		  async function loadMessages(sessionId: string) {
+	      const session = supabaseSessionRef.current;
+	      const url = session ? getSupabaseUrl() : null;
 
-	    const buildAgentToolCallsFromEvents = (events: EventRecord[]): ToolCallRecord[] => {
+		    const buildAgentToolCallsFromEvents = (events: EventRecord[]): ToolCallRecord[] => {
 	      type AgentToolCallState = {
 	        id: string;
 	        session_id: string;
@@ -2059,56 +2190,13 @@ function App() {
           updated_at: state.updated_at,
         });
       }
-      out.sort((a, b) => a.created_at - b.created_at);
-      return out;
-    };
+	      out.sort((a, b) => a.created_at - b.created_at);
+	      return out;
+	    };
 
-    const eventToMessage = (evt: EventRecord): MessageRecord | null => {
-      const evtType = (evt.type ?? "").trim();
-      const role =
-        evtType === "user_message" ? "user" : evtType === "assistant_message" ? "assistant" : null;
-      if (!role) return null;
-
-      let contentJson: string | null = null;
-      let engineId: string | null = null;
-      let modelId: string | null = null;
-      let runId: string | null = null;
-      if (evt.payload_json) {
-        try {
-          const parsed = JSON.parse(evt.payload_json) as { content?: unknown; meta?: unknown };
-          if (parsed && typeof parsed === "object" && "content" in parsed) {
-            contentJson = JSON.stringify((parsed as { content: unknown }).content ?? { text: evt.text ?? "" });
-          }
-          const meta = (parsed as { meta?: unknown }).meta;
-          if (meta && typeof meta === "object") {
-            const metaObj = meta as { engine_id?: unknown; model_id?: unknown; run_id?: unknown };
-            engineId = typeof metaObj.engine_id === "string" ? metaObj.engine_id : null;
-            modelId = typeof metaObj.model_id === "string" ? metaObj.model_id : null;
-            runId = typeof metaObj.run_id === "string" ? metaObj.run_id : null;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      if (!contentJson) {
-        contentJson = JSON.stringify({ text: evt.text ?? "" });
-      }
-
-      return {
-        id: evt.id,
-        session_id: evt.thread_id,
-        role,
-        content_json: contentJson,
-        created_at: evt.created_at,
-        engine_id: engineId,
-        model_id: modelId,
-        run_id: runId
-      };
-    };
-
-    type CloudMessageRow = {
-      id: string;
-      thread_id: string;
+	    type CloudMessageRow = {
+	      id: string;
+	      thread_id: string;
       seq: number;
       role: string;
       content_json: unknown;
@@ -2118,11 +2206,11 @@ function App() {
       created_at: string;
     };
 
-    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
-      if (!url) return [];
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.asc`,
-        { method: "GET" },
+	    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
+	      if (!url) return [];
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.asc`,
+	        { method: "GET" },
         auth,
       );
       if (!response.ok) throw new Error(await readSupabaseError(response));
@@ -2136,58 +2224,38 @@ function App() {
         engine_id: row.engine_id,
         model_id: row.model_id,
         run_id: row.run_id,
-      }));
-    };
+	      }));
+	    };
 
-    let cloudMessages: MessageRecord[] = [];
-    if (session && url) {
-      try {
-        cloudMessages = await loadCloudMessages(session);
-      } catch {
-        cloudMessages = [];
-      }
-    }
+	    let toolCalls: ToolCallRecord[] = [];
+	    try {
+	      const events = await invoke<EventRecord[]>("list_events_cmd", {
+	        threadId: sessionId,
+	        limit: 2000,
+	      });
+	      toolCalls = buildAgentToolCallsFromEvents(events);
+	    } catch {
+	      toolCalls = [];
+	    }
+	    setToolCalls(toolCalls);
 
-    let localMessages: MessageRecord[] = [];
-    let toolCalls: ToolCallRecord[] = [];
+	    if (session && url) {
+	      try {
+	        const cloudMessages = await loadCloudMessages(session);
+	        setMessages(cloudMessages);
+	        return;
+	      } catch {
+	        // Fall through to local projection as a best-effort fallback.
+	      }
+	    }
 
-    try {
-      const events = await invoke<EventRecord[]>("list_events_cmd", {
-        threadId: sessionId,
-        limit: 2000,
-      });
-      const mapped = events.map(eventToMessage).filter(Boolean) as MessageRecord[];
-      if (mapped.length > 0) {
-        localMessages = mapped;
-        toolCalls = buildAgentToolCallsFromEvents(events);
-      }
-    } catch {
-      // ignore
-    }
-
-    if (localMessages.length === 0) {
-      try {
-        localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
-      } catch {
-        localMessages = [];
-      }
-    }
-
-    const mergedById = new Map<string, MessageRecord>();
-    for (const msg of cloudMessages) mergedById.set(msg.id, msg);
-    for (const msg of localMessages) {
-      if (!mergedById.has(msg.id)) mergedById.set(msg.id, msg);
-    }
-    const merged = Array.from(mergedById.values());
-    merged.sort((a, b) => a.created_at - b.created_at);
-
-    setMessages(merged);
-    setToolCalls(toolCalls);
-
-    if (session && localMessages.length > 0) {
-      void syncLocalMessagesToCloud(sessionId, localMessages, session);
-    }
-  }
+	    try {
+	      const localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
+	      setMessages(localMessages);
+	    } catch {
+	      setMessages([]);
+	    }
+	  }
 
   async function loadTurns(sessionId: string) {
     try {
@@ -2423,7 +2491,7 @@ function isModelReady(modelId: string): boolean {
           continue;
         }
 
-        // Only auto-execute run_shell_command (not apply_patch or future tools)
+        // Only auto-execute run_shell_command (never file-change tools)
         if (details.toolName !== "run_shell_command") continue;
         // Check policy
         const policy = policyByToolCallId[toolCall.id];
@@ -4976,16 +5044,69 @@ function isModelReady(modelId: string): boolean {
       setMemoryToast("No model selected. Enable a model in Settings → Models.");
       return;
     }
-    const thread = await invoke<ThreadRecord>("create_thread_cmd", {
-      title: newThreadTitle,
-      engineId: "openrouter_messages_agent",
-      modelId: activeModelId
-    });
+
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to start a thread.");
+      await handleSignIn();
+      return;
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const threadId = crypto.randomUUID();
+    const thread: ThreadRecord = {
+      id: threadId,
+      title: newThreadTitle || null,
+      engine_id: "openrouter_messages_agent",
+      model_id: activeModelId,
+      community_id: null,
+      workspace_path: null,
+      created_at: nowSec,
+      updated_at: nowSec,
+      last_event_at: null,
+    };
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: threadId,
+            owner_id: getSupabaseAuthUid(session),
+            title: thread.title,
+            engine_id: thread.engine_id,
+            model_id: thread.model_id,
+            community_id: null,
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+    } catch (error) {
+      console.error("Failed to create cloud thread:", error);
+      setMemoryToast("Failed to create thread.");
+      return;
+    }
+
+    // Ensure the local runtime can operate on the thread id.
+    try {
+      await invoke("upsert_thread_cmd", {
+        threadId: thread.id,
+        title: thread.title,
+        engineId: thread.engine_id,
+        modelId: thread.model_id,
+        communityId: thread.community_id,
+        createdAt: thread.created_at,
+        updatedAt: thread.updated_at,
+      });
+    } catch {
+      // best-effort
+    }
+
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
-    if (supabaseSessionRef.current) {
-      void syncLocalThreadsToCloud([thread], supabaseSessionRef.current);
-    }
     const nextWorkspace = effectiveCwd;
     await invoke("set_thread_workspace_cmd", {
       threadId: thread.id,
@@ -5011,6 +5132,21 @@ function isModelReady(modelId: string): boolean {
   }, [activeThreadId, effectiveCwd]);
 
   async function handleDeleteThread(threadId: string) {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (session && url) {
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}`,
+          { method: "DELETE", headers: { Prefer: "return=minimal" } },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+      } catch (error) {
+        console.error("Failed to delete cloud thread:", error);
+      }
+    }
+
     await invoke("delete_thread_cmd", { threadId });
     setThreads((prev) => prev.filter((t) => t.id !== threadId));
     if (activeThreadId === threadId) {
@@ -5034,17 +5170,73 @@ function isModelReady(modelId: string): boolean {
       setMemoryToast("No model selected. Enable a model in Settings → Models.");
       return null;
     }
-    const thread = await invoke<ThreadRecord>("create_thread_cmd", {
-      title: newThreadTitle,
-      engineId: "openrouter_messages_agent",
-      modelId: activeModelId
-    });
+    // Cloud-canonical: threads exist only when signed in.
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to start a thread.");
+      await handleSignIn();
+      return null;
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const threadId = crypto.randomUUID();
+    const thread: ThreadRecord = {
+      id: threadId,
+      title: newThreadTitle || null,
+      engine_id: "openrouter_messages_agent",
+      model_id: activeModelId,
+      community_id: null,
+      workspace_path: null,
+      created_at: nowSec,
+      updated_at: nowSec,
+      last_event_at: null,
+    };
+
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            id: threadId,
+            owner_id: getSupabaseAuthUid(session),
+            title: thread.title,
+            engine_id: thread.engine_id,
+            model_id: thread.model_id,
+            community_id: null,
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+    } catch (error) {
+      console.error("Failed to create cloud thread:", error);
+      setMemoryToast("Failed to create thread.");
+      return null;
+    }
+
+    try {
+      await invoke("upsert_thread_cmd", {
+        threadId: thread.id,
+        title: thread.title,
+        engineId: thread.engine_id,
+        modelId: thread.model_id,
+        communityId: thread.community_id,
+        createdAt: thread.created_at,
+        updatedAt: thread.updated_at,
+      });
+    } catch {
+      // best-effort
+    }
+
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
     return thread.id;
   }
 
-  async function handleSendMessage() {
+	  async function handleSendMessage() {
     const hasText = commandInput.trim().length > 0;
     const hasAttachments = attachments.length > 0;
     if (!hasText && !hasAttachments) return;
@@ -5069,13 +5261,14 @@ function isModelReady(modelId: string): boolean {
       );
     }
 
-    const sessionId = await ensureThreadId();
-    if (!sessionId) return;
-    const userText = commandInput.trim();
-    const currentAttachments = [...attachments];
-    setCommandInput("");
-    setAttachments([]);
-    setIsSending(true);
+	    const sessionId = await ensureThreadId();
+	    if (!sessionId) return;
+	    const session = supabaseSessionRef.current;
+	    const userText = commandInput.trim();
+	    const currentAttachments = [...attachments];
+	    setCommandInput("");
+	    setAttachments([]);
+	    setIsSending(true);
     autoScrollEnabledRef.current = true;
     try {
       // Build content JSON with text and attachments
@@ -5091,15 +5284,22 @@ function isModelReady(modelId: string): boolean {
           size: a.size
         }));
       }
-      await invoke("add_message_cmd", {
-        sessionId,
-        role: "user",
-        contentJson: JSON.stringify(contentPayload)
-      });
-      await loadMessages(sessionId);
-      const handledSlash = await handleSlashCommand(userText, sessionId);
-      if (handledSlash) {
-        return;
+	      await invoke("add_message_cmd", {
+	        sessionId,
+	        role: "user",
+	        contentJson: JSON.stringify(contentPayload)
+	      });
+	      if (session) {
+	        try {
+	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
+	        } catch {
+	          // best-effort
+	        }
+	      }
+	      await loadMessages(sessionId);
+	      const handledSlash = await handleSlashCommand(userText, sessionId);
+	      if (handledSlash) {
+	        return;
       }
 
       if (userText.length > 0) {
@@ -5154,27 +5354,131 @@ function isModelReady(modelId: string): boolean {
         streamingMetaRef.current = null;
         scheduleStreamingUpdate();
 
-        await invoke<SendTurnResult>("engine_send_turn_cmd", {
-          threadId: sessionId,
-          cwd: activeProject?.root_path ?? workspaceRoot ?? ".",
-          input: userText
-        });
-        await loadMessages(sessionId);
-      }
-    } catch (error) {
+	        const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+
+	        // Prefer local history (fast, always present during a run). Fall back to cloud if the local DB was reset.
+	        let historyMessagesJson: string | null = null;
+	        try {
+	          const localHistory = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
+	          if (localHistory.length > 0) {
+            const payload = localHistory
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .slice(-50)
+              .map((m) => {
+                let content: unknown = null;
+                try {
+                  content = JSON.parse(m.content_json);
+                } catch {
+                  content = { text: m.content_json };
+                }
+                return { role: m.role, content_json: content };
+              });
+            historyMessagesJson = JSON.stringify(payload);
+          }
+        } catch {
+          // ignore
+        }
+
+	        if (!historyMessagesJson && session) {
+	          try {
+	            const url = getSupabaseUrl();
+	            if (url) {
+              const response = await fetchWithSupabaseAuth(
+                `${url}/rest/v1/messages?select=role,content_json,seq&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.desc&limit=50`,
+                { method: "GET" },
+                session,
+              );
+              if (response.ok) {
+                const rows = (await response.json()) as Array<{ role: string; content_json: unknown; seq: number }>;
+                rows.sort((a, b) => a.seq - b.seq);
+                historyMessagesJson = JSON.stringify(
+                  rows
+                    .filter((r) => r.role === "user" || r.role === "assistant")
+                    .map((r) => ({ role: r.role, content_json: r.content_json })),
+                );
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        let personalMemoryItemsJson: string | null = null;
+        if (session) {
+          try {
+            const url = getSupabaseUrl();
+            if (url) {
+              const userId = getSupabaseAuthUid(session);
+              const response = await fetchWithSupabaseAuth(
+                `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,updated_at&user_id=eq.${encodeURIComponent(
+                  userId,
+                )}&order=pinned.desc,updated_at.desc&limit=200`,
+                { method: "GET" },
+                session,
+              );
+              if (response.ok) {
+                const rows = (await response.json()) as Array<{
+                  id: string;
+                  content: string;
+                  scope: string;
+                  scope_id: string | null;
+                  pinned: boolean;
+                  updated_at: string;
+                }>;
+                const items = rows.map((row) => ({
+                  id: row.id,
+                  content: row.content,
+                  scope: row.scope,
+                  scope_id: row.scope_id,
+                  pinned: row.pinned ? 1 : 0,
+                  updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
+                }));
+                personalMemoryItemsJson = JSON.stringify(items);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+	        await invoke<SendTurnResult>("engine_send_turn_cmd", {
+	          threadId: sessionId,
+	          cwd,
+	          input: userText,
+	          historyMessagesJson,
+	          personalMemoryItemsJson,
+	        });
+	        if (session) {
+	          try {
+	            // Sync the newest assistant message + any trailing system content.
+	            await syncRecentLocalMessagesToCloud(sessionId, session, 3);
+	          } catch {
+	            // best-effort
+	          }
+	        }
+	        await loadMessages(sessionId);
+	      }
+	    } catch (error) {
       const message =
         typeof error === "string"
           ? error
           : error instanceof Error
             ? error.message
             : "Unknown error";
-      await invoke("add_message_cmd", {
-        sessionId,
-        role: "assistant",
-        contentJson: JSON.stringify({ text: `Engine error: ${message}` })
-      });
-      await loadMessages(sessionId);
-    } finally {
+	      await invoke("add_message_cmd", {
+	        sessionId,
+	        role: "assistant",
+	        contentJson: JSON.stringify({ text: `Engine error: ${message}` })
+	      });
+	      if (session) {
+	        try {
+	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
+	        } catch {
+	          // best-effort
+	        }
+	      }
+	      await loadMessages(sessionId);
+	    } finally {
       setIsSending(false);
       setAgentStatus(null);
       setRunningTools([]);
@@ -5275,7 +5579,7 @@ function isModelReady(modelId: string): boolean {
       return true;
     }
 
-    if (name === "remember") {
+	    if (name === "remember") {
       const rest = userText.slice(userText.indexOf("remember") + "remember".length).trim();
       try {
         if (!rest) {
@@ -5304,22 +5608,39 @@ function isModelReady(modelId: string): boolean {
           return true;
         }
 
-        await invoke("create_personal_memory_item_cmd", {
-          threadId: sessionId,
-          content,
-          scope,
-          scopeId: scope === "workspace" ? getEffectiveWorkspacePath() : null,
-          pinned: false,
-          provenanceEventId: null
-        });
-        setActiveView("settings");
-        setSettingsPage("memory");
-        setPersonalMemoryQuery("");
-        await loadPersonalMemoryItems();
-        showPanel("info", "Memory", `Saved to ${scope} memory.`);
-      } catch (error) {
-        const message =
-          typeof error === "string"
+	        const session = supabaseSessionRef.current;
+	        const url = session ? getSupabaseUrl() : null;
+	        if (!session || !url) {
+	          setAuthError("Sign in to save memory.");
+	          await handleSignIn();
+	          return true;
+	        }
+
+	        const response = await fetchWithSupabaseAuth(
+	          `${url}/rest/v1/personal_memory_items`,
+	          {
+	            method: "POST",
+	            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+	            body: JSON.stringify({
+	              user_id: getSupabaseAuthUid(session),
+	              content,
+	              scope,
+	              scope_id: scope === "workspace" ? getEffectiveWorkspacePath() : null,
+	              pinned: false,
+	            }),
+	          },
+	          session,
+	        );
+	        if (!response.ok) throw new Error(await readSupabaseError(response));
+
+	        setActiveView("settings");
+	        setSettingsPage("memory");
+	        setPersonalMemoryQuery("");
+	        await loadPersonalMemoryItems();
+	        showPanel("info", "Memory", `Saved to ${scope} memory.`);
+	      } catch (error) {
+	        const message =
+	          typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
@@ -5420,11 +5741,8 @@ function isModelReady(modelId: string): boolean {
       "sha256",
       "write",
       "edit",
-      "apply_patch",
       "glob",
       "grep",
-      "task",
-      "invalid",
       "bash"
     ] as const).includes(call.tool_name as any) &&
     (["requested", "approved", "denied", "started", "finished"] as const).includes(call.status as any);
@@ -5997,9 +6315,14 @@ function isModelReady(modelId: string): boolean {
                 }}
               >
                 <span className="nav-icon">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
-                    <path d="M19.4 15a1 1 0 0 0 .2 1.1l.2.2a2 2 0 1 1-2.8 2.8l-.2-.2a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.2.2a2 2 0 1 1-2.8-2.8l.2-.2a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.2-.2a2 2 0 1 1 2.8-2.8l.2.2a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.2-.2a2 2 0 1 1 2.8 2.8l-.2.2a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z" />
+                  <svg
+                    viewBox="0 0 24 24"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ strokeWidth: 1.5 }}
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                 </span>
                 Settings
@@ -6592,6 +6915,36 @@ function isModelReady(modelId: string): boolean {
                     <div className="memory-error">{personalMemoryError}</div>
                   )}
 
+                  <div className="settings-section">
+                    <div className="settings-section-title">Export</div>
+                    <div className="settings-section-desc">
+                      Download your threads, messages, and personal memory as CSV.
+                    </div>
+                    <div className="export-actions">
+                      <button className="secondary" onClick={() => void exportThreadsCsv()}>
+                        Threads CSV
+                      </button>
+                      <button className="secondary" onClick={() => void exportMessagesCsv()}>
+                        Messages CSV
+                      </button>
+                      <button className="secondary" onClick={() => void exportPersonalMemoryCsv()}>
+                        Memory CSV
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <div className="settings-section-title">Local Cache</div>
+                    <div className="settings-section-desc">
+                      Clear local SQLite caches used by the desktop operator. Cloud data is unchanged.
+                    </div>
+                    <div className="export-actions">
+                      <button className="secondary" onClick={() => void resetLocalCache()} disabled={isSending}>
+                        Reset local cache
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="memory-editor">
                     <div className="memory-editor-header">
                       <div className="memory-editor-title">Personal memory</div>
@@ -6912,8 +7265,6 @@ function isModelReady(modelId: string): boolean {
                     const path = typeof args?.path === "string" ? args.path : null;
                     const cmd = typeof args?.cmd === "string" ? args.cmd : null;
                     const pat = typeof args?.pat === "string" ? args.pat : null;
-                    const query = typeof args?.query === "string" ? args.query : null;
-                    const invalidTool = typeof args?.tool === "string" ? args.tool : null;
                     if (latest.tool_name === "bash") return cmd ? `bash ${cmd}` : "bash";
                     if (latest.tool_name === "grep") return pat ? `grep ${pat}` : "grep";
                     if (latest.tool_name === "glob") return pat ? `glob ${pat}` : "glob";
@@ -6922,12 +7273,6 @@ function isModelReady(modelId: string): boolean {
                     if (latest.tool_name === "read") return path ? `read ${path}` : "read";
                     if (latest.tool_name === "write") return path ? `write ${path}` : "write";
                     if (latest.tool_name === "edit") return path ? `edit ${path}` : "edit";
-                    if (latest.tool_name === "apply_patch") return path ? `apply_patch ${path}` : "apply_patch";
-                    if (latest.tool_name === "task") {
-                      const base = path ?? ".";
-                      return query ? `task "${query}" in ${base}` : `task in ${base}`;
-                    }
-                    if (latest.tool_name === "invalid") return invalidTool ? `invalid ${invalidTool}` : "invalid";
                     return latest.tool_name;
                   } catch {
                     return latest.tool_name;
@@ -6963,8 +7308,6 @@ function isModelReady(modelId: string): boolean {
                         const path = typeof args.path === "string" ? args.path : null;
                         const cmd = typeof args.cmd === "string" ? args.cmd : null;
                         const pat = typeof args.pat === "string" ? args.pat : null;
-                        const query = typeof args.query === "string" ? args.query : null;
-                        const invalidTool = typeof args.tool === "string" ? args.tool : null;
 
                         const label = (() => {
                           if (toolCall.tool_name === "bash") return cmd ? `bash ${cmd}` : "bash";
@@ -6981,12 +7324,6 @@ function isModelReady(modelId: string): boolean {
                           if (toolCall.tool_name === "read") return path ? `read ${path}` : "read";
                           if (toolCall.tool_name === "write") return path ? `write ${path}` : "write";
                           if (toolCall.tool_name === "edit") return path ? `edit ${path}` : "edit";
-                          if (toolCall.tool_name === "apply_patch") return path ? `apply_patch ${path}` : "apply_patch";
-                          if (toolCall.tool_name === "task") {
-                            const base = path ?? ".";
-                            return query ? `task "${query}" in ${base}` : `task in ${base}`;
-                          }
-                          if (toolCall.tool_name === "invalid") return invalidTool ? `invalid ${invalidTool}` : "invalid";
                           return toolCall.tool_name;
                         })();
 
@@ -7073,11 +7410,8 @@ function isModelReady(modelId: string): boolean {
 	                    "sha256",
 	                    "write",
 	                    "edit",
-	                    "apply_patch",
 	                    "glob",
 	                    "grep",
-	                    "task",
-	                    "invalid",
 	                    "bash"
 	                  ] as const).includes(toolCall.tool_name as any) &&
 	                  (["requested", "approved", "denied", "started", "finished"] as const).includes(
@@ -7197,7 +7531,6 @@ function isModelReady(modelId: string): boolean {
                 const output = fallbackOutput;
                 const isOutputExpanded = expandedOutputIds.has(toolCall.id);
                 const isRunning = runningToolCallId === toolCall.id;
-                const isPatch = details.toolName === "apply_patch";
                 const policy = policyByToolCallId[toolCall.id];
                 const isForbidden = policy?.decision === "forbid";
                 const isShell = details.toolName === "run_shell_command";
@@ -7212,7 +7545,7 @@ function isModelReady(modelId: string): boolean {
                   }
                 })();
 
-                const cmdPreview = isPatch ? null : formatCommandPreview(details.command);
+                const cmdPreview = formatCommandPreview(details.command);
                 const isCommandExpanded = expandedCommandIds.has(toolCall.id);
                 const toolLabel = formatToolLabel(details, cmdPreview);
 
@@ -7268,18 +7601,6 @@ function isModelReady(modelId: string): boolean {
                           {isCommandExpanded ? "▼ full command" : "▶ full command"}
                         </button>
                       )}
-	                      {isPatch && (
-	                        <button
-	                          className="tool-toggle"
-	                          onClick={() => {
-	                            setExpandedToolCallId((prev) =>
-	                              prev === toolCall.id ? null : toolCall.id
-	                            );
-	                          }}
-	                        >
-	                          {expandedToolCallId === toolCall.id ? "▼ diff" : "▶ diff"}
-	                        </button>
-	                      )}
                       {toolCall.status === "proposed" && (
                         <>
                           <button
@@ -7287,7 +7608,7 @@ function isModelReady(modelId: string): boolean {
                             onClick={() => handleApproveAndRun(toolCall)}
                             disabled={isForbidden}
                           >
-                            {isPatch ? "Apply" : "Run"}
+                            Run
                           </button>
                           <button
                             className="tool-action secondary"
@@ -7295,7 +7616,7 @@ function isModelReady(modelId: string): boolean {
                           >
                             Reject
                           </button>
-                          {!isPatch && !isShell && toolSpec?.requires_approval && (
+                          {!isShell && toolSpec?.requires_approval && (
                             <>
                               <button
                                 className="tool-action secondary"
@@ -7315,7 +7636,7 @@ function isModelReady(modelId: string): boolean {
                               </button>
                             </>
                           )}
-                          {!isPatch && isShell && (
+                          {isShell && (
                             <>
                               <button
                                 className="tool-action secondary"
@@ -7337,7 +7658,7 @@ function isModelReady(modelId: string): boolean {
                               </button>
                             </>
                           )}
-                          {!isPatch && !isShell && isDoomLoopGuarded && toolSpec && toolSpec.requires_approval === false && (
+                          {!isShell && isDoomLoopGuarded && toolSpec && toolSpec.requires_approval === false && (
                             <>
                               <button
                                 className="tool-action secondary"
@@ -7390,22 +7711,6 @@ function isModelReady(modelId: string): boolean {
                     )}
                     {isOutputExpanded && output && (
                       <pre className="tool-output">{output}</pre>
-                    )}
-                    {isPatch && expandedToolCallId === toolCall.id && (
-                      <div className="diff-preview">
-                        <div className="diff-toolbar">
-                          <button
-                            className="diff-copy"
-                            onClick={() => {
-                              if (!details.patch) return;
-                              void navigator.clipboard.writeText(details.patch);
-                            }}
-                          >
-                            Copy patch
-                          </button>
-                        </div>
-                        {details.patch ? renderPatch(details.patch) : "No patch content."}
-                      </div>
                     )}
                     {actionError && (
                       <div className="tool-error">Error: {actionError}</div>
@@ -7543,8 +7848,7 @@ function isModelReady(modelId: string): boolean {
                       Approve once
                     </button>
                     {(pendingToolApproval.tool_name === "write" ||
-                      pendingToolApproval.tool_name === "edit" ||
-                      pendingToolApproval.tool_name === "apply_patch") && (
+                      pendingToolApproval.tool_name === "edit") && (
                       <button
                         className="tool-action secondary"
                         onClick={() => void resolvePendingToolApproval(true, true)}
@@ -7721,9 +8025,6 @@ function isModelReady(modelId: string): boolean {
             <div className="ask-toolbar-left">
               <button className="toolbar-icon" title="Add files" onClick={handleAddAttachment}>
                 <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-              </button>
-              <button className="toolbar-icon" title="Web">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
               </button>
 	              <div className="model-select">
 	                <select
@@ -8765,17 +9066,6 @@ function formatToolApproval(toolName: string, argsJson: string): {
         previewType: "code",
       };
     }
-    case "apply_patch": {
-      const path = (args.path as string) || (args.file_path as string) || "file";
-      const patch = (args.patch as string) || (args.unified_diff as string) || "";
-      return {
-        icon: "📝",
-        title: "Apply Patch",
-        subtitle: path,
-        preview: patch.length > 1500 ? patch.slice(0, 1500) + "\n..." : patch,
-        previewType: "diff",
-      };
-    }
     case "bash":
     case "run_shell_command": {
       const command = (args.cmd as string) || (args.command as string) || "";
@@ -8970,16 +9260,6 @@ function formatToolLabel(
   if (details.toolName === "stat_file") {
     return details.path ? `stat ${details.path}` : "stat file";
   }
-  if (details.toolName === "apply_patch") {
-    return "apply patch";
-  }
-  if (details.toolName === "task") {
-    const base = details.path ?? ".";
-    return details.query?.trim() ? `task "${details.query}" in ${base}` : `task in ${base}`;
-  }
-  if (details.toolName === "invalid") {
-    return "invalid tool call";
-  }
   if (details.toolName === "propose_memory_update") {
     return "update memory";
   }
@@ -9027,37 +9307,6 @@ function formatExecutionLabel(
     return modelLabel ?? modelId;
   }
   return engineId.replace(/_/g, " ");
-}
-
-function renderPatch(patch: string) {
-  const lines = patch.split("\n");
-  const lineCount = lines.length;
-  const gutterWidth = String(lineCount).length;
-  return (
-    <div className="diff-lines">
-      {lines.map((line, index) => {
-        const trimmed = line.trim();
-        let kind = "context";
-        if (trimmed.startsWith("***") || trimmed.startsWith("@@")) {
-          kind = "header";
-        } else if (line.startsWith("+")) {
-          kind = "add";
-        } else if (line.startsWith("-")) {
-          kind = "del";
-        } else if (line.startsWith(" ")) {
-          kind = "context";
-        }
-        return (
-          <div key={index} className={`diff-line ${kind}`}>
-            <span className="diff-line-number">
-              {String(index + 1).padStart(gutterWidth, " ")}
-            </span>
-            <span className="diff-line-text">{line.length === 0 ? " " : line}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function parseMessageContent(contentJson: string): { text: string; format: string | null } {
@@ -9130,9 +9379,6 @@ function cleanStreamingContent(text: string): {
     if (["runshellcommand", "shellcommand", "shell", "bash"].includes(normalized)) {
       return "run_shell_command";
     }
-    if (["applypatch", "patch"].includes(normalized)) {
-      return "apply_patch";
-    }
     if (["readfile"].includes(normalized)) {
       return "read_file";
     }
@@ -9144,7 +9390,6 @@ function cleanStreamingContent(text: string): {
 
   const formatToolName = (tool: string): string => {
     if (tool === "run_shell_command") return "run shell command";
-    if (tool === "apply_patch") return "apply patch";
     if (tool === "read_file") return "read file";
     if (tool === "propose_memory_update") return "update memory";
     return tool;
@@ -9191,8 +9436,6 @@ function cleanStreamingContent(text: string): {
           if (cmdMatch) commandPreview = cmdMatch[1];
         } else if (toolKey === "read_file") {
           if (pathMatch) commandPreview = pathMatch[1];
-        } else if (toolKey === "apply_patch") {
-          if (patchMatch) commandPreview = "diff";
         } else if (toolKey === "propose_memory_update") {
           if (labelMatch) commandPreview = labelMatch[1];
         } else {
@@ -9665,6 +9908,32 @@ function getSupabaseUrl(): string | null {
 
 function getSupabaseAnonKey(): string | null {
   return import.meta.env.VITE_SUPABASE_ANON_KEY ?? null;
+}
+
+function csvEscape(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildCsv(columns: string[], rows: Array<Record<string, unknown>>): string {
+  const header = columns.map(csvEscape).join(",");
+  const lines = rows.map((row) => columns.map((col) => csvEscape(row[col])).join(","));
+  return [header, ...lines].join("\n");
+}
+
+function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function formatSecretScanError(scan: SecretScanResult): string {

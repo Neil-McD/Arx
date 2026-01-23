@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   clearPersistedSupabaseSession,
   fetchSupabaseUser,
@@ -100,9 +100,69 @@ type CommunityInviteRecord = {
   created_at: string;
 };
 
+type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
+
+type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
+
+type ModelToggle = {
+  id: string;
+  label: string;
+  enabled: boolean;
+};
+
+type ProviderKey = {
+  id: "openrouter";
+  label: string;
+  hasKey: boolean;
+  inputValue: string;
+  error: string | null;
+};
+
+type PersonalMemoryItem = {
+  id: string;
+  content: string;
+  scope: "global" | "workspace";
+  scope_id: string | null;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
+const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
+const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
+  { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
+  { id: "gpt-5.1", label: "GPT 5.1", enabled: true },
+  { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
+  { id: "opus-4.5", label: "Opus 4.5", enabled: true },
+  { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
+  { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
+  { id: "grok-4.1", label: "Grok 4.1", enabled: true }
+];
+
+const OPENROUTER_KEY_STORAGE_KEY = "arx_provider_key_openrouter";
+const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
+const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
+
+const APPROVAL_PRESETS: Record<
+  "read-only" | "agent" | "agent-full",
+  { label: string; description: string }
+> = {
+  "read-only": {
+    label: "Read Only",
+    description: "Requires approval to edit files and run commands."
+  },
+  agent: {
+    label: "Agent",
+    description: "Read and edit files, and run commands with approval."
+  },
+  "agent-full": {
+    label: "Agent (full access)",
+    description: "Broader command allowlist; use caution."
+  }
+};
 
 async function copyTextToClipboard(text: string): Promise<void> {
   try {
@@ -144,6 +204,35 @@ async function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Failed to read file."));
     reader.readAsDataURL(file);
   });
+}
+
+async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    const loaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image."));
+    });
+    img.src = url;
+    await loaded;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    const side = Math.min(img.width, img.height);
+    const sx = Math.floor((img.width - side) / 2);
+    const sy = Math.floor((img.height - side) / 2);
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function buildCommunityInviteLink(communityId: string, inviteCode: string): string {
@@ -210,12 +299,256 @@ function parseMessageText(content: unknown): string {
   }
 }
 
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await copyTextToClipboard(code);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="code-block-wrapper">
+      <div className="code-block-header">
+        {language && <span className="code-block-lang">{language}</span>}
+        <button className="code-block-copy" type="button" onClick={() => void handleCopy()}>
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="md-code-block">
+        <code className={language ? `language-${language}` : undefined}>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function renderMarkdown(text: string): ReactNode {
+  const lines = text.split("\n");
+  const elements: ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const trimmedLine = line.trim();
+
+    if (trimmedLine.startsWith("```")) {
+      const lang = trimmedLine.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
+        codeLines.push(lines[i] ?? "");
+        i++;
+      }
+      elements.push(<CodeBlock key={key++} code={codeLines.join("\n")} language={lang || undefined} />);
+      i++;
+      continue;
+    }
+
+    if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmedLine)) {
+      elements.push(<hr key={key++} className="md-hr" />);
+      i++;
+      continue;
+    }
+
+    const headerMatch = trimmedLine.match(/^(#{1,3})\s+(.+)$/);
+    if (headerMatch) {
+      const level = headerMatch[1]?.length ?? 1;
+      const content = headerMatch[2] ?? "";
+      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+      elements.push(
+        <Tag key={key++} className="md-header">
+          {renderInline(content)}
+        </Tag>
+      );
+      i++;
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmedLine)) {
+      const listItems: ReactNode[] = [];
+      while (i < lines.length) {
+        const currentLine = (lines[i] ?? "").trim();
+        if (/^\d+\.\s+/.test(currentLine)) {
+          const content = currentLine.replace(/^\d+\.\s+/, "");
+          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          i++;
+        } else if (currentLine.startsWith("```")) {
+          const lang = currentLine.slice(3).trim();
+          const codeLines: string[] = [];
+          i++;
+          while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
+            codeLines.push(lines[i] ?? "");
+            i++;
+          }
+          listItems.push(
+            <li key={key++} className="md-list-code">
+              <CodeBlock code={codeLines.join("\n")} language={lang || undefined} />
+            </li>
+          );
+          i++;
+        } else if (currentLine === "") {
+          i++;
+        } else {
+          break;
+        }
+      }
+      elements.push(
+        <ol key={key++} className="md-list">
+          {listItems}
+        </ol>
+      );
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmedLine)) {
+      const listItems: ReactNode[] = [];
+      while (i < lines.length) {
+        const currentLine = (lines[i] ?? "").trim();
+        if (/^[-*]\s+/.test(currentLine)) {
+          const content = currentLine.replace(/^[-*]\s+/, "");
+          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          i++;
+        } else if (currentLine.startsWith("```")) {
+          const lang = currentLine.slice(3).trim();
+          const codeLines: string[] = [];
+          i++;
+          while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
+            codeLines.push(lines[i] ?? "");
+            i++;
+          }
+          listItems.push(
+            <li key={key++} className="md-list-code">
+              <CodeBlock code={codeLines.join("\n")} language={lang || undefined} />
+            </li>
+          );
+          i++;
+        } else if (currentLine === "") {
+          i++;
+        } else {
+          break;
+        }
+      }
+      elements.push(
+        <ul key={key++} className="md-list">
+          {listItems}
+        </ul>
+      );
+      continue;
+    }
+
+    if (trimmedLine === "") {
+      i++;
+      continue;
+    }
+
+    elements.push(
+      <p key={key++} className="md-paragraph">
+        {renderInline(line)}
+      </p>
+    );
+    i++;
+  }
+
+  return <>{elements}</>;
+}
+
+function renderInline(text: string): ReactNode {
+  const parts: ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    const codeMatch = remaining.match(/^`([^`]+)`/);
+    if (codeMatch) {
+      parts.push(
+        <code key={key++} className="md-inline-code">
+          {codeMatch[1]}
+        </code>
+      );
+      remaining = remaining.slice(codeMatch[0].length);
+      continue;
+    }
+
+    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) ?? remaining.match(/^__([^_]+)__/);
+    if (boldMatch) {
+      parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
+      remaining = remaining.slice(boldMatch[0].length);
+      continue;
+    }
+
+    const italicMatch = remaining.match(/^\*([^*]+)\*/) ?? remaining.match(/^_([^_]+)_/);
+    if (italicMatch) {
+      parts.push(<em key={key++}>{italicMatch[1]}</em>);
+      remaining = remaining.slice(italicMatch[0].length);
+      continue;
+    }
+
+    const nextSpecial = remaining.search(/[`*_]/);
+    if (nextSpecial === -1) {
+      parts.push(remaining);
+      break;
+    }
+    if (nextSpecial === 0) {
+      parts.push(remaining[0]);
+      remaining = remaining.slice(1);
+      continue;
+    }
+    parts.push(remaining.slice(0, nextSpecial));
+    remaining = remaining.slice(nextSpecial);
+  }
+
+  return <>{parts}</>;
+}
+
+function formatModelLabel(modelId: string | null | undefined): string | null {
+  const raw = (modelId ?? "").trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/[_\s]+/g, "-");
+  const gptMatch = normalized.match(/^gpt-?(\d+(?:\.\d+)?)(.*)$/i);
+  if (gptMatch) {
+    const version = gptMatch[1] ?? "";
+    const rest = (gptMatch[2] ?? "").replace(/^-+/, "").replace(/-+/g, " ").trim();
+    return `GPT ${version}${rest ? ` ${rest}` : ""}`.trim();
+  }
+
+  return raw.replace(/[_-]+/g, " ");
+}
+
 function hashCode(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   return hash;
+}
+
+function csvEscape(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildCsv(columns: string[], rows: Array<Record<string, unknown>>): string {
+  const header = columns.map(csvEscape).join(",");
+  const lines = rows.map((row) => columns.map((col) => csvEscape(row[col])).join(","));
+  return [header, ...lines].join("\n");
+}
+
+function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function getAvatarColor(id: string): string {
@@ -302,6 +635,26 @@ function formatDateSeparator(date: Date): string {
   if (msgDate.getTime() === today.getTime()) return "Today";
   if (msgDate.getTime() === yesterday.getTime()) return "Yesterday";
   return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatRelativeTime(iso: string): string {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "";
+  const deltaSeconds = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (deltaSeconds < 45) return "just now";
+  if (deltaSeconds < 90) return "1m ago";
+  const minutes = Math.floor(deltaSeconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(days / 365);
+  return `${years}y ago`;
 }
 
 type ReplyPrefix = { sender: string; preview: string; rest: string };
@@ -429,6 +782,21 @@ function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   return null;
 }
 
+function settingsPageLabel(page: SettingsPage): string {
+  switch (page) {
+    case "account":
+      return "Account";
+    case "models":
+      return "Models";
+    case "execution":
+      return "Execution";
+    case "memory":
+      return "Memory";
+    case "appearance":
+      return "Appearance";
+  }
+}
+
 export default function App() {
   const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -439,6 +807,92 @@ export default function App() {
 
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
+  const [userWantsSessions, setUserWantsSessions] = useState(true);
+  const [appTheme, setAppTheme] = useState<AppTheme>(() => {
+    try {
+      const stored = localStorage.getItem("arx-theme");
+      if (stored && ["light", "dark", "light-warm", "dark-warm"].includes(stored)) {
+        return stored as AppTheme;
+      }
+      return "dark";
+    } catch {
+      return "dark";
+    }
+  });
+  const [profileName, setProfileName] = useState(() => {
+    try {
+      return localStorage.getItem("arx_profile_name") ?? localStorage.getItem("arx_profile_display_name") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [profileUsername, setProfileUsername] = useState(() => {
+    try {
+      return localStorage.getItem("arx_profile_username") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [profileBio, setProfileBio] = useState(() => {
+    try {
+      return localStorage.getItem("arx_profile_bio") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("arx_profile_avatar");
+    } catch {
+      return null;
+    }
+  });
+  const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
+  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => {
+    try {
+      const stored = localStorage.getItem(OPENROUTER_KEY_STORAGE_KEY);
+      return [{ id: "openrouter", label: "OpenRouter", hasKey: Boolean(stored?.trim()), inputValue: "", error: null }];
+    } catch {
+      return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
+    }
+  });
+  const [modelToggles, setModelToggles] = useState<ModelToggle[]>(() => {
+    try {
+      const raw = localStorage.getItem(MODEL_TOGGLES_STORAGE_KEY);
+      if (!raw) return DEFAULT_MODEL_TOGGLES;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return DEFAULT_MODEL_TOGGLES;
+      const normalized = parsed
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const id = (item as { id?: unknown }).id;
+          const label = (item as { label?: unknown }).label;
+          const enabled = (item as { enabled?: unknown }).enabled;
+          if (typeof id !== "string" || typeof label !== "string" || typeof enabled !== "boolean") return null;
+          return { id, label, enabled } satisfies ModelToggle;
+        })
+        .filter(Boolean) as ModelToggle[];
+      return normalized.length ? normalized : DEFAULT_MODEL_TOGGLES;
+    } catch {
+      return DEFAULT_MODEL_TOGGLES;
+    }
+  });
+  const [activeModelId, setActiveModelId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const [modelAvailability, setModelAvailability] = useState<Record<string, boolean>>({});
+  const [personalMemoryItems, setPersonalMemoryItems] = useState<PersonalMemoryItem[]>([]);
+  const [personalMemoryQuery, setPersonalMemoryQuery] = useState("");
+  const [personalMemoryError, setPersonalMemoryError] = useState<string | null>(null);
+  const [isLoadingPersonalMemory, setIsLoadingPersonalMemory] = useState(false);
+  const [newPersonalMemoryContent, setNewPersonalMemoryContent] = useState("");
+  const [newPersonalMemoryScope, setNewPersonalMemoryScope] = useState<"global" | "workspace">("global");
+  const [newPersonalMemoryPinned, setNewPersonalMemoryPinned] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
@@ -509,7 +963,14 @@ export default function App() {
   const [messageInput, setMessageInput] = useState("");
   const [threadError, setThreadError] = useState<string | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
+  const workspaceAskInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement | null>(null);
+
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [discoverQuery, setDiscoverQuery] = useState("");
   const [discoverCommunities, setDiscoverCommunities] = useState<CommunityRecord[]>([]);
@@ -521,11 +982,120 @@ export default function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    try {
+      document.documentElement.setAttribute("data-theme", appTheme);
+      localStorage.setItem("arx-theme", appTheme);
+    } catch {
+      return;
+    }
+  }, [appTheme]);
+
+  useEffect(() => {
+    const trimmed = profileName.trim();
+    try {
+      if (trimmed) {
+        localStorage.setItem("arx_profile_name", trimmed);
+      } else {
+        localStorage.removeItem("arx_profile_name");
+      }
+    } catch {
+      return;
+    }
+  }, [profileName]);
+
+  useEffect(() => {
+    const trimmed = profileUsername.trim();
+    try {
+      if (trimmed) {
+        localStorage.setItem("arx_profile_username", trimmed);
+      } else {
+        localStorage.removeItem("arx_profile_username");
+      }
+    } catch {
+      return;
+    }
+  }, [profileUsername]);
+
+  useEffect(() => {
+    const trimmed = profileBio.trim();
+    try {
+      if (trimmed) {
+        localStorage.setItem("arx_profile_bio", trimmed);
+      } else {
+        localStorage.removeItem("arx_profile_bio");
+      }
+    } catch {
+      return;
+    }
+  }, [profileBio]);
+
+  useEffect(() => {
+    try {
+      if (profileAvatarUrl) {
+        localStorage.setItem("arx_profile_avatar", profileAvatarUrl);
+      } else {
+        localStorage.removeItem("arx_profile_avatar");
+      }
+    } catch {
+      return;
+    }
+  }, [profileAvatarUrl]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODEL_TOGGLES_STORAGE_KEY, JSON.stringify(modelToggles));
+    } catch {
+      return;
+    }
+  }, [modelToggles]);
+
+  useEffect(() => {
+    try {
+      if (activeModelId) {
+        localStorage.setItem(ACTIVE_MODEL_STORAGE_KEY, activeModelId);
+      } else {
+        localStorage.removeItem(ACTIVE_MODEL_STORAGE_KEY);
+      }
+    } catch {
+      return;
+    }
+  }, [activeModelId]);
+
+  useEffect(() => {
     const stored = loadPersistedSupabaseSession();
     if (stored) {
       setSupabaseSession(stored);
     }
   }, []);
+
+  useLayoutEffect(() => {
+    const el = workspaceAskInputRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const maxPx = 220;
+    const next = Math.min(el.scrollHeight, maxPx);
+    el.style.height = `${Math.max(next, 28)}px`;
+  }, [messageInput]);
+
+  useEffect(() => {
+    if (!isModelPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const root = modelPickerRef.current;
+      if (!root) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!root.contains(target)) setIsModelPickerOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsModelPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isModelPickerOpen]);
 
   useEffect(() => {
     const parsed = parseOAuthHash();
@@ -585,6 +1155,7 @@ export default function App() {
     setThreads([]);
     setActiveThreadId(null);
     setThreadMessages([]);
+    setPersonalMemoryItems([]);
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -594,6 +1165,21 @@ export default function App() {
     }
     void loadThreadMessages(activeThreadId, supabaseSession);
   }, [supabaseSession, activeThreadId]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    const threadModelId = threads.find((t) => t.id === activeThreadId)?.model_id ?? null;
+    if (threadModelId) setActiveModelId(threadModelId);
+  }, [activeThreadId, threads]);
+
+  useEffect(() => {
+    if (activeView !== "settings" || settingsPage !== "memory") return;
+    const q = personalMemoryQuery.trim();
+    const handle = window.setTimeout(() => {
+      void searchPersonalMemoryItems(q);
+    }, 150);
+    return () => window.clearTimeout(handle);
+  }, [activeView, settingsPage, personalMemoryQuery, supabaseSession]);
 
   useEffect(() => {
     if (activePage !== "discover") return;
@@ -1061,12 +1647,18 @@ export default function App() {
     const nowSec = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();
     const ownerId = getSupabaseAuthUid(session);
+    const enabled = modelToggles.filter((toggle) => toggle.enabled);
+    const preferredModelId =
+      (activeModelId ?? "").trim() ||
+      enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
+      enabled[0]?.id ||
+      DEFAULT_ACTIVE_MODEL_ID;
     const body = {
       id,
       owner_id: ownerId,
       title: null,
       engine_id: "arx_harness",
-      model_id: null,
+      model_id: preferredModelId,
       community_id: null
     };
     try {
@@ -1087,7 +1679,7 @@ export default function App() {
         id,
         title: null,
         engine_id: "arx_harness",
-        model_id: null,
+        model_id: preferredModelId,
         community_id: null,
         created_at: nowSec,
         updated_at: nowSec
@@ -1098,6 +1690,26 @@ export default function App() {
     } catch (error) {
       console.warn("Failed to create thread:", error);
       return null;
+    }
+  }
+
+  async function updateThreadModel(threadId: string, modelId: string, session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({ model_id: modelId })
+        },
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, model_id: modelId } : t)));
+    } catch (error) {
+      console.warn("Failed to update thread model:", error);
     }
   }
 
@@ -1119,6 +1731,17 @@ export default function App() {
 
       const url = getSupabaseUrl();
       if (!url) throw new Error("Missing Supabase URL.");
+
+      const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
+      const enabled = modelToggles.filter((toggle) => toggle.enabled);
+      const preferredModelId =
+        (activeModelId ?? "").trim() ||
+        enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
+        enabled[0]?.id ||
+        DEFAULT_ACTIVE_MODEL_ID;
+      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
+        await updateThreadModel(threadId, preferredModelId, session);
+      }
 
       const messageId = crypto.randomUUID();
       const response = await fetchWithSupabaseAuth(
@@ -1153,6 +1776,318 @@ export default function App() {
       setThreadError(message);
     } finally {
       setIsSendingMessage(false);
+    }
+  }
+
+  async function handleCopyMessage(messageId: string, text: string) {
+    await copyTextToClipboard(text);
+    setCopiedMessageId(messageId);
+    window.setTimeout(() => setCopiedMessageId((prev) => (prev === messageId ? null : prev)), 2000);
+  }
+
+  async function handleSaveProviderKey(id: ProviderKey["id"]) {
+    const provider = providerKeys.find((item) => item.id === id);
+    const value = provider?.inputValue.trim() ?? "";
+    if (!value) return;
+    try {
+      localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, value);
+      setProviderKeys((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, hasKey: true, inputValue: "", error: null } : item))
+      );
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to save key";
+      setProviderKeys((prev) => prev.map((item) => (item.id === id ? { ...item, error: message } : item)));
+    }
+  }
+
+  async function handleClearProviderKey(id: ProviderKey["id"]) {
+    try {
+      localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
+      setProviderKeys((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, hasKey: false, inputValue: "", error: null } : item))
+      );
+      setModelAvailability({});
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to clear key";
+      setProviderKeys((prev) => prev.map((item) => (item.id === id ? { ...item, error: message } : item)));
+    }
+  }
+
+  async function handleToggleModel(id: string) {
+    setModelToggles((prev) => prev.map((toggle) => (toggle.id === id ? { ...toggle, enabled: !toggle.enabled } : toggle)));
+  }
+
+  async function exportThreadsCsv() {
+    if (!supabaseSession) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=1000`,
+        {},
+        supabaseSession
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      const csv = buildCsv(["id", "title", "engine_id", "model_id", "community_id", "created_at", "updated_at"], rows);
+      downloadTextFile("arx_threads.csv", csv);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export threads.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function exportMessagesCsv() {
+    if (!supabaseSession) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=10000`,
+        {},
+        supabaseSession
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rawRows = (await response.json()) as ThreadMessage[];
+      const rows = rawRows.map((row) => ({
+        id: row.id,
+        thread_id: row.thread_id,
+        seq: row.seq,
+        role: row.role,
+        content: parseMessageText(row.content_json),
+        engine_id: row.engine_id ?? "",
+        model_id: row.model_id ?? "",
+        run_id: row.run_id ?? "",
+        created_at: row.created_at
+      }));
+      const csv = buildCsv(["id", "thread_id", "seq", "role", "content", "engine_id", "model_id", "run_id", "created_at"], rows);
+      downloadTextFile("arx_messages.csv", csv);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export messages.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  async function exportMemoryCsv() {
+    if (!supabaseSession) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setExportError(null);
+    setIsExporting(true);
+    try {
+      const userId = getSupabaseAuthUid(supabaseSession);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,created_at,updated_at&user_id=eq.${encodeURIComponent(userId)}&order=pinned.desc,updated_at.desc&limit=2000`,
+        {},
+        supabaseSession
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      const csv = buildCsv(["id", "scope", "scope_id", "pinned", "content", "created_at", "updated_at"], rows);
+      downloadTextFile("arx_personal_memory.csv", csv);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export memory.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  function sortPersonalMemory(items: PersonalMemoryItem[]): PersonalMemoryItem[] {
+    return [...items].sort((a, b) => {
+      const pinnedDiff = Number(b.pinned) - Number(a.pinned);
+      if (pinnedDiff !== 0) return pinnedDiff;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+  }
+
+  async function fetchCloudPersonalMemoryItems(session: SupabaseSession): Promise<PersonalMemoryItem[]> {
+    const url = getSupabaseUrl();
+    if (!url) return [];
+
+    const userId = getSupabaseAuthUid(session);
+    const baseSelect = "id,content,scope,scope_id,pinned,created_at,updated_at";
+
+    const fetchRows = async (scope: "global" | "workspace"): Promise<PersonalMemoryItem[]> => {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?select=${baseSelect}` +
+          `&user_id=eq.${encodeURIComponent(userId)}` +
+          `&scope=eq.${scope}` +
+          `&order=pinned.desc,updated_at.desc` +
+          `&limit=1000`,
+        {},
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{
+        id: string;
+        content: string;
+        scope: string;
+        scope_id: string | null;
+        pinned: boolean;
+        created_at: string;
+        updated_at: string;
+      }>;
+      return rows.map((row) => ({
+        id: row.id,
+        content: row.content,
+        scope: row.scope === "workspace" ? "workspace" : "global",
+        scope_id: row.scope_id ?? null,
+        pinned: Boolean(row.pinned),
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      }));
+    };
+
+    const [globalRows, workspaceRows] = await Promise.all([fetchRows("global"), fetchRows("workspace")]);
+    return [...globalRows, ...workspaceRows];
+  }
+
+  async function loadPersonalMemoryItems() {
+    setIsLoadingPersonalMemory(true);
+    setPersonalMemoryError(null);
+    try {
+      const session = sessionRef.current;
+      if (!session) {
+        setPersonalMemoryItems([]);
+        return;
+      }
+      const items = await fetchCloudPersonalMemoryItems(session);
+      setPersonalMemoryItems(sortPersonalMemory(items));
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Unknown error";
+      setPersonalMemoryError(message);
+    } finally {
+      setIsLoadingPersonalMemory(false);
+    }
+  }
+
+  async function searchPersonalMemoryItems(query: string) {
+    const q = query.trim();
+    if (!q) {
+      await loadPersonalMemoryItems();
+      return;
+    }
+    setIsLoadingPersonalMemory(true);
+    setPersonalMemoryError(null);
+    try {
+      const session = sessionRef.current;
+      if (!session) {
+        setPersonalMemoryItems([]);
+        return;
+      }
+      const items = await fetchCloudPersonalMemoryItems(session);
+      const needle = q.toLowerCase();
+      const filtered = items.filter((item) => item.content.toLowerCase().includes(needle));
+      setPersonalMemoryItems(sortPersonalMemory(filtered));
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Unknown error";
+      setPersonalMemoryError(message);
+    } finally {
+      setIsLoadingPersonalMemory(false);
+    }
+  }
+
+  async function handleCreatePersonalMemoryItem() {
+    const content = newPersonalMemoryContent.trim();
+    if (!content) return;
+    setPersonalMemoryError(null);
+    try {
+      const session = sessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to save memory.");
+        handleSignIn();
+        return;
+      }
+      const scope = newPersonalMemoryScope === "workspace" ? "global" : newPersonalMemoryScope;
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            user_id: getSupabaseAuthUid(session),
+            content,
+            scope,
+            scope_id: null,
+            pinned: Boolean(newPersonalMemoryPinned)
+          })
+        },
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setNewPersonalMemoryContent("");
+      setNewPersonalMemoryPinned(false);
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Unknown error";
+      setPersonalMemoryError(message);
+    }
+  }
+
+  async function handleTogglePersonalMemoryPinned(item: PersonalMemoryItem) {
+    setPersonalMemoryError(null);
+    try {
+      const session = sessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to update memory.");
+        handleSignIn();
+        return;
+      }
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(item.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            pinned: !item.pinned,
+            updated_at: new Date().toISOString()
+          })
+        },
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Unknown error";
+      setPersonalMemoryError(message);
+    }
+  }
+
+  async function handleDeletePersonalMemoryItem(id: string) {
+    setPersonalMemoryError(null);
+    try {
+      const session = sessionRef.current;
+      const url = session ? getSupabaseUrl() : null;
+      if (!session || !url) {
+        setAuthError("Sign in to delete memory.");
+        handleSignIn();
+        return;
+      }
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(id)}`,
+        { method: "DELETE", headers: { Prefer: "return=minimal" } },
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await loadPersonalMemoryItems();
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Unknown error";
+      setPersonalMemoryError(message);
     }
   }
 
@@ -2047,6 +2982,26 @@ export default function App() {
     }
   }
 
+  async function handleProfileAvatarUpload(file: File | null) {
+    if (!file) return;
+    try {
+      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
+      setProfileAvatarUrl(dataUrl);
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to load image.";
+      setAuthError(message);
+    }
+  }
+
+  function handleProfileAvatarDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsProfileAvatarDragOver(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (file) void handleProfileAvatarUpload(file);
+  }
+
   function handleSettingsBannerDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsSettingsBannerDragOver(false);
@@ -2072,12 +3027,45 @@ export default function App() {
     return map;
   }, [communityMessages]);
 
-  const displayName = (id: string): string => shortId(id, supabaseSession?.user.id, supabaseSession?.user.email);
+  const displayName = useCallback(
+    (userId: string): string => {
+      const trimmedName = profileName.trim();
+      const trimmedUsername = profileUsername.trim();
+      if (supabaseSession?.user.id === userId) {
+        if (trimmedName) return trimmedName;
+        if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
+      }
+      return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email);
+    },
+    [profileName, profileUsername, supabaseSession?.user.email, supabaseSession?.user.id]
+  );
 
   const activeThread = useMemo(() => {
     if (!activeThreadId) return null;
     return threads.find((t) => t.id === activeThreadId) ?? null;
   }, [activeThreadId, threads]);
+
+  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
+
+  const selectedModelId = useMemo(() => {
+    const threadModel = (activeThread?.model_id ?? "").trim();
+    if (threadModel && modelToggles.some((toggle) => toggle.id === threadModel)) return threadModel;
+
+    const stored = (activeModelId ?? "").trim();
+    if (stored && modelToggles.some((toggle) => toggle.id === stored)) return stored;
+
+    return (
+      enabledModels.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ??
+      enabledModels[0]?.id ??
+      modelToggles[0]?.id ??
+      ""
+    );
+  }, [activeThread?.model_id, activeModelId, enabledModels, modelToggles]);
+
+  const selectedModelLabel = useMemo(() => {
+    if (!selectedModelId) return "Model";
+    return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
+  }, [enabledModels, selectedModelId]);
 
   const filteredDiscoverCommunities = useMemo(() => {
     const q = discoverQuery.trim().toLowerCase();
@@ -2091,40 +3079,108 @@ export default function App() {
   }, [discoverCommunities, discoverQuery]);
 
   const showCommunityRail = true;
-  const showSessionsPanel = activePage === "workspace";
+  const showSessionsPanel = activePage === "workspace" && (activeView === "settings" || userWantsSessions);
   const showCommunityNav = activePage === "community";
   const hasLeftPanel = showSessionsPanel || showCommunityNav;
 
   return (
     <div className="app-root">
-      <button
-        className={`icon-button web-community-toggle${activePage !== "workspace" ? " active" : ""}`}
-        onClick={() => {
-          setActiveView("home");
-          if (activeView === "settings") setActiveView("home");
-          if (activePage !== "workspace") {
-            setActivePage("workspace");
-            return;
-          }
-          if (communities.length === 0) {
-            setActivePage("discover");
-            return;
-          }
-          setActivePage("community");
-          setCommunityTab("chat");
-          setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
-        }}
-        aria-label="Community"
-        title="Community"
-        type="button"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      </button>
+      <header className="app-topbar">
+        <div className="topbar-left">
+          {activePage === "workspace" ? (
+            activeView === "settings" ? (
+              <button className="back-to-workspace" onClick={() => setActiveView("home")} title="Back" type="button">
+                <svg viewBox="0 0 24 24" className="back-icon">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                <span className="back-path">settings / {settingsPageLabel(settingsPage)}</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  className={`icon-button${userWantsSessions ? " active" : ""}`}
+                  onClick={() => setUserWantsSessions((prev) => !prev)}
+                  aria-label="Toggle threads panel"
+                  title="Toggle threads panel"
+                  type="button"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M9 4v16" />
+                  </svg>
+                </button>
+                <button
+                  className="new-session-header-btn"
+                  onClick={() => {
+                    if (!supabaseSession) {
+                      handleSignIn();
+                      return;
+                    }
+                    void createThread(supabaseSession);
+                  }}
+                  title="New thread"
+                  aria-label="New thread"
+                  type="button"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              </>
+            )
+          ) : (
+            <button
+              className="back-to-workspace"
+              onClick={() => {
+                setActiveView("home");
+                setActivePage("workspace");
+              }}
+              title="Back to workspace"
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" className="back-icon">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span className="back-path">workspace</span>
+            </button>
+          )}
+        </div>
+
+        <div className="topbar-right">
+          <button
+            className={`icon-button community-btn${activePage !== "workspace" ? " active" : ""}`}
+            onClick={() => {
+              setActiveView("home");
+              if (activePage !== "workspace") {
+                setActivePage("workspace");
+                return;
+              }
+              if (communities.length === 0) {
+                setActivePage("discover");
+                return;
+              }
+              setActivePage("community");
+              setCommunityTab("chat");
+              setUnreadCount(0);
+              setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
+            }}
+            aria-label="Community"
+            title="Community"
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            {unreadCount > 0 && activePage !== "community" && (
+              <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+            )}
+          </button>
+        </div>
+      </header>
 
       <div
         className={`app-shell${showCommunityRail ? " with-community-rail" : ""}${!hasLeftPanel ? " no-left" : ""} no-right`}
@@ -2197,6 +3253,7 @@ export default function App() {
                 onClick={() => {
                   setActivePage("workspace");
                   setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
+                  setUserWantsSessions(true);
                 }}
                 title="Settings"
                 aria-label="Settings"
@@ -2221,57 +3278,54 @@ export default function App() {
 
         {showSessionsPanel && (
           <aside className="sessions">
-            <div className="sessions-header">
-              <div className="project-selector" role="button" tabIndex={0}>
-                <span className="project-name">Threads</span>
-              </div>
-              <button
-                className="new-session-btn"
-                type="button"
-                onClick={() => {
-                  if (!supabaseSession) {
-                    handleSignIn();
-                    return;
-                  }
-                  void createThread(supabaseSession);
-                }}
-                title="New thread"
-                aria-label="New thread"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-            </div>
-
-            {threadError && <div className="auth-error">{threadError}</div>}
-
-            <div className="session-list">
-              {groupThreadsByDate(threads).map((group) => (
-                <div key={group.label} className="session-group">
-                  <div className="session-group-label">{group.label}</div>
-                  {group.threads.map((thread) => (
-                    <div
-                      key={thread.id}
-                      className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                      onClick={() => setActiveThreadId(thread.id)}
+            {activeView === "settings" ? (
+              <>
+                <div className="panel-title">Settings</div>
+                <div className="session-list">
+                  {(["account", "models", "execution", "memory", "appearance"] as const).map((page) => (
+                    <button
+                      key={page}
+                      className={settingsPage === page ? "nav-item active" : "nav-item"}
+                      onClick={() => setSettingsPage(page)}
+                      type="button"
                     >
-                      <div className="session-content">
-                        <div className="session-title">
-                          {(thread.title ?? "").trim() || "Untitled thread"}
-                        </div>
-                        <div className="session-preview">
-                          {thread.id === activeThreadId && activeThread ? "Open" : ""}
-                        </div>
-                      </div>
-                    </div>
+                      {settingsPageLabel(page)}
+                    </button>
                   ))}
                 </div>
-              ))}
-              {threads.length === 0 && (
-                <div className="empty-state">No threads yet. Click + to start.</div>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                {threadError && <div className="auth-error">{threadError}</div>}
+
+                <div className="session-list">
+                  {groupThreadsByDate(threads).map((group) => (
+                    <div key={group.label} className="session-group">
+                      <div className="session-group-label">{group.label}</div>
+                      {group.threads.map((thread) => (
+                        <div
+                          key={thread.id}
+                          className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                          onClick={() => setActiveThreadId(thread.id)}
+                        >
+                          <div className="session-content">
+                            <div className="session-title">
+                              {(thread.title ?? "").trim() || "Untitled thread"}
+                            </div>
+                            <div className="session-preview">
+                              {thread.id === activeThreadId && activeThread ? "Open" : ""}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {threads.length === 0 && (
+                    <div className="empty-state">No threads yet. Click + to start.</div>
+                  )}
+                </div>
+              </>
+            )}
           </aside>
         )}
 
@@ -2358,9 +3412,14 @@ export default function App() {
                   }}
                 >
                   <span className="nav-icon">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
-                      <path d="M19.4 15a1 1 0 0 0 .2 1.1l.2.2a2 2 0 1 1-2.8 2.8l-.2-.2a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.2.2a2 2 0 1 1-2.8-2.8l.2-.2a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.2-.2a2 2 0 1 1 2.8-2.8l.2.2a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.2-.2a2 2 0 1 1 2.8 2.8l-.2.2a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z" />
+                    <svg
+                      viewBox="0 0 24 24"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ strokeWidth: 1.5 }}
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                   </span>
                   Settings
@@ -2373,29 +3432,442 @@ export default function App() {
         <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
           {activeView === "settings" ? (
             <div className="settings-panel">
-              <div className="settings-section">
-                <div className="settings-section-title">Account</div>
-                <div className="settings-section-desc">
-                  Sign in to join communities and sync your threads across devices.
-                </div>
-                {supabaseSession ? (
-                  <div className="account-row">
-                    <div className="account-identity">
-                      <span>Signed in as</span>
-                      <strong>{supabaseSession.user.email ?? supabaseSession.user.id}</strong>
+              {settingsPage === "account" && (
+                <>
+                  <div className="settings-section">
+                    <div className="settings-section-title">Account</div>
+                    <div className="settings-section-desc">
+                      Sign in to join communities and sync your profile.
                     </div>
-                    <button className="secondary" type="button" onClick={() => void handleSignOut()}>
-                      Sign out
-                    </button>
+                    {supabaseSession ? (
+                      <div className="account-row">
+                        <div className="account-identity">
+                          <span>Signed in as</span>
+                          <strong>{supabaseSession.user.email ?? supabaseSession.user.id}</strong>
+                        </div>
+                        <button className="secondary" type="button" onClick={() => void handleSignOut()}>
+                          Sign out
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="account-row">
+                        <button type="button" onClick={handleSignIn}>
+                          Sign in
+                        </button>
+                      </div>
+                    )}
+                    {authError && <div className="key-error">{authError}</div>}
                   </div>
-                ) : (
-                  <div className="account-row">
-                    <button type="button" onClick={handleSignIn}>
-                      Sign in
-                    </button>
+
+                  <div className="settings-section">
+                    <div className="settings-section-title">Profile</div>
+                    <div className="settings-section-desc">
+                      Local profile details shown in communities on this device.
+                    </div>
+                    <div className="profile-block">
+                      <div
+                        className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setIsProfileAvatarDragOver(true);
+                        }}
+                        onDragLeave={() => setIsProfileAvatarDragOver(false)}
+                        onDrop={handleProfileAvatarDrop}
+                      >
+                        {profileAvatarUrl ? (
+                          <img src={profileAvatarUrl} alt="Profile avatar" />
+                        ) : (
+                          <span>
+                            {getInitials(
+                              (profileName || profileUsername || supabaseSession?.user.email || "AR").replace(/^@/, "")
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <div className="profile-avatar-actions">
+                        <label className="create-avatar-btn">
+                          Upload photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {profileAvatarUrl && (
+                          <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="profile-row">
+                      <input
+                        type="text"
+                        placeholder="Name"
+                        value={profileName}
+                        onChange={(event) => setProfileName(event.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Username"
+                        value={profileUsername}
+                        onChange={(event) => setProfileUsername(event.target.value)}
+                      />
+                    </div>
+                    <textarea
+                      className="profile-bio"
+                      placeholder="Bio"
+                      value={profileBio}
+                      onChange={(event) => setProfileBio(event.target.value)}
+                      rows={3}
+                    />
                   </div>
-                )}
-              </div>
+                </>
+              )}
+
+              {settingsPage === "models" && (
+                <>
+                  <div className="settings-section">
+                    <div className="settings-section-title">API Key</div>
+                    <div className="settings-section-desc">Connect your OpenRouter key to access models</div>
+                    <div className="key-row">
+                      <input
+                        type="password"
+                        value={providerKeys[0]?.inputValue ?? ""}
+                        placeholder={providerKeys[0]?.hasKey ? "Key saved" : "Enter OpenRouter API key"}
+                        onChange={(event) =>
+                          setProviderKeys((prev) => {
+                            const current = prev[0] ?? {
+                              id: "openrouter",
+                              label: "OpenRouter",
+                              hasKey: false,
+                              inputValue: "",
+                              error: null
+                            };
+                            return [{ ...current, inputValue: event.target.value }];
+                          })
+                        }
+                      />
+                      <button type="button" onClick={() => void handleSaveProviderKey("openrouter")}>
+                        Save
+                      </button>
+                      <button className="secondary" type="button" onClick={() => void handleClearProviderKey("openrouter")}>
+                        Clear
+                      </button>
+                    </div>
+                    {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+                  </div>
+
+                  <div className="settings-section">
+                    <div className="settings-section-title">Available Models</div>
+                    <div className="settings-section-desc">Select which models to enable</div>
+                    <div className="model-list">
+                      {modelToggles.map((toggle) => (
+                        <label key={toggle.id} className="model-toggle">
+                          <input
+                            type="checkbox"
+                            checked={toggle.enabled}
+                            disabled={providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false}
+                            onChange={() => void handleToggleModel(toggle.id)}
+                          />
+                          <span>
+                            {toggle.label}
+                            {!providerKeys[0]?.hasKey && " (missing key)"}
+                            {providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false && " (unavailable)"}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {settingsPage === "execution" && (
+                <>
+                  <div className="settings-section">
+                    <div className="settings-section-title">Approval Mode</div>
+                    <div className="settings-section-desc">Control how tool executions are approved (desktop only)</div>
+                    <div className="approval-selector">
+                      {(["read-only", "agent", "agent-full"] as const).map((mode) => {
+                        const preset = APPROVAL_PRESETS[mode];
+                        const isActive = mode === "agent";
+                        return (
+                          <button
+                            key={mode}
+                            className={`approval-option${isActive ? " active" : ""}`}
+                            type="button"
+                            disabled
+                          >
+                            <div className="approval-option-title">{preset.label}</div>
+                            <div className="approval-option-desc">{preset.description}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="approval-note">Execution policies are configured in the desktop app.</div>
+                  </div>
+
+                  <div className="settings-section">
+                    <div className="settings-section-title">Thread Overrides</div>
+                    <div className="settings-section-desc">Settings for the current thread only (desktop only)</div>
+                    <label className="model-toggle">
+                      <input type="checkbox" defaultChecked={false} disabled />
+                      <span>Auto-approve write/edit for this thread</span>
+                    </label>
+                    <div className="approval-note">
+                      Read/search tools never require approval. When enabled, write/edit skip prompts.
+                    </div>
+                    <div className="exec-policy">
+                      <textarea
+                        className="exec-policy-input"
+                        defaultValue=""
+                        disabled
+                        placeholder="allow git status\nallow ls"
+                      />
+                      <div className="exec-policy-actions">
+                        <button type="button" disabled>
+                          Save
+                        </button>
+                        <button type="button" className="secondary" disabled>
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings-section">
+                    <div className="settings-section-title">Global Policy Rules</div>
+                    <div className="settings-section-desc">Default rules applied to all threads (desktop only)</div>
+                    <div className="exec-policy">
+                      <textarea
+                        className="exec-policy-input"
+                        defaultValue=""
+                        disabled
+                        placeholder="prompt\ndefault\nallow git status\nforbid rm -rf /"
+                      />
+                      <div className="exec-policy-actions">
+                        <button type="button" disabled>
+                          Save rules
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {settingsPage === "memory" && (
+                <>
+                  <div className="panel-title">Memory</div>
+                  <div className="memory-panel">
+                    {personalMemoryError && <div className="memory-error">{personalMemoryError}</div>}
+                    {exportError && <div className="auth-error">{exportError}</div>}
+
+                    <div className="settings-section">
+                      <div className="settings-section-title">Export</div>
+                      <div className="settings-section-desc">
+                        Download your threads, messages, and personal memory as CSV.
+                      </div>
+                      <div className="export-actions">
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => void exportThreadsCsv()}
+                          disabled={!supabaseSession || isExporting}
+                        >
+                          Threads CSV
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => void exportMessagesCsv()}
+                          disabled={!supabaseSession || isExporting}
+                        >
+                          Messages CSV
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => void exportMemoryCsv()}
+                          disabled={!supabaseSession || isExporting}
+                        >
+                          Memory CSV
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="settings-section">
+                      <div className="settings-section-title">Local Cache</div>
+                      <div className="settings-section-desc">
+                        Clear local SQLite caches used by the desktop operator. Cloud data is unchanged.
+                      </div>
+                      <div className="export-actions">
+                        <button className="secondary" type="button" disabled>
+                          Reset local cache
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="memory-editor">
+                      <div className="memory-editor-header">
+                        <div className="memory-editor-title">Personal memory</div>
+                        <div className="memory-editor-meta">
+                          {isLoadingPersonalMemory
+                            ? "loading…"
+                            : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
+                        </div>
+                      </div>
+                      <input
+                        value={personalMemoryQuery}
+                        onChange={(event) => setPersonalMemoryQuery(event.target.value)}
+                        placeholder="Search memory…"
+                      />
+                      <div className="memory-block-meta">Workspace scope is managed from the desktop app.</div>
+                      <div className="memory-editor-actions">
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => {
+                            setPersonalMemoryQuery("");
+                            void loadPersonalMemoryItems();
+                          }}
+                          disabled={isLoadingPersonalMemory}
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="memory-block-group">
+                      {personalMemoryItems.length === 0 ? (
+                        <div className="memory-block-empty">No personal memory items yet.</div>
+                      ) : (
+                        personalMemoryItems.map((item) => (
+                          <div key={item.id} className="memory-block">
+                            <div className="memory-block-header">
+                              <div className="memory-block-label">{item.content}</div>
+                              <div className="memory-block-actions">
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  onClick={() => void handleTogglePersonalMemoryPinned(item)}
+                                  disabled={isLoadingPersonalMemory}
+                                >
+                                  {item.pinned ? "Unpin" : "Pin"}
+                                </button>
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  onClick={() => void handleDeletePersonalMemoryItem(item.id)}
+                                  disabled={isLoadingPersonalMemory}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                            <div className="memory-block-meta">
+                              {item.scope}
+                              {item.scope === "workspace" && item.scope_id ? ` · ${item.scope_id}` : ""}
+                              {" · "}
+                              updated {formatRelativeTime(item.updated_at)}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="memory-editor">
+                      <div className="memory-editor-header">
+                        <div className="memory-editor-title">Add memory</div>
+                        <div className="memory-editor-meta">{newPersonalMemoryScope}</div>
+                      </div>
+                      <textarea
+                        value={newPersonalMemoryContent}
+                        onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
+                        placeholder="Write a durable preference/fact…"
+                      />
+                      <div className="memory-editor-actions">
+                        <select
+                          className="select-styled"
+                          value={newPersonalMemoryScope}
+                          onChange={(event) => setNewPersonalMemoryScope(event.target.value as "global" | "workspace")}
+                        >
+                          <option value="workspace" disabled>
+                            Workspace (desktop only)
+                          </option>
+                          <option value="global">Global</option>
+                        </select>
+                        <label className="memory-pin-toggle">
+                          <input
+                            type="checkbox"
+                            checked={newPersonalMemoryPinned}
+                            onChange={(event) => setNewPersonalMemoryPinned(event.target.checked)}
+                          />
+                          Pinned
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void handleCreatePersonalMemoryItem()}
+                          disabled={!newPersonalMemoryContent.trim()}
+                        >
+                          Save memory
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => {
+                            setNewPersonalMemoryContent("");
+                            setNewPersonalMemoryPinned(false);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {settingsPage === "appearance" && (
+                <>
+                  <div className="panel-title">Appearance</div>
+                  <div className="appearance-panel">
+                    <div className="appearance-selector">
+                      <div className="appearance-title">Theme</div>
+                      <div className="appearance-options">
+                        {([
+                          { id: "light", label: "Light", description: "Default light theme", disabled: false },
+                          { id: "dark", label: "Dark", description: "Default dark theme", disabled: false },
+                          { id: "light-warm", label: "Light (Warm)", description: "Stone + charcoal + gold", disabled: false },
+                          { id: "dark-warm", label: "Dark (Warm)", description: "Warm obsidian + champagne gold", disabled: false }
+                        ] as const).map((theme) => (
+                          <button
+                            key={theme.id}
+                            className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
+                            type="button"
+                            onClick={() => {
+                              if (!theme.disabled) {
+                                setAppTheme(theme.id);
+                              }
+                            }}
+                            disabled={theme.disabled}
+                          >
+                            <div className="appearance-option-preview" data-preview-theme={theme.id}>
+                              <div className="preview-header" />
+                              <div className="preview-sidebar" />
+                              <div className="preview-content">
+                                <div className="preview-line" />
+                                <div className="preview-line short" />
+                              </div>
+                            </div>
+                            <div className="appearance-option-label">{theme.label}</div>
+                            <div className="appearance-option-desc">{theme.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           ) : activePage === "workspace" ? (
             <>
@@ -2412,20 +3884,69 @@ export default function App() {
                   )}
                   {threadMessages.map((message) => {
                     const isUser = message.role === "user";
+                    const textContent = parseMessageText(message.content_json);
+                    const modelLabel = !isUser ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null) : null;
                     return (
                       <div
                         key={message.id}
                         className={isUser ? "message-item user" : "message-item assistant"}
                       >
-                        <div className="message-text">{parseMessageText(message.content_json)}</div>
+                        <div className="message-text">
+                          {isUser ? textContent : renderMarkdown(textContent)}
+                        </div>
+                        {!isUser && (
+                          <div className="message-footer">
+                            <button
+                              className={`message-copy-btn${copiedMessageId === message.id ? " copied" : ""}`}
+                              type="button"
+                              onClick={() => void handleCopyMessage(message.id, textContent)}
+                              title="Copy"
+                              aria-label="Copy"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                {copiedMessageId === message.id ? (
+                                  <polyline points="20 6 9 17 4 12" />
+                                ) : (
+                                  <>
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                  </>
+                                )}
+                              </svg>
+                            </button>
+                            <button
+                              className="message-copy-btn"
+                              type="button"
+                              disabled
+                              title="Save to memory (coming soon)"
+                              aria-label="Save to memory (coming soon)"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M9 3v2" />
+                                <path d="M15 3v2" />
+                                <path d="M9 19v2" />
+                                <path d="M15 19v2" />
+                                <path d="M3 9h2" />
+                                <path d="M3 15h2" />
+                                <path d="M19 9h2" />
+                                <path d="M19 15h2" />
+                                <rect x="7" y="7" width="10" height="10" rx="2" />
+                                <path d="M10 10h4" />
+                                <path d="M10 14h4" />
+                              </svg>
+                            </button>
+                            {modelLabel && <span className="message-meta">{modelLabel}</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div className="ask-bar">
+              <div className="ask-bar ask-bar-v2">
                 <textarea
-                  className="ask-input"
+                  ref={workspaceAskInputRef}
+                  className="ask-input ask-input-v2"
                   placeholder={supabaseSession ? "Ask anything" : "Sign in to send messages"}
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
@@ -2438,27 +3959,70 @@ export default function App() {
                   disabled={!supabaseSession || isSendingMessage}
                   rows={1}
                 />
-                <div className="ask-toolbar">
-                  <div className="ask-toolbar-left">
-                    {activeThread && (
-                      <div className="model-select">
-                        <span>{(activeThread.title ?? "").trim() || "Untitled thread"}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="ask-toolbar-right">
+                <div className="ask-footer">
+                  <div className="ask-footer-left">
                     <button
-                      className="toolbar-send"
+                      className="ask-icon-btn ask-plus"
                       type="button"
-                      onClick={() => void sendUserMessage()}
-                      disabled={!supabaseSession || isSendingMessage || messageInput.trim().length === 0}
-                      title="Send"
+                      disabled
+                      aria-label="Attach"
+                      title="Attach (coming soon)"
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                        <path d="M12 5v14M5 12h14" />
                       </svg>
                     </button>
+                    <div className="ask-model" ref={modelPickerRef}>
+                      <button
+                        className="ask-model-btn"
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={isModelPickerOpen}
+                        onClick={() => setIsModelPickerOpen((prev) => !prev)}
+                        disabled={enabledModels.length === 0}
+                        title="Model"
+                      >
+                        <span className="ask-model-label">{selectedModelLabel}</span>
+                        <svg className="ask-model-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {isModelPickerOpen && (
+                        <div className="ask-model-menu" role="listbox" aria-label="Models">
+                          {enabledModels.map((toggle) => (
+                            <button
+                              key={toggle.id}
+                              type="button"
+                              role="option"
+                              aria-selected={toggle.id === selectedModelId}
+                              className={toggle.id === selectedModelId ? "ask-model-option active" : "ask-model-option"}
+                              onClick={() => {
+                                setActiveModelId(toggle.id);
+                                if (supabaseSession && activeThreadId) {
+                                  void updateThreadModel(activeThreadId, toggle.id, supabaseSession);
+                                }
+                                setIsModelPickerOpen(false);
+                              }}
+                            >
+                              {toggle.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    className="ask-send-btn ask-send-btn-v2"
+                    type="button"
+                    onClick={() => void sendUserMessage()}
+                    disabled={!supabaseSession || isSendingMessage || messageInput.trim().length === 0}
+                    aria-label="Send"
+                    title="Send"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </>
@@ -2858,6 +4422,17 @@ export default function App() {
                       )}
 
                       <div className="chat-input-bar">
+                        <button
+                          className="ask-icon-btn ask-plus"
+                          type="button"
+                          disabled
+                          aria-label="Attach"
+                          title="Attach (coming soon)"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                        </button>
                         <textarea
                           ref={chatInputRef}
                           className="chat-input"
@@ -2884,11 +4459,28 @@ export default function App() {
                           rows={1}
                         />
                         <button
-                          className="chat-send"
+                          className="ask-icon-btn ask-mic"
+                          type="button"
+                          disabled
+                          aria-label="Voice input"
+                          title="Voice input (coming soon)"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+                            <path d="M19 11a7 7 0 0 1-14 0" />
+                            <path d="M12 18v4" />
+                            <path d="M8 22h8" />
+                          </svg>
+                        </button>
+                        <button
+                          className="chat-send ask-send-btn"
                           onClick={() => void handleSendCommunityMessage()}
                           disabled={!supabaseSession || !activeCommunity || isSendingCommunityMessage}
+                          type="button"
+                          aria-label="Send"
+                          title="Send"
                         >
-                          <svg viewBox="0 0 24 24">
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
                           </svg>
                         </button>

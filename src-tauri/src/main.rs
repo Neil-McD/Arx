@@ -721,25 +721,85 @@ async fn execute_agent_tool_call(
   cancel_rx: watch::Receiver<bool>,
 ) -> AgentToolCallOutcome {
   let mut tool_name = normalize_agent_tool_name(raw_tool_name);
-  if tool_name.is_empty() {
-    tool_name = "invalid".to_string();
-    tool_args = serde_json::json!({
+  let tool_args_for_exec = tool_args.clone();
+  let original_args_json = canonical_json_string(&tool_args);
+
+  let mut tool_args_for_events = tool_args;
+  let mut synthetic_exec: Option<ToolExecResult> = None;
+
+  let tool_args_error = tool_args_for_exec
+    .as_object()
+    .and_then(|obj| obj.get("__arx_tool_args_error"))
+    .and_then(|v| v.as_str())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty());
+  let tool_args_input = tool_args_for_exec
+    .as_object()
+    .and_then(|obj| obj.get("__arx_tool_args_input"))
+    .and_then(|v| v.as_str())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty());
+
+  if let Some(detail) = tool_args_error {
+    if tool_name.is_empty() {
+      tool_name = "unknown".to_string();
+    }
+    let mut msg = String::new();
+    msg.push_str(&format!(
+      "invalid tool arguments for \"{}\".\n",
+      raw_tool_name.trim()
+    ));
+    msg.push_str(&detail);
+    if let Some(input) = tool_args_input.as_deref() {
+      msg.push_str("\n\ninput:\n");
+      msg.push_str(input);
+    }
+    if !msg.ends_with('\n') {
+      msg.push('\n');
+    }
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+
+    tool_args_for_events = serde_json::json!({
+      "tool": raw_tool_name,
+      "error": "invalid tool arguments",
+      "detail": detail,
+      "input": tool_args_input.unwrap_or(original_args_json.clone())
+    });
+    synthetic_exec = Some(tool_error(msg.trim().to_string()));
+  } else if tool_name.is_empty() {
+    tool_name = "unknown".to_string();
+    let mut msg = String::new();
+    msg.push_str("invalid tool name.\n");
+    if !msg.ends_with('\n') {
+      msg.push('\n');
+    }
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+
+    tool_args_for_events = serde_json::json!({
       "tool": raw_tool_name,
       "error": "invalid tool name",
-      "input": canonical_json_string(&tool_args)
+      "input": original_args_json
     });
+    synthetic_exec = Some(tool_error(msg.trim().to_string()));
   } else if !is_known_agent_tool_name(tool_name.as_str()) {
-    tool_args = serde_json::json!({
+    let mut msg = String::new();
+    msg.push_str(&format!("unknown tool: {}\n", tool_name));
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+
+    tool_args_for_events = serde_json::json!({
       "tool": raw_tool_name,
       "error": "unknown tool",
-      "input": canonical_json_string(&tool_args)
+      "input": original_args_json
     });
-    tool_name = "invalid".to_string();
+    synthetic_exec = Some(tool_error(msg.trim().to_string()));
   }
 
   let tool_call_id = uuid::Uuid::new_v4().to_string();
-  let tool_call_key = compute_tool_call_key(&tool_name, &tool_args, workspace_scope_id);
-  let args_json = canonical_json_string(&tool_args);
+  let tool_call_key = compute_tool_call_key(&tool_name, &tool_args_for_events, workspace_scope_id);
+  let args_json = canonical_json_string(&tool_args_for_events);
   let requires_approval = tool_requires_approval(&tool_name);
   let denied_by_mode = mode == "explore" && requires_approval;
   let is_write_edit = matches!(tool_name.as_str(), "write" | "edit");
@@ -751,7 +811,7 @@ async fn execute_agent_tool_call(
     "tool_call_id": tool_call_id.clone(),
     "tool_call_key": tool_call_key,
     "tool_name": tool_name.clone(),
-    "args": tool_args.clone(),
+    "args": tool_args_for_events.clone(),
     "requires_approval": requires_approval,
     "policy_basis": "mvp_default"
   });
@@ -893,14 +953,14 @@ async fn execute_agent_tool_call(
   );
 
   let tool_args_preview = {
-    let path = tool_args
+    let path = tool_args_for_events
       .get("path")
-      .or_else(|| tool_args.get("file_path"))
+      .or_else(|| tool_args_for_events.get("file_path"))
       .and_then(|v| v.as_str())
       .map(|s| s.to_string());
-    let cmd = tool_args
+    let cmd = tool_args_for_events
       .get("cmd")
-      .or_else(|| tool_args.get("command"))
+      .or_else(|| tool_args_for_events.get("command"))
       .and_then(|v| v.as_str())
       .map(|s| {
         let trimmed = s.trim();
@@ -910,12 +970,12 @@ async fn execute_agent_tool_call(
           trimmed.to_string()
         }
       });
-    let pat = tool_args
+    let pat = tool_args_for_events
       .get("pat")
-      .or_else(|| tool_args.get("pattern"))
+      .or_else(|| tool_args_for_events.get("pattern"))
       .and_then(|v| v.as_str())
       .map(|s| s.to_string());
-    let writes = tool_args
+    let writes = tool_args_for_events
       .get("writes")
       .and_then(|v| v.as_array())
       .map(|arr| {
@@ -968,7 +1028,11 @@ async fn execute_agent_tool_call(
     },
   );
 
-  let exec = run_agent_tool(workspace, db_path, &tool_name, &tool_args).await;
+  let exec = if let Some(exec) = synthetic_exec {
+    exec
+  } else {
+    run_agent_tool(workspace, db_path, &tool_name, &tool_args_for_exec).await
+  };
   let stdout_blob = write_blob_and_record(conn, db_path, &exec.stdout);
   let stderr_blob = write_blob_and_record(conn, db_path, &exec.stderr);
   let (redacted_preview, _preview_report) = context::redact_secrets(&exec.tool_result_content);
@@ -1044,7 +1108,7 @@ fn build_atom_system_prompt(
   let community_memory_block = "(none)".to_string();
 
   format!(
-    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n\nRules:\n- Be useful, friendly, and concise.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, write, edit, task, bash.\n  - read/list_dir/glob/grep/task are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{{path, content}}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
+    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n\nRules:\n- Be useful, friendly, and concise.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{{path, content}}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
     workspace_path,
     os,
     if git_repo { "yes" } else { "no" },
@@ -1052,6 +1116,59 @@ fn build_atom_system_prompt(
     community_name,
     community_memory_block
   )
+}
+
+#[derive(Clone, Deserialize)]
+struct HistoryOverrideMessage {
+  role: String,
+  content_json: serde_json::Value,
+}
+
+fn load_recent_history_messages(
+  conn: &rusqlite::Connection,
+  thread_id: &str,
+  history_override_json: Option<&str>,
+) -> Vec<(String, serde_json::Value)> {
+  if let Some(json) = history_override_json {
+    if let Ok(items) = serde_json::from_str::<Vec<HistoryOverrideMessage>>(json) {
+      let mut filtered: Vec<(String, serde_json::Value)> = Vec::new();
+      for item in items {
+        let role = item.role.trim().to_string();
+        if role != "user" && role != "assistant" {
+          continue;
+        }
+        let value = match item.content_json {
+          serde_json::Value::String(s) => serde_json::from_str(&s).unwrap_or(serde_json::Value::Null),
+          other => other,
+        };
+        filtered.push((role, value));
+      }
+      if filtered.len() > 20 {
+        filtered = filtered.into_iter().rev().take(20).collect::<Vec<_>>();
+        filtered.reverse();
+      }
+      return filtered;
+    }
+  }
+
+  if let Ok(history) = list_messages(conn, thread_id) {
+    let mut filtered: Vec<(String, serde_json::Value)> = Vec::new();
+    for msg in history {
+      if msg.role != "user" && msg.role != "assistant" {
+        continue;
+      }
+      let value: serde_json::Value =
+        serde_json::from_str(&msg.content_json).unwrap_or(serde_json::Value::Null);
+      filtered.push((msg.role, value));
+    }
+    if filtered.len() > 20 {
+      filtered = filtered.into_iter().rev().take(20).collect::<Vec<_>>();
+      filtered.reverse();
+    }
+    return filtered;
+  }
+
+  Vec::new()
 }
 
 fn make_agent_tool_schema() -> Vec<serde_json::Value> {
@@ -1114,31 +1231,6 @@ fn make_agent_tool_schema() -> Vec<serde_json::Value> {
           }
         },
         "required": ["path", "content"]
-      }
-    }),
-    serde_json::json!({
-      "name": "task",
-      "description": "Quick helper for exploring: optionally list a directory, glob files, and/or search for a literal substring in text files. Read-only.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "path": { "type": "string" },
-          "pat": { "type": "string" },
-          "query": { "type": "string" },
-          "list": { "type": "boolean" }
-        }
-      }
-    }),
-    serde_json::json!({
-      "name": "invalid",
-      "description": "Return an error for an invalid tool call (used for malformed tool names/args).",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "tool": { "type": "string" },
-          "error": { "type": "string" },
-          "input": { "type": "string" }
-        }
       }
     }),
     serde_json::json!({
@@ -1667,371 +1759,8 @@ fn is_known_agent_tool_name(tool_name: &str) -> bool {
       | "edit"
       | "glob"
       | "grep"
-      | "task"
-      | "invalid"
       | "bash"
   )
-}
-
-fn parse_unified_diff_hunks(diff: &str) -> Result<Vec<(usize, usize, usize, usize, Vec<(char, String)>)>, String> {
-  let mut hunks: Vec<(usize, usize, usize, usize, Vec<(char, String)>)> = Vec::new();
-  let mut current: Option<(usize, usize, usize, usize, Vec<(char, String)>)> = None;
-
-  for raw_line in diff.lines() {
-    let line = raw_line.trim_end_matches('\r');
-    if line.starts_with("@@") {
-      if let Some(hunk) = current.take() {
-        hunks.push(hunk);
-      }
-      let inner = line
-        .split("@@")
-        .nth(1)
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| "invalid hunk header".to_string())?;
-      let mut parts = inner.split_whitespace();
-      let old_range = parts.next().ok_or_else(|| "invalid hunk header".to_string())?;
-      let new_range = parts.next().ok_or_else(|| "invalid hunk header".to_string())?;
-
-      let parse_range = |value: &str, prefix: char| -> Option<(usize, usize)> {
-        if !value.starts_with(prefix) {
-          return None;
-        }
-        let rest = &value[1..];
-        let mut items = rest.split(',');
-        let start = items.next()?.parse::<usize>().ok()?;
-        let count = items
-          .next()
-          .and_then(|v| v.parse::<usize>().ok())
-          .unwrap_or(1);
-        Some((start, count))
-      };
-      let Some((old_start, old_count)) = parse_range(old_range, '-') else {
-        return Err("invalid hunk header (old range)".to_string());
-      };
-      let Some((new_start, new_count)) = parse_range(new_range, '+') else {
-        return Err("invalid hunk header (new range)".to_string());
-      };
-
-      current = Some((old_start, old_count, new_start, new_count, Vec::new()));
-      continue;
-    }
-
-    if line.starts_with("--- ")
-      || line.starts_with("+++ ")
-      || line.starts_with("diff ")
-      || line.starts_with("index ")
-    {
-      continue;
-    }
-
-    if line.starts_with("\\ No newline at end of file") {
-      continue;
-    }
-
-    let Some(hunk) = current.as_mut() else {
-      continue;
-    };
-    let (prefix, rest) = match line.chars().next() {
-      Some(ch @ (' ' | '+' | '-')) => (ch, &line[1..]),
-      _ => continue,
-    };
-    hunk.4.push((prefix, rest.to_string()));
-  }
-
-  if let Some(hunk) = current.take() {
-    hunks.push(hunk);
-  }
-
-  if hunks.is_empty() {
-    return Err("no hunks found in unified diff".to_string());
-  }
-  Ok(hunks)
-}
-
-#[derive(Clone)]
-enum CodexPatchHunk {
-  Add { path: String, contents: String },
-  Delete { path: String },
-  Update {
-    path: String,
-    move_to: Option<String>,
-    chunks: Vec<CodexUpdateChunk>,
-  },
-}
-
-#[derive(Clone)]
-struct CodexUpdateChunk {
-  change_context: Option<String>,
-  old_lines: Vec<String>,
-  new_lines: Vec<String>,
-  is_end_of_file: bool,
-}
-
-fn parse_codex_patch_hunks(patch_text: &str) -> Result<Vec<CodexPatchHunk>, String> {
-  let lines = patch_text.lines().collect::<Vec<_>>();
-
-  let begin_marker = "*** Begin Patch";
-  let end_marker = "*** End Patch";
-
-  let begin_idx = lines
-    .iter()
-    .position(|line| line.trim_end_matches('\r').trim() == begin_marker);
-  let end_idx = lines
-    .iter()
-    .position(|line| line.trim_end_matches('\r').trim() == end_marker);
-
-  let start = begin_idx.map(|i| i + 1).unwrap_or(0);
-  let end = end_idx.unwrap_or(lines.len());
-  if start > end || end > lines.len() {
-    return Err("invalid patch markers".to_string());
-  }
-
-  let mut hunks: Vec<CodexPatchHunk> = Vec::new();
-  let mut i = start;
-
-  let parse_header_path = |line: &str, prefix: &str| -> Option<String> {
-    let trimmed = line.trim_end_matches('\r');
-    if !trimmed.starts_with(prefix) {
-      return None;
-    }
-    trimmed.splitn(2, ':').nth(1).map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-  };
-
-  while i < end {
-    let line = lines[i].trim_end_matches('\r');
-    if let Some(path) = parse_header_path(line, "*** Add File:") {
-      i += 1;
-      let mut out_lines: Vec<String> = Vec::new();
-      while i < end {
-        let l = lines[i].trim_end_matches('\r');
-        if l.starts_with("***") {
-          break;
-        }
-        if let Some(rest) = l.strip_prefix('+') {
-          out_lines.push(rest.to_string());
-        }
-        i += 1;
-      }
-      hunks.push(CodexPatchHunk::Add {
-        path,
-        contents: out_lines.join("\n"),
-      });
-      continue;
-    }
-
-    if let Some(path) = parse_header_path(line, "*** Delete File:") {
-      hunks.push(CodexPatchHunk::Delete { path });
-      i += 1;
-      continue;
-    }
-
-    if let Some(path) = parse_header_path(line, "*** Update File:") {
-      i += 1;
-      let mut move_to: Option<String> = None;
-      if i < end {
-        let next = lines[i].trim_end_matches('\r');
-        if let Some(dest) = parse_header_path(next, "*** Move to:") {
-          move_to = Some(dest);
-          i += 1;
-        }
-      }
-
-      let mut chunks: Vec<CodexUpdateChunk> = Vec::new();
-      while i < end {
-        let l = lines[i].trim_end_matches('\r');
-        if l.starts_with("***") {
-          break;
-        }
-        if !l.starts_with("@@") {
-          i += 1;
-          continue;
-        }
-
-        let context_line = l.trim_start_matches("@@").trim().to_string();
-        i += 1;
-
-        let mut old_lines: Vec<String> = Vec::new();
-        let mut new_lines: Vec<String> = Vec::new();
-        let mut is_end_of_file = false;
-        while i < end {
-          let cl = lines[i].trim_end_matches('\r');
-          if cl.starts_with("@@") || cl.starts_with("***") {
-            break;
-          }
-          if cl == "*** End of File" {
-            is_end_of_file = true;
-            i += 1;
-            break;
-          }
-          if let Some(rest) = cl.strip_prefix(' ') {
-            old_lines.push(rest.to_string());
-            new_lines.push(rest.to_string());
-          } else if let Some(rest) = cl.strip_prefix('-') {
-            old_lines.push(rest.to_string());
-          } else if let Some(rest) = cl.strip_prefix('+') {
-            new_lines.push(rest.to_string());
-          }
-          i += 1;
-        }
-
-        chunks.push(CodexUpdateChunk {
-          change_context: if context_line.is_empty() { None } else { Some(context_line) },
-          old_lines,
-          new_lines,
-          is_end_of_file,
-        });
-      }
-
-      hunks.push(CodexPatchHunk::Update {
-        path,
-        move_to,
-        chunks,
-      });
-      continue;
-    }
-
-    i += 1;
-  }
-
-  if hunks.is_empty() {
-    return Err("no file changes found in patch".to_string());
-  }
-  Ok(hunks)
-}
-
-fn seek_sequence(lines: &[String], pattern: &[String], start_index: usize) -> Option<usize> {
-  if pattern.is_empty() {
-    return None;
-  }
-  if start_index > lines.len() {
-    return None;
-  }
-  let max = lines.len().saturating_sub(pattern.len());
-  for i in start_index..=max {
-    let mut matches = true;
-    for j in 0..pattern.len() {
-      if lines.get(i + j) != Some(&pattern[j]) {
-        matches = false;
-        break;
-      }
-    }
-    if matches {
-      return Some(i);
-    }
-  }
-  None
-}
-
-fn apply_codex_chunks_to_lines(
-  original_lines: &[String],
-  chunks: &[CodexUpdateChunk],
-) -> Result<Vec<String>, String> {
-  let mut replacements: Vec<(usize, usize, Vec<String>)> = Vec::new();
-  let mut line_index: usize = 0;
-
-  for chunk in chunks {
-    if let Some(ctx) = &chunk.change_context {
-      let ctx_pattern = vec![ctx.clone()];
-      let found = seek_sequence(original_lines, &ctx_pattern, line_index)
-        .ok_or_else(|| format!("failed to find context '{}'", ctx))?;
-      line_index = found + 1;
-    }
-
-    if chunk.old_lines.is_empty() {
-      replacements.push((original_lines.len(), 0, chunk.new_lines.clone()));
-      continue;
-    }
-
-    let mut pattern = chunk.old_lines.clone();
-    let mut new_segment = chunk.new_lines.clone();
-    let mut found = seek_sequence(original_lines, &pattern, line_index);
-
-    if found.is_none() && pattern.last().map(|s| s.is_empty()).unwrap_or(false) {
-      pattern.pop();
-      if new_segment.last().map(|s| s.is_empty()).unwrap_or(false) {
-        new_segment.pop();
-      }
-      found = seek_sequence(original_lines, &pattern, line_index);
-    }
-
-    let Some(found_idx) = found else {
-      return Err(format!(
-        "failed to find expected lines:\n{}",
-        chunk.old_lines.join("\n")
-      ));
-    };
-
-    replacements.push((found_idx, pattern.len(), new_segment));
-    line_index = found_idx + pattern.len();
-  }
-
-  replacements.sort_by(|a, b| a.0.cmp(&b.0));
-
-  let mut out = original_lines.to_vec();
-  for (start, old_len, new_seg) in replacements.into_iter().rev() {
-    if start > out.len() {
-      return Err("replacement starts past end of file".to_string());
-    }
-    let end = start.saturating_add(old_len);
-    if end > out.len() {
-      return Err("replacement past end of file".to_string());
-    }
-    out.splice(start..end, new_seg);
-  }
-
-  Ok(out)
-}
-
-fn apply_unified_diff_to_lines(
-  original_lines: &[String],
-  hunks: &[(usize, usize, usize, usize, Vec<(char, String)>)],
-) -> Result<Vec<String>, String> {
-  let mut out: Vec<String> = Vec::new();
-  let mut idx: usize = 0;
-
-  for (old_start, _old_count, _new_start, _new_count, lines) in hunks {
-    let target = old_start.saturating_sub(1);
-    if target > original_lines.len() {
-      return Err(format!("hunk starts past end of file (line {})", old_start));
-    }
-    if target < idx {
-      return Err("hunks overlap or are out of order".to_string());
-    }
-    out.extend_from_slice(&original_lines[idx..target]);
-    idx = target;
-
-    for (kind, text) in lines {
-      match kind {
-        ' ' => {
-          if idx >= original_lines.len() {
-            return Err("context line past end of file".to_string());
-          }
-          if original_lines[idx] != *text {
-            return Err(format!("context mismatch at line {}", idx + 1));
-          }
-          out.push(original_lines[idx].clone());
-          idx += 1;
-        }
-        '-' => {
-          if idx >= original_lines.len() {
-            return Err("remove line past end of file".to_string());
-          }
-          if original_lines[idx] != *text {
-            return Err(format!("remove mismatch at line {}", idx + 1));
-          }
-          idx += 1;
-        }
-        '+' => {
-          out.push(text.clone());
-        }
-        _ => {}
-      }
-    }
-  }
-
-  out.extend_from_slice(&original_lines[idx..]);
-  Ok(out)
 }
 
 async fn read_limited(mut reader: impl tokio::io::AsyncRead + Unpin, max_bytes: usize) -> Vec<u8> {
@@ -2049,40 +1778,6 @@ async fn read_limited(mut reader: impl tokio::io::AsyncRead + Unpin, max_bytes: 
     }
   }
   out
-}
-
-fn coerce_json_to_multiline_string(value: &serde_json::Value) -> Option<String> {
-  match value {
-    serde_json::Value::String(s) => Some(s.to_string()),
-    serde_json::Value::Array(arr) => {
-      let mut out: Vec<String> = Vec::new();
-      for v in arr {
-        if let Some(s) = coerce_json_to_multiline_string(v) {
-          if !s.is_empty() {
-            out.push(s);
-          }
-        }
-      }
-      if out.is_empty() {
-        None
-      } else {
-        Some(out.join("\n"))
-      }
-    }
-    serde_json::Value::Object(map) => {
-      for key in ["text", "patch", "diff", "content", "unified_diff", "unifiedDiff"] {
-        if let Some(v) = map.get(key) {
-          if let Some(s) = coerce_json_to_multiline_string(v) {
-            if !s.trim().is_empty() {
-              return Some(s);
-            }
-          }
-        }
-      }
-      None
-    }
-    _ => None,
-  }
 }
 
 async fn run_agent_tool(
@@ -2214,611 +1909,6 @@ async fn run_agent_tool(
         "path": rel_path_display(workspace_root, &abs),
         "sha256": sha,
         "byte_len": bytes.len()
-      }));
-      result
-    }
-    "task" => {
-      let base = obj
-        .get("path")
-        .or_else(|| obj.get("cwd"))
-        .or_else(|| obj.get("workdir"))
-        .and_then(|v| v.as_str())
-        .unwrap_or(".")
-        .trim();
-      let base_abs = match resolve_scoped_path(workspace_root, base) {
-        Ok(v) => v,
-        Err(e) => return tool_error(e),
-      };
-      if !base_abs.exists() {
-        return tool_error("path does not exist".to_string());
-      }
-
-      let do_list = obj.get("list").and_then(|v| v.as_bool()).unwrap_or(true);
-      let pat = obj
-        .get("pat")
-        .or_else(|| obj.get("pattern"))
-        .and_then(|v| v.as_str())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-      let query = obj
-        .get("query")
-        .and_then(|v| v.as_str())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-
-      let mut out_lines: Vec<String> = Vec::new();
-
-      if do_list {
-        if base_abs.is_dir() {
-          let mut dirs: Vec<String> = Vec::new();
-          let mut files: Vec<String> = Vec::new();
-          let read_dir = match std::fs::read_dir(&base_abs) {
-            Ok(rd) => rd,
-            Err(err) => return tool_error(format!("list_dir failed: {}", err)),
-          };
-          for entry in read_dir.flatten() {
-            let file_name = entry.file_name();
-            let name = file_name.to_string_lossy().to_string();
-            if is_ignored_component(name.as_str()) {
-              continue;
-            }
-            let file_type = match entry.file_type() {
-              Ok(ft) => ft,
-              Err(_) => continue,
-            };
-            if file_type.is_dir() {
-              dirs.push(format!("{}/", name));
-            } else if file_type.is_file() {
-              files.push(name);
-            }
-          }
-          dirs.sort();
-          files.sort();
-          let rel = rel_path_display(workspace_root, &base_abs);
-          out_lines.push(format!("dir: {} ({} dirs, {} files)", rel, dirs.len(), files.len()));
-          if !dirs.is_empty() || !files.is_empty() {
-            out_lines.push(String::new());
-            out_lines.extend(dirs);
-            out_lines.extend(files);
-          }
-        } else {
-          out_lines.push(format!(
-            "path: {} (not a directory)",
-            rel_path_display(workspace_root, &base_abs)
-          ));
-        }
-      }
-
-      if let Some(pat) = pat {
-        let pattern_abs = if std::path::Path::new(&pat).is_absolute() {
-          std::path::PathBuf::from(&pat)
-        } else {
-          base_abs.join(&pat)
-        };
-        let pattern = pattern_abs.to_string_lossy().replace('\\', "/");
-        let prefix = pattern
-          .char_indices()
-          .find(|(_idx, ch)| matches!(ch, '*' | '?' | '[' | '{'))
-          .map(|(idx, _)| pattern[..idx].to_string())
-          .unwrap_or_else(|| pattern.clone());
-        let prefix_path = if prefix.trim().is_empty() {
-          base_abs.to_string_lossy().to_string()
-        } else {
-          prefix
-        };
-        if !is_within_root(workspace_root, &prefix_path) {
-          return tool_error("pat resolves outside workspace scope".to_string());
-        }
-
-        let mut hits: Vec<(i64, String)> = Vec::new();
-        let mut total_matches: usize = 0;
-        const MAX_HITS: usize = 200;
-        match glob::glob(&pattern) {
-          Ok(paths) => {
-            for p in paths.flatten() {
-              if is_ignored_path(&p) {
-                continue;
-              }
-              let rel = rel_path_display(workspace_root, &p);
-              if std::path::Path::new(&rel).is_absolute() {
-                continue;
-              }
-              total_matches += 1;
-              let mtime = std::fs::metadata(&p)
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-              hits.push((mtime, rel));
-            }
-          }
-          Err(err) => return tool_error(format!("invalid glob: {}", err)),
-        }
-        hits.sort_by(|a, b| b.0.cmp(&a.0));
-        let truncated = hits.len() > MAX_HITS;
-        if hits.len() > MAX_HITS {
-          hits.truncate(MAX_HITS);
-        }
-        let mut glob_lines: Vec<String> = Vec::new();
-        glob_lines.push(format!(
-          "matches: {} (returned: {}{}) (ignored: .git,node_modules,dist,target,blobs)",
-          total_matches,
-          hits.len(),
-          if truncated { ", truncated" } else { "" }
-        ));
-        if !hits.is_empty() {
-          glob_lines.push(String::new());
-          glob_lines.extend(hits.into_iter().map(|(_mtime, rel)| rel));
-        }
-        let listing = tool_ok(glob_lines.join("\n"));
-        if !out_lines.is_empty() {
-          out_lines.push(String::new());
-        }
-        out_lines.push(listing.tool_result_content.trim().to_string());
-      }
-
-      if let Some(query) = query {
-        const MAX_HITS: usize = 50;
-        const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
-        let mut hits: Vec<String> = Vec::new();
-        let mut stack = vec![base_abs.clone()];
-        let mut scanned_files: u64 = 0;
-        let mut skipped_large: u64 = 0;
-        let mut skipped_binary: u64 = 0;
-
-        while let Some(dir) = stack.pop() {
-          if hits.len() >= MAX_HITS {
-            break;
-          }
-          if is_ignored_path(&dir) {
-            continue;
-          }
-          let read_dir = match std::fs::read_dir(&dir) {
-            Ok(rd) => rd,
-            Err(_) => continue,
-          };
-          for entry in read_dir.flatten() {
-            let path = entry.path();
-            if is_ignored_path(&path) {
-              continue;
-            }
-            let file_type = match entry.file_type() {
-              Ok(ft) => ft,
-              Err(_) => continue,
-            };
-            if file_type.is_dir() {
-              stack.push(path);
-              continue;
-            }
-            if !file_type.is_file() {
-              continue;
-            }
-            scanned_files += 1;
-
-            let meta = match std::fs::metadata(&path) {
-              Ok(m) => m,
-              Err(_) => continue,
-            };
-            if meta.len() > MAX_FILE_BYTES {
-              skipped_large += 1;
-              continue;
-            }
-            let bytes = match std::fs::read(&path) {
-              Ok(b) => b,
-              Err(_) => continue,
-            };
-            if bytes.iter().any(|b| *b == 0) {
-              skipped_binary += 1;
-              continue;
-            }
-            let text = String::from_utf8_lossy(&bytes);
-            for (idx, line) in text.lines().enumerate() {
-              if line.contains(&query) {
-                let rel = rel_path_display(workspace_root, &path);
-                hits.push(format!("{}:{}:{}", rel, idx + 1, line));
-                if hits.len() >= MAX_HITS {
-                  break;
-                }
-              }
-            }
-            if hits.len() >= MAX_HITS {
-              break;
-            }
-          }
-        }
-
-        if !out_lines.is_empty() {
-          out_lines.push(String::new());
-        }
-        out_lines.push(format!(
-          "query: \"{}\" hits: {}{} (scanned_files: {}, skipped_large: {}, skipped_binary: {})",
-          query,
-          hits.len(),
-          if hits.len() >= MAX_HITS { " (truncated)" } else { "" },
-          scanned_files,
-          skipped_large,
-          skipped_binary
-        ));
-        if !hits.is_empty() {
-          out_lines.push(String::new());
-          out_lines.extend(hits);
-        }
-      }
-
-      if out_lines.is_empty() {
-        out_lines.push("ok".to_string());
-      }
-      tool_ok(out_lines.join("\n"))
-    }
-    "invalid" => {
-      let tool = obj.get("tool").and_then(|v| v.as_str()).unwrap_or("").trim();
-      let error = obj.get("error").and_then(|v| v.as_str()).unwrap_or("").trim();
-      let input = obj.get("input").and_then(|v| v.as_str()).unwrap_or("").trim();
-      let mut msg = String::new();
-      if !tool.is_empty() {
-        msg.push_str(&format!("tool: {}\n", tool));
-      }
-      if !error.is_empty() {
-        msg.push_str(&format!("error: {}\n", error));
-      }
-      if !input.is_empty() {
-        msg.push_str(&format!("input: {}\n", input));
-      }
-      if msg.trim().is_empty() {
-        msg = "invalid tool call".to_string();
-      }
-      if !msg.ends_with('\n') {
-        msg.push('\n');
-      }
-      msg.push_str("available_tools: read, list_dir, glob, grep, task, sha256, write, edit, bash\n");
-      msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
-      tool_error(msg.trim().to_string())
-    }
-    "apply_patch" => {
-      let path = obj
-        .get("path")
-        .or_else(|| obj.get("file_path"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-      let patch_value = obj
-        .get("patch")
-        .or_else(|| obj.get("patchText"))
-        .or_else(|| obj.get("patch_text"))
-        .or_else(|| obj.get("unified_diff"))
-        .or_else(|| obj.get("unifiedDiff"))
-        .or_else(|| obj.get("diff"));
-      let patch_text = patch_value
-        .and_then(coerce_json_to_multiline_string)
-        .unwrap_or_default();
-      if patch_text.trim().is_empty() {
-        return tool_error(
-          "patch is required. Provide input.patch as a string (or array of lines), e.g.\n\
-{\"patch\":\"*** Begin Patch\\n*** Add File: foo.txt\\n+hello\\n*** End Patch\"}\n\
-If you just want to create/overwrite files, use the write tool instead."
-            .to_string(),
-        );
-      }
-      #[derive(Clone)]
-      enum ExpectedBeforeSha {
-        Create,
-        Hash(String),
-      }
-      let expected = match obj.get("expected_before_sha256") {
-        None => None,
-        Some(serde_json::Value::Null) => Some(ExpectedBeforeSha::Create),
-        Some(serde_json::Value::String(s)) => {
-          let trimmed = s.trim();
-          if trimmed.is_empty() {
-            None
-          } else {
-            Some(ExpectedBeforeSha::Hash(trimmed.to_string()))
-          }
-        }
-        Some(_) => return tool_error("expected_before_sha256 must be string or null".to_string()),
-      };
-
-      let looks_like_codex_patch = patch_text.contains("*** Begin Patch")
-        || patch_text.contains("*** Update File:")
-        || patch_text.contains("*** Add File:")
-        || patch_text.contains("*** Delete File:");
-      let looks_like_codex_chunks =
-        patch_text.lines().any(|l| l.trim_start().starts_with("@@")) && !patch_text.contains("@@ -");
-
-      let mut codex_hunks: Option<Vec<CodexPatchHunk>> = None;
-      if looks_like_codex_patch {
-        codex_hunks = parse_codex_patch_hunks(&patch_text).ok();
-      }
-      if codex_hunks.is_none() && looks_like_codex_chunks {
-        if path.trim().is_empty() {
-          return tool_error("path is required when patch has no file header".to_string());
-        }
-        let synthetic = format!(
-          "*** Begin Patch\n*** Update File: {}\n{}\n*** End Patch\n",
-          path.trim(),
-          patch_text.trim_end()
-        );
-        codex_hunks = Some(match parse_codex_patch_hunks(&synthetic) {
-          Ok(hunks) => hunks,
-          Err(err) => return tool_error(err),
-        });
-      }
-
-      if let Some(hunks) = codex_hunks {
-        let scoped_expected_target = if expected.is_some() {
-          if !path.trim().is_empty() {
-            Some(path.trim().to_string())
-          } else if hunks.len() == 1 {
-            Some(match &hunks[0] {
-              CodexPatchHunk::Add { path, .. } => path.clone(),
-              CodexPatchHunk::Delete { path } => path.clone(),
-              CodexPatchHunk::Update { path, .. } => path.clone(),
-            })
-          } else {
-            return tool_error("expected_before_sha256 is only supported for single-file patches".to_string());
-          }
-        } else {
-          None
-        };
-
-        let mut artifacts: Vec<serde_json::Value> = Vec::new();
-        let mut changed: Vec<String> = Vec::new();
-
-        for hunk in hunks {
-          match hunk {
-            CodexPatchHunk::Add { path, contents } => {
-              let abs = match resolve_scoped_path(workspace_root, &path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-              };
-              if abs.exists() {
-                return tool_error(format!("file exists: {}", path));
-              }
-              if let Some(target) = scoped_expected_target.as_deref() {
-                if target == path {
-                  if let Some(ExpectedBeforeSha::Hash(_)) = expected {
-                    return tool_error("expected_before_sha256 provided, but file does not exist".to_string());
-                  }
-                }
-              }
-              if let Err(err) = write_file_atomic(&abs, contents.as_bytes()) {
-                return tool_error(format!("apply_patch add failed: {}", err));
-              }
-              let after_bytes = std::fs::read(&abs).unwrap_or_else(|_| contents.as_bytes().to_vec());
-              let after_hash = hex_sha256(&after_bytes);
-              let rel = rel_path_display(workspace_root, &abs);
-              changed.push(rel.clone());
-              artifacts.push(serde_json::json!({
-                "type": "file_write",
-                "path": rel,
-                "before_sha256": null,
-                "after_sha256": after_hash,
-                "byte_len": after_bytes.len()
-              }));
-            }
-            CodexPatchHunk::Delete { path } => {
-              let abs = match resolve_scoped_path(workspace_root, &path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-              };
-              let meta = match std::fs::metadata(&abs) {
-                Ok(m) => m,
-                Err(_) => return tool_error(format!("file does not exist: {}", path)),
-              };
-              if meta.is_dir() {
-                return tool_error(format!("path is a directory: {}", path));
-              }
-              let before_bytes = std::fs::read(&abs).unwrap_or_default();
-              let before_hash = hex_sha256(&before_bytes);
-              if let Some(target) = scoped_expected_target.as_deref() {
-                if target == path {
-                  match expected.clone() {
-                    Some(ExpectedBeforeSha::Create) => {
-                      return tool_error("expected_before_sha256 was null (create), but file exists".to_string());
-                    }
-                    Some(ExpectedBeforeSha::Hash(expected_hash)) => {
-                      if before_hash != expected_hash {
-                        return tool_error(format!(
-                          "expected_before_sha256 mismatch (expected {}, got {})",
-                          expected_hash, before_hash
-                        ));
-                      }
-                    }
-                    None => {}
-                  }
-                }
-              }
-              if let Err(err) = std::fs::remove_file(&abs) {
-                return tool_error(format!("delete failed: {}", err));
-              }
-              let rel = rel_path_display(workspace_root, &abs);
-              changed.push(rel.clone());
-              artifacts.push(serde_json::json!({
-                "type": "file_delete",
-                "path": rel,
-                "before_sha256": before_hash,
-                "after_sha256": null,
-                "byte_len": before_bytes.len()
-              }));
-            }
-            CodexPatchHunk::Update { path, move_to, chunks } => {
-              let abs = match resolve_scoped_path(workspace_root, &path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-              };
-              let meta = match std::fs::metadata(&abs) {
-                Ok(m) => m,
-                Err(_) => return tool_error(format!("file does not exist: {}", path)),
-              };
-              if meta.is_dir() {
-                return tool_error(format!("path is a directory: {}", path));
-              }
-
-              let before_bytes = match std::fs::read(&abs) {
-                Ok(b) => b,
-                Err(err) => return tool_error(format!("read failed: {}", err)),
-              };
-              let before_hash = hex_sha256(&before_bytes);
-              if let Some(target) = scoped_expected_target.as_deref() {
-                if target == path {
-                  match expected.clone() {
-                    Some(ExpectedBeforeSha::Create) => {
-                      return tool_error("expected_before_sha256 was null (create), but file exists".to_string());
-                    }
-                    Some(ExpectedBeforeSha::Hash(expected_hash)) => {
-                      if before_hash != expected_hash {
-                        return tool_error(format!(
-                          "expected_before_sha256 mismatch (expected {}, got {})",
-                          expected_hash, before_hash
-                        ));
-                      }
-                    }
-                    None => {}
-                  }
-                }
-              }
-
-              let before_text = String::from_utf8_lossy(&before_bytes).to_string();
-              let had_trailing_newline = before_text.ends_with('\n');
-              let mut original_lines: Vec<String> = before_text
-                .split('\n')
-                .map(|s| s.trim_end_matches('\r').to_string())
-                .collect();
-              if had_trailing_newline && original_lines.last().map(|s| s.is_empty()).unwrap_or(false) {
-                original_lines.pop();
-              }
-
-              let new_lines = match apply_codex_chunks_to_lines(&original_lines, &chunks) {
-                Ok(lines) => lines,
-                Err(err) => return tool_error(format!("apply_patch failed: {}", err)),
-              };
-              let mut new_text = new_lines.join("\n");
-              if had_trailing_newline {
-                new_text.push('\n');
-              }
-
-              let dest_abs = if let Some(dest) = move_to.as_deref() {
-                match resolve_scoped_path(workspace_root, dest) {
-                  Ok(v) => v,
-                  Err(e) => return tool_error(e),
-                }
-              } else {
-                abs.clone()
-              };
-
-              if let Err(err) = write_file_atomic(&dest_abs, new_text.as_bytes()) {
-                return tool_error(format!("apply_patch write failed: {}", err));
-              }
-              if dest_abs != abs {
-                let _ = std::fs::remove_file(&abs);
-              }
-
-              let after_bytes = std::fs::read(&dest_abs).unwrap_or_else(|_| new_text.as_bytes().to_vec());
-              let after_hash = hex_sha256(&after_bytes);
-              let rel = rel_path_display(workspace_root, &dest_abs);
-              changed.push(rel.clone());
-              artifacts.push(serde_json::json!({
-                "type": "file_patch",
-                "path": rel,
-                "before_sha256": before_hash,
-                "after_sha256": after_hash,
-                "byte_len": after_bytes.len()
-              }));
-            }
-          }
-        }
-
-        changed.sort();
-        changed.dedup();
-        let summary = if changed.is_empty() {
-          "ok".to_string()
-        } else {
-          format!("ok\npatched {} file(s):\n{}", changed.len(), changed.join("\n"))
-        };
-        let mut result = tool_ok(summary);
-        result.artifacts = artifacts;
-        return result;
-      }
-
-      // Fallback: unified diff with numeric @@ ranges (single file).
-      if path.trim().is_empty() {
-        return tool_error("path is required for unified diffs".to_string());
-      }
-      let unified_diff = patch_text;
-
-      let abs = match resolve_scoped_path(workspace_root, &path) {
-        Ok(v) => v,
-        Err(e) => return tool_error(e),
-      };
-
-      let exists = abs.exists();
-      let before_bytes = if exists { std::fs::read(&abs).ok() } else { None };
-      if exists {
-        let before_bytes = before_bytes.clone().unwrap_or_default();
-        let before_hash = hex_sha256(&before_bytes);
-        match expected {
-          Some(ExpectedBeforeSha::Create) => {
-            return tool_error(
-              "expected_before_sha256 was null (create), but file exists; refuse overwrite".to_string(),
-            );
-          }
-          Some(ExpectedBeforeSha::Hash(expected_hash)) => {
-            if before_hash != expected_hash {
-              return tool_error(format!(
-                "expected_before_sha256 mismatch (expected {}, got {})",
-                expected_hash, before_hash
-              ));
-            }
-          }
-          None => {}
-        }
-      } else if let Some(ExpectedBeforeSha::Hash(_)) = expected {
-        return tool_error("expected_before_sha256 provided, but file does not exist".to_string());
-      }
-
-      let before_text = before_bytes
-        .as_ref()
-        .map(|b| String::from_utf8_lossy(b).to_string())
-        .unwrap_or_default();
-      let had_trailing_newline = before_text.ends_with('\n');
-      let mut original_lines: Vec<String> = before_text
-        .split('\n')
-        .map(|s| s.trim_end_matches('\r').to_string())
-        .collect();
-      if had_trailing_newline && original_lines.last().map(|s| s.is_empty()).unwrap_or(false) {
-        original_lines.pop();
-      }
-
-      let hunks = match parse_unified_diff_hunks(&unified_diff) {
-        Ok(hunks) => hunks,
-        Err(err) => return tool_error(err),
-      };
-      let out_lines = match apply_unified_diff_to_lines(&original_lines, &hunks) {
-        Ok(lines) => lines,
-        Err(err) => return tool_error(format!("patch failed: {}", err)),
-      };
-      let mut out_text = out_lines.join("\n");
-      if had_trailing_newline || (!out_text.is_empty() && !out_text.ends_with('\n')) {
-        out_text.push('\n');
-      }
-
-      if let Err(err) = write_file_atomic(&abs, out_text.as_bytes()) {
-        return tool_error(format!("write failed: {}", err));
-      }
-
-      let after_bytes = std::fs::read(&abs).unwrap_or_else(|_| out_text.as_bytes().to_vec());
-      let after_hash = hex_sha256(&after_bytes);
-      let before_hash = before_bytes.as_ref().map(|b| hex_sha256(b));
-
-      let mut result = tool_ok("ok".to_string());
-      result.artifacts.push(serde_json::json!({
-        "type": "file_patch",
-        "path": rel_path_display(workspace_root, &abs),
-        "before_sha256": before_hash,
-        "after_sha256": after_hash,
-        "byte_len": after_bytes.len()
       }));
       result
     }
@@ -3708,6 +2798,7 @@ async fn send_turn_openrouter_messages_agent(
   selected_model_id: &str,
   input: &str,
   atom_system_prompt: &str,
+  history_messages_json: Option<String>,
   mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<SendTurnResult, String> {
   let run_id = uuid::Uuid::new_v4().to_string();
@@ -3895,10 +2986,7 @@ async fn send_turn_openrouter_messages_agent(
 	    // Base conversation: system in messages, then last ~20 user/assistant text messages.
 	    let mut messages: Vec<serde_json::Value> = Vec::new();
 	    messages.push(serde_json::json!({ "role": "system", "content": system_prompt }));
-	    if let Ok(history) = list_messages(&conn, thread_id) {
-	      for msg in history.into_iter().rev().take(20).rev() {
-	        let value: serde_json::Value =
-	          serde_json::from_str(&msg.content_json).unwrap_or(serde_json::Value::Null);
+	    for (role, value) in load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref()) {
 	        let text = value
 	          .get("text")
 	          .and_then(|v| v.as_str())
@@ -3913,9 +3001,8 @@ async fn send_turn_openrouter_messages_agent(
 	        if redacted.is_empty() {
 	          continue;
 	        }
-	        messages.push(serde_json::json!({ "role": msg.role, "content": redacted }));
-	      }
-	    }
+	        messages.push(serde_json::json!({ "role": role, "content": redacted }));
+      }
 	    if messages.last().and_then(|m| m.get("role")).and_then(|v| v.as_str()) != Some("user")
 	      || messages.last().and_then(|m| m.get("content")).and_then(|v| v.as_str())
 	        != Some(input_to_send.as_str())
@@ -4537,11 +3624,9 @@ async fn send_turn_openrouter_messages_agent(
 	        let mut parsed_args = serde_json::from_str::<serde_json::Value>(&tc.arguments).unwrap_or(serde_json::Value::Null);
 	        if !parsed_args.is_object() {
 	          parsed_args = serde_json::json!({
-	            "tool": raw_tool_name,
-	            "error": "invalid tool arguments (expected JSON object)",
-	            "input": tc.arguments
+	            "__arx_tool_args_error": "invalid tool arguments (expected JSON object)",
+	            "__arx_tool_args_input": tc.arguments
 	          });
-	          raw_tool_name = "invalid".to_string();
 	        }
 	        if tool_use_id.trim().is_empty() {
 	          tool_use_id = uuid::Uuid::new_v4().to_string();
@@ -4667,10 +3752,7 @@ async fn send_turn_openrouter_messages_agent(
 
 			  // Base conversation: system in request, then last ~20 user/assistant text messages.
 			  let mut messages: Vec<serde_json::Value> = Vec::new();
-		  if let Ok(history) = list_messages(&conn, thread_id) {
-		    for msg in history.into_iter().rev().take(20).rev() {
-	      let value: serde_json::Value =
-	        serde_json::from_str(&msg.content_json).unwrap_or(serde_json::Value::Null);
+		  for (role, value) in load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref()) {
       let text = value
         .get("text")
         .and_then(|v| v.as_str())
@@ -4685,9 +3767,8 @@ async fn send_turn_openrouter_messages_agent(
       if redacted.is_empty() {
         continue;
       }
-      messages.push(serde_json::json!({ "role": msg.role, "content": redacted }));
+      messages.push(serde_json::json!({ "role": role, "content": redacted }));
     }
-  }
   if messages.last().and_then(|m| m.get("role")).and_then(|v| v.as_str()) != Some("user")
     || messages.last().and_then(|m| m.get("content")).and_then(|v| v.as_str()) != Some(input_to_send.as_str())
   {
@@ -5469,6 +4550,8 @@ async fn send_turn_cmd(
   thread_id: String,
   cwd: String,
   input: String,
+  history_messages_json: Option<String>,
+  personal_memory_items_json: Option<String>,
 ) -> Result<SendTurnResult, String> {
   let _thread_lock = lock_thread_run(&thread_id).await;
   let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
@@ -5493,17 +4576,25 @@ async fn send_turn_cmd(
     .map(|mode| if mode == "explore" { "explore" } else { "build" })
     .unwrap_or("build");
 
-	  // Shared memory injection (both harness + OpenRouter chat).
-	  let built = context_builder::build_turn_handoff_prefix(&conn, workspace)
-	    .map_err(|e| e.to_string())?;
-	  let atom_system_prompt =
-	    build_atom_system_prompt(workspace, &built.used_personal_memory, thread.community_id.as_deref());
+  // Shared memory injection (both harness + OpenRouter chat). Prefer cloud-canonical items if provided.
+  let used_personal_memory = if let Some(json) = personal_memory_items_json.as_deref() {
+    context_builder::build_used_personal_memory_from_cloud_json(workspace, json)
+      .or_else(|_| context_builder::build_turn_handoff_prefix(&conn, workspace).map(|b| b.used_personal_memory))
+      .map_err(|e| e.to_string())?
+  } else {
+    context_builder::build_turn_handoff_prefix(&conn, workspace)
+      .map(|b| b.used_personal_memory)
+      .map_err(|e| e.to_string())?
+  };
+
+  let atom_system_prompt =
+    build_atom_system_prompt(workspace, &used_personal_memory, thread.community_id.as_deref());
 	  let retrieval_payload = serde_json::json!({
 	    "v": 1,
 	    "workspace_path": workspace,
 	    "personal_memory": {
       "budget_chars": 2000,
-      "items": built.used_personal_memory.iter().map(|it| serde_json::json!({
+      "items": used_personal_memory.iter().map(|it| serde_json::json!({
         "id": it.id,
         "content": it.content,
         "scope": it.scope,
@@ -5542,6 +4633,7 @@ async fn send_turn_cmd(
 	      selected_model_id,
 	      &input,
 	      &atom_system_prompt,
+	      history_messages_json.clone(),
 	      cancel_rx.clone(),
 	    )
 	    .await;
@@ -5763,9 +4855,7 @@ async fn send_turn_cmd(
     role: "system".to_string(),
     content: atom_system_prompt,
   });
-  if let Ok(history) = list_messages(&conn, &thread_id) {
-    for msg in history.into_iter().rev().take(20).rev() {
-      let value: serde_json::Value = serde_json::from_str(&msg.content_json).unwrap_or(serde_json::Value::Null);
+  for (role, value) in load_recent_history_messages(&conn, &thread_id, history_messages_json.as_deref()) {
       let text = value.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
       if text.is_empty() {
         continue;
@@ -5776,11 +4866,10 @@ async fn send_turn_cmd(
         continue;
       }
       messages.push(OpenRouterMessage {
-        role: msg.role,
+        role,
         content: redacted,
       });
     }
-  }
   // Ensure current input is present as the last user message.
   if messages.last().map(|m| m.role.as_str()) != Some("user")
     || messages.last().map(|m| m.content.as_str()) != Some(input_to_send.as_str())
@@ -6263,8 +5352,19 @@ async fn engine_send_turn_cmd(
   thread_id: String,
   cwd: String,
   input: String,
+  history_messages_json: Option<String>,
+  personal_memory_items_json: Option<String>,
 ) -> Result<SendTurnResult, String> {
-  send_turn_cmd(window, state, thread_id, cwd, input).await
+  send_turn_cmd(
+    window,
+    state,
+    thread_id,
+    cwd,
+    input,
+    history_messages_json,
+    personal_memory_items_json,
+  )
+  .await
 }
 
 fn normalize_git_remote(value: &str) -> String {
@@ -6448,6 +5548,17 @@ fn gc_blobs_cmd(state: tauri::State<DbState>) -> Result<db::BlobGcReport, String
 fn rebuild_projections_cmd(state: tauri::State<DbState>) -> Result<(), String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
   db::rebuild_projections(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reset_local_db_cmd(state: tauri::State<DbState>) -> Result<(), String> {
+  // Best-effort local reset: delete the SQLite file and blobs, then recreate schema.
+  // Cloud is canonical for cognition; this is a cache/evidence store for the desktop operator.
+  let _ = std::fs::remove_dir_all(blob_store::blob_root(&state.db_path));
+  let _ = std::fs::remove_file(&state.db_path);
+  db::init_db_at(&state.db_path, &state.key)
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -7638,6 +6749,7 @@ fn main() {
       list_turns_cmd,
       gc_blobs_cmd,
       rebuild_projections_cmd,
+      reset_local_db_cmd,
       list_tools_cmd,
       get_agent_mode_cmd,
       set_agent_mode_cmd,

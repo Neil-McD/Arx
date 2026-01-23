@@ -15,8 +15,10 @@ Default mode is **BUILD**. Only switch to **EXPLORE** when explicitly asked. In 
 ### Canonical State
 - **Cloud is canonical** for: `users/profiles`, `communities`, `entitlements`, `plans`, `payments`, `threads/messages`, and **personal + community memory**.
 - **Desktop local storage is not canonical cognition.** It stores workspace bindings, local approvals state, and optional caches.
-  - Desktop MAY cache `threads/messages/events` for offline UX and for local tool evidence.
-  - When signed in, desktop should behave as **cloud-primary read** with **local fallback** + **background sync**.
+  - Desktop stores **runtime evidence + blobs** for the operator agent and mirrors user/assistant messages back to the cloud thread.
+  - Threads/messages/memory are **cloud-canonical when signed in**; offline/local-only chat is not an MVP requirement.
+- Users can export their cognition as **CSV** (threads/messages/personal memory) from Settings (web or desktop).
+- Users can reset/clear the desktop’s local cache (SQLite + blobs) without affecting cloud data.
 
 ### Access Control
 - **Entitlements are canonical** access control. The UI never gates access based on provider-specific payment state.
@@ -110,11 +112,15 @@ Desktop local storage exists to enable the “operator agent” safely.
 Must store:
 - `workspace_bindings` (device-local): `thread_id`, `workspace_path`, `workspace_scope_id`, timestamps
 - `workspace_policies` (device-local approvals and scope rules) OR session-scoped policy in memory (MVP)
+- run/tool **evidence + blobs** (stdout/stderr/diffs) for crash recovery and UX
 
 Should not be canonical for:
 - `threads/messages`
 - `personal memory`
 - community membership state
+
+Note:
+- Removing SQLite entirely is a larger refactor because the desktop operator runtime currently uses it for safe local execution state and evidence. If we later remove it, replace with a minimal file-backed store for bindings/policies.
 
 ---
 
@@ -164,7 +170,7 @@ Should not be canonical for:
 
 ### 6.1 Desktop tool policy (approvals)
 Allowed by default (within workspace scope):
-- `read`, `list_dir`, `glob`, `grep`, `task`, `sha256`, `skill_load`
+- `read`, `list_dir`, `glob`, `grep`, `sha256`
 
 Approval required:
 - `write`, `edit`, `bash`
