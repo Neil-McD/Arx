@@ -93,13 +93,6 @@
   border-radius: 20px;
 }
 
-.ask-bar:focus-within {
-  border-color: var(--border-strong);
-  box-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.22),
-    0 0 0 1px var(--accent-gold-subtle, var(--border-strong));
-}
-
 .ask-input {
   flex: 1;
   min-width: 0;
@@ -339,13 +332,6 @@
   background: var(--bg-card-solid, var(--bg-card));
   border: 1px solid var(--border-default);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
-}
-
-.community-chat .chat-input-bar:focus-within {
-  border-color: var(--border-strong);
-  box-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.22),
-    0 0 0 1px var(--accent-gold-subtle, var(--border-strong));
 }
 
 .community-chat .chat-input {
