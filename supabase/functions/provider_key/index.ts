@@ -10,7 +10,7 @@ type ProviderKeyInput =
   | { action: "get"; provider: string; reveal?: boolean }
   | { action: "clear"; provider: string };
 
-type ProviderKeyRow = { api_key: string; updated_at: string };
+type ProviderKeyRpcRow = { has_key: boolean; updated_at: string | null; api_key: string | null };
 
 function base64UrlToBytes(input: string): Uint8Array {
   const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -52,46 +52,31 @@ function normalizeProvider(value: string): "openrouter" {
 }
 
 async function upsertProviderKey(params: { userId: string; provider: string; apiKey: string }): Promise<void> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/user_provider_keys?on_conflict=user_id,provider`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      },
-      body: JSON.stringify({
-        user_id: params.userId,
-        provider: params.provider,
-        api_key: params.apiKey,
-      }),
-    },
-  );
+  const res = await supabaseAdminFetch("/rest/v1/rpc/upsert_user_provider_key_secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: params.userId, p_provider: params.provider, p_api_key: params.apiKey }),
+  });
   if (!res.ok) throw new Error(await res.text());
 }
 
-async function loadProviderKey(params: {
-  userId: string;
-  provider: string;
-}): Promise<ProviderKeyRow | null> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/user_provider_keys?select=api_key,updated_at&user_id=eq.${encodeURIComponent(
-      params.userId,
-    )}&provider=eq.${encodeURIComponent(params.provider)}&limit=1`,
-    { method: "GET" },
-  );
+async function readProviderKey(params: { userId: string; provider: string; reveal: boolean }): Promise<ProviderKeyRpcRow> {
+  const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: params.userId, p_provider: params.provider, p_reveal: params.reveal }),
+  });
   if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as ProviderKeyRow[];
-  return rows[0] ?? null;
+  const rows = (await res.json()) as ProviderKeyRpcRow[];
+  return rows[0] ?? { has_key: false, updated_at: null, api_key: null };
 }
 
 async function clearProviderKey(params: { userId: string; provider: string }): Promise<void> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/user_provider_keys?user_id=eq.${encodeURIComponent(params.userId)}&provider=eq.${encodeURIComponent(
-      params.provider,
-    )}`,
-    { method: "DELETE", headers: { Prefer: "return=minimal" } },
-  );
+  const res = await supabaseAdminFetch("/rest/v1/rpc/clear_user_provider_key_secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: params.userId, p_provider: params.provider }),
+  });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -121,15 +106,16 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "get") {
-      const row = await loadProviderKey({ userId, provider });
       const reveal = Boolean((input as { reveal?: unknown }).reveal);
+      const row = await readProviderKey({ userId, provider, reveal });
+      const key = typeof row.api_key === "string" ? row.api_key : null;
       return jsonResponse(
         {
           ok: true,
           provider,
-          has_key: Boolean(row?.api_key?.trim()),
-          updated_at: row?.updated_at ?? null,
-          ...(reveal ? { key: row?.api_key ?? null } : null),
+          has_key: Boolean(row.has_key),
+          updated_at: row.updated_at ?? null,
+          ...(reveal ? { key } : null),
         },
         { status: 200, headers },
       );
@@ -141,4 +127,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
-

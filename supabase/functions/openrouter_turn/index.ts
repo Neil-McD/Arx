@@ -8,6 +8,7 @@ type OpenRouterTurnInput = {
   thread_id: string;
   max_tokens?: number;
   stream?: boolean;
+  mode?: "respond" | "regenerate";
 };
 
 function sanitizeUuid(value: string): string {
@@ -99,9 +100,59 @@ function extractTextFromContentJson(contentJson: unknown): string {
   }
   if (typeof contentJson === "object") {
     const asAny = contentJson as any;
-    if (typeof asAny.text === "string") return asAny.text;
-    if (typeof asAny.body === "string") return asAny.body;
-    if (typeof asAny.content === "string") return asAny.content;
+    const baseText =
+      typeof asAny.text === "string"
+        ? asAny.text
+        : typeof asAny.body === "string"
+          ? asAny.body
+          : typeof asAny.content === "string"
+            ? asAny.content
+            : "";
+
+    const attachments = Array.isArray(asAny.attachments) ? (asAny.attachments as any[]) : [];
+    if (attachments.length === 0) return baseText;
+
+    const maxAttachments = 6;
+    const maxPerAttachmentChars = 8000;
+    const maxTotalAttachmentChars = 20000;
+    let budget = maxTotalAttachmentChars;
+
+    const blocks: string[] = [];
+    for (const item of attachments) {
+      if (blocks.length >= maxAttachments) break;
+      if (!item || typeof item !== "object") continue;
+      const name = String((item as any).name ?? "attachment").trim() || "attachment";
+      const text = typeof (item as any).text === "string" ? String((item as any).text) : "";
+      const truncated = (item as any).truncated === true;
+      const dataUrl = typeof (item as any).data_url === "string" ? String((item as any).data_url) : "";
+      const type = String((item as any).type ?? "").trim();
+
+      if (text.trim()) {
+        const snippetRaw = text.length > maxPerAttachmentChars ? text.slice(0, maxPerAttachmentChars) : text;
+        const snippet = snippetRaw + (text.length > maxPerAttachmentChars || truncated ? "\n…[truncated]" : "");
+        const block = `[Attachment: ${name}]\n\`\`\`\n${snippet}\n\`\`\``;
+        if (block.length > budget) break;
+        blocks.push(block);
+        budget -= block.length;
+        continue;
+      }
+
+      if ((type === "image" || dataUrl.startsWith("data:image/")) && name) {
+        const block = `[Image attachment: ${name}]`;
+        if (block.length > budget) break;
+        blocks.push(block);
+        budget -= block.length;
+        continue;
+      }
+
+      const block = `[Attachment: ${name}]`;
+      if (block.length > budget) break;
+      blocks.push(block);
+      budget -= block.length;
+    }
+
+    if (blocks.length === 0) return baseText;
+    return baseText ? `${baseText}\n\n${blocks.join("\n\n")}` : blocks.join("\n\n");
   }
   return "";
 }
@@ -327,14 +378,93 @@ async function insertAssistantMessage(params: {
   throw new Error(body || "Failed to insert assistant message");
 }
 
-async function loadUserOpenRouterKey(userId: string): Promise<string> {
-  // Prefer per-user BYO keys stored in cloud.
+async function loadAssistantReplyId(threadId: string, replyToId: string): Promise<string | null> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/user_provider_keys?select=api_key&user_id=eq.${encodeURIComponent(userId)}&provider=eq.openrouter&limit=1`,
+    `/rest/v1/messages?select=id&thread_id=eq.${encodeURIComponent(threadId)}&reply_to_id=eq.${encodeURIComponent(
+      replyToId,
+    )}&role=eq.assistant&limit=1`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as Array<{ api_key: string }>;
+  const rows = (await res.json()) as Array<{ id: string }>;
+  const id = String(rows[0]?.id ?? "").trim();
+  return id ? id : null;
+}
+
+async function updateAssistantMessage(params: {
+  id: string;
+  contentText: string;
+  modelId: string;
+  runId: string;
+}): Promise<void> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/messages?id=eq.${encodeURIComponent(params.id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        content_json: { text: params.contentText },
+        engine_id: "openrouter_web",
+        model_id: params.modelId,
+        run_id: params.runId,
+        edited_at: new Date().toISOString(),
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function writeAssistantReply(params: {
+  threadId: string;
+  replyToId: string;
+  contentText: string;
+  modelId: string;
+  openrouterModelId: string;
+  runId: string;
+  allowUpdate: boolean;
+}): Promise<{ status: "inserted" | "duplicate" | "updated" }> {
+  if (params.allowUpdate) {
+    const existingId = await loadAssistantReplyId(params.threadId, params.replyToId);
+    if (existingId) {
+      await updateAssistantMessage({
+        id: existingId,
+        contentText: params.contentText,
+        modelId: params.modelId,
+        runId: params.runId,
+      });
+      return { status: "updated" };
+    }
+  }
+
+  const { inserted } = await insertAssistantMessage(params);
+  if (inserted) return { status: "inserted" };
+  if (params.allowUpdate) {
+    const existingId = await loadAssistantReplyId(params.threadId, params.replyToId);
+    if (existingId) {
+      await updateAssistantMessage({
+        id: existingId,
+        contentText: params.contentText,
+        modelId: params.modelId,
+        runId: params.runId,
+      });
+      return { status: "updated" };
+    }
+  }
+  return { status: "duplicate" };
+}
+
+async function loadUserOpenRouterKey(userId: string): Promise<string> {
+  // Prefer per-user BYO keys stored in cloud.
+  const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: userId, p_provider: "openrouter", p_reveal: true }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as Array<{ api_key: string | null }>;
   const rowKey = String(rows[0]?.api_key ?? "").trim();
   if (rowKey) return rowKey;
 
