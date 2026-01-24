@@ -24,7 +24,7 @@ export function withCors(
     ...headers,
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,authorization",
+    // Supabase clients commonly send `apikey` + `x-client-info` in addition to `authorization`.
+    "Access-Control-Allow-Headers": "content-type,authorization,apikey,x-client-info",
   };
 }
-

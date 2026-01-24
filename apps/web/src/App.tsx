@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import hljs from "highlight.js";
+import "highlight.js/styles/github-dark.css";
 import {
   clearPersistedSupabaseSession,
   fetchSupabaseUser,
@@ -57,6 +59,7 @@ type CommunityChatMessage = {
   body: string;
   reply_to_id?: string | null;
   created_at: string;
+  seq: number;
 };
 
 type MessageReaction = {
@@ -85,6 +88,29 @@ type CommunityMember = {
   user_id: string;
   role: string;
   created_at: string;
+};
+
+type CommunityAccess = {
+  community_id: string;
+  user_id: string;
+  is_owner: boolean;
+  is_entitled: boolean;
+  entitlement_role: string | null;
+  entitlement_tier_id: string | null;
+  entitlement_ends_at: string | null;
+  effective_role: string | null;
+  can_view: boolean;
+  can_post_message: boolean;
+  can_create_resource: boolean;
+  can_manage_resources: boolean;
+  can_invite: boolean;
+  can_manage_members: boolean;
+};
+
+type UserProfile = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
 };
 
 type CommunityInviteRecord = {
@@ -142,7 +168,6 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "grok-4.1", label: "Grok 4.1", enabled: true }
 ];
 
-const OPENROUTER_KEY_STORAGE_KEY = "arx_provider_key_openrouter";
 const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 
@@ -249,6 +274,19 @@ function communityInitials(name: string): string {
   return combined || trimmed.slice(0, 2).toUpperCase();
 }
 
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+
+function isValidSlug(value: string): boolean {
+  if (value.length < 3 || value.length > 32) return false;
+  return /^(?!-)[a-z0-9-]+(?<!-)$/.test(value);
+}
+
 function toEpochSeconds(input: string): number {
   const ms = Date.parse(input);
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : Math.floor(Date.now() / 1000);
@@ -301,6 +339,16 @@ function parseMessageText(content: unknown): string {
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
+  const highlighted = useMemo(() => {
+    if (language && hljs.getLanguage(language)) {
+      try {
+        return hljs.highlight(code, { language }).value;
+      } catch {
+        return hljs.highlightAuto(code).value;
+      }
+    }
+    return hljs.highlightAuto(code).value;
+  }, [code, language]);
 
   const handleCopy = async () => {
     await copyTextToClipboard(code);
@@ -317,14 +365,17 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
         </button>
       </div>
       <pre className="md-code-block">
-        <code className={language ? `language-${language}` : undefined}>{code}</code>
+        <code
+          className={language ? `language-${language} hljs` : "hljs"}
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
       </pre>
     </div>
   );
 }
 
 function renderMarkdown(text: string): ReactNode {
-  const lines = text.split("\n");
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const elements: ReactNode[] = [];
   let i = 0;
   let key = 0;
@@ -352,7 +403,7 @@ function renderMarkdown(text: string): ReactNode {
       continue;
     }
 
-    const headerMatch = trimmedLine.match(/^(#{1,3})\s+(.+)$/);
+    const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
     if (headerMatch) {
       const level = headerMatch[1]?.length ?? 1;
       const content = headerMatch[2] ?? "";
@@ -366,13 +417,40 @@ function renderMarkdown(text: string): ReactNode {
       continue;
     }
 
-    if (/^\d+\.\s+/.test(trimmedLine)) {
-      const listItems: ReactNode[] = [];
+    if (trimmedLine.startsWith(">")) {
+      const quoteLines: string[] = [];
       while (i < lines.length) {
-        const currentLine = (lines[i] ?? "").trim();
+        const raw = lines[i] ?? "";
+        const trimmed = raw.trim();
+        if (trimmed === "") {
+          quoteLines.push("");
+          i++;
+          continue;
+        }
+        if (!trimmed.startsWith(">")) break;
+        let inner = trimmed.slice(1);
+        if (inner.startsWith(" ")) inner = inner.slice(1);
+        quoteLines.push(inner);
+        i++;
+      }
+      elements.push(
+        <blockquote key={key++} className="md-blockquote">
+          {renderMarkdown(quoteLines.join("\n"))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+\.\s+/.test(trimmedLine)) {
+      const listItems: Array<{ kind: "text"; lines: string[] } | { kind: "code"; code: string; language?: string }> =
+        [];
+      while (i < lines.length) {
+        const rawLine = lines[i] ?? "";
+        const currentLine = rawLine.trim();
         if (/^\d+\.\s+/.test(currentLine)) {
           const content = currentLine.replace(/^\d+\.\s+/, "");
-          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          listItems.push({ kind: "text", lines: [content] });
           i++;
         } else if (currentLine.startsWith("```")) {
           const lang = currentLine.slice(3).trim();
@@ -382,33 +460,48 @@ function renderMarkdown(text: string): ReactNode {
             codeLines.push(lines[i] ?? "");
             i++;
           }
-          listItems.push(
-            <li key={key++} className="md-list-code">
-              <CodeBlock code={codeLines.join("\n")} language={lang || undefined} />
-            </li>
-          );
+          listItems.push({ kind: "code", code: codeLines.join("\n"), language: lang || undefined });
           i++;
         } else if (currentLine === "") {
           i++;
+        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
+          const last = listItems[listItems.length - 1];
+          if (last && last.kind === "text") {
+            last.lines.push(currentLine);
+            i++;
+          } else {
+            break;
+          }
         } else {
           break;
         }
       }
       elements.push(
         <ol key={key++} className="md-list">
-          {listItems}
+          {listItems.map((item) =>
+            item.kind === "code" ? (
+              <li key={key++} className="md-list-code">
+                <CodeBlock code={item.code} language={item.language} />
+              </li>
+            ) : (
+              <li key={key++}>{renderInline(item.lines.join("\n"))}</li>
+            )
+          )}
         </ol>
       );
       continue;
     }
 
+    // Bullet list
     if (/^[-*]\s+/.test(trimmedLine)) {
-      const listItems: ReactNode[] = [];
+      const listItems: Array<{ kind: "text"; lines: string[] } | { kind: "code"; code: string; language?: string }> =
+        [];
       while (i < lines.length) {
-        const currentLine = (lines[i] ?? "").trim();
+        const rawLine = lines[i] ?? "";
+        const currentLine = rawLine.trim();
         if (/^[-*]\s+/.test(currentLine)) {
           const content = currentLine.replace(/^[-*]\s+/, "");
-          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          listItems.push({ kind: "text", lines: [content] });
           i++;
         } else if (currentLine.startsWith("```")) {
           const lang = currentLine.slice(3).trim();
@@ -418,21 +511,33 @@ function renderMarkdown(text: string): ReactNode {
             codeLines.push(lines[i] ?? "");
             i++;
           }
-          listItems.push(
-            <li key={key++} className="md-list-code">
-              <CodeBlock code={codeLines.join("\n")} language={lang || undefined} />
-            </li>
-          );
+          listItems.push({ kind: "code", code: codeLines.join("\n"), language: lang || undefined });
           i++;
         } else if (currentLine === "") {
           i++;
+        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
+          const last = listItems[listItems.length - 1];
+          if (last && last.kind === "text") {
+            last.lines.push(currentLine);
+            i++;
+          } else {
+            break;
+          }
         } else {
           break;
         }
       }
       elements.push(
         <ul key={key++} className="md-list">
-          {listItems}
+          {listItems.map((item) =>
+            item.kind === "code" ? (
+              <li key={key++} className="md-list-code">
+                <CodeBlock code={item.code} language={item.language} />
+              </li>
+            ) : (
+              <li key={key++}>{renderInline(item.lines.join("\n"))}</li>
+            )
+          )}
         </ul>
       );
       continue;
@@ -443,12 +548,29 @@ function renderMarkdown(text: string): ReactNode {
       continue;
     }
 
+    const paragraphLines: string[] = [];
+    while (i < lines.length) {
+      const raw = lines[i] ?? "";
+      const trimmed = raw.trim();
+      if (trimmed === "") break;
+      if (
+        trimmed.startsWith("```") ||
+        /^(-{3,}|_{3,}|\*{3,})$/.test(trimmed) ||
+        /^(#{1,6})\s+(.+)$/.test(trimmed) ||
+        trimmed.startsWith(">") ||
+        /^\d+\.\s+/.test(trimmed) ||
+        /^[-*]\s+/.test(trimmed)
+      ) {
+        break;
+      }
+      paragraphLines.push(raw);
+      i++;
+    }
     elements.push(
       <p key={key++} className="md-paragraph">
-        {renderInline(line)}
+        {renderInline(paragraphLines.join("\n"))}
       </p>
     );
-    i++;
   }
 
   return <>{elements}</>;
@@ -471,6 +593,32 @@ function renderInline(text: string): ReactNode {
       continue;
     }
 
+    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+    if (linkMatch) {
+      const label = linkMatch[1] ?? "";
+      const href = (linkMatch[2] ?? "").trim();
+      const safeHref =
+        href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:") ? href : null;
+      parts.push(
+        safeHref ? (
+          <a key={key++} className="md-link" href={safeHref} target="_blank" rel="noreferrer">
+            {label}
+          </a>
+        ) : (
+          label
+        )
+      );
+      remaining = remaining.slice(linkMatch[0].length);
+      continue;
+    }
+
+    const strikeMatch = remaining.match(/^~~([^~]+)~~/);
+    if (strikeMatch) {
+      parts.push(<s key={key++}>{strikeMatch[1]}</s>);
+      remaining = remaining.slice(strikeMatch[0].length);
+      continue;
+    }
+
     const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) ?? remaining.match(/^__([^_]+)__/);
     if (boldMatch) {
       parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
@@ -485,7 +633,7 @@ function renderInline(text: string): ReactNode {
       continue;
     }
 
-    const nextSpecial = remaining.search(/[`*_]/);
+    const nextSpecial = remaining.search(/[`*_\[~]/);
     if (nextSpecial === -1) {
       parts.push(remaining);
       break;
@@ -850,12 +998,7 @@ export default function App() {
   });
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => {
-    try {
-      const stored = localStorage.getItem(OPENROUTER_KEY_STORAGE_KEY);
-      return [{ id: "openrouter", label: "OpenRouter", hasKey: Boolean(stored?.trim()), inputValue: "", error: null }];
-    } catch {
-      return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
-    }
+    return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
   });
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(() => {
     try {
@@ -896,6 +1039,19 @@ export default function App() {
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
+  const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
+  const [createCommunityName, setCreateCommunityName] = useState("");
+  const [createCommunitySlug, setCreateCommunitySlug] = useState("");
+  const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
+  const [createCommunityVisibility, setCreateCommunityVisibility] = useState<"public" | "unlisted" | "private">(
+    "private"
+  );
+  const [createCommunityDescription, setCreateCommunityDescription] = useState("");
+  const [createCommunityError, setCreateCommunityError] = useState<string | null>(null);
+  const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
+  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
+  const [, setIsLoadingCommunityAccess] = useState(false);
+  const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<"chat" | "library" | "resources" | "members" | "settings">(
     "chat"
   );
@@ -909,7 +1065,7 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const isUserAtBottomRef = useRef(true);
-  const communityChatOldestCreatedAtRef = useRef<string | null>(null);
+  const communityChatOldestSeqRef = useRef<number | null>(null);
   const pendingChatPrependScrollRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const communitySocketRef = useRef<WebSocket | null>(null);
@@ -963,6 +1119,13 @@ export default function App() {
   const [messageInput, setMessageInput] = useState("");
   const [threadError, setThreadError] = useState<string | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
+  const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
+  const [streamingMeta, setStreamingMeta] = useState<{ engine_id: string; model_id: string | null } | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const streamingContentRef = useRef<string | null>(null);
+  const streamingRafRef = useRef<number | null>(null);
+  const streamingAbortRef = useRef<AbortController | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const workspaceAskInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -980,6 +1143,16 @@ export default function App() {
   useEffect(() => {
     sessionRef.current = supabaseSession;
   }, [supabaseSession]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      const current = sessionRef.current;
+      if (!current) return;
+      void loadProviderKeyStatus(current);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1071,11 +1244,11 @@ export default function App() {
   useLayoutEffect(() => {
     const el = workspaceAskInputRef.current;
     if (!el) return;
-    el.style.height = "0px";
-    const maxPx = 220;
-    const next = Math.min(el.scrollHeight, maxPx);
-    el.style.height = `${Math.max(next, 28)}px`;
-  }, [messageInput]);
+	    el.style.height = "0px";
+	    const maxPx = 220;
+	    const next = Math.min(el.scrollHeight, maxPx);
+	    el.style.height = `${Math.max(next, 24)}px`;
+	  }, [messageInput]);
 
   useEffect(() => {
     if (!isModelPickerOpen) return;
@@ -1146,6 +1319,7 @@ export default function App() {
     if (!supabaseSession) return;
     void loadCommunities(supabaseSession);
     void loadThreads(supabaseSession);
+    void loadProviderKeyStatus(supabaseSession);
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -1156,6 +1330,7 @@ export default function App() {
     setActiveThreadId(null);
     setThreadMessages([]);
     setPersonalMemoryItems([]);
+    setProviderKeys([{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }]);
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -1205,7 +1380,7 @@ export default function App() {
     isUserAtBottomRef.current = true;
     setIsLoadingMoreChat(false);
     setCommunityChatHasMore(true);
-    communityChatOldestCreatedAtRef.current = null;
+    communityChatOldestSeqRef.current = null;
     pendingChatPrependScrollRef.current = null;
     setOpenResourceEmbedId(null);
     if (chatInputRef.current) {
@@ -1236,20 +1411,132 @@ export default function App() {
     setInviteCreateError(null);
   }, [activeCommunityId, communities]);
 
-  const activeCommunityRole = activeCommunityId ? (communityRoleById[activeCommunityId] ?? null) : null;
-  const isActiveCommunityAdmin = activeCommunityRole === "owner" || activeCommunityRole === "admin";
+  useEffect(() => {
+    if (createCommunitySlugEdited) return;
+    const next = slugify(createCommunityName);
+    setCreateCommunitySlug(next);
+  }, [createCommunityName, createCommunitySlugEdited]);
+
+  function openCreateCommunityModal() {
+    setCreateCommunityError(null);
+    setCreateCommunityName("");
+    setCreateCommunitySlug("");
+    setCreateCommunitySlugEdited(false);
+    setCreateCommunityVisibility("private");
+    setCreateCommunityDescription("");
+    setShowCreateCommunityModal(true);
+  }
+
+  function closeCreateCommunityModal() {
+    setShowCreateCommunityModal(false);
+    setCreateCommunityError(null);
+  }
+
+  async function handleCreateCommunity() {
+    setCreateCommunityError(null);
+    if (!supabaseSession) {
+      setCreateCommunityError("Sign in to create a community.");
+      return;
+    }
+
+    const name = createCommunityName.trim();
+    const rawSlug = createCommunitySlug.trim() || slugify(name);
+    const slug = rawSlug.toLowerCase();
+    if (!name || !slug) {
+      setCreateCommunityError("Name and slug are required.");
+      return;
+    }
+    if (!isValidSlug(slug)) {
+      setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
+      return;
+    }
+
+    const url = getSupabaseUrl();
+    const apiKey = getSupabaseAnonKey();
+    if (!url || !apiKey) {
+      setCreateCommunityError("Missing Supabase config.");
+      return;
+    }
+    if (!["public", "unlisted", "private"].includes(createCommunityVisibility)) {
+      setCreateCommunityError("Visibility must be public, unlisted, or private.");
+      return;
+    }
+
+    setIsCreatingCommunity(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/create_community`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_name: name,
+            p_slug: slug,
+            p_visibility: createCommunityVisibility,
+            p_description: createCommunityDescription.trim() || null
+          })
+        },
+        supabaseSession
+      );
+      if (!response.ok) {
+        const text = await response.text();
+        setCreateCommunityError(text || "Failed to create community.");
+        return;
+      }
+      const created = (await response.json()) as CommunityRecord[];
+      const community = created[0];
+      if (!community?.id) {
+        setCreateCommunityError("Failed to create community.");
+        return;
+      }
+      setCommunities((prev) => [community, ...prev]);
+      setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
+      setActiveCommunityId(community.id);
+      setActivePage("community");
+      setCommunityTab("chat");
+      setActiveView("home");
+      closeCreateCommunityModal();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to create community.";
+      setCreateCommunityError(message);
+    } finally {
+      setIsCreatingCommunity(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!supabaseSession || !activeCommunityId) {
+      setActiveCommunityAccess(null);
+      setIsLoadingCommunityAccess(false);
+      return;
+    }
+    void loadCommunityAccess(activeCommunityId, supabaseSession);
+  }, [supabaseSession, activeCommunityId]);
+
+  const canInviteActiveCommunity = Boolean(activeCommunityAccess?.can_invite);
+  const canEditActiveCommunitySettings = Boolean(activeCommunityAccess?.is_owner);
+  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
+  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
+  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
+  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "members") return;
-    if (!supabaseSession || !activeCommunityId || !isActiveCommunityAdmin) {
+    if (!supabaseSession || !activeCommunityId || !canInviteActiveCommunity) {
       setCommunityInvites([]);
       return;
     }
     void loadCommunityInvites(activeCommunityId, supabaseSession);
-  }, [activePage, communityTab, supabaseSession, activeCommunityId, isActiveCommunityAdmin]);
+  }, [activePage, communityTab, supabaseSession, activeCommunityId, canInviteActiveCommunity]);
 
   useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || activePage !== "community" || communityTab !== "resources") return;
+    if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
+    if (communityTab !== "resources" && communityTab !== "library") return;
     void loadCommunityResources(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, activePage, communityTab]);
 
@@ -1297,7 +1584,8 @@ export default function App() {
     const socket = new WebSocket(wsUrl);
     communitySocketRef.current = socket;
     const joinRef = `${Date.now()}`;
-    const topic = "realtime:public:community_chat_messages";
+    const topic = "realtime:public:messages";
+    const threadId = communityChatThreadIdForCommunity(activeCommunityId);
 
     socket.addEventListener("open", () => {
       socket.send(
@@ -1311,8 +1599,8 @@ export default function App() {
                 {
                   event: "INSERT",
                   schema: "public",
-                  table: "community_chat_messages",
-                  filter: `community_id=eq.${activeCommunityId}`
+                  table: "messages",
+                  filter: `thread_id=eq.${threadId}`
                 }
               ]
             },
@@ -1344,22 +1632,30 @@ export default function App() {
 
         if (data.event !== "postgres_changes") return;
         const payload = data.payload as {
-          new?: CommunityChatMessage;
-          record?: CommunityChatMessage;
-          data?: { new?: CommunityChatMessage; record?: CommunityChatMessage };
+          new?: CloudMessageRow;
+          record?: CloudMessageRow;
+          data?: { new?: CloudMessageRow; record?: CloudMessageRow };
         };
         const record = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
         if (!record) return;
-        if (record.community_id !== activeCommunityId) return;
+        if (record.thread_id !== threadId) return;
+        const mapped = toCommunityChatMessage(record);
+        if (!mapped) return;
 
         setCommunityMessages((prev) => {
-          if (prev.some((item) => item.id === record.id)) return prev;
-          const next = [...prev, record];
-          next.sort((a, b) => a.created_at.localeCompare(b.created_at));
+          const idx = prev.findIndex((item) => item.id === mapped.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...mapped };
+            next.sort((a, b) => a.seq - b.seq);
+            return next;
+          }
+          const next = [...prev, mapped];
+          next.sort((a, b) => a.seq - b.seq);
           return next;
         });
 
-        if (record.sender_id !== supabaseSession.user.id && !isUserAtBottomRef.current) {
+        if (mapped.sender_id !== supabaseSession.user.id && !isUserAtBottomRef.current) {
           setUnreadCount((prev) => prev + 1);
         }
       } catch {
@@ -1487,6 +1783,17 @@ export default function App() {
     setThreads([]);
     setActiveThreadId(null);
     setThreadMessages([]);
+    streamingAbortRef.current?.abort();
+    streamingAbortRef.current = null;
+    if (streamingRafRef.current) {
+      window.cancelAnimationFrame(streamingRafRef.current);
+      streamingRafRef.current = null;
+    }
+    streamingContentRef.current = null;
+    setStreamingContent(null);
+    setStreamingThreadId(null);
+    setStreamingRunId(null);
+    setStreamingMeta(null);
     setDiscoverCommunities([]);
   }
 
@@ -1572,7 +1879,7 @@ export default function App() {
     setThreadError(null);
     try {
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=200`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
         {},
         session
       );
@@ -1589,15 +1896,17 @@ export default function App() {
         created_at: string;
         updated_at: string;
       }>;
-      const list: ThreadRecord[] = rows.map((row) => ({
-        id: row.id,
-        title: row.title ?? null,
-        engine_id: row.engine_id,
-        model_id: row.model_id ?? null,
-        community_id: row.community_id ?? null,
-        created_at: toEpochSeconds(row.created_at),
-        updated_at: toEpochSeconds(row.updated_at)
-      }));
+      const list: ThreadRecord[] = rows
+        .filter((row) => (row.engine_id ?? "").trim() !== "community_chat")
+        .map((row) => ({
+          id: row.id,
+          title: row.title ?? null,
+          engine_id: row.engine_id,
+          model_id: row.model_id ?? null,
+          community_id: row.community_id ?? null,
+          created_at: toEpochSeconds(row.created_at),
+          updated_at: toEpochSeconds(row.updated_at)
+        }));
       setThreads(list);
       if (!activeThreadId && list.length > 0) setActiveThreadId(list[0].id);
       if (activeThreadId && !list.some((t) => t.id === activeThreadId) && list.length > 0) {
@@ -1638,6 +1947,30 @@ export default function App() {
     } catch (error) {
       console.warn("Failed to load messages:", error);
       setThreadMessages([]);
+    }
+  }
+
+  async function loadProviderKeyStatus(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/provider_key`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "get", provider: "openrouter" }),
+        },
+        session,
+      );
+      if (!response.ok) return;
+      const data = (await response.json()) as { has_key?: unknown };
+      const hasKey = Boolean(data?.has_key);
+      setProviderKeys((prev) =>
+        prev.map((item) => (item.id === "openrouter" ? { ...item, hasKey, error: null } : item)),
+      );
+    } catch {
+      // ignore (BYO is optional in some flows)
     }
   }
 
@@ -1722,6 +2055,7 @@ export default function App() {
       return;
     }
 
+    setThreadError(null);
     setIsSendingMessage(true);
     try {
       const session = supabaseSession;
@@ -1765,6 +2099,115 @@ export default function App() {
       }
       setMessageInput("");
       await loadThreadMessages(threadId, session);
+
+      // Generate the assistant response server-side (OpenRouter) with streaming updates.
+      streamingAbortRef.current?.abort();
+      const abort = new AbortController();
+      streamingAbortRef.current = abort;
+      streamingContentRef.current = "";
+      setStreamingContent("");
+      setStreamingThreadId(threadId);
+      setStreamingRunId(`openrouter_web:${messageId}`);
+      setStreamingMeta({ engine_id: "openrouter_web", model_id: preferredModelId });
+
+      const scheduleStreamingFlush = () => {
+        if (streamingRafRef.current) return;
+        streamingRafRef.current = window.requestAnimationFrame(() => {
+          streamingRafRef.current = null;
+          setStreamingContent(streamingContentRef.current);
+          window.requestAnimationFrame(() => {
+            const el = workspaceMessageListRef.current;
+            if (!el) return;
+            const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (distance < 120) {
+              el.scrollTop = el.scrollHeight;
+            }
+          });
+        });
+      };
+
+      const turn = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/openrouter_turn`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ thread_id: threadId, stream: true }),
+          signal: abort.signal,
+        },
+        session,
+      );
+      if (!turn.ok) {
+        const message = await readSupabaseError(turn);
+        throw new Error(message || "Failed to run model.");
+      }
+      const reader = turn.body?.getReader();
+      if (!reader) throw new Error("Missing streaming response.");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let eventName = "message";
+      let dataBuffer = "";
+      let seenDone = false;
+
+      const flushEvent = () => {
+        const raw = dataBuffer.trim();
+        dataBuffer = "";
+        if (!raw) return;
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = { raw };
+        }
+        if (eventName === "start") {
+          if (typeof parsed?.run_id === "string") setStreamingRunId(parsed.run_id);
+          if (typeof parsed?.engine_id === "string") {
+            setStreamingMeta({ engine_id: parsed.engine_id, model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null });
+          }
+        } else if (eventName === "delta") {
+          const full = typeof parsed?.full_content === "string" ? parsed.full_content : "";
+          streamingContentRef.current = full;
+          scheduleStreamingFlush();
+        } else if (eventName === "done") {
+          seenDone = true;
+        } else if (eventName === "error") {
+          const msg =
+            (typeof parsed?.error === "string" && parsed.error.trim()) ||
+            (typeof parsed?.message === "string" && parsed.message.trim()) ||
+            (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
+            "Failed to run model.";
+          throw new Error(msg);
+        }
+        eventName = "message";
+      };
+
+      while (!seenDone) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        while (true) {
+          const idx = buffer.indexOf("\n");
+          if (idx < 0) break;
+          let line = buffer.slice(0, idx);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          buffer = buffer.slice(idx + 1);
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            dataBuffer += line.slice(5).trim();
+            continue;
+          }
+          if (line === "") {
+            flushEvent();
+            continue;
+          }
+        }
+      }
+      flushEvent();
+
+      await loadThreadMessages(threadId, session);
       await loadThreads(session);
     } catch (error) {
       const message =
@@ -1776,6 +2219,16 @@ export default function App() {
       setThreadError(message);
     } finally {
       setIsSendingMessage(false);
+      if (streamingRafRef.current) {
+        window.cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingAbortRef.current = null;
+      streamingContentRef.current = null;
+      setStreamingContent(null);
+      setStreamingThreadId(null);
+      setStreamingRunId(null);
+      setStreamingMeta(null);
     }
   }
 
@@ -1789,10 +2242,25 @@ export default function App() {
     const provider = providerKeys.find((item) => item.id === id);
     const value = provider?.inputValue.trim() ?? "";
     if (!value) return;
+    if (!supabaseSession) {
+      handleSignIn();
+      return;
+    }
+    const url = getSupabaseUrl();
+    if (!url) return;
     try {
-      localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, value);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/provider_key`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set", provider: id, key: value }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) throw new Error(await response.text());
       setProviderKeys((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, hasKey: true, inputValue: "", error: null } : item))
+        prev.map((item) => (item.id === id ? { ...item, hasKey: true, inputValue: "", error: null } : item)),
       );
     } catch (error) {
       const message =
@@ -1802,10 +2270,22 @@ export default function App() {
   }
 
   async function handleClearProviderKey(id: ProviderKey["id"]) {
+    if (!supabaseSession) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
     try {
-      localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/provider_key`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "clear", provider: id }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) throw new Error(await response.text());
       setProviderKeys((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, hasKey: false, inputValue: "", error: null } : item))
+        prev.map((item) => (item.id === id ? { ...item, hasKey: false, inputValue: "", error: null } : item)),
       );
       setModelAvailability({});
     } catch (error) {
@@ -2128,6 +2608,80 @@ export default function App() {
     target.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function communityChatThreadIdForCommunity(communityId: string): string {
+    return communityId;
+  }
+
+  function extractTextFromContentJson(contentJson: unknown): string {
+    if (contentJson === null || contentJson === undefined) return "";
+    if (typeof contentJson === "string") {
+      const trimmed = contentJson.trim();
+      if (!trimmed) return "";
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        return extractTextFromContentJson(parsed);
+      } catch {
+        return trimmed;
+      }
+    }
+    if (typeof contentJson === "object") {
+      const asAny = contentJson as any;
+      if (typeof asAny.text === "string") return asAny.text;
+      if (typeof asAny.body === "string") return asAny.body;
+    }
+    return "";
+  }
+
+  type CloudMessageRow = {
+    id: string;
+    thread_id: string;
+    seq: number;
+    role: string;
+    content_json: unknown;
+    sender_id: string | null;
+    reply_to_id: string | null;
+    created_at: string;
+  };
+
+  function toCommunityChatMessage(row: CloudMessageRow): CommunityChatMessage | null {
+    const threadId = (row.thread_id ?? "").trim();
+    if (!threadId) return null;
+    const id = (row.id ?? "").trim();
+    if (!id) return null;
+    if ((row.role ?? "").trim() !== "user") return null;
+    const senderId = (row.sender_id ?? "").trim() || "unknown";
+    const body = extractTextFromContentJson(row.content_json);
+    return {
+      id,
+      community_id: threadId,
+      sender_id: senderId,
+      body,
+      reply_to_id: row.reply_to_id ?? null,
+      created_at: row.created_at,
+      seq: Number(row.seq) || 0,
+    };
+  }
+
+  async function ensureCommunityChatThread(communityId: string, session: SupabaseSession): Promise<string> {
+    const url = getSupabaseUrl();
+    if (!url) throw new Error("Missing Supabase URL.");
+
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/rpc/ensure_community_chat_thread`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ p_community_id: communityId }),
+      },
+      session,
+    );
+    if (!response.ok) throw new Error(await readSupabaseError(response));
+    const rows = (await response.json()) as Array<{ thread_id: string }>;
+    const threadId = (rows[0]?.thread_id ?? "").trim();
+    if (!threadId) throw new Error("Failed to ensure community chat thread.");
+    return threadId;
+  }
+
   const handleChatScroll = () => {
     if (!communityChatListRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = communityChatListRef.current;
@@ -2159,26 +2713,30 @@ export default function App() {
     setCommunityChatError(null);
     setIsLoadingMoreChat(false);
     setCommunityChatHasMore(true);
-    communityChatOldestCreatedAtRef.current = null;
+    communityChatOldestSeqRef.current = null;
     pendingChatPrependScrollRef.current = null;
     try {
+      const threadId = await ensureCommunityChatThread(communityId, session);
       let response: Response;
       try {
         response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_chat_messages?select=id,community_id,sender_id,body,reply_to_id,created_at&community_id=eq.${communityId}&order=created_at.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          {},
+          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
+            threadId
+          )}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
+          { method: "GET" },
           session
         );
       } catch {
         return;
       }
       if (!response.ok) return;
-      const rowsDesc = (await response.json()) as CommunityChatMessage[];
-      const hasMore = rowsDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...rowsDesc].reverse();
+      const rowsDesc = (await response.json()) as CloudMessageRow[];
+      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
+      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
+      const rows = [...mappedDesc].reverse();
       setCommunityChatHasMore(hasMore);
       setCommunityMessages(rows);
-      communityChatOldestCreatedAtRef.current = rows[0]?.created_at ?? null;
+      communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
       setUnreadCount(0);
       setIsUserAtBottom(true);
       isUserAtBottomRef.current = true;
@@ -2196,7 +2754,7 @@ export default function App() {
   async function loadOlderCommunityChat(communityId: string, session: SupabaseSession) {
     if (isLoadingChat || isLoadingMoreChat) return;
     if (!communityChatHasMore) return;
-    const cursor = communityChatOldestCreatedAtRef.current;
+    const cursor = communityChatOldestSeqRef.current;
     if (!cursor) {
       setCommunityChatHasMore(false);
       return;
@@ -2214,11 +2772,14 @@ export default function App() {
 
     setIsLoadingMoreChat(true);
     try {
+      const threadId = await ensureCommunityChatThread(communityId, session);
       let response: Response;
       try {
         response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_chat_messages?select=id,community_id,sender_id,body,reply_to_id,created_at&community_id=eq.${communityId}&created_at=lt.${encodeURIComponent(cursor)}&order=created_at.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          {},
+          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
+            threadId
+          )}&seq=lt.${cursor}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
+          { method: "GET" },
           session
         );
       } catch {
@@ -2229,17 +2790,18 @@ export default function App() {
         pendingChatPrependScrollRef.current = null;
         return;
       }
-      const rowsDesc = (await response.json()) as CommunityChatMessage[];
-      if (rowsDesc.length === 0) {
+      const rowsDesc = (await response.json()) as CloudMessageRow[];
+      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
+      if (mappedDesc.length === 0) {
         setCommunityChatHasMore(false);
         pendingChatPrependScrollRef.current = null;
         return;
       }
 
-      const hasMore = rowsDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...rowsDesc].reverse();
+      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
+      const rows = [...mappedDesc].reverse();
       setCommunityChatHasMore(hasMore);
-      communityChatOldestCreatedAtRef.current = rows[0]?.created_at ?? cursor;
+      communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
 
       setCommunityMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
@@ -2328,13 +2890,12 @@ export default function App() {
               "Content-Type": "application/json",
               Prefer: "return=representation"
             },
-            body: JSON.stringify({
-              message_id: messageId,
-              user_id: supabaseSession.user.id,
-              emoji
-            })
-          },
-          supabaseSession
+	            body: JSON.stringify({
+	              message_id: messageId,
+	              emoji
+	            })
+	          },
+	          supabaseSession
         );
         if (response.ok) {
           const created = (await response.json()) as MessageReaction[];
@@ -2393,11 +2954,11 @@ export default function App() {
     let response: Response | null = null;
     try {
       response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages?id=eq.${editingMessageId}&sender_id=eq.${supabaseSession.user.id}`,
+        `${url}/rest/v1/messages?id=eq.${editingMessageId}&sender_id=eq.${supabaseSession.user.id}`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: bodyToSave })
+          body: JSON.stringify({ content_json: { text: bodyToSave } })
         },
         supabaseSession
       );
@@ -2422,7 +2983,7 @@ export default function App() {
     let response: Response | null = null;
     try {
       response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages?id=eq.${messageId}&sender_id=eq.${supabaseSession.user.id}`,
+        `${url}/rest/v1/messages?id=eq.${messageId}&sender_id=eq.${supabaseSession.user.id}`,
         { method: "DELETE" },
         supabaseSession
       );
@@ -2452,7 +3013,8 @@ export default function App() {
       sender_id: supabaseSession.user.id,
       body: bodyToSend,
       reply_to_id: replyToId,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      seq: Number.MAX_SAFE_INTEGER,
     };
     setCommunityMessages((prev) => [...prev, optimisticMessage]);
     setCommunityMessageInput("");
@@ -2478,22 +3040,23 @@ export default function App() {
     }
 
     try {
+      const threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages`,
+        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Prefer: "return=representation"
           },
-          body: JSON.stringify({
-            community_id: activeCommunityId,
-            sender_id: supabaseSession.user.id,
-            body: bodyToSend,
-            reply_to_id: replyToId
-          })
-        },
-        supabaseSession
+	          body: JSON.stringify({
+	            thread_id: threadId,
+	            role: "user",
+	            content_json: { text: bodyToSend },
+	            reply_to_id: replyToId
+	          })
+	        },
+	        supabaseSession
       );
       if (!response.ok) {
         const errText = await response.text();
@@ -2503,8 +3066,8 @@ export default function App() {
         setReplyingToMessage(replySnapshot);
         return;
       }
-      const created = (await response.json()) as CommunityChatMessage[];
-      const record = created[0] ?? null;
+      const created = (await response.json()) as CloudMessageRow[];
+      const record = created[0] ? toCommunityChatMessage(created[0]) : null;
       if (!record) {
         setCommunityChatError("Message sent, but no payload returned.");
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -2516,7 +3079,7 @@ export default function App() {
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
         if (withoutOptimistic.some((m) => m.id === record.id)) return withoutOptimistic;
         const next = [...withoutOptimistic, record];
-        next.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        next.sort((a, b) => a.seq - b.seq);
         return next;
       });
     } catch (error) {
@@ -2555,6 +3118,30 @@ export default function App() {
       setCommunityResources(rows);
     } finally {
       setIsLoadingResources(false);
+    }
+  }
+
+  async function loadCommunityAccess(communityId: string, session: SupabaseSession) {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingCommunityAccess(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/get_my_community_access`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_community_id: communityId })
+        },
+        session
+      );
+      if (!response.ok) return;
+      const rows = (await response.json()) as CommunityAccess[];
+      setActiveCommunityAccess(rows[0] ?? null);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingCommunityAccess(false);
     }
   }
 
@@ -2713,6 +3300,90 @@ export default function App() {
     if (!response.ok) return;
     const rows = (await response.json()) as CommunityMember[];
     setCommunityMembers(rows);
+
+    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+    if (userIds.length === 0) return;
+    const idsFilter = userIds.map((id) => `"${id}"`).join(",");
+    try {
+      const profilesResponse = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url&user_id=in.(${idsFilter})`,
+        {},
+        session
+      );
+      if (!profilesResponse.ok) return;
+      const profiles = (await profilesResponse.json()) as UserProfile[];
+      setProfilesByUserId((prev) => {
+        const next = { ...prev };
+        for (const profile of profiles) {
+          next[profile.user_id] = profile;
+        }
+        return next;
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleSetCommunityMemberRole(userId: string, role: string) {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/set_member_role`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_community_id: activeCommunityId,
+            p_user_id: userId,
+            p_role: role
+          })
+        },
+        supabaseSession
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        console.warn("Failed to set member role:", message);
+      }
+    } catch (error) {
+      console.warn("Failed to set member role:", error);
+    } finally {
+      await loadCommunityMembers(activeCommunityId, supabaseSession);
+      await loadCommunities(supabaseSession);
+      await loadCommunityAccess(activeCommunityId, supabaseSession);
+    }
+  }
+
+  async function handleRemoveCommunityMember(userId: string) {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    if (!window.confirm("Remove this member?")) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/remove_member`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_community_id: activeCommunityId,
+            p_user_id: userId
+          })
+        },
+        supabaseSession
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        console.warn("Failed to remove member:", message);
+      }
+    } catch (error) {
+      console.warn("Failed to remove member:", error);
+    } finally {
+      await loadCommunityMembers(activeCommunityId, supabaseSession);
+      await loadCommunities(supabaseSession);
+      await loadCommunityAccess(activeCommunityId, supabaseSession);
+    }
   }
 
   async function loadCommunityInvites(communityId: string, session: SupabaseSession) {
@@ -3027,18 +3698,21 @@ export default function App() {
     return map;
   }, [communityMessages]);
 
-  const displayName = useCallback(
-    (userId: string): string => {
-      const trimmedName = profileName.trim();
-      const trimmedUsername = profileUsername.trim();
-      if (supabaseSession?.user.id === userId) {
-        if (trimmedName) return trimmedName;
-        if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
-      }
-      return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email);
-    },
-    [profileName, profileUsername, supabaseSession?.user.email, supabaseSession?.user.id]
-  );
+	  const displayName = useCallback(
+	    (userId: string): string => {
+	      const trimmedName = profileName.trim();
+	      const trimmedUsername = profileUsername.trim();
+	      if (supabaseSession?.user.id === userId) {
+	        if (trimmedName) return trimmedName;
+	        if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
+	      }
+	      const remote = profilesByUserId[userId];
+	      const remoteName = remote?.display_name?.trim();
+	      if (remoteName) return remoteName;
+	      return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email);
+	    },
+	    [profileName, profileUsername, profilesByUserId, supabaseSession?.user.email, supabaseSession?.user.id]
+	  );
 
   const activeThread = useMemo(() => {
     if (!activeThreadId) return null;
@@ -3236,15 +3910,15 @@ export default function App() {
                 </div>
               )}
               <div className="community-rail-divider" />
-              <button
-                type="button"
-                className="community-rail-button community-rail-add"
-                onClick={() => alert("Create community (web) not wired yet.")}
-                title="Create community"
-                aria-label="Create community"
-              >
-                +
-              </button>
+	              <button
+	                type="button"
+	                className="community-rail-button community-rail-add"
+	                onClick={openCreateCommunityModal}
+	                title="Create community"
+	                aria-label="Create community"
+	              >
+	                +
+	              </button>
             </div>
             <div className="rail-footer">
               <button
@@ -3399,11 +4073,11 @@ export default function App() {
               </span>
               Members
             </button>
-            {isActiveCommunityAdmin && (
-              <>
-                <div className="community-nav-divider" />
-                <button
-                  className={communityTab === "settings" ? "nav-item active" : "nav-item"}
+	            {canEditActiveCommunitySettings && (
+	              <>
+	                <div className="community-nav-divider" />
+	                <button
+	                  className={communityTab === "settings" ? "nav-item active" : "nav-item"}
                   type="button"
                   onClick={() => {
                     setActivePage("community");
@@ -3529,7 +4203,9 @@ export default function App() {
                 <>
                   <div className="settings-section">
                     <div className="settings-section-title">API Key</div>
-                    <div className="settings-section-desc">Connect your OpenRouter key to access models</div>
+                    <div className="settings-section-desc">
+                      Connect your OpenRouter key to access models (synced to your Arx account)
+                    </div>
                     <div className="key-row">
                       <input
                         type="password"
@@ -3869,81 +4545,114 @@ export default function App() {
                 </>
               )}
             </div>
-          ) : activePage === "workspace" ? (
-            <>
-              <div className="workspace-body">
-                <div className="message-list" ref={workspaceMessageListRef}>
-                  {!supabaseSession && (
-                    <div className="chat-empty">Sign in to start a thread.</div>
-                  )}
-                  {supabaseSession && !activeThreadId && threads.length === 0 && (
-                    <div className="chat-empty">No threads yet. Click + to start.</div>
-                  )}
-                  {supabaseSession && activeThreadId && threadMessages.length === 0 && (
-                    <div className="chat-empty">No messages yet.</div>
-                  )}
-                  {threadMessages.map((message) => {
-                    const isUser = message.role === "user";
-                    const textContent = parseMessageText(message.content_json);
-                    const modelLabel = !isUser ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null) : null;
-                    return (
-                      <div
-                        key={message.id}
-                        className={isUser ? "message-item user" : "message-item assistant"}
-                      >
-                        <div className="message-text">
-                          {isUser ? textContent : renderMarkdown(textContent)}
-                        </div>
-                        {!isUser && (
-                          <div className="message-footer">
-                            <button
-                              className={`message-copy-btn${copiedMessageId === message.id ? " copied" : ""}`}
-                              type="button"
-                              onClick={() => void handleCopyMessage(message.id, textContent)}
-                              title="Copy"
-                              aria-label="Copy"
-                            >
-                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                {copiedMessageId === message.id ? (
-                                  <polyline points="20 6 9 17 4 12" />
-                                ) : (
-                                  <>
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                  </>
-                                )}
-                              </svg>
-                            </button>
-                            <button
-                              className="message-copy-btn"
-                              type="button"
-                              disabled
-                              title="Save to memory (coming soon)"
-                              aria-label="Save to memory (coming soon)"
-                            >
-                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M9 3v2" />
-                                <path d="M15 3v2" />
-                                <path d="M9 19v2" />
-                                <path d="M15 19v2" />
-                                <path d="M3 9h2" />
-                                <path d="M3 15h2" />
-                                <path d="M19 9h2" />
-                                <path d="M19 15h2" />
-                                <rect x="7" y="7" width="10" height="10" rx="2" />
-                                <path d="M10 10h4" />
-                                <path d="M10 14h4" />
-                              </svg>
-                            </button>
-                            {modelLabel && <span className="message-meta">{modelLabel}</span>}
+	          ) : activePage === "workspace" ? (
+	            <>
+	              <div className="workspace-body">
+	                <div className="message-list" ref={workspaceMessageListRef}>
+	                  <div className="message-list-inner">
+	                    {!supabaseSession && (
+	                      <div className="chat-empty">Sign in to start a thread.</div>
+	                    )}
+	                    {supabaseSession && !activeThreadId && threads.length === 0 && (
+	                      <div className="chat-empty">No threads yet. Click + to start.</div>
+	                    )}
+	                    {supabaseSession && activeThreadId && threadMessages.length === 0 && (
+	                      <div className="chat-empty">No messages yet.</div>
+	                    )}
+                      {threadError && <div className="auth-error">{threadError}</div>}
+	                    {threadMessages.map((message) => {
+	                      const isUser = message.role === "user";
+	                      const textContent = parseMessageText(message.content_json);
+	                      const modelLabel = !isUser
+	                        ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null)
+	                        : null;
+	                      return (
+	                        <div
+	                          key={message.id}
+	                          className={isUser ? "message-item user" : "message-item assistant"}
+	                        >
+	                          <div className="message-text">{isUser ? textContent : renderMarkdown(textContent)}</div>
+	                          {!isUser && (
+	                            <div className="message-footer">
+	                              <button
+	                                className={`message-copy-btn${copiedMessageId === message.id ? " copied" : ""}`}
+	                                type="button"
+	                                onClick={() => void handleCopyMessage(message.id, textContent)}
+	                                title="Copy"
+	                                aria-label="Copy"
+	                              >
+	                                <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                  {copiedMessageId === message.id ? (
+	                                    <polyline points="20 6 9 17 4 12" />
+	                                  ) : (
+	                                    <>
+	                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+	                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+	                                    </>
+	                                  )}
+	                                </svg>
+	                              </button>
+	                              <button
+	                                className="message-copy-btn"
+	                                type="button"
+	                                disabled
+	                                title="Save to memory (coming soon)"
+	                                aria-label="Save to memory (coming soon)"
+	                              >
+	                                <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                  <path d="M9 3v2" />
+	                                  <path d="M15 3v2" />
+	                                  <path d="M9 19v2" />
+	                                  <path d="M15 19v2" />
+	                                  <path d="M3 9h2" />
+	                                  <path d="M3 15h2" />
+	                                  <path d="M19 9h2" />
+	                                  <path d="M19 15h2" />
+	                                  <rect x="7" y="7" width="10" height="10" rx="2" />
+	                                  <path d="M10 10h4" />
+	                                  <path d="M10 14h4" />
+	                                </svg>
+	                              </button>
+	                              {modelLabel && <span className="message-meta">{modelLabel}</span>}
+	                            </div>
+	                          )}
+	                        </div>
+	                      );
+	                    })}
+                      {streamingThreadId === activeThreadId &&
+                        streamingContent !== null &&
+                        !(streamingRunId && threadMessages.some((m) => m.run_id === streamingRunId && m.role === "assistant")) && (
+                          <div className="message-item assistant streaming">
+                            <div className="message-text streaming-text">
+                              {streamingContent.trim() ? (
+                                <>
+                                  {streamingContent}
+                                  <span className="streaming-caret" aria-hidden="true" />
+                                </>
+                              ) : (
+                                <span className="streaming-placeholder">
+                                  Thinking
+                                  <span className="running-dots" aria-hidden="true">
+                                    <span />
+                                    <span />
+                                    <span />
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                            {streamingMeta && (
+                              <div className="message-footer">
+                                <span className="message-meta">
+                                  {formatModelLabel(streamingMeta.model_id ?? activeThread?.model_id ?? null)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="ask-bar ask-bar-v2">
+	                  </div>
+	                </div>
+	              </div>
+	              <div className="ask-bar ask-bar-v2">
                 <textarea
                   ref={workspaceAskInputRef}
                   className="ask-input ask-input-v2"
@@ -4436,13 +5145,15 @@ export default function App() {
                         <textarea
                           ref={chatInputRef}
                           className="chat-input"
-                          placeholder={
-                            !supabaseSession
-                              ? "Sign in to chat..."
-                              : !activeCommunity
-                                ? "Select a community to chat..."
-                                : "Message the community..."
-                          }
+	                          placeholder={
+	                            !supabaseSession
+	                              ? "Sign in to chat..."
+	                              : !activeCommunity
+	                                ? "Select a community to chat..."
+	                                : !canPostMessagesActiveCommunity
+	                                  ? "Join this community to chat..."
+	                                  : "Message the community..."
+	                          }
                           value={communityMessageInput}
                           onChange={(event) => {
                             setCommunityMessageInput(event.target.value);
@@ -4455,9 +5166,9 @@ export default function App() {
                               void handleSendCommunityMessage();
                             }
                           }}
-                          disabled={!supabaseSession || !activeCommunity}
-                          rows={1}
-                        />
+	                          disabled={!supabaseSession || !activeCommunity || !canPostMessagesActiveCommunity}
+	                          rows={1}
+	                        />
                         <button
                           className="ask-icon-btn ask-mic"
                           type="button"
@@ -4473,13 +5184,18 @@ export default function App() {
                           </svg>
                         </button>
                         <button
-                          className="chat-send ask-send-btn"
-                          onClick={() => void handleSendCommunityMessage()}
-                          disabled={!supabaseSession || !activeCommunity || isSendingCommunityMessage}
-                          type="button"
-                          aria-label="Send"
-                          title="Send"
-                        >
+	                          className="chat-send ask-send-btn"
+	                          onClick={() => void handleSendCommunityMessage()}
+	                          disabled={
+	                            !supabaseSession ||
+	                            !activeCommunity ||
+	                            !canPostMessagesActiveCommunity ||
+	                            isSendingCommunityMessage
+	                          }
+	                          type="button"
+	                          aria-label="Send"
+	                          title="Send"
+	                        >
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
                           </svg>
@@ -4492,14 +5208,14 @@ export default function App() {
 
                   {communityTab === "settings" && (
                     <div className="settings-panel community-settings-panel">
-                      {!activeCommunity ? (
-                        <div className="chat-empty">Select a community to edit settings.</div>
-                      ) : !supabaseSession ? (
-                        <div className="chat-empty">Sign in to edit community settings.</div>
-                      ) : !isActiveCommunityAdmin ? (
-                        <div className="chat-empty">Only admins can edit community settings.</div>
-                      ) : (
-                        <>
+	                      {!activeCommunity ? (
+	                        <div className="chat-empty">Select a community to edit settings.</div>
+	                      ) : !supabaseSession ? (
+	                        <div className="chat-empty">Sign in to edit community settings.</div>
+	                      ) : !canEditActiveCommunitySettings ? (
+	                        <div className="chat-empty">Only the owner can edit community settings.</div>
+	                      ) : (
+	                        <>
                           <div className="panel-title">Community Settings</div>
                           <div className="create-community community-settings">
                             <div
@@ -4616,14 +5332,14 @@ export default function App() {
                     <div className="community-panel resources-panel">
                       <div className="resources-header-row">
                         <div className="resources-header">Resources</div>
-                        <button
-                          className="resources-add-btn"
-                          onClick={openNewResourceModal}
-                          disabled={!supabaseSession || !activeCommunity}
-                          title="Add resource"
-                        >
-                          +
-                        </button>
+	                        <button
+	                          className="resources-add-btn"
+	                          onClick={openNewResourceModal}
+	                          disabled={!supabaseSession || !activeCommunity || !canCreateResourcesActiveCommunity}
+	                          title={canCreateResourcesActiveCommunity ? "Add resource" : "Insufficient permissions"}
+	                        >
+	                          +
+	                        </button>
                       </div>
                       {resourceSuccess && <div className="success-toast">Resource saved successfully!</div>}
                       <div className="resource-list">
@@ -4710,26 +5426,28 @@ export default function App() {
                                       </a>
                                     )}
                                     {resource.body_md && <div className="resource-body">{resource.body_md}</div>}
-                                    <div className="resource-actions">
-                                      <button className="secondary" onClick={() => handleEditResource(resource)}>
-                                        Edit
-                                      </button>
-                                      <button className="danger" onClick={() => void handleDeleteResource(resource.id)}>
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </>
-                                );
-                              })()}
+	                                    {canManageResourcesActiveCommunity && (
+	                                      <div className="resource-actions">
+	                                        <button className="secondary" onClick={() => handleEditResource(resource)}>
+	                                          Edit
+	                                        </button>
+	                                        <button className="danger" onClick={() => void handleDeleteResource(resource.id)}>
+	                                          Delete
+	                                        </button>
+	                                      </div>
+	                                    )}
+	                                  </>
+	                                );
+	                              })()}
                             </div>
                           ))}
                       </div>
                     </div>
                   )}
 
-                  {communityTab === "members" && (
-                    <div className="community-panel members-panel">
-                      <div className={`members-layout${isActiveCommunityAdmin ? " with-invites" : ""}`}>
+	                  {communityTab === "members" && (
+	                    <div className="community-panel members-panel">
+	                      <div className={`members-layout${canInviteActiveCommunity ? " with-invites" : ""}`}>
                         <section className="members-section">
                           <div className="members-header-row">
                             <div className="members-header">Members</div>
@@ -4739,23 +5457,79 @@ export default function App() {
                             {communityMembers.length === 0 ? (
                               <div className="members-empty">No members yet.</div>
                             ) : (
-                              communityMembers.map((member) => (
-                                <div key={member.id} className="member-item">
-                                  <div className="member-avatar" style={{ backgroundColor: getAvatarColor(member.user_id) }}>
-                                    {getInitials(member.user_id)}
-                                  </div>
-                                  <div className="member-info">
-                                    <span className="member-name">{displayName(member.user_id)}</span>
-                                    <span className="member-role">{member.role}</span>
-                                  </div>
-                                </div>
-                              ))
+	                              communityMembers.map((member) => {
+	                                const profile = profilesByUserId[member.user_id] ?? null;
+	                                const avatarUrl = profile?.avatar_url ?? null;
+	                                const initials = profile?.display_name
+	                                  ? communityInitials(profile.display_name)
+	                                  : getInitials(member.user_id);
+	                                const memberIsOwner = Boolean(
+	                                  (activeCommunity && activeCommunity.owner_id === member.user_id) ||
+	                                    member.role === "owner"
+	                                );
+	                                const viewerIsOwner = canEditActiveCommunitySettings;
+	                                const viewerIsAdmin = canManageMembersActiveCommunity && !viewerIsOwner;
+	                                const memberIsAdmin = member.role === "admin";
+	                                const canEditThisMember = viewerIsOwner || !memberIsAdmin;
+	                                const canRemoveThisMember =
+	                                  viewerIsOwner || (viewerIsAdmin && !memberIsAdmin && !memberIsOwner);
+	                                const roleOptions = viewerIsOwner
+	                                  ? ["member", "mod", "admin"]
+	                                  : memberIsAdmin
+	                                    ? ["admin"]
+	                                    : ["member", "mod"];
+	                                return (
+	                                  <div key={member.id} className="member-item">
+                                    <div className="member-avatar" style={{ backgroundColor: getAvatarColor(member.user_id) }}>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={displayName(member.user_id)} />
+                                      ) : (
+                                        initials
+                                      )}
+	                                    </div>
+	                                    <div className="member-info">
+	                                      <span className="member-name">{displayName(member.user_id)}</span>
+	                                      {!canManageMembersActiveCommunity || memberIsOwner ? (
+	                                        <span className="member-role">{member.role}</span>
+	                                      ) : (
+	                                        <div className="member-controls">
+	                                          <select
+	                                            className="select-styled"
+	                                            value={member.role}
+	                                            disabled={!canEditThisMember}
+	                                            onChange={(event) => {
+	                                              const next = event.target.value;
+	                                              if (next === member.role) return;
+	                                              void handleSetCommunityMemberRole(member.user_id, next);
+	                                            }}
+	                                          >
+	                                            {roleOptions.map((role) => (
+	                                              <option key={role} value={role}>
+	                                                {role}
+	                                              </option>
+	                                            ))}
+	                                          </select>
+	                                          {canRemoveThisMember && (
+	                                            <button
+	                                              className="danger"
+	                                              type="button"
+	                                              onClick={() => void handleRemoveCommunityMember(member.user_id)}
+	                                            >
+	                                              Remove
+	                                            </button>
+	                                          )}
+	                                        </div>
+	                                      )}
+	                                    </div>
+	                                  </div>
+	                                );
+	                              })
                             )}
                           </div>
                         </section>
 
-                        {activeCommunity && supabaseSession && isActiveCommunityAdmin && (
-                          <section className="invites-section">
+	                        {activeCommunity && supabaseSession && canInviteActiveCommunity && (
+	                          <section className="invites-section">
                             <div className="members-header-row">
                               <div className="members-header">Invites</div>
                             </div>
@@ -4886,6 +5660,89 @@ export default function App() {
                   {communityTab === "library" && (
                     <div className="community-panel library-panel">
                       <div className="chat-empty">Library on web is coming next.</div>
+                    </div>
+                  )}
+
+                  {showCreateCommunityModal && (
+                    <div className="modal-overlay" onClick={closeCreateCommunityModal}>
+                      <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+                        <div className="modal-header">
+                          <div className="modal-title">Create community</div>
+                          <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
+                            ×
+                          </button>
+                        </div>
+                        <div className="modal-body">
+                          <div className="create-community-form">
+                            <label className="create-community-field">
+                              <span>Name</span>
+                              <input
+                                type="text"
+                                placeholder="Community name"
+                                value={createCommunityName}
+                                onChange={(event) => setCreateCommunityName(event.target.value)}
+                              />
+                            </label>
+                            <label className="create-community-field">
+                              <span>Short description</span>
+                              <textarea
+                                placeholder="One-liner about who this is for"
+                                rows={2}
+                                value={createCommunityDescription}
+                                onChange={(event) => setCreateCommunityDescription(event.target.value)}
+                              />
+                            </label>
+                            <label className="create-community-field">
+                              <span>Slug</span>
+                              <input
+                                type="text"
+                                placeholder="your-community"
+                                value={createCommunitySlug}
+                                onChange={(event) => {
+                                  setCreateCommunitySlug(event.target.value);
+                                  setCreateCommunitySlugEdited(true);
+                                }}
+                              />
+                              <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
+                            </label>
+                            <label className="create-community-field">
+                              <span>Visibility</span>
+                              <select
+                                className="select-styled"
+                                value={createCommunityVisibility}
+                                onChange={(event) =>
+                                  setCreateCommunityVisibility(event.target.value as "public" | "unlisted" | "private")
+                                }
+                              >
+                                <option value="private">Private</option>
+                                <option value="unlisted">Unlisted</option>
+                                <option value="public">Public</option>
+                              </select>
+                            </label>
+                            {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
+                          </div>
+                        </div>
+                        <div className="modal-footer">
+                          <div className="create-community-actions">
+                            {supabaseSession ? (
+                              <button
+                                className="create-community-primary"
+                                onClick={() => void handleCreateCommunity()}
+                                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
+                              >
+                                {isCreatingCommunity ? "Creating..." : "Create community"}
+                              </button>
+                            ) : (
+                              <button className="create-community-primary" onClick={() => void handleSignIn()}>
+                                Sign in to create
+                              </button>
+                            )}
+                            <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 

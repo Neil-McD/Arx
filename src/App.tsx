@@ -272,6 +272,7 @@ type CommunityChatMessage = {
   body: string;
   reply_to_id?: string | null;
   created_at: string;
+  seq: number;
 };
 
 type MessageReaction = {
@@ -384,25 +385,27 @@ type CommunityMember = {
   created_at: string;
 };
 
-type CommunityArtifact = {
-  id: string;
+type CommunityAccess = {
   community_id: string;
-  author_id: string;
-  type: "vision" | "decision" | "playbook" | "outcome";
-  title: string;
-  current_version_id: string | null;
-  created_at: string;
-  updated_at: string;
+  user_id: string;
+  is_owner: boolean;
+  is_entitled: boolean;
+  entitlement_role: string | null;
+  entitlement_tier_id: string | null;
+  entitlement_ends_at: string | null;
+  effective_role: string | null;
+  can_view: boolean;
+  can_post_message: boolean;
+  can_create_resource: boolean;
+  can_manage_resources: boolean;
+  can_invite: boolean;
+  can_manage_members: boolean;
 };
 
-type ArtifactVersion = {
-  id: string;
-  artifact_id: string;
-  body_md: string;
-  summary: string | null;
-  tags: string[] | null;
-  created_at: string;
-  created_by: string;
+type UserProfile = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
 };
 
 type CommunityInviteRecord = {
@@ -467,6 +470,8 @@ function App() {
   const [modelAvailability, setModelAvailability] = useState<Record<string, boolean>>({});
 		  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
 		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
+      const providerKeySyncInFlightRef = useRef<Promise<void> | null>(null);
+      const lastProviderKeySyncAtRef = useRef<number>(0);
 		  const supabaseAutoRefreshTimeoutRef = useRef<number | null>(null);
 		  const autoJoinInvitesAttemptedRef = useRef<Set<string>>(new Set());
 		  const autoJoinPublicCommunitiesAttemptedRef = useRef<Set<string>>(new Set());
@@ -493,7 +498,10 @@ function App() {
 		  const [communities, setCommunities] = useState<CommunityRecord[]>([]);
 		  const [communitiesLoadError, setCommunitiesLoadError] = useState<string | null>(null);
 		  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
-		  const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
+		  const [, setCommunityRoleById] = useState<Record<string, string>>({});
+		  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
+		  const [, setIsLoadingCommunityAccess] = useState(false);
+		  const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
 		  const [communityInvites, setCommunityInvites] = useState<CommunityInviteRecord[]>([]);
 		  const [isLoadingCommunityInvites, setIsLoadingCommunityInvites] = useState(false);
 		  const [inviteMaxUsesPreset, setInviteMaxUsesPreset] = useState("unlimited");
@@ -526,11 +534,7 @@ function App() {
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
   const [showResourceModal, setShowResourceModal] = useState(false);
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
-  const [artifacts, setArtifacts] = useState<CommunityArtifact[]>([]);
-  const [artifactVersions, setArtifactVersions] = useState<ArtifactVersion[]>([]);
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
-	  const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
-	  const [isLoadingArtifactVersions, setIsLoadingArtifactVersions] = useState(false);
+  const [selectedLibraryResourceId, setSelectedLibraryResourceId] = useState<string | null>(null);
 	  const [isLoadingChat, setIsLoadingChat] = useState(false);
 	  const [isLoadingMoreChat, setIsLoadingMoreChat] = useState(false);
 	  const [communityChatHasMore, setCommunityChatHasMore] = useState(true);
@@ -551,8 +555,8 @@ function App() {
 	  const [unreadCount, setUnreadCount] = useState(0);
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
 	  const isUserAtBottomRef = useRef(true);
-	  const communityChatOldestCreatedAtRef = useRef<string | null>(null);
-	  const pendingChatPrependScrollRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+		  const communityChatOldestSeqRef = useRef<number | null>(null);
+		  const pendingChatPrependScrollRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
 	  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashHover, setSlashHover] = useState<string | null>(null);
@@ -1129,6 +1133,97 @@ function App() {
     supabaseSessionRef.current = supabaseSession;
   }, [supabaseSession]);
 
+  async function fetchCloudProviderKey(
+    session: SupabaseSession,
+    params: { provider: string; reveal?: boolean },
+  ): Promise<{ hasKey: boolean; updatedAt: string | null; key: string | null } | null> {
+    const url = getSupabaseUrl();
+    if (!url) return null;
+    const response = await fetchWithSupabaseAuth(
+      `${url}/functions/v1/provider_key`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get", provider: params.provider, reveal: params.reveal ?? false }),
+      },
+      session,
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as { has_key?: unknown; updated_at?: unknown; key?: unknown };
+    return {
+      hasKey: Boolean(data?.has_key),
+      updatedAt: typeof data?.updated_at === "string" ? data.updated_at : null,
+      key: typeof data?.key === "string" ? data.key : null,
+    };
+  }
+
+  async function setCloudProviderKey(session: SupabaseSession, provider: string, key: string): Promise<boolean> {
+    const url = getSupabaseUrl();
+    if (!url) return false;
+    const response = await fetchWithSupabaseAuth(
+      `${url}/functions/v1/provider_key`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set", provider, key }),
+      },
+      session,
+    );
+    return response.ok;
+  }
+
+  async function clearCloudProviderKey(session: SupabaseSession, provider: string): Promise<boolean> {
+    const url = getSupabaseUrl();
+    if (!url) return false;
+    const response = await fetchWithSupabaseAuth(
+      `${url}/functions/v1/provider_key`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear", provider }),
+      },
+      session,
+    );
+    return response.ok;
+  }
+
+  async function syncOpenRouterKeyWithCloud(session: SupabaseSession): Promise<void> {
+    const provider = "openrouter";
+
+    const localKey = await invoke<string | null>("get_provider_key_cmd", { provider }).catch(() => null);
+    const localTrimmed = (localKey ?? "").trim();
+
+    const cloudStatus = await fetchCloudProviderKey(session, { provider, reveal: false }).catch(() => null);
+    if (cloudStatus?.hasKey) {
+      const cloudRevealed = await fetchCloudProviderKey(session, { provider, reveal: true }).catch(() => null);
+      const cloudKey = (cloudRevealed?.key ?? "").trim();
+      if (cloudKey && cloudKey !== localTrimmed) {
+        await invoke("set_provider_key_cmd", { provider, key: cloudKey });
+      }
+      await loadProviderKeys();
+      return;
+    }
+
+    if (localTrimmed) {
+      await setCloudProviderKey(session, provider, localTrimmed);
+    }
+    await loadProviderKeys();
+  }
+
+  function scheduleOpenRouterKeySync(session: SupabaseSession, reason: "session" | "focus") {
+    const now = Date.now();
+    const minIntervalMs = reason === "focus" ? 10_000 : 0;
+    if (now - lastProviderKeySyncAtRef.current < minIntervalMs) return;
+    lastProviderKeySyncAtRef.current = now;
+
+    if (providerKeySyncInFlightRef.current) return;
+    providerKeySyncInFlightRef.current = syncOpenRouterKeyWithCloud(session)
+      .catch((error) => console.warn("Provider key sync failed:", error))
+      .finally(() => {
+        providerKeySyncInFlightRef.current = null;
+      });
+  }
+
   useEffect(() => {
     if (!supabaseSession) return;
     void loadThreads();
@@ -1180,6 +1275,7 @@ function App() {
       if (current.expires_at <= now + 60) {
         void refreshSupabaseSessionLocked(current.refresh_token);
       }
+      scheduleOpenRouterKeySync(current, "focus");
     };
     window.addEventListener("focus", onFocus);
 	    return () => window.removeEventListener("focus", onFocus);
@@ -1190,6 +1286,7 @@ function App() {
 	    void loadCommunities(supabaseSession);
 	    void maybeAutoJoinPendingInvites(supabaseSession);
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
+      scheduleOpenRouterKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
 
   useEffect(() => {
@@ -1197,11 +1294,11 @@ function App() {
     void loadCommunityChat(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, communityTab]);
 
-	  useEffect(() => {
-	    // Reset community chat UI when switching communities.
-	    setCommunityChatError(null);
-	    setCommunityMessages([]);
-	    setMessageReactions([]);
+		  useEffect(() => {
+		    // Reset community chat UI when switching communities.
+		    setCommunityChatError(null);
+		    setCommunityMessages([]);
+		    setMessageReactions([]);
 	    setReplyingToMessage(null);
 	    setEditingMessageId(null);
 	    setEditingMessageText("");
@@ -1211,19 +1308,20 @@ function App() {
 	    setIsUserAtBottom(true);
 	    isUserAtBottomRef.current = true;
 	    setIsLoadingMoreChat(false);
-	    setCommunityChatHasMore(true);
-	    communityChatOldestCreatedAtRef.current = null;
-	    pendingChatPrependScrollRef.current = null;
-	    setOpenResourceEmbedId(null);
-	    if (chatInputRef.current) {
-	      chatInputRef.current.style.height = "auto";
-	    }
-	  }, [activeCommunityId]);
+		    setCommunityChatHasMore(true);
+		    communityChatOldestSeqRef.current = null;
+		    pendingChatPrependScrollRef.current = null;
+		    setOpenResourceEmbedId(null);
+        setSelectedLibraryResourceId(null);
+		    if (chatInputRef.current) {
+		      chatInputRef.current.style.height = "auto";
+		    }
+		  }, [activeCommunityId]);
 
 	  useEffect(() => {
 	    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
 	    setCommunitySettingsError(null);
-    if (!current) {
+	    if (!current) {
       setCommunitySettingsName("");
       setCommunitySettingsSlug("");
       setCommunitySettingsDescription("");
@@ -1240,8 +1338,17 @@ function App() {
     setCommunitySettingsVisibility(current.visibility ?? "private");
     setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
     setCommunitySettingsBannerUrl(current.banner_url ?? null);
-    setInviteCreateError(null);
-  }, [activeCommunityId, communities]);
+	    setInviteCreateError(null);
+	  }, [activeCommunityId, communities]);
+
+	  useEffect(() => {
+	    if (!supabaseSession || !activeCommunityId) {
+	      setActiveCommunityAccess(null);
+	      setIsLoadingCommunityAccess(false);
+	      return;
+	    }
+	    void loadCommunityAccess(activeCommunityId, supabaseSession);
+	  }, [supabaseSession, activeCommunityId]);
 
 	  useEffect(() => {
 	    if (activePage !== "community" || communityTab !== "members") return;
@@ -1249,20 +1356,16 @@ function App() {
 	      setCommunityInvites([]);
 	      return;
 	    }
-    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
-    const role = communityRoleById[activeCommunityId];
-    const isAdmin = Boolean(
-      current && (role === "owner" || role === "admin" || current.owner_id === supabaseSession.user.id)
-    );
-    if (!isAdmin) {
-      setCommunityInvites([]);
-      return;
-    }
+	    if (!activeCommunityAccess?.can_invite) {
+	      setCommunityInvites([]);
+	      return;
+	    }
 	    void loadCommunityInvites(activeCommunityId, supabaseSession);
-	  }, [activePage, communityTab, supabaseSession, activeCommunityId, communities, communityRoleById]);
+	  }, [activePage, communityTab, supabaseSession, activeCommunityId, activeCommunityAccess?.can_invite]);
 
   useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || communityTab !== "resources") return;
+    if (!supabaseSession || !activeCommunityId) return;
+    if (communityTab !== "resources" && communityTab !== "library") return;
     void loadCommunityResources(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, communityTab]);
 
@@ -1277,14 +1380,16 @@ function App() {
   }, [supabaseSession, activeCommunityId, activePage]);
 
   useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || communityTab !== "library") return;
-    void loadArtifacts(activeCommunityId, supabaseSession);
-  }, [supabaseSession, activeCommunityId, communityTab]);
-
-  useEffect(() => {
-    if (!supabaseSession || !selectedArtifactId || communityTab !== "library") return;
-    void loadArtifactVersions(selectedArtifactId, supabaseSession);
-  }, [supabaseSession, selectedArtifactId, communityTab]);
+    if (communityTab !== "library") return;
+    const pinned = communityResources.filter((resource) => Boolean(resource.pinned));
+    if (pinned.length === 0) {
+      if (selectedLibraryResourceId !== null) setSelectedLibraryResourceId(null);
+      return;
+    }
+    if (!selectedLibraryResourceId || !pinned.some((resource) => resource.id === selectedLibraryResourceId)) {
+      setSelectedLibraryResourceId(pinned[0].id);
+    }
+  }, [communityResources, communityTab, selectedLibraryResourceId]);
 
 	  // Smart auto-scroll: only scroll to bottom if user is already near bottom
 	  useEffect(() => {
@@ -1414,8 +1519,9 @@ function App() {
     const wsUrl = `${url.replace("https://", "wss://").replace("http://", "ws://")}/realtime/v1/websocket?apikey=${apiKey}&vsn=1.0.0`;
     const socket = new WebSocket(wsUrl);
     communitySocketRef.current = socket;
-    const joinRef = `${Date.now()}`;
-    const topic = "realtime:public:community_chat_messages";
+	    const joinRef = `${Date.now()}`;
+	    const topic = "realtime:public:messages";
+      const threadId = communityChatThreadIdForCommunity(activeCommunityId);
 
     socket.addEventListener("open", () => {
       socket.send(
@@ -1425,17 +1531,17 @@ function App() {
           payload: {
             config: {
               broadcast: { ack: false },
-              postgres_changes: [
-                {
-                  event: "INSERT",
-                  schema: "public",
-                  table: "community_chat_messages",
-                  filter: `community_id=eq.${activeCommunityId}`
-                }
-              ]
-            },
-            access_token: supabaseSession.access_token
-          },
+	              postgres_changes: [
+	                {
+	                  event: "INSERT",
+	                  schema: "public",
+	                  table: "messages",
+	                  filter: `thread_id=eq.${threadId}`
+	                }
+	              ]
+	            },
+	            access_token: supabaseSession.access_token
+	          },
           ref: joinRef
         })
       );
@@ -1460,32 +1566,40 @@ function App() {
           payload?: Record<string, unknown>;
         };
 
-        if (data.event !== "postgres_changes") return;
-        const payload = data.payload as {
-          eventType?: string;
-          new?: CommunityChatMessage;
-          record?: CommunityChatMessage;
-          data?: { new?: CommunityChatMessage; record?: CommunityChatMessage };
-        };
-        const record =
-          payload.new ??
-          payload.record ??
-          payload.data?.new ??
-          payload.data?.record;
-        if (!record) return;
-        if (record.community_id !== activeCommunityId) return;
-        setCommunityMessages((prev) => {
-          if (prev.some((item) => item.id === record.id)) return prev;
-          const next = [...prev, record];
-          next.sort((a, b) => a.created_at.localeCompare(b.created_at));
-          return next;
-        });
-        // Increment unread count only when the user isn't at bottom.
-        if (record.sender_id !== supabaseSession?.user.id && !isUserAtBottomRef.current) {
-          setUnreadCount((prev) => prev + 1);
-        }
-      } catch {
-        // Ignore malformed payloads
+	        if (data.event !== "postgres_changes") return;
+	        const payload = data.payload as {
+	          eventType?: string;
+	          new?: CloudMessageRow;
+	          record?: CloudMessageRow;
+	          data?: { new?: CloudMessageRow; record?: CloudMessageRow };
+	        };
+	        const record =
+	          payload.new ??
+	          payload.record ??
+	          payload.data?.new ??
+	          payload.data?.record;
+	        if (!record) return;
+	        if (record.thread_id !== threadId) return;
+          const mapped = toCommunityChatMessage(record);
+          if (!mapped) return;
+	        setCommunityMessages((prev) => {
+	          const idx = prev.findIndex((item) => item.id === mapped.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...mapped };
+              next.sort((a, b) => a.seq - b.seq);
+              return next;
+            }
+	          const next = [...prev, mapped];
+	          next.sort((a, b) => a.seq - b.seq);
+	          return next;
+	        });
+	        // Increment unread count only when the user isn't at bottom.
+	        if (mapped.sender_id !== supabaseSession?.user.id && !isUserAtBottomRef.current) {
+	          setUnreadCount((prev) => prev + 1);
+	        }
+	      } catch {
+	        // Ignore malformed payloads
       }
     });
 
@@ -1926,7 +2040,7 @@ function App() {
     const loadCloud = async (auth: SupabaseSession): Promise<ThreadRecord[]> => {
       if (!url) return [];
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&engine_id=neq.community_chat&order=updated_at.desc`,
         { method: "GET" },
         auth,
       );
@@ -1956,7 +2070,9 @@ function App() {
       }
 
       const cloudThreads = await loadCloud(session);
-      const visible = cloudThreads.filter((t) => t.id !== "system" && t.engine_id !== "system");
+      const visible = cloudThreads.filter(
+        (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
+      );
       setThreads(visible);
 
       if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
@@ -2676,36 +2792,11 @@ function isModelReady(modelId: string): boolean {
       role: string;
       tier_id: string | null;
     }>;
-    const first = rows[0];
-    if (!first) throw new Error("Failed to join community.");
+	    const first = rows[0];
+	    if (!first) throw new Error("Failed to join community.");
 
-    // Best-effort entitlement grant (some deployments use entitlements for RLS).
-    try {
-      await fetchWithSupabaseAuth(
-        `${url}/rest/v1/entitlements`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            user_id: session.user.id,
-            community_id: first.community_id,
-            role: first.role ?? "member",
-            tier_id: first.tier_id ?? "member",
-            source: "invite",
-            status: "active",
-            starts_at: new Date().toISOString()
-          })
-        },
-        session
-      );
-    } catch {
-      // ignore
-    }
-
-    return { id: first.community_id, slug: first.community_slug, name: first.community_name };
-  }
+	    return { id: first.community_id, slug: first.community_slug, name: first.community_name };
+	  }
 
   async function handleDismissInvite(inviteKey: string) {
     setInviteJoinError(null);
@@ -2861,36 +2952,12 @@ function isModelReady(modelId: string): boolean {
         role: string;
         tier_id: string;
       }>;
-      const first = rows[0];
-      if (!first) throw new Error("Failed to join community.");
+	      const first = rows[0];
+	      if (!first) throw new Error("Failed to join community.");
 
-      try {
-        await fetchWithSupabaseAuth(
-          `${url}/rest/v1/entitlements`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              user_id: session.user.id,
-              community_id: first.community_id,
-              role: first.role ?? "member",
-              tier_id: first.tier_id ?? "member",
-              source: "public_join",
-              status: "active",
-              starts_at: new Date().toISOString()
-            })
-          },
-          session
-        );
-      } catch {
-        // ignore
-      }
-
-      try {
-        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-      } catch {
+	      try {
+	        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+	      } catch {
         // ignore
       }
 
@@ -3341,36 +3408,12 @@ function isModelReady(modelId: string): boolean {
 	        role: string;
 	        tier_id: string;
 	      }>;
-	      const first = rows[0];
-	      if (!first) throw new Error("Failed to join community.");
+		      const first = rows[0];
+		      if (!first) throw new Error("Failed to join community.");
 
-	      try {
-	        await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/entitlements`,
-	          {
-	            method: "POST",
-	            headers: {
-	              "Content-Type": "application/json"
-	            },
-	            body: JSON.stringify({
-	              user_id: supabaseSession.user.id,
-	              community_id: first.community_id,
-	              role: first.role ?? "member",
-	              tier_id: first.tier_id ?? "member",
-	              source: "public_join",
-	              status: "active",
-	              starts_at: new Date().toISOString()
-	            })
-	          },
-	          supabaseSession
-	        );
-	      } catch {
-	        // ignore
-	      }
-
-	      try {
-	        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-	      } catch {
+		      try {
+		        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+		      } catch {
 	        // ignore
 	      }
 
@@ -3582,38 +3625,115 @@ function isModelReady(modelId: string): boolean {
 	    }
 	  }
 
+  function communityChatThreadIdForCommunity(communityId: string): string {
+    return communityId;
+  }
+
+  function extractTextFromContentJson(contentJson: unknown): string {
+    if (contentJson === null || contentJson === undefined) return "";
+    if (typeof contentJson === "string") {
+      const trimmed = contentJson.trim();
+      if (!trimmed) return "";
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        return extractTextFromContentJson(parsed);
+      } catch {
+        return trimmed;
+      }
+    }
+    if (typeof contentJson === "object") {
+      const asAny = contentJson as any;
+      if (typeof asAny.text === "string") return asAny.text;
+      if (typeof asAny.body === "string") return asAny.body;
+    }
+    return "";
+  }
+
+  type CloudMessageRow = {
+    id: string;
+    thread_id: string;
+    seq: number;
+    role: string;
+    content_json: unknown;
+    sender_id: string | null;
+    reply_to_id: string | null;
+    created_at: string;
+  };
+
+  function toCommunityChatMessage(row: CloudMessageRow): CommunityChatMessage | null {
+    const threadId = (row.thread_id ?? "").trim();
+    if (!threadId) return null;
+    const id = (row.id ?? "").trim();
+    if (!id) return null;
+    if ((row.role ?? "").trim() !== "user") return null;
+    const senderId = (row.sender_id ?? "").trim() || "unknown";
+    const body = extractTextFromContentJson(row.content_json);
+    return {
+      id,
+      community_id: threadId,
+      sender_id: senderId,
+      body,
+      reply_to_id: row.reply_to_id ?? null,
+      created_at: row.created_at,
+      seq: Number(row.seq) || 0,
+    };
+  }
+
+  async function ensureCommunityChatThread(communityId: string, session: SupabaseSession): Promise<string> {
+    const url = getSupabaseUrl();
+    if (!url) throw new Error("Missing Supabase URL.");
+
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/rpc/ensure_community_chat_thread`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ p_community_id: communityId }),
+      },
+      session,
+    );
+    if (!response.ok) throw new Error(await readSupabaseError(response));
+    const rows = (await response.json()) as Array<{ thread_id: string }>;
+    const threadId = (rows[0]?.thread_id ?? "").trim();
+    if (!threadId) throw new Error("Failed to ensure community chat thread.");
+    return threadId;
+  }
+
   async function loadCommunityChat(communityId: string, session: SupabaseSession) {
     const url = getSupabaseUrl();
     if (!url) return;
     setIsLoadingChat(true);
     setIsLoadingMoreChat(false);
     setCommunityChatHasMore(true);
-    communityChatOldestCreatedAtRef.current = null;
+    communityChatOldestSeqRef.current = null;
     pendingChatPrependScrollRef.current = null;
     try {
+      const threadId = await ensureCommunityChatThread(communityId, session);
       let response: Response;
       try {
         response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_chat_messages?select=id,community_id,sender_id,body,reply_to_id,created_at&community_id=eq.${communityId}&order=created_at.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          {},
-          session
+          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
+            threadId,
+          )}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
+          { method: "GET" },
+          session,
         );
       } catch {
         return;
       }
       if (!response.ok) return;
-      const rowsDesc = (await response.json()) as CommunityChatMessage[];
-      const hasMore = rowsDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...rowsDesc].reverse();
+      const rowsDesc = (await response.json()) as CloudMessageRow[];
+      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
+      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
+      const rows = [...mappedDesc].reverse();
       setCommunityChatHasMore(hasMore);
       setCommunityMessages(rows);
-      communityChatOldestCreatedAtRef.current = rows[0]?.created_at ?? null;
+      communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
       setUnreadCount(0);
-      setIsUserAtBottom(true); // Reset scroll state on load
+      setIsUserAtBottom(true);
       isUserAtBottomRef.current = true;
-      // Load reactions for these messages
       if (rows.length > 0) {
-        const messageIds = rows.map(m => m.id);
+        const messageIds = rows.map((m) => m.id);
         await loadMessageReactions(messageIds, session);
       }
     } finally {
@@ -3624,7 +3744,7 @@ function isModelReady(modelId: string): boolean {
   async function loadOlderCommunityChat(communityId: string, session: SupabaseSession) {
     if (isLoadingChat || isLoadingMoreChat) return;
     if (!communityChatHasMore) return;
-    const cursor = communityChatOldestCreatedAtRef.current;
+    const cursor = communityChatOldestSeqRef.current;
     if (!cursor) {
       setCommunityChatHasMore(false);
       return;
@@ -3636,18 +3756,21 @@ function isModelReady(modelId: string): boolean {
     if (container) {
       pendingChatPrependScrollRef.current = {
         prevScrollHeight: container.scrollHeight,
-        prevScrollTop: container.scrollTop
+        prevScrollTop: container.scrollTop,
       };
     }
 
     setIsLoadingMoreChat(true);
     try {
+      const threadId = await ensureCommunityChatThread(communityId, session);
       let response: Response;
       try {
         response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_chat_messages?select=id,community_id,sender_id,body,reply_to_id,created_at&community_id=eq.${communityId}&created_at=lt.${encodeURIComponent(cursor)}&order=created_at.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          {},
-          session
+          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
+            threadId,
+          )}&seq=lt.${cursor}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
+          { method: "GET" },
+          session,
         );
       } catch {
         pendingChatPrependScrollRef.current = null;
@@ -3657,17 +3780,18 @@ function isModelReady(modelId: string): boolean {
         pendingChatPrependScrollRef.current = null;
         return;
       }
-      const rowsDesc = (await response.json()) as CommunityChatMessage[];
-      if (rowsDesc.length === 0) {
+      const rowsDesc = (await response.json()) as CloudMessageRow[];
+      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
+      if (mappedDesc.length === 0) {
         setCommunityChatHasMore(false);
         pendingChatPrependScrollRef.current = null;
         return;
       }
 
-      const hasMore = rowsDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...rowsDesc].reverse();
+      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
+      const rows = [...mappedDesc].reverse();
       setCommunityChatHasMore(hasMore);
-      communityChatOldestCreatedAtRef.current = rows[0]?.created_at ?? cursor;
+      communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
 
       setCommunityMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
@@ -3759,13 +3883,12 @@ function isModelReady(modelId: string): boolean {
               "Content-Type": "application/json",
               Prefer: "return=representation"
             },
-            body: JSON.stringify({
-              message_id: messageId,
-              user_id: supabaseSession.user.id,
-              emoji
-            })
-          },
-          supabaseSession
+	            body: JSON.stringify({
+	              message_id: messageId,
+	              emoji
+	            })
+	          },
+	          supabaseSession
         );
         if (response.ok) {
           const created = (await response.json()) as MessageReaction[];
@@ -3818,13 +3941,13 @@ function isModelReady(modelId: string): boolean {
     let response: Response | null = null;
     try {
       response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages?id=eq.${editingMessageId}&sender_id=eq.${supabaseSession.user.id}`,
+        `${url}/rest/v1/messages?id=eq.${editingMessageId}&sender_id=eq.${supabaseSession.user.id}`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ body: bodyToSave })
+          body: JSON.stringify({ content_json: { text: bodyToSave } })
         },
         supabaseSession
       );
@@ -3851,7 +3974,7 @@ function isModelReady(modelId: string): boolean {
     let response: Response | null = null;
     try {
       response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages?id=eq.${messageId}&sender_id=eq.${supabaseSession.user.id}`,
+        `${url}/rest/v1/messages?id=eq.${messageId}&sender_id=eq.${supabaseSession.user.id}`,
         { method: "DELETE" },
         supabaseSession
       );
@@ -3866,11 +3989,11 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function loadCommunityResources(communityId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingResources(true);
-    try {
+	  async function loadCommunityResources(communityId: string, session: SupabaseSession) {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    setIsLoadingResources(true);
+	    try {
       let response: Response;
       try {
         response = await fetchWithSupabaseAuth(
@@ -3886,13 +4009,37 @@ function isModelReady(modelId: string): boolean {
       setCommunityResources(rows);
     } finally {
       setIsLoadingResources(false);
-    }
-  }
+	    }
+	  }
 
-  async function loadCommunityMembers(communityId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    let response: Response;
+	  async function loadCommunityAccess(communityId: string, session: SupabaseSession) {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    setIsLoadingCommunityAccess(true);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/rpc/get_my_community_access`,
+	        {
+	          method: "POST",
+	          headers: { "Content-Type": "application/json" },
+	          body: JSON.stringify({ p_community_id: communityId })
+	        },
+	        session
+	      );
+	      if (!response.ok) return;
+	      const rows = (await response.json()) as CommunityAccess[];
+	      setActiveCommunityAccess(rows[0] ?? null);
+	    } catch {
+	      // ignore
+	    } finally {
+	      setIsLoadingCommunityAccess(false);
+	    }
+	  }
+
+		  async function loadCommunityMembers(communityId: string, session: SupabaseSession) {
+		    const url = getSupabaseUrl();
+		    if (!url) return;
+		    let response: Response;
     try {
       response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/community_memberships?select=id,community_id,user_id,role,created_at&community_id=eq.${communityId}&order=created_at.asc&limit=200`,
@@ -3901,65 +4048,100 @@ function isModelReady(modelId: string): boolean {
       );
     } catch {
       return;
-    }
-    if (!response.ok) return;
-    const rows = (await response.json()) as CommunityMember[];
-    setCommunityMembers(rows);
-  }
+	    }
+	    if (!response.ok) return;
+	    const rows = (await response.json()) as CommunityMember[];
+	    setCommunityMembers(rows);
 
-  async function loadArtifacts(communityId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingArtifacts(true);
-    try {
-      let response: Response;
-      try {
-        response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/artifacts?select=id,community_id,author_id,type,title,current_version_id,created_at,updated_at&community_id=eq.${communityId}&order=updated_at.desc&limit=200`,
-          {},
-          session
-        );
-      } catch {
-        return;
-      }
-      if (!response.ok) return;
-      const rows = (await response.json()) as CommunityArtifact[];
-      setArtifacts(rows);
-      if (rows.length > 0 && !selectedArtifactId) {
-        setSelectedArtifactId(rows[0].id);
-      }
-    } finally {
-      setIsLoadingArtifacts(false);
-    }
-  }
+	    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+	    if (userIds.length === 0) return;
+	    const idsFilter = userIds.map((id) => `"${id}"`).join(",");
+	    try {
+	      const profilesResponse = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url&user_id=in.(${idsFilter})`,
+	        {},
+	        session
+	      );
+	      if (!profilesResponse.ok) return;
+	      const profiles = (await profilesResponse.json()) as UserProfile[];
+	      setProfilesByUserId((prev) => {
+	        const next = { ...prev };
+	        for (const profile of profiles) {
+	          next[profile.user_id] = profile;
+	        }
+	        return next;
+	      });
+		    } catch {
+		      // ignore
+		    }
+		  }
 
-  async function loadArtifactVersions(artifactId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingArtifactVersions(true);
-    try {
-      let response: Response;
-      try {
-        response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/artifact_versions?select=id,artifact_id,body_md,summary,tags,created_at,created_by&artifact_id=eq.${artifactId}&order=created_at.desc`,
-          {},
-          session
-        );
-      } catch {
-        return;
-      }
-      if (!response.ok) return;
-      const rows = (await response.json()) as ArtifactVersion[];
-      setArtifactVersions(rows);
-    } finally {
-      setIsLoadingArtifactVersions(false);
-    }
-  }
+		  async function handleSetCommunityMemberRole(userId: string, role: string) {
+		    if (!supabaseSession || !activeCommunityId) return;
+		    const url = getSupabaseUrl();
+		    if (!url) return;
+		    try {
+		      const response = await fetchWithSupabaseAuth(
+		        `${url}/rest/v1/rpc/set_member_role`,
+		        {
+		          method: "POST",
+		          headers: { "Content-Type": "application/json" },
+		          body: JSON.stringify({
+		            p_community_id: activeCommunityId,
+		            p_user_id: userId,
+		            p_role: role
+		          })
+		        },
+		        supabaseSession
+		      );
+		      if (!response.ok) {
+		        const message = await readSupabaseError(response);
+		        console.warn("Failed to set member role:", message);
+		      }
+		    } catch (error) {
+		      console.warn("Failed to set member role:", error);
+		    } finally {
+		      await loadCommunityMembers(activeCommunityId, supabaseSession);
+		      await loadCommunities(supabaseSession);
+		      await loadCommunityAccess(activeCommunityId, supabaseSession);
+		    }
+		  }
 
-  function slugify(input: string): string {
-    return input
-      .toLowerCase()
-      .trim()
+		  async function handleRemoveCommunityMember(userId: string) {
+		    if (!supabaseSession || !activeCommunityId) return;
+		    const url = getSupabaseUrl();
+		    if (!url) return;
+		    if (!window.confirm("Remove this member?")) return;
+		    try {
+		      const response = await fetchWithSupabaseAuth(
+		        `${url}/rest/v1/rpc/remove_member`,
+		        {
+		          method: "POST",
+		          headers: { "Content-Type": "application/json" },
+		          body: JSON.stringify({
+		            p_community_id: activeCommunityId,
+		            p_user_id: userId
+		          })
+		        },
+		        supabaseSession
+		      );
+		      if (!response.ok) {
+		        const message = await readSupabaseError(response);
+		        console.warn("Failed to remove member:", message);
+		      }
+		    } catch (error) {
+		      console.warn("Failed to remove member:", error);
+		    } finally {
+		      await loadCommunityMembers(activeCommunityId, supabaseSession);
+		      await loadCommunities(supabaseSession);
+		      await loadCommunityAccess(activeCommunityId, supabaseSession);
+		    }
+		  }
+
+	  function slugify(input: string): string {
+	    return input
+	      .toLowerCase()
+	      .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
   }
@@ -4022,21 +4204,19 @@ function isModelReady(modelId: string): boolean {
     setIsCreatingCommunity(true);
     try {
       const communityResponse = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/communities`,
+        `${url}/rest/v1/rpc/create_community`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation"
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            name,
-            slug,
-            owner_id: supabaseSession.user.id,
-            visibility: createCommunityVisibility,
-            avatar_url: createCommunityAvatarUrl?.trim() || null,
-            description: createCommunityDescription.trim() || null,
-            banner_url: createCommunityBannerUrl?.trim() || null
+            p_name: name,
+            p_slug: slug,
+            p_visibility: createCommunityVisibility,
+            p_avatar_url: createCommunityAvatarUrl?.trim() || null,
+            p_description: createCommunityDescription.trim() || null,
+            p_banner_url: createCommunityBannerUrl?.trim() || null
           })
         },
         supabaseSession
@@ -4048,49 +4228,8 @@ function isModelReady(modelId: string): boolean {
       }
       const created = (await communityResponse.json()) as CommunityRecord[];
       const community = created[0];
-      const membershipResponse = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_memberships`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            community_id: community.id,
-            user_id: supabaseSession.user.id,
-            role: "owner"
-          })
-        },
-        supabaseSession
-      );
-      if (!membershipResponse.ok) {
-        const text = await membershipResponse.text();
-        setCreateCommunityError(text || "Failed to add you as a community member.");
-        return;
-      }
-
-      const entitlementResponse = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/entitlements`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            user_id: supabaseSession.user.id,
-            community_id: community.id,
-            role: "owner",
-            tier_id: "founder",
-            source: "manual_grant",
-            status: "active",
-            starts_at: new Date().toISOString()
-          })
-        },
-        supabaseSession
-      );
-      if (!entitlementResponse.ok) {
-        const text = await entitlementResponse.text();
-        setCreateCommunityError(text || "Failed to create entitlements.");
+      if (!community?.id) {
+        setCreateCommunityError("Failed to create community.");
         return;
       }
 
@@ -4409,6 +4548,7 @@ function isModelReady(modelId: string): boolean {
       body: bodyToSend,
       reply_to_id: replyToId,
       created_at: new Date().toISOString(),
+      seq: Number.MAX_SAFE_INTEGER,
     };
     setCommunityMessages((prev) => [...prev, optimisticMessage]);
     setCommunityMessageInput("");
@@ -4434,22 +4574,23 @@ function isModelReady(modelId: string): boolean {
       return;
     }
     try {
+      const threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_chat_messages`,
+        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Prefer: "return=representation"
           },
-          body: JSON.stringify({
-            community_id: activeCommunityId,
-            sender_id: supabaseSession.user.id,
-            body: bodyToSend,
-            reply_to_id: replyToId
-          })
-        },
-        supabaseSession
+	          body: JSON.stringify({
+	            thread_id: threadId,
+	            role: "user",
+	            content_json: { text: bodyToSend },
+	            reply_to_id: replyToId
+	          })
+	        },
+	        supabaseSession
       );
       if (!response.ok) {
         const errText = await response.text();
@@ -4460,8 +4601,8 @@ function isModelReady(modelId: string): boolean {
         setReplyingToMessage(replySnapshot);
         return;
       }
-      const created = (await response.json()) as CommunityChatMessage[];
-      const record = created[0] ?? null;
+      const created = (await response.json()) as CloudMessageRow[];
+      const record = created[0] ? toCommunityChatMessage(created[0]) : null;
       if (!record) {
         setCommunityChatError("Message sent, but no response payload returned.");
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -4474,7 +4615,7 @@ function isModelReady(modelId: string): boolean {
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
         if (withoutOptimistic.some((m) => m.id === record.id)) return withoutOptimistic;
         const next = [...withoutOptimistic, record];
-        next.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        next.sort((a, b) => a.seq - b.seq);
         return next;
       });
     } catch (error) {
@@ -4651,11 +4792,12 @@ function isModelReady(modelId: string): boolean {
 
   async function handleSaveProviderKey(id: string) {
     const provider = providerKeys.find((item) => item.id === id);
-    if (!provider || !provider.inputValue.trim()) return;
+    const value = provider?.inputValue.trim() ?? "";
+    if (!provider || !value) return;
     try {
       await invoke("set_provider_key_cmd", {
         provider: id,
-        key: provider.inputValue.trim()
+        key: value
       });
       const hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: id });
       setProviderKeys((prev) =>
@@ -4667,6 +4809,12 @@ function isModelReady(modelId: string): boolean {
       );
       if (id === "openrouter" && hasKey) {
         await refreshModelAvailability();
+      }
+      if (supabaseSession) {
+        const ok = await setCloudProviderKey(supabaseSession, id, value);
+        if (!ok) {
+          setMemoryToast("Saved key locally, but failed to sync to cloud.");
+        }
       }
     } catch (error) {
       const message =
@@ -4693,6 +4841,12 @@ function isModelReady(modelId: string): boolean {
       );
       if (id === "openrouter") {
         setModelAvailability({});
+      }
+      if (supabaseSession) {
+        const ok = await clearCloudProviderKey(supabaseSession, id);
+        if (!ok) {
+          setMemoryToast("Cleared key locally, but failed to sync to cloud.");
+        }
       }
     } catch (error) {
       const message =
@@ -4763,19 +4917,29 @@ function isModelReady(modelId: string): boolean {
     return () => window.clearInterval(interval);
   }, [isSending]);
 
-	  const enabledModels = modelToggles.filter((toggle) => toggle.enabled);
-	  const activeCommunity = communities.find((item) => item.id === activeCommunityId) ?? null;
-	  const activeCommunityRole = activeCommunityId ? (communityRoleById[activeCommunityId] ?? null) : null;
-	  const isActiveCommunityAdmin = Boolean(
-	    supabaseSession &&
-	      activeCommunity &&
-	      (activeCommunityRole === "owner" ||
-	        activeCommunityRole === "admin" ||
-	        activeCommunity.owner_id === supabaseSession.user.id)
-	  );
-  const filteredDiscoverCommunities = useMemo(() => {
-    const query = discoverQuery.trim().toLowerCase();
-    const list = supabaseSession
+		  const enabledModels = modelToggles.filter((toggle) => toggle.enabled);
+		  const activeCommunity = communities.find((item) => item.id === activeCommunityId) ?? null;
+		  const canInviteActiveCommunity = Boolean(activeCommunityAccess?.can_invite);
+		  const canEditActiveCommunitySettings = Boolean(activeCommunityAccess?.is_owner);
+		  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
+		  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
+		  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
+		  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
+      const libraryResources = useMemo(
+        () => communityResources.filter((resource) => Boolean(resource.pinned)),
+        [communityResources],
+      );
+      const selectedLibraryResource = useMemo(() => {
+        if (!selectedLibraryResourceId) return libraryResources[0] ?? null;
+        return (
+          libraryResources.find((resource) => resource.id === selectedLibraryResourceId) ??
+          libraryResources[0] ??
+          null
+        );
+      }, [libraryResources, selectedLibraryResourceId]);
+	  const filteredDiscoverCommunities = useMemo(() => {
+	    const query = discoverQuery.trim().toLowerCase();
+	    const list = supabaseSession
       ? discoverCommunities
       : discoverCommunities.filter((c) => c.visibility === "public");
     if (!query) return list;
@@ -4833,16 +4997,19 @@ function isModelReady(modelId: string): boolean {
       });
   }
 
-  // Helper to display user names with session context
-  const displayName = useCallback((userId: string): string => {
-    const trimmedName = profileName.trim();
-    const trimmedUsername = profileUsername.trim();
-    if (supabaseSession?.user.id === userId) {
-      if (trimmedName) return trimmedName;
-      if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
-    }
-    return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email ?? undefined);
-  }, [profileName, profileUsername, supabaseSession?.user.id, supabaseSession?.user.email]);
+	  // Helper to display user names with session context
+	  const displayName = useCallback((userId: string): string => {
+	    const trimmedName = profileName.trim();
+	    const trimmedUsername = profileUsername.trim();
+	    if (supabaseSession?.user.id === userId) {
+	      if (trimmedName) return trimmedName;
+	      if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
+	    }
+	    const remote = profilesByUserId[userId];
+	    const remoteName = remote?.display_name?.trim();
+	    if (remoteName) return remoteName;
+	    return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email ?? undefined);
+	  }, [profileName, profileUsername, profilesByUserId, supabaseSession?.user.id, supabaseSession?.user.email]);
 
   useEffect(() => {
     const trimmed = profileName.trim();
@@ -6303,7 +6470,7 @@ function isModelReady(modelId: string): boolean {
             </span>
             Members
           </button>
-          {isActiveCommunityAdmin && (
+          {canEditActiveCommunitySettings && (
             <>
               <div className="community-nav-divider" />
               <button
@@ -6753,7 +6920,9 @@ function isModelReady(modelId: string): boolean {
               <>
                 <div className="settings-section">
                   <div className="settings-section-title">API Key</div>
-                  <div className="settings-section-desc">Connect your OpenRouter key to access models</div>
+                  <div className="settings-section-desc">
+                    Connect your OpenRouter key to access models (synced to your Arx account)
+                  </div>
                   <div className="key-row">
                     <input
                       type="password"
@@ -8477,11 +8646,13 @@ function isModelReady(modelId: string): boolean {
                   <textarea
                     ref={chatInputRef}
                     className="chat-input"
-                    placeholder={
-                      !activeCommunity
-                        ? "Select a community to chat..."
-                        : "Message the community..."
-                    }
+	                    placeholder={
+	                      !activeCommunity
+	                        ? "Select a community to chat..."
+	                        : !canPostMessagesActiveCommunity
+	                          ? "Join this community to chat..."
+	                          : "Message the community..."
+	                    }
                     value={communityMessageInput}
                     onChange={(event) => {
                       setCommunityMessageInput(event.target.value);
@@ -8495,14 +8666,18 @@ function isModelReady(modelId: string): boolean {
                         void handleSendCommunityMessage();
                       }
                     }}
-                    disabled={!activeCommunity}
-                    rows={1}
-                  />
+	                    disabled={!activeCommunity || !canPostMessagesActiveCommunity}
+	                    rows={1}
+	                  />
                   <button
-                    className="chat-send"
-                    onClick={() => void handleSendCommunityMessage()}
-                    disabled={!activeCommunity || isSendingCommunityMessage}
-                  >
+	                    className="chat-send"
+	                    onClick={() => void handleSendCommunityMessage()}
+	                    disabled={
+	                      !activeCommunity ||
+	                      !canPostMessagesActiveCommunity ||
+	                      isSendingCommunityMessage
+	                    }
+	                  >
                     <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
                   </button>
                 </div>
@@ -8517,8 +8692,8 @@ function isModelReady(modelId: string): boolean {
                   <div className="chat-empty">Select a community to edit settings.</div>
                 ) : !supabaseSession ? (
                   <div className="chat-empty">Sign in to edit community settings.</div>
-                ) : !isActiveCommunityAdmin ? (
-                  <div className="chat-empty">Only admins can edit community settings.</div>
+                ) : !canEditActiveCommunitySettings ? (
+                  <div className="chat-empty">Only the owner can edit community settings.</div>
                 ) : (
                   <>
                     <div className="panel-title">Community Settings</div>
@@ -8635,89 +8810,93 @@ function isModelReady(modelId: string): boolean {
                 )}
               </div>
             )}
-            {activePage === "community" && communityTab === "library" && (
-              <div className="community-panel library-panel">
-                {!activeCommunity && "Select a community."}
-                {activeCommunity && (
-                  <div className="library-layout">
-                    <div className="library-column">
-                      <div className="resources-header">Artifacts</div>
-                      <div className="library-list">
-                        {isLoadingArtifacts && (
-                          <div className="chat-loading">
-                            <div className="loading-spinner" />
-                            <span>Loading artifacts...</span>
-                          </div>
-                        )}
-                        {!isLoadingArtifacts && artifacts.length === 0 && (
-                          <div className="chat-empty">No artifacts yet.</div>
-                        )}
-                        {!isLoadingArtifacts &&
-                          artifacts.map((artifact) => (
-                            <button
-                              key={artifact.id}
-                              className={
-                                artifact.id === selectedArtifactId
-                                  ? "library-item active"
-                                  : "library-item"
-                              }
-                              onClick={() => setSelectedArtifactId(artifact.id)}
-                            >
-                              <div className="library-item-title">{artifact.title}</div>
-                              <div className="library-item-meta">
-                                <span>{artifact.type}</span>
-                                <span>{formatChatTime(artifact.updated_at)}</span>
-                              </div>
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                    <div className="library-column">
-                      <div className="resources-header">Versions</div>
-                      <div className="library-versions">
-                        {!selectedArtifactId && (
-                          <div className="chat-empty">Select an artifact.</div>
-                        )}
-                        {selectedArtifactId && isLoadingArtifactVersions && (
-                          <div className="chat-loading">
-                            <div className="loading-spinner" />
-                            <span>Loading versions...</span>
-                          </div>
-                        )}
-                        {selectedArtifactId &&
-                          !isLoadingArtifactVersions &&
-                          artifactVersions.length === 0 && (
-                            <div className="chat-empty">No versions yet.</div>
-                          )}
-                        {selectedArtifactId &&
-                          !isLoadingArtifactVersions &&
-                          artifactVersions.map((version) => (
-                            <div key={version.id} className="library-version">
-                              <div className="library-version-meta">
-                                <span>{formatChatTime(version.created_at)}</span>
-                                <span>{displayName(version.created_by)}</span>
-                              </div>
-                              <div className="library-version-body">{version.body_md}</div>
+	            {activePage === "community" && communityTab === "library" && (
+	              <div className="community-panel library-panel">
+	                {!activeCommunity && "Select a community."}
+	                {activeCommunity && (
+	                  <div className="library-layout">
+	                    <div className="library-column">
+	                      <div className="resources-header">Library</div>
+	                      <div className="library-list">
+	                        {isLoadingResources && (
+	                          <div className="chat-loading">
+	                            <div className="loading-spinner" />
+	                            <span>Loading library...</span>
+	                          </div>
+	                        )}
+	                        {!isLoadingResources && libraryResources.length === 0 && (
+	                          <div className="chat-empty">Pin resources to add them to the library.</div>
+	                        )}
+	                        {!isLoadingResources &&
+	                          libraryResources.map((resource) => (
+	                            <button
+	                              key={resource.id}
+	                              className={
+	                                resource.id === selectedLibraryResourceId
+	                                  ? "library-item active"
+	                                  : "library-item"
+	                              }
+	                              onClick={() => setSelectedLibraryResourceId(resource.id)}
+	                            >
+	                              <div className="library-item-title">{resource.title}</div>
+	                              <div className="library-item-meta">
+	                                <span>{resource.type}</span>
+	                                <span>{formatChatTime(resource.created_at)}</span>
+	                              </div>
+	                            </button>
+	                          ))}
+	                      </div>
+	                    </div>
+	                    <div className="library-column">
+	                      <div className="resources-header">Preview</div>
+	                      <div className="library-versions">
+	                        {!selectedLibraryResource && (
+	                          <div className="chat-empty">
+                              {libraryResources.length === 0 ? "No library items yet." : "Select a library item."}
                             </div>
-                          ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+	                        )}
+                          {selectedLibraryResource && (
+                            <div className="library-version">
+                              <div className="library-version-meta">
+                                <span>{formatChatTime(selectedLibraryResource.created_at)}</span>
+                                <span>
+                                  {selectedLibraryResource.url
+                                    ? "link"
+                                    : selectedLibraryResource.type}
+                                </span>
+                              </div>
+                              {selectedLibraryResource.url && (
+                                <div className="resource-body">
+                                  <a href={selectedLibraryResource.url} target="_blank" rel="noreferrer">
+                                    {selectedLibraryResource.url}
+                                  </a>
+                                </div>
+                              )}
+                              <div className="library-version-body">
+                                {selectedLibraryResource.body_md
+                                  ? renderMarkdown(selectedLibraryResource.body_md)
+                                  : <div className="chat-empty">No content.</div>}
+                              </div>
+                            </div>
+                          )}
+	                      </div>
+	                    </div>
+	                  </div>
+	                )}
+	              </div>
+	            )}
             {activePage === "community" && communityTab === "resources" && (
               <div className="community-panel resources-panel">
                 <div className="resources-header-row">
                   <div className="resources-header">Resources</div>
-                  <button
-                    className="resources-add-btn"
-                    onClick={openNewResourceModal}
-                    disabled={!activeCommunity}
-                    title="Add resource"
-                  >
-                    +
-                  </button>
+	                  <button
+	                    className="resources-add-btn"
+	                    onClick={openNewResourceModal}
+	                    disabled={!activeCommunity || !canCreateResourcesActiveCommunity}
+	                    title={canCreateResourcesActiveCommunity ? "Add resource" : "Insufficient permissions"}
+	                  >
+	                    +
+	                  </button>
                 </div>
                 {resourceSuccess && (
                   <div className="success-toast">Resource saved successfully!</div>
@@ -8805,32 +8984,34 @@ function isModelReady(modelId: string): boolean {
                       {resource.body_md && (
                         <div className="resource-body">{resource.body_md}</div>
                       )}
-                      <div className="resource-actions">
-                        <button
-                          className="secondary"
-                          onClick={() => handleEditResource(resource)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => void handleDeleteResource(resource.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                          </>
-                        );
-                      })()}
+	                      {canManageResourcesActiveCommunity && (
+	                        <div className="resource-actions">
+	                          <button
+	                            className="secondary"
+	                            onClick={() => handleEditResource(resource)}
+	                          >
+	                            Edit
+	                          </button>
+	                          <button
+	                            className="danger"
+	                            onClick={() => void handleDeleteResource(resource.id)}
+	                          >
+	                            Delete
+	                          </button>
+	                        </div>
+	                      )}
+	                          </>
+	                        );
+	                      })()}
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {activePage === "community" && communityTab === "members" && (
-              <div className="community-panel members-panel">
-                <div className={`members-layout${isActiveCommunityAdmin ? " with-invites" : ""}`}>
-                  <section className="members-section">
+	            {activePage === "community" && communityTab === "members" && (
+	              <div className="community-panel members-panel">
+	                <div className={`members-layout${canInviteActiveCommunity ? " with-invites" : ""}`}>
+	                  <section className="members-section">
                     <div className="members-header-row">
                       <div className="members-header">Members</div>
                       <div className="members-count">{communityMembers.length}</div>
@@ -8838,27 +9019,83 @@ function isModelReady(modelId: string): boolean {
                     <div className="members-list">
                       {communityMembers.length === 0 ? (
                         <div className="members-empty">No members yet.</div>
-                      ) : (
-                        communityMembers.map((member) => (
-                          <div key={member.id} className="member-item">
-                            <div
-                              className="member-avatar"
-                              style={{ backgroundColor: getAvatarColor(member.user_id) }}
-                            >
-                              {getInitials(member.user_id)}
-                            </div>
-                            <div className="member-info">
-                              <span className="member-name">{displayName(member.user_id)}</span>
-                              <span className="member-role">{member.role}</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </section>
+	                      ) : (
+		                        communityMembers.map((member) => {
+		                          const profile = profilesByUserId[member.user_id] ?? null;
+		                          const avatarUrl = profile?.avatar_url ?? null;
+		                          const initials = profile?.display_name
+		                            ? communityInitials(profile.display_name)
+		                            : getInitials(member.user_id);
+		                          const memberIsOwner = Boolean(
+		                            (activeCommunity && activeCommunity.owner_id === member.user_id) ||
+		                              member.role === "owner"
+		                          );
+		                          const viewerIsOwner = canEditActiveCommunitySettings;
+		                          const viewerIsAdmin = canManageMembersActiveCommunity && !viewerIsOwner;
+		                          const memberIsAdmin = member.role === "admin";
+		                          const canEditThisMember = viewerIsOwner || !memberIsAdmin;
+		                          const canRemoveThisMember =
+		                            viewerIsOwner || (viewerIsAdmin && !memberIsAdmin && !memberIsOwner);
+		                          const roleOptions = viewerIsOwner
+		                            ? ["member", "mod", "admin"]
+		                            : memberIsAdmin
+		                              ? ["admin"]
+		                              : ["member", "mod"];
+		                          return (
+		                            <div key={member.id} className="member-item">
+		                              <div
+		                                className="member-avatar"
+		                                style={{ backgroundColor: getAvatarColor(member.user_id) }}
+	                              >
+	                                {avatarUrl ? (
+	                                  <img src={avatarUrl} alt={displayName(member.user_id)} />
+	                                ) : (
+	                                  initials
+		                                )}
+		                              </div>
+		                              <div className="member-info">
+		                                <span className="member-name">{displayName(member.user_id)}</span>
+		                                {!canManageMembersActiveCommunity || memberIsOwner ? (
+		                                  <span className="member-role">{member.role}</span>
+		                                ) : (
+		                                  <div className="member-controls">
+		                                    <select
+		                                      className="select-styled"
+		                                      value={member.role}
+		                                      disabled={!canEditThisMember}
+		                                      onChange={(event) => {
+		                                        const next = event.target.value;
+		                                        if (next === member.role) return;
+		                                        void handleSetCommunityMemberRole(member.user_id, next);
+		                                      }}
+		                                    >
+		                                      {roleOptions.map((role) => (
+		                                        <option key={role} value={role}>
+		                                          {role}
+		                                        </option>
+		                                      ))}
+		                                    </select>
+		                                    {canRemoveThisMember && (
+		                                      <button
+		                                        className="danger"
+		                                        type="button"
+		                                        onClick={() => void handleRemoveCommunityMember(member.user_id)}
+		                                      >
+		                                        Remove
+		                                      </button>
+		                                    )}
+		                                  </div>
+		                                )}
+		                              </div>
+		                            </div>
+		                          );
+		                        })
+	                      )}
+	                    </div>
+	                  </section>
 
-                  {activeCommunity && supabaseSession && isActiveCommunityAdmin && (
-                    <section className="invites-section">
+	                  {activeCommunity && supabaseSession && canInviteActiveCommunity && (
+	                    <section className="invites-section">
                       <div className="members-header-row">
                         <div className="members-header">Invites</div>
                       </div>
@@ -9009,27 +9246,38 @@ function isModelReady(modelId: string): boolean {
           <div className="panel-title">
             Members
           </div>
-          <div className="member-list">
-            {communityMembers.length === 0 && (
-              <div className="member-empty">No members yet.</div>
-            )}
-            {communityMembers.map((member) => (
-              <div key={member.id} className="member-item">
-                <div
-                  className="member-avatar"
-                  style={{ backgroundColor: getAvatarColor(member.user_id) }}
-                >
-                  {getInitials(member.user_id)}
-                </div>
-                <div className="member-info">
-                  <span className="member-name">{displayName(member.user_id)}</span>
-                  <span className="member-role">{member.role}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </aside>
-      )}
+	          <div className="member-list">
+	            {communityMembers.length === 0 && (
+	              <div className="member-empty">No members yet.</div>
+	            )}
+	            {communityMembers.map((member) => {
+	              const profile = profilesByUserId[member.user_id] ?? null;
+	              const avatarUrl = profile?.avatar_url ?? null;
+	              const initials = profile?.display_name
+	                ? communityInitials(profile.display_name)
+	                : getInitials(member.user_id);
+	              return (
+	                <div key={member.id} className="member-item">
+	                  <div
+	                    className="member-avatar"
+	                    style={{ backgroundColor: getAvatarColor(member.user_id) }}
+	                  >
+	                    {avatarUrl ? (
+	                      <img src={avatarUrl} alt={displayName(member.user_id)} />
+	                    ) : (
+	                      initials
+	                    )}
+	                  </div>
+	                  <div className="member-info">
+	                    <span className="member-name">{displayName(member.user_id)}</span>
+	                    <span className="member-role">{member.role}</span>
+	                  </div>
+	                </div>
+	              );
+	            })}
+	          </div>
+	        </aside>
+	      )}
       </div>
     </div>
   );
@@ -9453,7 +9701,7 @@ function cleanStreamingContent(text: string): {
 }
 
 function renderMarkdown(text: string): ReactNode {
-  const lines = text.split('\n');
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const elements: ReactNode[] = [];
   let i = 0;
   let key = 0;
@@ -9486,7 +9734,7 @@ function renderMarkdown(text: string): ReactNode {
     }
 
     // Headers
-    const headerMatch = trimmedLine.match(/^(#{1,3})\s+(.+)$/);
+    const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
     if (headerMatch) {
       const level = headerMatch[1].length;
       const content = headerMatch[2];
@@ -9496,14 +9744,40 @@ function renderMarkdown(text: string): ReactNode {
       continue;
     }
 
+    // Blockquote
+    if (trimmedLine.startsWith('>')) {
+      const quoteLines: string[] = [];
+      while (i < lines.length) {
+        const raw = lines[i] ?? '';
+        const trimmed = raw.trim();
+        if (trimmed === '') {
+          quoteLines.push('');
+          i++;
+          continue;
+        }
+        if (!trimmed.startsWith('>')) break;
+        let inner = trimmed.slice(1);
+        if (inner.startsWith(' ')) inner = inner.slice(1);
+        quoteLines.push(inner);
+        i++;
+      }
+      elements.push(
+        <blockquote key={key++} className="md-blockquote">
+          {renderMarkdown(quoteLines.join('\n'))}
+        </blockquote>
+      );
+      continue;
+    }
+
     // Numbered list
     if (/^\d+\.\s+/.test(trimmedLine)) {
-      const listItems: ReactNode[] = [];
+      const listItems: Array<{ kind: 'text'; lines: string[] } | { kind: 'code'; code: string; language?: string }> = [];
       while (i < lines.length) {
-        const currentLine = lines[i].trim();
+        const rawLine = lines[i] ?? '';
+        const currentLine = rawLine.trim();
         if (/^\d+\.\s+/.test(currentLine)) {
           const content = currentLine.replace(/^\d+\.\s+/, '');
-          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          listItems.push({ kind: 'text', lines: [content] });
           i++;
         } else if (currentLine.startsWith('```')) {
           // Code block inside list
@@ -9514,30 +9788,47 @@ function renderMarkdown(text: string): ReactNode {
             codeLines.push(lines[i]);
             i++;
           }
-          listItems.push(
-            <li key={key++} className="md-list-code">
-              <CodeBlock code={codeLines.join('\n')} language={lang || undefined} />
-            </li>
-          );
+          listItems.push({ kind: 'code', code: codeLines.join('\n'), language: lang || undefined });
           i++;
         } else if (currentLine === '') {
           i++;
+        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
+          const last = listItems[listItems.length - 1];
+          if (last && last.kind === 'text') {
+            last.lines.push(currentLine);
+            i++;
+          } else {
+            break;
+          }
         } else {
           break;
         }
       }
-      elements.push(<ol key={key++} className="md-list">{listItems}</ol>);
+      elements.push(
+        <ol key={key++} className="md-list">
+          {listItems.map((item) =>
+            item.kind === 'code' ? (
+              <li key={key++} className="md-list-code">
+                <CodeBlock code={item.code} language={item.language} />
+              </li>
+            ) : (
+              <li key={key++}>{renderInline(item.lines.join('\n'))}</li>
+            )
+          )}
+        </ol>
+      );
       continue;
     }
 
     // Bullet list
     if (/^[-*]\s+/.test(trimmedLine)) {
-      const listItems: ReactNode[] = [];
+      const listItems: Array<{ kind: 'text'; lines: string[] } | { kind: 'code'; code: string; language?: string }> = [];
       while (i < lines.length) {
-        const currentLine = lines[i].trim();
+        const rawLine = lines[i] ?? '';
+        const currentLine = rawLine.trim();
         if (/^[-*]\s+/.test(currentLine)) {
           const content = currentLine.replace(/^[-*]\s+/, '');
-          listItems.push(<li key={key++}>{renderInline(content)}</li>);
+          listItems.push({ kind: 'text', lines: [content] });
           i++;
         } else if (currentLine.startsWith('```')) {
           // Code block inside list
@@ -9548,19 +9839,35 @@ function renderMarkdown(text: string): ReactNode {
             codeLines.push(lines[i]);
             i++;
           }
-          listItems.push(
-            <li key={key++} className="md-list-code">
-              <CodeBlock code={codeLines.join('\n')} language={lang || undefined} />
-            </li>
-          );
+          listItems.push({ kind: 'code', code: codeLines.join('\n'), language: lang || undefined });
           i++;
         } else if (currentLine === '') {
           i++;
+        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
+          const last = listItems[listItems.length - 1];
+          if (last && last.kind === 'text') {
+            last.lines.push(currentLine);
+            i++;
+          } else {
+            break;
+          }
         } else {
           break;
         }
       }
-      elements.push(<ul key={key++} className="md-list">{listItems}</ul>);
+      elements.push(
+        <ul key={key++} className="md-list">
+          {listItems.map((item) =>
+            item.kind === 'code' ? (
+              <li key={key++} className="md-list-code">
+                <CodeBlock code={item.code} language={item.language} />
+              </li>
+            ) : (
+              <li key={key++}>{renderInline(item.lines.join('\n'))}</li>
+            )
+          )}
+        </ul>
+      );
       continue;
     }
 
@@ -9570,9 +9877,26 @@ function renderMarkdown(text: string): ReactNode {
       continue;
     }
 
-    // Paragraph
-    elements.push(<p key={key++} className="md-paragraph">{renderInline(line)}</p>);
-    i++;
+    // Paragraph: join soft-wrapped lines until a blank line or a new block.
+    const paragraphLines: string[] = [];
+    while (i < lines.length) {
+      const raw = lines[i] ?? '';
+      const trimmed = raw.trim();
+      if (trimmed === '') break;
+      if (
+        trimmed.startsWith('```') ||
+        /^(-{3,}|_{3,}|\*{3,})$/.test(trimmed) ||
+        /^(#{1,6})\s+(.+)$/.test(trimmed) ||
+        trimmed.startsWith('>') ||
+        /^\d+\.\s+/.test(trimmed) ||
+        /^[-*]\s+/.test(trimmed)
+      ) {
+        break;
+      }
+      paragraphLines.push(raw);
+      i++;
+    }
+    elements.push(<p key={key++} className="md-paragraph">{renderInline(paragraphLines.join('\n'))}</p>);
   }
 
   return <>{elements}</>;
@@ -9583,22 +9907,48 @@ function renderInline(text: string): ReactNode {
   let remaining = text;
   let key = 0;
 
-  while (remaining.length > 0) {
-    // Inline code
-    const codeMatch = remaining.match(/^`([^`]+)`/);
-    if (codeMatch) {
-      parts.push(<code key={key++} className="md-inline-code">{codeMatch[1]}</code>);
-      remaining = remaining.slice(codeMatch[0].length);
-      continue;
-    }
+	while (remaining.length > 0) {
+	  // Inline code
+	  const codeMatch = remaining.match(/^`([^`]+)`/);
+	  if (codeMatch) {
+	    parts.push(<code key={key++} className="md-inline-code">{codeMatch[1]}</code>);
+	    remaining = remaining.slice(codeMatch[0].length);
+	    continue;
+	  }
 
-    // Bold
-    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) || remaining.match(/^__([^_]+)__/);
-    if (boldMatch) {
-      parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
-      remaining = remaining.slice(boldMatch[0].length);
-      continue;
-    }
+	  const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+	  if (linkMatch) {
+	    const label = linkMatch[1] ?? '';
+	    const href = (linkMatch[2] ?? '').trim();
+	    const safeHref =
+	      href.startsWith('https://') || href.startsWith('http://') || href.startsWith('mailto:') ? href : null;
+	    parts.push(
+	      safeHref ? (
+	        <a key={key++} className="md-link" href={safeHref} target="_blank" rel="noreferrer">
+	          {label}
+	        </a>
+	      ) : (
+	        label
+	      )
+	    );
+	    remaining = remaining.slice(linkMatch[0].length);
+	    continue;
+	  }
+
+	  const strikeMatch = remaining.match(/^~~([^~]+)~~/);
+	  if (strikeMatch) {
+	    parts.push(<s key={key++}>{strikeMatch[1]}</s>);
+	    remaining = remaining.slice(strikeMatch[0].length);
+	    continue;
+	  }
+
+	  // Bold
+	  const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) || remaining.match(/^__([^_]+)__/);
+	  if (boldMatch) {
+	    parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
+	    remaining = remaining.slice(boldMatch[0].length);
+	    continue;
+	  }
 
     // Italic
     const italicMatch = remaining.match(/^\*([^*]+)\*/) || remaining.match(/^_([^_]+)_/);
@@ -9606,15 +9956,15 @@ function renderInline(text: string): ReactNode {
       parts.push(<em key={key++}>{italicMatch[1]}</em>);
       remaining = remaining.slice(italicMatch[0].length);
       continue;
-    }
+	  }
 
-    // Plain text until next special character
-    const nextSpecial = remaining.search(/[`*_]/);
-    if (nextSpecial === -1) {
-      parts.push(remaining);
-      break;
-    } else if (nextSpecial === 0) {
-      parts.push(remaining[0]);
+	  // Plain text until next special character
+	  const nextSpecial = remaining.search(/[`*_\[~]/);
+	  if (nextSpecial === -1) {
+	    parts.push(remaining);
+	    break;
+	  } else if (nextSpecial === 0) {
+	    parts.push(remaining[0]);
       remaining = remaining.slice(1);
     } else {
       parts.push(remaining.slice(0, nextSpecial));

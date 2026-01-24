@@ -507,47 +507,7 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       VALUES (new.rowid, new.text, new.thread_id);
     END;
 
-    CREATE TABLE IF NOT EXISTS community_artifacts_cache (
-      artifact_id TEXT PRIMARY KEY,
-      community_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      body_md TEXT NOT NULL,
-      visibility TEXT NOT NULL,
-      injectable INTEGER NOT NULL,
-      pinned INTEGER NOT NULL,
-      helpful_count INTEGER DEFAULT 0,
-      unhelpful_count INTEGER DEFAULT 0,
-      author_name TEXT,
-      content_hash TEXT,
-      fetched_at INTEGER NOT NULL
-    );
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS community_artifacts_cache_fts
-    USING fts5(
-      title,
-      body_md,
-      content='community_artifacts_cache',
-      content_rowid='rowid'
-    );
-
-    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_ai AFTER INSERT ON community_artifacts_cache BEGIN
-      INSERT INTO community_artifacts_cache_fts(rowid, title, body_md)
-      VALUES (new.rowid, new.title, new.body_md);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_ad AFTER DELETE ON community_artifacts_cache BEGIN
-      INSERT INTO community_artifacts_cache_fts(community_artifacts_cache_fts, rowid, title, body_md)
-      VALUES('delete', old.rowid, old.title, old.body_md);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS community_artifacts_cache_au AFTER UPDATE ON community_artifacts_cache BEGIN
-      INSERT INTO community_artifacts_cache_fts(community_artifacts_cache_fts, rowid, title, body_md)
-      VALUES('delete', old.rowid, old.title, old.body_md);
-      INSERT INTO community_artifacts_cache_fts(rowid, title, body_md)
-      VALUES (new.rowid, new.title, new.body_md);
-    END;
-    ",
+      ",
     )
     .context("migrations: create/update tables + FTS triggers")?;
 
@@ -649,8 +609,8 @@ fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
 
   // Migrate Claude's harness_id schema back to contract engine_id.
   if has_harness_id {
-	    conn.execute_batch(
-	      "
+    conn.execute_batch(
+      "
       CREATE TABLE threads_new (
         id TEXT PRIMARY KEY,
         title TEXT,
@@ -663,18 +623,18 @@ fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
         last_event_at INTEGER
       );
 
-	      INSERT INTO threads_new (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-	      SELECT
-	        id,
-	        title,
-	        CASE
-	          WHEN harness_id IS NOT NULL AND TRIM(harness_id) <> '' THEN harness_id
-	          WHEN model_id IS NOT NULL AND TRIM(model_id) <> '' THEN 'openrouter_chat'
-	          ELSE 'openrouter_chat'
-	        END,
-	        model_id,
-	        workspace_path,
-	        community_id,
+      INSERT INTO threads_new (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+      SELECT
+        id,
+        title,
+        CASE
+          WHEN harness_id IS NOT NULL AND TRIM(harness_id) <> '' THEN harness_id
+          WHEN model_id IS NOT NULL AND TRIM(model_id) <> '' THEN 'openrouter_chat'
+          ELSE 'openrouter_chat'
+        END,
+        model_id,
+        workspace_path,
+        community_id,
         created_at,
         updated_at,
         last_event_at
@@ -977,44 +937,46 @@ fn backfill_contract_tables(conn: &Connection) -> anyhow::Result<()> {
   let has_messages = table_exists(conn, "messages")?;
 
   // Threads: 1:1 with legacy sessions (same id), best-effort defaults.
-	  if has_sessions {
-	    if table_exists(conn, "session_state")? {
-	      conn.execute(
-	        "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-	         SELECT
-	           s.id,
-	           s.title,
-	           'openrouter_chat',
-	           NULL,
-	           NULL,
-	           NULL,
-	           COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-           COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-           COALESCE(ss.last_message_at, COALESCE(s.updated_at, s.created_at))
-         FROM sessions s
-         LEFT JOIN session_state ss ON ss.session_id = s.id
-         WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
-        [],
-      )
-      .context("backfill: insert threads from sessions + session_state")?;
-	    } else {
-	      conn.execute(
-	        "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-	         SELECT
-	           s.id,
-	           s.title,
-	           'openrouter_chat',
-	           NULL,
-	           NULL,
-	           NULL,
-	           COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-           COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-           COALESCE(s.updated_at, s.created_at)
-         FROM sessions s
-         WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
-        [],
-      )
-      .context("backfill: insert threads from sessions")?;
+  if has_sessions {
+    if table_exists(conn, "session_state")? {
+      conn
+        .execute(
+          "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+           SELECT
+             s.id,
+             s.title,
+             'openrouter_chat',
+             NULL,
+             NULL,
+             NULL,
+             COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+             COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+             COALESCE(ss.last_message_at, COALESCE(s.updated_at, s.created_at))
+           FROM sessions s
+           LEFT JOIN session_state ss ON ss.session_id = s.id
+           WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
+          [],
+        )
+        .context("backfill: insert threads from sessions + session_state")?;
+    } else {
+      conn
+        .execute(
+          "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+           SELECT
+             s.id,
+             s.title,
+             'openrouter_chat',
+             NULL,
+             NULL,
+             NULL,
+             COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+             COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
+             COALESCE(s.updated_at, s.created_at)
+           FROM sessions s
+           WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
+          [],
+        )
+        .context("backfill: insert threads from sessions")?;
     }
   }
 
