@@ -88,7 +88,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
   if (!/^[0-9a-fA-F-]{36}$/.test(intentId)) return;
 
   const intentRes = await supabaseAdminFetch(
-    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals`,
+    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps`,
     { method: "GET" },
   );
   if (!intentRes.ok) throw new Error(await intentRes.text());
@@ -99,6 +99,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
     amount_base_units: string;
     currency: string;
     currency_decimals: number;
+    platform_fee_bps?: number | null;
   }>;
   const intent = intentRows[0];
   if (!intent) return;
@@ -123,6 +124,17 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
   const email = session.customer_details?.email ?? session.customer_email ?? null;
   const nowIso = new Date().toISOString();
 
+  const platformFeeBps = Number.isFinite(intent.platform_fee_bps) ? Number(intent.platform_fee_bps) : 0;
+  const amountBaseUnits = (() => {
+    const fromStripe = session.amount_total;
+    if (typeof fromStripe === "number" && Number.isFinite(fromStripe)) return BigInt(Math.trunc(fromStripe));
+    const raw = String(intent.amount_base_units ?? "").trim();
+    const match = raw.match(/^(\d+)(?:\.0+)?$/);
+    if (!match) return 0n;
+    return BigInt(match[1]);
+  })();
+  const platformFeeAmount = platformFeeBps > 0 ? (amountBaseUnits * BigInt(platformFeeBps)) / 10000n : 0n;
+
   await supabaseAdminFetch("/rest/v1/payment_receipts?on_conflict=provider,provider_session_id", {
     method: "POST",
     headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -137,6 +149,8 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
       amount_base_units: String(session.amount_total ?? intent.amount_base_units),
       currency: (session.currency ?? intent.currency).toUpperCase(),
       currency_decimals: intent.currency_decimals,
+      platform_fee_bps: platformFeeBps,
+      platform_fee_amount_base_units: String(platformFeeAmount),
       status: committed ? "confirmed" : "pending",
       paid_at: committed ? nowIso : null,
       raw_json: session,
@@ -160,6 +174,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
         current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
         current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
         cancel_at_period_end: sub.cancel_at_period_end,
+        platform_fee_bps: platformFeeBps,
         raw_json: sub,
         updated_at: new Date().toISOString(),
       }),
@@ -199,7 +214,7 @@ async function handleSubscriptionUpdated(subscriptionId: string): Promise<void> 
   if (existing.user_id) {
     // Best-effort entitlement extension (claim-first means entitlement may not exist yet).
     await supabaseAdminFetch(
-      `/rest/v1/entitlements?user_id=eq.${encodeURIComponent(existing.user_id)}&community_id=eq.${encodeURIComponent(existing.community_id)}&status=eq.active`,
+      `/rest/v1/entitlements?user_id=eq.${encodeURIComponent(existing.user_id)}&community_id=eq.${encodeURIComponent(existing.community_id)}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Prefer: "return=minimal" },

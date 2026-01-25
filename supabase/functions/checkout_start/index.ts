@@ -48,7 +48,44 @@ async function loadPlan(planId: string): Promise<PlanRow> {
   return row;
 }
 
-async function createPaymentIntent(plan: PlanRow): Promise<{ id: string }> {
+type CommunityOwnerRow = { id: string; owner_id: string };
+
+async function loadCommunityOwner(communityId: string): Promise<CommunityOwnerRow> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/communities?id=eq.${encodeURIComponent(communityId)}&select=id,owner_id`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as CommunityOwnerRow[];
+  const row = rows[0];
+  if (!row?.owner_id) throw new Error("Community not found");
+  return row;
+}
+
+type BuilderTier = "free" | "builder" | "pro";
+type ProfileTierRow = { user_id: string; builder_tier: string | null };
+
+async function loadBuilderTier(userId: string): Promise<BuilderTier> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/profiles?user_id=eq.${encodeURIComponent(userId)}&select=user_id,builder_tier`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as ProfileTierRow[];
+  const row = rows[0];
+  const tier = (row?.builder_tier ?? "free").trim().toLowerCase();
+  if (tier === "pro") return "pro";
+  if (tier === "builder") return "builder";
+  return "free";
+}
+
+function resolvePlatformFeeBps(tier: BuilderTier): number {
+  // Skool-shaped: higher plan => lower take rate.
+  if (tier === "pro") return 300; // 3%
+  return 1000; // 10% for builder
+}
+
+async function createPaymentIntent(plan: PlanRow, platformFeeBps: number): Promise<{ id: string }> {
   const res = await supabaseAdminFetch("/rest/v1/payment_intents?select=id", {
     method: "POST",
     headers: {
@@ -63,6 +100,7 @@ async function createPaymentIntent(plan: PlanRow): Promise<{ id: string }> {
       amount_base_units: plan.amount_base_units,
       currency: plan.currency,
       currency_decimals: plan.currency_decimals,
+      platform_fee_bps: platformFeeBps,
     }),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -139,7 +177,13 @@ Deno.serve(async (req: Request) => {
     const plan = await loadPlan(planId);
     if (plan.community_id !== communityId) throw new Error("Plan does not belong to community");
 
-    const intent = await createPaymentIntent(plan);
+    const community = await loadCommunityOwner(plan.community_id);
+    const builderTier = await loadBuilderTier(community.owner_id);
+    if (builderTier === "free") {
+      throw new Error("Creator must be on Builder/Pro to accept payments");
+    }
+    const platformFeeBps = resolvePlatformFeeBps(builderTier);
+    const intent = await createPaymentIntent(plan, platformFeeBps);
     const session = await createStripeCheckoutSession(intent.id, plan, input);
 
     await updatePaymentIntent(intent.id, {
@@ -156,4 +200,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
-

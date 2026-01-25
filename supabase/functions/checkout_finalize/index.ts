@@ -25,11 +25,12 @@ type PaymentIntentRow = {
   amount_base_units: string;
   currency: string;
   currency_decimals: number;
+  platform_fee_bps?: number | null;
 };
 
 async function loadPaymentIntent(intentId: string): Promise<PaymentIntentRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals`,
+    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
@@ -48,10 +49,33 @@ async function updatePaymentIntent(intentId: string, patch: Record<string, unkno
   if (!res.ok) throw new Error(await res.text());
 }
 
+function parseBaseUnits(value: string): bigint {
+  const raw = String(value ?? "").trim();
+  const match = raw.match(/^(\d+)(?:\.0+)?$/);
+  if (!match) return 0n;
+  return BigInt(match[1]);
+}
+
+function resolvePlatformFeeBps(intent: PaymentIntentRow): number {
+  const candidate = intent.platform_fee_bps;
+  if (typeof candidate !== "number" || !Number.isFinite(candidate)) return 0;
+  return Math.min(10000, Math.max(0, Math.trunc(candidate)));
+}
+
+function resolveAmountBaseUnits(intent: PaymentIntentRow, session: StripeCheckoutSession): bigint {
+  const fromStripe = session.amount_total;
+  if (typeof fromStripe === "number" && Number.isFinite(fromStripe)) {
+    return BigInt(Math.trunc(fromStripe));
+  }
+  return parseBaseUnits(intent.amount_base_units);
+}
+
 async function upsertReceipt(intent: PaymentIntentRow, session: StripeCheckoutSession): Promise<void> {
   const email = session.customer_details?.email ?? session.customer_email ?? null;
   const currency = (session.currency ?? intent.currency).toUpperCase();
-  const amount = Number(session.amount_total ?? 0);
+  const amountBaseUnits = resolveAmountBaseUnits(intent, session);
+  const platformFeeBps = resolvePlatformFeeBps(intent);
+  const platformFeeAmount = platformFeeBps > 0 ? (amountBaseUnits * BigInt(platformFeeBps)) / 10000n : 0n;
   const nowIso = new Date().toISOString();
   const status = isCommitted(session) ? "confirmed" : "pending";
 
@@ -64,19 +88,21 @@ async function upsertReceipt(intent: PaymentIntentRow, session: StripeCheckoutSe
         Prefer: "resolution=merge-duplicates,return=minimal",
       },
       body: JSON.stringify({
-      payment_intent_id: intent.id,
-      provider: "stripe",
-      provider_session_id: session.id,
-      provider_payment_intent_id: session.payment_intent ?? null,
-      provider_subscription_id: session.subscription ?? null,
-      provider_customer_id: session.customer ?? null,
-      checkout_email: email,
-      amount_base_units: String(amount || intent.amount_base_units),
-      currency,
-      currency_decimals: intent.currency_decimals,
-      status,
-      paid_at: isCommitted(session) ? nowIso : null,
-      raw_json: session,
+        payment_intent_id: intent.id,
+        provider: "stripe",
+        provider_session_id: session.id,
+        provider_payment_intent_id: session.payment_intent ?? null,
+        provider_subscription_id: session.subscription ?? null,
+        provider_customer_id: session.customer ?? null,
+        checkout_email: email,
+        amount_base_units: String(amountBaseUnits),
+        currency,
+        currency_decimals: intent.currency_decimals,
+        platform_fee_bps: platformFeeBps,
+        platform_fee_amount_base_units: String(platformFeeAmount),
+        status,
+        paid_at: isCommitted(session) ? nowIso : null,
+        raw_json: session,
       }),
     },
   );
@@ -89,29 +115,31 @@ async function upsertSubscription(
 ): Promise<StripeSubscription | null> {
   if (!session.subscription) return null;
   const sub = await retrieveSubscription(session.subscription);
+  const platformFeeBps = resolvePlatformFeeBps(intent);
   const res = await supabaseAdminFetch(
     "/rest/v1/provider_subscriptions?on_conflict=provider,provider_subscription_id",
     {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal",
-    },
-    body: JSON.stringify({
-      provider: "stripe",
-      provider_subscription_id: sub.id,
-      provider_customer_id: sub.customer,
-      payment_intent_id: intent.id,
-      community_id: intent.community_id,
-      plan_id: intent.plan_id,
-      user_id: null,
-      status: sub.status,
-      current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
-      cancel_at_period_end: sub.cancel_at_period_end,
-      raw_json: sub,
-      updated_at: new Date().toISOString(),
-    }),
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        provider: "stripe",
+        provider_subscription_id: sub.id,
+        provider_customer_id: sub.customer,
+        payment_intent_id: intent.id,
+        community_id: intent.community_id,
+        plan_id: intent.plan_id,
+        user_id: null,
+        status: sub.status,
+        current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
+        current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        cancel_at_period_end: sub.cancel_at_period_end,
+        platform_fee_bps: platformFeeBps,
+        raw_json: sub,
+        updated_at: new Date().toISOString(),
+      }),
     },
   );
   if (!res.ok) throw new Error(await res.text());
