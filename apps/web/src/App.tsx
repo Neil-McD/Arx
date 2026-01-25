@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
 import {
@@ -52,11 +52,23 @@ type ThreadMessage = {
   run_id: string | null;
 };
 
+type MessageAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file";
+  mime: string | null;
+  size: number;
+  data_url?: string | null;
+  text?: string | null;
+  truncated?: boolean | null;
+};
+
 type CommunityChatMessage = {
   id: string;
   community_id: string;
   sender_id: string;
   body: string;
+  attachments?: MessageAttachment[];
   reply_to_id?: string | null;
   created_at: string;
   seq: number;
@@ -96,7 +108,6 @@ type CommunityAccess = {
   is_owner: boolean;
   is_entitled: boolean;
   entitlement_role: string | null;
-  entitlement_tier_id: string | null;
   entitlement_ends_at: string | null;
   effective_role: string | null;
   can_view: boolean;
@@ -117,8 +128,6 @@ type CommunityInviteRecord = {
   id: string;
   community_id: string;
   code: string;
-  role: string;
-  tier_id: string;
   max_uses: number | null;
   expires_at: string | null;
   revoked_at: string | null;
@@ -154,7 +163,7 @@ type PersonalMemoryItem = {
   updated_at: string;
 };
 
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
@@ -258,6 +267,136 @@ async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<st
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
+const MAX_WEB_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
+const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
+
+function isLikelyTextFile(file: File): boolean {
+  const mime = (file.type ?? "").toLowerCase();
+  if (mime.startsWith("text/")) return true;
+  if (mime === "application/json") return true;
+  if (mime === "application/xml") return true;
+  if (mime === "application/x-yaml") return true;
+  const name = (file.name ?? "").toLowerCase();
+  return (
+    name.endsWith(".md") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".csv") ||
+    name.endsWith(".ts") ||
+    name.endsWith(".tsx") ||
+    name.endsWith(".js") ||
+    name.endsWith(".jsx") ||
+    name.endsWith(".json") ||
+    name.endsWith(".py") ||
+    name.endsWith(".rs") ||
+    name.endsWith(".go") ||
+    name.endsWith(".html") ||
+    name.endsWith(".css") ||
+    name.endsWith(".yml") ||
+    name.endsWith(".yaml")
+  );
+}
+
+function isLikelyImageFile(file: File): boolean {
+  const mime = (file.type ?? "").toLowerCase();
+  if (mime.startsWith("image/")) return true;
+  const name = (file.name ?? "").toLowerCase();
+  return (
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".gif") ||
+    name.endsWith(".webp") ||
+    name.endsWith(".svg")
+  );
+}
+
+async function readTextAttachmentPreview(file: File): Promise<{ text: string; truncated: boolean }> {
+  const truncated = file.size > MAX_WEB_TEXT_ATTACHMENT_BYTES;
+  const slice = truncated ? file.slice(0, MAX_WEB_TEXT_ATTACHMENT_BYTES) : file;
+  const text = await slice.text();
+  return { text, truncated };
+}
+
+async function readChatImageAsDataUrl(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    const loaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image."));
+    });
+    img.src = url;
+    await loaded;
+
+    const candidates: Array<{ maxDim: number; quality: number }> = [
+      { maxDim: 1280, quality: 0.85 },
+      { maxDim: 1024, quality: 0.82 },
+      { maxDim: 768, quality: 0.78 },
+      { maxDim: 512, quality: 0.74 }
+    ];
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    const sourceWidth = img.naturalWidth || img.width;
+    const sourceHeight = img.naturalHeight || img.height;
+    if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
+
+    let lastDataUrl = "";
+    for (const { maxDim, quality } of candidates) {
+      const scale = Math.min(1, maxDim / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      lastDataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (lastDataUrl.length <= MAX_WEB_IMAGE_DATA_URL_CHARS) return lastDataUrl;
+    }
+
+    if (lastDataUrl && lastDataUrl.length <= MAX_WEB_IMAGE_DATA_URL_CHARS) return lastDataUrl;
+    throw new Error("Image is too large to attach. Try a smaller one.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function parseMessageAttachments(contentJson: unknown): MessageAttachment[] {
+  if (contentJson === null || contentJson === undefined) return [];
+  let parsed: unknown = contentJson;
+  if (typeof parsed === "string") {
+    const trimmed = parsed.trim();
+    if (!trimmed) return [];
+    try {
+      parsed = JSON.parse(trimmed) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return [];
+  const raw = (parsed as any).attachments;
+  if (!Array.isArray(raw)) return [];
+  const out: MessageAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const id = typeof (item as any).id === "string" ? String((item as any).id) : crypto.randomUUID();
+    const name = typeof (item as any).name === "string" ? String((item as any).name) : "attachment";
+    const type = (item as any).type === "image" ? "image" : "file";
+    const mime = typeof (item as any).mime === "string" ? String((item as any).mime) : null;
+    const size = Number.isFinite((item as any).size) ? Number((item as any).size) : 0;
+    const data_url = typeof (item as any).data_url === "string" ? String((item as any).data_url) : null;
+    const text = typeof (item as any).text === "string" ? String((item as any).text) : null;
+    const truncated = typeof (item as any).truncated === "boolean" ? Boolean((item as any).truncated) : null;
+    out.push({ id, name, type, mime, size, data_url, text, truncated });
+  }
+  return out;
 }
 
 function buildCommunityInviteLink(communityId: string, inviteCode: string): string {
@@ -753,11 +892,16 @@ function formatChatTime(value: string): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${timeStr}`;
 }
 
-function shouldShowSender(messages: { sender_id: string; created_at: string }[], index: number): boolean {
+function shouldShowSender(
+  messages: { sender_id: string; created_at: string; reply_to_id?: string | null }[],
+  index: number
+): boolean {
   if (index === 0) return true;
   const prev = messages[index - 1];
   const curr = messages[index];
   if (prev.sender_id !== curr.sender_id) return true;
+  if (new Date(prev.created_at).toDateString() !== new Date(curr.created_at).toDateString()) return true;
+  if ((prev.reply_to_id ?? null) !== (curr.reply_to_id ?? null)) return true;
   const prevTime = new Date(prev.created_at).getTime();
   const currTime = new Date(curr.created_at).getTime();
   return currTime - prevTime > 2 * 60 * 1000;
@@ -956,7 +1100,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
-  const [userWantsSessions, setUserWantsSessions] = useState(true);
+  const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       const stored = localStorage.getItem("arx-theme");
@@ -1046,9 +1190,13 @@ export default function App() {
   const [createCommunityVisibility, setCreateCommunityVisibility] = useState<"public" | "unlisted" | "private">(
     "private"
   );
+  const [createCommunityAvatarUrl, setCreateCommunityAvatarUrl] = useState<string | null>(null);
   const [createCommunityDescription, setCreateCommunityDescription] = useState("");
+  const [createCommunityBannerUrl, setCreateCommunityBannerUrl] = useState<string | null>(null);
   const [createCommunityError, setCreateCommunityError] = useState<string | null>(null);
   const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
+  const [isCreateAvatarDragOver, setIsCreateAvatarDragOver] = useState(false);
+  const [isCreateBannerDragOver, setIsCreateBannerDragOver] = useState(false);
   const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
@@ -1058,6 +1206,8 @@ export default function App() {
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
+  const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
+  const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isLoadingMoreChat, setIsLoadingMoreChat] = useState(false);
@@ -1066,13 +1216,20 @@ export default function App() {
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const isUserAtBottomRef = useRef(true);
   const communityChatOldestSeqRef = useRef<number | null>(null);
-  const pendingChatPrependScrollRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+  const pendingChatPrependScrollRef = useRef<{ elementId: string; offset: number } | null>(null);
+  const communityChatAnchorRef = useRef<{ elementId: string; offset: number } | null>(null);
+  const communityMessageIdsRef = useRef<Set<string>>(new Set());
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const communitySocketRef = useRef<WebSocket | null>(null);
   const communityHeartbeatRef = useRef<number | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
   const [replyingToMessage, setReplyingToMessage] = useState<CommunityChatMessage | null>(null);
+  const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
+  const communityTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const communityTypingTopicRef = useRef<string | null>(null);
+  const lastCommunityTypingSentAtRef = useRef<number>(0);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1117,6 +1274,8 @@ export default function App() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
+  const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
@@ -1126,9 +1285,15 @@ export default function App() {
   const streamingContentRef = useRef<string | null>(null);
   const streamingRafRef = useRef<number | null>(null);
   const streamingAbortRef = useRef<AbortController | null>(null);
+  const streamingUserCancelledRef = useRef(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
+  const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
+  const autoScrollEnabledRef = useRef(true);
+  const lastWorkspaceScrollTopRef = useRef(0);
+  const isLoadingThreadRef = useRef(false);
   const workspaceAskInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const workspaceFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1143,6 +1308,14 @@ export default function App() {
   useEffect(() => {
     sessionRef.current = supabaseSession;
   }, [supabaseSession]);
+
+  useEffect(() => {
+    workspaceAttachmentsRef.current = workspaceAttachments;
+  }, [workspaceAttachments]);
+
+  useEffect(() => {
+    communityAttachmentsRef.current = communityAttachments;
+  }, [communityAttachments]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -1338,6 +1511,10 @@ export default function App() {
       setThreadMessages([]);
       return;
     }
+    isLoadingThreadRef.current = true;
+    autoScrollEnabledRef.current = true;
+    setIsWorkspaceAtBottom(true);
+    lastWorkspaceScrollTopRef.current = 0;
     void loadThreadMessages(activeThreadId, supabaseSession);
   }, [supabaseSession, activeThreadId]);
 
@@ -1346,6 +1523,62 @@ export default function App() {
     const threadModelId = threads.find((t) => t.id === activeThreadId)?.model_id ?? null;
     if (threadModelId) setActiveModelId(threadModelId);
   }, [activeThreadId, threads]);
+
+  // Workspace auto-scroll: keep the view pinned to bottom until the user scrolls up.
+  useEffect(() => {
+    const isThreadLoad = isLoadingThreadRef.current;
+    if (!autoScrollEnabledRef.current && !isThreadLoad) return;
+
+    const raf = window.requestAnimationFrame(() => {
+      const el = workspaceMessageListRef.current;
+      if (!el) return;
+      if (!autoScrollEnabledRef.current && !isLoadingThreadRef.current) return;
+
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "auto",
+      });
+
+      if (isLoadingThreadRef.current) {
+        lastWorkspaceScrollTopRef.current = el.scrollTop;
+        isLoadingThreadRef.current = false;
+        setIsWorkspaceAtBottom(true);
+        autoScrollEnabledRef.current = true;
+      }
+    });
+
+    return () => window.cancelAnimationFrame(raf);
+  }, [threadMessages, streamingContent]);
+
+  const handleWorkspaceScroll = () => {
+    const el = workspaceMessageListRef.current;
+    if (!el) return;
+    if (isLoadingThreadRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const hasScrollableContent = scrollHeight > clientHeight + 1;
+
+    if (!hasScrollableContent) {
+      setIsWorkspaceAtBottom(true);
+      autoScrollEnabledRef.current = true;
+      return;
+    }
+
+    const atBottom = scrollHeight - scrollTop <= clientHeight + 24;
+
+    const prevScrollTop = lastWorkspaceScrollTopRef.current;
+    lastWorkspaceScrollTopRef.current = scrollTop;
+    const scrolledUp = scrollTop < prevScrollTop - 2;
+
+    if (scrolledUp) {
+      autoScrollEnabledRef.current = false;
+      setIsWorkspaceAtBottom(false);
+      return;
+    }
+
+    setIsWorkspaceAtBottom(atBottom);
+    autoScrollEnabledRef.current = atBottom;
+  };
 
   useEffect(() => {
     if (activeView !== "settings" || settingsPage !== "memory") return;
@@ -1417,13 +1650,57 @@ export default function App() {
     setCreateCommunitySlug(next);
   }, [createCommunityName, createCommunitySlugEdited]);
 
+  async function handleCreateCommunityAvatarUpload(file: File | null) {
+    if (!file) return;
+    try {
+      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
+      setCreateCommunityAvatarUrl(dataUrl);
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to load image.";
+      setCreateCommunityError(message);
+    }
+  }
+
+  async function handleCreateCommunityBannerUpload(file: File | null) {
+    if (!file) return;
+    try {
+      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 320);
+      setCreateCommunityBannerUrl(dataUrl);
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to load banner.";
+      setCreateCommunityError(message);
+    }
+  }
+
+  function handleCreateBannerDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsCreateBannerDragOver(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (file) void handleCreateCommunityBannerUpload(file);
+  }
+
+  function handleCreateAvatarDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsCreateAvatarDragOver(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (file) void handleCreateCommunityAvatarUpload(file);
+  }
+
   function openCreateCommunityModal() {
     setCreateCommunityError(null);
     setCreateCommunityName("");
     setCreateCommunitySlug("");
     setCreateCommunitySlugEdited(false);
     setCreateCommunityVisibility("private");
+    setCreateCommunityAvatarUrl(null);
     setCreateCommunityDescription("");
+    setCreateCommunityBannerUrl(null);
+    setIsCreateAvatarDragOver(false);
+    setIsCreateBannerDragOver(false);
     setShowCreateCommunityModal(true);
   }
 
@@ -1473,7 +1750,9 @@ export default function App() {
             p_name: name,
             p_slug: slug,
             p_visibility: createCommunityVisibility,
-            p_description: createCommunityDescription.trim() || null
+            p_avatar_url: createCommunityAvatarUrl?.trim() || null,
+            p_description: createCommunityDescription.trim() || null,
+            p_banner_url: createCommunityBannerUrl?.trim() || null
           })
         },
         supabaseSession
@@ -1545,12 +1824,44 @@ export default function App() {
     void loadCommunityMembers(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, activePage]);
 
+  function captureCommunityChatScrollAnchor(
+    container: HTMLElement,
+  ): { elementId: string; offset: number } | null {
+    const rect = container.getBoundingClientRect();
+    const x = rect.left + Math.min(32, rect.width / 2);
+    const yCandidates = [rect.top + 20, rect.top + 60, rect.top + 100];
+    for (const y of yCandidates) {
+      if (y >= rect.bottom) continue;
+      const hit = document.elementFromPoint(x, y);
+      const messageEl = hit?.closest?.(".chat-message[id^='msg-']") as HTMLElement | null;
+      if (messageEl?.id) {
+        return { elementId: messageEl.id, offset: messageEl.offsetTop - container.scrollTop };
+      }
+    }
+
+    // Fallback for odd layouts (rare): scan message nodes.
+    const scrollTop = container.scrollTop;
+    const nodes = container.querySelectorAll<HTMLElement>(".chat-message[id^='msg-']");
+    for (const node of nodes) {
+      const top = node.offsetTop;
+      const bottom = top + node.offsetHeight;
+      if (bottom > scrollTop + 1) {
+        return { elementId: node.id, offset: top - scrollTop };
+      }
+    }
+    return null;
+  }
+
+  function restoreCommunityChatScrollAnchor(container: HTMLElement, anchor: { elementId: string; offset: number }) {
+    const el = document.getElementById(anchor.elementId) as HTMLElement | null;
+    if (!el) return;
+    container.scrollTop = el.offsetTop - anchor.offset;
+  }
+
   useEffect(() => {
-    if (!communityChatListRef.current || !isUserAtBottom) return;
-    communityChatListRef.current.scrollTo({
-      top: communityChatListRef.current.scrollHeight,
-      behavior: "smooth"
-    });
+    const container = communityChatListRef.current;
+    if (!container || !isUserAtBottom) return;
+    container.scrollTop = container.scrollHeight;
   }, [communityMessages, isUserAtBottom]);
 
   useLayoutEffect(() => {
@@ -1558,10 +1869,35 @@ export default function App() {
     if (!pending) return;
     const container = communityChatListRef.current;
     if (!container) return;
-    const delta = container.scrollHeight - pending.prevScrollHeight;
-    container.scrollTop = pending.prevScrollTop + delta;
+    restoreCommunityChatScrollAnchor(container, pending);
     pendingChatPrependScrollRef.current = null;
   }, [communityMessages]);
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "chat") return;
+    const container = communityChatListRef.current;
+    if (!container) return;
+    let raf: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = communityChatListRef.current;
+        if (!el) return;
+        if (isUserAtBottomRef.current) {
+          el.scrollTop = el.scrollHeight;
+          return;
+        }
+        const anchor = communityChatAnchorRef.current;
+        if (!anchor) return;
+        restoreCommunityChatScrollAnchor(el, anchor);
+      });
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, [activePage, communityTab, activeCommunityId]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community" || communityTab !== "chat") {
@@ -1581,101 +1917,271 @@ export default function App() {
     if (!url || !apiKey) return;
 
     const wsUrl = `${url.replace("https://", "wss://").replace("http://", "ws://")}/realtime/v1/websocket?apikey=${apiKey}&vsn=1.0.0`;
-    const socket = new WebSocket(wsUrl);
-    communitySocketRef.current = socket;
+    let socket: WebSocket | null = null;
+    let cancelled = false;
     const joinRef = `${Date.now()}`;
-    const topic = "realtime:public:messages";
-    const threadId = communityChatThreadIdForCommunity(activeCommunityId);
+    const messagesTopic = "realtime:public:messages";
+    const reactionsJoinRef = `${Date.now()}-reactions`;
+    const reactionsTopic = "realtime:public:message_reactions";
 
-    socket.addEventListener("open", () => {
-      socket.send(
-        JSON.stringify({
-          topic,
-          event: "phx_join",
-          payload: {
-            config: {
-              broadcast: { ack: false },
-              postgres_changes: [
-                {
-                  event: "INSERT",
-                  schema: "public",
-                  table: "messages",
-                  filter: `thread_id=eq.${threadId}`
-                }
-              ]
-            },
-            access_token: supabaseSession.access_token
-          },
-          ref: joinRef
-        })
-      );
+    void (async () => {
+      let threadId: string;
+      try {
+        threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
+      } catch {
+        return;
+      }
+      if (cancelled) return;
 
-      communityHeartbeatRef.current = window.setInterval(() => {
-        if (socket.readyState !== WebSocket.OPEN) return;
+      const typingJoinRef = `${Date.now()}-typing`;
+      const typingTopic = `realtime:typing_${threadId}`;
+      communityTypingTopicRef.current = typingTopic;
+
+      socket = new WebSocket(wsUrl);
+      communitySocketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        if (!socket) return;
+
         socket.send(
           JSON.stringify({
-            topic: "phoenix",
-            event: "heartbeat",
-            payload: {},
-            ref: `${Date.now()}`
+            topic: messagesTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false },
+                postgres_changes: [
+                  {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  },
+                  {
+                    event: "UPDATE",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  },
+                  {
+                    event: "DELETE",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  }
+                ]
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: joinRef
           })
         );
-      }, 25000);
-    });
 
-    socket.addEventListener("message", (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          event?: string;
-          payload?: Record<string, unknown>;
-        };
+        socket.send(
+          JSON.stringify({
+            topic: reactionsTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false },
+                postgres_changes: [
+                  { event: "INSERT", schema: "public", table: "message_reactions" },
+                  { event: "UPDATE", schema: "public", table: "message_reactions" },
+                  { event: "DELETE", schema: "public", table: "message_reactions" }
+                ]
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: reactionsJoinRef
+          })
+        );
 
-        if (data.event !== "postgres_changes") return;
-        const payload = data.payload as {
-          new?: CloudMessageRow;
-          record?: CloudMessageRow;
-          data?: { new?: CloudMessageRow; record?: CloudMessageRow };
-        };
-        const record = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
-        if (!record) return;
-        if (record.thread_id !== threadId) return;
-        const mapped = toCommunityChatMessage(record);
-        if (!mapped) return;
+        socket.send(
+          JSON.stringify({
+            topic: typingTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false }
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: typingJoinRef
+          })
+        );
 
-        setCommunityMessages((prev) => {
-          const idx = prev.findIndex((item) => item.id === mapped.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...mapped };
-            next.sort((a, b) => a.seq - b.seq);
-            return next;
+        communityHeartbeatRef.current = window.setInterval(() => {
+          if (!socket || socket.readyState !== WebSocket.OPEN) return;
+          socket.send(
+            JSON.stringify({
+              topic: "phoenix",
+              event: "heartbeat",
+              payload: {},
+              ref: `${Date.now()}`
+            })
+          );
+        }, 25000);
+      });
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            topic?: string;
+            event?: string;
+            payload?: Record<string, unknown>;
+          };
+
+          if (data.event === "broadcast" && data.topic === typingTopic) {
+            const payload = data.payload as { event?: unknown; payload?: unknown; type?: unknown };
+            const name =
+              (typeof payload.event === "string" ? payload.event : null) ??
+              (typeof payload.type === "string" ? payload.type : null) ??
+              "";
+            if (name !== "typing") return;
+            const details = payload.payload as { user_id?: unknown; userId?: unknown } | null;
+            const userId =
+              (details && typeof details.user_id === "string" ? details.user_id : null) ??
+              (details && typeof details.userId === "string" ? details.userId : null);
+            if (!userId) return;
+            if (userId === supabaseSession?.user.id) return;
+
+            const existing = communityTypingTimeoutsRef.current.get(userId);
+            if (existing) window.clearTimeout(existing);
+            const timeoutId = window.setTimeout(() => {
+              communityTypingTimeoutsRef.current.delete(userId);
+              setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
+            }, 2500);
+            communityTypingTimeoutsRef.current.set(userId, timeoutId);
+            setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
+            return;
           }
-          const next = [...prev, mapped];
-          next.sort((a, b) => a.seq - b.seq);
-          return next;
-        });
 
-        if (mapped.sender_id !== supabaseSession.user.id && !isUserAtBottomRef.current) {
-          setUnreadCount((prev) => prev + 1);
+          if (data.event !== "postgres_changes") return;
+
+          if (data.topic === messagesTopic) {
+            const payload = data.payload as {
+              eventType?: string;
+              type?: string;
+              new?: CloudMessageRow;
+              old?: CloudMessageRow;
+              record?: CloudMessageRow;
+              old_record?: CloudMessageRow;
+              data?: {
+                type?: string;
+                new?: CloudMessageRow;
+                record?: CloudMessageRow;
+                old?: CloudMessageRow;
+                old_record?: CloudMessageRow;
+              };
+            };
+
+            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
+            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
+            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
+
+            if (eventType === "DELETE") {
+              const deleted = oldRecord ?? newRecord;
+              if (!deleted) return;
+              if (deleted.thread_id !== threadId) return;
+              setCommunityMessages((prev) => prev.filter((m) => m.id !== deleted.id));
+              setMessageReactions((prev) => prev.filter((r) => r.message_id !== deleted.id));
+              return;
+            }
+
+            if (!newRecord) return;
+            if (newRecord.thread_id !== threadId) return;
+            const mapped = toCommunityChatMessage(newRecord);
+            if (!mapped) return;
+
+            setCommunityMessages((prev) => {
+              const idx = prev.findIndex((item) => item.id === mapped.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...mapped };
+                next.sort((a, b) => a.seq - b.seq);
+                return next;
+              }
+              const next = [...prev, mapped];
+              next.sort((a, b) => a.seq - b.seq);
+              return next;
+            });
+
+            if (
+              eventType === "INSERT" &&
+              mapped.sender_id !== supabaseSession.user.id &&
+              !isUserAtBottomRef.current
+            ) {
+              setUnreadCount((prev) => prev + 1);
+            }
+            return;
+          }
+
+          if (data.topic === reactionsTopic) {
+            const payload = data.payload as {
+              eventType?: string;
+              type?: string;
+              new?: MessageReaction;
+              old?: MessageReaction;
+              record?: MessageReaction;
+              old_record?: MessageReaction;
+              data?: {
+                type?: string;
+                new?: MessageReaction;
+                record?: MessageReaction;
+                old?: MessageReaction;
+                old_record?: MessageReaction;
+              };
+            };
+
+            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
+            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
+            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
+            const target = eventType === "DELETE" ? oldRecord ?? newRecord : newRecord;
+            if (!target) return;
+            if (!communityMessageIdsRef.current.has(target.message_id)) return;
+
+            if (eventType === "DELETE") {
+              setMessageReactions((prev) => prev.filter((r) => r.id !== target.id));
+              return;
+            }
+
+            setMessageReactions((prev) => {
+              const idx = prev.findIndex((item) => item.id === target.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...target };
+                return next;
+              }
+              return [...prev, target];
+            });
+          }
+        } catch {
+          // Ignore malformed payloads.
         }
-      } catch {
-        // Ignore malformed payloads.
-      }
-    });
+      });
 
-    socket.addEventListener("close", () => {
-      if (communityHeartbeatRef.current) {
-        window.clearInterval(communityHeartbeatRef.current);
-        communityHeartbeatRef.current = null;
-      }
-    });
+      socket.addEventListener("close", () => {
+        if (communityHeartbeatRef.current) {
+          window.clearInterval(communityHeartbeatRef.current);
+          communityHeartbeatRef.current = null;
+        }
+      });
+    })();
 
     return () => {
-      socket.close();
+      cancelled = true;
+      socket?.close();
+      communitySocketRef.current = null;
       if (communityHeartbeatRef.current) {
         window.clearInterval(communityHeartbeatRef.current);
         communityHeartbeatRef.current = null;
       }
+      communityTypingTopicRef.current = null;
+      for (const timeoutId of communityTypingTimeoutsRef.current.values()) {
+        window.clearTimeout(timeoutId);
+      }
+      communityTypingTimeoutsRef.current.clear();
+      setCommunityTypingUserIds([]);
     };
   }, [supabaseSession, activeCommunityId, activePage, communityTab]);
 
@@ -1939,11 +2445,6 @@ export default function App() {
       }
       const rows = (await response.json()) as ThreadMessage[];
       setThreadMessages(rows);
-      window.requestAnimationFrame(() => {
-        const el = workspaceMessageListRef.current;
-        if (!el) return;
-        el.scrollTop = el.scrollHeight;
-      });
     } catch (error) {
       console.warn("Failed to load messages:", error);
       setThreadMessages([]);
@@ -2046,92 +2547,64 @@ export default function App() {
     }
   }
 
-  async function sendUserMessage() {
-    const text = messageInput.trim();
-    if (!text) return;
-
-    if (!supabaseSession) {
-      handleSignIn();
-      return;
+  function getLastThreadMessageId(messages: ThreadMessage[], role: "user" | "assistant" | "system"): string | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg?.role === role) return msg.id;
     }
+    return null;
+  }
 
-    setThreadError(null);
-    setIsSendingMessage(true);
+  function isAbortError(error: unknown): boolean {
+    if (!error) return false;
+    if (error instanceof DOMException && error.name === "AbortError") return true;
+    if (error instanceof Error && error.name === "AbortError") return true;
+    return false;
+  }
+
+  function stopStreamingTurn(): void {
+    if (!streamingAbortRef.current) return;
+    streamingUserCancelledRef.current = true;
+    streamingAbortRef.current.abort();
+  }
+
+  async function runOpenRouterTurn(
+    session: SupabaseSession,
+    threadId: string,
+    params: {
+      preferredModelId: string;
+      mode?: "respond" | "regenerate";
+      runIdHint: string;
+    },
+  ): Promise<{ cancelled: boolean; error: string | null }> {
+    const url = getSupabaseUrl();
+    if (!url) return { cancelled: false, error: "Missing Supabase URL." };
+
+    streamingAbortRef.current?.abort();
+    const abort = new AbortController();
+    streamingAbortRef.current = abort;
+    streamingUserCancelledRef.current = false;
+    streamingContentRef.current = "";
+    setStreamingContent("");
+    setStreamingThreadId(threadId);
+    setStreamingRunId(params.runIdHint);
+    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId });
+
+    const scheduleStreamingFlush = () => {
+      if (streamingRafRef.current) return;
+      streamingRafRef.current = window.requestAnimationFrame(() => {
+        streamingRafRef.current = null;
+        setStreamingContent(streamingContentRef.current);
+      });
+    };
+
     try {
-      const session = supabaseSession;
-      const threadId =
-        activeThreadId ?? (await createThread(session))?.id ?? null;
-      if (!threadId) throw new Error("No thread available.");
-
-      const url = getSupabaseUrl();
-      if (!url) throw new Error("Missing Supabase URL.");
-
-      const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
-      const enabled = modelToggles.filter((toggle) => toggle.enabled);
-      const preferredModelId =
-        (activeModelId ?? "").trim() ||
-        enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
-        enabled[0]?.id ||
-        DEFAULT_ACTIVE_MODEL_ID;
-      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        await updateThreadModel(threadId, preferredModelId, session);
-      }
-
-      const messageId = crypto.randomUUID();
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: messageId,
-            thread_id: threadId,
-            seq: 0,
-            role: "user",
-            content_json: { text }
-          })
-        },
-        session
-      );
-      if (!response.ok) {
-        const message = await readSupabaseError(response);
-        throw new Error(message);
-      }
-      setMessageInput("");
-      await loadThreadMessages(threadId, session);
-
-      // Generate the assistant response server-side (OpenRouter) with streaming updates.
-      streamingAbortRef.current?.abort();
-      const abort = new AbortController();
-      streamingAbortRef.current = abort;
-      streamingContentRef.current = "";
-      setStreamingContent("");
-      setStreamingThreadId(threadId);
-      setStreamingRunId(`openrouter_web:${messageId}`);
-      setStreamingMeta({ engine_id: "openrouter_web", model_id: preferredModelId });
-
-      const scheduleStreamingFlush = () => {
-        if (streamingRafRef.current) return;
-        streamingRafRef.current = window.requestAnimationFrame(() => {
-          streamingRafRef.current = null;
-          setStreamingContent(streamingContentRef.current);
-          window.requestAnimationFrame(() => {
-            const el = workspaceMessageListRef.current;
-            if (!el) return;
-            const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-            if (distance < 120) {
-              el.scrollTop = el.scrollHeight;
-            }
-          });
-        });
-      };
-
       const turn = await fetchWithSupabaseAuth(
         `${url}/functions/v1/openrouter_turn`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ thread_id: threadId, stream: true }),
+          body: JSON.stringify({ thread_id: threadId, stream: true, ...(params.mode ? { mode: params.mode } : null) }),
           signal: abort.signal,
         },
         session,
@@ -2162,7 +2635,10 @@ export default function App() {
         if (eventName === "start") {
           if (typeof parsed?.run_id === "string") setStreamingRunId(parsed.run_id);
           if (typeof parsed?.engine_id === "string") {
-            setStreamingMeta({ engine_id: parsed.engine_id, model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null });
+            setStreamingMeta({
+              engine_id: parsed.engine_id,
+              model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null,
+            });
           }
         } else if (eventName === "delta") {
           const full = typeof parsed?.full_content === "string" ? parsed.full_content : "";
@@ -2209,16 +2685,20 @@ export default function App() {
 
       await loadThreadMessages(threadId, session);
       await loadThreads(session);
+      return { cancelled: false, error: null };
     } catch (error) {
+      const cancelled = streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
+      if (cancelled) {
+        window.setTimeout(() => {
+          void loadThreadMessages(threadId, session).catch(() => null);
+          void loadThreads(session).catch(() => null);
+        }, 350);
+        return { cancelled: true, error: null };
+      }
       const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to send message.";
-      setThreadError(message);
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
+      return { cancelled: false, error: message };
     } finally {
-      setIsSendingMessage(false);
       if (streamingRafRef.current) {
         window.cancelAnimationFrame(streamingRafRef.current);
         streamingRafRef.current = null;
@@ -2229,6 +2709,259 @@ export default function App() {
       setStreamingThreadId(null);
       setStreamingRunId(null);
       setStreamingMeta(null);
+      streamingUserCancelledRef.current = false;
+    }
+  }
+
+  async function ingestAttachmentsFromFileList(
+    files: FileList,
+    existing: MessageAttachment[],
+    onError: (message: string) => void,
+  ): Promise<MessageAttachment[]> {
+    if (files.length === 0) return existing;
+    const remaining = Math.max(0, MAX_WEB_ATTACHMENTS_PER_MESSAGE - existing.length);
+    if (remaining === 0) {
+      onError(`You can attach up to ${MAX_WEB_ATTACHMENTS_PER_MESSAGE} files per message.`);
+      return existing;
+    }
+
+    const picked = Array.from(files).slice(0, remaining);
+    const next: MessageAttachment[] = [];
+    for (const file of picked) {
+      if (!file) continue;
+      const name = (file.name ?? "").trim() || "attachment";
+      if (file.size > MAX_WEB_ATTACHMENT_BYTES) {
+        onError(`${name} is too large (max ${(MAX_WEB_ATTACHMENT_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
+        continue;
+      }
+      const base: MessageAttachment = {
+        id: crypto.randomUUID(),
+        name,
+        type: "file",
+        mime: (file.type ?? "").trim() || null,
+        size: file.size,
+      };
+      try {
+        if (isLikelyImageFile(file)) {
+          base.type = "image";
+          base.data_url = await readChatImageAsDataUrl(file);
+        } else if (isLikelyTextFile(file)) {
+          const { text, truncated } = await readTextAttachmentPreview(file);
+          base.text = text;
+          base.truncated = truncated;
+        }
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to read file.";
+        onError(`${name}: ${message}`);
+      }
+      next.push(base);
+    }
+
+    return [...existing, ...next];
+  }
+
+  async function handleWorkspaceFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    event.target.value = "";
+    if (!files) return;
+    setThreadError(null);
+    const updated = await ingestAttachmentsFromFileList(files, workspaceAttachmentsRef.current, (message) => {
+      setThreadError(message);
+    });
+    setWorkspaceAttachments(updated);
+  }
+
+  async function handleCommunityFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    event.target.value = "";
+    if (!files) return;
+    setCommunityChatError(null);
+    const updated = await ingestAttachmentsFromFileList(files, communityAttachmentsRef.current, (message) => {
+      setCommunityChatError(message);
+    });
+    setCommunityAttachments(updated);
+  }
+
+  function removeWorkspaceAttachment(id: string) {
+    setWorkspaceAttachments((prev) => prev.filter((att) => att.id !== id));
+  }
+
+  function removeCommunityAttachment(id: string) {
+    setCommunityAttachments((prev) => prev.filter((att) => att.id !== id));
+  }
+
+  async function sendUserMessage() {
+    const text = messageInput.trim();
+    const hasAttachments = workspaceAttachments.length > 0;
+    if (!text && !hasAttachments) return;
+
+    if (!supabaseSession) {
+      handleSignIn();
+      return;
+    }
+
+    setThreadError(null);
+    setIsSendingMessage(true);
+    autoScrollEnabledRef.current = true;
+    setIsWorkspaceAtBottom(true);
+    try {
+      const session = supabaseSession;
+      const threadId =
+        activeThreadId ?? (await createThread(session))?.id ?? null;
+      if (!threadId) throw new Error("No thread available.");
+
+      const url = getSupabaseUrl();
+      if (!url) throw new Error("Missing Supabase URL.");
+
+      const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
+      const enabled = modelToggles.filter((toggle) => toggle.enabled);
+      const preferredModelId =
+        (activeModelId ?? "").trim() ||
+        enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
+        enabled[0]?.id ||
+        DEFAULT_ACTIVE_MODEL_ID;
+      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
+        await updateThreadModel(threadId, preferredModelId, session);
+      }
+
+      const messageId = crypto.randomUUID();
+      const attachmentsToSend = [...workspaceAttachmentsRef.current];
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: messageId,
+            thread_id: threadId,
+            seq: 0,
+            role: "user",
+            content_json: {
+              text,
+              ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {})
+            }
+          })
+        },
+        session
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        throw new Error(message);
+      }
+      setMessageInput("");
+      setWorkspaceAttachments([]);
+      await loadThreadMessages(threadId, session);
+
+      const turnResult = await runOpenRouterTurn(session, threadId, {
+        preferredModelId,
+        mode: "respond",
+        runIdHint: `openrouter_web:${messageId}`,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to send message.";
+      setThreadError(message);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }
+
+  async function retryLastTurn() {
+    if (isSendingMessage) return;
+    if (!supabaseSession) {
+      handleSignIn();
+      return;
+    }
+    const threadId = activeThreadId;
+    if (!threadId) return;
+    const lastMessage = threadMessages[threadMessages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") return;
+
+    const lastUserMessageId = getLastThreadMessageId(threadMessages, "user");
+    if (!lastUserMessageId) return;
+
+    setThreadError(null);
+    setIsSendingMessage(true);
+    autoScrollEnabledRef.current = true;
+    setIsWorkspaceAtBottom(true);
+    try {
+      const session = supabaseSession;
+      const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
+      const enabled = modelToggles.filter((toggle) => toggle.enabled);
+      const preferredModelId =
+        (activeModelId ?? "").trim() ||
+        enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
+        enabled[0]?.id ||
+        DEFAULT_ACTIVE_MODEL_ID;
+      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
+        await updateThreadModel(threadId, preferredModelId, session);
+      }
+
+      const turnResult = await runOpenRouterTurn(session, threadId, {
+        preferredModelId,
+        mode: "respond",
+        runIdHint: `openrouter_web:${lastUserMessageId}`,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
+      setThreadError(message);
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }
+
+  async function regenerateLastTurn() {
+    if (isSendingMessage) return;
+    if (!supabaseSession) {
+      handleSignIn();
+      return;
+    }
+    const threadId = activeThreadId;
+    if (!threadId) return;
+    const lastUserMessageId = getLastThreadMessageId(threadMessages, "user");
+    if (!lastUserMessageId) return;
+
+    setThreadError(null);
+    setIsSendingMessage(true);
+    autoScrollEnabledRef.current = true;
+    setIsWorkspaceAtBottom(true);
+    try {
+      const session = supabaseSession;
+      const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
+      const enabled = modelToggles.filter((toggle) => toggle.enabled);
+      const preferredModelId =
+        (activeModelId ?? "").trim() ||
+        enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
+        enabled[0]?.id ||
+        DEFAULT_ACTIVE_MODEL_ID;
+      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
+        await updateThreadModel(threadId, preferredModelId, session);
+      }
+
+      const turnResult = await runOpenRouterTurn(session, threadId, {
+        preferredModelId,
+        mode: "regenerate",
+        runIdHint: `openrouter_web_regen:${lastUserMessageId}:${Date.now()}`,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
+    } catch (error) {
+      const message =
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
+      setThreadError(message);
+    } finally {
+      setIsSendingMessage(false);
     }
   }
 
@@ -2651,11 +3384,13 @@ export default function App() {
     if ((row.role ?? "").trim() !== "user") return null;
     const senderId = (row.sender_id ?? "").trim() || "unknown";
     const body = extractTextFromContentJson(row.content_json);
+    const attachments = parseMessageAttachments(row.content_json);
     return {
       id,
       community_id: threadId,
       sender_id: senderId,
       body,
+      attachments: attachments.length > 0 ? attachments : undefined,
       reply_to_id: row.reply_to_id ?? null,
       created_at: row.created_at,
       seq: Number(row.seq) || 0,
@@ -2686,9 +3421,16 @@ export default function App() {
     if (!communityChatListRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = communityChatListRef.current;
     const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
-    setIsUserAtBottom(atBottom);
-    isUserAtBottomRef.current = atBottom;
+    if (atBottom !== isUserAtBottomRef.current) {
+      setIsUserAtBottom(atBottom);
+      isUserAtBottomRef.current = atBottom;
+    }
     if (atBottom) setUnreadCount(0);
+    if (atBottom) {
+      communityChatAnchorRef.current = null;
+    } else {
+      communityChatAnchorRef.current = captureCommunityChatScrollAnchor(communityChatListRef.current);
+    }
 
     const nearTop = scrollTop <= COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX;
     if (
@@ -2764,10 +3506,7 @@ export default function App() {
 
     const container = communityChatListRef.current;
     if (container) {
-      pendingChatPrependScrollRef.current = {
-        prevScrollHeight: container.scrollHeight,
-        prevScrollTop: container.scrollTop
-      };
+      pendingChatPrependScrollRef.current = captureCommunityChatScrollAnchor(container);
     }
 
     setIsLoadingMoreChat(true);
@@ -2923,6 +3662,30 @@ export default function App() {
     setTimeout(() => chatInputRef.current?.focus(), 0);
   }
 
+  function maybeBroadcastCommunityTyping(nextValue: string) {
+    if (!supabaseSession || !activeCommunityId || activePage !== "community" || communityTab !== "chat") return;
+    if (!nextValue.trim()) return;
+    const socket = communitySocketRef.current;
+    const topic = communityTypingTopicRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !topic) return;
+    const now = Date.now();
+    if (now - lastCommunityTypingSentAtRef.current < 1200) return;
+    lastCommunityTypingSentAtRef.current = now;
+    socket.send(
+      JSON.stringify({
+        topic,
+        event: "broadcast",
+        payload: {
+          event: "typing",
+          payload: {
+            user_id: supabaseSession.user.id
+          }
+        },
+        ref: `${now}`
+      })
+    );
+  }
+
   function handleStartEdit(message: CommunityChatMessage) {
     const reply = parseReplyPrefix(message.body);
     setEditingMessageId(message.id);
@@ -2944,6 +3707,9 @@ export default function App() {
     const url = getSupabaseUrl();
     if (!url) return;
 
+    const existingAttachments =
+      communityMessages.find((m) => m.id === editingMessageId)?.attachments ?? [];
+
     const bodyToSave = editingMessagePrefix ? editingMessagePrefix + text : text;
 
     setCommunityMessages((prev) => prev.map((m) => (m.id === editingMessageId ? { ...m, body: bodyToSave } : m)));
@@ -2958,7 +3724,12 @@ export default function App() {
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content_json: { text: bodyToSave } })
+          body: JSON.stringify({
+            content_json: {
+              text: bodyToSave,
+              ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {})
+            }
+          })
         },
         supabaseSession
       );
@@ -3000,7 +3771,8 @@ export default function App() {
   async function handleSendCommunityMessage() {
     if (!supabaseSession || !activeCommunityId) return;
     const rawText = communityMessageInput.trim();
-    if (!rawText) return;
+    const attachmentsToSend = [...communityAttachmentsRef.current];
+    if (!rawText && attachmentsToSend.length === 0) return;
 
     const replySnapshot = replyingToMessage;
     const replyToId = replySnapshot ? replySnapshot.id : null;
@@ -3012,12 +3784,14 @@ export default function App() {
       community_id: activeCommunityId,
       sender_id: supabaseSession.user.id,
       body: bodyToSend,
+      attachments: attachmentsToSend,
       reply_to_id: replyToId,
       created_at: new Date().toISOString(),
       seq: Number.MAX_SAFE_INTEGER,
     };
     setCommunityMessages((prev) => [...prev, optimisticMessage]);
     setCommunityMessageInput("");
+    setCommunityAttachments([]);
     setReplyingToMessage(null);
     setIsUserAtBottom(true);
     isUserAtBottomRef.current = true;
@@ -3034,6 +3808,7 @@ export default function App() {
       setCommunityChatError("Missing Supabase URL.");
       setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setCommunityMessageInput(rawText);
+      setCommunityAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
       setIsSendingCommunityMessage(false);
       return;
@@ -3052,7 +3827,10 @@ export default function App() {
 	          body: JSON.stringify({
 	            thread_id: threadId,
 	            role: "user",
-	            content_json: { text: bodyToSend },
+	            content_json: {
+	              text: bodyToSend,
+	              ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {})
+	            },
 	            reply_to_id: replyToId
 	          })
 	        },
@@ -3063,6 +3841,7 @@ export default function App() {
         setCommunityChatError(errText || "Failed to send message.");
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setCommunityMessageInput(rawText);
+        setCommunityAttachments(attachmentsToSend);
         setReplyingToMessage(replySnapshot);
         return;
       }
@@ -3072,6 +3851,7 @@ export default function App() {
         setCommunityChatError("Message sent, but no payload returned.");
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setCommunityMessageInput(rawText);
+        setCommunityAttachments(attachmentsToSend);
         setReplyingToMessage(replySnapshot);
         return;
       }
@@ -3092,6 +3872,7 @@ export default function App() {
       setCommunityChatError(message);
       setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setCommunityMessageInput(rawText);
+      setCommunityAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
     } finally {
       setIsSendingCommunityMessage(false);
@@ -3392,7 +4173,7 @@ export default function App() {
     setIsLoadingCommunityInvites(true);
     try {
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_invites?select=id,community_id,code,role,tier_id,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
+        `${url}/rest/v1/community_invites?select=id,community_id,code,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
         {},
         session
       );
@@ -3471,8 +4252,6 @@ export default function App() {
             body: JSON.stringify({
               community_id: activeCommunityId,
               code,
-              role: "member",
-              tier_id: "member",
               max_uses: maxUses,
               expires_at: expiresAt,
               created_by: supabaseSession.user.id
@@ -3698,6 +4477,10 @@ export default function App() {
     return map;
   }, [communityMessages]);
 
+  useEffect(() => {
+    communityMessageIdsRef.current = new Set(communityMessages.map((m) => m.id));
+  }, [communityMessages]);
+
 	  const displayName = useCallback(
 	    (userId: string): string => {
 	      const trimmedName = profileName.trim();
@@ -3753,12 +4536,48 @@ export default function App() {
   }, [discoverCommunities, discoverQuery]);
 
   const showCommunityRail = true;
-  const showSessionsPanel = activePage === "workspace" && (activeView === "settings" || userWantsSessions);
   const showCommunityNav = activePage === "community";
-  const hasLeftPanel = showSessionsPanel || showCommunityNav;
+  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
+  const sessionsDrawerEnabled = activePage === "workspace" && !isWorkspaceSettings;
+  const isSessionsDrawerOpen = sessionsDrawerEnabled && userWantsSessions;
+  const hasLeftPanel = isWorkspaceSettings || showCommunityNav;
+
+  useEffect(() => {
+    if (!isSessionsDrawerOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setUserWantsSessions(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSessionsDrawerOpen]);
+
+  const lastThreadMessage = threadMessages[threadMessages.length - 1] ?? null;
+  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
+  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
+  const lastThreadAssistantMessageId = getLastThreadMessageId(threadMessages, "assistant");
+  const canRetryLastThreadTurn = Boolean(
+    threadError &&
+      supabaseSession &&
+      activeThreadId &&
+      !isSendingMessage &&
+      lastThreadMessageRole === "user" &&
+      lastThreadUserMessageId,
+  );
+  const canRegenerateLastThreadTurn = Boolean(
+    supabaseSession &&
+      activeThreadId &&
+      !isSendingMessage &&
+      lastThreadMessageRole === "assistant" &&
+      lastThreadUserMessageId &&
+      lastThreadAssistantMessageId,
+  );
+  const isStreamingWorkspaceTurn = Boolean(
+    isSendingMessage && streamingThreadId === activeThreadId && streamingContent !== null,
+  );
 
   return (
-    <div className="app-root">
+    <div className={`app-root${isSessionsDrawerOpen ? " sessions-drawer-open" : ""}`}>
       <header className="app-topbar">
         <div className="topbar-left">
           {activePage === "workspace" ? (
@@ -3854,11 +4673,44 @@ export default function App() {
             )}
           </button>
         </div>
-      </header>
+	      </header>
 
-      <div
-        className={`app-shell${showCommunityRail ? " with-community-rail" : ""}${!hasLeftPanel ? " no-left" : ""} no-right`}
-      >
+        {sessionsDrawerEnabled && (
+          <>
+            <aside
+              className={`sessions web-sessions-drawer${isSessionsDrawerOpen ? " open" : ""}`}
+              aria-hidden={!isSessionsDrawerOpen}
+            >
+              {threadError && <div className="auth-error">{threadError}</div>}
+              <div className="session-list">
+                {groupThreadsByDate(threads).map((group) => (
+                  <div key={group.label} className="session-group">
+                    <div className="session-group-label">{group.label}</div>
+                    {group.threads.map((thread) => (
+                      <div
+                        key={thread.id}
+                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                        onClick={() => setActiveThreadId(thread.id)}
+                      >
+                        <div className="session-content">
+                          <div className="session-title">{(thread.title ?? "").trim() || "Untitled thread"}</div>
+                          <div className="session-preview">
+                            {thread.id === activeThreadId && activeThread ? "Open" : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {threads.length === 0 && <div className="empty-state">No threads yet. Click + to start.</div>}
+              </div>
+            </aside>
+          </>
+        )}
+
+	      <div
+	        className={`app-shell${showCommunityRail ? " with-community-rail" : ""}${showCommunityNav ? " community-layout" : ""}${showCommunityNav || isWorkspaceSettings ? " sessions-compact" : ""}${!hasLeftPanel ? " no-left" : ""} no-right`}
+	      >
         {showCommunityRail && (
           <aside className="rail community-rail" aria-label="Communities">
             <div className="rail-main">
@@ -3921,17 +4773,16 @@ export default function App() {
 	              </button>
             </div>
             <div className="rail-footer">
-              <button
-                type="button"
-                className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
-                onClick={() => {
-                  setActivePage("workspace");
-                  setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
-                  setUserWantsSessions(true);
-                }}
-                title="Settings"
-                aria-label="Settings"
-              >
+	              <button
+	                type="button"
+	                className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
+	                onClick={() => {
+	                  setActivePage("workspace");
+	                  setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
+	                }}
+	                title="Settings"
+	                aria-label="Settings"
+	              >
                 <svg
                   viewBox="0 0 24 24"
                   aria-hidden="true"
@@ -3950,58 +4801,23 @@ export default function App() {
           </aside>
         )}
 
-        {showSessionsPanel && (
-          <aside className="sessions">
-            {activeView === "settings" ? (
-              <>
-                <div className="panel-title">Settings</div>
-                <div className="session-list">
-                  {(["account", "models", "execution", "memory", "appearance"] as const).map((page) => (
-                    <button
-                      key={page}
-                      className={settingsPage === page ? "nav-item active" : "nav-item"}
-                      onClick={() => setSettingsPage(page)}
-                      type="button"
-                    >
-                      {settingsPageLabel(page)}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                {threadError && <div className="auth-error">{threadError}</div>}
-
-                <div className="session-list">
-                  {groupThreadsByDate(threads).map((group) => (
-                    <div key={group.label} className="session-group">
-                      <div className="session-group-label">{group.label}</div>
-                      {group.threads.map((thread) => (
-                        <div
-                          key={thread.id}
-                          className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                          onClick={() => setActiveThreadId(thread.id)}
-                        >
-                          <div className="session-content">
-                            <div className="session-title">
-                              {(thread.title ?? "").trim() || "Untitled thread"}
-                            </div>
-                            <div className="session-preview">
-                              {thread.id === activeThreadId && activeThread ? "Open" : ""}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {threads.length === 0 && (
-                    <div className="empty-state">No threads yet. Click + to start.</div>
-                  )}
-                </div>
-              </>
-            )}
-          </aside>
-        )}
+	        {isWorkspaceSettings && (
+	          <aside className="sessions">
+	            <div className="panel-title">Settings</div>
+	            <div className="session-list">
+	              {(["account", "models", "execution", "memory", "appearance"] as const).map((page) => (
+	                <button
+	                  key={page}
+	                  className={settingsPage === page ? "nav-item active" : "nav-item"}
+	                  onClick={() => setSettingsPage(page)}
+	                  type="button"
+	                >
+	                  {settingsPageLabel(page)}
+	                </button>
+	              ))}
+	            </div>
+	          </aside>
+	        )}
 
         {showCommunityNav && (
           <aside className="community-nav">
@@ -4024,6 +4840,7 @@ export default function App() {
               className={communityTab === "chat" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => setCommunityTab("chat")}
+              title="Chat"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -4036,6 +4853,7 @@ export default function App() {
               className={communityTab === "library" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => setCommunityTab("library")}
+              title="Library"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -4049,6 +4867,7 @@ export default function App() {
               className={communityTab === "resources" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => setCommunityTab("resources")}
+              title="Resources"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -4062,6 +4881,7 @@ export default function App() {
               className={communityTab === "members" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => setCommunityTab("members")}
+              title="Members"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -4084,6 +4904,7 @@ export default function App() {
                     setActiveView("home");
                     setCommunityTab("settings");
                   }}
+                  title="Settings"
                 >
                   <span className="nav-icon">
                     <svg
@@ -4547,22 +5368,37 @@ export default function App() {
             </div>
 	          ) : activePage === "workspace" ? (
 	            <>
-	              <div className="workspace-body">
-	                <div className="message-list" ref={workspaceMessageListRef}>
-	                  <div className="message-list-inner">
-	                    {!supabaseSession && (
-	                      <div className="chat-empty">Sign in to start a thread.</div>
-	                    )}
+		              <div className="workspace-body">
+		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
+		                  <div className="message-list-inner">
+		                    {!supabaseSession && (
+		                      <div className="chat-empty">Sign in to start a thread.</div>
+		                    )}
 	                    {supabaseSession && !activeThreadId && threads.length === 0 && (
 	                      <div className="chat-empty">No threads yet. Click + to start.</div>
 	                    )}
 	                    {supabaseSession && activeThreadId && threadMessages.length === 0 && (
 	                      <div className="chat-empty">No messages yet.</div>
 	                    )}
-                      {threadError && <div className="auth-error">{threadError}</div>}
+                      {threadError && (
+                        <div className="auth-error">
+                          {threadError}
+                          {canRetryLastThreadTurn && (
+                            <button
+                              className="auth-error-action"
+                              type="button"
+                              onClick={() => void retryLastTurn()}
+                              title="Retry"
+                            >
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                      )}
 	                    {threadMessages.map((message) => {
 	                      const isUser = message.role === "user";
 	                      const textContent = parseMessageText(message.content_json);
+                        const attachments = parseMessageAttachments(message.content_json);
 	                      const modelLabel = !isUser
 	                        ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null)
 	                        : null;
@@ -4572,6 +5408,44 @@ export default function App() {
 	                          className={isUser ? "message-item user" : "message-item assistant"}
 	                        >
 	                          <div className="message-text">{isUser ? textContent : renderMarkdown(textContent)}</div>
+                            {attachments.length > 0 && (
+                              <div className="attachments-preview message-attachments-preview">
+                                {attachments.map((att) => {
+                                  const openUrl =
+                                    att.type === "image" && typeof att.data_url === "string" && att.data_url.startsWith("data:")
+                                      ? att.data_url
+                                      : null;
+                                  return (
+                                    <button
+                                      key={att.id}
+                                      type="button"
+                                      className="attachment-item attachment-chip"
+                                      onClick={() => {
+                                        if (!openUrl) return;
+                                        window.open(openUrl, "_blank", "noopener,noreferrer");
+                                      }}
+                                      disabled={!openUrl}
+                                      title={att.name}
+                                    >
+                                      {att.type === "image" && openUrl ? (
+                                        <img src={openUrl} alt={att.name} className="attachment-thumb" />
+                                      ) : (
+                                        <div className="attachment-icon" aria-hidden="true">
+                                          <svg viewBox="0 0 24 24">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                            <path d="M14 2v6h6" />
+                                            <path d="M16 13H8" />
+                                            <path d="M16 17H8" />
+                                            <path d="M10 9H8" />
+                                          </svg>
+                                        </div>
+                                      )}
+                                      <span className="attachment-name">{att.name}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
 	                          {!isUser && (
 	                            <div className="message-footer">
 	                              <button
@@ -4613,6 +5487,20 @@ export default function App() {
 	                                  <path d="M10 14h4" />
 	                                </svg>
 	                              </button>
+                                {canRegenerateLastThreadTurn && message.id === lastThreadAssistantMessageId && (
+                                  <button
+                                    className="message-copy-btn"
+                                    type="button"
+                                    onClick={() => void regenerateLastTurn()}
+                                    title="Regenerate"
+                                    aria-label="Regenerate"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M21 12a9 9 0 1 1-3-6.7" />
+                                      <path d="M21 3v6h-6" />
+                                    </svg>
+                                  </button>
+                                )}
 	                              {modelLabel && <span className="message-meta">{modelLabel}</span>}
 	                            </div>
 	                          )}
@@ -4626,7 +5514,7 @@ export default function App() {
                             <div className="message-text streaming-text">
                               {streamingContent.trim() ? (
                                 <>
-                                  {streamingContent}
+                                  {renderMarkdown(streamingContent)}
                                   <span className="streaming-caret" aria-hidden="true" />
                                 </>
                               ) : (
@@ -4647,16 +5535,42 @@ export default function App() {
                                 </span>
                               </div>
                             )}
-                          </div>
-                        )}
-	                  </div>
-	                </div>
-	              </div>
-	              <div className="ask-bar ask-bar-v2">
-                <textarea
-                  ref={workspaceAskInputRef}
+		                          </div>
+		                        )}
+		                  </div>
+		                </div>
+                {!isWorkspaceAtBottom && (
+                  <button
+                    className="scroll-to-bottom workspace"
+                    type="button"
+                    onClick={() => {
+                      const el = workspaceMessageListRef.current;
+                      if (!el) return;
+		                      autoScrollEnabledRef.current = true;
+		                      setIsWorkspaceAtBottom(true);
+		                      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+		                    }}
+		                    aria-label="Scroll to bottom"
+		                    title="Scroll to bottom"
+		                  >
+		                    <svg viewBox="0 0 24 24" aria-hidden="true">
+		                      <path d="M12 5v14" />
+		                      <path d="M19 12l-7 7-7-7" />
+		                    </svg>
+		                  </button>
+		                )}
+		              </div>
+		              <div className="ask-bar ask-bar-v2">
+	                <textarea
+	                  ref={workspaceAskInputRef}
                   className="ask-input ask-input-v2"
-                  placeholder={supabaseSession ? "Ask anything" : "Sign in to send messages"}
+                  placeholder={
+                    supabaseSession
+                      ? workspaceAttachments.length > 0
+                        ? "Add a message or send files..."
+                        : "Ask anything"
+                      : "Sign in to send messages"
+                  }
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -4668,19 +5582,63 @@ export default function App() {
                   disabled={!supabaseSession || isSendingMessage}
                   rows={1}
                 />
+                {workspaceAttachments.length > 0 && (
+                  <div className="attachments-preview workspace-attachments-preview">
+                    {workspaceAttachments.map((att) => (
+                      <div key={att.id} className="attachment-item">
+                        {att.type === "image" && att.data_url ? (
+                          <img src={att.data_url} alt={att.name} className="attachment-thumb" />
+                        ) : (
+                          <div className="attachment-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <path d="M14 2v6h6" />
+                              <path d="M16 13H8" />
+                              <path d="M16 17H8" />
+                              <path d="M10 9H8" />
+                            </svg>
+                          </div>
+                        )}
+                        <span className="attachment-name" title={att.name}>
+                          {att.name}
+                        </span>
+                        <button
+                          className="attachment-remove"
+                          type="button"
+                          onClick={() => removeWorkspaceAttachment(att.id)}
+                          title="Remove"
+                          aria-label={`Remove ${att.name}`}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="ask-footer">
                   <div className="ask-footer-left">
                     <button
                       className="ask-icon-btn ask-plus"
                       type="button"
-                      disabled
-                      aria-label="Attach"
-                      title="Attach (coming soon)"
+                      onClick={() => workspaceFileInputRef.current?.click()}
+                      disabled={isSendingMessage || isStreamingWorkspaceTurn}
+                      aria-label="Attach files"
+                      title="Attach files"
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 5v14M5 12h14" />
                       </svg>
                     </button>
+                    <input
+                      ref={workspaceFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+                      style={{ display: "none" }}
+                      onChange={handleWorkspaceFileInputChange}
+                    />
                     <div className="ask-model" ref={modelPickerRef}>
                       <button
                         className="ask-model-btn"
@@ -4723,13 +5681,22 @@ export default function App() {
                   <button
                     className="ask-send-btn ask-send-btn-v2"
                     type="button"
-                    onClick={() => void sendUserMessage()}
-                    disabled={!supabaseSession || isSendingMessage || messageInput.trim().length === 0}
-                    aria-label="Send"
-                    title="Send"
+                    onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+                    disabled={
+                      !supabaseSession ||
+                      (isStreamingWorkspaceTurn
+                        ? false
+                        : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
+                    }
+                    aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+                    title={isStreamingWorkspaceTurn ? "Stop" : "Send"}
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                      {isStreamingWorkspaceTurn ? (
+                        <rect x="7" y="7" width="10" height="10" rx="2" />
+                      ) : (
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                      )}
                     </svg>
                   </button>
                 </div>
@@ -4904,7 +5871,7 @@ export default function App() {
                               <span>Start</span>
                             </div>
                           )}
-                          {activeCommunity &&
+                      {activeCommunity &&
                             !isLoadingChat &&
                             communityMessages.map((message, index) => {
                               const isOwn = message.sender_id === supabaseSession?.user.id;
@@ -4979,26 +5946,77 @@ export default function App() {
                                               onClick={() => scrollToCommunityMessage(replyToId!)}
                                               title="Jump to replied message"
                                             >
-                                              <div className="chat-reply-sender">{displayName(replyTarget.sender_id)}</div>
-                                              <div className="chat-reply-text">
+                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="9 14 4 9 9 4" />
+                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                              </svg>
+                                              <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
+                                              <span className="chat-reply-text">
                                                 {truncateReplyPreview(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)}
-                                              </div>
+                                              </span>
                                             </button>
                                           )}
                                           {!replyTarget && replyToId && (
                                             <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
-                                              <div className="chat-reply-sender">Reply</div>
-                                              <div className="chat-reply-text">Replied message not loaded</div>
+                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="9 14 4 9 9 4" />
+                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                              </svg>
+                                              <span className="chat-reply-sender">Reply</span>
+                                              <span className="chat-reply-text">Replied message not loaded</span>
                                             </div>
                                           )}
                                           {legacyReply && (
                                             <div className="chat-reply-quote">
-                                              <div className="chat-reply-sender">{legacyReply.sender}</div>
-                                              <div className="chat-reply-text">{legacyReply.preview}</div>
+                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="9 14 4 9 9 4" />
+                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                                              </svg>
+                                              <span className="chat-reply-sender">{legacyReply.sender}</span>
+                                              <span className="chat-reply-text">{legacyReply.preview}</span>
                                             </div>
                                           )}
                                           <div className="chat-body">{legacyReply ? legacyReply.rest : message.body}</div>
                                         </>
+                                      )}
+
+                                      {message.attachments && message.attachments.length > 0 && (
+                                        <div className="attachments-preview chat-attachments-preview">
+                                          {message.attachments.map((att) => {
+                                            const openUrl =
+                                              att.type === "image" && typeof att.data_url === "string" && att.data_url.startsWith("data:")
+                                                ? att.data_url
+                                                : null;
+                                            return (
+                                              <button
+                                                key={att.id}
+                                                type="button"
+                                                className="attachment-item attachment-chip"
+                                                onClick={() => {
+                                                  if (!openUrl) return;
+                                                  window.open(openUrl, "_blank", "noopener,noreferrer");
+                                                }}
+                                                disabled={!openUrl}
+                                                title={att.name}
+                                              >
+                                                {att.type === "image" && openUrl ? (
+                                                  <img src={openUrl} alt={att.name} className="attachment-thumb" />
+                                                ) : (
+                                                  <div className="attachment-icon" aria-hidden="true">
+                                                    <svg viewBox="0 0 24 24">
+                                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                                      <path d="M14 2v6h6" />
+                                                      <path d="M16 13H8" />
+                                                      <path d="M16 17H8" />
+                                                      <path d="M10 9H8" />
+                                                    </svg>
+                                                  </div>
+                                                )}
+                                                <span className="attachment-name">{att.name}</span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
                                       )}
 
                                       {reactionPickerMessageId === message.id && (
@@ -5091,23 +6109,35 @@ export default function App() {
                               );
                             })}
                         </div>
-                      </div>
 
-                      {!isUserAtBottom && unreadCount > 0 && (
-                        <button
-                          className="scroll-to-bottom"
-                          onClick={() => {
-                            setIsUserAtBottom(true);
-                            isUserAtBottomRef.current = true;
-                            communityChatListRef.current?.scrollTo({
-                              top: communityChatListRef.current.scrollHeight,
-                              behavior: "smooth"
-                            });
-                          }}
-                        >
-                          {unreadCount} new message{unreadCount > 1 ? "s" : ""} ↓
-                        </button>
-                      )}
+                        {!isUserAtBottom && (
+                          <button
+                            className="scroll-to-bottom workspace"
+                            type="button"
+                            onClick={() => {
+                              setIsUserAtBottom(true);
+                              isUserAtBottomRef.current = true;
+                              setUnreadCount(0);
+                              communityChatListRef.current?.scrollTo({
+                                top: communityChatListRef.current.scrollHeight,
+                                behavior: "smooth"
+                              });
+                            }}
+                            aria-label="Scroll to bottom"
+                            title="Scroll to bottom"
+                          >
+                            {unreadCount > 0 && (
+                              <span className="scroll-badge" aria-hidden="true">
+                                {unreadCount > 99 ? "99+" : unreadCount}
+                              </span>
+                            )}
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M12 5v14" />
+                              <path d="M19 12l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
 
                       {replyingToMessage && (
                         <div className="chat-replying-bar">
@@ -5130,18 +6160,82 @@ export default function App() {
                         </div>
                       )}
 
+                      {communityAttachments.length > 0 && (
+                        <div className="attachments-preview community-attachments-preview">
+                          {communityAttachments.map((att) => (
+                            <div key={att.id} className="attachment-item">
+                              {att.type === "image" && att.data_url ? (
+                                <img src={att.data_url} alt={att.name} className="attachment-thumb" />
+                              ) : (
+                                <div className="attachment-icon" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <path d="M14 2v6h6" />
+                                    <path d="M16 13H8" />
+                                    <path d="M16 17H8" />
+                                    <path d="M10 9H8" />
+                                  </svg>
+                                </div>
+                              )}
+                              <span className="attachment-name" title={att.name}>
+                                {att.name}
+                              </span>
+                              <button
+                                className="attachment-remove"
+                                type="button"
+                                onClick={() => removeCommunityAttachment(att.id)}
+                                title="Remove"
+                                aria-label={`Remove ${att.name}`}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {communityTypingUserIds.length > 0 && (
+                        <div className="chat-typing-indicator" aria-live="polite">
+                          {communityTypingUserIds.length === 1
+                            ? `${displayName(communityTypingUserIds[0])} is typing…`
+                            : communityTypingUserIds.length === 2
+                              ? `${displayName(communityTypingUserIds[0])} and ${displayName(
+                                  communityTypingUserIds[1]
+                                )} are typing…`
+                              : `${displayName(communityTypingUserIds[0])} and ${
+                                  communityTypingUserIds.length - 1
+                                } others are typing…`}
+                        </div>
+                      )}
+
                       <div className="chat-input-bar">
                         <button
                           className="ask-icon-btn ask-plus"
                           type="button"
-                          disabled
-                          aria-label="Attach"
-                          title="Attach (coming soon)"
+                          onClick={() => communityFileInputRef.current?.click()}
+                          disabled={
+                            !supabaseSession ||
+                            !activeCommunity ||
+                            !canPostMessagesActiveCommunity ||
+                            isSendingCommunityMessage
+                          }
+                          aria-label="Attach files"
+                          title="Attach files"
                         >
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M12 5v14M5 12h14" />
                           </svg>
                         </button>
+                        <input
+                          ref={communityFileInputRef}
+                          type="file"
+                          multiple
+                          accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+                          style={{ display: "none" }}
+                          onChange={handleCommunityFileInputChange}
+                        />
                         <textarea
                           ref={chatInputRef}
                           className="chat-input"
@@ -5157,6 +6251,7 @@ export default function App() {
                           value={communityMessageInput}
                           onChange={(event) => {
                             setCommunityMessageInput(event.target.value);
+                            maybeBroadcastCommunityTyping(event.target.value);
                             event.target.style.height = "auto";
                             event.target.style.height = Math.min(event.target.scrollHeight, 120) + "px";
                           }}
@@ -5190,7 +6285,8 @@ export default function App() {
 	                            !supabaseSession ||
 	                            !activeCommunity ||
 	                            !canPostMessagesActiveCommunity ||
-	                            isSendingCommunityMessage
+	                            isSendingCommunityMessage ||
+                              (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
 	                          }
 	                          type="button"
 	                          aria-label="Send"
@@ -5663,89 +6759,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {showCreateCommunityModal && (
-                    <div className="modal-overlay" onClick={closeCreateCommunityModal}>
-                      <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-                        <div className="modal-header">
-                          <div className="modal-title">Create community</div>
-                          <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
-                            ×
-                          </button>
-                        </div>
-                        <div className="modal-body">
-                          <div className="create-community-form">
-                            <label className="create-community-field">
-                              <span>Name</span>
-                              <input
-                                type="text"
-                                placeholder="Community name"
-                                value={createCommunityName}
-                                onChange={(event) => setCreateCommunityName(event.target.value)}
-                              />
-                            </label>
-                            <label className="create-community-field">
-                              <span>Short description</span>
-                              <textarea
-                                placeholder="One-liner about who this is for"
-                                rows={2}
-                                value={createCommunityDescription}
-                                onChange={(event) => setCreateCommunityDescription(event.target.value)}
-                              />
-                            </label>
-                            <label className="create-community-field">
-                              <span>Slug</span>
-                              <input
-                                type="text"
-                                placeholder="your-community"
-                                value={createCommunitySlug}
-                                onChange={(event) => {
-                                  setCreateCommunitySlug(event.target.value);
-                                  setCreateCommunitySlugEdited(true);
-                                }}
-                              />
-                              <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
-                            </label>
-                            <label className="create-community-field">
-                              <span>Visibility</span>
-                              <select
-                                className="select-styled"
-                                value={createCommunityVisibility}
-                                onChange={(event) =>
-                                  setCreateCommunityVisibility(event.target.value as "public" | "unlisted" | "private")
-                                }
-                              >
-                                <option value="private">Private</option>
-                                <option value="unlisted">Unlisted</option>
-                                <option value="public">Public</option>
-                              </select>
-                            </label>
-                            {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
-                          </div>
-                        </div>
-                        <div className="modal-footer">
-                          <div className="create-community-actions">
-                            {supabaseSession ? (
-                              <button
-                                className="create-community-primary"
-                                onClick={() => void handleCreateCommunity()}
-                                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
-                              >
-                                {isCreatingCommunity ? "Creating..." : "Create community"}
-                              </button>
-                            ) : (
-                              <button className="create-community-primary" onClick={() => void handleSignIn()}>
-                                Sign in to create
-                              </button>
-                            )}
-                            <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {showResourceModal && (
                     <div className="modal-overlay" onClick={closeResourceModal}>
                       <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
@@ -5828,6 +6841,157 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {showCreateCommunityModal && (
+        <div className="modal-overlay" onClick={closeCreateCommunityModal}>
+          <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Create community</div>
+              <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="create-community-form">
+                <div
+                  className={`create-community-banner${isCreateBannerDragOver ? " drag-over" : ""}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsCreateBannerDragOver(true);
+                  }}
+                  onDragLeave={() => setIsCreateBannerDragOver(false)}
+                  onDrop={handleCreateBannerDrop}
+                >
+                  {createCommunityBannerUrl ? (
+                    <img src={createCommunityBannerUrl} alt="Community banner preview" />
+                  ) : (
+                    <div className="create-community-banner-placeholder">Banner preview</div>
+                  )}
+                  <label className="create-banner-btn">
+                    Upload banner
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleCreateCommunityBannerUpload(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  {createCommunityBannerUrl && (
+                    <button
+                      className="create-banner-remove"
+                      type="button"
+                      onClick={() => setCreateCommunityBannerUrl(null)}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div className="create-community-avatar-row">
+                  <div
+                    className={`create-community-avatar${isCreateAvatarDragOver ? " drag-over" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setIsCreateAvatarDragOver(true);
+                    }}
+                    onDragLeave={() => setIsCreateAvatarDragOver(false)}
+                    onDrop={handleCreateAvatarDrop}
+                  >
+                    {createCommunityAvatarUrl ? (
+                      <img src={createCommunityAvatarUrl} alt="Community avatar preview" />
+                    ) : (
+                      <span>{communityInitials(createCommunityName || "Community")}</span>
+                    )}
+                  </div>
+                  <div className="create-community-avatar-actions">
+                    <label className="create-avatar-btn">
+                      Upload avatar
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => void handleCreateCommunityAvatarUpload(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    {createCommunityAvatarUrl && (
+                      <button
+                        className="create-avatar-remove"
+                        type="button"
+                        onClick={() => setCreateCommunityAvatarUrl(null)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <label className="create-community-field">
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    placeholder="Community name"
+                    value={createCommunityName}
+                    onChange={(event) => setCreateCommunityName(event.target.value)}
+                  />
+                </label>
+                <label className="create-community-field">
+                  <span>Short description</span>
+                  <textarea
+                    placeholder="One-liner about who this is for"
+                    rows={2}
+                    value={createCommunityDescription}
+                    onChange={(event) => setCreateCommunityDescription(event.target.value)}
+                  />
+                </label>
+                <label className="create-community-field">
+                  <span>Slug</span>
+                  <input
+                    type="text"
+                    placeholder="your-community"
+                    value={createCommunitySlug}
+                    onChange={(event) => {
+                      setCreateCommunitySlug(event.target.value);
+                      setCreateCommunitySlugEdited(true);
+                    }}
+                  />
+                  <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
+                </label>
+                <label className="create-community-field">
+                  <span>Visibility</span>
+                  <select
+                    className="select-styled"
+                    value={createCommunityVisibility}
+                    onChange={(event) =>
+                      setCreateCommunityVisibility(event.target.value as "public" | "unlisted" | "private")
+                    }
+                  >
+                    <option value="private">Private</option>
+                    <option value="unlisted">Unlisted</option>
+                    <option value="public">Public</option>
+                  </select>
+                </label>
+                {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <div className="create-community-actions">
+                {supabaseSession ? (
+                  <button
+                    className="create-community-primary"
+                    onClick={() => void handleCreateCommunity()}
+                    disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
+                  >
+                    {isCreatingCommunity ? "Creating..." : "Create community"}
+                  </button>
+                ) : (
+                  <button className="create-community-primary" onClick={() => void handleSignIn()}>
+                    Sign in to create
+                  </button>
+                )}
+                <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {authError && (
         <div className="toast error" role="status">
