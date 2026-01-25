@@ -292,7 +292,7 @@ type Attachment = {
   previewDataUrl?: string; // base64 data URL for image thumbnails
 };
 
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
@@ -391,7 +391,6 @@ type CommunityAccess = {
   is_owner: boolean;
   is_entitled: boolean;
   entitlement_role: string | null;
-  entitlement_tier_id: string | null;
   entitlement_ends_at: string | null;
   effective_role: string | null;
   can_view: boolean;
@@ -412,8 +411,6 @@ type CommunityInviteRecord = {
   id: string;
   community_id: string;
   code: string;
-  role: string;
-  tier_id: string | null;
   max_uses: number | null;
   expires_at: string | null;
   revoked_at: string | null;
@@ -523,6 +520,10 @@ function App() {
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
   const [replyingToMessage, setReplyingToMessage] = useState<CommunityChatMessage | null>(null);
+  const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
+  const communityTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const communityTypingTopicRef = useRef<string | null>(null);
+  const lastCommunityTypingSentAtRef = useRef<number>(0);
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [resourceTitleInput, setResourceTitleInput] = useState("");
   const [resourceUrlInput, setResourceUrlInput] = useState("");
@@ -556,7 +557,9 @@ function App() {
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
 	  const isUserAtBottomRef = useRef(true);
 		  const communityChatOldestSeqRef = useRef<number | null>(null);
-		  const pendingChatPrependScrollRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
+		  const pendingChatPrependScrollRef = useRef<{ elementId: string; offset: number } | null>(null);
+		  const communityChatAnchorRef = useRef<{ elementId: string; offset: number } | null>(null);
+		  const communityMessageIdsRef = useRef<Set<string>>(new Set());
 	  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [slashHover, setSlashHover] = useState<string | null>(null);
@@ -1391,34 +1394,103 @@ function App() {
     }
   }, [communityResources, communityTab, selectedLibraryResourceId]);
 
-	  // Smart auto-scroll: only scroll to bottom if user is already near bottom
-	  useEffect(() => {
-	    if (!communityChatListRef.current || !isUserAtBottom) return;
-	    communityChatListRef.current.scrollTo({
-	      top: communityChatListRef.current.scrollHeight,
-	      behavior: "smooth"
-	    });
-	  }, [communityMessages, isUserAtBottom]);
+		  function captureCommunityChatScrollAnchor(
+		    container: HTMLElement,
+		  ): { elementId: string; offset: number } | null {
+		    const rect = container.getBoundingClientRect();
+		    const x = rect.left + Math.min(32, rect.width / 2);
+		    const yCandidates = [rect.top + 20, rect.top + 60, rect.top + 100];
+		    for (const y of yCandidates) {
+		      if (y >= rect.bottom) continue;
+		      const hit = document.elementFromPoint(x, y);
+		      const messageEl = hit?.closest?.(".chat-message[id^='msg-']") as HTMLElement | null;
+		      if (messageEl?.id) {
+		        return { elementId: messageEl.id, offset: messageEl.offsetTop - container.scrollTop };
+		      }
+		    }
 
-	  useLayoutEffect(() => {
-	    const pending = pendingChatPrependScrollRef.current;
-	    if (!pending) return;
-	    const container = communityChatListRef.current;
-	    if (!container) return;
-	    const delta = container.scrollHeight - pending.prevScrollHeight;
-	    container.scrollTop = pending.prevScrollTop + delta;
-	    pendingChatPrependScrollRef.current = null;
-	  }, [communityMessages]);
+		    // Fallback for odd layouts (rare): scan message nodes.
+		    const scrollTop = container.scrollTop;
+		    const nodes = container.querySelectorAll<HTMLElement>(".chat-message[id^='msg-']");
+		    for (const node of nodes) {
+		      const top = node.offsetTop;
+		      const bottom = top + node.offsetHeight;
+		      if (bottom > scrollTop + 1) {
+		        return { elementId: node.id, offset: top - scrollTop };
+		      }
+		    }
+		    return null;
+		  }
 
-	  // Track if user has scrolled up
-	  const handleChatScroll = () => {
-	    if (!communityChatListRef.current) return;
-	    const { scrollTop, scrollHeight, clientHeight } = communityChatListRef.current;
-	    const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
-	    setIsUserAtBottom(atBottom);
-	    isUserAtBottomRef.current = atBottom;
-	    // Reset unread count when scrolled to bottom
-	    if (atBottom) setUnreadCount(0);
+		  function restoreCommunityChatScrollAnchor(
+		    container: HTMLElement,
+		    anchor: { elementId: string; offset: number },
+		  ) {
+		    const el = document.getElementById(anchor.elementId) as HTMLElement | null;
+		    if (!el) return;
+		    container.scrollTop = el.offsetTop - anchor.offset;
+		  }
+
+		  // Smart auto-scroll: only scroll to bottom if user is already near bottom
+		  useEffect(() => {
+		    const container = communityChatListRef.current;
+		    if (!container || !isUserAtBottom) return;
+		    container.scrollTop = container.scrollHeight;
+		  }, [communityMessages, isUserAtBottom]);
+
+		  useLayoutEffect(() => {
+		    const pending = pendingChatPrependScrollRef.current;
+		    if (!pending) return;
+		    const container = communityChatListRef.current;
+		    if (!container) return;
+		    restoreCommunityChatScrollAnchor(container, pending);
+		    pendingChatPrependScrollRef.current = null;
+		  }, [communityMessages]);
+
+		  // Keep the visible message anchored when the chat column width changes (panel toggles / resize).
+		  useEffect(() => {
+		    if (activePage !== "community" || communityTab !== "chat") return;
+		    const container = communityChatListRef.current;
+		    if (!container) return;
+		    let raf: number | null = null;
+		    const observer = new ResizeObserver(() => {
+		      if (raf !== null) cancelAnimationFrame(raf);
+		      raf = requestAnimationFrame(() => {
+		        const el = communityChatListRef.current;
+		        if (!el) return;
+		        if (isUserAtBottomRef.current) {
+		          el.scrollTop = el.scrollHeight;
+		          return;
+		        }
+		        const anchor = communityChatAnchorRef.current;
+		        if (!anchor) return;
+		        restoreCommunityChatScrollAnchor(el, anchor);
+		      });
+		    });
+		    observer.observe(container);
+		    return () => {
+		      observer.disconnect();
+		      if (raf !== null) cancelAnimationFrame(raf);
+		    };
+		  }, [activePage, communityTab, activeCommunityId]);
+
+		  // Track if user has scrolled up
+		  const handleChatScroll = () => {
+		    if (!communityChatListRef.current) return;
+		    const { scrollTop, scrollHeight, clientHeight } = communityChatListRef.current;
+		    const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
+
+		    if (atBottom !== isUserAtBottomRef.current) {
+		      setIsUserAtBottom(atBottom);
+		      isUserAtBottomRef.current = atBottom;
+		    }
+		    // Reset unread count when scrolled to bottom
+		    if (atBottom) setUnreadCount(0);
+		    if (atBottom) {
+		      communityChatAnchorRef.current = null;
+		    } else {
+		      communityChatAnchorRef.current = captureCommunityChatScrollAnchor(communityChatListRef.current);
+		    }
 
 	    const nearTop = scrollTop <= COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX;
 	    if (
@@ -1517,105 +1589,270 @@ function App() {
     if (!url || !apiKey) return;
 
     const wsUrl = `${url.replace("https://", "wss://").replace("http://", "ws://")}/realtime/v1/websocket?apikey=${apiKey}&vsn=1.0.0`;
-    const socket = new WebSocket(wsUrl);
-    communitySocketRef.current = socket;
-	    const joinRef = `${Date.now()}`;
-	    const topic = "realtime:public:messages";
-      const threadId = communityChatThreadIdForCommunity(activeCommunityId);
+    let socket: WebSocket | null = null;
+    let cancelled = false;
+    const joinRef = `${Date.now()}`;
+    const messagesTopic = "realtime:public:messages";
+    const reactionsJoinRef = `${Date.now()}-reactions`;
+    const reactionsTopic = "realtime:public:message_reactions";
 
-    socket.addEventListener("open", () => {
-      socket.send(
-        JSON.stringify({
-          topic,
-          event: "phx_join",
-          payload: {
-            config: {
-              broadcast: { ack: false },
-	              postgres_changes: [
-	                {
-	                  event: "INSERT",
-	                  schema: "public",
-	                  table: "messages",
-	                  filter: `thread_id=eq.${threadId}`
-	                }
-	              ]
-	            },
-	            access_token: supabaseSession.access_token
-	          },
-          ref: joinRef
-        })
-      );
+    void (async () => {
+      let threadId: string;
+      try {
+        threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
+      } catch {
+        return;
+      }
+      if (cancelled) return;
 
-      communityHeartbeatRef.current = window.setInterval(() => {
-        if (socket.readyState !== WebSocket.OPEN) return;
+      const typingJoinRef = `${Date.now()}-typing`;
+      const typingTopic = `realtime:typing_${threadId}`;
+      communityTypingTopicRef.current = typingTopic;
+
+      socket = new WebSocket(wsUrl);
+      communitySocketRef.current = socket;
+
+      socket.addEventListener("open", () => {
+        if (!socket) return;
+
         socket.send(
           JSON.stringify({
-            topic: "phoenix",
-            event: "heartbeat",
-            payload: {},
-            ref: `${Date.now()}`
+            topic: messagesTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false },
+                postgres_changes: [
+                  {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  },
+                  {
+                    event: "UPDATE",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  },
+                  {
+                    event: "DELETE",
+                    schema: "public",
+                    table: "messages",
+                    filter: `thread_id=eq.${threadId}`
+                  }
+                ]
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: joinRef
           })
         );
-      }, 25000);
-    });
 
-    socket.addEventListener("message", (event) => {
-      try {
-        const data = JSON.parse(event.data) as {
-          event?: string;
-          payload?: Record<string, unknown>;
-        };
+        socket.send(
+          JSON.stringify({
+            topic: reactionsTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false },
+                postgres_changes: [
+                  { event: "INSERT", schema: "public", table: "message_reactions" },
+                  { event: "UPDATE", schema: "public", table: "message_reactions" },
+                  { event: "DELETE", schema: "public", table: "message_reactions" }
+                ]
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: reactionsJoinRef
+          })
+        );
 
-	        if (data.event !== "postgres_changes") return;
-	        const payload = data.payload as {
-	          eventType?: string;
-	          new?: CloudMessageRow;
-	          record?: CloudMessageRow;
-	          data?: { new?: CloudMessageRow; record?: CloudMessageRow };
-	        };
-	        const record =
-	          payload.new ??
-	          payload.record ??
-	          payload.data?.new ??
-	          payload.data?.record;
-	        if (!record) return;
-	        if (record.thread_id !== threadId) return;
-          const mapped = toCommunityChatMessage(record);
-          if (!mapped) return;
-	        setCommunityMessages((prev) => {
-	          const idx = prev.findIndex((item) => item.id === mapped.id);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = { ...next[idx], ...mapped };
+        socket.send(
+          JSON.stringify({
+            topic: typingTopic,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: { ack: false }
+              },
+              access_token: supabaseSession.access_token
+            },
+            ref: typingJoinRef
+          })
+        );
+
+        communityHeartbeatRef.current = window.setInterval(() => {
+          if (!socket || socket.readyState !== WebSocket.OPEN) return;
+          socket.send(
+            JSON.stringify({
+              topic: "phoenix",
+              event: "heartbeat",
+              payload: {},
+              ref: `${Date.now()}`
+            })
+          );
+        }, 25000);
+      });
+
+      socket.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            topic?: string;
+            event?: string;
+            payload?: Record<string, unknown>;
+          };
+
+          if (data.event === "broadcast" && data.topic === typingTopic) {
+            const payload = data.payload as { event?: unknown; payload?: unknown; type?: unknown };
+            const name =
+              (typeof payload.event === "string" ? payload.event : null) ??
+              (typeof payload.type === "string" ? payload.type : null) ??
+              "";
+            if (name !== "typing") return;
+            const details = payload.payload as { user_id?: unknown; userId?: unknown } | null;
+            const userId =
+              (details && typeof details.user_id === "string" ? details.user_id : null) ??
+              (details && typeof details.userId === "string" ? details.userId : null);
+            if (!userId) return;
+            if (userId === supabaseSession?.user.id) return;
+
+            const existing = communityTypingTimeoutsRef.current.get(userId);
+            if (existing) window.clearTimeout(existing);
+            const timeoutId = window.setTimeout(() => {
+              communityTypingTimeoutsRef.current.delete(userId);
+              setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
+            }, 2500);
+            communityTypingTimeoutsRef.current.set(userId, timeoutId);
+            setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
+            return;
+          }
+
+          if (data.event !== "postgres_changes") return;
+
+          if (data.topic === messagesTopic) {
+            const payload = data.payload as {
+              eventType?: string;
+              type?: string;
+              new?: CloudMessageRow;
+              old?: CloudMessageRow;
+              record?: CloudMessageRow;
+              old_record?: CloudMessageRow;
+              data?: {
+                type?: string;
+                new?: CloudMessageRow;
+                old?: CloudMessageRow;
+                record?: CloudMessageRow;
+                old_record?: CloudMessageRow;
+              };
+            };
+
+            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
+            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
+            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
+
+            if (eventType === "DELETE") {
+              const deleted = oldRecord ?? newRecord;
+              if (!deleted) return;
+              if (deleted.thread_id !== threadId) return;
+              setCommunityMessages((prev) => prev.filter((m) => m.id !== deleted.id));
+              setMessageReactions((prev) => prev.filter((r) => r.message_id !== deleted.id));
+              return;
+            }
+
+            if (!newRecord) return;
+            if (newRecord.thread_id !== threadId) return;
+            const mapped = toCommunityChatMessage(newRecord);
+            if (!mapped) return;
+            setCommunityMessages((prev) => {
+              const idx = prev.findIndex((item) => item.id === mapped.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...mapped };
+                next.sort((a, b) => a.seq - b.seq);
+                return next;
+              }
+              const next = [...prev, mapped];
               next.sort((a, b) => a.seq - b.seq);
               return next;
+            });
+            // Increment unread count only when the user isn't at bottom.
+            if (
+              eventType === "INSERT" &&
+              mapped.sender_id !== supabaseSession?.user.id &&
+              !isUserAtBottomRef.current
+            ) {
+              setUnreadCount((prev) => prev + 1);
             }
-	          const next = [...prev, mapped];
-	          next.sort((a, b) => a.seq - b.seq);
-	          return next;
-	        });
-	        // Increment unread count only when the user isn't at bottom.
-	        if (mapped.sender_id !== supabaseSession?.user.id && !isUserAtBottomRef.current) {
-	          setUnreadCount((prev) => prev + 1);
-	        }
-	      } catch {
-	        // Ignore malformed payloads
-      }
-    });
+            return;
+          }
 
-    socket.addEventListener("close", () => {
-      if (communityHeartbeatRef.current) {
-        window.clearInterval(communityHeartbeatRef.current);
-        communityHeartbeatRef.current = null;
-      }
-    });
+          if (data.topic === reactionsTopic) {
+            const payload = data.payload as {
+              eventType?: string;
+              type?: string;
+              new?: MessageReaction;
+              old?: MessageReaction;
+              record?: MessageReaction;
+              old_record?: MessageReaction;
+              data?: {
+                type?: string;
+                new?: MessageReaction;
+                old?: MessageReaction;
+                record?: MessageReaction;
+                old_record?: MessageReaction;
+              };
+            };
+
+            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
+            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
+            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
+            const target = eventType === "DELETE" ? oldRecord ?? newRecord : newRecord;
+            if (!target) return;
+            if (!communityMessageIdsRef.current.has(target.message_id)) return;
+
+            if (eventType === "DELETE") {
+              setMessageReactions((prev) => prev.filter((r) => r.id !== target.id));
+              return;
+            }
+
+            setMessageReactions((prev) => {
+              const idx = prev.findIndex((item) => item.id === target.id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...target };
+                return next;
+              }
+              return [...prev, target];
+            });
+          }
+        } catch {
+          // Ignore malformed payloads
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (communityHeartbeatRef.current) {
+          window.clearInterval(communityHeartbeatRef.current);
+          communityHeartbeatRef.current = null;
+        }
+      });
+    })();
 
     return () => {
-      socket.close();
+      cancelled = true;
+      socket?.close();
+      communitySocketRef.current = null;
       if (communityHeartbeatRef.current) {
         window.clearInterval(communityHeartbeatRef.current);
         communityHeartbeatRef.current = null;
       }
+      communityTypingTopicRef.current = null;
+      for (const timeoutId of communityTypingTimeoutsRef.current.values()) {
+        window.clearTimeout(timeoutId);
+      }
+      communityTypingTimeoutsRef.current.clear();
+      setCommunityTypingUserIds([]);
     };
   }, [supabaseSession, activeCommunityId, communityTab]);
 
@@ -2789,8 +3026,6 @@ function isModelReady(modelId: string): boolean {
       community_id: string;
       community_slug: string;
       community_name: string;
-      role: string;
-      tier_id: string | null;
     }>;
 	    const first = rows[0];
 	    if (!first) throw new Error("Failed to join community.");
@@ -2949,8 +3184,6 @@ function isModelReady(modelId: string): boolean {
         community_id: string;
         community_slug: string;
         community_name: string;
-        role: string;
-        tier_id: string;
       }>;
 	      const first = rows[0];
 	      if (!first) throw new Error("Failed to join community.");
@@ -3405,8 +3638,6 @@ function isModelReady(modelId: string): boolean {
 	        community_id: string;
 	        community_slug: string;
 	        community_name: string;
-	        role: string;
-	        tier_id: string;
 	      }>;
 		      const first = rows[0];
 		      if (!first) throw new Error("Failed to join community.");
@@ -3451,7 +3682,7 @@ function isModelReady(modelId: string): boolean {
 	    setIsLoadingCommunityInvites(true);
 	    try {
 	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/community_invites?select=id,community_id,code,role,tier_id,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
+	        `${url}/rest/v1/community_invites?select=id,community_id,code,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
 	        {},
 	        session
 	      );
@@ -3533,8 +3764,6 @@ function isModelReady(modelId: string): boolean {
 	            body: JSON.stringify({
 	              community_id: activeCommunityId,
 	              code,
-	              role: "member",
-	              tier_id: "member",
 	              max_uses: maxUses,
 	              expires_at: expiresAt,
 	              created_by: supabaseSession.user.id
@@ -3752,13 +3981,10 @@ function isModelReady(modelId: string): boolean {
     const url = getSupabaseUrl();
     if (!url) return;
 
-    const container = communityChatListRef.current;
-    if (container) {
-      pendingChatPrependScrollRef.current = {
-        prevScrollHeight: container.scrollHeight,
-        prevScrollTop: container.scrollTop,
-      };
-    }
+	    const container = communityChatListRef.current;
+	    if (container) {
+	      pendingChatPrependScrollRef.current = captureCommunityChatScrollAnchor(container);
+	    }
 
     setIsLoadingMoreChat(true);
     try {
@@ -4524,6 +4750,30 @@ function isModelReady(modelId: string): boolean {
     setTimeout(() => chatInputRef.current?.focus(), 0);
   }
 
+  function maybeBroadcastCommunityTyping(nextValue: string) {
+    if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
+    if (!nextValue.trim()) return;
+    const socket = communitySocketRef.current;
+    const topic = communityTypingTopicRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !topic) return;
+    const now = Date.now();
+    if (now - lastCommunityTypingSentAtRef.current < 1200) return;
+    lastCommunityTypingSentAtRef.current = now;
+    socket.send(
+      JSON.stringify({
+        topic,
+        event: "broadcast",
+        payload: {
+          event: "typing",
+          payload: {
+            user_id: supabaseSession.user.id
+          }
+        },
+        ref: `${now}`
+      })
+    );
+  }
+
   async function handleSendCommunityMessage() {
     if (!supabaseSession || !activeCommunityId) return;
     const rawText = communityMessageInput.trim();
@@ -4954,6 +5204,10 @@ function isModelReady(modelId: string): boolean {
 	      map.set(message.id, message);
 	    }
 	    return map;
+	  }, [communityMessages]);
+
+	  useEffect(() => {
+	    communityMessageIdsRef.current = new Set(communityMessages.map((m) => m.id));
 	  }, [communityMessages]);
 	  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
 	  const pinnedThreadCommunityId = activeThread?.community_id ?? null;
@@ -8494,22 +8748,34 @@ function isModelReady(modelId: string): boolean {
 	                                    onClick={() => scrollToCommunityMessage(replyToId!)}
 	                                    title="Jump to replied message"
 	                                  >
-	                                    <div className="chat-reply-sender">{displayName(replyTarget.sender_id)}</div>
-	                                    <div className="chat-reply-text">
+	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+	                                      <polyline points="9 14 4 9 9 4" />
+	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+	                                    </svg>
+	                                    <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
+	                                    <span className="chat-reply-text">
 	                                      {truncateReplyPreview(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)}
-	                                    </div>
+	                                    </span>
 	                                  </button>
 	                                )}
 	                                {!replyTarget && replyToId && (
 	                                  <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
-	                                    <div className="chat-reply-sender">Reply</div>
-	                                    <div className="chat-reply-text">Replied message not loaded</div>
+	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+	                                      <polyline points="9 14 4 9 9 4" />
+	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+	                                    </svg>
+	                                    <span className="chat-reply-sender">Reply</span>
+	                                    <span className="chat-reply-text">Replied message not loaded</span>
 	                                  </div>
 	                                )}
 	                                {legacyReply && (
 	                                  <div className="chat-reply-quote">
-	                                    <div className="chat-reply-sender">{legacyReply.sender}</div>
-	                                    <div className="chat-reply-text">{legacyReply.preview}</div>
+	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+	                                      <polyline points="9 14 4 9 9 4" />
+	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+	                                    </svg>
+	                                    <span className="chat-reply-sender">{legacyReply.sender}</span>
+	                                    <span className="chat-reply-text">{legacyReply.preview}</span>
 	                                  </div>
 	                                )}
 	                                <div className="chat-body">{legacyReply ? legacyReply.rest : message.body}</div>
@@ -8609,21 +8875,31 @@ function isModelReady(modelId: string): boolean {
                         );
                       })}
                   </div>
+                  {!isUserAtBottom && (
+                    <button
+                      className="scroll-to-bottom workspace"
+                      type="button"
+                      onClick={() => {
+                        setIsUserAtBottom(true);
+                        isUserAtBottomRef.current = true;
+                        setUnreadCount(0);
+                        communityChatListRef.current?.scrollTo({
+                          top: communityChatListRef.current.scrollHeight,
+                          behavior: "smooth"
+                        });
+                      }}
+                      aria-label="Scroll to bottom"
+                      title="Scroll to bottom"
+                    >
+                      {unreadCount > 0 && (
+                        <span className="scroll-badge" aria-hidden="true">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
+                      ↓
+                    </button>
+                  )}
                 </div>
-                {!isUserAtBottom && unreadCount > 0 && (
-                  <button
-                    className="scroll-to-bottom"
-                    onClick={() => {
-                      setIsUserAtBottom(true);
-                      communityChatListRef.current?.scrollTo({
-                        top: communityChatListRef.current.scrollHeight,
-                        behavior: "smooth"
-                      });
-                    }}
-                  >
-                    {unreadCount} new message{unreadCount > 1 ? "s" : ""} ↓
-                  </button>
-                )}
                 {replyingToMessage && (
                   <div className="chat-replying-bar">
                     <div className="chat-replying-content">
@@ -8642,6 +8918,19 @@ function isModelReady(modelId: string): boolean {
                     </button>
                   </div>
                 )}
+                {communityTypingUserIds.length > 0 && (
+                  <div className="chat-typing-indicator" aria-live="polite">
+                    {communityTypingUserIds.length === 1
+                      ? `${displayName(communityTypingUserIds[0])} is typing…`
+                      : communityTypingUserIds.length === 2
+                        ? `${displayName(communityTypingUserIds[0])} and ${displayName(
+                            communityTypingUserIds[1],
+                          )} are typing…`
+                        : `${displayName(communityTypingUserIds[0])} and ${
+                            communityTypingUserIds.length - 1
+                          } others are typing…`}
+                  </div>
+                )}
                 <div className="chat-input-bar">
                   <textarea
                     ref={chatInputRef}
@@ -8656,6 +8945,7 @@ function isModelReady(modelId: string): boolean {
                     value={communityMessageInput}
                     onChange={(event) => {
                       setCommunityMessageInput(event.target.value);
+                      maybeBroadcastCommunityTyping(event.target.value);
                       // Auto-resize
                       event.target.style.height = "auto";
                       event.target.style.height = Math.min(event.target.scrollHeight, 120) + "px";
@@ -10078,17 +10368,27 @@ function formatChatTime(value: string): string {
 }
 
 function shouldShowSender(
-  messages: { sender_id: string; created_at: string }[],
+  messages: { sender_id: string; created_at: string; reply_to_id?: string | null }[],
   index: number
 ): boolean {
   if (index === 0) return true;
   const prev = messages[index - 1];
   const curr = messages[index];
   if (prev.sender_id !== curr.sender_id) return true;
+  // Break grouping across date separators (day boundary).
+  if (new Date(prev.created_at).toDateString() !== new Date(curr.created_at).toDateString()) return true;
+  // Break grouping when replies target different messages.
+  if ((prev.reply_to_id ?? null) !== (curr.reply_to_id ?? null)) return true;
   // Show sender if more than 2 minutes apart
   const prevTime = new Date(prev.created_at).getTime();
   const currTime = new Date(curr.created_at).getTime();
-  return currTime - prevTime > 2 * 60 * 1000;
+  if (currTime - prevTime > 2 * 60 * 1000) return true;
+  // Force meta on last message before a date separator (so it doesn't look orphaned).
+  const next = messages[index + 1];
+  if (next && new Date(curr.created_at).toDateString() !== new Date(next.created_at).toDateString()) {
+    return true;
+  }
+  return false;
 }
 
 function shouldShowDateSeparator(

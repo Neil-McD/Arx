@@ -80,7 +80,7 @@
   --text-primary: #f1ede5;
   --text-secondary: #b5b0a6;
   --text-muted: #8a857a;
-  --text-faint: #6a655b;
+  --text-faint: #7a756b;
   --text-terminal: #f1ede5;
 
   --border-default: #3a3a3a;
@@ -216,7 +216,7 @@
   --text-primary: #f5f0e6;
   --text-secondary: #b5aea1;
   --text-muted: #8a847a;
-  --text-faint: #6a655b;
+  --text-faint: #7a756b;
   --text-terminal: #f5f0e6;
 
   /* === BORDERS: Warm grays === */
@@ -1159,7 +1159,7 @@ html, body {
   flex-direction: column;
   scroll-behavior: smooth;
   overflow-x: hidden;
-  padding: 12px 0 24px 4px;
+  padding: 14px 12px 28px;
   min-width: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
@@ -1230,10 +1230,11 @@ html, body {
 /* Discord-style chat messages */
 .chat-message {
   display: flex;
-  padding: 4px 12px 4px 72px;
+  padding: 4px 12px 6px 72px;
   position: relative;
   /* Reserve space for the absolute-positioned 40px avatar to prevent overlap */
   min-height: 44px;
+  flex-shrink: 0;
 }
 
 .chat-message:hover {
@@ -1274,12 +1275,13 @@ html, body {
 .chat-header {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  line-height: 1.375rem;
+  gap: 10px;
+  line-height: 1.35rem;
 }
 
 .chat-sender {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -1297,15 +1299,16 @@ html, body {
 /* Message body - no bubble, just text */
 .chat-body {
   color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.375rem;
+  font-size: 15px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 /* Grouped messages (same sender, close in time) - no avatar/header */
 .chat-message.grouped {
-  padding-top: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
   min-height: auto;
 }
 
@@ -1333,8 +1336,7 @@ html, body {
 
 /* Non-grouped messages get more top spacing */
 .chat-message:not(.grouped) {
-  margin-top: 16px;
-  padding-top: 4px;
+  margin-top: 14px;
 }
 
 .chat-messages > .chat-message:first-of-type {
@@ -1366,9 +1368,8 @@ html, body {
 /* Hover actions - positioned top right */
 .chat-actions {
   position: absolute;
-  top: 0;
+  top: -6px;
   right: 12px;
-  transform: translateY(-50%);
   display: flex;
   gap: 1px;
   padding: 4px;
@@ -1415,30 +1416,65 @@ html, body {
 
 /* Reply quote inside message */
 .chat-reply-quote {
-  padding: 6px 10px;
-  margin-bottom: 8px;
+  align-self: flex-start;
+  max-width: min(520px, 100%);
+  padding: 4px 10px;
+  margin: 2px 0 4px;
   background: var(--hover-overlay);
-  border-left: 3px solid var(--text-muted);
+  border: none;
+  border-left: 2px solid var(--border-strong);
   border-radius: 4px;
   font-size: 12px;
-  cursor: pointer;
+  color: var(--text-muted);
+  cursor: default;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  transition: background 0.15s;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  min-width: 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.chat-reply-quote:hover {
+button.chat-reply-quote {
+  cursor: pointer;
+}
+
+button.chat-reply-quote:hover {
   background: var(--active-overlay);
+  border-left-color: var(--text-muted);
+}
+
+.chat-reply-quote:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 2px;
 }
 
 .chat-reply-sender {
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-reply-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transform: scale(-1, -1);
 }
 
 .chat-reply-text {
-  color: var(--text-muted);
+  color: var(--text-faint);
+  min-width: 0;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1554,8 +1590,13 @@ html, body {
 .chat-date-separator {
   display: flex;
   align-items: center;
-  margin: 16px 16px 8px;
+  margin: 22px 16px 12px;
   position: relative;
+  flex-shrink: 0;
+}
+
+.chat-date-separator + .chat-message {
+  margin-top: 0;
 }
 
 .chat-messages > .chat-date-separator:first-child {
@@ -1854,6 +1895,23 @@ html, body {
   font-size: 16px;
 }
 
+.scroll-to-bottom.workspace .scroll-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-default);
+}
+
 /* Unread badge on community button */
 .community-btn {
   position: relative;
@@ -2133,6 +2191,9 @@ html, body {
 .resource-list {
   display: grid;
   gap: 12px;
+  align-content: start;
+  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 420px));
 }
 
 .resource-item {
@@ -2142,6 +2203,13 @@ html, body {
   padding: 12px;
   display: grid;
   gap: 6px;
+  width: 100%;
+}
+
+@media (max-width: 740px) {
+  .resource-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .resource-title {
@@ -2365,6 +2433,47 @@ html, body {
   .members-layout.with-invites {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* Avoid cramped invite controls once invites stack under members. */
+  .invite-create-row-cta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .invite-create-row-cta .invite-create-btn {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 700px) {
+  .members-panel {
+    padding: 16px;
+  }
+
+  .members-section,
+  .invites-card {
+    padding: 10px;
+  }
+
+  .invite-create-row,
+  .invite-create-row-cta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .invite-create-btn {
+    width: 100%;
+  }
+
+  .invite-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .invite-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
 }
 
 .library-panel {
@@ -2443,6 +2552,13 @@ html, body {
   font-size: 13px;
   color: var(--text-primary);
   white-space: pre-wrap;
+}
+
+.chat-typing-indicator {
+  margin: 0 12px 6px;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .chat-input-bar {
@@ -3249,14 +3365,12 @@ html, body {
 .message-text strong,
 .message-text b {
   font-weight: 600;
-  color: #fff;
 }
 
 .message-text h1,
 .message-text h2,
 .message-text h3 {
   font-weight: 600;
-  color: #fff;
   margin: 1.5em 0 0.5em 0;
   line-height: 1.3;
 }
