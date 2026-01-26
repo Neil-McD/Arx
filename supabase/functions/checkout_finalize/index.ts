@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
+import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import {
   retrieveCheckoutSession,
   retrieveSubscription,
@@ -214,6 +215,14 @@ Deno.serve(async (req: Request) => {
   const sessionId = sanitizeSessionId(url.searchParams.get("session_id") ?? "");
 
   try {
+    const allowed = await edgeRateLimitAllow({
+      req,
+      key: `checkout_finalize:${sessionId}`,
+      windowSeconds: 60,
+      limit: 30,
+    });
+    if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
+
     const session = await retrieveCheckoutSession(sessionId);
     const intentId = extractIntentId(session);
     const intent = await loadPaymentIntent(intentId);

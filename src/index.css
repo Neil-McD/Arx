@@ -1954,6 +1954,58 @@ button.chat-reply-quote:hover {
   pointer-events: none;
 }
 
+/* Pending purchases banner */
+.pending-purchase-banner {
+  margin: 12px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pending-purchase-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pending-purchase-banner-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pending-purchase-banner-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.pending-purchase-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .pending-purchase-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pending-purchase-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .plan-panel {
   position: absolute;
   top: 12px;

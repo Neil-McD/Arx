@@ -163,6 +163,33 @@ type PersonalMemoryItem = {
   updated_at: string;
 };
 
+type PublicPlanSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  amount_base_units: string;
+  currency: string;
+  currency_decimals: number;
+  billing_period: string;
+};
+
+type DiscoverCommunity = CommunityRecord & {
+  active_plan?: PublicPlanSummary | null;
+};
+
+type PendingPurchaseClaim = {
+  community_id: string;
+  community_slug: string;
+  community_name: string;
+  expires_at: string;
+};
+
+type PublicRoute =
+  | { kind: "app" }
+  | { kind: "community_landing"; slug: string }
+  | { kind: "checkout_success"; sessionId: string }
+  | { kind: "claim"; token: string };
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
@@ -179,6 +206,8 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
 
 const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
+const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
+const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
 
 const APPROVAL_PRESETS: Record<
   "read-only" | "agent" | "agent-full",
@@ -218,6 +247,36 @@ async function copyTextToClipboard(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textarea);
   }
+}
+
+function readPublicRouteFromLocation(): PublicRoute {
+  const path = window.location.pathname || "/";
+  if (path.startsWith("/c/")) {
+    const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
+    if (slug) return { kind: "community_landing", slug };
+  }
+  if (path === "/checkout/success") {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = (params.get("session_id") ?? "").trim();
+    return { kind: "checkout_success", sessionId };
+  }
+  if (path === "/claim") {
+    const params = new URLSearchParams(window.location.search);
+    const token = (params.get("token") ?? "").trim();
+    return { kind: "claim", token };
+  }
+  return { kind: "app" };
+}
+
+function formatPlanPrice(plan: PublicPlanSummary): string {
+  const raw = String(plan.amount_base_units ?? "").trim();
+  const amount = Number(raw);
+  const decimals = Number(plan.currency_decimals ?? 2);
+  const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
+  const currency = String(plan.currency ?? "").toUpperCase();
+  const suffix = plan.billing_period === "yearly" ? "/year" : plan.billing_period === "monthly" ? "/month" : "";
+  if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
+  return `${value.toFixed(0)} ${currency}${suffix}`;
 }
 
 function generateInviteCode(length = 10): string {
@@ -1092,10 +1151,16 @@ function settingsPageLabel(page: SettingsPage): string {
 export default function App() {
   const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
 
   const sessionRef = useRef<SupabaseSession | null>(null);
   const refreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
+  const lastCheckoutFinalizeSessionIdRef = useRef<string | null>(null);
+
+  const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => readPublicRouteFromLocation());
 
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
@@ -1144,6 +1209,32 @@ export default function App() {
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => {
     return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
   });
+
+  const [publicCommunity, setPublicCommunity] = useState<CommunityRecord | null>(null);
+  const [publicCommunityPlan, setPublicCommunityPlan] = useState<PublicPlanSummary | null>(null);
+  const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
+  const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
+  const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
+  const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
+
+  const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaim[]>([]);
+  const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
+  const [pendingPurchasesError, setPendingPurchasesError] = useState<string | null>(null);
+  const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
+  const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
+  const [isPendingPurchasesBannerDismissed, setIsPendingPurchasesBannerDismissed] = useState(false);
+
+  const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">("idle");
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutClaimToken, setCheckoutClaimToken] = useState<string | null>(null);
+  const [isRedeemingClaim, setIsRedeemingClaim] = useState(false);
+  const [redeemClaimError, setRedeemClaimError] = useState<string | null>(null);
+  const [manualClaimToken, setManualClaimToken] = useState("");
+  const [checkoutFinalizeNonce, setCheckoutFinalizeNonce] = useState(0);
+  const checkoutFinalizeInFlightRef = useRef(false);
+  const checkoutFinalizePollCountRef = useRef(0);
+  const checkoutFinalizePollTimeoutRef = useRef<number | null>(null);
+
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(() => {
     try {
       const raw = localStorage.getItem(MODEL_TOGGLES_STORAGE_KEY);
@@ -1301,13 +1392,19 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
 
   const [discoverQuery, setDiscoverQuery] = useState("");
-  const [discoverCommunities, setDiscoverCommunities] = useState<CommunityRecord[]>([]);
+  const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
 
   useEffect(() => {
     sessionRef.current = supabaseSession;
   }, [supabaseSession]);
+
+  useEffect(() => {
+    const handlePopState = () => setPublicRoute(readPublicRouteFromLocation());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
@@ -1449,6 +1546,8 @@ export default function App() {
 
     void (async () => {
       setAuthError(null);
+      setMagicLinkStatus("idle");
+      setMagicLinkError(null);
       const user = await fetchSupabaseUser(parsed.session.access_token);
       if (!user) {
         setAuthError("Failed to load user profile from Supabase.");
@@ -1504,6 +1603,9 @@ export default function App() {
     setThreadMessages([]);
     setPersonalMemoryItems([]);
     setProviderKeys([{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }]);
+    setPendingPurchaseClaims([]);
+    setPendingPurchasesError(null);
+    setPendingPurchasesSuccess(null);
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -2220,6 +2322,66 @@ export default function App() {
     window.location.assign(authUrl);
   }
 
+  async function handleSendMagicLink(email: string): Promise<void> {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setMagicLinkError("Email is required.");
+      setMagicLinkStatus("idle");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setMagicLinkError("Enter a valid email.");
+      setMagicLinkStatus("idle");
+      return;
+    }
+
+    const url = getSupabaseUrl();
+    const apiKey = getSupabaseAnonKey();
+    if (!url || !apiKey) {
+      setMagicLinkError("Missing Supabase URL or anon key.");
+      setMagicLinkStatus("idle");
+      return;
+    }
+
+    setMagicLinkStatus("sending");
+    setMagicLinkError(null);
+    try {
+      const response = await fetch(`${url}/auth/v1/otp`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: trimmed,
+          create_user: true,
+          redirect_to: getOAuthRedirectUrl(),
+        }),
+      });
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setMagicLinkStatus("sent");
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to send magic link.";
+      setMagicLinkError(message);
+      setMagicLinkStatus("idle");
+    }
+  }
+
+  function navigateTo(path: string, opts: { replace?: boolean } = {}) {
+    if (opts.replace) {
+      window.history.replaceState({}, document.title, path);
+    } else {
+      window.history.pushState({}, document.title, path);
+    }
+    setPublicRoute(readPublicRouteFromLocation());
+  }
+
   async function handleSignOut() {
     const url = getSupabaseUrl();
     const apiKey = getSupabaseAnonKey();
@@ -2343,6 +2505,453 @@ export default function App() {
     const latest = await ensureOrFail(refreshed ?? sessionRef.current ?? fresh);
     return await doFetch(latest);
   }
+
+  async function redeemPurchaseClaim(token: string): Promise<void> {
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      try {
+        localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
+      } catch {
+        // ignore
+      }
+      handleSignIn();
+      return;
+    }
+
+    setIsRedeemingClaim(true);
+    setRedeemClaimError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/redeem_purchase_claim`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_token: token }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{ community_id: string }>;
+      const communityId = rows[0]?.community_id;
+      if (!communityId) throw new Error("Redeem succeeded but community missing.");
+      try {
+        localStorage.removeItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY);
+      } catch {
+        // ignore
+      }
+      setCheckoutClaimToken(null);
+      setCheckoutStatus("idle");
+
+      // Return into the main app and open the community.
+      navigateTo("/", { replace: true });
+      setActiveView("home");
+      setActivePage("community");
+      setCommunityTab("chat");
+      setActiveCommunityId(communityId);
+      await loadCommunities(session);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to redeem.";
+      setRedeemClaimError(message);
+    } finally {
+      setIsRedeemingClaim(false);
+    }
+  }
+
+  async function joinPublicCommunity(communityId: string): Promise<void> {
+    const trimmed = communityId.trim();
+    if (!trimmed) return;
+
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      try {
+        localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
+      } catch {
+        // ignore
+      }
+      handleSignIn();
+      return;
+    }
+
+    setIsJoiningPublicCommunity(true);
+    setPublicJoinError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/join_public_community`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_community_id: trimmed }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{ community_id: string }>;
+      const joinedId = rows[0]?.community_id ?? trimmed;
+      try {
+        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+      } catch {
+        // ignore
+      }
+
+      navigateTo("/", { replace: true });
+      setActiveView("home");
+      setActivePage("community");
+      setCommunityTab("chat");
+      setActiveCommunityId(joinedId);
+      await loadCommunities(session);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to join community.";
+      setPublicJoinError(message);
+    } finally {
+      setIsJoiningPublicCommunity(false);
+    }
+  }
+
+  async function loadPublicCommunity(slug: string): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) {
+      setPublicCommunityError("Missing Supabase URL.");
+      return;
+    }
+    setIsLoadingPublicCommunity(true);
+    setPublicCommunityError(null);
+    setPublicCommunity(null);
+    setPublicCommunityPlan(null);
+    try {
+      const response = await fetchWithSupabasePublic(
+        `${url}/functions/v1/public_community?slug=${encodeURIComponent(slug)}`,
+        { method: "GET" },
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        community?: CommunityRecord;
+        active_plan?: PublicPlanSummary | null;
+      };
+      if (!payload?.community?.id) throw new Error("Community not found.");
+      setPublicCommunity(payload.community);
+      setPublicCommunityPlan(payload.active_plan ?? null);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load community.";
+      setPublicCommunityError(message);
+    } finally {
+      setIsLoadingPublicCommunity(false);
+    }
+  }
+
+  async function startCheckoutForPlan(communityId: string, planId: string, cancelPath: string): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) {
+      setCheckoutError("Missing Supabase URL.");
+      setCheckoutStatus("error");
+      return;
+    }
+    setCheckoutStatus("loading");
+    setCheckoutError(null);
+    try {
+      const origin = window.location.origin.replace(/\/+$/, "");
+      const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${origin}${cancelPath}`;
+      const response = await fetchWithSupabasePublic(`${url}/functions/v1/checkout_start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          community_id: communityId,
+          plan_id: planId,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
+      });
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const data = (await response.json()) as { checkout_url?: unknown };
+      const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
+      if (!checkoutUrl) throw new Error("Missing checkout_url.");
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to start checkout.";
+      setCheckoutError(message);
+      setCheckoutStatus("error");
+    }
+  }
+
+  async function loadPendingPurchaseClaims(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingPendingPurchases(true);
+    setPendingPurchasesError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/list_pending_purchase_claims`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as PendingPurchaseClaim[];
+      setPendingPurchaseClaims(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load pending purchases.";
+      setPendingPurchasesError(message);
+      setPendingPurchaseClaims([]);
+    } finally {
+      setIsLoadingPendingPurchases(false);
+    }
+  }
+
+  async function redeemPendingPurchases(): Promise<void> {
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to claim access.");
+      handleSignIn();
+      return;
+    }
+
+    setIsRedeemingPendingPurchases(true);
+    setPendingPurchasesError(null);
+    setPendingPurchasesSuccess(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/redeem_pending_purchase_claims`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{ community_id: string }>;
+      const claimedCommunityId = rows[0]?.community_id;
+      if (rows.length === 0) {
+        setPendingPurchasesSuccess("No pending purchases found.");
+        setPendingPurchaseClaims([]);
+        return;
+      }
+
+      setPendingPurchasesSuccess(rows.length === 1 ? "Claimed access." : `Claimed ${rows.length} communities.`);
+      await loadCommunities(session);
+      setPendingPurchaseClaims([]);
+
+      if (claimedCommunityId) {
+        navigateTo("/", { replace: true });
+        setActiveView("home");
+        setActivePage("community");
+        setCommunityTab("chat");
+        setActiveCommunityId(claimedCommunityId);
+      }
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to claim access.";
+      setPendingPurchasesError(message);
+    } finally {
+      setIsRedeemingPendingPurchases(false);
+    }
+  }
+
+  const publicLandingSlug = publicRoute.kind === "community_landing" ? publicRoute.slug : null;
+  const checkoutSuccessSessionId = publicRoute.kind === "checkout_success" ? publicRoute.sessionId : null;
+  const claimTokenParam = publicRoute.kind === "claim" ? publicRoute.token : null;
+  const pendingPurchaseBannerKey = pendingPurchaseClaims
+    .map((claim) => claim.community_id)
+    .sort()
+    .join("|");
+
+  useEffect(() => {
+    setIsPendingPurchasesBannerDismissed(false);
+  }, [pendingPurchaseBannerKey]);
+
+  useEffect(() => {
+    if (!publicLandingSlug) return;
+    void loadPublicCommunity(publicLandingSlug);
+  }, [publicLandingSlug]);
+
+  useEffect(() => {
+    if (checkoutSuccessSessionId) return;
+    if (checkoutFinalizePollTimeoutRef.current) {
+      window.clearTimeout(checkoutFinalizePollTimeoutRef.current);
+      checkoutFinalizePollTimeoutRef.current = null;
+    }
+    checkoutFinalizePollCountRef.current = 0;
+    checkoutFinalizeInFlightRef.current = false;
+  }, [checkoutSuccessSessionId]);
+
+  useEffect(() => {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    if (!checkoutSuccessSessionId) return;
+    const sessionId = checkoutSuccessSessionId.trim();
+    if (!sessionId) {
+      setCheckoutStatus("error");
+      setCheckoutError("Missing session_id.");
+      return;
+    }
+    if (lastCheckoutFinalizeSessionIdRef.current !== sessionId) {
+      lastCheckoutFinalizeSessionIdRef.current = sessionId;
+      checkoutFinalizePollCountRef.current = 0;
+      if (checkoutFinalizePollTimeoutRef.current) {
+        window.clearTimeout(checkoutFinalizePollTimeoutRef.current);
+        checkoutFinalizePollTimeoutRef.current = null;
+      }
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      if (checkoutFinalizeInFlightRef.current) return;
+      checkoutFinalizeInFlightRef.current = true;
+      setCheckoutStatus((prev) => (prev === "pending" ? "pending" : "loading"));
+      setCheckoutError(null);
+      setCheckoutClaimToken(null);
+      setRedeemClaimError(null);
+      try {
+        const response = await fetchWithSupabasePublic(
+          `${url}/functions/v1/checkout_finalize?session_id=${encodeURIComponent(sessionId)}`,
+          { method: "GET" },
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          status?: string;
+          claim?: { token?: string };
+        };
+        if (cancelled) return;
+        if (payload?.status === "pending") {
+          setCheckoutStatus("pending");
+          checkoutFinalizePollCountRef.current += 1;
+          const attempt = checkoutFinalizePollCountRef.current;
+          if (attempt <= 20) {
+            const delayMs = Math.min(8000, 900 + attempt * 450);
+            if (checkoutFinalizePollTimeoutRef.current) {
+              window.clearTimeout(checkoutFinalizePollTimeoutRef.current);
+            }
+            checkoutFinalizePollTimeoutRef.current = window.setTimeout(() => {
+              if (cancelled) return;
+              setCheckoutFinalizeNonce((prev) => prev + 1);
+            }, delayMs);
+          }
+          return;
+        }
+        const token = typeof payload?.claim?.token === "string" ? payload.claim.token.trim() : "";
+        if (!token) throw new Error("Missing claim token.");
+        setCheckoutStatus("succeeded");
+        setCheckoutClaimToken(token);
+        if (checkoutFinalizePollTimeoutRef.current) {
+          window.clearTimeout(checkoutFinalizePollTimeoutRef.current);
+          checkoutFinalizePollTimeoutRef.current = null;
+        }
+        try {
+          localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
+        } catch {
+          // ignore
+        }
+        if (sessionRef.current) {
+          await redeemPurchaseClaim(token);
+        }
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to finalize checkout.";
+        setCheckoutStatus("error");
+        setCheckoutError(message);
+      } finally {
+        checkoutFinalizeInFlightRef.current = false;
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutSuccessSessionId, checkoutFinalizeNonce]);
+
+  useEffect(() => {
+    const token = (claimTokenParam ?? "").trim();
+    if (!token) return;
+    try {
+      localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
+    } catch {
+      // ignore
+    }
+    if (!sessionRef.current) return;
+    void redeemPurchaseClaim(token);
+  }, [claimTokenParam]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    const token = (() => {
+      try {
+        return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
+      } catch {
+        return "";
+      }
+    })();
+    if (!token) return;
+    if (isRedeemingClaim) return;
+    void redeemPurchaseClaim(token);
+  }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    void loadPendingPurchaseClaims(supabaseSession);
+  }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    if (isRedeemingClaim || isJoiningPublicCommunity) return;
+    const claimToken = (() => {
+      try {
+        return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
+      } catch {
+        return "";
+      }
+    })();
+    if (claimToken) return;
+    const communityId = (() => {
+      try {
+        return (localStorage.getItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY) ?? "").trim();
+      } catch {
+        return "";
+      }
+    })();
+    if (!communityId) return;
+    void joinPublicCommunity(communityId);
+  }, [supabaseSession, isRedeemingClaim, isJoiningPublicCommunity]);
 
   async function loadCommunities(session: SupabaseSession) {
     const url = getSupabaseUrl();
@@ -3310,18 +3919,13 @@ export default function App() {
     setIsLoadingDiscover(true);
     setDiscoverError(null);
     try {
-      const endpoint = supabaseSession
-        ? `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at&order=updated_at.desc&limit=200`
-        : `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at&visibility=eq.public&order=updated_at.desc&limit=200`;
-      const response = supabaseSession
-        ? await fetchWithSupabaseAuth(endpoint, {}, supabaseSession)
-        : await fetchWithSupabasePublic(endpoint);
+      const response = await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
       if (!response.ok) {
         const message = await readSupabaseError(response);
         throw new Error(message);
       }
-      const rows = (await response.json()) as CommunityRecord[];
-      setDiscoverCommunities(rows);
+      const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunity[] };
+      setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -4576,6 +5180,301 @@ export default function App() {
     isSendingMessage && streamingThreadId === activeThreadId && streamingContent !== null,
   );
 
+  if (publicRoute.kind !== "app") {
+    const showSignIn = !supabaseSession;
+    const pendingToken =
+      (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
+      (() => {
+        try {
+          return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
+        } catch {
+          return "";
+        }
+      })();
+
+    return (
+      <div className="app-root public-root">
+        <header className="app-topbar">
+          <div className="topbar-left">
+            <button className="back-to-workspace" type="button" onClick={() => navigateTo("/")}>
+              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span className="back-path">Arx</span>
+            </button>
+          </div>
+          <div className="topbar-right">
+            {showSignIn ? (
+              <button className="secondary" type="button" onClick={handleSignIn}>
+                Sign in
+              </button>
+            ) : (
+              <button className="secondary" type="button" onClick={() => void handleSignOut()}>
+                Sign out
+              </button>
+            )}
+          </div>
+        </header>
+
+        <main className="workspace community-mode">
+          {publicRoute.kind === "community_landing" && (
+            <div className="community-panel discover-panel">
+              <div className="discover-hero">
+                <div className="discover-hero-copy">
+                  <div className="discover-title">{publicCommunity?.name ?? publicRoute.slug}</div>
+                  <div className="discover-subtitle">
+                    {publicCommunity?.description ?? "Join this community on Arx."}
+                  </div>
+                  <div className="discover-subtitle">
+                    {publicCommunityPlan ? formatPlanPrice(publicCommunityPlan) : "Free"}
+                  </div>
+                </div>
+                <div className="discover-controls">
+                  <button
+                    className="discover-refresh"
+                    type="button"
+                    disabled={isLoadingPublicCommunity || !publicCommunity || checkoutStatus === "loading" || isJoiningPublicCommunity}
+                    onClick={() => {
+                      if (!publicCommunity) return;
+                      if (publicCommunityPlan) {
+                        void startCheckoutForPlan(
+                          publicCommunity.id,
+                          publicCommunityPlan.id,
+                          `/c/${encodeURIComponent(publicCommunity.slug)}`,
+                        );
+                        return;
+                      }
+                      void joinPublicCommunity(publicCommunity.id);
+                    }}
+                  >
+                    {isJoiningPublicCommunity ? "Joining…" : publicCommunityPlan ? "Join now" : "Join free"}
+                  </button>
+                </div>
+              </div>
+              {isLoadingPublicCommunity && <div className="chat-empty">Loading…</div>}
+              {!isLoadingPublicCommunity && publicCommunityError && (
+                <div className="auth-error">{publicCommunityError}</div>
+              )}
+              {publicJoinError && <div className="auth-error">{publicJoinError}</div>}
+              {checkoutError && <div className="auth-error">{checkoutError}</div>}
+              {showSignIn && publicCommunity && !publicCommunityPlan && (
+                <div className="chat-empty">
+                  <div className="discover-empty-text">Or join with a magic link:</div>
+                  <div className="discover-controls">
+                    <input
+                      className="discover-search"
+                      type="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={magicLinkEmail}
+                      onChange={(event) => setMagicLinkEmail(event.target.value)}
+                    />
+                    <button
+                      className="discover-refresh"
+                      type="button"
+                      disabled={magicLinkStatus === "sending"}
+                      onClick={() => {
+                        try {
+                          localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, publicCommunity.id);
+                        } catch {
+                          // ignore
+                        }
+                        void handleSendMagicLink(magicLinkEmail);
+                      }}
+                    >
+                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+                    </button>
+                  </div>
+                  {magicLinkStatus === "sent" && (
+                    <div className="chat-empty">Check your email for a sign-in link.</div>
+                  )}
+                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+                </div>
+              )}
+              <div className="chat-messages">
+                <div className="discover-empty">
+                  <div className="discover-empty-title">Powered by Arx</div>
+                  <div className="discover-empty-text">
+                    Join to access chat, resources, and the community copilot.
+                  </div>
+                  <button className="secondary" type="button" onClick={() => navigateTo("/claim")}>
+                    Paid but can't access? Recover
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {publicRoute.kind === "checkout_success" && (
+            <div className="community-panel discover-panel">
+              <div className="discover-hero">
+                <div className="discover-hero-copy">
+                  <div className="discover-title">
+                    {checkoutStatus === "loading"
+                      ? "Setting up your access…"
+                      : checkoutStatus === "pending"
+                        ? "Payment pending"
+                        : checkoutStatus === "succeeded"
+                          ? "You're in!"
+                          : "Checkout error"}
+                  </div>
+                  <div className="discover-subtitle">
+                    {checkoutStatus === "pending"
+                      ? "It can take a moment. We'll keep checking."
+                      : checkoutStatus === "succeeded"
+                        ? "Continue to access the community."
+                        : checkoutError ?? ""}
+                  </div>
+                </div>
+                <div className="discover-controls">
+                  <button
+                    className="discover-refresh"
+                    type="button"
+                    disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
+                    onClick={() => {
+                      if (!pendingToken) return;
+                      if (showSignIn) {
+                        handleSignIn();
+                        return;
+                      }
+                      void redeemPurchaseClaim(pendingToken);
+                    }}
+                  >
+                    Continue
+                  </button>
+                  {(checkoutStatus === "pending" || checkoutStatus === "error") && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      disabled={checkoutStatus === "loading"}
+                      onClick={() => setCheckoutFinalizeNonce((prev) => prev + 1)}
+                    >
+                      {checkoutStatus === "pending" ? "Check again" : "Retry"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {showSignIn && (
+                <div className="chat-empty">
+                  <div className="discover-empty-text">Or get a magic link:</div>
+                  <div className="discover-controls">
+                    <input
+                      className="discover-search"
+                      type="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={magicLinkEmail}
+                      onChange={(event) => setMagicLinkEmail(event.target.value)}
+                    />
+                    <button
+                      className="discover-refresh"
+                      type="button"
+                      disabled={magicLinkStatus === "sending"}
+                      onClick={() => void handleSendMagicLink(magicLinkEmail)}
+                    >
+                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+                    </button>
+                  </div>
+                  {magicLinkStatus === "sent" && (
+                    <div className="chat-empty">Check your email for a sign-in link.</div>
+                  )}
+                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+                </div>
+              )}
+              {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
+              {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
+              {pendingToken && (
+                <div className="chat-empty">
+                  <a className="secondary" href={`arx://claim?token=${encodeURIComponent(pendingToken)}`}>
+                    Open in desktop
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {publicRoute.kind === "claim" && (
+            <div className="community-panel discover-panel">
+              <div className="discover-hero">
+                <div className="discover-hero-copy">
+                  <div className="discover-title">Claim access</div>
+                  <div className="discover-subtitle">Continue to unlock your community.</div>
+                </div>
+                <div className="discover-controls">
+                  <button
+                    className="discover-refresh"
+                    type="button"
+                    disabled={!(pendingToken || manualClaimToken.trim()) || isRedeemingClaim}
+                    onClick={() => {
+                      const token = (pendingToken || manualClaimToken).trim();
+                      if (!token) return;
+                      void redeemPurchaseClaim(token);
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+              {!pendingToken && (
+                <div className="chat-empty">
+                  <div className="discover-empty-text">Paste your claim token:</div>
+                  <div className="discover-controls">
+                    <input
+                      className="discover-search"
+                      type="text"
+                      placeholder="Paste token"
+                      value={manualClaimToken}
+                      onChange={(event) => setManualClaimToken(event.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+              {showSignIn && (
+                <div className="chat-empty">
+                  <div className="discover-empty-text">Or get a magic link:</div>
+                  <div className="discover-controls">
+                    <input
+                      className="discover-search"
+                      type="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={magicLinkEmail}
+                      onChange={(event) => setMagicLinkEmail(event.target.value)}
+                    />
+                    <button
+                      className="discover-refresh"
+                      type="button"
+                      disabled={magicLinkStatus === "sending"}
+                      onClick={() => void handleSendMagicLink(magicLinkEmail)}
+                    >
+                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+                    </button>
+                  </div>
+                  {magicLinkStatus === "sent" && (
+                    <div className="chat-empty">Check your email for a sign-in link.</div>
+                  )}
+                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+                </div>
+              )}
+              {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
+              {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
+              {(pendingToken || manualClaimToken.trim()) && (
+                <div className="chat-empty">
+                  <a
+                    className="secondary"
+                    href={`arx://claim?token=${encodeURIComponent((pendingToken || manualClaimToken).trim())}`}
+                  >
+                    Open in desktop
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-root${isSessionsDrawerOpen ? " sessions-drawer-open" : ""}`}>
       <header className="app-topbar">
@@ -4925,6 +5824,39 @@ export default function App() {
         )}
 
         <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
+          {supabaseSession && pendingPurchaseClaims.length > 0 && !isPendingPurchasesBannerDismissed && (
+            <div className="pending-purchase-banner" role="status">
+              <div className="pending-purchase-banner-copy">
+                <div className="pending-purchase-banner-title">Pending community access</div>
+                <div className="pending-purchase-banner-subtitle">
+                  {pendingPurchaseClaims.length === 1
+                    ? `You paid for ${
+                        pendingPurchaseClaims[0]?.community_name ??
+                        pendingPurchaseClaims[0]?.community_slug ??
+                        "a community"
+                      } but didn’t finish joining.`
+                    : `You have ${pendingPurchaseClaims.length} communities waiting to be claimed.`}
+                </div>
+              </div>
+              <div className="pending-purchase-banner-actions">
+                <button
+                  type="button"
+                  onClick={() => void redeemPendingPurchases()}
+                  disabled={isRedeemingPendingPurchases}
+                >
+                  {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setIsPendingPurchasesBannerDismissed(true)}
+                  disabled={isRedeemingPendingPurchases}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           {activeView === "settings" ? (
             <div className="settings-panel">
               {settingsPage === "account" && (
@@ -4953,6 +5885,59 @@ export default function App() {
                     )}
                     {authError && <div className="key-error">{authError}</div>}
                   </div>
+
+                  {supabaseSession &&
+                    (isLoadingPendingPurchases ||
+                      pendingPurchaseClaims.length > 0 ||
+                      pendingPurchasesError ||
+                      pendingPurchasesSuccess) && (
+                      <div className="settings-section">
+                        <div className="settings-section-title">Pending purchases</div>
+                        <div className="settings-section-desc">
+                          Recover access if you paid but didn&apos;t finish the join flow.
+                        </div>
+                        {isLoadingPendingPurchases && (
+                          <div className="chat-loading">
+                            <div className="loading-spinner" />
+                            <span>Checking…</span>
+                          </div>
+                        )}
+                        {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
+                          <div className="model-list">
+                            {pendingPurchaseClaims.map((claim) => (
+                              <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
+                                <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {!isLoadingPendingPurchases && pendingPurchaseClaims.length === 0 && pendingPurchasesSuccess && (
+                          <div className="auth-status">{pendingPurchasesSuccess}</div>
+                        )}
+                        <div className="auth-actions">
+                          <button
+                            type="button"
+                            onClick={() => void redeemPendingPurchases()}
+                            disabled={
+                              isRedeemingPendingPurchases ||
+                              isLoadingPendingPurchases ||
+                              pendingPurchaseClaims.length === 0
+                            }
+                          >
+                            {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+                          </button>
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={() => supabaseSession && void loadPendingPurchaseClaims(supabaseSession)}
+                            disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
+                      </div>
+                    )}
 
                   <div className="settings-section">
                     <div className="settings-section-title">Profile</div>
@@ -5746,6 +6731,7 @@ export default function App() {
                       {!isLoadingDiscover &&
                         filteredDiscoverCommunities.map((community) => {
                           const alreadyMember = communities.some((c) => c.id === community.id);
+                          const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
                           const visibilityLabel =
                             community.visibility === "public"
                               ? "Public"
@@ -5783,6 +6769,7 @@ export default function App() {
                                   <div className="discover-card-meta">
                                     <div className="discover-card-name-row">
                                       <div className="discover-card-name">{community.name}</div>
+                                      <span className="discover-tag">{priceLabel}</span>
                                       <span className={`discover-tag ${community.visibility ?? "private"}`}>
                                         {visibilityLabel}
                                       </span>
@@ -5812,8 +6799,16 @@ export default function App() {
                                         Open
                                       </button>
                                     ) : (
-                                      <button className="discover-btn secondary" type="button" disabled>
-                                        Join (desktop)
+                                      <button
+                                        className="discover-btn secondary"
+                                        type="button"
+                                        onClick={() => {
+                                          if (!community.slug) return;
+                                          navigateTo(`/c/${encodeURIComponent(community.slug)}`);
+                                        }}
+                                        disabled={!community.slug}
+                                      >
+                                        Join
                                       </button>
                                     )}
                                   </div>

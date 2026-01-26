@@ -213,6 +213,13 @@ type PendingInviteRecord = {
   source: string | null;
 };
 
+type PendingPurchaseClaim = {
+  community_id: string;
+  community_slug: string;
+  community_name: string;
+  expires_at: string;
+};
+
 type OpenRouterStreamPayload = {
   session_id: string;
   run_id: string;
@@ -474,6 +481,17 @@ function App() {
 		  const autoJoinPublicCommunitiesAttemptedRef = useRef<Set<string>>(new Set());
 		  const supabaseRefreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
 		  const [authError, setAuthError] = useState<string | null>(null);
+      const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaim[]>([]);
+      const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
+      const [pendingPurchasesError, setPendingPurchasesError] = useState<string | null>(null);
+      const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
+      const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
+      const [isPendingPurchasesBannerDismissed, setIsPendingPurchasesBannerDismissed] = useState(false);
+
+  const pendingPurchaseBannerKey = pendingPurchaseClaims
+    .map((claim) => claim.community_id)
+    .sort()
+    .join("|");
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
@@ -1289,8 +1307,20 @@ function App() {
 	    void loadCommunities(supabaseSession);
 	    void maybeAutoJoinPendingInvites(supabaseSession);
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
+      void loadPendingPurchaseClaims(supabaseSession);
       scheduleOpenRouterKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
+
+    useEffect(() => {
+      setIsPendingPurchasesBannerDismissed(false);
+    }, [pendingPurchaseBannerKey]);
+
+    useEffect(() => {
+      if (supabaseSession) return;
+      setPendingPurchaseClaims([]);
+      setPendingPurchasesError(null);
+      setPendingPurchasesSuccess(null);
+    }, [supabaseSession]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
@@ -2300,9 +2330,18 @@ function App() {
 
     try {
       if (!session || !url) {
-        // Cloud-canonical cognition: threads are available only when signed in.
-        setThreads([]);
-        setActiveThreadId(null);
+        // Signed-out: show device-local threads (no cloud sync).
+        const localThreads = await invoke<ThreadRecord[]>("list_threads_cmd");
+        const visible = localThreads.filter(
+          (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
+        );
+        setThreads(visible);
+
+        if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
+          setActiveThreadId(visible.length > 0 ? visible[0].id : null);
+        } else if (!activeThreadId && visible.length > 0) {
+          setActiveThreadId(visible[0].id);
+        }
         return;
       }
 
@@ -3401,6 +3440,91 @@ function isModelReady(modelId: string): boolean {
     return await fetch(url, { ...init, headers });
   }
 
+  async function loadPendingPurchaseClaims(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingPendingPurchases(true);
+    setPendingPurchasesError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/list_pending_purchase_claims`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as PendingPurchaseClaim[];
+      setPendingPurchaseClaims(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load pending purchases.";
+      setPendingPurchasesError(message);
+      setPendingPurchaseClaims([]);
+    } finally {
+      setIsLoadingPendingPurchases(false);
+    }
+  }
+
+  async function redeemPendingPurchases(): Promise<void> {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to claim access.");
+      await handleSignIn();
+      return;
+    }
+
+    setIsRedeemingPendingPurchases(true);
+    setPendingPurchasesError(null);
+    setPendingPurchasesSuccess(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/redeem_pending_purchase_claims`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{ community_id: string }>;
+      const claimedCommunityId = rows[0]?.community_id ?? null;
+      if (rows.length === 0) {
+        setPendingPurchasesSuccess("No pending purchases found.");
+        setPendingPurchaseClaims([]);
+        return;
+      }
+
+      setPendingPurchasesSuccess(rows.length === 1 ? "Claimed access." : `Claimed ${rows.length} communities.`);
+      await loadCommunities(session);
+      setPendingPurchaseClaims([]);
+
+      if (claimedCommunityId) {
+        setActivePage("community");
+        setActiveCommunityId(claimedCommunityId);
+        setCommunityTab("chat");
+      }
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to claim access.";
+      setPendingPurchasesError(message);
+    } finally {
+      setIsRedeemingPendingPurchases(false);
+    }
+  }
+
   async function fetchSupabaseUser(accessToken: string): Promise<SupabaseUser | null> {
     const url = getSupabaseUrl();
     const apiKey = getSupabaseAnonKey();
@@ -3574,18 +3698,24 @@ function isModelReady(modelId: string): boolean {
 	    setIsLoadingDiscover(true);
 	    setDiscoverError(null);
 	    try {
-	      const endpoint = supabaseSession
-	        ? `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,visibility,created_at,updated_at&order=updated_at.desc&limit=200`
-	        : `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,visibility,created_at,updated_at&visibility=eq.public&order=updated_at.desc&limit=200`;
 	      const response = supabaseSession
-	        ? await fetchWithSupabaseAuth(endpoint, {}, supabaseSession)
-	        : await fetchWithSupabasePublic(endpoint);
+	        ? await fetchWithSupabaseAuth(
+	            `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,visibility,created_at,updated_at&order=updated_at.desc&limit=200`,
+	            {},
+	            supabaseSession,
+	          )
+	        : await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
 	      if (!response.ok) {
 	        const message = await readSupabaseError(response);
 	        throw new Error(message);
 	      }
-	      const rows = (await response.json()) as CommunityRecord[];
-	      setDiscoverCommunities(rows);
+	      if (supabaseSession) {
+	        const rows = (await response.json()) as CommunityRecord[];
+	        setDiscoverCommunities(rows);
+	      } else {
+	        const payload = (await response.json()) as { ok?: boolean; communities?: CommunityRecord[] };
+	        setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
+	      }
 	    } catch (error) {
 	      const message =
 	        typeof error === "string"
@@ -5468,11 +5598,6 @@ function isModelReady(modelId: string): boolean {
 
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to start a thread.");
-      await handleSignIn();
-      return;
-    }
 
     const nowSec = Math.floor(Date.now() / 1000);
     const threadId = crypto.randomUUID();
@@ -5487,28 +5612,31 @@ function isModelReady(modelId: string): boolean {
       updated_at: nowSec,
       last_event_at: null,
     };
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            id: threadId,
-            owner_id: getSupabaseAuthUid(session),
-            title: thread.title,
-            engine_id: thread.engine_id,
-            model_id: thread.model_id,
-            community_id: null,
-          }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-    } catch (error) {
-      console.error("Failed to create cloud thread:", error);
-      setMemoryToast("Failed to create thread.");
-      return;
+
+    if (session && url) {
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/threads`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({
+              id: threadId,
+              owner_id: getSupabaseAuthUid(session),
+              title: thread.title,
+              engine_id: thread.engine_id,
+              model_id: thread.model_id,
+              community_id: null,
+            }),
+          },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+      } catch (error) {
+        console.error("Failed to create cloud thread:", error);
+        setMemoryToast("Failed to create thread.");
+        return;
+      }
     }
 
     // Ensure the local runtime can operate on the thread id.
@@ -5591,14 +5719,8 @@ function isModelReady(modelId: string): boolean {
       setMemoryToast("No model selected. Enable a model in Settings → Models.");
       return null;
     }
-    // Cloud-canonical: threads exist only when signed in.
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to start a thread.");
-      await handleSignIn();
-      return null;
-    }
 
     const nowSec = Math.floor(Date.now() / 1000);
     const threadId = crypto.randomUUID();
@@ -5614,28 +5736,30 @@ function isModelReady(modelId: string): boolean {
       last_event_at: null,
     };
 
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            id: threadId,
-            owner_id: getSupabaseAuthUid(session),
-            title: thread.title,
-            engine_id: thread.engine_id,
-            model_id: thread.model_id,
-            community_id: null,
-          }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-    } catch (error) {
-      console.error("Failed to create cloud thread:", error);
-      setMemoryToast("Failed to create thread.");
-      return null;
+    if (session && url) {
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/threads`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+            body: JSON.stringify({
+              id: threadId,
+              owner_id: getSupabaseAuthUid(session),
+              title: thread.title,
+              engine_id: thread.engine_id,
+              model_id: thread.model_id,
+              community_id: null,
+            }),
+          },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+      } catch (error) {
+        console.error("Failed to create cloud thread:", error);
+        setMemoryToast("Failed to create thread.");
+        return null;
+      }
     }
 
     try {
@@ -6753,6 +6877,39 @@ function isModelReady(modelId: string): boolean {
         </aside>
       )}
       <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
+        {supabaseSession && pendingPurchaseClaims.length > 0 && !isPendingPurchasesBannerDismissed && (
+          <div className="pending-purchase-banner" role="status">
+            <div className="pending-purchase-banner-copy">
+              <div className="pending-purchase-banner-title">Pending community access</div>
+              <div className="pending-purchase-banner-subtitle">
+                {pendingPurchaseClaims.length === 1
+                  ? `You paid for ${
+                      pendingPurchaseClaims[0]?.community_name ??
+                      pendingPurchaseClaims[0]?.community_slug ??
+                      "a community"
+                    } but didn’t finish joining.`
+                  : `You have ${pendingPurchaseClaims.length} communities waiting to be claimed.`}
+              </div>
+            </div>
+            <div className="pending-purchase-banner-actions">
+              <button
+                type="button"
+                onClick={() => void redeemPendingPurchases()}
+                disabled={isRedeemingPendingPurchases}
+              >
+                {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => setIsPendingPurchasesBannerDismissed(true)}
+                disabled={isRedeemingPendingPurchases}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         {showCreateCommunityModal && (
           <div className="modal-overlay" onClick={closeCreateCommunityModal}>
             <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
@@ -7097,6 +7254,59 @@ function isModelReady(modelId: string): boolean {
                   )}
                   {authError && <div className="key-error">{authError}</div>}
                 </div>
+
+                {supabaseSession &&
+                  (isLoadingPendingPurchases ||
+                    pendingPurchaseClaims.length > 0 ||
+                    pendingPurchasesError ||
+                    pendingPurchasesSuccess) && (
+                    <div className="settings-section">
+                      <div className="settings-section-title">Pending purchases</div>
+                      <div className="settings-section-desc">
+                        Recover access if you paid but didn't finish the join flow.
+                      </div>
+                      {isLoadingPendingPurchases && (
+                        <div className="chat-loading">
+                          <div className="loading-spinner" />
+                          <span>Checking…</span>
+                        </div>
+                      )}
+                      {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
+                        <div className="model-list">
+                          {pendingPurchaseClaims.map((claim) => (
+                            <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
+                              <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!isLoadingPendingPurchases &&
+                        pendingPurchaseClaims.length === 0 &&
+                        pendingPurchasesSuccess && <div className="auth-status">{pendingPurchasesSuccess}</div>}
+                      <div className="auth-actions">
+                        <button
+                          type="button"
+                          onClick={() => void redeemPendingPurchases()}
+                          disabled={
+                            isRedeemingPendingPurchases ||
+                            isLoadingPendingPurchases ||
+                            pendingPurchaseClaims.length === 0
+                          }
+                        >
+                          {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => supabaseSession && void loadPendingPurchaseClaims(supabaseSession)}
+                          disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                      {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
+                    </div>
+                  )}
 
                 <div className="settings-section">
                   <div className="settings-section-title">Profile</div>
