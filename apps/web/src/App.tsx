@@ -1291,7 +1291,9 @@ export default function App() {
   const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
-  const [communityTab, setCommunityTab] = useState<"chat" | "library" | "resources" | "members" | "settings">(
+  const [communityTab, setCommunityTab] = useState<
+    "chat" | "library" | "resources" | "members" | "settings" | "analytics"
+  >(
     "chat"
   );
 
@@ -5818,6 +5820,27 @@ export default function App() {
                   </span>
                   Settings
                 </button>
+                <button
+                  className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
+                  type="button"
+                  onClick={() => {
+                    setActivePage("community");
+                    setActiveView("home");
+                    setCommunityTab("analytics");
+                  }}
+                  title="Analytics"
+                >
+                  <span className="nav-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M4 19V5" />
+                      <path d="M4 19h16" />
+                      <path d="M8 15v-5" />
+                      <path d="M12 15v-8" />
+                      <path d="M16 15v-3" />
+                    </svg>
+                  </span>
+                  Analytics
+                </button>
               </>
             )}
           </aside>
@@ -7413,6 +7436,41 @@ export default function App() {
                               {isSavingCommunitySettings ? "Saving..." : "Save settings"}
                             </button>
                             {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {communityTab === "analytics" && (
+                    <div className="settings-panel community-settings-panel">
+                      {!activeCommunity ? (
+                        <div className="chat-empty">Select a community to view analytics.</div>
+                      ) : !supabaseSession ? (
+                        <div className="chat-empty">Sign in to view community analytics.</div>
+                      ) : !canEditActiveCommunitySettings ? (
+                        <div className="chat-empty">Only the owner can view community analytics.</div>
+                      ) : (
+                        <>
+                          <div className="panel-title">Community Analytics</div>
+                          <div className="settings-section">
+                            <div className="settings-section-title">Overview</div>
+                            <div className="settings-section-desc">
+                              Revenue and retention reporting will appear here once payments are live.
+                            </div>
+                            <div className="model-list analytics-kpis">
+                              {[
+                                { label: "MRR", value: "—" },
+                                { label: "Active subscribers", value: "—" },
+                                { label: "New this week", value: "—" },
+                                { label: "Churn", value: "—" },
+                              ].map((kpi) => (
+                                <div key={kpi.label} className="model-toggle analytics-kpi">
+                                  <span>{kpi.label}</span>
+                                  <span className="analytics-kpi-value">{kpi.value}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </>
                       )}
