@@ -77,6 +77,12 @@ export type StripeSubscription = {
   current_period_end: number;
   cancel_at_period_end: boolean;
   customer: string | null;
+  metadata?: Record<string, string> | null;
+  items?: {
+    data?: Array<{
+      price?: { id?: string | null } | null;
+    }>;
+  } | null;
 };
 
 export async function retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession> {
@@ -86,4 +92,3 @@ export async function retrieveCheckoutSession(sessionId: string): Promise<Stripe
 export async function retrieveSubscription(subscriptionId: string): Promise<StripeSubscription> {
   return stripeRequest<StripeSubscription>("GET", `/subscriptions/${encodeURIComponent(subscriptionId)}`);
 }
-

@@ -153,4 +153,3 @@ begin
   order by b.bucket_start asc;
 end;
 $$;
-

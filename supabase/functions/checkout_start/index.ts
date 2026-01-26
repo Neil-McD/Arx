@@ -63,6 +63,20 @@ async function loadCommunityOwner(communityId: string): Promise<CommunityOwnerRo
   return row;
 }
 
+type BuilderAccountRow = { user_id: string; stripe_connected_account_id: string | null };
+
+async function loadBuilderConnectedAccountId(userId: string): Promise<string | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/builder_accounts?user_id=eq.${encodeURIComponent(userId)}&select=user_id,stripe_connected_account_id&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as BuilderAccountRow[];
+  const row = rows[0];
+  const acct = String(row?.stripe_connected_account_id ?? "").trim();
+  return acct ? acct : null;
+}
+
 type BuilderTier = "free" | "builder" | "pro";
 type ProfileTierRow = { user_id: string; builder_tier: string | null };
 
@@ -170,6 +184,8 @@ async function ensureStripePriceForPlan(plan: PlanRow): Promise<string> {
 async function createStripeCheckoutSession(
   intentId: string,
   plan: PlanRow,
+  platformFeeBps: number,
+  destinationAccountId: string,
   input: CheckoutStartInput,
 ): Promise<StripeSessionCreate> {
   const mode =
@@ -191,6 +207,12 @@ async function createStripeCheckoutSession(
     "line_items[0][quantity]": 1,
   };
   body["line_items[0][price]"] = stripePriceId;
+
+  if (mode === "subscription") {
+    const feePercent = Math.max(0, Math.min(100, platformFeeBps / 100));
+    body["subscription_data[application_fee_percent]"] = feePercent;
+    body["subscription_data[transfer_data][destination]"] = destinationAccountId;
+  }
   return stripeRequest<StripeSessionCreate>("POST", "/checkout/sessions", body);
 }
 
@@ -218,8 +240,12 @@ Deno.serve(async (req: Request) => {
       throw new Error("Creator must be on Builder/Pro to accept payments");
     }
     const platformFeeBps = resolvePlatformFeeBps(builderTier);
+    const destinationAccountId = await loadBuilderConnectedAccountId(community.owner_id);
+    if (!destinationAccountId) {
+      throw new Error("Creator must set up payouts before accepting payments");
+    }
     const intent = await createPaymentIntent(plan, platformFeeBps);
-    const session = await createStripeCheckoutSession(intent.id, plan, input);
+    const session = await createStripeCheckoutSession(intent.id, plan, platformFeeBps, destinationAccountId, input);
 
     await updatePaymentIntent(intent.id, {
       status: "pending",

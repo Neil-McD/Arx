@@ -6137,6 +6137,18 @@ fn clear_supabase_session_cmd() -> Result<(), String> {
   }
 }
 
+#[tauri::command]
+fn open_external_url_cmd(url: String) -> Result<(), String> {
+  let trimmed = url.trim();
+  if trimmed.is_empty() {
+    return Err("url is empty".to_string());
+  }
+  if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+    return Err("url must start with http:// or https://".to_string());
+  }
+  open::that(trimmed).map_err(|e| e.to_string())
+}
+
 const UI_STATE_PENDING_INVITES_V1: &str = "pending_invites_v1";
 const MAX_INVITE_KEY_LEN: usize = 128;
 
@@ -6773,6 +6785,7 @@ fn main() {
 	      get_supabase_session_cmd,
 	      set_supabase_session_cmd,
 	      clear_supabase_session_cmd,
+	      open_external_url_cmd,
 	      list_pending_invites_cmd,
 	      upsert_pending_invite_cmd,
 	      dismiss_pending_invite_cmd,

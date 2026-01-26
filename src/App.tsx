@@ -220,6 +220,17 @@ type PendingPurchaseClaim = {
   expires_at: string;
 };
 
+type BuilderBillingStatus = {
+  user_id: string;
+  builder_tier: string;
+  max_communities: number;
+  platform_fee_bps: number;
+  has_payouts: boolean;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+};
+
 type OpenRouterStreamPayload = {
   session_id: string;
   run_id: string;
@@ -282,6 +293,27 @@ type CommunityChatMessage = {
   seq: number;
 };
 
+type AutomationEndpoint = {
+  id: string;
+  name: string;
+  url: string;
+  is_enabled: boolean;
+  event_types: string[] | null;
+  include_email: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type AutomationDelivery = {
+  attempted_at: string;
+  event_type: string;
+  endpoint_name: string;
+  status: "success" | "fail";
+  response_code: number | null;
+  duration_ms: number | null;
+  error: string | null;
+};
+
 type MessageReaction = {
   id: string;
   message_id: string;
@@ -302,6 +334,7 @@ type Attachment = {
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
+const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
@@ -494,7 +527,7 @@ function App() {
   });
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
   const [communityTab, setCommunityTab] = useState<
-    "chat" | "library" | "resources" | "members" | "settings" | "analytics"
+    "chat" | "library" | "resources" | "members" | "settings" | "analytics" | "automations"
   >("chat");
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
@@ -518,6 +551,14 @@ function App() {
       const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
       const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
       const [isPendingPurchasesBannerDismissed, setIsPendingPurchasesBannerDismissed] = useState(false);
+      const [isRedeemingClaim, setIsRedeemingClaim] = useState(false);
+      const [, setRedeemClaimError] = useState<string | null>(null);
+      const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
+      const [isLoadingBuilderBilling, setIsLoadingBuilderBilling] = useState(false);
+      const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
+      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
+      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
+      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
 
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
@@ -544,7 +585,7 @@ function App() {
 		  const [communities, setCommunities] = useState<CommunityRecord[]>([]);
 		  const [communitiesLoadError, setCommunitiesLoadError] = useState<string | null>(null);
 		  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
-		  const [, setCommunityRoleById] = useState<Record<string, string>>({});
+		  const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
 		  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
 		  const [, setIsLoadingCommunityAccess] = useState(false);
 		  const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
@@ -557,34 +598,44 @@ function App() {
 			  const [inviteCreateError, setInviteCreateError] = useState<string | null>(null);
 			  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
 
-		      const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
-		        total_members: null,
-		        new_members_window: null,
-		        active_members_window: null,
-		        retention_window: null,
-		        total_resources: null,
-		        resources_added_window: null,
-		      });
-		      const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<AnalyticsPoint[]>([]);
-		      const [communityAnalyticsChartMode, setCommunityAnalyticsChartMode] = useState<AnalyticsChartMode>("members");
-		      const [communityRevenueSeries, setCommunityRevenueSeries] = useState<AnalyticsPoint[]>([]);
-		      const [communityRevenueMeta, setCommunityRevenueMeta] = useState<{ currency: string; currency_decimals: number } | null>(
-		        null
-		      );
-		      const [communityRevenueError, setCommunityRevenueError] = useState<string | null>(null);
-		      const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
-		        try {
-		          const stored = localStorage.getItem("arx-community-analytics-range");
-		          if (stored && ["7d", "30d", "90d", "1y", "all"].includes(stored)) {
-	            return stored as AnalyticsRange;
-	          }
-	        } catch {
-	          // ignore
-	        }
-	        return "30d";
-	      });
-	      const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
-	      const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
+  const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
+    total_members: null,
+    new_members_window: null,
+    active_members_window: null,
+    retention_window: null,
+    total_resources: null,
+    resources_added_window: null,
+  });
+  const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<AnalyticsPoint[]>([]);
+  const [communityAnalyticsChartMode, setCommunityAnalyticsChartMode] = useState<AnalyticsChartMode>("members");
+  const [communityRevenueSeries, setCommunityRevenueSeries] = useState<AnalyticsPoint[]>([]);
+  const [communityRevenueMeta, setCommunityRevenueMeta] = useState<{ currency: string; currency_decimals: number } | null>(null);
+  const [communityRevenueError, setCommunityRevenueError] = useState<string | null>(null);
+  const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
+    try {
+      const stored = localStorage.getItem("arx-community-analytics-range");
+      if (stored && ["7d", "30d", "90d", "1y", "all"].includes(stored)) {
+        return stored as AnalyticsRange;
+      }
+    } catch {
+      // ignore
+    }
+    return "30d";
+  });
+  const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
+  const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
+
+  const [automationEndpoints, setAutomationEndpoints] = useState<AutomationEndpoint[]>([]);
+  const [automationDeliveries, setAutomationDeliveries] = useState<AutomationDelivery[]>([]);
+  const [isLoadingAutomations, setIsLoadingAutomations] = useState(false);
+  const [automationError, setAutomationError] = useState<string | null>(null);
+  const [isAutomationCreateOpen, setIsAutomationCreateOpen] = useState(false);
+  const [automationNameInput, setAutomationNameInput] = useState("");
+  const [automationUrlInput, setAutomationUrlInput] = useState("");
+  const [automationIsEnabledInput, setAutomationIsEnabledInput] = useState(true);
+  const [automationSelectedEventTypes, setAutomationSelectedEventTypes] = useState<string[]>([]);
+  const [automationRevealSecret, setAutomationRevealSecret] = useState<{ label: string; secret: string } | null>(null);
+  const [automationNotice, setAutomationNotice] = useState<string | null>(null);
 
 			  const [communitySettingsName, setCommunitySettingsName] = useState("");
 			  const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
@@ -1388,6 +1439,7 @@ function App() {
 	    void maybeAutoJoinPendingInvites(supabaseSession);
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
       void loadPendingPurchaseClaims(supabaseSession);
+      void loadBuilderBillingStatus(supabaseSession);
       scheduleOpenRouterKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
 
@@ -1400,7 +1452,24 @@ function App() {
       setPendingPurchaseClaims([]);
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
+      setBuilderBillingStatus(null);
+      setBuilderBillingError(null);
+      setIsLoadingBuilderBilling(false);
     }, [supabaseSession]);
+
+    useEffect(() => {
+      if (!supabaseSession) return;
+      if (isRedeemingClaim) return;
+      const token = (() => {
+        try {
+          return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
+        } catch {
+          return "";
+        }
+      })();
+      if (!token) return;
+      void redeemPurchaseClaim(token);
+    }, [supabaseSession, isRedeemingClaim]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
@@ -2438,12 +2507,27 @@ function App() {
         if (urls.length === 0) return;
 
         let newestInvite: string | null = null;
+        let newestClaimToken: string | null = null;
         for (const raw of urls) {
           let parsed: URL;
           try {
             parsed = new URL(raw);
           } catch {
             continue;
+          }
+
+          if (parsed.protocol === "arx:") {
+            const host = (parsed.hostname ?? "").toLowerCase();
+            const pathname = (parsed.pathname ?? "").toLowerCase();
+            const token = (parsed.searchParams.get("token") ?? parsed.searchParams.get("claim") ?? "").trim();
+            if ((host === "claim" || pathname === "/claim") && token) {
+              newestClaimToken = token;
+              try {
+                localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
+              } catch {
+                // ignore
+              }
+            }
           }
           const inviteKey = parsed.searchParams.get("invite") ?? parsed.searchParams.get("join");
           if (!inviteKey) continue;
@@ -2459,11 +2543,22 @@ function App() {
           }
         }
 
-        if (!newestInvite) return;
-        await loadPendingInvites();
-        setActivePage("workspace");
-        setActiveView("home");
-        setActiveInviteGateKey(newestInvite);
+        if (newestClaimToken) {
+          const session = supabaseSessionRef.current;
+          if (session) {
+            void redeemPurchaseClaim(newestClaimToken);
+          } else {
+            setAuthError("Sign in to claim access.");
+            void handleSignIn();
+          }
+        }
+
+        if (newestInvite) {
+          await loadPendingInvites();
+          setActivePage("workspace");
+          setActiveView("home");
+          setActiveInviteGateKey(newestInvite);
+        }
       }
     );
 
@@ -3279,6 +3374,51 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
+  function getPublicAppBaseUrl(): string | null {
+    const raw =
+      (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined) ??
+      (import.meta.env.VITE_APP_URL as string | undefined) ??
+      "";
+    const trimmed = raw.trim().replace(/\/+$/, "");
+    if (trimmed && /^https?:\/\//i.test(trimmed)) return trimmed;
+
+    const origin = window.location.origin.trim().replace(/\/+$/, "");
+    if (origin && /^https?:\/\//i.test(origin)) return origin;
+
+    return null;
+  }
+
+  async function openExternalUrl(url: string): Promise<boolean> {
+    const trimmed = url.trim();
+    if (!trimmed) return false;
+    try {
+      await invoke("open_external_url_cmd", { url: trimmed });
+      return true;
+    } catch {
+      try {
+        window.open(trimmed, "_blank", "noopener,noreferrer");
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  async function openCommunityLandingExternal(community: CommunityRecord): Promise<void> {
+    const base = getPublicAppBaseUrl();
+    if (!base) {
+      setDiscoverError("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable checkout links.");
+      return;
+    }
+    const slug = (community.slug ?? community.id ?? "").trim();
+    if (!slug) {
+      setDiscoverError("Missing community slug.");
+      return;
+    }
+    const ok = await openExternalUrl(`${base}/c/${encodeURIComponent(slug)}`);
+    if (!ok) setDiscoverError("Failed to open the join page.");
+  }
+
   function buildInviteLink(community: CommunityRecord | null, inviteCode: string): string | null {
     const base = getPublicShareBaseUrl();
     if (!base) return null;
@@ -3709,6 +3849,62 @@ function isModelReady(modelId: string): boolean {
     return await fetch(url, { ...init, headers });
   }
 
+  async function redeemPurchaseClaim(token: string): Promise<void> {
+    const trimmed = token.trim();
+    if (!trimmed) return;
+
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      try {
+        localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, trimmed);
+      } catch {
+        // ignore
+      }
+      setAuthError("Sign in to claim access.");
+      await handleSignIn();
+      return;
+    }
+
+    setIsRedeemingClaim(true);
+    setRedeemClaimError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/redeem_purchase_claim`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_token: trimmed }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<{ community_id: string }>;
+      const communityId = rows[0]?.community_id;
+      if (!communityId) throw new Error("Redeem succeeded but community missing.");
+      try {
+        localStorage.removeItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY);
+      } catch {
+        // ignore
+      }
+
+      await loadCommunities(session);
+      setActivePage("community");
+      setActiveCommunityId(communityId);
+      setCommunityTab("chat");
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to claim access.";
+      setRedeemClaimError(message);
+    } finally {
+      setIsRedeemingClaim(false);
+    }
+  }
+
   async function loadPendingPurchaseClaims(session: SupabaseSession): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) return;
@@ -3738,6 +3934,168 @@ function isModelReady(modelId: string): boolean {
       setPendingPurchaseClaims([]);
     } finally {
       setIsLoadingPendingPurchases(false);
+    }
+  }
+
+  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingBuilderBilling(true);
+    setBuilderBillingError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/get_builder_billing_status`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as BuilderBillingStatus[];
+      setBuilderBillingStatus(rows[0] ?? null);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load billing status.";
+      setBuilderBillingError(message);
+      setBuilderBillingStatus(null);
+    } finally {
+      setIsLoadingBuilderBilling(false);
+    }
+  }
+
+  async function startBuilderPlanCheckout(tier: "builder" | "pro"): Promise<void> {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to upgrade.");
+      await handleSignIn();
+      return;
+    }
+
+    setBuilderBillingError(null);
+    setIsStartingBuilderCheckout(true);
+    try {
+      const origin = getPublicAppBaseUrl();
+      if (!origin) throw new Error("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable billing links.");
+      const successUrl = `${origin}/?billing=success`;
+      const cancelUrl = `${origin}/?billing=cancel`;
+
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/builder_checkout_start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tier, success_url: successUrl, cancel_url: cancelUrl }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const data = (await response.json()) as { checkout_url?: unknown };
+      const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
+      if (!checkoutUrl) throw new Error("Missing checkout_url.");
+      const ok = await openExternalUrl(checkoutUrl);
+      if (!ok) throw new Error("Failed to open checkout.");
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to start checkout.";
+      setBuilderBillingError(message);
+    } finally {
+      setIsStartingBuilderCheckout(false);
+    }
+  }
+
+  async function openBuilderBillingPortal(): Promise<void> {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to manage billing.");
+      await handleSignIn();
+      return;
+    }
+
+    setBuilderBillingError(null);
+    setIsStartingBuilderPortal(true);
+    try {
+      const origin = getPublicAppBaseUrl();
+      const returnUrl = origin ? `${origin}/?billing=return` : window.location.href;
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/builder_billing_portal`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ return_url: returnUrl }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const data = (await response.json()) as { url?: unknown };
+      const portalUrl = typeof data?.url === "string" ? data.url : "";
+      if (!portalUrl) throw new Error("Missing portal URL.");
+      const ok = await openExternalUrl(portalUrl);
+      if (!ok) throw new Error("Failed to open billing portal.");
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to open billing portal.";
+      setBuilderBillingError(message);
+    } finally {
+      setIsStartingBuilderPortal(false);
+    }
+  }
+
+  async function startConnectOnboarding(): Promise<void> {
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) {
+      setAuthError("Sign in to set up payouts.");
+      await handleSignIn();
+      return;
+    }
+
+    setBuilderBillingError(null);
+    setIsStartingConnectOnboarding(true);
+    try {
+      const origin = getPublicAppBaseUrl();
+      const returnUrl = origin ? `${origin}/?payouts=return` : window.location.href;
+      const refreshUrl = origin ? `${origin}/?payouts=refresh` : window.location.href;
+      const response = await fetchWithSupabaseAuth(
+        `${url}/functions/v1/connect_onboard_start`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ return_url: returnUrl, refresh_url: refreshUrl }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const data = (await response.json()) as { url?: unknown };
+      const linkUrl = typeof data?.url === "string" ? data.url : "";
+      if (!linkUrl) throw new Error("Missing onboarding URL.");
+      const ok = await openExternalUrl(linkUrl);
+      if (!ok) throw new Error("Failed to open onboarding.");
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to start payout setup.";
+      setBuilderBillingError(message);
+    } finally {
+      setIsStartingConnectOnboarding(false);
     }
   }
 
@@ -4007,12 +4365,7 @@ function isModelReady(modelId: string): boolean {
 	    setDiscoverError(null);
 
 	    if (!supabaseSession) {
-	      try {
-	        localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, community.id);
-	      } catch {
-	        // ignore
-	      }
-	      await handleSignIn();
+	      await openCommunityLandingExternal(community);
 	      return;
 	    }
 
@@ -4058,6 +4411,10 @@ function isModelReady(modelId: string): boolean {
 	          : error instanceof Error
 	            ? error.message
 	            : "Failed to join community.";
+	      if (message.toLowerCase().includes("payment required")) {
+	        await openCommunityLandingExternal(community);
+	        return;
+	      }
 	      setDiscoverError(message);
 	    } finally {
 	      setJoiningDiscoverCommunityId(null);
@@ -4943,10 +5300,244 @@ function isModelReady(modelId: string): boolean {
 	                ? error.message
 	                : "Failed to load analytics.";
 	          setCommunityAnalyticsError(message);
-	        } finally {
-	          setIsLoadingCommunityAnalytics(false);
-	        }
-	      }
+        } finally {
+          setIsLoadingCommunityAnalytics(false);
+        }
+      }
+
+      async function loadCommunityAutomations(communityId: string, session: SupabaseSession) {
+        const url = getSupabaseUrl();
+        if (!url) return;
+        setIsLoadingAutomations(true);
+        setAutomationError(null);
+
+        try {
+          const [endpointsRes, deliveriesRes] = await Promise.all([
+            fetchWithSupabaseAuth(
+              `${url}/rest/v1/rpc/list_automation_endpoints`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ p_community_id: communityId }),
+              },
+              session,
+            ),
+            fetchWithSupabaseAuth(
+              `${url}/rest/v1/rpc/list_automation_deliveries`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ p_community_id: communityId, p_limit: 50 }),
+              },
+              session,
+            ),
+          ]);
+
+          if (!endpointsRes.ok) throw new Error(await readSupabaseError(endpointsRes));
+          if (!deliveriesRes.ok) throw new Error(await readSupabaseError(deliveriesRes));
+
+          const endpoints = (await endpointsRes.json()) as AutomationEndpoint[];
+          const deliveries = (await deliveriesRes.json()) as AutomationDelivery[];
+          setAutomationEndpoints(endpoints);
+          setAutomationDeliveries(deliveries);
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to load automations.";
+          setAutomationError(message);
+        } finally {
+          setIsLoadingAutomations(false);
+        }
+      }
+
+      function resetAutomationForm() {
+        setAutomationNameInput("");
+        setAutomationUrlInput("");
+        setAutomationIsEnabledInput(true);
+        setAutomationSelectedEventTypes(["community.member_joined", "community.member_left"]);
+      }
+
+      async function handleCreateAutomationEndpoint() {
+        if (!supabaseSession || !activeCommunityId) return;
+        const url = getSupabaseUrl();
+        if (!url) {
+          setAutomationError("Missing Supabase URL.");
+          return;
+        }
+
+        setAutomationError(null);
+        setAutomationNotice(null);
+
+        const name = automationNameInput.trim();
+        const hookUrl = automationUrlInput.trim();
+        if (!name) {
+          setAutomationError("Name is required.");
+          return;
+        }
+                if (!hookUrl) {
+                  setAutomationError("Webhook URL is required.");
+                  return;
+                }
+                if (automationSelectedEventTypes.length === 0) {
+                  setAutomationError("Select at least one event.");
+                  return;
+                }
+
+                try {
+                  const response = await fetchWithSupabaseAuth(
+                    `${url}/rest/v1/rpc/create_automation_endpoint`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        p_community_id: activeCommunityId,
+                        p_name: name,
+                        p_url: hookUrl,
+                        p_event_types: automationSelectedEventTypes,
+                        p_include_email: false,
+                        p_is_enabled: automationIsEnabledInput,
+                      }),
+                    },
+                    supabaseSession,
+                  );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          const rows = (await response.json()) as Array<AutomationEndpoint & { signing_secret: string | null }>;
+          const created = rows[0];
+          if (!created?.id || !created.signing_secret) throw new Error("Failed to create webhook.");
+
+          setAutomationRevealSecret({ label: `${created.name} signing secret`, secret: created.signing_secret });
+          setAutomationNotice("Webhook created. Copy the signing secret now.");
+          setIsAutomationCreateOpen(false);
+          resetAutomationForm();
+          await loadCommunityAutomations(activeCommunityId, supabaseSession);
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to create webhook.";
+          setAutomationError(message);
+        }
+      }
+
+      async function handleToggleAutomationEndpointEnabled(endpoint: AutomationEndpoint) {
+        if (!supabaseSession) return;
+        const url = getSupabaseUrl();
+        if (!url) return;
+        setAutomationError(null);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/update_automation_endpoint`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                p_endpoint_id: endpoint.id,
+                p_is_enabled: !endpoint.is_enabled,
+              }),
+            },
+            supabaseSession,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          setAutomationEndpoints((prev) =>
+            prev.map((row) => (row.id === endpoint.id ? { ...row, is_enabled: !endpoint.is_enabled } : row)),
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to update webhook.";
+          setAutomationError(message);
+        }
+      }
+
+      async function handleRotateAutomationEndpointSecret(endpoint: AutomationEndpoint) {
+        if (!supabaseSession) return;
+        const url = getSupabaseUrl();
+        if (!url) return;
+        setAutomationError(null);
+        setAutomationNotice(null);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/rotate_automation_endpoint_secret`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ p_endpoint_id: endpoint.id }),
+            },
+            supabaseSession,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          const rows = (await response.json()) as Array<{ signing_secret: string | null }>;
+          const secret = rows[0]?.signing_secret ?? null;
+          if (!secret) throw new Error("Failed to rotate secret.");
+          setAutomationRevealSecret({ label: `${endpoint.name} signing secret`, secret });
+          setAutomationNotice("Secret rotated. Update your webhook receiver.");
+          if (activeCommunityId) await loadCommunityAutomations(activeCommunityId, supabaseSession);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to rotate secret.";
+          setAutomationError(message);
+        }
+      }
+
+      async function handleDeleteAutomationEndpoint(endpoint: AutomationEndpoint) {
+        if (!supabaseSession) return;
+        if (!window.confirm(`Delete webhook “${endpoint.name}”?`)) return;
+        const url = getSupabaseUrl();
+        if (!url) return;
+        setAutomationError(null);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/delete_automation_endpoint`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ p_endpoint_id: endpoint.id }),
+            },
+            supabaseSession,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          setAutomationEndpoints((prev) => prev.filter((row) => row.id !== endpoint.id));
+          setAutomationNotice("Webhook deleted.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to delete webhook.";
+          setAutomationError(message);
+        }
+      }
+
+      async function handleTestAutomationEndpoint(endpoint: AutomationEndpoint) {
+        if (!supabaseSession) return;
+        const url = getSupabaseUrl();
+        if (!url) return;
+        setAutomationError(null);
+        setAutomationNotice(null);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/functions/v1/automations_test`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint_id: endpoint.id }),
+            },
+            supabaseSession,
+          );
+          const data = (await response.json().catch(() => null)) as
+            | { ok: true; delivered: boolean; response_code: number | null; error: string | null }
+            | { ok: false; error?: string }
+            | null;
+          if (!response.ok || !data || data.ok !== true) {
+            throw new Error((data as { error?: string } | null)?.error ?? "Test failed.");
+          }
+          setAutomationNotice(
+            data.delivered ? `Test delivered (${data.response_code ?? "ok"}).` : `Test failed: ${data.error ?? "unknown"}`,
+          );
+          if (activeCommunityId) await loadCommunityAutomations(activeCommunityId, supabaseSession);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Test failed.";
+          setAutomationError(message);
+        }
+      }
 
 			  async function handleSetCommunityMemberRole(userId: string, role: string) {
 			    if (!supabaseSession || !activeCommunityId) return;
@@ -5865,45 +6456,58 @@ function isModelReady(modelId: string): boolean {
 		  const isActiveCommunityOwner = Boolean(activeCommunityAccess?.is_owner);
 		  const canViewActiveCommunitySettings = Boolean(activeCommunityAccess?.can_view);
 		  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
-		  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
+			  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
 			  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
 			  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
 			  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
+			  const canViewActiveCommunityAutomations = canManageMembersActiveCommunity;
 
-		      useEffect(() => {
-		        if (activePage !== "community" || communityTab !== "analytics") return;
-			        if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAnalytics) {
-			          setCommunityAnalyticsSummary({
-			            total_members: null,
-			            new_members_window: null,
-			            active_members_window: null,
-			            retention_window: null,
-			            total_resources: null,
-			            resources_added_window: null,
-			          });
-			          setCommunityAnalyticsSeries([]);
-			          setCommunityRevenueSeries([]);
-			          setCommunityRevenueMeta(null);
-			          setCommunityRevenueError(null);
-			          setCommunityAnalyticsError(null);
-			          setIsLoadingCommunityAnalytics(false);
-			          return;
-			        }
-		        void loadCommunityAnalytics(
-		          activeCommunityId,
-		          supabaseSession,
-		          communityAnalyticsRange,
-		          activeCommunity?.created_at ?? null
-		        );
-		      }, [
-		        activePage,
-		        communityTab,
-		        supabaseSession,
-		        activeCommunityId,
-		        canViewActiveCommunityAnalytics,
-		        communityAnalyticsRange,
-		        activeCommunity?.created_at,
-		      ]);
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "analytics") return;
+    if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAnalytics) {
+      setCommunityAnalyticsSummary({
+        total_members: null,
+        new_members_window: null,
+        active_members_window: null,
+        retention_window: null,
+        total_resources: null,
+        resources_added_window: null,
+      });
+      setCommunityAnalyticsSeries([]);
+      setCommunityRevenueSeries([]);
+      setCommunityRevenueMeta(null);
+      setCommunityRevenueError(null);
+      setCommunityAnalyticsError(null);
+      setIsLoadingCommunityAnalytics(false);
+      return;
+    }
+    void loadCommunityAnalytics(
+      activeCommunityId,
+      supabaseSession,
+      communityAnalyticsRange,
+      activeCommunity?.created_at ?? null
+    );
+  }, [
+    activePage,
+    communityTab,
+    supabaseSession,
+    activeCommunityId,
+    canViewActiveCommunityAnalytics,
+    communityAnalyticsRange,
+    activeCommunity?.created_at,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "automations") return;
+    if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAutomations) {
+      setAutomationEndpoints([]);
+      setAutomationDeliveries([]);
+      setAutomationError(null);
+      setIsLoadingAutomations(false);
+      return;
+    }
+    void loadCommunityAutomations(activeCommunityId, supabaseSession);
+  }, [activePage, communityTab, supabaseSession, activeCommunityId, canViewActiveCommunityAutomations]);
 
 	      const libraryResources = useMemo(
 	        () => communityResources.filter((resource) => Boolean(resource.pinned)),
@@ -7473,25 +8077,49 @@ function isModelReady(modelId: string): boolean {
 	                Settings
 	              </button>
 	              {canViewActiveCommunityAnalytics && (
-	                <button
-	                  className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
-	                  onClick={() => {
-	                    setActivePage("community");
-	                    setActiveView("home");
-	                    setCommunityTab("analytics");
-	                  }}
-	                >
-	                  <span className="nav-icon">
-	                    <svg viewBox="0 0 24 24">
-	                      <path d="M4 19V5" />
-	                      <path d="M4 19h16" />
-	                      <path d="M8 15v-5" />
-	                      <path d="M12 15v-8" />
-	                      <path d="M16 15v-3" />
-	                    </svg>
-	                  </span>
-	                  Analytics
-	                </button>
+	                <>
+	                  <button
+	                    className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
+	                    onClick={() => {
+	                      setActivePage("community");
+	                      setActiveView("home");
+	                      setCommunityTab("analytics");
+	                    }}
+	                  >
+	                    <span className="nav-icon">
+	                      <svg viewBox="0 0 24 24">
+	                        <path d="M4 19V5" />
+	                        <path d="M4 19h16" />
+	                        <path d="M8 15v-5" />
+	                        <path d="M12 15v-8" />
+	                        <path d="M16 15v-3" />
+	                      </svg>
+	                    </span>
+	                    Analytics
+	                  </button>
+	                  {canViewActiveCommunityAutomations && (
+	                    <button
+	                      className={communityTab === "automations" ? "nav-item active" : "nav-item"}
+	                      onClick={() => {
+	                        setActivePage("community");
+	                        setActiveView("home");
+	                        setCommunityTab("automations");
+	                      }}
+	                    >
+	                      <span className="nav-icon">
+	                        <svg viewBox="0 0 24 24">
+	                          <circle cx="6" cy="6" r="2" />
+	                          <circle cx="18" cy="6" r="2" />
+	                          <circle cx="12" cy="18" r="2" />
+	                          <path d="M8 6h8" />
+	                          <path d="M7.4 7.4l3.7 8.1" />
+	                          <path d="M16.6 7.4l-3.7 8.1" />
+	                        </svg>
+	                      </span>
+	                      Automations
+	                    </button>
+	                  )}
+	                </>
 	              )}
 	            </>
 	          )}
@@ -7657,31 +8285,77 @@ function isModelReady(modelId: string): boolean {
                       <option value="private">Private</option>
                       <option value="unlisted">Unlisted</option>
                       <option value="public">Public</option>
-                    </select>
-                  </label>
-                  {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
-                </div>
+                  </select>
+                </label>
+                {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
+                {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
               </div>
-              <div className="modal-footer">
-                <div className="create-community-actions">
-                  {supabaseSession ? (
+            </div>
+            <div className="modal-footer">
+              <div className="create-community-actions">
+                {(() => {
+                  const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+                  const max = builderBillingStatus?.max_communities ?? 0;
+                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+                  const needsPlan = Boolean(supabaseSession && tier === "free");
+                  const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
+                  const canCreate = Boolean(supabaseSession && !needsPlan && !limitReached);
+                  if (!supabaseSession) {
+                    return (
+                      <button className="create-community-primary" onClick={() => void handleSignIn()}>
+                        Sign in to create
+                      </button>
+                    );
+                  }
+                  if (needsPlan) {
+                    return (
+                      <>
+                        <button
+                          className="create-community-primary"
+                          type="button"
+                          onClick={() => void startBuilderPlanCheckout("builder")}
+                          disabled={isStartingBuilderCheckout}
+                        >
+                          {isStartingBuilderCheckout ? "Starting…" : "Starter ($20/mo)"}
+                        </button>
+                        <button
+                          className="create-community-primary"
+                          type="button"
+                          onClick={() => void startBuilderPlanCheckout("pro")}
+                          disabled={isStartingBuilderCheckout}
+                        >
+                          {isStartingBuilderCheckout ? "Starting…" : "Pro ($100/mo)"}
+                        </button>
+                      </>
+                    );
+                  }
+                  if (limitReached) {
+                    return (
+                      <button
+                        className="create-community-primary"
+                        type="button"
+                        onClick={() => void openBuilderBillingPortal()}
+                        disabled={isStartingBuilderPortal}
+                      >
+                        {isStartingBuilderPortal ? "Opening…" : "Upgrade to Pro"}
+                      </button>
+                    );
+                  }
+                  return (
                     <button
                       className="create-community-primary"
                       onClick={() => void handleCreateCommunity()}
-                      disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
+                      disabled={!canCreate || isCreatingCommunity || createCommunityName.trim().length === 0}
                     >
                       {isCreatingCommunity ? "Creating..." : "Create community"}
                     </button>
-                  ) : (
-                    <button className="create-community-primary" onClick={() => void handleSignIn()}>
-                      Sign in to create
-                    </button>
-                  )}
-                  <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
-                    Cancel
-                  </button>
-                </div>
+                  );
+                })()}
+                <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
+                  Cancel
+                </button>
               </div>
+            </div>
             </div>
           </div>
         )}
@@ -10225,6 +10899,254 @@ function isModelReady(modelId: string): boolean {
 		                )}
 		              </div>
 		            )}
+
+	            {activePage === "community" && communityTab === "automations" && (
+	              <div className="settings-panel community-settings-panel">
+	                {!activeCommunity ? (
+	                  <div className="chat-empty">Select a community to view automations.</div>
+	                ) : !supabaseSession ? (
+	                  <div className="chat-empty">Sign in to view community automations.</div>
+	                ) : !canViewActiveCommunityAutomations ? (
+	                  <div className="chat-empty">Only owners and admins can manage automations.</div>
+	                ) : (
+	                  <>
+	                    {automationNotice && (
+	                      <div className="success-toast" style={{ marginBottom: 12 }}>
+	                        {automationNotice}
+	                      </div>
+	                    )}
+	                    {automationError && (
+	                      <div className="auth-error" style={{ marginBottom: 12 }}>
+	                        {automationError}
+	                      </div>
+	                    )}
+	                    {automationRevealSecret && (
+	                      <div className="analytics-chart-card" style={{ marginBottom: 12 }}>
+	                        <div className="analytics-chart-header">
+	                          <div className="analytics-chart-title">{automationRevealSecret.label}</div>
+	                          <button type="button" className="secondary" onClick={() => setAutomationRevealSecret(null)}>
+	                            Close
+	                          </button>
+	                        </div>
+	                        <div className="tool-output">{automationRevealSecret.secret}</div>
+	                        <div className="model-note">
+	                          Copy this secret now. You can rotate it later, but it won't be shown again.
+	                        </div>
+	                      </div>
+	                    )}
+	                    <div className="settings-section">
+	                      <div className="settings-section-title">Presets</div>
+	                      <div className="analytics-chart-card">
+	                        <div className="analytics-chart-header">
+	                          <div className="analytics-chart-title">BrandOS</div>
+	                          <button type="button" disabled title="Coming soon">
+	                            Connect
+	                          </button>
+	                        </div>
+	                        <div className="model-note">
+	                          Attribution + revenue tracking (webhooks with optional email, coming soon).
+	                        </div>
+	                      </div>
+	                    </div>
+	                    <div className="settings-section">
+	                      <div className="settings-section-title">Webhooks</div>
+	                      <div className="analytics-chart-card">
+	                        <div className="analytics-chart-header">
+	                          <div className="analytics-chart-title">
+	                            {isAutomationCreateOpen ? "New webhook" : "Webhook endpoints"}
+	                          </div>
+	                          <div className="analytics-chart-header-right">
+	                            {isAutomationCreateOpen ? (
+	                              <>
+	                                <button
+	                                  type="button"
+	                                  className="secondary"
+	                                  onClick={() => {
+	                                    setIsAutomationCreateOpen(false);
+	                                    resetAutomationForm();
+	                                  }}
+	                                >
+	                                  Cancel
+	                                </button>
+	                                <button type="button" onClick={() => void handleCreateAutomationEndpoint()}>
+	                                  Create
+	                                </button>
+	                              </>
+	                            ) : (
+	                              <button
+	                                type="button"
+	                                onClick={() => {
+	                                  setAutomationNotice(null);
+	                                  setAutomationError(null);
+	                                  setAutomationRevealSecret(null);
+	                                  resetAutomationForm();
+	                                  setIsAutomationCreateOpen(true);
+	                                }}
+	                              >
+	                                Add
+	                              </button>
+	                            )}
+	                          </div>
+	                        </div>
+	                        {isAutomationCreateOpen && (
+	                          <div style={{ marginBottom: 14 }}>
+	                            <div className="invite-create-row invite-create-row-custom">
+	                              <label className="create-community-field">
+	                                <span>Name</span>
+	                                <input
+	                                  type="text"
+	                                  placeholder="Zapier"
+	                                  value={automationNameInput}
+	                                  onChange={(event) => setAutomationNameInput(event.target.value)}
+	                                />
+	                              </label>
+	                              <label className="create-community-field">
+	                                <span>Webhook URL</span>
+	                                <input
+	                                  type="text"
+	                                  placeholder="https://hooks.zapier.com/..."
+	                                  value={automationUrlInput}
+	                                  onChange={(event) => setAutomationUrlInput(event.target.value)}
+	                                />
+	                              </label>
+	                            </div>
+
+	                            <div className="model-note" style={{ marginTop: 10 }}>
+	                              Select which events to send. Email captured includes email.
+	                            </div>
+	                            <div className="model-list">
+	                              {[
+	                                { id: "identity.email_captured", label: "Email captured" },
+	                                { id: "community.member_joined", label: "Member joined" },
+	                                { id: "community.member_left", label: "Member churned" },
+	                              ].map((option) => (
+	                                <label key={option.id} className="model-toggle">
+	                                  <input
+	                                    type="checkbox"
+	                                    checked={automationSelectedEventTypes.includes(option.id)}
+	                                    onChange={(event) => {
+	                                      const checked = event.target.checked;
+	                                      setAutomationSelectedEventTypes((prev) => {
+	                                        if (checked) return Array.from(new Set([...prev, option.id]));
+	                                        return prev.filter((value) => value !== option.id);
+	                                      });
+	                                    }}
+	                                  />
+	                                  <span>{option.label}</span>
+	                                </label>
+	                              ))}
+	                              <label className="model-toggle">
+	                                <input
+	                                  type="checkbox"
+	                                  checked={automationIsEnabledInput}
+	                                  onChange={(event) => setAutomationIsEnabledInput(event.target.checked)}
+	                                />
+	                                <span>Enabled</span>
+	                              </label>
+	                            </div>
+	                          </div>
+	                        )}
+
+	                        {isLoadingAutomations ? (
+	                          <div className="chat-empty">Loading…</div>
+	                        ) : automationEndpoints.length === 0 ? (
+	                          <div className="model-note">No webhooks yet.</div>
+	                        ) : (
+	                          <div className="invite-list">
+	                            {automationEndpoints.map((endpoint) => {
+	                              const statusClass = endpoint.is_enabled ? "active" : "revoked";
+	                              const statusText = endpoint.is_enabled ? "Enabled" : "Disabled";
+	                              const eventLabels: Record<string, string> = {
+	                                "identity.email_captured": "Email captured",
+	                                "community.member_joined": "Member joined",
+	                                "community.member_left": "Member churned",
+	                              };
+	                              const events =
+	                                endpoint.event_types && endpoint.event_types.length > 0
+	                                  ? endpoint.event_types
+	                                  : ["community.member_joined", "community.member_left"];
+	                              const eventsLabel = events.map((eventType) => eventLabels[eventType] ?? eventType).join(", ");
+	                              return (
+	                                <div key={endpoint.id} className="invite-row">
+	                                  <div className="invite-main">
+	                                    <div className="invite-code">{endpoint.name}</div>
+	                                    <div className={`invite-status ${statusClass}`}>
+	                                      {statusText} • {eventsLabel} • {endpoint.url}
+	                                    </div>
+	                                  </div>
+	                                  <div className="invite-actions">
+	                                    <button type="button" onClick={() => void handleTestAutomationEndpoint(endpoint)}>
+	                                      Test
+	                                    </button>
+	                                    <button
+	                                      type="button"
+	                                      className="secondary"
+	                                      onClick={() => void handleToggleAutomationEndpointEnabled(endpoint)}
+	                                    >
+	                                      {endpoint.is_enabled ? "Disable" : "Enable"}
+	                                    </button>
+	                                    <button
+	                                      type="button"
+	                                      className="secondary"
+	                                      onClick={() => void handleRotateAutomationEndpointSecret(endpoint)}
+	                                    >
+	                                      Rotate secret
+	                                    </button>
+	                                    <button
+	                                      type="button"
+	                                      className="danger"
+	                                      onClick={() => void handleDeleteAutomationEndpoint(endpoint)}
+	                                    >
+	                                      Delete
+	                                    </button>
+	                                  </div>
+	                                </div>
+	                              );
+	                            })}
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
+	                    <div className="settings-section">
+	                      <div className="settings-section-title">Delivery log</div>
+	                      <div className="analytics-chart-card">
+	                        {isLoadingAutomations ? (
+	                          <div className="chat-empty">Loading…</div>
+	                        ) : automationDeliveries.length === 0 ? (
+	                          <div className="model-note">No deliveries yet.</div>
+	                        ) : (
+	                          <div className="invite-list">
+	                            {automationDeliveries.map((delivery) => {
+	                              const key = `${delivery.attempted_at}:${delivery.endpoint_name}:${delivery.event_type}`;
+	                              const statusClass = delivery.status === "success" ? "active" : "revoked";
+	                              const attemptedEpoch = Math.floor(new Date(delivery.attempted_at).getTime() / 1000);
+	                              const details = [
+	                                Number.isFinite(attemptedEpoch) ? formatRelativeTime(attemptedEpoch) : "",
+	                                delivery.endpoint_name,
+	                                delivery.response_code != null ? `HTTP ${delivery.response_code}` : null,
+	                              ]
+	                                .filter(Boolean)
+	                                .join(" • ");
+	                              return (
+	                                <div key={key} className="invite-row">
+	                                  <div className="invite-main">
+	                                    <div className="invite-code">{delivery.event_type}</div>
+	                                    <div className={`invite-status ${statusClass}`}>
+	                                      {details}
+	                                      {delivery.error ? ` • ${delivery.error}` : ""}
+	                                    </div>
+	                                  </div>
+	                                </div>
+	                              );
+	                            })}
+	                          </div>
+	                        )}
+	                      </div>
+	                    </div>
+	                  </>
+	                )}
+	              </div>
+	            )}
 	            {activePage === "community" && communityTab === "library" && (
 	              <div className="community-panel library-panel">
 	                {!activeCommunity && "Select a community."}
