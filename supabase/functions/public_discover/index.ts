@@ -68,7 +68,9 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
   const list = communityIds.map((id) => `"${id}"`).join(",");
   const res = await supabaseAdminFetch(
     `/rest/v1/plans?select=id,community_id,name,description,amount_base_units,currency,currency_decimals,billing_period,visibility,is_active` +
-      `&community_id=in.(${encodeURIComponent(list)})&is_active=eq.true&visibility=in.(public,unlisted)`,
+      `&community_id=in.(${encodeURIComponent(list)})` +
+      `&is_active=eq.true&visibility=in.(public,unlisted)` +
+      `&billing_period=in.(monthly,yearly)`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
@@ -76,8 +78,8 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
   const out: Record<string, PublicPlan> = {};
   for (const row of rows) {
     const cid = String(row.community_id ?? "").trim();
-    if (!cid || out[cid]) continue;
-    out[cid] = {
+    if (!cid) continue;
+    const next: PublicPlan = {
       id: row.id,
       name: row.name,
       description: row.description ?? null,
@@ -86,6 +88,14 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
       currency_decimals: row.currency_decimals,
       billing_period: row.billing_period,
     };
+    const current = out[cid];
+    if (!current) {
+      out[cid] = next;
+      continue;
+    }
+    if (current.billing_period !== "monthly" && next.billing_period === "monthly") {
+      out[cid] = next;
+    }
   }
   return out;
 }

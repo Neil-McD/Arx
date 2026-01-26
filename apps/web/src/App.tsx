@@ -102,6 +102,15 @@ type CommunityMember = {
   created_at: string;
 };
 
+type CommunityMemberSettings = {
+  community_id: string;
+  user_id: string;
+  muted: boolean;
+  muted_until: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type CommunityAccess = {
   community_id: string;
   user_id: string;
@@ -117,6 +126,26 @@ type CommunityAccess = {
   can_invite: boolean;
   can_manage_members: boolean;
 };
+
+type CommunityAnalyticsSummary = {
+  total_members: number | null;
+  new_members_window: number | null;
+  active_members_window: number | null;
+  retention_window: number | null;
+  total_resources: number | null;
+  resources_added_window: number | null;
+};
+
+type AnalyticsPoint = {
+  label: string;
+  value: number;
+};
+
+type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
+
+type AnalyticsChartMode = "members" | "revenue";
+
+type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
 
 type UserProfile = {
   user_id: string;
@@ -951,6 +980,214 @@ function formatChatTime(value: string): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${timeStr}`;
 }
 
+function parseContentRangeTotal(value: string | null): number | null {
+  if (!value) return null;
+  const parts = value.split("/");
+  if (parts.length !== 2) return null;
+  const total = Number(parts[1]);
+  return Number.isFinite(total) ? total : null;
+}
+
+function formatCount(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return value.toLocaleString();
+}
+
+function formatPercent(value: number | null, digits = 1): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function formatMoneyBaseUnits(
+  value: number | null,
+  currency: string | null,
+  currencyDecimals: number | null
+): string {
+  if (value == null || currency == null || currencyDecimals == null) return "—";
+  const major = value / Math.pow(10, currencyDecimals);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      maximumFractionDigits: currencyDecimals,
+    }).format(major);
+  } catch {
+    return major.toFixed(Math.min(Math.max(currencyDecimals, 0), 6));
+  }
+}
+
+function dateKeyLocal(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function AnalyticsLineChart({
+  points,
+  valueFormatter,
+}: {
+  points: AnalyticsPoint[];
+  valueFormatter?: (value: number) => string;
+}) {
+  const width = 720;
+  const height = 180;
+  const paddingX = 22;
+  const paddingY = 22;
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
+
+  if (!points || points.length === 0) {
+    return <div className="analytics-line-chart analytics-line-chart-empty">No trend data yet.</div>;
+  }
+
+  const maxValue = Math.max(1, ...points.map((point) => point.value));
+  const innerWidth = width - paddingX * 2;
+  const innerHeight = height - paddingY * 2;
+  const stepX = points.length > 1 ? innerWidth / (points.length - 1) : innerWidth;
+  const bottomY = height - paddingY;
+
+  const coords = points.map((point, index) => {
+    const x = paddingX + stepX * index;
+    const y = paddingY + innerHeight - (point.value / maxValue) * innerHeight;
+    return { x, y };
+  });
+
+  const linePath = coords
+    .map((coord, index) => `${index === 0 ? "M" : "L"}${coord.x.toFixed(2)},${coord.y.toFixed(2)}`)
+    .join(" ");
+  const areaPath = `M${coords[0].x.toFixed(2)},${bottomY.toFixed(2)} L ${coords
+    .map((coord) => `${coord.x.toFixed(2)},${coord.y.toFixed(2)}`)
+    .join(" L ")} L ${coords[coords.length - 1].x.toFixed(2)},${bottomY.toFixed(2)} Z`;
+
+  const startLabel = points[0]?.label ?? "";
+  const endLabel = points[points.length - 1]?.label ?? "";
+  const gradientId = "analyticsAreaGradient";
+  const activeIndex = hoverIndex == null ? null : Math.min(Math.max(hoverIndex, 0), points.length - 1);
+  const activeCoord = activeIndex == null ? null : coords[activeIndex];
+  const activePoint = activeIndex == null ? null : points[activeIndex];
+  const activeLabel = activePoint?.label ?? "";
+  const activeValue = activePoint?.value ?? null;
+
+  return (
+    <div className="analytics-line-chart">
+      <svg
+        className="analytics-chart-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Trend chart"
+        preserveAspectRatio="none"
+        onPointerLeave={() => setHoverIndex(null)}
+        onPointerMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const x = (event.clientX - rect.left) * (width / rect.width);
+          const idx = Math.round((x - paddingX) / stepX);
+          const clamped = Math.min(Math.max(idx, 0), points.length - 1);
+          setHoverIndex(clamped);
+        }}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent-gold)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--accent-gold)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {[0.25, 0.5, 0.75].map((ratio) => {
+          const y = paddingY + innerHeight * ratio;
+          return (
+            <line
+              key={ratio}
+              className="analytics-chart-grid"
+              x1={paddingX}
+              y1={y}
+              x2={width - paddingX}
+              y2={y}
+            />
+          );
+        })}
+
+        <path className="analytics-chart-area" d={areaPath} fill={`url(#${gradientId})`} />
+        <path className="analytics-chart-line" d={linePath} />
+
+        {activeCoord && (
+          <>
+            <line
+              className="analytics-chart-hover-line"
+              x1={activeCoord.x}
+              y1={paddingY}
+              x2={activeCoord.x}
+              y2={height - paddingY}
+            />
+            <circle className="analytics-chart-hover-dot" cx={activeCoord.x} cy={activeCoord.y} r="4" />
+          </>
+        )}
+
+        {coords.length > 0 && !activeCoord && (
+          <circle className="analytics-chart-dot" cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3" />
+        )}
+      </svg>
+      {activeCoord && (
+        <div
+          className="analytics-chart-tooltip"
+          style={{
+            left: `${(activeCoord.x / width) * 100}%`,
+            top: "50%",
+          }}
+        >
+          <div className="analytics-chart-tooltip-label">{activeLabel}</div>
+          <div className="analytics-chart-tooltip-value">
+            {activeValue == null ? "—" : formatValue(activeValue)}
+          </div>
+        </div>
+      )}
+      <div className="analytics-chart-axis">
+        <span>{startLabel}</span>
+        <span>{endLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function analyticsRangeLabel(range: AnalyticsRange): string {
+  switch (range) {
+    case "7d":
+      return "Last 7 days";
+    case "30d":
+      return "Last 30 days";
+    case "90d":
+      return "Last 90 days";
+    case "1y":
+      return "Last year";
+    case "all":
+      return "All time";
+    default:
+      return "Last 30 days";
+  }
+}
+
+function analyticsRangeDays(range: AnalyticsRange): number | null {
+  switch (range) {
+    case "7d":
+      return 7;
+    case "30d":
+      return 30;
+    case "90d":
+      return 90;
+    case "1y":
+      return 365;
+    default:
+      return null;
+  }
+}
+
+function analyticsRangeBucket(range: AnalyticsRange): "day" | "week" | "month" {
+  if (range === "7d" || range === "30d") return "day";
+  if (range === "90d") return "week";
+  return "month";
+}
+
 function shouldShowSender(
   messages: { sender_id: string; created_at: string; reply_to_id?: string | null }[],
   index: number
@@ -1211,7 +1448,8 @@ export default function App() {
   });
 
   const [publicCommunity, setPublicCommunity] = useState<CommunityRecord | null>(null);
-  const [publicCommunityPlan, setPublicCommunityPlan] = useState<PublicPlanSummary | null>(null);
+  const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
+  const [selectedPublicCommunityPlanId, setSelectedPublicCommunityPlanId] = useState<string | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
@@ -1352,16 +1590,55 @@ export default function App() {
   const [inviteCreateError, setInviteCreateError] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
 
+	  const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
+	    total_members: null,
+	    new_members_window: null,
+	    active_members_window: null,
+	    retention_window: null,
+	    total_resources: null,
+	    resources_added_window: null,
+	  });
+		  const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<AnalyticsPoint[]>([]);
+		  const [communityAnalyticsChartMode, setCommunityAnalyticsChartMode] = useState<AnalyticsChartMode>("members");
+		  const [communityRevenueSeries, setCommunityRevenueSeries] = useState<AnalyticsPoint[]>([]);
+		  const [communityRevenueMeta, setCommunityRevenueMeta] = useState<{ currency: string; currency_decimals: number } | null>(
+		    null
+		  );
+		  const [communityRevenueError, setCommunityRevenueError] = useState<string | null>(null);
+		  const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
+		    try {
+		      const stored = localStorage.getItem("arx-community-analytics-range");
+		      if (stored && ["7d", "30d", "90d", "1y", "all"].includes(stored)) {
+	        return stored as AnalyticsRange;
+	      }
+	    } catch {
+	      // ignore
+	    }
+	    return "30d";
+	  });
+	  const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
+	  const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
+
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("private");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
+  const [communitySettingsMonthlyPlanId, setCommunitySettingsMonthlyPlanId] = useState<string | null>(null);
+  const [communitySettingsYearlyPlanId, setCommunitySettingsYearlyPlanId] = useState<string | null>(null);
+  const [communitySettingsPricingMode, setCommunitySettingsPricingMode] = useState<CommunityPricingMode>("free");
+  const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
+  const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
   const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
   const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
   const [isSettingsBannerDragOver, setIsSettingsBannerDragOver] = useState(false);
   const [isSettingsAvatarDragOver, setIsSettingsAvatarDragOver] = useState(false);
+
+  const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
+  const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
+  const [communityMemberSettingsError, setCommunityMemberSettingsError] = useState<string | null>(null);
+  const [isLeavingCommunity, setIsLeavingCommunity] = useState(false);
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -1401,6 +1678,14 @@ export default function App() {
   useEffect(() => {
     sessionRef.current = supabaseSession;
   }, [supabaseSession]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("arx-community-analytics-range", communityAnalyticsRange);
+    } catch {
+      // ignore
+    }
+  }, [communityAnalyticsRange]);
 
   useEffect(() => {
     const handlePopState = () => setPublicRoute(readPublicRouteFromLocation());
@@ -1725,28 +2010,217 @@ export default function App() {
     }
   }, [activeCommunityId]);
 
-  useEffect(() => {
-    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
-    setCommunitySettingsError(null);
-    if (!current) {
-      setCommunitySettingsName("");
-      setCommunitySettingsSlug("");
-      setCommunitySettingsDescription("");
-      setCommunitySettingsVisibility("private");
-      setCommunitySettingsAvatarUrl(null);
-      setCommunitySettingsBannerUrl(null);
-      setCommunityInvites([]);
-      setInviteCreateError(null);
-      return;
-    }
-    setCommunitySettingsName(current.name ?? "");
-    setCommunitySettingsSlug(current.slug ?? "");
-    setCommunitySettingsDescription(current.description ?? "");
-    setCommunitySettingsVisibility(current.visibility ?? "private");
-    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
-    setCommunitySettingsBannerUrl(current.banner_url ?? null);
-    setInviteCreateError(null);
-  }, [activeCommunityId, communities]);
+	  useEffect(() => {
+	    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
+	    setCommunitySettingsError(null);
+	    setCommunityMemberSettingsError(null);
+	    if (!current) {
+	      setCommunitySettingsName("");
+	      setCommunitySettingsSlug("");
+	      setCommunitySettingsDescription("");
+	      setCommunitySettingsVisibility("private");
+	      setCommunitySettingsAvatarUrl(null);
+	      setCommunitySettingsBannerUrl(null);
+	      setCommunitySettingsMonthlyPlanId(null);
+	      setCommunitySettingsYearlyPlanId(null);
+	      setCommunitySettingsPriceUsdMonthly("");
+	      setCommunitySettingsPriceUsdYearly("");
+	      setCommunityMemberMuted(false);
+	      setCommunityInvites([]);
+	      setInviteCreateError(null);
+	      return;
+	    }
+	    setCommunitySettingsName(current.name ?? "");
+	    setCommunitySettingsSlug(current.slug ?? "");
+	    setCommunitySettingsDescription(current.description ?? "");
+	    setCommunitySettingsVisibility(current.visibility ?? "private");
+	    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
+	    setCommunitySettingsBannerUrl(current.banner_url ?? null);
+	    setInviteCreateError(null);
+	  }, [activeCommunityId, communities]);
+
+	  useEffect(() => {
+	    if (activePage !== "community" || communityTab !== "settings") return;
+	    if (!supabaseSession || !activeCommunityId) {
+	      setCommunityMemberMuted(false);
+	      return;
+	    }
+	    if (!activeCommunityAccess?.can_view) return;
+	    if (activeCommunityAccess.is_owner || activeCommunityAccess.can_manage_members) return;
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+
+	    setIsLoadingCommunityMemberSettings(true);
+	    setCommunityMemberSettingsError(null);
+	    (async () => {
+	      try {
+	        const response = await fetchWithSupabaseAuth(
+	          `${url}/rest/v1/community_member_settings?select=community_id,user_id,muted,muted_until,created_at,updated_at&community_id=eq.${encodeURIComponent(
+	            activeCommunityId
+	          )}&user_id=eq.${encodeURIComponent(supabaseSession.user.id)}&limit=1`,
+	          { method: "GET" },
+	          supabaseSession
+	        );
+	        if (!response.ok) {
+	          setCommunityMemberMuted(false);
+	          return;
+	        }
+	        const rows = (await response.json()) as CommunityMemberSettings[];
+	        const row = rows[0];
+	        setCommunityMemberMuted(Boolean(row?.muted));
+	      } catch {
+	        setCommunityMemberMuted(false);
+	      } finally {
+	        setIsLoadingCommunityMemberSettings(false);
+	      }
+	    })();
+	  }, [
+	    activePage,
+	    communityTab,
+	    supabaseSession,
+	    activeCommunityId,
+	    activeCommunityAccess?.can_view,
+	    activeCommunityAccess?.is_owner,
+	    activeCommunityAccess?.can_manage_members,
+	  ]);
+
+	  async function handleToggleCommunityMute(nextMuted: boolean) {
+	    if (!supabaseSession || !activeCommunityId) return;
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    setCommunityMemberSettingsError(null);
+	    setIsLoadingCommunityMemberSettings(true);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/community_member_settings?on_conflict=community_id,user_id`,
+	        {
+	          method: "POST",
+	          headers: {
+	            "Content-Type": "application/json",
+	            Prefer: "resolution=merge-duplicates,return=representation",
+	          },
+	          body: JSON.stringify({
+	            community_id: activeCommunityId,
+	            user_id: supabaseSession.user.id,
+	            muted: nextMuted,
+	            muted_until: null,
+	          }),
+	        },
+	        supabaseSession
+	      );
+	      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      setCommunityMemberMuted(nextMuted);
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to update settings.";
+	      setCommunityMemberSettingsError(message);
+	    } finally {
+	      setIsLoadingCommunityMemberSettings(false);
+	    }
+	  }
+
+	  async function handleLeaveCommunity() {
+	    if (!supabaseSession || !activeCommunityId) return;
+	    if (!confirm("Leave this community? You will lose access immediately.")) return;
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    setCommunityMemberSettingsError(null);
+	    setIsLeavingCommunity(true);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/rpc/leave_community`,
+	        {
+	          method: "POST",
+	          headers: { "Content-Type": "application/json" },
+	          body: JSON.stringify({ p_community_id: activeCommunityId }),
+	        },
+	        supabaseSession
+	      );
+	      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      const leavingId = activeCommunityId;
+	      setActiveCommunityId(null);
+	      setActivePage("workspace");
+	      setActiveView("home");
+	      setCommunityTab("chat");
+	      setCommunities((prev) => prev.filter((c) => c.id !== leavingId));
+	      await loadCommunities(supabaseSession);
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to leave community.";
+	      setCommunityMemberSettingsError(message);
+	    } finally {
+	      setIsLeavingCommunity(false);
+	    }
+	  }
+
+	  useEffect(() => {
+	    if (activePage !== "community" || communityTab !== "settings") return;
+	    if (!supabaseSession || !activeCommunityId) {
+	      setCommunitySettingsMonthlyPlanId(null);
+	      setCommunitySettingsYearlyPlanId(null);
+	      setCommunitySettingsPricingMode("free");
+	      setCommunitySettingsPriceUsdMonthly("");
+	      setCommunitySettingsPriceUsdYearly("");
+	      return;
+	    }
+	    if (!activeCommunityAccess?.can_manage_members) return;
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+
+	    (async () => {
+	      try {
+	        const response = await fetchWithSupabaseAuth(
+	          `${url}/rest/v1/rpc/get_community_pricing`,
+	          {
+	            method: "POST",
+	            headers: { "Content-Type": "application/json" },
+	            body: JSON.stringify({ p_community_id: activeCommunityId }),
+	          },
+	          supabaseSession
+	        );
+	        if (!response.ok) return;
+	        const rows = (await response.json()) as Array<{
+	          billing_period: string;
+	          plan_id: string;
+	          amount_base_units: number | string;
+	          currency: string;
+	          currency_decimals: number;
+	        }>;
+	        const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
+	        const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
+	        setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
+	        setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
+
+	        const formatPlanAmount = (row: typeof monthly): string => {
+	          if (!row) return "";
+	          const decimals = Number(row.currency_decimals ?? 2) || 2;
+	          const major = Number(row.amount_base_units ?? 0) / Math.pow(10, decimals);
+	          return Number.isFinite(major) ? major.toFixed(decimals).replace(/\.?0+$/, "") : "";
+	        };
+	        setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
+	        setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
+	        setCommunitySettingsPricingMode(
+	          monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
+	        );
+	      } catch {
+	        // ignore
+	      }
+	    })();
+	  }, [
+	    activePage,
+	    communityTab,
+	    supabaseSession,
+	    activeCommunityId,
+	    activeCommunityAccess?.can_manage_members,
+	  ]);
 
   useEffect(() => {
     if (createCommunitySlugEdited) return;
@@ -1902,11 +2376,13 @@ export default function App() {
   }, [supabaseSession, activeCommunityId]);
 
   const canInviteActiveCommunity = Boolean(activeCommunityAccess?.can_invite);
-  const canEditActiveCommunitySettings = Boolean(activeCommunityAccess?.is_owner);
+  const isActiveCommunityOwner = Boolean(activeCommunityAccess?.is_owner);
+  const canViewActiveCommunitySettings = Boolean(activeCommunityAccess?.can_view);
   const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
   const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
   const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
   const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
+  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "members") return;
@@ -1927,6 +2403,37 @@ export default function App() {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
     void loadCommunityMembers(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, activePage]);
+
+	  useEffect(() => {
+	    if (activePage !== "community" || communityTab !== "analytics") return;
+		    if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAnalytics) {
+		      setCommunityAnalyticsSummary({
+		        total_members: null,
+		        new_members_window: null,
+		        active_members_window: null,
+		        retention_window: null,
+		        total_resources: null,
+		        resources_added_window: null,
+		      });
+		      setCommunityAnalyticsSeries([]);
+		      setCommunityRevenueSeries([]);
+		      setCommunityRevenueMeta(null);
+		      setCommunityRevenueError(null);
+		      setCommunityAnalyticsError(null);
+		      setIsLoadingCommunityAnalytics(false);
+		      return;
+		    }
+	    const createdAt = communities.find((community) => community.id === activeCommunityId)?.created_at ?? null;
+	    void loadCommunityAnalytics(activeCommunityId, supabaseSession, communityAnalyticsRange, createdAt);
+	  }, [
+	    activePage,
+	    communityTab,
+	    supabaseSession,
+	    activeCommunityId,
+	    canViewActiveCommunityAnalytics,
+	    communityAnalyticsRange,
+	    communities,
+	  ]);
 
   function captureCommunityChatScrollAnchor(
     container: HTMLElement,
@@ -2630,7 +3137,8 @@ export default function App() {
     setIsLoadingPublicCommunity(true);
     setPublicCommunityError(null);
     setPublicCommunity(null);
-    setPublicCommunityPlan(null);
+    setPublicCommunityPlans([]);
+    setSelectedPublicCommunityPlanId(null);
     try {
       const response = await fetchWithSupabasePublic(
         `${url}/functions/v1/public_community?slug=${encodeURIComponent(slug)}`,
@@ -2641,10 +3149,22 @@ export default function App() {
         ok?: boolean;
         community?: CommunityRecord;
         active_plan?: PublicPlanSummary | null;
+        active_plans?: PublicPlanSummary[] | null;
       };
       if (!payload?.community?.id) throw new Error("Community not found.");
       setPublicCommunity(payload.community);
-      setPublicCommunityPlan(payload.active_plan ?? null);
+      const plans = Array.isArray(payload.active_plans)
+        ? payload.active_plans
+        : payload.active_plan
+          ? [payload.active_plan]
+          : [];
+      setPublicCommunityPlans(plans);
+      const preferred =
+        plans.find((plan) => plan.billing_period === "monthly") ??
+        plans.find((plan) => plan.billing_period === "yearly") ??
+        plans[0] ??
+        null;
+      setSelectedPublicCommunityPlanId(preferred?.id ?? null);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -4711,6 +5231,253 @@ export default function App() {
     }
   }
 
+  async function loadCommunityAnalytics(
+    communityId: string,
+    session: SupabaseSession,
+    range: AnalyticsRange,
+    communityCreatedAt: string | null
+  ) {
+    const url = getSupabaseUrl();
+	    if (!url) return;
+	    setIsLoadingCommunityAnalytics(true);
+	    setCommunityAnalyticsError(null);
+	    setCommunityRevenueError(null);
+
+    const now = Date.now();
+    const rangeToWindowStart = (): Date | null => {
+      switch (range) {
+        case "7d":
+          return new Date(now - 7 * 86400000);
+        case "30d":
+          return new Date(now - 30 * 86400000);
+        case "90d":
+          return new Date(now - 90 * 86400000);
+        case "1y":
+          return new Date(now - 365 * 86400000);
+        case "all": {
+          if (!communityCreatedAt) return null;
+          const created = new Date(communityCreatedAt);
+          return Number.isNaN(created.getTime()) ? null : created;
+        }
+        default:
+          return new Date(now - 30 * 86400000);
+      }
+    };
+
+    const windowStart = rangeToWindowStart();
+    const sinceWindowIso = windowStart ? windowStart.toISOString() : null;
+    const chartBucket: "day" | "week" | "month" =
+      range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
+
+    const fetchCount = async (queryUrl: string): Promise<number | null> => {
+      let response: Response;
+      try {
+        response = await fetchWithSupabaseAuth(
+          queryUrl,
+          { method: "HEAD", headers: { Prefer: "count=exact" } },
+          session
+        );
+      } catch {
+        return null;
+      }
+      if (!response.ok) return null;
+      return parseContentRangeTotal(response.headers.get("content-range"));
+    };
+
+    const startOfBucket = (date: Date, bucket: "day" | "week" | "month"): Date => {
+      if (bucket === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
+      if (bucket === "week") {
+        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const day = d.getDay(); // 0=Sun..6=Sat
+        const diff = (day + 6) % 7; // days since Monday
+        d.setDate(d.getDate() - diff);
+        return d;
+      }
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    };
+
+    const addBucket = (date: Date, bucket: "day" | "week" | "month"): Date => {
+      if (bucket === "month") return new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      if (bucket === "week") return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 7);
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    };
+
+    const bucketKey = (date: Date, bucket: "day" | "week" | "month"): string => {
+      if (bucket === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      if (bucket === "week") return dateKeyLocal(date);
+      return dateKeyLocal(date);
+    };
+
+    const bucketLabel = (date: Date, bucket: "day" | "week" | "month"): string => {
+      if (bucket === "month") return date.toLocaleDateString([], { month: "short", year: "2-digit" });
+      return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    };
+
+    const buildSeries = (
+      rows: Array<{ created_at: string }>,
+      start: Date,
+      bucket: "day" | "week" | "month"
+    ): AnalyticsPoint[] => {
+      const end = new Date();
+      const startBucket = startOfBucket(start, bucket);
+      const endBucket = startOfBucket(end, bucket);
+
+      const counts = new Map<string, number>();
+      for (const row of rows) {
+        const created = new Date(row.created_at);
+        if (Number.isNaN(created.getTime())) continue;
+        if (created < startBucket) continue;
+        const key = bucketKey(startOfBucket(created, bucket), bucket);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+
+      const points: AnalyticsPoint[] = [];
+      for (let cursor = startBucket; cursor <= endBucket; cursor = addBucket(cursor, bucket)) {
+        const key = bucketKey(cursor, bucket);
+        points.push({ label: bucketLabel(cursor, bucket), value: counts.get(key) ?? 0 });
+      }
+      return points;
+    };
+
+    try {
+      const [totalMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
+        fetchCount(`${url}/rest/v1/community_memberships?select=id&community_id=eq.${communityId}`),
+        fetchCount(`${url}/rest/v1/community_resources?select=id&community_id=eq.${communityId}`),
+        sinceWindowIso
+          ? fetchCount(
+              `${url}/rest/v1/community_memberships?select=id&community_id=eq.${communityId}&created_at=gte.${encodeURIComponent(
+                sinceWindowIso
+              )}`
+            )
+          : null,
+        sinceWindowIso
+          ? fetchCount(
+              `${url}/rest/v1/community_resources?select=id&community_id=eq.${communityId}&created_at=gte.${encodeURIComponent(
+                sinceWindowIso
+              )}`
+            )
+          : null,
+      ]);
+
+      let memberJoinsWindow: Array<{ created_at: string }> = [];
+      try {
+        const joinQueryBase = `${url}/rest/v1/community_memberships?select=created_at&community_id=eq.${communityId}`;
+        const joinQuery =
+          sinceWindowIso !== null
+            ? `${joinQueryBase}&created_at=gte.${encodeURIComponent(sinceWindowIso)}`
+            : joinQueryBase;
+        const response = await fetchWithSupabaseAuth(
+          `${joinQuery}&order=created_at.asc&limit=5000`,
+          {},
+          session
+        );
+        if (response.ok) {
+          memberJoinsWindow = (await response.json()) as Array<{ created_at: string }>;
+        }
+      } catch {
+        // ignore
+      }
+
+      let activeMembersWindow: number | null = null;
+      try {
+        const threadId = await ensureCommunityChatThread(communityId, session);
+        const messagesQueryBase = `${url}/rest/v1/messages?select=sender_id&thread_id=eq.${encodeURIComponent(
+          threadId
+        )}&role=eq.user`;
+        const messagesQuery =
+          sinceWindowIso !== null
+            ? `${messagesQueryBase}&created_at=gte.${encodeURIComponent(sinceWindowIso)}`
+            : messagesQueryBase;
+        const response = await fetchWithSupabaseAuth(
+          `${messagesQuery}&limit=5000`,
+          {},
+          session
+        );
+        if (response.ok) {
+          const rows = (await response.json()) as Array<{ sender_id: string | null }>;
+          const senders = new Set<string>();
+          for (const row of rows) {
+            const sender = (row.sender_id ?? "").trim();
+            if (sender) senders.add(sender);
+          }
+          activeMembersWindow = senders.size;
+        }
+      } catch {
+        // ignore
+      }
+
+      const retentionWindow =
+        totalMembers && totalMembers > 0 && activeMembersWindow != null ? activeMembersWindow / totalMembers : null;
+
+      setCommunityAnalyticsSummary({
+        total_members: totalMembers,
+        new_members_window: newMembersWindow ?? totalMembers,
+        active_members_window: activeMembersWindow,
+        retention_window: retentionWindow,
+        total_resources: totalResources,
+        resources_added_window: resourcesAddedWindow ?? totalResources,
+      });
+	      setCommunityAnalyticsSeries(
+	        buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
+	      );
+
+	      try {
+	        const response = await fetchWithSupabaseAuth(
+	          `${url}/rest/v1/rpc/community_revenue_series`,
+	          {
+	            method: "POST",
+	            headers: { "Content-Type": "application/json" },
+	            body: JSON.stringify({ p_community_id: communityId, p_range: range }),
+	          },
+	          session
+	        );
+	        if (!response.ok) {
+	          const message = await readSupabaseError(response);
+	          setCommunityRevenueSeries([]);
+	          setCommunityRevenueMeta(null);
+	          setCommunityRevenueError(message);
+	        } else {
+	          const rows = (await response.json()) as Array<{
+	            bucket_start: string;
+	            net_base_units: number | string | null;
+	            currency: string | null;
+	            currency_decimals: number | null;
+	          }>;
+	          const metaCurrency = rows[0]?.currency ?? null;
+	          const metaDecimals = rows[0]?.currency_decimals ?? null;
+	          if (metaCurrency && metaDecimals != null) {
+	            setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
+	          } else {
+	            setCommunityRevenueMeta(null);
+	          }
+	          setCommunityRevenueSeries(
+	            rows.map((row) => {
+	              const date = new Date(row.bucket_start);
+	              return {
+	                label: bucketLabel(date, chartBucket),
+	                value: Number(row.net_base_units ?? 0) || 0,
+	              };
+	            })
+	          );
+	        }
+	      } catch {
+	        setCommunityRevenueSeries([]);
+	        setCommunityRevenueMeta(null);
+	        setCommunityRevenueError("Failed to load revenue.");
+	      }
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load analytics.";
+      setCommunityAnalyticsError(message);
+    } finally {
+      setIsLoadingCommunityAnalytics(false);
+    }
+  }
+
   async function handleSetCommunityMemberRole(userId: string, role: string) {
     if (!supabaseSession || !activeCommunityId) return;
     const url = getSupabaseUrl();
@@ -4950,11 +5717,11 @@ export default function App() {
     }
   }
 
-  async function handleSaveCommunitySettings() {
-    if (!supabaseSession || !activeCommunityId) return;
-    setCommunitySettingsError(null);
-    setIsSavingCommunitySettings(true);
-    const url = getSupabaseUrl();
+	  async function handleSaveCommunitySettings() {
+	    if (!supabaseSession || !activeCommunityId) return;
+	    setCommunitySettingsError(null);
+	    setIsSavingCommunitySettings(true);
+	    const url = getSupabaseUrl();
     if (!url) {
       setCommunitySettingsError("Missing Supabase URL.");
       setIsSavingCommunitySettings(false);
@@ -4976,39 +5743,85 @@ export default function App() {
       return;
     }
 
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/communities?id=eq.${activeCommunityId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation"
+	    try {
+        const parsePriceBaseUnits = (raw: string): number | null => {
+          const text = raw.trim();
+          if (!text) return null;
+          const parsed = Number(text.replace(/[^0-9.]/g, ""));
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            throw new Error("Prices must be positive numbers.");
+          }
+          return Math.round(parsed * 100);
+        };
+
+        const monthlyEnabled =
+          communitySettingsPricingMode === "monthly" || communitySettingsPricingMode === "both";
+        const yearlyEnabled =
+          communitySettingsPricingMode === "yearly" || communitySettingsPricingMode === "both";
+        const monthlyAmount = monthlyEnabled ? parsePriceBaseUnits(communitySettingsPriceUsdMonthly) : null;
+        const yearlyAmount = yearlyEnabled ? parsePriceBaseUnits(communitySettingsPriceUsdYearly) : null;
+        if (monthlyEnabled && monthlyAmount == null) throw new Error("Enter a monthly price.");
+        if (yearlyEnabled && yearlyAmount == null) throw new Error("Enter an annual price.");
+
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/save_community_settings`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              p_community_id: activeCommunityId,
+              p_name: name,
+              p_slug: slug,
+              p_description: communitySettingsDescription.trim() || null,
+              p_avatar_url: communitySettingsAvatarUrl?.trim() || null,
+              p_banner_url: communitySettingsBannerUrl?.trim() || null,
+              p_visibility: visibility,
+              p_monthly_amount_base_units: monthlyAmount,
+              p_yearly_amount_base_units: yearlyAmount,
+              p_currency: "usd",
+              p_currency_decimals: 2,
+            }),
           },
-          body: JSON.stringify({
-            name,
-            slug,
-            description: communitySettingsDescription.trim() || null,
-            avatar_url: communitySettingsAvatarUrl?.trim() || null,
-            banner_url: communitySettingsBannerUrl?.trim() || null,
-            visibility
-          })
-        },
-        supabaseSession
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Failed to save settings.");
-      }
-      const updated = (await response.json()) as CommunityRecord[];
-      const row = updated[0];
-      if (row) {
-        setCommunities((prev) => prev.map((c) => (c.id === row.id ? { ...c, ...row } : c)));
-      }
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
+          supabaseSession
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+        const rows = (await response.json()) as Array<{
+          community_id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          avatar_url: string | null;
+          banner_url: string | null;
+          visibility: string;
+          updated_at: string;
+          monthly_plan_id: string | null;
+          yearly_plan_id: string | null;
+        }>;
+        const result = rows[0];
+        if (result?.community_id) {
+          setCommunities((prev) =>
+            prev.map((c) =>
+              c.id === result.community_id
+                ? {
+                    ...c,
+                    name: result.name,
+                    slug: result.slug,
+                    description: result.description,
+                    avatar_url: result.avatar_url,
+                    banner_url: result.banner_url,
+                    visibility: result.visibility,
+                    updated_at: result.updated_at,
+                  }
+                : c
+            )
+          );
+          setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
+          setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
+        }
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
           : error instanceof Error
             ? error.message
             : "Failed to save settings.";
@@ -5184,6 +5997,10 @@ export default function App() {
 
   if (publicRoute.kind !== "app") {
     const showSignIn = !supabaseSession;
+    const selectedPublicCommunityPlan =
+      publicCommunityPlans.find((plan) => plan.id === selectedPublicCommunityPlanId) ??
+      publicCommunityPlans[0] ??
+      null;
     const pendingToken =
       (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
       (() => {
@@ -5228,20 +6045,45 @@ export default function App() {
                     {publicCommunity?.description ?? "Join this community on Arx."}
                   </div>
                   <div className="discover-subtitle">
-                    {publicCommunityPlan ? formatPlanPrice(publicCommunityPlan) : "Free"}
+                    {selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : "Free"}
                   </div>
                 </div>
                 <div className="discover-controls">
+                  {publicCommunityPlans.length > 1 && (
+                    <div className="analytics-range-toggle" role="tablist" aria-label="Billing period">
+                      {[
+                        ...publicCommunityPlans.slice().sort((a, b) => {
+                          const ar = a.billing_period === "monthly" ? 0 : 1;
+                          const br = b.billing_period === "monthly" ? 0 : 1;
+                          return ar - br;
+                        }),
+                      ].map((plan) => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          className={
+                            plan.id === (selectedPublicCommunityPlanId ?? selectedPublicCommunityPlan?.id)
+                              ? "analytics-range-btn active"
+                              : "analytics-range-btn"
+                          }
+                          aria-pressed={plan.id === (selectedPublicCommunityPlanId ?? selectedPublicCommunityPlan?.id)}
+                          onClick={() => setSelectedPublicCommunityPlanId(plan.id)}
+                        >
+                          {plan.billing_period === "monthly" ? "Monthly" : "Annual"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <button
                     className="discover-refresh"
                     type="button"
                     disabled={isLoadingPublicCommunity || !publicCommunity || checkoutStatus === "loading" || isJoiningPublicCommunity}
                     onClick={() => {
                       if (!publicCommunity) return;
-                      if (publicCommunityPlan) {
+                      if (selectedPublicCommunityPlan) {
                         void startCheckoutForPlan(
                           publicCommunity.id,
-                          publicCommunityPlan.id,
+                          selectedPublicCommunityPlan.id,
                           `/c/${encodeURIComponent(publicCommunity.slug)}`,
                         );
                         return;
@@ -5249,7 +6091,11 @@ export default function App() {
                       void joinPublicCommunity(publicCommunity.id);
                     }}
                   >
-                    {isJoiningPublicCommunity ? "Joining…" : publicCommunityPlan ? "Join now" : "Join free"}
+                    {isJoiningPublicCommunity
+                      ? "Joining…"
+                      : selectedPublicCommunityPlan
+                        ? "Join now"
+                        : "Join free"}
                   </button>
                 </div>
               </div>
@@ -5259,7 +6105,7 @@ export default function App() {
               )}
               {publicJoinError && <div className="auth-error">{publicJoinError}</div>}
               {checkoutError && <div className="auth-error">{checkoutError}</div>}
-              {showSignIn && publicCommunity && !publicCommunityPlan && (
+              {showSignIn && publicCommunity && publicCommunityPlans.length === 0 && (
                 <div className="chat-empty">
                   <div className="discover-empty-text">Or join with a magic link:</div>
                   <div className="discover-controls">
@@ -5794,7 +6640,7 @@ export default function App() {
               </span>
               Members
             </button>
-	            {canEditActiveCommunitySettings && (
+	            {canViewActiveCommunitySettings && (
 	              <>
 	                <div className="community-nav-divider" />
 	                <button
@@ -5817,32 +6663,34 @@ export default function App() {
                       <circle cx="12" cy="12" r="3" />
                       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
-                  </span>
-                  Settings
-                </button>
-                <button
-                  className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
-                  type="button"
-                  onClick={() => {
-                    setActivePage("community");
-                    setActiveView("home");
-                    setCommunityTab("analytics");
-                  }}
-                  title="Analytics"
-                >
-                  <span className="nav-icon">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M4 19V5" />
-                      <path d="M4 19h16" />
-                      <path d="M8 15v-5" />
-                      <path d="M12 15v-8" />
-                      <path d="M16 15v-3" />
-                    </svg>
-                  </span>
-                  Analytics
-                </button>
-              </>
-            )}
+	                  </span>
+	                  Settings
+	                </button>
+	                {canViewActiveCommunityAnalytics && (
+	                  <button
+	                    className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
+	                    type="button"
+	                    onClick={() => {
+	                      setActivePage("community");
+	                      setActiveView("home");
+	                      setCommunityTab("analytics");
+	                    }}
+	                    title="Analytics"
+	                  >
+	                    <span className="nav-icon">
+	                      <svg viewBox="0 0 24 24">
+	                        <path d="M4 19V5" />
+	                        <path d="M4 19h16" />
+	                        <path d="M8 15v-5" />
+	                        <path d="M12 15v-8" />
+	                        <path d="M16 15v-3" />
+	                      </svg>
+	                    </span>
+	                    Analytics
+	                  </button>
+	                )}
+	              </>
+	            )}
           </aside>
         )}
 
@@ -7320,176 +8168,439 @@ export default function App() {
                     </div>
                   )}
 
-                  {communityTab === "settings" && (
-                    <div className="settings-panel community-settings-panel">
+		                  {communityTab === "settings" && (
+		                    <div className="settings-panel community-settings-panel">
+			                      {!activeCommunity ? (
+			                        <div className="chat-empty">Select a community to view settings.</div>
+			                      ) : !supabaseSession ? (
+			                        <div className="chat-empty">Sign in to view community settings.</div>
+			                      ) : !canViewActiveCommunitySettings ? (
+			                        <div className="chat-empty">Join this community to view settings.</div>
+			                      ) : canManageMembersActiveCommunity ? (
+			                        <>
+			                          <div className="create-community-form community-settings-form">
+			                            <div className="settings-section">
+			                              <div className="settings-section-title">Branding</div>
+			                              <div
+			                                className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
+			                                onDragOver={(event) => {
+			                                  event.preventDefault();
+			                                  setIsSettingsBannerDragOver(true);
+			                                }}
+			                                onDragLeave={() => setIsSettingsBannerDragOver(false)}
+			                                onDrop={handleSettingsBannerDrop}
+			                              >
+			                                {communitySettingsBannerUrl ? (
+			                                  <img src={communitySettingsBannerUrl} alt="Community banner preview" />
+			                                ) : (
+			                                  <div className="create-community-banner-placeholder">Banner preview</div>
+			                                )}
+			                                <label className="create-banner-btn">
+			                                  Upload banner
+			                                  <input
+			                                    type="file"
+			                                    accept="image/*"
+			                                    onChange={(event) =>
+			                                      void handleCommunityBannerUpload(event.target.files?.[0] ?? null)
+			                                    }
+			                                  />
+			                                </label>
+			                                {communitySettingsBannerUrl && (
+			                                  <button
+			                                    className="create-banner-remove"
+			                                    type="button"
+			                                    onClick={() => setCommunitySettingsBannerUrl(null)}
+			                                  >
+			                                    Remove
+			                                  </button>
+			                                )}
+			                              </div>
+			                              <div className="create-community-avatar-row">
+			                                <div
+			                                  className={`create-community-avatar${isSettingsAvatarDragOver ? " drag-over" : ""}`}
+			                                  onDragOver={(event) => {
+			                                    event.preventDefault();
+			                                    setIsSettingsAvatarDragOver(true);
+			                                  }}
+			                                  onDragLeave={() => setIsSettingsAvatarDragOver(false)}
+			                                  onDrop={handleSettingsAvatarDrop}
+			                                >
+			                                  {communitySettingsAvatarUrl ? (
+			                                    <img src={communitySettingsAvatarUrl} alt="Community avatar preview" />
+			                                  ) : (
+			                                    <span>
+			                                      {communityInitials(
+			                                        communitySettingsName || activeCommunity?.name || "Community"
+			                                      )}
+			                                    </span>
+			                                  )}
+			                                </div>
+			                                <div className="create-community-avatar-actions">
+			                                  <label className="create-avatar-btn">
+			                                    Upload avatar
+			                                    <input
+			                                      type="file"
+			                                      accept="image/*"
+			                                      onChange={(event) =>
+			                                        void handleCommunityAvatarUpload(event.target.files?.[0] ?? null)
+			                                      }
+			                                    />
+			                                  </label>
+			                                  {communitySettingsAvatarUrl && (
+			                                    <button
+			                                      className="create-avatar-remove"
+			                                      type="button"
+			                                      onClick={() => setCommunitySettingsAvatarUrl(null)}
+			                                    >
+			                                      Remove
+			                                    </button>
+			                                  )}
+			                                </div>
+			                              </div>
+			                              <label className="create-community-field">
+			                                <span>Name</span>
+			                                <input
+			                                  type="text"
+			                                  placeholder="Community name"
+			                                  value={communitySettingsName}
+			                                  onChange={(event) => setCommunitySettingsName(event.target.value)}
+			                                />
+			                              </label>
+			                              <label className="create-community-field">
+			                                <span>Slug</span>
+			                                <input
+			                                  type="text"
+			                                  placeholder="your-community"
+			                                  value={communitySettingsSlug}
+			                                  onChange={(event) => setCommunitySettingsSlug(event.target.value)}
+			                                />
+			                                <span className="create-community-hint">
+			                                  {`arx.com/c/${communitySettingsSlug.trim() || "your-community"}`}
+			                                </span>
+			                              </label>
+			                            </div>
+
+			                            <div className="settings-section">
+			                              <label className="create-community-field">
+			                                <span>Description</span>
+			                                <textarea
+			                                  placeholder="Optional description for your community page"
+			                                  rows={3}
+			                                  value={communitySettingsDescription}
+			                                  onChange={(event) => setCommunitySettingsDescription(event.target.value)}
+			                                />
+			                              </label>
+			                            </div>
+
+			                            <div className="settings-section">
+			                              <div className="settings-section-title">Access</div>
+			                              <label className="create-community-field">
+			                                <span>Visibility</span>
+			                                <select
+			                                  className="select-styled"
+			                                  value={communitySettingsVisibility}
+			                                  onChange={(event) => setCommunitySettingsVisibility(event.target.value)}
+			                                >
+			                                  <option value="private">Private</option>
+			                                  <option value="unlisted">Unlisted</option>
+			                                  <option value="public">Public</option>
+			                                </select>
+			                                <span className="create-community-hint">
+			                                  {communitySettingsVisibility === "public"
+			                                    ? "Anyone can discover and join."
+			                                    : communitySettingsVisibility === "unlisted"
+			                                      ? "Anyone with the link can join."
+			                                      : "Only invited members can join."}
+			                                </span>
+			                              </label>
+			                              <div className="create-community-field">
+			                                <span>Pricing</span>
+			                                <div className="analytics-range-toggle" role="tablist" aria-label="Pricing options">
+			                                  {(
+			                                    [
+			                                      { key: "free", label: "Free" },
+			                                      { key: "monthly", label: "Monthly" },
+			                                      { key: "yearly", label: "Annual" },
+			                                      { key: "both", label: "Both" },
+			                                    ] as Array<{ key: CommunityPricingMode; label: string }>
+			                                  ).map((opt) => (
+			                                    <button
+			                                      key={opt.key}
+			                                      type="button"
+			                                      className={`analytics-range-btn${
+			                                        communitySettingsPricingMode === opt.key ? " active" : ""
+			                                      }`}
+			                                      onClick={() => setCommunitySettingsPricingMode(opt.key)}
+			                                    >
+			                                      {opt.label}
+			                                    </button>
+			                                  ))}
+			                                </div>
+			                                <span className="create-community-hint">
+			                                  Choose what billing options members see at checkout.
+			                                </span>
+			                              </div>
+			                              {(communitySettingsPricingMode === "monthly" ||
+			                                communitySettingsPricingMode === "both") && (
+			                                <label className="create-community-field">
+			                                  <span>Monthly price (USD)</span>
+			                                  <input
+			                                    type="text"
+                                    inputMode="decimal"
+			                                    placeholder="29"
+			                                    value={communitySettingsPriceUsdMonthly}
+			                                    onChange={(event) => setCommunitySettingsPriceUsdMonthly(event.target.value)}
+			                                  />
+			                                  <span className="create-community-hint">Billed monthly.</span>
+			                                </label>
+			                              )}
+			                              {(communitySettingsPricingMode === "yearly" ||
+			                                communitySettingsPricingMode === "both") && (
+			                                <label className="create-community-field">
+			                                  <span>Annual price (USD)</span>
+			                                  <input
+			                                    type="text"
+                                    inputMode="decimal"
+			                                    placeholder="290"
+			                                    value={communitySettingsPriceUsdYearly}
+			                                    onChange={(event) => setCommunitySettingsPriceUsdYearly(event.target.value)}
+			                                  />
+			                                  <span className="create-community-hint">Billed yearly.</span>
+			                                </label>
+			                              )}
+			                            </div>
+
+			                            {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
+			                            <div className="create-community-actions">
+			                              <button
+			                                onClick={() => void handleSaveCommunitySettings()}
+			                                disabled={isSavingCommunitySettings}
+			                              >
+			                                {isSavingCommunitySettings ? "Saving..." : "Save changes"}
+			                              </button>
+			                            </div>
+			                          </div>
+			                        </>
+			                      ) : (
+			                        <>
+			                          <div className="panel-title">Community</div>
+		                          <div className="settings-section">
+		                            <div className="settings-section-title">Access</div>
+		                            <div className="settings-section-desc">
+		                              Your role and entitlement status for this community.
+		                            </div>
+		                            <div className="model-list analytics-kpis">
+		                              {[
+		                                {
+		                                  label: "Role",
+		                                  value: activeCommunityAccess?.effective_role
+		                                    ? activeCommunityAccess.effective_role
+		                                    : "member",
+		                                },
+		                                {
+		                                  label: "Entitlement ends",
+		                                  value: activeCommunityAccess?.entitlement_ends_at
+		                                    ? formatChatTime(activeCommunityAccess.entitlement_ends_at)
+		                                    : "—",
+		                                },
+		                              ].map((row) => (
+		                                <div key={row.label} className="model-toggle analytics-kpi">
+		                                  <span>{row.label}</span>
+		                                  <span className="analytics-kpi-value">{row.value}</span>
+		                                </div>
+		                              ))}
+		                            </div>
+		                            <div className="model-note">
+		                              Only owners and admins can edit community details right now.
+		                            </div>
+		                          </div>
+		                          <div className="settings-section">
+		                            <div className="settings-section-title">About</div>
+		                            <div className="model-list analytics-kpis">
+		                              {[
+		                                { label: "Name", value: activeCommunity.name },
+		                                { label: "Slug", value: activeCommunity.slug },
+		                                { label: "Visibility", value: activeCommunity.visibility },
+		                              ].map((row) => (
+		                                <div key={row.label} className="model-toggle analytics-kpi">
+		                                  <span>{row.label}</span>
+		                                  <span className="analytics-kpi-value">{row.value}</span>
+		                                </div>
+		                              ))}
+		                            </div>
+		                            {activeCommunity.description && (
+		                              <div className="model-note">{activeCommunity.description}</div>
+		                            )}
+		                          </div>
+		                          <div className="settings-section">
+		                            <div className="settings-section-title">You</div>
+		                            <div className="model-list">
+		                              <label className="model-toggle">
+		                                <span>Mute community</span>
+		                                <input
+		                                  type="checkbox"
+		                                  checked={communityMemberMuted}
+		                                  disabled={isLoadingCommunityMemberSettings || isLeavingCommunity}
+		                                  onChange={(event) => void handleToggleCommunityMute(event.target.checked)}
+		                                />
+		                              </label>
+		                            </div>
+		                            <div className="model-note">
+		                              Muted communities won't send notifications (when notifications ship).
+		                            </div>
+		                            {!activeCommunityAccess?.is_owner && (
+		                              <div className="create-community-actions" style={{ marginTop: 12 }}>
+		                                <button
+		                                  className="danger"
+		                                  type="button"
+		                                  disabled={isLeavingCommunity || isLoadingCommunityMemberSettings}
+		                                  onClick={() => void handleLeaveCommunity()}
+		                                >
+		                                  {isLeavingCommunity ? "Leaving…" : "Leave community"}
+		                                </button>
+		                              </div>
+		                            )}
+		                            {communityMemberSettingsError && (
+		                              <div className="auth-error" style={{ marginTop: 10 }}>
+		                                {communityMemberSettingsError}
+		                              </div>
+		                            )}
+		                          </div>
+		                        </>
+		                      )}
+	                    </div>
+	                  )}
+
+	                  {communityTab === "analytics" && (
+	                    <div className="settings-panel community-settings-panel">
 	                      {!activeCommunity ? (
-	                        <div className="chat-empty">Select a community to edit settings.</div>
+	                        <div className="chat-empty">Select a community to view analytics.</div>
 	                      ) : !supabaseSession ? (
-	                        <div className="chat-empty">Sign in to edit community settings.</div>
-	                      ) : !canEditActiveCommunitySettings ? (
-	                        <div className="chat-empty">Only the owner can edit community settings.</div>
-	                      ) : (
-	                        <>
-                          <div className="panel-title">Community Settings</div>
-                          <div className="create-community community-settings">
-                            <div
-                              className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
-                              onDragOver={(event) => {
-                                event.preventDefault();
-                                setIsSettingsBannerDragOver(true);
-                              }}
-                              onDragLeave={() => setIsSettingsBannerDragOver(false)}
-                              onDrop={handleSettingsBannerDrop}
-                            >
-                              {communitySettingsBannerUrl ? (
-                                <img src={communitySettingsBannerUrl} alt="Community banner preview" />
-                              ) : (
-                                <div className="create-community-banner-placeholder">Banner preview</div>
-                              )}
-                              <label className="create-banner-btn">
-                                Upload banner
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(event) =>
-                                    void handleCommunityBannerUpload(event.target.files?.[0] ?? null)
-                                  }
-                                />
-                              </label>
-                              {communitySettingsBannerUrl && (
-                                <button
-                                  className="create-banner-remove"
-                                  type="button"
-                                  onClick={() => setCommunitySettingsBannerUrl(null)}
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                            <div className="create-community-avatar-row">
-                              <div
-                                className={`create-community-avatar${isSettingsAvatarDragOver ? " drag-over" : ""}`}
-                                onDragOver={(event) => {
-                                  event.preventDefault();
-                                  setIsSettingsAvatarDragOver(true);
-                                }}
-                                onDragLeave={() => setIsSettingsAvatarDragOver(false)}
-                                onDrop={handleSettingsAvatarDrop}
-                              >
-                                {communitySettingsAvatarUrl ? (
-                                  <img src={communitySettingsAvatarUrl} alt="Community avatar preview" />
-                                ) : (
-                                  <span>{communityInitials(communitySettingsName || activeCommunity?.name || "Community")}</span>
-                                )}
-                              </div>
-                              <div className="create-community-avatar-actions">
-                                <label className="create-avatar-btn">
-                                  Upload avatar
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(event) =>
-                                      void handleCommunityAvatarUpload(event.target.files?.[0] ?? null)
-                                    }
-                                  />
-                                </label>
-                                {communitySettingsAvatarUrl && (
-                                  <button
-                                    className="create-avatar-remove"
-                                    type="button"
-                                    onClick={() => setCommunitySettingsAvatarUrl(null)}
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <input
-                              type="text"
-                              placeholder="Name"
-                              value={communitySettingsName}
-                              onChange={(event) => setCommunitySettingsName(event.target.value)}
-                            />
-                            <input
-                              type="text"
-                              placeholder="Slug"
-                              value={communitySettingsSlug}
-                              onChange={(event) => setCommunitySettingsSlug(event.target.value)}
-                            />
-                            <textarea
-                              className="community-settings-textarea"
-                              placeholder="Description (optional)"
-                              value={communitySettingsDescription}
-                              onChange={(event) => setCommunitySettingsDescription(event.target.value)}
-                              rows={3}
-                            />
-                            <select
-                              className="community-settings-select select-styled"
-                              value={communitySettingsVisibility}
-                              onChange={(event) => setCommunitySettingsVisibility(event.target.value)}
-                            >
-                              <option value="private">Private</option>
-                              <option value="unlisted">Unlisted</option>
-                              <option value="public">Public</option>
-                            </select>
-                            <button onClick={() => void handleSaveCommunitySettings()} disabled={isSavingCommunitySettings}>
-                              {isSavingCommunitySettings ? "Saving..." : "Save settings"}
-                            </button>
-                            {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+	                        <div className="chat-empty">Sign in to view community analytics.</div>
+	                      ) : !canViewActiveCommunityAnalytics ? (
+	                        <div className="chat-empty">Only owners and admins can view community analytics.</div>
+		                      ) : (
+		                        <>
+		                          <div className="analytics-header-row">
+		                            <div className="panel-title">Community Analytics</div>
+		                            <div className="analytics-range-toggle" role="tablist" aria-label="Time range">
+		                              {(["7d", "30d", "90d", "1y", "all"] as AnalyticsRange[]).map((value) => (
+		                                <button
+		                                  key={value}
+		                                  className={
+		                                    value === communityAnalyticsRange
+		                                      ? "analytics-range-btn active"
+		                                      : "analytics-range-btn"
+		                                  }
+		                                  type="button"
+		                                  onClick={() => setCommunityAnalyticsRange(value)}
+		                                  aria-pressed={value === communityAnalyticsRange}
+		                                >
+		                                  {value}
+		                                </button>
+		                              ))}
+		                            </div>
+		                          </div>
+	                          <div className="settings-section">
+	                            {isLoadingCommunityAnalytics && (
+	                              <div className="chat-loading">
+	                                <div className="loading-spinner" />
+	                                <span>Loading analytics...</span>
+	                              </div>
+	                            )}
+	                            {communityAnalyticsError && <div className="auth-error">{communityAnalyticsError}</div>}
+	                            <div className="analytics-kpi-strip" aria-label="Key performance indicators">
+	                              {[
+	                                { label: "Members", value: formatCount(communityAnalyticsSummary.total_members) },
+	                                { label: "MRR", value: "—" },
+	                                { label: "Conversion", value: "—" },
+	                                { label: "Retention", value: formatPercent(communityAnalyticsSummary.retention_window) },
+	                              ].map((kpi) => (
+	                                <div key={kpi.label} className="analytics-kpi-tile">
+	                                  <div className="analytics-kpi-value-big">{kpi.value}</div>
+	                                  <div className="analytics-kpi-label">{kpi.label}</div>
+	                                </div>
+	                              ))}
+	                            </div>
+	                          </div>
 
-                  {communityTab === "analytics" && (
-                    <div className="settings-panel community-settings-panel">
-                      {!activeCommunity ? (
-                        <div className="chat-empty">Select a community to view analytics.</div>
-                      ) : !supabaseSession ? (
-                        <div className="chat-empty">Sign in to view community analytics.</div>
-                      ) : !canEditActiveCommunitySettings ? (
-                        <div className="chat-empty">Only the owner can view community analytics.</div>
-                      ) : (
-                        <>
-                          <div className="panel-title">Community Analytics</div>
-                          <div className="settings-section">
-                            <div className="settings-section-title">Overview</div>
-                            <div className="settings-section-desc">
-                              Revenue and retention reporting will appear here once payments are live.
-                            </div>
-                            <div className="model-list analytics-kpis">
-                              {[
-                                { label: "MRR", value: "—" },
-                                { label: "Active subscribers", value: "—" },
-                                { label: "New this week", value: "—" },
-                                { label: "Churn", value: "—" },
-                              ].map((kpi) => (
-                                <div key={kpi.label} className="model-toggle analytics-kpi">
-                                  <span>{kpi.label}</span>
-                                  <span className="analytics-kpi-value">{kpi.value}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+		                          <div className="settings-section">
+		                            <div className="analytics-chart-card">
+		                              <div className="analytics-chart-header">
+		                                <div className="analytics-range-toggle analytics-mode-toggle" role="tablist" aria-label="Metric">
+		                                  {(["members", "revenue"] as AnalyticsChartMode[]).map((value) => (
+		                                    <button
+		                                      key={value}
+		                                      className={
+		                                        value === communityAnalyticsChartMode
+		                                          ? "analytics-range-btn active"
+		                                          : "analytics-range-btn"
+		                                      }
+		                                      type="button"
+		                                      onClick={() => setCommunityAnalyticsChartMode(value)}
+		                                      aria-pressed={value === communityAnalyticsChartMode}
+		                                    >
+		                                      {value === "members" ? "Members" : "Revenue"}
+		                                    </button>
+		                                  ))}
+		                                </div>
+		                                <div className="analytics-chart-stat">
+		                                  {communityAnalyticsChartMode === "members"
+		                                    ? communityAnalyticsSeries.length === 0
+		                                      ? "—"
+		                                      : formatCount(
+		                                          communityAnalyticsSeries.reduce((sum, point) => sum + point.value, 0)
+		                                        )
+		                                    : !communityRevenueMeta || communityRevenueSeries.length === 0
+		                                      ? "—"
+		                                      : formatMoneyBaseUnits(
+		                                          communityRevenueSeries.reduce((sum, point) => sum + point.value, 0),
+		                                          communityRevenueMeta.currency,
+		                                          communityRevenueMeta.currency_decimals
+		                                        )}
+		                                </div>
+		                              </div>
+		                              {communityAnalyticsChartMode === "members" ? (
+		                                <AnalyticsLineChart points={communityAnalyticsSeries} />
+		                              ) : (
+		                                <AnalyticsLineChart
+		                                  points={communityRevenueSeries}
+		                                  valueFormatter={
+		                                    communityRevenueMeta
+		                                      ? (value) =>
+		                                          formatMoneyBaseUnits(
+		                                            value,
+		                                            communityRevenueMeta.currency,
+		                                            communityRevenueMeta.currency_decimals
+		                                          )
+		                                      : undefined
+		                                  }
+		                                />
+		                              )}
+		                              {communityAnalyticsChartMode === "revenue" && communityRevenueError && (
+		                                <div className="analytics-chart-note">
+		                                  {communityRevenueError.includes("schema cache")
+		                                    ? "Revenue is still syncing. Refresh in a moment."
+		                                    : communityRevenueError}
+		                                </div>
+		                              )}
+		                            </div>
+		                          </div>
+		                        </>
+		                      )}
+		                    </div>
+		                  )}
 
-                  {communityTab === "resources" && (
-                    <div className="community-panel resources-panel">
-                      <div className="resources-header-row">
-                        <div className="resources-header">Resources</div>
-	                        <button
-	                          className="resources-add-btn"
-	                          onClick={openNewResourceModal}
-	                          disabled={!supabaseSession || !activeCommunity || !canCreateResourcesActiveCommunity}
-	                          title={canCreateResourcesActiveCommunity ? "Add resource" : "Insufficient permissions"}
-	                        >
-	                          +
-	                        </button>
-                      </div>
+	                  {communityTab === "resources" && (
+	                    <div className="community-panel resources-panel">
+	                      <div className="resources-header-row">
+	                        <div className="resources-header">Resources</div>
+		                        {supabaseSession && activeCommunity && canCreateResourcesActiveCommunity && (
+		                          <button className="resources-add-btn" onClick={openNewResourceModal} title="Add resource">
+		                            +
+		                          </button>
+		                        )}
+	                      </div>
                       {resourceSuccess && <div className="success-toast">Resource saved successfully!</div>}
                       <div className="resource-list">
                         {isLoadingResources && (
@@ -7616,7 +8727,7 @@ export default function App() {
 	                                  (activeCommunity && activeCommunity.owner_id === member.user_id) ||
 	                                    member.role === "owner"
 	                                );
-	                                const viewerIsOwner = canEditActiveCommunitySettings;
+		                                const viewerIsOwner = isActiveCommunityOwner;
 	                                const viewerIsAdmin = canManageMembersActiveCommunity && !viewerIsOwner;
 	                                const memberIsAdmin = member.role === "admin";
 	                                const canEditThisMember = viewerIsOwner || !memberIsAdmin;

@@ -131,6 +131,42 @@ type StripeSessionCreate = {
   url: string | null;
 };
 
+type StripePriceCreate = {
+  id: string;
+};
+
+async function updatePlanStripePriceId(planId: string, stripePriceId: string): Promise<void> {
+  const res = await supabaseAdminFetch(`/rest/v1/plans?id=eq.${encodeURIComponent(planId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ stripe_price_id: stripePriceId, updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function ensureStripePriceForPlan(plan: PlanRow): Promise<string> {
+  if (plan.stripe_price_id) return plan.stripe_price_id;
+  if (plan.billing_period !== "monthly" && plan.billing_period !== "yearly") {
+    throw new Error("Plan billing period is not supported");
+  }
+  const unitAmount = Math.round(Number(plan.amount_base_units ?? 0));
+  if (!Number.isFinite(unitAmount) || unitAmount <= 0) throw new Error("Invalid plan amount");
+
+  const interval = plan.billing_period === "monthly" ? "month" : "year";
+  const price = await stripeRequest<StripePriceCreate>("POST", "/prices", {
+    unit_amount: unitAmount,
+    currency: plan.currency,
+    recurring: { interval },
+    product_data: { name: `${plan.name} (${plan.billing_period})` },
+    metadata: {
+      community_id: plan.community_id,
+      plan_id: plan.id,
+    },
+  });
+  await updatePlanStripePriceId(plan.id, price.id);
+  return price.id;
+}
+
 async function createStripeCheckoutSession(
   intentId: string,
   plan: PlanRow,
@@ -138,9 +174,9 @@ async function createStripeCheckoutSession(
 ): Promise<StripeSessionCreate> {
   const mode =
     plan.billing_period === "one_time" ? "payment" : "subscription";
-  if (mode === "subscription" && !plan.stripe_price_id) {
-    throw new Error("Plan is missing stripe_price_id");
-  }
+  const stripePriceId =
+    mode === "subscription" ? await ensureStripePriceForPlan(plan) : plan.stripe_price_id;
+  if (!stripePriceId) throw new Error("Plan is missing stripe_price_id");
 
   const body: Record<string, unknown> = {
     mode,
@@ -154,12 +190,7 @@ async function createStripeCheckoutSession(
     },
     "line_items[0][quantity]": 1,
   };
-  if (plan.stripe_price_id) {
-    body["line_items[0][price]"] = plan.stripe_price_id;
-  } else {
-    // one-time can be created inline if desired; for now require a price id too.
-    throw new Error("Plan is missing stripe_price_id");
-  }
+  body["line_items[0][price]"] = stripePriceId;
   return stripeRequest<StripeSessionCreate>("POST", "/checkout/sessions", body);
 }
 

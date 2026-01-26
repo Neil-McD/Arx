@@ -60,17 +60,18 @@ async function loadCommunityBySlug(slug: string): Promise<CommunityRow> {
   return row;
 }
 
-async function loadActivePlan(communityId: string): Promise<PublicPlan | null> {
+async function loadActivePlans(communityId: string): Promise<PublicPlan[]> {
   const res = await supabaseAdminFetch(
     `/rest/v1/plans?select=id,community_id,name,description,amount_base_units,currency,currency_decimals,billing_period,visibility,is_active` +
-      `&community_id=eq.${encodeURIComponent(communityId)}&is_active=eq.true&visibility=in.(public,unlisted)&limit=1`,
+      `&community_id=eq.${encodeURIComponent(communityId)}` +
+      `&is_active=eq.true&visibility=in.(public,unlisted)` +
+      `&billing_period=in.(monthly,yearly)` +
+      `&order=billing_period.asc`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as PlanRow[];
-  const row = rows[0];
-  if (!row) return null;
-  return {
+  return rows.map((row) => ({
     id: row.id,
     name: row.name,
     description: row.description ?? null,
@@ -78,7 +79,7 @@ async function loadActivePlan(communityId: string): Promise<PublicPlan | null> {
     currency: row.currency,
     currency_decimals: row.currency_decimals,
     billing_period: row.billing_period,
-  };
+  }));
 }
 
 Deno.serve(async (req: Request) => {
@@ -95,8 +96,15 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const slug = normalizeSlug(url.searchParams.get("slug"));
     const community = await loadCommunityBySlug(slug);
-    const activePlan = await loadActivePlan(community.id);
-    return jsonResponse({ ok: true, community, active_plan: activePlan }, { status: 200, headers });
+    const activePlans = await loadActivePlans(community.id);
+    const preferred =
+      activePlans.find((plan) => plan.billing_period === "monthly") ??
+      activePlans.find((plan) => plan.billing_period === "yearly") ??
+      null;
+    return jsonResponse(
+      { ok: true, community, active_plan: preferred, active_plans: activePlans },
+      { status: 200, headers },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = message === "not_found" ? 404 : 400;
