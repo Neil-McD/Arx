@@ -16,9 +16,11 @@ type DequeuedEvent = {
 
 type DeliveryEndpoint = {
   endpoint_id: string;
+  kind: "webhook" | "brandos";
   url: string;
   include_email: boolean;
-  signing_secret: string;
+  secret: string;
+  brandos_account_id: string | null;
 };
 
 async function loadWorkerSecret(): Promise<string> {
@@ -118,6 +120,16 @@ async function finalizeEvent(params: { eventId: string; success: boolean; error:
   if (!res.ok) throw new Error(await res.text());
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-fA-F-]{36}$/.test(value);
+}
+
+function shouldRetryBrandos(code: number | null): boolean {
+  if (code === null) return true; // network error
+  if (code === 408 || code === 425 || code === 429) return true;
+  return code >= 500;
+}
+
 Deno.serve(async (req: Request) => {
   const headers = withCors(noStoreHeaders(), req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
@@ -159,29 +171,69 @@ Deno.serve(async (req: Request) => {
         let responseCode: number | null = null;
         let ok = false;
         let error: string | null = null;
+        let retryable = true;
         try {
-          const sig = await hmacSha256Hex(ep.signing_secret, `${ts}.${body}`);
-          const res = await fetchWithTimeout(
-            ep.url,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "User-Agent": "Arx-Automations/1.0",
-                "X-Arx-Event-Id": event.event_id,
-                "X-Arx-Event-Type": event.event_type,
-                "X-Arx-Community-Id": event.community_id,
-                "X-Arx-Signature": `t=${ts},v1=${sig}`,
+          if (ep.kind === "brandos") {
+            const email = String((event.payload as Record<string, unknown>)?.email ?? "").trim();
+            const brandosAid = String((event.payload as Record<string, unknown>)?.brandos_aid ?? "").trim();
+            const accountId = String(ep.brandos_account_id ?? "").trim();
+            if (!email) throw new Error("missing_email");
+            if (!accountId || !isUuid(accountId)) throw new Error("missing_brandos_account_id");
+
+            if (!brandosAid || !isUuid(brandosAid)) {
+              ok = true; // skip quietly if the event has no attribution token
+              retryable = false;
+            } else {
+              const identifyBody = JSON.stringify({ account_id: accountId, brandos_aid: brandosAid, email });
+              const res = await fetchWithTimeout(
+                ep.url,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${ep.secret}`,
+                    "User-Agent": "Arx-Automations/1.0",
+                    "X-Arx-Event-Id": event.event_id,
+                    "X-Arx-Event-Type": event.event_type,
+                    "X-Arx-Community-Id": event.community_id,
+                  },
+                  body: identifyBody,
+                },
+                10_000,
+              );
+              responseCode = res.status;
+              ok = res.ok;
+              retryable = shouldRetryBrandos(responseCode);
+              if (!res.ok) error = `HTTP ${res.status}`;
+            }
+          } else {
+            const sig = await hmacSha256Hex(ep.secret, `${ts}.${body}`);
+            const res = await fetchWithTimeout(
+              ep.url,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "User-Agent": "Arx-Automations/1.0",
+                  "X-Arx-Event-Id": event.event_id,
+                  "X-Arx-Event-Type": event.event_type,
+                  "X-Arx-Community-Id": event.community_id,
+                  "X-Arx-Signature": `t=${ts},v1=${sig}`,
+                },
+                body,
               },
-              body,
-            },
-            10_000,
-          );
-          responseCode = res.status;
-          ok = res.ok;
-          if (!res.ok) error = `HTTP ${res.status}`;
+              10_000,
+            );
+            responseCode = res.status;
+            ok = res.ok;
+            if (!res.ok) error = `HTTP ${res.status}`;
+          }
         } catch (err) {
           error = err instanceof Error ? err.message : String(err);
+          retryable = true;
+          if (ep.kind === "brandos" && (error === "missing_email" || error === "missing_brandos_account_id")) {
+            retryable = false;
+          }
         }
 
         const durationMs = Date.now() - started;
@@ -194,8 +246,10 @@ Deno.serve(async (req: Request) => {
           error,
         });
 
-        if (!ok) {
+        if (!ok && retryable) {
           eventOk = false;
+          lastError = error;
+        } else if (!ok && !retryable && lastError === null) {
           lastError = error;
         }
       }

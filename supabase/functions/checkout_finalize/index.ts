@@ -27,11 +27,12 @@ type PaymentIntentRow = {
   currency: string;
   currency_decimals: number;
   platform_fee_bps?: number | null;
+  tracking?: Record<string, unknown> | null;
 };
 
 async function loadPaymentIntent(intentId: string): Promise<PaymentIntentRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps`,
+    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps,tracking`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
@@ -163,6 +164,7 @@ async function insertClaim(
   intentId: string,
   token: string,
   issuedToEmail: string | null,
+  tracking: Record<string, unknown>,
   ttlDays = 7,
 ): Promise<{ token: string; expires_at: string }> {
   const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
@@ -184,6 +186,7 @@ async function insertClaim(
       status: "issued",
       expires_at: expiresAt,
       issued_to_email: issuedToEmail,
+      tracking,
     }),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -240,7 +243,8 @@ Deno.serve(async (req: Request) => {
     await revokeIssuedClaims(intentId);
     const email = session.customer_details?.email ?? session.customer_email ?? null;
     const token = generateToken(24);
-    const claim = await insertClaim(intentId, token, email, 7);
+    const tracking = intent.tracking && typeof intent.tracking === "object" ? intent.tracking : {};
+    const claim = await insertClaim(intentId, token, email, tracking, 7);
 
     return jsonResponse(
       {

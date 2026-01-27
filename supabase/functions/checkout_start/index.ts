@@ -10,6 +10,9 @@ type CheckoutStartInput = {
   plan_id: string;
   success_url: string;
   cancel_url: string;
+  tracking?: {
+    brandos_aid?: string;
+  };
 };
 
 async function readJson<T>(req: Request): Promise<T> {
@@ -20,6 +23,14 @@ async function readJson<T>(req: Request): Promise<T> {
 
 function sanitizeUuid(value: string): string {
   const v = (value ?? "").trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(v)) throw new Error("Invalid id");
+  return v;
+}
+
+function sanitizeOptionalUuid(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const v = String(value).trim();
+  if (!v) return null;
   if (!/^[0-9a-fA-F-]{36}$/.test(v)) throw new Error("Invalid id");
   return v;
 }
@@ -100,7 +111,11 @@ function resolvePlatformFeeBps(tier: BuilderTier): number {
   return 1000; // 10% for builder
 }
 
-async function createPaymentIntent(plan: PlanRow, platformFeeBps: number): Promise<{ id: string }> {
+async function createPaymentIntent(
+  plan: PlanRow,
+  platformFeeBps: number,
+  tracking: Record<string, unknown>,
+): Promise<{ id: string }> {
   const res = await supabaseAdminFetch("/rest/v1/payment_intents?select=id", {
     method: "POST",
     headers: {
@@ -116,6 +131,7 @@ async function createPaymentIntent(plan: PlanRow, platformFeeBps: number): Promi
       currency: plan.currency,
       currency_decimals: plan.currency_decimals,
       platform_fee_bps: platformFeeBps,
+      tracking,
     }),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -230,6 +246,7 @@ Deno.serve(async (req: Request) => {
     const planId = sanitizeUuid(input.plan_id);
     if (!input.success_url?.trim()) throw new Error("success_url is required");
     if (!input.cancel_url?.trim()) throw new Error("cancel_url is required");
+    const brandosAid = sanitizeOptionalUuid(input.tracking?.brandos_aid ?? null);
 
     const plan = await loadPlan(planId);
     if (plan.community_id !== communityId) throw new Error("Plan does not belong to community");
@@ -244,7 +261,8 @@ Deno.serve(async (req: Request) => {
     if (!destinationAccountId) {
       throw new Error("Creator must set up payouts before accepting payments");
     }
-    const intent = await createPaymentIntent(plan, platformFeeBps);
+    const tracking = brandosAid ? { brandos_aid: brandosAid } : {};
+    const intent = await createPaymentIntent(plan, platformFeeBps, tracking);
     const session = await createStripeCheckoutSession(intent.id, plan, platformFeeBps, destinationAccountId, input);
 
     await updatePaymentIntent(intent.id, {

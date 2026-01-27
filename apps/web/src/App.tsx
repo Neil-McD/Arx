@@ -52,6 +52,15 @@ type ThreadMessage = {
   run_id: string | null;
 };
 
+type MemoryUsedItem = {
+  id: string;
+  content: string;
+  scope: "global" | "workspace";
+  scope_id: string | null;
+  pinned: boolean;
+  updated_at: string;
+};
+
 type MessageAttachment = {
   id: string;
   name: string;
@@ -235,6 +244,14 @@ type AutomationEndpoint = {
   updated_at: string;
 };
 
+type BrandosConnector = {
+  endpoint_id: string;
+  base_url: string;
+  brandos_account_id: string;
+  is_enabled: boolean;
+  updated_at: string;
+};
+
 type AutomationDelivery = {
   attempted_at: string;
   event_type: string;
@@ -269,6 +286,44 @@ const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
+const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
+const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-fA-F-]{36}$/.test(value);
+}
+
+function captureBrandosAidFromLocation(): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = (params.get("bid") ?? params.get("brandos_aid") ?? params.get("aid") ?? "").trim();
+    if (!raw || !isUuid(raw)) return;
+
+    localStorage.setItem(BRANDOS_AID_LAST_KEY, raw);
+
+    const path = window.location.pathname || "/";
+    if (path.startsWith("/c/")) {
+      const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
+      if (slug) localStorage.setItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`, raw);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function getBrandosAidForCommunitySlug(slug: string | null): string | null {
+  try {
+    if (slug) {
+      const scoped = (localStorage.getItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`) ?? "").trim();
+      if (scoped && isUuid(scoped)) return scoped;
+    }
+    const last = (localStorage.getItem(BRANDOS_AID_LAST_KEY) ?? "").trim();
+    if (last && isUuid(last)) return last;
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
 const APPROVAL_PRESETS: Record<
   "read-only" | "agent" | "agent-full",
@@ -594,6 +649,39 @@ function parseMessageText(content: unknown): string {
   } catch {
     return "";
   }
+}
+
+function parseMemoryUsedArray(value: unknown): MemoryUsedItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: MemoryUsedItem[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const content = typeof record.content === "string" ? record.content.trim() : "";
+    if (!id || !content) continue;
+    out.push({
+      id,
+      content,
+      scope: record.scope === "workspace" ? "workspace" : "global",
+      scope_id: typeof record.scope_id === "string" ? record.scope_id : null,
+      pinned: Boolean(record.pinned),
+      updated_at: typeof record.updated_at === "string" ? record.updated_at : "",
+    });
+  }
+  return out;
+}
+
+function parseMessageMemoryUsed(content: unknown): MemoryUsedItem[] {
+  if (!content || typeof content !== "object") return [];
+  const record = content as Record<string, unknown>;
+  const meta = record.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as Record<string, unknown>;
+    const fromMeta = parseMemoryUsedArray(metaRecord.memory_used);
+    if (fromMeta.length > 0) return fromMeta;
+  }
+  return parseMemoryUsedArray(record.memory_used);
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
@@ -1667,6 +1755,16 @@ export default function App() {
   const [automationSelectedEventTypes, setAutomationSelectedEventTypes] = useState<string[]>([]);
   const [automationRevealSecret, setAutomationRevealSecret] = useState<{ label: string; secret: string } | null>(null);
   const [automationNotice, setAutomationNotice] = useState<string | null>(null);
+  const [brandosConnector, setBrandosConnector] = useState<BrandosConnector | null>(null);
+  const [isBrandosConnectOpen, setIsBrandosConnectOpen] = useState(false);
+  const [brandosBaseUrlInput, setBrandosBaseUrlInput] = useState("https://app.brandos.com");
+  const [brandosAccountIdInput, setBrandosAccountIdInput] = useState("");
+  const [brandosIdentifySecretInput, setBrandosIdentifySecretInput] = useState("");
+  const [brandosIsEnabledInput, setBrandosIsEnabledInput] = useState(true);
+  const [brandosError, setBrandosError] = useState<string | null>(null);
+  const [brandosNotice, setBrandosNotice] = useState<string | null>(null);
+  const [isSavingBrandosConnector, setIsSavingBrandosConnector] = useState(false);
+  const [isDeletingBrandosConnector, setIsDeletingBrandosConnector] = useState(false);
 
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
@@ -1699,13 +1797,18 @@ export default function App() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
-  const [streamingMeta, setStreamingMeta] = useState<{ engine_id: string; model_id: string | null } | null>(null);
+  const [streamingMeta, setStreamingMeta] = useState<{
+    engine_id: string;
+    model_id: string | null;
+    memory_used?: MemoryUsedItem[];
+  } | null>(null);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const streamingContentRef = useRef<string | null>(null);
   const streamingRafRef = useRef<number | null>(null);
   const streamingAbortRef = useRef<AbortController | null>(null);
   const streamingUserCancelledRef = useRef(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [memoryUsedModal, setMemoryUsedModal] = useState<{ items: MemoryUsedItem[] } | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
   const autoScrollEnabledRef = useRef(true);
@@ -1735,6 +1838,10 @@ export default function App() {
       // ignore
     }
   }, [communityAnalyticsRange]);
+
+  useEffect(() => {
+    captureBrandosAidFromLocation();
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => setPublicRoute(readPublicRouteFromLocation());
@@ -3240,7 +3347,12 @@ export default function App() {
     }
   }
 
-  async function startCheckoutForPlan(communityId: string, planId: string, cancelPath: string): Promise<void> {
+  async function startCheckoutForPlan(
+    communityId: string,
+    planId: string,
+    cancelPath: string,
+    communitySlug: string | null,
+  ): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) {
       setCheckoutError("Missing Supabase URL.");
@@ -3253,6 +3365,7 @@ export default function App() {
       const origin = window.location.origin.replace(/\/+$/, "");
       const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${origin}${cancelPath}`;
+      const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
       const response = await fetchWithSupabasePublic(`${url}/functions/v1/checkout_start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3261,6 +3374,7 @@ export default function App() {
           plan_id: planId,
           success_url: successUrl,
           cancel_url: cancelUrl,
+          tracking: brandosAid ? { brandos_aid: brandosAid } : undefined,
         }),
       });
       if (!response.ok) throw new Error(await readSupabaseError(response));
@@ -3944,7 +4058,7 @@ export default function App() {
     setStreamingContent("");
     setStreamingThreadId(threadId);
     setStreamingRunId(params.runIdHint);
-    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId });
+    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId, memory_used: [] });
 
     const scheduleStreamingFlush = () => {
       if (streamingRafRef.current) return;
@@ -3991,9 +4105,11 @@ export default function App() {
         if (eventName === "start") {
           if (typeof parsed?.run_id === "string") setStreamingRunId(parsed.run_id);
           if (typeof parsed?.engine_id === "string") {
+            const memoryUsed = parseMemoryUsedArray(parsed?.memory_used);
             setStreamingMeta({
               engine_id: parsed.engine_id,
               model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null,
+              memory_used: memoryUsed,
             });
           }
         } else if (eventName === "delta") {
@@ -5642,58 +5758,66 @@ export default function App() {
         total_resources: totalResources,
         resources_added_window: resourcesAddedWindow ?? totalResources,
       });
-	      setCommunityAnalyticsSeries(
-	        buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
-	      );
+      setCommunityAnalyticsSeries(
+        buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
+      );
 
-	      try {
-	        const response = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/rpc/community_revenue_series`,
-	          {
-	            method: "POST",
-	            headers: { "Content-Type": "application/json" },
-	            body: JSON.stringify({ p_community_id: communityId, p_range: range }),
-	          },
-	          session
-	        );
-	        if (!response.ok) {
-	          const message = await readSupabaseError(response);
-	          setCommunityRevenueSeries([]);
-	          setCommunityRevenueMeta(null);
-	          setCommunityRevenueError(message);
-	        } else {
-	          const rows = (await response.json()) as Array<{
-	            bucket_start: string;
-	            net_base_units: number | string | null;
-	            currency: string | null;
-	            currency_decimals: number | null;
-	          }>;
-	          const metaCurrency = rows[0]?.currency ?? null;
-	          const metaDecimals = rows[0]?.currency_decimals ?? null;
-	          if (metaCurrency && metaDecimals != null) {
-	            setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
-	          } else {
-	            setCommunityRevenueMeta(null);
-	          }
-	          setCommunityRevenueSeries(
-	            rows.map((row) => {
-	              const date = new Date(row.bucket_start);
-	              return {
-	                label: bucketLabel(date, chartBucket),
-	                value: Number(row.net_base_units ?? 0) || 0,
-	              };
-	            })
-	          );
-	        }
-	      } catch {
-	        setCommunityRevenueSeries([]);
-	        setCommunityRevenueMeta(null);
-	        setCommunityRevenueError("Failed to load revenue.");
-	      }
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/community_revenue_series`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_community_id: communityId, p_range: range }),
+          },
+          session
+        );
+        if (!response.ok) {
+          const message = await readSupabaseError(response);
+          if (message.includes("schema cache")) {
+            setCommunityRevenueSeries(
+              buildSeries([], windowStart ?? new Date(now - 30 * 86400000), chartBucket)
+            );
+            setCommunityRevenueMeta(null);
+            setCommunityRevenueError(null);
+          } else {
+            setCommunityRevenueSeries([]);
+            setCommunityRevenueMeta(null);
+            setCommunityRevenueError(message);
+          }
+        } else {
+          const rows = (await response.json()) as Array<{
+            bucket_start: string;
+            net_base_units: number | string | null;
+            currency: string | null;
+            currency_decimals: number | null;
+          }>;
+          const metaCurrency = rows[0]?.currency ?? null;
+          const metaDecimals = rows[0]?.currency_decimals ?? null;
+          if (metaCurrency && metaDecimals != null) {
+            setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
+          } else {
+            setCommunityRevenueMeta(null);
+          }
+          setCommunityRevenueSeries(
+            rows.map((row) => {
+              const date = new Date(row.bucket_start);
+              return {
+                label: bucketLabel(date, chartBucket),
+                value: Number(row.net_base_units ?? 0) || 0,
+              };
+            })
+          );
+        }
+      } catch {
+        setCommunityRevenueSeries([]);
+        setCommunityRevenueMeta(null);
+        setCommunityRevenueError("Failed to load revenue.");
+      }
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
           : error instanceof Error
             ? error.message
             : "Failed to load analytics.";
@@ -5708,9 +5832,10 @@ export default function App() {
     if (!url) return;
     setIsLoadingAutomations(true);
     setAutomationError(null);
+    setBrandosError(null);
 
     try {
-      const [endpointsRes, deliveriesRes] = await Promise.all([
+      const [endpointsRes, deliveriesRes, brandosRes] = await Promise.all([
         fetchWithSupabaseAuth(
           `${url}/rest/v1/rpc/list_automation_endpoints`,
           {
@@ -5729,6 +5854,15 @@ export default function App() {
           },
           session,
         ),
+        fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/get_brandos_connector`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_community_id: communityId }),
+          },
+          session,
+        ),
       ]);
 
       if (!endpointsRes.ok) throw new Error(await readSupabaseError(endpointsRes));
@@ -5738,6 +5872,14 @@ export default function App() {
       const deliveries = (await deliveriesRes.json()) as AutomationDelivery[];
       setAutomationEndpoints(endpoints);
       setAutomationDeliveries(deliveries);
+
+      if (brandosRes.ok) {
+        const brandosRows = (await brandosRes.json()) as BrandosConnector[];
+        setBrandosConnector(brandosRows[0] ?? null);
+      } else {
+        setBrandosConnector(null);
+        setBrandosError(await readSupabaseError(brandosRes));
+      }
     } catch (error) {
       const message =
         typeof error === "string"
@@ -5745,7 +5887,11 @@ export default function App() {
           : error instanceof Error
             ? error.message
             : "Failed to load automations.";
-      setAutomationError(message);
+      if (message.includes("schema cache")) {
+        setAutomationError("Automations are still syncing. Refresh in a moment.");
+      } else {
+        setAutomationError(message);
+      }
     } finally {
       setIsLoadingAutomations(false);
     }
@@ -5756,6 +5902,115 @@ export default function App() {
     setAutomationUrlInput("");
     setAutomationIsEnabledInput(true);
     setAutomationSelectedEventTypes(["community.member_joined", "community.member_left"]);
+  }
+
+  function openBrandosConnect() {
+    setBrandosNotice(null);
+    setBrandosError(null);
+    setBrandosIdentifySecretInput("");
+    setBrandosBaseUrlInput(brandosConnector?.base_url?.trim() || "https://app.brandos.com");
+    setBrandosAccountIdInput(brandosConnector?.brandos_account_id?.trim() || "");
+    setBrandosIsEnabledInput(brandosConnector?.is_enabled ?? true);
+    setIsBrandosConnectOpen(true);
+  }
+
+  function closeBrandosConnect() {
+    setIsBrandosConnectOpen(false);
+    setBrandosIdentifySecretInput("");
+  }
+
+  async function handleSaveBrandosConnector() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) {
+      setBrandosError("Missing Supabase URL.");
+      return;
+    }
+
+    setBrandosNotice(null);
+    setBrandosError(null);
+
+    const baseUrl = brandosBaseUrlInput.trim();
+    const accountId = brandosAccountIdInput.trim();
+    const secret = brandosIdentifySecretInput.trim();
+
+    if (!baseUrl) {
+      setBrandosError("BrandOS base URL is required.");
+      return;
+    }
+    if (!/^https?:\/\//.test(baseUrl)) {
+      setBrandosError("BrandOS base URL must start with https://");
+      return;
+    }
+    if (!accountId || !isUuid(accountId)) {
+      setBrandosError("BrandOS account id must be a UUID.");
+      return;
+    }
+    if (!secret) {
+      setBrandosError("BrandOS identify secret is required.");
+      return;
+    }
+
+    setIsSavingBrandosConnector(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/upsert_brandos_connector`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_community_id: activeCommunityId,
+            p_base_url: baseUrl,
+            p_brandos_account_id: accountId,
+            p_identify_secret: secret,
+            p_is_enabled: brandosIsEnabledInput,
+          }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as BrandosConnector[];
+      setBrandosConnector(rows[0] ?? null);
+      setBrandosNotice("BrandOS connected.");
+      closeBrandosConnect();
+      await loadCommunityAutomations(activeCommunityId, supabaseSession);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to connect BrandOS.";
+      setBrandosError(message);
+    } finally {
+      setIsSavingBrandosConnector(false);
+      setBrandosIdentifySecretInput("");
+    }
+  }
+
+  async function handleDeleteBrandosConnector() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setBrandosNotice(null);
+    setBrandosError(null);
+    setIsDeletingBrandosConnector(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/delete_brandos_connector`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_community_id: activeCommunityId }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setBrandosConnector(null);
+      setBrandosNotice("BrandOS disconnected.");
+      closeBrandosConnect();
+      await loadCommunityAutomations(activeCommunityId, supabaseSession);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to disconnect BrandOS.";
+      setBrandosError(message);
+    } finally {
+      setIsDeletingBrandosConnector(false);
+    }
   }
 
   async function handleCreateAutomationEndpoint() {
@@ -6544,6 +6799,7 @@ export default function App() {
                           publicCommunity.id,
                           selectedPublicCommunityPlan.id,
                           `/c/${encodeURIComponent(publicCommunity.slug)}`,
+                          publicCommunity.slug,
                         );
                         return;
                       }
@@ -6649,16 +6905,15 @@ export default function App() {
                   >
                     Continue
                   </button>
-                  {(checkoutStatus === "pending" || checkoutStatus === "error") && (
-                    <button
-                      className="secondary"
-                      type="button"
-                      disabled={checkoutStatus === "loading"}
-                      onClick={() => setCheckoutFinalizeNonce((prev) => prev + 1)}
-                    >
-                      {checkoutStatus === "pending" ? "Check again" : "Retry"}
-                    </button>
-                  )}
+	                  {(checkoutStatus === "pending" || checkoutStatus === "error") && (
+	                    <button
+	                      className="secondary"
+	                      type="button"
+	                      onClick={() => setCheckoutFinalizeNonce((prev) => prev + 1)}
+	                    >
+	                      {checkoutStatus === "pending" ? "Check again" : "Retry"}
+	                    </button>
+	                  )}
                 </div>
               </div>
               {showSignIn && (
@@ -7826,6 +8081,7 @@ export default function App() {
 	                      const isUser = message.role === "user";
 	                      const textContent = parseMessageText(message.content_json);
                         const attachments = parseMessageAttachments(message.content_json);
+                        const memoryUsed = !isUser ? parseMessageMemoryUsed(message.content_json) : [];
 	                      const modelLabel = !isUser
 	                        ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null)
 	                        : null;
@@ -7896,9 +8152,13 @@ export default function App() {
 	                              <button
 	                                className="message-copy-btn"
 	                                type="button"
-	                                disabled
-	                                title="Save to memory (coming soon)"
-	                                aria-label="Save to memory (coming soon)"
+	                                disabled={memoryUsed.length === 0}
+	                                onClick={() => {
+	                                  if (memoryUsed.length === 0) return;
+	                                  setMemoryUsedModal({ items: memoryUsed });
+	                                }}
+	                                title={memoryUsed.length === 0 ? "No memory used" : "Memory used"}
+	                                aria-label={memoryUsed.length === 0 ? "No memory used" : "Memory used"}
 	                              >
 	                                <svg viewBox="0 0 24 24" aria-hidden="true">
 	                                  <path d="M9 3v2" />
@@ -7957,6 +8217,34 @@ export default function App() {
                             </div>
                             {streamingMeta && (
                               <div className="message-footer">
+                                <button
+                                  className="message-copy-btn"
+                                  type="button"
+                                  disabled={!streamingMeta.memory_used || streamingMeta.memory_used.length === 0}
+                                  onClick={() => {
+                                    const items = streamingMeta.memory_used ?? [];
+                                    if (items.length === 0) return;
+                                    setMemoryUsedModal({ items });
+                                  }}
+                                  title={streamingMeta.memory_used && streamingMeta.memory_used.length > 0 ? "Memory used" : "No memory used"}
+                                  aria-label={
+                                    streamingMeta.memory_used && streamingMeta.memory_used.length > 0 ? "Memory used" : "No memory used"
+                                  }
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M9 3v2" />
+                                    <path d="M15 3v2" />
+                                    <path d="M9 19v2" />
+                                    <path d="M15 19v2" />
+                                    <path d="M3 9h2" />
+                                    <path d="M3 15h2" />
+                                    <path d="M19 9h2" />
+                                    <path d="M19 15h2" />
+                                    <rect x="7" y="7" width="10" height="10" rx="2" />
+                                    <path d="M10 10h4" />
+                                    <path d="M10 14h4" />
+                                  </svg>
+                                </button>
                                 <span className="message-meta">
                                   {formatModelLabel(streamingMeta.model_id ?? activeThread?.model_id ?? null)}
                                 </span>
@@ -9291,9 +9579,19 @@ export default function App() {
 	                              {automationNotice}
 	                            </div>
 	                          )}
+	                          {brandosNotice && (
+	                            <div className="success-toast" style={{ marginBottom: 12 }}>
+	                              {brandosNotice}
+	                            </div>
+	                          )}
 	                          {automationError && (
 	                            <div className="auth-error" style={{ marginBottom: 12 }}>
 	                              {automationError}
+	                            </div>
+	                          )}
+	                          {brandosError && (
+	                            <div className="auth-error" style={{ marginBottom: 12 }}>
+	                              {brandosError}
 	                            </div>
 	                          )}
 	                          {automationRevealSecret && (
@@ -9315,13 +9613,101 @@ export default function App() {
 	                            <div className="analytics-chart-card">
 	                              <div className="analytics-chart-header">
 	                                <div className="analytics-chart-title">BrandOS</div>
-	                                <button type="button" disabled title="Coming soon">
-	                                  Connect
-	                                </button>
+	                                <div className="analytics-chart-header-right">
+	                                  {isBrandosConnectOpen ? (
+	                                    <>
+	                                      <button
+	                                        type="button"
+	                                        className="secondary"
+	                                        onClick={closeBrandosConnect}
+	                                        disabled={isSavingBrandosConnector}
+	                                      >
+	                                        Cancel
+	                                      </button>
+	                                      <button
+	                                        type="button"
+	                                        onClick={() => void handleSaveBrandosConnector()}
+	                                        disabled={isSavingBrandosConnector}
+	                                      >
+	                                        {isSavingBrandosConnector ? "Saving…" : brandosConnector ? "Save" : "Connect"}
+	                                      </button>
+	                                    </>
+	                                  ) : brandosConnector ? (
+	                                    <>
+	                                      <button type="button" className="secondary" onClick={openBrandosConnect}>
+	                                        Manage
+	                                      </button>
+	                                      <button
+	                                        type="button"
+	                                        className="danger"
+	                                        onClick={() => void handleDeleteBrandosConnector()}
+	                                        disabled={isDeletingBrandosConnector}
+	                                      >
+	                                        {isDeletingBrandosConnector ? "Disconnecting…" : "Disconnect"}
+	                                      </button>
+	                                    </>
+	                                  ) : (
+	                                    <button type="button" onClick={openBrandosConnect}>
+	                                      Connect
+	                                    </button>
+	                                  )}
+	                                </div>
 	                              </div>
 	                              <div className="model-note">
-	                                Attribution + revenue tracking (webhooks with optional email, coming soon).
+	                                One-click attribution: Arx captures bid/aid and identifies on email capture.
 	                              </div>
+	                              {brandosConnector && !isBrandosConnectOpen && (
+	                                <div className="model-note">Connected to {brandosConnector.base_url}.</div>
+	                              )}
+	                              {isBrandosConnectOpen && (
+	                                <div style={{ marginTop: 12 }}>
+	                                  <div className="invite-create-row invite-create-row-custom">
+	                                    <label className="create-community-field">
+	                                      <span>Base URL</span>
+	                                      <input
+	                                        type="text"
+	                                        placeholder="https://app.brandos.com"
+	                                        value={brandosBaseUrlInput}
+	                                        onChange={(event) => setBrandosBaseUrlInput(event.target.value)}
+	                                      />
+	                                    </label>
+	                                    <label className="create-community-field">
+	                                      <span>Account id</span>
+	                                      <input
+	                                        type="text"
+	                                        placeholder="00000000-0000-0000-0000-000000000000"
+	                                        value={brandosAccountIdInput}
+	                                        onChange={(event) => setBrandosAccountIdInput(event.target.value)}
+	                                      />
+	                                    </label>
+	                                  </div>
+	                                  <div className="invite-create-row invite-create-row-custom" style={{ marginTop: 12 }}>
+	                                    <label className="create-community-field" style={{ flex: 1 }}>
+	                                      <span>Identify secret</span>
+	                                      <input
+	                                        type="password"
+	                                        placeholder="Paste your BrandOS identify secret"
+	                                        value={brandosIdentifySecretInput}
+	                                        onChange={(event) => setBrandosIdentifySecretInput(event.target.value)}
+	                                      />
+	                                    </label>
+	                                  </div>
+	                                  <div className="model-list" style={{ marginTop: 12 }}>
+	                                    <label className="model-toggle">
+	                                      <input
+	                                        type="checkbox"
+	                                        checked={brandosIsEnabledInput}
+	                                        onChange={(event) => setBrandosIsEnabledInput(event.target.checked)}
+	                                      />
+	                                      <span>Enabled</span>
+	                                    </label>
+	                                  </div>
+	                                  <div className="model-note" style={{ marginTop: 10 }}>
+	                                    Arx will POST to <span className="token">/api/identify</span> on{" "}
+	                                    <span className="token">Email captured</span>.
+	                                  </div>
+	                                </div>
+	                              )}
 	                            </div>
 	                          </div>
 	                          <div className="settings-section">
@@ -9359,7 +9745,7 @@ export default function App() {
 	                                        setIsAutomationCreateOpen(true);
 	                                      }}
 	                                    >
-	                                      Add
+	                                      Add webhook
 	                                    </button>
 	                                  )}
 	                                </div>
@@ -9824,6 +10210,48 @@ export default function App() {
         </main>
       </div>
 
+      {memoryUsedModal && (
+        <div className="modal-overlay" onClick={() => setMemoryUsedModal(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Memory used</div>
+              <button className="modal-close" onClick={() => setMemoryUsedModal(null)} title="Close">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              {memoryUsedModal.items.length === 0 ? (
+                <div className="memory-block-empty">No memory items were used.</div>
+              ) : (
+                <div className="memory-blocks">
+                  <div className="memory-block-group">
+                    {memoryUsedModal.items.map((item) => {
+                      const updatedLabel = item.updated_at
+                        ? new Date(item.updated_at).toLocaleDateString()
+                        : "unknown";
+                      return (
+                        <div key={item.id} className="memory-block read-only">
+                          <div className="memory-block-header">
+                            <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
+                          </div>
+                          <div className="memory-block-desc">{item.content}</div>
+                          <div className="memory-block-meta">
+                            {item.scope}
+                            {item.scope_id ? `:${item.scope_id}` : ""}
+                            {item.pinned ? " • pinned" : ""}
+                            {item.updated_at ? ` • updated ${updatedLabel}` : ""}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCreateCommunityModal && (
         <div className="modal-overlay" onClick={closeCreateCommunityModal}>
           <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
@@ -9834,18 +10262,19 @@ export default function App() {
               );
               const tier = builderBillingStatus?.builder_tier ?? "free";
               const max = builderBillingStatus?.max_communities ?? 0;
-              const needsPlan = Boolean(supabaseSession && tier === "free");
-              const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
-              const canCreate = Boolean(supabaseSession && !needsPlan && !limitReached);
-              return (
-            <div className="modal-header">
-              <div className="modal-title">Create community</div>
-              <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="create-community-form">
+	              const needsPlan = Boolean(supabaseSession && tier === "free");
+	              const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
+	              const canCreate = Boolean(supabaseSession && !needsPlan && !limitReached);
+	              return (
+                <>
+                  <div className="modal-header">
+                    <div className="modal-title">Create community</div>
+                    <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
+                      ×
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    <div className="create-community-form">
                 <div
                   className={`create-community-banner${isCreateBannerDragOver ? " drag-over" : ""}`}
                   onDragOver={(event) => {
@@ -9961,10 +10390,10 @@ export default function App() {
                 </label>
                 {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
                 {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <div className="create-community-actions">
+                    </div>
+                  </div>
+                  <div className="modal-footer">
+                    <div className="create-community-actions">
                 {!supabaseSession ? (
                   <button className="create-community-primary" onClick={() => void handleSignIn()}>
                     Sign in to create
@@ -10009,13 +10438,14 @@ export default function App() {
                 <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
                   Cancel
                 </button>
-              </div>
-            </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
+                    </div>
+                  </div>
+                </>
+	              );
+	            })()}
+	          </div>
+	        </div>
+	      )}
 
       {authError && (
         <div className="toast error" role="status">

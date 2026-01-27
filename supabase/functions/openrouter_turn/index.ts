@@ -58,6 +58,15 @@ type ThreadRow = {
   community_id: string | null;
 };
 
+type PersonalMemoryRow = {
+  id: string;
+  content: string;
+  scope: "global" | "workspace";
+  scope_id: string | null;
+  pinned: boolean;
+  updated_at: string;
+};
+
 async function loadThread(threadId: string): Promise<ThreadRow> {
   const res = await supabaseAdminFetch(
     `/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}&select=id,owner_id,engine_id,model_id,community_id`,
@@ -68,6 +77,19 @@ async function loadThread(threadId: string): Promise<ThreadRow> {
   const row = rows[0];
   if (!row) throw new Error("Thread not found");
   return row;
+}
+
+async function loadPersonalMemoryItems(userId: string, limit = 32): Promise<PersonalMemoryRow[]> {
+  const safeLimit = Math.max(0, Math.min(200, Math.floor(limit)));
+  if (safeLimit === 0) return [];
+  const res = await supabaseAdminFetch(
+    `/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,updated_at&user_id=eq.${encodeURIComponent(
+      userId,
+    )}&scope=eq.global&order=pinned.desc,updated_at.desc&limit=${safeLimit}`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as PersonalMemoryRow[];
 }
 
 type MessageRow = {
@@ -346,7 +368,14 @@ async function insertAssistantMessage(params: {
   modelId: string;
   openrouterModelId: string;
   runId: string;
+  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
 }): Promise<{ inserted: boolean }> {
+  const contentJson: Record<string, unknown> = { text: params.contentText };
+  if (params.memoryUsed.length > 0) {
+    contentJson.meta = {
+      memory_used: params.memoryUsed,
+    };
+  }
   const res = await supabaseAdminFetch(
     "/rest/v1/messages?select=id",
     {
@@ -358,7 +387,7 @@ async function insertAssistantMessage(params: {
       body: JSON.stringify({
         thread_id: params.threadId,
         role: "assistant",
-        content_json: { text: params.contentText },
+        content_json: contentJson,
         engine_id: "openrouter_web",
         model_id: params.modelId,
         run_id: params.runId,
@@ -396,7 +425,14 @@ async function updateAssistantMessage(params: {
   contentText: string;
   modelId: string;
   runId: string;
+  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
 }): Promise<void> {
+  const contentJson: Record<string, unknown> = { text: params.contentText };
+  if (params.memoryUsed.length > 0) {
+    contentJson.meta = {
+      memory_used: params.memoryUsed,
+    };
+  }
   const res = await supabaseAdminFetch(
     `/rest/v1/messages?id=eq.${encodeURIComponent(params.id)}`,
     {
@@ -406,7 +442,7 @@ async function updateAssistantMessage(params: {
         Prefer: "return=minimal",
       },
       body: JSON.stringify({
-        content_json: { text: params.contentText },
+        content_json: contentJson,
         engine_id: "openrouter_web",
         model_id: params.modelId,
         run_id: params.runId,
@@ -424,6 +460,7 @@ async function writeAssistantReply(params: {
   modelId: string;
   openrouterModelId: string;
   runId: string;
+  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
   allowUpdate: boolean;
 }): Promise<{ status: "inserted" | "duplicate" | "updated" }> {
   if (params.allowUpdate) {
@@ -434,6 +471,7 @@ async function writeAssistantReply(params: {
         contentText: params.contentText,
         modelId: params.modelId,
         runId: params.runId,
+        memoryUsed: params.memoryUsed,
       });
       return { status: "updated" };
     }
@@ -449,6 +487,7 @@ async function writeAssistantReply(params: {
         contentText: params.contentText,
         modelId: params.modelId,
         runId: params.runId,
+        memoryUsed: params.memoryUsed,
       });
       return { status: "updated" };
     }
@@ -478,6 +517,52 @@ async function loadUserOpenRouterKey(userId: string): Promise<string> {
 function encodeSse(event: string, data: unknown): Uint8Array {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   return new TextEncoder().encode(payload);
+}
+
+function truncateUtf8(input: string, maxChars: number): string {
+  const text = (input ?? "").trim();
+  if (!text) return "";
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars).trimEnd() + "…";
+}
+
+function selectPersonalMemoryForPrompt(items: PersonalMemoryRow[]): PersonalMemoryRow[] {
+  const pinned: PersonalMemoryRow[] = [];
+  const recent: PersonalMemoryRow[] = [];
+  for (const item of items) {
+    if (!item || typeof item.content !== "string") continue;
+    const content = item.content.trim();
+    if (!content) continue;
+    (item.pinned ? pinned : recent).push(item);
+  }
+  const maxPinned = 6;
+  const maxTotal = 10;
+  const out: PersonalMemoryRow[] = [];
+  for (const item of pinned) {
+    if (out.length >= maxPinned) break;
+    out.push(item);
+  }
+  for (const item of recent) {
+    if (out.length >= maxTotal) break;
+    out.push(item);
+  }
+  return out;
+}
+
+function buildPersonalMemorySystemPrompt(items: PersonalMemoryRow[]): string | null {
+  if (items.length === 0) return null;
+  const maxItemChars = 420;
+  const lines = items.map((item) => `- ${truncateUtf8(item.content, maxItemChars)}`).filter(Boolean);
+  if (lines.length === 0) return null;
+
+  return [
+    "Personal memory (user-provided, explicit, durable):",
+    ...lines,
+    "",
+    "Use this memory only when relevant to the user's request. If it's not clearly relevant, ignore it.",
+    "If memory may be outdated or ambiguous, ask a clarifying question.",
+    "Do not mention these notes unless the user asks about them.",
+  ].join("\n");
 }
 
 Deno.serve(async (req: Request) => {
@@ -518,15 +603,31 @@ Deno.serve(async (req: Request) => {
     }
 
     const replyToId = latest.id;
-    const runId = `openrouter_web:${replyToId}`;
+    const allowUpdate = input.mode === "regenerate";
+    const runId = allowUpdate ? `openrouter_web_regen:${replyToId}:${Date.now()}` : `openrouter_web:${replyToId}`;
     const openrouterKey = await loadUserOpenRouterKey(userId);
 
     const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
     const resolvedModelId = await resolveOpenRouterModelId(aliasModelId, openrouterKey);
 
+    const memoryRows = await loadPersonalMemoryItems(userId, 64);
+    const selectedMemory = selectPersonalMemoryForPrompt(memoryRows);
+    const memoryPrompt = buildPersonalMemorySystemPrompt(selectedMemory);
+    const memoryUsed = selectedMemory.map((item) => ({
+      id: item.id,
+      content: truncateUtf8(item.content, 800),
+      scope: item.scope,
+      scope_id: item.scope_id,
+      pinned: Boolean(item.pinned),
+      updated_at: item.updated_at,
+    }));
+
     const history = [...rowsDesc].reverse();
     const messages: OpenRouterChatMessage[] = [];
     messages.push({ role: "system", content: "You are a helpful assistant." });
+    if (memoryPrompt) {
+      messages.push({ role: "system", content: memoryPrompt });
+    }
     for (const row of history) {
       const content = extractTextFromContentJson(row.content_json);
       if (!content.trim()) continue;
@@ -537,16 +638,25 @@ Deno.serve(async (req: Request) => {
 
     if (!wantsStream) {
       const { text } = await openRouterChatCompletion(openrouterKey, resolvedModelId, messages, maxTokens);
-      const { inserted } = await insertAssistantMessage({
+      const result = await writeAssistantReply({
         threadId,
         replyToId,
         contentText: text,
         modelId: aliasModelId,
         openrouterModelId: resolvedModelId,
         runId,
+        memoryUsed,
+        allowUpdate,
       });
       return jsonResponse(
-        { ok: true, status: inserted ? "inserted" : "duplicate", thread_id: threadId, reply_to_id: replyToId, run_id: runId },
+        {
+          ok: true,
+          status: result.status,
+          thread_id: threadId,
+          reply_to_id: replyToId,
+          run_id: runId,
+          memory_used: memoryUsed,
+        },
         { status: 200, headers },
       );
     }
@@ -570,6 +680,7 @@ Deno.serve(async (req: Request) => {
             engine_id: "openrouter_web",
             model_id: aliasModelId,
             resolved_model_id: resolvedModelId,
+            memory_used: memoryUsed,
           });
 
           const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -640,21 +751,24 @@ Deno.serve(async (req: Request) => {
           const finalText = fullContent.trim();
           if (!finalText) throw new Error("OpenRouter returned an empty response");
 
-          const { inserted } = await insertAssistantMessage({
+          const result = await writeAssistantReply({
             threadId,
             replyToId,
             contentText: finalText,
             modelId: aliasModelId,
             openrouterModelId: resolvedModelId,
             runId,
+            memoryUsed,
+            allowUpdate,
           });
 
           emit("done", {
             ok: true,
-            status: inserted ? "inserted" : "duplicate",
+            status: result.status,
             thread_id: threadId,
             reply_to_id: replyToId,
             run_id: runId,
+            memory_used: memoryUsed,
           });
           controller.close();
         } catch (error) {

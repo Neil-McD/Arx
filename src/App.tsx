@@ -304,6 +304,14 @@ type AutomationEndpoint = {
   updated_at: string;
 };
 
+type BrandosConnector = {
+  endpoint_id: string;
+  base_url: string;
+  brandos_account_id: string;
+  is_enabled: boolean;
+  updated_at: string;
+};
+
 type AutomationDelivery = {
   attempted_at: string;
   event_type: string;
@@ -355,6 +363,10 @@ const SLASH_COMMANDS = [
   { name: "/test", description: "Detect and propose a test command." },
   { name: "/remember", description: "Save a memory note (/remember Title :: Body) or open the memory editor." }
 ];
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-fA-F-]{36}$/.test(value);
+}
 
 const APPROVAL_PRESETS: Record<
   "read-only" | "agent" | "agent-full",
@@ -637,19 +649,30 @@ function App() {
   const [automationRevealSecret, setAutomationRevealSecret] = useState<{ label: string; secret: string } | null>(null);
   const [automationNotice, setAutomationNotice] = useState<string | null>(null);
 
-			  const [communitySettingsName, setCommunitySettingsName] = useState("");
-			  const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
-			  const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
+  const [brandosConnector, setBrandosConnector] = useState<BrandosConnector | null>(null);
+  const [isBrandosConnectOpen, setIsBrandosConnectOpen] = useState(false);
+  const [brandosBaseUrlInput, setBrandosBaseUrlInput] = useState("https://app.brandos.com");
+  const [brandosAccountIdInput, setBrandosAccountIdInput] = useState("");
+  const [brandosIdentifySecretInput, setBrandosIdentifySecretInput] = useState("");
+  const [brandosIsEnabledInput, setBrandosIsEnabledInput] = useState(true);
+  const [brandosError, setBrandosError] = useState<string | null>(null);
+  const [brandosNotice, setBrandosNotice] = useState<string | null>(null);
+  const [isSavingBrandosConnector, setIsSavingBrandosConnector] = useState(false);
+  const [isDeletingBrandosConnector, setIsDeletingBrandosConnector] = useState(false);
+
+  const [communitySettingsName, setCommunitySettingsName] = useState("");
+  const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
+  const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("private");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
-  const [communitySettingsMonthlyPlanId, setCommunitySettingsMonthlyPlanId] = useState<string | null>(null);
-  const [communitySettingsYearlyPlanId, setCommunitySettingsYearlyPlanId] = useState<string | null>(null);
+  const [, setCommunitySettingsMonthlyPlanId] = useState<string | null>(null);
+  const [, setCommunitySettingsYearlyPlanId] = useState<string | null>(null);
   const [communitySettingsPricingMode, setCommunitySettingsPricingMode] = useState<CommunityPricingMode>("free");
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
   const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
-		  const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
-		  const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
+  const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
+  const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
 
       const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
       const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
@@ -4610,14 +4633,10 @@ function isModelReady(modelId: string): boolean {
 	    }
 	  }
 
-  function communityChatThreadIdForCommunity(communityId: string): string {
-    return communityId;
-  }
-
-  function extractTextFromContentJson(contentJson: unknown): string {
-    if (contentJson === null || contentJson === undefined) return "";
-    if (typeof contentJson === "string") {
-      const trimmed = contentJson.trim();
+	  function extractTextFromContentJson(contentJson: unknown): string {
+	    if (contentJson === null || contentJson === undefined) return "";
+	    if (typeof contentJson === "string") {
+	      const trimmed = contentJson.trim();
       if (!trimmed) return "";
       try {
         const parsed = JSON.parse(trimmed) as unknown;
@@ -5244,58 +5263,66 @@ function isModelReady(modelId: string): boolean {
 	            total_resources: totalResources,
 	            resources_added_window: resourcesAddedWindow ?? totalResources,
 	          });
-		          setCommunityAnalyticsSeries(
-		            buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
-		          );
+	          setCommunityAnalyticsSeries(
+	            buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
+	          );
 
-		          try {
-		            const response = await fetchWithSupabaseAuth(
-		              `${url}/rest/v1/rpc/community_revenue_series`,
-		              {
-		                method: "POST",
-		                headers: { "Content-Type": "application/json" },
-		                body: JSON.stringify({ p_community_id: communityId, p_range: range }),
-		              },
-		              session
-		            );
-		            if (!response.ok) {
-		              const message = await readSupabaseError(response);
-		              setCommunityRevenueSeries([]);
-		              setCommunityRevenueMeta(null);
-		              setCommunityRevenueError(message);
-		            } else {
-		              const rows = (await response.json()) as Array<{
-		                bucket_start: string;
-		                net_base_units: number | string | null;
-		                currency: string | null;
-		                currency_decimals: number | null;
-		              }>;
-		              const metaCurrency = rows[0]?.currency ?? null;
-		              const metaDecimals = rows[0]?.currency_decimals ?? null;
-		              if (metaCurrency && metaDecimals != null) {
-		                setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
-		              } else {
-		                setCommunityRevenueMeta(null);
-		              }
-		              setCommunityRevenueSeries(
-		                rows.map((row) => {
-		                  const date = new Date(row.bucket_start);
-		                  return {
-		                    label: bucketLabel(date, chartBucket),
-		                    value: Number(row.net_base_units ?? 0) || 0,
-		                  };
-		                })
-		              );
-		            }
-		          } catch {
-		            setCommunityRevenueSeries([]);
-		            setCommunityRevenueMeta(null);
-		            setCommunityRevenueError("Failed to load revenue.");
-		          }
-		        } catch (error) {
-		          const message =
-		            typeof error === "string"
-		              ? error
+	          try {
+	            const response = await fetchWithSupabaseAuth(
+	              `${url}/rest/v1/rpc/community_revenue_series`,
+	              {
+	                method: "POST",
+	                headers: { "Content-Type": "application/json" },
+	                body: JSON.stringify({ p_community_id: communityId, p_range: range }),
+	              },
+	              session
+	            );
+	            if (!response.ok) {
+	              const message = await readSupabaseError(response);
+	              if (message.includes("schema cache")) {
+	                setCommunityRevenueSeries(
+	                  buildSeries([], windowStart ?? new Date(now - 30 * 86400000), chartBucket)
+	                );
+	                setCommunityRevenueMeta(null);
+	                setCommunityRevenueError(null);
+	              } else {
+	                setCommunityRevenueSeries([]);
+	                setCommunityRevenueMeta(null);
+	                setCommunityRevenueError(message);
+	              }
+	            } else {
+	              const rows = (await response.json()) as Array<{
+	                bucket_start: string;
+	                net_base_units: number | string | null;
+	                currency: string | null;
+	                currency_decimals: number | null;
+	              }>;
+	              const metaCurrency = rows[0]?.currency ?? null;
+	              const metaDecimals = rows[0]?.currency_decimals ?? null;
+	              if (metaCurrency && metaDecimals != null) {
+	                setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
+	              } else {
+	                setCommunityRevenueMeta(null);
+	              }
+	              setCommunityRevenueSeries(
+	                rows.map((row) => {
+	                  const date = new Date(row.bucket_start);
+	                  return {
+	                    label: bucketLabel(date, chartBucket),
+	                    value: Number(row.net_base_units ?? 0) || 0,
+	                  };
+	                })
+	              );
+	            }
+	          } catch {
+	            setCommunityRevenueSeries([]);
+	            setCommunityRevenueMeta(null);
+	            setCommunityRevenueError("Failed to load revenue.");
+	          }
+	        } catch (error) {
+	          const message =
+	            typeof error === "string"
+	              ? error
 	              : error instanceof Error
 	                ? error.message
 	                : "Failed to load analytics.";
@@ -5310,9 +5337,10 @@ function isModelReady(modelId: string): boolean {
         if (!url) return;
         setIsLoadingAutomations(true);
         setAutomationError(null);
+        setBrandosError(null);
 
         try {
-          const [endpointsRes, deliveriesRes] = await Promise.all([
+          const [endpointsRes, deliveriesRes, brandosRes] = await Promise.all([
             fetchWithSupabaseAuth(
               `${url}/rest/v1/rpc/list_automation_endpoints`,
               {
@@ -5331,6 +5359,15 @@ function isModelReady(modelId: string): boolean {
               },
               session,
             ),
+            fetchWithSupabaseAuth(
+              `${url}/rest/v1/rpc/get_brandos_connector`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ p_community_id: communityId }),
+              },
+              session,
+            ),
           ]);
 
           if (!endpointsRes.ok) throw new Error(await readSupabaseError(endpointsRes));
@@ -5340,6 +5377,14 @@ function isModelReady(modelId: string): boolean {
           const deliveries = (await deliveriesRes.json()) as AutomationDelivery[];
           setAutomationEndpoints(endpoints);
           setAutomationDeliveries(deliveries);
+
+          if (brandosRes.ok) {
+            const brandosRows = (await brandosRes.json()) as BrandosConnector[];
+            setBrandosConnector(brandosRows[0] ?? null);
+          } else {
+            setBrandosConnector(null);
+            setBrandosError(await readSupabaseError(brandosRes));
+          }
         } catch (error) {
           const message =
             typeof error === "string"
@@ -5347,7 +5392,11 @@ function isModelReady(modelId: string): boolean {
               : error instanceof Error
                 ? error.message
                 : "Failed to load automations.";
-          setAutomationError(message);
+          if (message.includes("schema cache")) {
+            setAutomationError("Automations are still syncing. Refresh in a moment.");
+          } else {
+            setAutomationError(message);
+          }
         } finally {
           setIsLoadingAutomations(false);
         }
@@ -5358,6 +5407,131 @@ function isModelReady(modelId: string): boolean {
         setAutomationUrlInput("");
         setAutomationIsEnabledInput(true);
         setAutomationSelectedEventTypes(["community.member_joined", "community.member_left"]);
+      }
+
+      function openBrandosConnect() {
+        setBrandosNotice(null);
+        setBrandosError(null);
+        setBrandosIdentifySecretInput("");
+        setBrandosBaseUrlInput(brandosConnector?.base_url?.trim() || "https://app.brandos.com");
+        setBrandosAccountIdInput(brandosConnector?.brandos_account_id?.trim() || "");
+        setBrandosIsEnabledInput(brandosConnector?.is_enabled ?? true);
+        setIsBrandosConnectOpen(true);
+      }
+
+      function closeBrandosConnect() {
+        setIsBrandosConnectOpen(false);
+        setBrandosIdentifySecretInput("");
+      }
+
+      async function handleSaveBrandosConnector() {
+        if (!supabaseSession || !activeCommunityId) return;
+        const url = getSupabaseUrl();
+        if (!url) {
+          setBrandosError("Missing Supabase URL.");
+          return;
+        }
+
+        setBrandosNotice(null);
+        setBrandosError(null);
+
+        const baseUrl = brandosBaseUrlInput.trim();
+        const accountId = brandosAccountIdInput.trim();
+        const secret = brandosIdentifySecretInput.trim();
+
+        if (!baseUrl) {
+          setBrandosError("BrandOS base URL is required.");
+          return;
+        }
+        if (!/^https?:\/\//.test(baseUrl)) {
+          setBrandosError("BrandOS base URL must start with https://");
+          return;
+        }
+        if (!accountId || !isUuid(accountId)) {
+          setBrandosError("BrandOS account id must be a UUID.");
+          return;
+        }
+        if (!secret) {
+          setBrandosError("BrandOS identify secret is required.");
+          return;
+        }
+
+        setIsSavingBrandosConnector(true);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/upsert_brandos_connector`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                p_community_id: activeCommunityId,
+                p_base_url: baseUrl,
+                p_brandos_account_id: accountId,
+                p_identify_secret: secret,
+                p_is_enabled: brandosIsEnabledInput,
+              }),
+            },
+            supabaseSession,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          const rows = (await response.json()) as BrandosConnector[];
+          const connector = rows[0] ?? null;
+          setBrandosConnector(connector);
+          setBrandosNotice(connector ? "BrandOS connected." : "BrandOS saved.");
+          setIsBrandosConnectOpen(false);
+          setBrandosIdentifySecretInput("");
+          await loadCommunityAutomations(activeCommunityId, supabaseSession);
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to save BrandOS connector.";
+          setBrandosError(message);
+        } finally {
+          setIsSavingBrandosConnector(false);
+        }
+      }
+
+      async function handleDeleteBrandosConnector() {
+        if (!supabaseSession || !activeCommunityId) return;
+        const url = getSupabaseUrl();
+        if (!url) {
+          setBrandosError("Missing Supabase URL.");
+          return;
+        }
+
+        setBrandosNotice(null);
+        setBrandosError(null);
+        setIsDeletingBrandosConnector(true);
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/delete_brandos_connector`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ p_community_id: activeCommunityId }),
+            },
+            supabaseSession,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          setBrandosConnector(null);
+          setBrandosNotice("BrandOS disconnected.");
+          setIsBrandosConnectOpen(false);
+          setBrandosIdentifySecretInput("");
+          await loadCommunityAutomations(activeCommunityId, supabaseSession);
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to disconnect BrandOS.";
+          setBrandosError(message);
+        } finally {
+          setIsDeletingBrandosConnector(false);
+        }
       }
 
       async function handleCreateAutomationEndpoint() {
@@ -5377,32 +5551,32 @@ function isModelReady(modelId: string): boolean {
           setAutomationError("Name is required.");
           return;
         }
-                if (!hookUrl) {
-                  setAutomationError("Webhook URL is required.");
-                  return;
-                }
-                if (automationSelectedEventTypes.length === 0) {
-                  setAutomationError("Select at least one event.");
-                  return;
-                }
+        if (!hookUrl) {
+          setAutomationError("Webhook URL is required.");
+          return;
+        }
+        if (automationSelectedEventTypes.length === 0) {
+          setAutomationError("Select at least one event.");
+          return;
+        }
 
-                try {
-                  const response = await fetchWithSupabaseAuth(
-                    `${url}/rest/v1/rpc/create_automation_endpoint`,
+        try {
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/create_automation_endpoint`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        p_community_id: activeCommunityId,
-                        p_name: name,
-                        p_url: hookUrl,
-                        p_event_types: automationSelectedEventTypes,
-                        p_include_email: false,
-                        p_is_enabled: automationIsEnabledInput,
-                      }),
-                    },
-                    supabaseSession,
-                  );
+              body: JSON.stringify({
+                p_community_id: activeCommunityId,
+                p_name: name,
+                p_url: hookUrl,
+                p_event_types: automationSelectedEventTypes,
+                p_include_email: false,
+                p_is_enabled: automationIsEnabledInput,
+              }),
+            },
+            supabaseSession,
+          );
           if (!response.ok) throw new Error(await readSupabaseError(response));
           const rows = (await response.json()) as Array<AutomationEndpoint & { signing_secret: string | null }>;
           const created = rows[0];
@@ -8550,6 +8724,89 @@ function isModelReady(modelId: string): boolean {
                   {authError && <div className="key-error">{authError}</div>}
                 </div>
 
+                {supabaseSession && (
+                  <div className="settings-section">
+                    <div className="settings-section-title">Builder plan</div>
+                    <div className="settings-section-desc">
+                      Starter is $20/month (10% take, 1 community). Pro is $100/month (3% take, 3 communities).
+                    </div>
+                    {(() => {
+                      const status = builderBillingStatus;
+                      const tier = (status?.builder_tier ?? "free").toLowerCase();
+                      const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+                      const max = status?.max_communities ?? 0;
+                      const pct = status ? status.platform_fee_bps / 100 : 10;
+                      const hasPayouts = Boolean(status?.has_payouts);
+                      return (
+                        <>
+                          <div className="account-row">
+                            <div className="account-identity">
+                              <span>Current</span>
+                              <strong>
+                                {tier === "pro" ? "Pro" : tier === "builder" ? "Starter" : "Free"} · {pct}% take ·{" "}
+                                {max > 0 ? `${ownedCount}/${max} communities` : `${ownedCount} communities`}
+                              </strong>
+                            </div>
+                            <div className="auth-actions">
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => supabaseSession && void loadBuilderBillingStatus(supabaseSession)}
+                                disabled={isLoadingBuilderBilling}
+                              >
+                                {isLoadingBuilderBilling ? "Refreshing…" : "Refresh"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="auth-actions">
+                            {tier === "free" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => void startBuilderPlanCheckout("builder")}
+                                  disabled={isStartingBuilderCheckout}
+                                >
+                                  {isStartingBuilderCheckout ? "Starting…" : "Start Starter"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void startBuilderPlanCheckout("pro")}
+                                  disabled={isStartingBuilderCheckout}
+                                >
+                                  {isStartingBuilderCheckout ? "Starting…" : "Start Pro"}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void openBuilderBillingPortal()}
+                                disabled={isStartingBuilderPortal}
+                              >
+                                {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
+                              </button>
+                            )}
+                            {!hasPayouts ? (
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => void startConnectOnboarding()}
+                                disabled={isStartingConnectOnboarding}
+                              >
+                                {isStartingConnectOnboarding ? "Opening…" : "Set up payouts"}
+                              </button>
+                            ) : (
+                              <button type="button" className="secondary" disabled>
+                                Payouts connected
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+                  </div>
+                )}
+
                 {supabaseSession &&
                   (isLoadingPendingPurchases ||
                     pendingPurchaseClaims.length > 0 ||
@@ -10915,9 +11172,19 @@ function isModelReady(modelId: string): boolean {
 	                        {automationNotice}
 	                      </div>
 	                    )}
+	                    {brandosNotice && (
+	                      <div className="success-toast" style={{ marginBottom: 12 }}>
+	                        {brandosNotice}
+	                      </div>
+	                    )}
 	                    {automationError && (
 	                      <div className="auth-error" style={{ marginBottom: 12 }}>
 	                        {automationError}
+	                      </div>
+	                    )}
+	                    {brandosError && (
+	                      <div className="auth-error" style={{ marginBottom: 12 }}>
+	                        {brandosError}
 	                      </div>
 	                    )}
 	                    {automationRevealSecret && (
@@ -10939,13 +11206,101 @@ function isModelReady(modelId: string): boolean {
 	                      <div className="analytics-chart-card">
 	                        <div className="analytics-chart-header">
 	                          <div className="analytics-chart-title">BrandOS</div>
-	                          <button type="button" disabled title="Coming soon">
-	                            Connect
-	                          </button>
+	                          <div className="analytics-chart-header-right">
+	                            {isBrandosConnectOpen ? (
+	                              <>
+	                                <button
+	                                  type="button"
+	                                  className="secondary"
+	                                  onClick={closeBrandosConnect}
+	                                  disabled={isSavingBrandosConnector}
+	                                >
+	                                  Cancel
+	                                </button>
+	                                <button
+	                                  type="button"
+	                                  onClick={() => void handleSaveBrandosConnector()}
+	                                  disabled={isSavingBrandosConnector}
+	                                >
+	                                  {isSavingBrandosConnector ? "Saving…" : brandosConnector ? "Save" : "Connect"}
+	                                </button>
+	                              </>
+	                            ) : brandosConnector ? (
+	                              <>
+	                                <button type="button" className="secondary" onClick={openBrandosConnect}>
+	                                  Manage
+	                                </button>
+	                                <button
+	                                  type="button"
+	                                  className="danger"
+	                                  onClick={() => void handleDeleteBrandosConnector()}
+	                                  disabled={isDeletingBrandosConnector}
+	                                >
+	                                  {isDeletingBrandosConnector ? "Disconnecting…" : "Disconnect"}
+	                                </button>
+	                              </>
+	                            ) : (
+	                              <button type="button" onClick={openBrandosConnect}>
+	                                Connect
+	                              </button>
+	                            )}
+	                          </div>
 	                        </div>
 	                        <div className="model-note">
-	                          Attribution + revenue tracking (webhooks with optional email, coming soon).
+	                          One-click attribution: Arx captures bid/aid and identifies on email capture.
 	                        </div>
+	                        {brandosConnector && !isBrandosConnectOpen && (
+	                          <div className="model-note">Connected to {brandosConnector.base_url}.</div>
+	                        )}
+	                        {isBrandosConnectOpen && (
+	                          <div style={{ marginTop: 12 }}>
+	                            <div className="invite-create-row invite-create-row-custom">
+	                              <label className="create-community-field">
+	                                <span>Base URL</span>
+	                                <input
+	                                  type="text"
+	                                  placeholder="https://app.brandos.com"
+	                                  value={brandosBaseUrlInput}
+	                                  onChange={(event) => setBrandosBaseUrlInput(event.target.value)}
+	                                />
+	                              </label>
+	                              <label className="create-community-field">
+	                                <span>Account id</span>
+	                                <input
+	                                  type="text"
+	                                  placeholder="00000000-0000-0000-0000-000000000000"
+	                                  value={brandosAccountIdInput}
+	                                  onChange={(event) => setBrandosAccountIdInput(event.target.value)}
+	                                />
+	                              </label>
+	                            </div>
+	                            <div className="invite-create-row invite-create-row-custom" style={{ marginTop: 12 }}>
+	                              <label className="create-community-field" style={{ flex: 1 }}>
+	                                <span>Identify secret</span>
+	                                <input
+	                                  type="password"
+	                                  placeholder="Paste your BrandOS identify secret"
+	                                  value={brandosIdentifySecretInput}
+	                                  onChange={(event) => setBrandosIdentifySecretInput(event.target.value)}
+	                                />
+	                              </label>
+	                            </div>
+	                            <div className="model-list" style={{ marginTop: 12 }}>
+	                              <label className="model-toggle">
+	                                <input
+	                                  type="checkbox"
+	                                  checked={brandosIsEnabledInput}
+	                                  onChange={(event) => setBrandosIsEnabledInput(event.target.checked)}
+	                                />
+	                                <span>Enabled</span>
+	                              </label>
+	                            </div>
+	                            <div className="model-note" style={{ marginTop: 10 }}>
+	                              Arx will POST to <span className="token">/api/identify</span> on{" "}
+	                              <span className="token">Email captured</span>.
+	                            </div>
+	                          </div>
+	                        )}
 	                      </div>
 	                    </div>
 	                    <div className="settings-section">
@@ -10983,7 +11338,7 @@ function isModelReady(modelId: string): boolean {
 	                                  setIsAutomationCreateOpen(true);
 	                                }}
 	                              >
-	                                Add
+	                                Add webhook
 	                              </button>
 	                            )}
 	                          </div>
@@ -12579,44 +12934,6 @@ function AnalyticsLineChart({
       </div>
     </div>
   );
-}
-
-function analyticsRangeLabel(range: AnalyticsRange): string {
-  switch (range) {
-    case "7d":
-      return "Last 7 days";
-    case "30d":
-      return "Last 30 days";
-    case "90d":
-      return "Last 90 days";
-    case "1y":
-      return "Last year";
-    case "all":
-      return "All time";
-    default:
-      return "Last 30 days";
-  }
-}
-
-function analyticsRangeDays(range: AnalyticsRange): number | null {
-  switch (range) {
-    case "7d":
-      return 7;
-    case "30d":
-      return 30;
-    case "90d":
-      return 90;
-    case "1y":
-      return 365;
-    default:
-      return null;
-  }
-}
-
-function analyticsRangeBucket(range: AnalyticsRange): "day" | "week" | "month" {
-  if (range === "7d" || range === "30d") return "day";
-  if (range === "90d") return "week";
-  return "month";
 }
 
 function shouldShowSender(
