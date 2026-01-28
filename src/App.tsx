@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -231,6 +231,28 @@ type BuilderBillingStatus = {
   cancel_at_period_end: boolean | null;
 };
 
+type BuilderBillingReturn = {
+  status: "success" | "cancel" | "return";
+  source: "web" | "desktop" | "unknown";
+  context: "builder" | "create_community" | "unknown";
+};
+
+type BuilderUpgradeContext = "builder" | "create_community";
+
+type CreateCommunityDraft = {
+  v: 1;
+  id: string;
+  created_at: number;
+  user_id: string | null;
+  name: string;
+  slug: string;
+  slug_edited: boolean;
+  visibility: "public" | "unlisted" | "private";
+  avatar_url: string | null;
+  banner_url: string | null;
+  description: string | null;
+};
+
 type OpenRouterStreamPayload = {
   session_id: string;
   run_id: string;
@@ -283,14 +305,45 @@ type CommunityRecord = {
   updated_at?: string | null;
 };
 
+type PublicPlanSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  amount_base_units: string;
+  currency: string;
+  currency_decimals: number;
+  billing_period: string;
+};
+
+type DiscoverCommunity = CommunityRecord & {
+  active_plan?: PublicPlanSummary | null;
+};
+
+function formatPlanPrice(plan: PublicPlanSummary): string {
+  const raw = String(plan.amount_base_units ?? "").trim();
+  const amount = Number(raw);
+  const decimals = Number(plan.currency_decimals ?? 2);
+  const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
+  const currency = String(plan.currency ?? "").toUpperCase();
+  const suffix = plan.billing_period === "yearly" ? "/year" : plan.billing_period === "monthly" ? "/month" : "";
+  if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
+  return `${value.toFixed(0)} ${currency}${suffix}`;
+}
+
 type CommunityChatMessage = {
   id: string;
   community_id: string;
   sender_id: string;
   body: string;
+  attachments?: MessageAttachment[];
   reply_to_id?: string | null;
   created_at: string;
   seq: number;
+};
+
+type ChatLightboxImage = {
+  url: string;
+  name: string;
 };
 
 type AutomationEndpoint = {
@@ -339,11 +392,32 @@ type Attachment = {
   previewDataUrl?: string; // base64 data URL for image thumbnails
 };
 
+type MessageAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file";
+  mime: string | null;
+  size: number;
+  data_url?: string | null;
+  text?: string | null;
+  truncated?: boolean | null;
+};
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
+const MAX_COMMUNITY_ATTACHMENTS_PER_MESSAGE = 8;
+const MAX_COMMUNITY_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still compressed before sending)
+const MAX_COMMUNITY_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
+const MAX_COMMUNITY_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
+const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
+const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
+const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
+const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
+const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
@@ -366,6 +440,118 @@ const SLASH_COMMANDS = [
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
+}
+
+function isValidCommunitySlug(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 3 || trimmed.length > 32) return false;
+  return /^(?!-)[a-z0-9-]+(?<!-)$/.test(trimmed);
+}
+
+function createCommunityDraftId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // ignore
+  }
+  return `draft_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+}
+
+function loadCreateCommunityDraft(): CreateCommunityDraft | null {
+  try {
+    const raw = localStorage.getItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    if (record.v !== 1) return null;
+    const createdAt = Number(record.created_at);
+    if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
+    if (Date.now() - createdAt > CREATE_COMMUNITY_DRAFT_TTL_MS) {
+      localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+      return null;
+    }
+
+    const id = typeof record.id === "string" ? record.id : createCommunityDraftId();
+    const user_id = typeof record.user_id === "string" ? record.user_id : null;
+    const name = typeof record.name === "string" ? record.name : "";
+    const slug = typeof record.slug === "string" ? record.slug : "";
+    const slug_edited = Boolean(record.slug_edited);
+    const visibility =
+      record.visibility === "public" || record.visibility === "unlisted" || record.visibility === "private"
+        ? (record.visibility as "public" | "unlisted" | "private")
+        : "private";
+    const avatar_url = typeof record.avatar_url === "string" ? record.avatar_url : null;
+    const banner_url = typeof record.banner_url === "string" ? record.banner_url : null;
+    const description = typeof record.description === "string" ? record.description : null;
+
+    if (!name.trim() || !isValidCommunitySlug(slug.trim().toLowerCase())) return null;
+
+    return {
+      v: 1,
+      id,
+      created_at: createdAt,
+      user_id,
+      name,
+      slug,
+      slug_edited,
+      visibility,
+      avatar_url,
+      banner_url,
+      description,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveCreateCommunityDraft(draft: CreateCommunityDraft): void {
+  try {
+    localStorage.setItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore
+  }
+}
+
+function clearCreateCommunityDraft(): void {
+  try {
+    localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function captureBrandosAidFromLocation(): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = (params.get("bid") ?? params.get("brandos_aid") ?? params.get("aid") ?? "").trim();
+    if (!raw || !isUuid(raw)) return;
+
+    localStorage.setItem(BRANDOS_AID_LAST_KEY, raw);
+
+    const path = window.location.pathname || "/";
+    if (path.startsWith("/c/")) {
+      const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
+      if (slug) localStorage.setItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`, raw);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function getBrandosAidForCommunitySlug(slug: string | null): string | null {
+  try {
+    if (slug) {
+      const scoped = (localStorage.getItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`) ?? "").trim();
+      if (scoped && isUuid(scoped)) return scoped;
+      return null;
+    }
+    const last = (localStorage.getItem(BRANDOS_AID_LAST_KEY) ?? "").trim();
+    if (last && isUuid(last)) return last;
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 const APPROVAL_PRESETS: Record<
@@ -488,6 +674,10 @@ type UserProfile = {
   avatar_url: string | null;
 };
 
+type UserProfileDetail = UserProfile & {
+  bio: string | null;
+};
+
 type CommunityInviteRecord = {
   id: string;
   community_id: string;
@@ -547,8 +737,12 @@ function App() {
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([
     { id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }
   ]);
+  const [systemPromptDraft, setSystemPromptDraft] = useState("");
+  const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(false);
+  const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false);
+  const [systemPromptError, setSystemPromptError] = useState<string | null>(null);
   const [modelAvailability, setModelAvailability] = useState<Record<string, boolean>>({});
-		  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
+			  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
 		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
       const providerKeySyncInFlightRef = useRef<Promise<void> | null>(null);
       const lastProviderKeySyncAtRef = useRef<number>(0);
@@ -568,9 +762,42 @@ function App() {
       const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
       const [isLoadingBuilderBilling, setIsLoadingBuilderBilling] = useState(false);
       const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
-      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
-      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
-      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
+	      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
+	      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
+	      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
+	      const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
+	      const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
+	      const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
+	      const [isFinalizingBuilderReturn, setIsFinalizingBuilderReturn] = useState(false);
+	      const [isFinalizingCreateCommunityFromBilling, setIsFinalizingCreateCommunityFromBilling] = useState(false);
+	      const [finalizeCreateCommunityError, setFinalizeCreateCommunityError] = useState<string | null>(null);
+	      const builderUpgradeModalBodyRef = useRef<HTMLDivElement | null>(null);
+	      const [showBuilderUpgradeScrollHint, setShowBuilderUpgradeScrollHint] = useState(false);
+
+	      const updateBuilderUpgradeScrollHint = useCallback(() => {
+	        const el = builderUpgradeModalBodyRef.current;
+	        if (!el) return;
+	        const threshold = 8;
+	        const scrollable = el.scrollHeight - el.clientHeight > threshold;
+	        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
+	        setShowBuilderUpgradeScrollHint(scrollable && !atBottom);
+	      }, []);
+
+	      useEffect(() => {
+	        if (!isBuilderUpgradeOpen) {
+	          setShowBuilderUpgradeScrollHint(false);
+	          return;
+	        }
+	        updateBuilderUpgradeScrollHint();
+	        const handleResize = () => updateBuilderUpgradeScrollHint();
+	        window.addEventListener("resize", handleResize);
+	        return () => window.removeEventListener("resize", handleResize);
+	      }, [isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
+
+	      useEffect(() => {
+	        if (!isBuilderUpgradeOpen) return;
+	        updateBuilderUpgradeScrollHint();
+	      }, [builderBillingStatus?.builder_tier, builderUpgradeContext, isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
 
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
@@ -660,6 +887,22 @@ function App() {
   const [isSavingBrandosConnector, setIsSavingBrandosConnector] = useState(false);
   const [isDeletingBrandosConnector, setIsDeletingBrandosConnector] = useState(false);
 
+  const lastBrandosIdentifyDelivery = useMemo(() => {
+    let best: AutomationDelivery | null = null;
+    let bestMs = -1;
+    for (const delivery of automationDeliveries) {
+      if (delivery.endpoint_name !== "BrandOS") continue;
+      if (delivery.event_type !== "identity.email_captured") continue;
+      const ms = new Date(delivery.attempted_at).getTime();
+      if (!Number.isFinite(ms)) continue;
+      if (!best || ms > bestMs) {
+        best = delivery;
+        bestMs = ms;
+      }
+    }
+    return best;
+  }, [automationDeliveries]);
+
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
@@ -672,7 +915,15 @@ function App() {
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
   const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
   const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
+  const [communitySettingsBannerUploadError, setCommunitySettingsBannerUploadError] = useState<string | null>(null);
+  const [isProcessingCommunitySettingsBanner, setIsProcessingCommunitySettingsBanner] = useState(false);
   const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
+  const communitySettingsLoadedCommunityIdRef = useRef<string | null>(null);
+  const communitySettingsDirtyRef = useRef(false);
+  const communityPricingDirtyRef = useRef(false);
+  const markCommunitySettingsDirty = () => {
+    communitySettingsDirtyRef.current = true;
+  };
 
       const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
       const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
@@ -681,8 +932,14 @@ function App() {
 
 		  const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
+  const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
+  const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
+  const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
+  const [isCommunityChatLightboxOpen, setIsCommunityChatLightboxOpen] = useState(false);
+  const [communityChatLightboxImages, setCommunityChatLightboxImages] = useState<ChatLightboxImage[]>([]);
+  const [communityChatLightboxIndex, setCommunityChatLightboxIndex] = useState(0);
   const [replyingToMessage, setReplyingToMessage] = useState<CommunityChatMessage | null>(null);
   const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
   const communityTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -704,7 +961,7 @@ function App() {
 	  const [isLoadingMoreChat, setIsLoadingMoreChat] = useState(false);
 	  const [communityChatHasMore, setCommunityChatHasMore] = useState(true);
 		  const [isLoadingResources, setIsLoadingResources] = useState(false);
-      const [discoverCommunities, setDiscoverCommunities] = useState<CommunityRecord[]>([]);
+      const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
       const [discoverQuery, setDiscoverQuery] = useState("");
       const [discoverError, setDiscoverError] = useState<string | null>(null);
       const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
@@ -750,6 +1007,11 @@ function App() {
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() =>
     localStorage.getItem("arx_profile_avatar")
   );
+  const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const profileSaveTimeoutRef = useRef<number | null>(null);
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const resizeRaf = useRef<number | null>(null);
@@ -759,9 +1021,6 @@ function App() {
   const [execPolicyRules, setExecPolicyRules] = useState("");
   const [isSavingExecPolicy, setIsSavingExecPolicy] = useState(false);
   const [execPolicyError, setExecPolicyError] = useState<string | null>(null);
-  const [sessionExecPolicyRules, setSessionExecPolicyRules] = useState("");
-  const [isSavingSessionExecPolicy, setIsSavingSessionExecPolicy] = useState(false);
-  const [sessionExecPolicyError, setSessionExecPolicyError] = useState<string | null>(null);
   const [policyByToolCallId, setPolicyByToolCallId] = useState<Record<
     string,
     { decision: "allow" | "prompt" | "forbid"; reason: string; matched_rule?: string | null }
@@ -772,9 +1031,7 @@ function App() {
   const [personalMemoryError, setPersonalMemoryError] = useState<string | null>(null);
   const [isLoadingPersonalMemory, setIsLoadingPersonalMemory] = useState(false);
   const [newPersonalMemoryContent, setNewPersonalMemoryContent] = useState("");
-  const [newPersonalMemoryScope, setNewPersonalMemoryScope] = useState<"global" | "workspace">(
-    "workspace"
-  );
+  const [newPersonalMemoryScope] = useState<"global" | "workspace">("global");
   const [newPersonalMemoryPinned, setNewPersonalMemoryPinned] = useState(false);
   const [slashPanel, setSlashPanel] = useState<{
     kind: "status" | "approvals" | "info";
@@ -782,7 +1039,6 @@ function App() {
     body?: string;
   } | null>(null);
   const [approvalMode, setApprovalMode] = useState<"read-only" | "agent" | "agent-full">("agent");
-  const [autoApproveWriteEdit, setAutoApproveWriteEdit] = useState(false);
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectRecord | null>(null);
   const askInputRef = useRef<HTMLInputElement | null>(null);
@@ -844,6 +1100,7 @@ function App() {
   }, [commandInput, slashIndex]);
 
 	  useEffect(() => {
+	    captureBrandosAidFromLocation();
 	    void loadThreads();
 	    void loadWorkspaceRoot();
 	    void loadActiveProject();
@@ -911,7 +1168,6 @@ function App() {
     void loadMessages(activeThreadId);
     void loadTurns(activeThreadId);
     void loadSessionResume(activeThreadId);
-    void loadSessionExecPolicyRules(activeThreadId);
   }, [activeThreadId, activeProject?.id]);
 
   useEffect(() => {
@@ -1301,6 +1557,82 @@ function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    setIsLoadingSystemPrompt(true);
+    setSystemPromptError(null);
+    void invoke<string | null>("get_system_prompt_cmd")
+      .then((value) => setSystemPromptDraft(value ?? ""))
+      .catch(() => setSystemPromptDraft(""))
+      .finally(() => setIsLoadingSystemPrompt(false));
+  }, []);
+
+  async function fetchCloudSystemPrompt(session: SupabaseSession): Promise<string | null> {
+    const url = getSupabaseUrl();
+    if (!url) return null;
+    const userId = getSupabaseAuthUid(session);
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/user_model_settings?select=system_prompt&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+      { method: "GET" },
+      session,
+    );
+    if (!response.ok) return null;
+    const rows = (await response.json()) as Array<{ system_prompt?: unknown }>;
+    const raw = rows[0]?.system_prompt;
+    return typeof raw === "string" ? raw : "";
+  }
+
+  async function setCloudSystemPrompt(session: SupabaseSession, prompt: string): Promise<boolean> {
+    const url = getSupabaseUrl();
+    if (!url) return false;
+    const userId = getSupabaseAuthUid(session);
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/user_model_settings`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ user_id: userId, system_prompt: prompt }),
+      },
+      session,
+    );
+    return response.ok;
+  }
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    setIsLoadingSystemPrompt(true);
+    setSystemPromptError(null);
+    void fetchCloudSystemPrompt(supabaseSession)
+      .then(async (prompt) => {
+        if (prompt === null) return;
+        setSystemPromptDraft(prompt);
+        try {
+          await invoke("set_system_prompt_cmd", { prompt });
+        } catch {
+          // ignore
+        }
+      })
+      .catch((error) => {
+        setSystemPromptError(error instanceof Error ? error.message : "Failed to load system prompt");
+      })
+      .finally(() => setIsLoadingSystemPrompt(false));
+  }, [supabaseSession?.user?.id]);
+
+  async function saveSystemPrompt(prompt: string): Promise<void> {
+    setIsSavingSystemPrompt(true);
+    setSystemPromptError(null);
+    try {
+      await invoke("set_system_prompt_cmd", { prompt });
+      const session = supabaseSessionRef.current;
+      if (session) {
+        await setCloudSystemPrompt(session, prompt);
+      }
+    } catch (error) {
+      setSystemPromptError(error instanceof Error ? error.message : "Failed to save system prompt");
+    } finally {
+      setIsSavingSystemPrompt(false);
+    }
+  }
+
+  useEffect(() => {
     try {
       localStorage.setItem("arx-community-analytics-range", communityAnalyticsRange);
     } catch {
@@ -1446,15 +1778,17 @@ function App() {
 	    const onFocus = () => {
 	      const current = supabaseSessionRef.current;
 	      if (!current) return;
-      const now = Math.floor(Date.now() / 1000);
-      if (current.expires_at <= now + 60) {
-        void refreshSupabaseSessionLocked(current.refresh_token);
-      }
-      scheduleOpenRouterKeySync(current, "focus");
-    };
-    window.addEventListener("focus", onFocus);
-	    return () => window.removeEventListener("focus", onFocus);
-	  }, []);
+	      const now = Math.floor(Date.now() / 1000);
+	      if (current.expires_at <= now + 60) {
+	        void refreshSupabaseSessionLocked(current.refresh_token);
+	      }
+	      scheduleOpenRouterKeySync(current, "focus");
+	      void loadBuilderBillingStatus(current);
+        void loadSelfProfile(current);
+	    };
+	    window.addEventListener("focus", onFocus);
+		    return () => window.removeEventListener("focus", onFocus);
+		  }, []);
 
 	  useEffect(() => {
 	    if (!supabaseSession) return;
@@ -1463,6 +1797,7 @@ function App() {
 	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
       void loadPendingPurchaseClaims(supabaseSession);
       void loadBuilderBillingStatus(supabaseSession);
+      void loadSelfProfile(supabaseSession);
       scheduleOpenRouterKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
 
@@ -1470,20 +1805,88 @@ function App() {
       setIsPendingPurchasesBannerDismissed(false);
     }, [pendingPurchaseBannerKey]);
 
-    useEffect(() => {
-      if (supabaseSession) return;
-      setPendingPurchaseClaims([]);
-      setPendingPurchasesError(null);
-      setPendingPurchasesSuccess(null);
-      setBuilderBillingStatus(null);
-      setBuilderBillingError(null);
-      setIsLoadingBuilderBilling(false);
-    }, [supabaseSession]);
+	    useEffect(() => {
+	      if (supabaseSession) return;
+	      setPendingPurchaseClaims([]);
+	      setPendingPurchasesError(null);
+	      setPendingPurchasesSuccess(null);
+	      setBuilderBillingStatus(null);
+	      setBuilderBillingError(null);
+	      setIsLoadingBuilderBilling(false);
+        setCloudProfile(null);
+        setProfileSaveError(null);
+        setProfileSaveSuccess(false);
+        if (profileSaveTimeoutRef.current) {
+          window.clearTimeout(profileSaveTimeoutRef.current);
+          profileSaveTimeoutRef.current = null;
+        }
+	    }, [supabaseSession]);
 
-    useEffect(() => {
-      if (!supabaseSession) return;
-      if (isRedeemingClaim) return;
-      const token = (() => {
+	    useEffect(() => {
+	      if (!builderBillingReturn) return;
+	      if (!supabaseSession) return;
+	      if (builderBillingReturn.status === "cancel") return;
+
+		      let cancelled = false;
+			      const run = async () => {
+			        setIsFinalizingBuilderReturn(true);
+			        try {
+			          const wantsCreate = builderBillingReturn.context === "create_community";
+			          const maxAttempts =
+			            builderBillingReturn.status === "success" ? 30 : wantsCreate ? 10 : 1;
+			          const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+			          let lastStatus: BuilderBillingStatus | null = null;
+			          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			            if (cancelled) return;
+			            const status = await loadBuilderBillingStatus(supabaseSession);
+			            lastStatus = status;
+			            const tier = (status?.builder_tier ?? "free").toLowerCase();
+			            const max = status?.max_communities ?? 0;
+			            const hasCapacity = tier !== "free" && max > 0 && ownedCount < max;
+			            if (tier !== "free" && (!wantsCreate || hasCapacity)) break;
+			            if (builderBillingReturn.status !== "success" && !wantsCreate) break;
+			            await new Promise((resolve) => window.setTimeout(resolve, 1000));
+			          }
+
+		          if (cancelled) return;
+		          if (!wantsCreate) return;
+		          if (isFinalizingCreateCommunityFromBilling) return;
+
+		          const draft = loadCreateCommunityDraft();
+		          if (!draft) {
+		            setFinalizeCreateCommunityError("Draft not found. Re-open Create community to continue.");
+		            return;
+		          }
+			          if (draft.user_id && supabaseSession.user.id && draft.user_id !== supabaseSession.user.id) {
+			            setFinalizeCreateCommunityError("Draft belongs to a different account. Re-open Create community to continue.");
+			            return;
+			          }
+			          const tier = (lastStatus?.builder_tier ?? builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+			          const max = lastStatus?.max_communities ?? builderBillingStatus?.max_communities ?? 0;
+			          if (tier === "free") {
+			            setFinalizeCreateCommunityError("Still finalizing your plan. Wait a moment and try again.");
+			            return;
+			          }
+			          if (max > 0 && ownedCount >= max) {
+			            setFinalizeCreateCommunityError("You've reached your plan limit. Upgrade your plan to create more communities.");
+			            return;
+			          }
+			          await createCommunityFromDraft(draft, supabaseSession);
+			        } finally {
+			          if (!cancelled) setIsFinalizingBuilderReturn(false);
+			        }
+			      };
+
+	      void run();
+	      return () => {
+	        cancelled = true;
+	      };
+	    }, [builderBillingReturn, supabaseSession]);
+
+	    useEffect(() => {
+	      if (!supabaseSession) return;
+	      if (isRedeemingClaim) return;
+	      const token = (() => {
         try {
           return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
         } catch {
@@ -1523,34 +1926,56 @@ function App() {
 		    }
 		  }, [activeCommunityId]);
 
-		  useEffect(() => {
-		    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
-		    setCommunitySettingsError(null);
-        setCommunityMemberSettingsError(null);
-		    if (!current) {
-	      setCommunitySettingsName("");
-	      setCommunitySettingsSlug("");
-	      setCommunitySettingsDescription("");
-	      setCommunitySettingsVisibility("private");
-	      setCommunitySettingsAvatarUrl(null);
-	      setCommunitySettingsBannerUrl(null);
-        setCommunitySettingsMonthlyPlanId(null);
-        setCommunitySettingsYearlyPlanId(null);
-        setCommunitySettingsPriceUsdMonthly("");
-        setCommunitySettingsPriceUsdYearly("");
-        setCommunityMemberMuted(false);
-	      setCommunityInvites([]);
-	      setInviteCreateError(null);
-	      return;
-	    }
-	    setCommunitySettingsName(current.name ?? "");
-	    setCommunitySettingsSlug(current.slug ?? "");
-	    setCommunitySettingsDescription(current.description ?? "");
-	    setCommunitySettingsVisibility(current.visibility ?? "private");
-	    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
-	    setCommunitySettingsBannerUrl(current.banner_url ?? null);
-		    setInviteCreateError(null);
-		  }, [activeCommunityId, communities]);
+				  useEffect(() => {
+				    const nextLoadedId = activeCommunityId ?? null;
+				    const switchingCommunity = communitySettingsLoadedCommunityIdRef.current !== nextLoadedId;
+				    if (switchingCommunity) {
+				      communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
+				      communitySettingsDirtyRef.current = false;
+				      communityPricingDirtyRef.current = false;
+				      setCommunitySettingsMonthlyPlanId(null);
+				      setCommunitySettingsYearlyPlanId(null);
+				      setCommunitySettingsPricingMode("free");
+				      setCommunitySettingsPriceUsdMonthly("");
+				      setCommunitySettingsPriceUsdYearly("");
+				    }
+
+			    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
+			    if (!current) {
+			      setCommunitySettingsError(null);
+			      setCommunityMemberSettingsError(null);
+			      setCommunitySettingsBannerUploadError(null);
+			      setIsProcessingCommunitySettingsBanner(false);
+			      setCommunitySettingsName("");
+			      setCommunitySettingsSlug("");
+			      setCommunitySettingsDescription("");
+			      setCommunitySettingsVisibility("private");
+			      setCommunitySettingsAvatarUrl(null);
+			      setCommunitySettingsBannerUrl(null);
+			      setCommunitySettingsMonthlyPlanId(null);
+			      setCommunitySettingsYearlyPlanId(null);
+			      setCommunitySettingsPriceUsdMonthly("");
+			      setCommunitySettingsPriceUsdYearly("");
+			      setCommunityMemberMuted(false);
+			      setCommunityInvites([]);
+			      setInviteCreateError(null);
+			      return;
+			    }
+
+			    if (!switchingCommunity && communitySettingsDirtyRef.current) return;
+
+			    setCommunitySettingsError(null);
+			    setCommunityMemberSettingsError(null);
+				    setCommunitySettingsBannerUploadError(null);
+				    setIsProcessingCommunitySettingsBanner(false);
+				    setCommunitySettingsName(current.name ?? "");
+				    setCommunitySettingsSlug(slugify(current.slug ?? ""));
+				    setCommunitySettingsDescription(current.description ?? "");
+				    setCommunitySettingsVisibility(current.visibility ?? "private");
+				    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
+				    setCommunitySettingsBannerUrl(current.banner_url ?? null);
+				    setInviteCreateError(null);
+			  }, [activeCommunityId, communities]);
 
       useEffect(() => {
         if (activePage !== "community" || communityTab !== "settings") return;
@@ -1674,43 +2099,48 @@ function App() {
         }
       }
 
-      useEffect(() => {
-        if (activePage !== "community" || communityTab !== "settings") return;
-        if (!supabaseSession || !activeCommunityId) {
-          setCommunitySettingsMonthlyPlanId(null);
-          setCommunitySettingsYearlyPlanId(null);
-          setCommunitySettingsPricingMode("free");
-          setCommunitySettingsPriceUsdMonthly("");
-          setCommunitySettingsPriceUsdYearly("");
-          return;
-        }
-        if (!activeCommunityAccess?.can_manage_members) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
+	      useEffect(() => {
+	        if (activePage !== "community" || communityTab !== "settings") return;
+	        if (!supabaseSession || !activeCommunityId) {
+	          setCommunitySettingsMonthlyPlanId(null);
+	          setCommunitySettingsYearlyPlanId(null);
+	          setCommunitySettingsPricingMode("free");
+	          setCommunitySettingsPriceUsdMonthly("");
+	          setCommunitySettingsPriceUsdYearly("");
+	          return;
+	        }
+	        if (!activeCommunityAccess?.can_manage_members) return;
+	        const url = getSupabaseUrl();
+	        if (!url) return;
 
-        (async () => {
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/get_community_pricing`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: activeCommunityId }),
-              },
-              supabaseSession
-            );
-            if (!response.ok) return;
-            const rows = (await response.json()) as Array<{
-              billing_period: string;
-              plan_id: string;
-              amount_base_units: number | string;
-              currency: string;
-              currency_decimals: number;
-            }>;
-            const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
-            const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
-            setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
-            setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
+	        let cancelled = false;
+	        const communityId = activeCommunityId;
+	        (async () => {
+	          try {
+	            const response = await fetchWithSupabaseAuth(
+	              `${url}/rest/v1/rpc/get_community_pricing`,
+	              {
+	                method: "POST",
+	                headers: { "Content-Type": "application/json" },
+	                body: JSON.stringify({ p_community_id: communityId }),
+	              },
+	              supabaseSession
+	            );
+	            if (!response.ok) return;
+	            const rows = (await response.json()) as Array<{
+	              billing_period: string;
+	              plan_id: string;
+	              amount_base_units: number | string;
+	              currency: string;
+	              currency_decimals: number;
+	            }>;
+	            if (cancelled) return;
+	            if (communitySettingsLoadedCommunityIdRef.current !== communityId) return;
+	            if (communityPricingDirtyRef.current) return;
+	            const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
+	            const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
+	            setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
+	            setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
 
             const formatPlanAmount = (row: typeof monthly): string => {
               if (!row) return "";
@@ -1720,18 +2150,21 @@ function App() {
             };
             setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
             setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
-            setCommunitySettingsPricingMode(
-              monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
-            );
-          } catch {
-            // ignore
-          }
-        })();
-      }, [
-        activePage,
-        communityTab,
-        supabaseSession,
-        activeCommunityId,
+	            setCommunitySettingsPricingMode(
+	              monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
+	            );
+	          } catch {
+	            // ignore
+	          }
+	        })();
+	        return () => {
+	          cancelled = true;
+	        };
+	      }, [
+	        activePage,
+	        communityTab,
+	        supabaseSession,
+	        activeCommunityId,
         activeCommunityAccess?.can_manage_members,
       ]);
 
@@ -2523,37 +2956,66 @@ function App() {
       }
     );
 
-    const unlistenOpenedUrls = listen<OpenedUrlsPayload>(
-      "app-opened-urls",
-      async (event) => {
-        const urls = event.payload.urls ?? [];
-        if (urls.length === 0) return;
+	    const unlistenOpenedUrls = listen<OpenedUrlsPayload>(
+	      "app-opened-urls",
+	      async (event) => {
+	        const urls = event.payload.urls ?? [];
+	        if (urls.length === 0) return;
 
-        let newestInvite: string | null = null;
-        let newestClaimToken: string | null = null;
-        for (const raw of urls) {
-          let parsed: URL;
-          try {
-            parsed = new URL(raw);
-          } catch {
-            continue;
-          }
+		        let newestInvite: string | null = null;
+		        let newestClaimToken: string | null = null;
+		        let newestSettingsPage: string | null = null;
+		        let newestBillingReturn: BuilderBillingReturn | null = null;
+		        for (const raw of urls) {
+		          let parsed: URL;
+		          try {
+		            parsed = new URL(raw);
+		          } catch {
+	            continue;
+	          }
 
-          if (parsed.protocol === "arx:") {
-            const host = (parsed.hostname ?? "").toLowerCase();
-            const pathname = (parsed.pathname ?? "").toLowerCase();
-            const token = (parsed.searchParams.get("token") ?? parsed.searchParams.get("claim") ?? "").trim();
-            if ((host === "claim" || pathname === "/claim") && token) {
-              newestClaimToken = token;
-              try {
-                localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
-              } catch {
-                // ignore
-              }
-            }
-          }
-          const inviteKey = parsed.searchParams.get("invite") ?? parsed.searchParams.get("join");
-          if (!inviteKey) continue;
+		          if (parsed.protocol === "arx:") {
+		            const host = (parsed.hostname ?? "").toLowerCase();
+		            const pathname = (parsed.pathname ?? "").toLowerCase();
+		            const token = (parsed.searchParams.get("token") ?? parsed.searchParams.get("claim") ?? "").trim();
+		            if ((host === "claim" || pathname === "/claim") && token) {
+		              newestClaimToken = token;
+		              try {
+		                localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
+		              } catch {
+		                // ignore
+		              }
+		            }
+		            if (host === "settings" || pathname === "/settings") {
+		              const page = (parsed.searchParams.get("page") ?? parsed.searchParams.get("tab") ?? "").trim().toLowerCase();
+		              const fromPath = (pathname.startsWith("/") ? pathname.slice(1) : pathname).split("/")[0] ?? "";
+		              const next = (page || fromPath).trim();
+		              if (next) newestSettingsPage = next;
+		            }
+		            if (host === "billing" || pathname === "/billing") {
+		              const status = (parsed.searchParams.get("status") ?? parsed.searchParams.get("billing") ?? "")
+		                .trim()
+		                .toLowerCase();
+		              if (status === "success" || status === "cancel" || status === "return") {
+		                const rawContext = (parsed.searchParams.get("context") ?? parsed.searchParams.get("billing_context") ?? "")
+		                  .trim()
+		                  .toLowerCase();
+		                const context =
+		                  rawContext === "create_community"
+		                    ? "create_community"
+		                    : rawContext === "builder"
+		                      ? "builder"
+		                      : "unknown";
+		                newestBillingReturn = {
+		                  status: status as BuilderBillingReturn["status"],
+		                  source: "desktop",
+		                  context,
+		                };
+		              }
+		            }
+		          }
+		          const inviteKey = parsed.searchParams.get("invite") ?? parsed.searchParams.get("join");
+		          if (!inviteKey) continue;
 
           const normalized = normalizeInviteCode(inviteKey);
           if (!normalized) continue;
@@ -2566,20 +3028,38 @@ function App() {
           }
         }
 
-        if (newestClaimToken) {
-          const session = supabaseSessionRef.current;
-          if (session) {
-            void redeemPurchaseClaim(newestClaimToken);
-          } else {
-            setAuthError("Sign in to claim access.");
-            void handleSignIn();
-          }
-        }
+		        if (newestClaimToken) {
+		          const session = supabaseSessionRef.current;
+		          if (session) {
+		            void redeemPurchaseClaim(newestClaimToken);
+	          } else {
+	            setAuthError("Sign in to claim access.");
+	            void handleSignIn();
+	          }
+		        }
 
-        if (newestInvite) {
-          await loadPendingInvites();
-          setActivePage("workspace");
-          setActiveView("home");
+		        if (newestBillingReturn) {
+		          setFinalizeCreateCommunityError(null);
+		          setBuilderBillingReturn(newestBillingReturn);
+		        }
+
+		        if (newestSettingsPage) {
+		          setActiveView("settings");
+		          if (
+	            newestSettingsPage === "account" ||
+	            newestSettingsPage === "models" ||
+	            newestSettingsPage === "execution" ||
+	            newestSettingsPage === "memory" ||
+	            newestSettingsPage === "appearance"
+	          ) {
+	            setSettingsPage(newestSettingsPage);
+	          }
+	        }
+
+	        if (newestInvite) {
+	          await loadPendingInvites();
+	          setActivePage("workspace");
+	          setActiveView("home");
           setActiveInviteGateKey(newestInvite);
         }
       }
@@ -2659,16 +3139,6 @@ function App() {
     slashState.query,
     streamingContent,
   ]);
-
-  useEffect(() => {
-    if (!activeThreadId) {
-      setAutoApproveWriteEdit(false);
-      return;
-    }
-    void invoke<boolean>("get_auto_approve_write_edit_cmd", { threadId: activeThreadId })
-      .then((value) => setAutoApproveWriteEdit(Boolean(value)))
-      .catch(() => setAutoApproveWriteEdit(false));
-  }, [activeThreadId]);
 
   function toUnixSecondsFromIso(value: string | null | undefined): number | null {
     if (!value) return null;
@@ -3152,17 +3622,6 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function loadSessionExecPolicyRules(sessionId: string) {
-    try {
-      const value = await invoke<string | null>("get_session_exec_policy_rules_cmd", {
-        sessionId
-      });
-      setSessionExecPolicyRules(value ?? "");
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
   async function handleSaveExecPolicyRules() {
     setIsSavingExecPolicy(true);
     setExecPolicyError(null);
@@ -3174,28 +3633,6 @@ function isModelReady(modelId: string): boolean {
       );
     } finally {
       setIsSavingExecPolicy(false);
-    }
-  }
-
-  async function handleSaveSessionExecPolicyRules() {
-    if (!activeThreadId) return;
-    setIsSavingSessionExecPolicy(true);
-    setSessionExecPolicyError(null);
-    try {
-      await invoke("set_session_exec_policy_rules_cmd", {
-        sessionId: activeThreadId,
-        rules: sessionExecPolicyRules
-      });
-    } catch (error) {
-      setSessionExecPolicyError(
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save session rules"
-      );
-    } finally {
-      setIsSavingSessionExecPolicy(false);
     }
   }
 
@@ -3231,7 +3668,7 @@ function isModelReady(modelId: string): boolean {
       setPolicyByToolCallId(next);
     };
     void run();
-  }, [activeThreadId, execPolicyRules, sessionExecPolicyRules, toolCalls]);
+  }, [activeThreadId, execPolicyRules, toolCalls]);
 
   // Auto-execute tool calls when policy decision is "allow" or read_file within workspace
   useEffect(() => {
@@ -3619,10 +4056,13 @@ function isModelReady(modelId: string): boolean {
 
   async function maybeAutoJoinPendingPublicCommunity(session: SupabaseSession) {
     let communityId: string | null = null;
+    let brandosAid: string | null = null;
     try {
       communityId = localStorage.getItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+      brandosAid = localStorage.getItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
     } catch {
       communityId = null;
+      brandosAid = null;
     }
     if (!communityId) return;
     const id = communityId.trim();
@@ -3636,6 +4076,11 @@ function isModelReady(modelId: string): boolean {
     setJoiningDiscoverCommunityId(id);
     setDiscoverError(null);
     try {
+      const resolvedBrandosAid = (() => {
+        const candidate = (brandosAid ?? "").trim();
+        if (candidate && isUuid(candidate)) return candidate;
+        return null;
+      })();
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/rpc/join_public_community`,
         {
@@ -3643,7 +4088,10 @@ function isModelReady(modelId: string): boolean {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ p_community_id: id })
+          body: JSON.stringify({
+            p_community_id: id,
+            ...(resolvedBrandosAid ? { p_brandos_aid: resolvedBrandosAid } : {})
+          })
         },
         session
       );
@@ -3661,6 +4109,7 @@ function isModelReady(modelId: string): boolean {
 
 	      try {
 	        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+          localStorage.removeItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
 	      } catch {
         // ignore
       }
@@ -3960,39 +4409,45 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingBuilderBilling(true);
-    setBuilderBillingError(null);
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/get_builder_billing_status`,
+	  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<BuilderBillingStatus | null> {
+	    const url = getSupabaseUrl();
+	    if (!url) return null;
+	    setIsLoadingBuilderBilling(true);
+	    setBuilderBillingError(null);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/rpc/get_builder_billing_status`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: "{}",
         },
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as BuilderBillingStatus[];
-      setBuilderBillingStatus(rows[0] ?? null);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load billing status.";
-      setBuilderBillingError(message);
-      setBuilderBillingStatus(null);
-    } finally {
-      setIsLoadingBuilderBilling(false);
-    }
-  }
+	      );
+	      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      const rows = (await response.json()) as BuilderBillingStatus[];
+	      const row = rows[0] ?? null;
+	      setBuilderBillingStatus(row);
+	      return row;
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to load billing status.";
+	      setBuilderBillingError(message);
+	      setBuilderBillingStatus(null);
+	      return null;
+	    } finally {
+	      setIsLoadingBuilderBilling(false);
+	    }
+	  }
 
-  async function startBuilderPlanCheckout(tier: "builder" | "pro"): Promise<void> {
+  async function startBuilderPlanCheckout(
+    tier: "builder" | "pro",
+    opts?: { context?: BuilderUpgradeContext },
+  ): Promise<void> {
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
@@ -4001,17 +4456,18 @@ function isModelReady(modelId: string): boolean {
       return;
     }
 
-    setBuilderBillingError(null);
-    setIsStartingBuilderCheckout(true);
-    try {
-      const origin = getPublicAppBaseUrl();
-      if (!origin) throw new Error("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable billing links.");
-      const successUrl = `${origin}/?billing=success`;
-      const cancelUrl = `${origin}/?billing=cancel`;
+	    setBuilderBillingError(null);
+	    setIsStartingBuilderCheckout(true);
+	    try {
+	      const origin = getPublicAppBaseUrl();
+	      if (!origin) throw new Error("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable billing links.");
+	      const context: BuilderUpgradeContext = opts?.context ?? "builder";
+	      const successUrl = `${origin}/?billing=success&billing_source=desktop&billing_context=${encodeURIComponent(context)}`;
+	      const cancelUrl = `${origin}/?billing=cancel&billing_source=desktop&billing_context=${encodeURIComponent(context)}`;
 
-      const response = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/builder_checkout_start`,
-        {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/functions/v1/builder_checkout_start`,
+	        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tier, success_url: successUrl, cancel_url: cancelUrl }),
@@ -4037,7 +4493,7 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function openBuilderBillingPortal(): Promise<void> {
+  async function openBuilderBillingPortal(context: BuilderUpgradeContext = "builder"): Promise<void> {
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
@@ -4046,14 +4502,16 @@ function isModelReady(modelId: string): boolean {
       return;
     }
 
-    setBuilderBillingError(null);
-    setIsStartingBuilderPortal(true);
-    try {
-      const origin = getPublicAppBaseUrl();
-      const returnUrl = origin ? `${origin}/?billing=return` : window.location.href;
-      const response = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/builder_billing_portal`,
-        {
+	    setBuilderBillingError(null);
+	    setIsStartingBuilderPortal(true);
+	    try {
+	      const origin = getPublicAppBaseUrl();
+	      const returnUrl = origin
+	        ? `${origin}/?billing=return&billing_source=desktop&billing_context=${encodeURIComponent(context)}`
+	        : window.location.href;
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/functions/v1/builder_billing_portal`,
+	        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ return_url: returnUrl }),
@@ -4349,23 +4807,14 @@ function isModelReady(modelId: string): boolean {
 	    setDiscoverError(null);
 	    try {
 	      const response = supabaseSession
-	        ? await fetchWithSupabaseAuth(
-	            `${url}/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,visibility,created_at,updated_at&order=updated_at.desc&limit=200`,
-	            {},
-	            supabaseSession,
-	          )
+	        ? await fetchWithSupabaseAuth(`${url}/functions/v1/public_discover`, { method: "GET" }, supabaseSession)
 	        : await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
 	      if (!response.ok) {
 	        const message = await readSupabaseError(response);
 	        throw new Error(message);
 	      }
-	      if (supabaseSession) {
-	        const rows = (await response.json()) as CommunityRecord[];
-	        setDiscoverCommunities(rows);
-	      } else {
-	        const payload = (await response.json()) as { ok?: boolean; communities?: CommunityRecord[] };
-	        setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
-	      }
+	      const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunity[] };
+	      setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
 	    } catch (error) {
 	      const message =
 	        typeof error === "string"
@@ -4394,6 +4843,8 @@ function isModelReady(modelId: string): boolean {
 
 	    setJoiningDiscoverCommunityId(community.id);
 	    try {
+        const brandosAid = getBrandosAidForCommunitySlug(community.slug ?? null);
+        const resolvedBrandosAid = brandosAid && isUuid(brandosAid) ? brandosAid : null;
 	      const response = await fetchWithSupabaseAuth(
 	        `${url}/rest/v1/rpc/join_public_community`,
 	        {
@@ -4401,7 +4852,10 @@ function isModelReady(modelId: string): boolean {
 	          headers: {
 	            "Content-Type": "application/json"
 	          },
-	          body: JSON.stringify({ p_community_id: community.id })
+	          body: JSON.stringify({
+              p_community_id: community.id,
+              ...(resolvedBrandosAid ? { p_brandos_aid: resolvedBrandosAid } : {})
+            })
 	        },
 	        supabaseSession
 	      );
@@ -4653,6 +5107,37 @@ function isModelReady(modelId: string): boolean {
     return "";
   }
 
+  function parseMessageAttachments(contentJson: unknown): MessageAttachment[] {
+    if (contentJson === null || contentJson === undefined) return [];
+    let parsed: unknown = contentJson;
+    if (typeof parsed === "string") {
+      const trimmed = parsed.trim();
+      if (!trimmed) return [];
+      try {
+        parsed = JSON.parse(trimmed) as unknown;
+      } catch {
+        return [];
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return [];
+    const raw = (parsed as any).attachments;
+    if (!Array.isArray(raw)) return [];
+    const out: MessageAttachment[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const id = typeof (item as any).id === "string" ? String((item as any).id) : crypto.randomUUID();
+      const name = typeof (item as any).name === "string" ? String((item as any).name) : "attachment";
+      const type = (item as any).type === "image" ? "image" : "file";
+      const mime = typeof (item as any).mime === "string" ? String((item as any).mime) : null;
+      const size = Number.isFinite((item as any).size) ? Number((item as any).size) : 0;
+      const data_url = typeof (item as any).data_url === "string" ? String((item as any).data_url) : null;
+      const text = typeof (item as any).text === "string" ? String((item as any).text) : null;
+      const truncated = typeof (item as any).truncated === "boolean" ? Boolean((item as any).truncated) : null;
+      out.push({ id, name, type, mime, size, data_url, text, truncated });
+    }
+    return out;
+  }
+
   type CloudMessageRow = {
     id: string;
     thread_id: string;
@@ -4672,11 +5157,13 @@ function isModelReady(modelId: string): boolean {
     if ((row.role ?? "").trim() !== "user") return null;
     const senderId = (row.sender_id ?? "").trim() || "unknown";
     const body = extractTextFromContentJson(row.content_json);
+    const attachments = parseMessageAttachments(row.content_json);
     return {
       id,
       community_id: threadId,
       sender_id: senderId,
       body,
+      attachments: attachments.length > 0 ? attachments : undefined,
       reply_to_id: row.reply_to_id ?? null,
       created_at: row.created_at,
       seq: Number(row.seq) || 0,
@@ -4939,6 +5426,8 @@ function isModelReady(modelId: string): boolean {
     setEditingMessageText("");
     setEditingMessagePrefix(null);
 
+    const existingAttachments = communityMessages.find((m) => m.id === editingMessageId)?.attachments ?? [];
+
     let response: Response | null = null;
     try {
       response = await fetchWithSupabaseAuth(
@@ -4948,7 +5437,12 @@ function isModelReady(modelId: string): boolean {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ content_json: { text: bodyToSave } })
+          body: JSON.stringify({
+            content_json: {
+              text: bodyToSave,
+              ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {})
+            }
+          })
         },
         supabaseSession
       );
@@ -5076,6 +5570,109 @@ function isModelReady(modelId: string): boolean {
 			      // ignore
 			    }
 			  }
+
+        async function loadSelfProfile(session: SupabaseSession) {
+          const url = getSupabaseUrl();
+          if (!url) return;
+          try {
+            const response = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url,bio&user_id=eq.${encodeURIComponent(
+                session.user.id
+              )}&limit=1`,
+              { method: "GET" },
+              session
+            );
+            if (!response.ok) return;
+            const rows = (await response.json()) as UserProfileDetail[];
+            const row = rows[0];
+            if (!row) return;
+
+            const shouldOverwriteLocal = !cloudProfile || !isProfileDirty;
+            setCloudProfile(row);
+            setProfilesByUserId((prev) => ({
+              ...prev,
+              [row.user_id]: { user_id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url },
+            }));
+            if (shouldOverwriteLocal) {
+              setProfileName(row.display_name ?? "");
+              setProfileBio(row.bio ?? "");
+              setProfileAvatarUrl(row.avatar_url ?? null);
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        async function saveProfileToCloud() {
+          const session = supabaseSessionRef.current ?? supabaseSession;
+          const url = getSupabaseUrl();
+          if (!session || !url) {
+            setProfileSaveError("Sign in to save your profile.");
+            return;
+          }
+
+          const trimmedName = profileName.trim();
+          const trimmedBio = profileBio.trim();
+          if (trimmedName !== profileName) setProfileName(trimmedName);
+          if (trimmedBio !== profileBio) setProfileBio(trimmedBio);
+
+          if (profileSaveTimeoutRef.current) {
+            window.clearTimeout(profileSaveTimeoutRef.current);
+            profileSaveTimeoutRef.current = null;
+          }
+
+          setIsSavingProfile(true);
+          setProfileSaveError(null);
+          setProfileSaveSuccess(false);
+          try {
+            const response = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/profiles?on_conflict=user_id&select=user_id,display_name,avatar_url,bio`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Prefer: "resolution=merge-duplicates,return=representation",
+                },
+                body: JSON.stringify({
+                  user_id: session.user.id,
+                  display_name: trimmedName || null,
+                  avatar_url: profileAvatarUrl ?? null,
+                  bio: trimmedBio || null,
+                }),
+              },
+              session
+            );
+            if (!response.ok) throw new Error(await readSupabaseError(response));
+            const rows = (await response.json()) as UserProfileDetail[];
+            const saved = rows[0];
+            if (saved) {
+              setCloudProfile(saved);
+              setProfilesByUserId((prev) => ({
+                ...prev,
+                [saved.user_id]: {
+                  user_id: saved.user_id,
+                  display_name: saved.display_name,
+                  avatar_url: saved.avatar_url,
+                },
+              }));
+              setProfileName(saved.display_name ?? "");
+              setProfileBio(saved.bio ?? "");
+              setProfileAvatarUrl(saved.avatar_url ?? null);
+            }
+            setProfileSaveSuccess(true);
+            profileSaveTimeoutRef.current = window.setTimeout(() => setProfileSaveSuccess(false), 2000);
+          } catch (error) {
+            const message =
+              typeof error === "string"
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : "Failed to save profile.";
+            setProfileSaveError(message);
+          } finally {
+            setIsSavingProfile(false);
+          }
+        }
 
 	      async function loadCommunityAnalytics(
 	        communityId: string,
@@ -5788,28 +6385,162 @@ function isModelReady(modelId: string): boolean {
     return /^(?!-)[a-z0-9-]+(?<!-)$/.test(value);
   }
 
-  function openCreateCommunityModal() {
-    setCreateCommunityError(null);
-    setCreateCommunityName("");
-    setCreateCommunitySlug("");
-    setCreateCommunitySlugEdited(false);
-    setCreateCommunityVisibility("private");
-    setCreateCommunityAvatarUrl(null);
-    setCreateCommunityDescription("");
-    setCreateCommunityBannerUrl(null);
-    setShowCreateCommunityModal(true);
-  }
+	  function openCreateCommunityModal() {
+	    setCreateCommunityError(null);
+	    const draft = loadCreateCommunityDraft();
+	    const currentUserId = supabaseSession?.user.id ?? null;
+	    if (draft && draft.user_id && currentUserId && draft.user_id !== currentUserId) {
+	      clearCreateCommunityDraft();
+	    }
+	    const safeDraft = draft && (!draft.user_id || !currentUserId || draft.user_id === currentUserId) ? draft : null;
+	    setCreateCommunityName(safeDraft?.name ?? "");
+	    setCreateCommunitySlug(safeDraft?.slug ?? "");
+	    setCreateCommunitySlugEdited(Boolean(safeDraft?.slug_edited));
+	    setCreateCommunityVisibility(safeDraft?.visibility ?? "private");
+	    setCreateCommunityAvatarUrl(safeDraft?.avatar_url ?? null);
+	    setCreateCommunityDescription(safeDraft?.description ?? "");
+	    setCreateCommunityBannerUrl(safeDraft?.banner_url ?? null);
+	    setIsCreateBannerDragOver(false);
+	    setIsCreateAvatarDragOver(false);
+	    setShowCreateCommunityModal(true);
+	  }
 
-  function closeCreateCommunityModal() {
-    setShowCreateCommunityModal(false);
-    setCreateCommunityError(null);
-  }
+	  function closeCreateCommunityModal() {
+	    setShowCreateCommunityModal(false);
+	    setCreateCommunityError(null);
+	  }
 
-  useEffect(() => {
-    if (createCommunitySlugEdited) return;
-    const next = slugify(createCommunityName);
-    setCreateCommunitySlug(next);
-  }, [createCommunityName, createCommunitySlugEdited]);
+	  function buildCreateCommunityDraftFromState(): CreateCommunityDraft | null {
+	    setCreateCommunityError(null);
+	    const name = createCommunityName.trim();
+	    const rawSlug = createCommunitySlug.trim() || slugify(name);
+	    const slug = rawSlug.toLowerCase();
+	    if (!name || !slug) {
+	      setCreateCommunityError("Name and slug are required.");
+	      return null;
+	    }
+	    if (!isValidSlug(slug)) {
+	      setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
+	      return null;
+	    }
+	    if (!["public", "unlisted", "private"].includes(createCommunityVisibility)) {
+	      setCreateCommunityError("Visibility must be public, unlisted, or private.");
+	      return null;
+	    }
+	    const draft: CreateCommunityDraft = {
+	      v: 1,
+	      id: createCommunityDraftId(),
+	      created_at: Date.now(),
+	      user_id: supabaseSession?.user.id ?? null,
+	      name,
+	      slug,
+	      slug_edited: createCommunitySlugEdited,
+	      visibility: createCommunityVisibility,
+	      avatar_url: createCommunityAvatarUrl?.trim() || null,
+	      banner_url: createCommunityBannerUrl?.trim() || null,
+	      description: createCommunityDescription.trim() || null,
+	    };
+	    saveCreateCommunityDraft(draft);
+	    return draft;
+	  }
+
+		  async function createCommunityFromDraft(
+		    draft: CreateCommunityDraft,
+		    session: SupabaseSession,
+		  ): Promise<CommunityRecord | null> {
+	    const url = getSupabaseUrl();
+	    const apiKey = getSupabaseAnonKey();
+	    if (!url || !apiKey) {
+	      setFinalizeCreateCommunityError("Missing Supabase config.");
+	      return null;
+	    }
+	    setFinalizeCreateCommunityError(null);
+	    setIsFinalizingCreateCommunityFromBilling(true);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/rpc/create_community`,
+	        {
+	          method: "POST",
+	          headers: { "Content-Type": "application/json" },
+	          body: JSON.stringify({
+	            p_name: draft.name,
+	            p_slug: draft.slug,
+	            p_visibility: draft.visibility,
+	            p_avatar_url: draft.avatar_url,
+	            p_description: draft.description,
+	            p_banner_url: draft.banner_url,
+	          }),
+	        },
+	        session,
+	      );
+	      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      const created = (await response.json()) as CommunityRecord[];
+	      const community = created[0] ?? null;
+	      if (!community?.id) throw new Error("Failed to create community.");
+
+	      setCommunities((prev) => [community, ...prev]);
+	      setActiveCommunityId(community.id);
+	      setActivePage("community");
+	      setCommunityTab("chat");
+	      clearCreateCommunityDraft();
+	      closeCreateCommunityModal();
+	      setBuilderBillingReturn(null);
+	      return community;
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to create community.";
+	      setFinalizeCreateCommunityError(message);
+	      return null;
+	    } finally {
+	      setIsFinalizingCreateCommunityFromBilling(false);
+		    }
+		  }
+
+		  async function handleCreateCommunityPrimaryAction(): Promise<void> {
+		    setFinalizeCreateCommunityError(null);
+		    if (!supabaseSession) {
+		      await handleSignIn();
+		      return;
+		    }
+		    const status = builderBillingStatus ?? (await loadBuilderBillingStatus(supabaseSession));
+		    if (!status) {
+		      setCreateCommunityError("Couldn't check your plan. Try again.");
+		      return;
+		    }
+		    const tier = (status.builder_tier ?? "free").toLowerCase();
+		    const max = status.max_communities ?? 0;
+		    const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+		    const needsPlan = tier === "free";
+		    const limitReached = tier !== "free" && max > 0 && ownedCount >= max;
+		    const canCreate = !needsPlan && !limitReached;
+		    if (canCreate) {
+		      await handleCreateCommunity();
+		      return;
+		    }
+
+		    const draft = buildCreateCommunityDraftFromState();
+		    if (!draft) return;
+
+		    closeCreateCommunityModal();
+
+		    if (limitReached) {
+		      await openBuilderBillingPortal("create_community");
+		      return;
+		    }
+
+		    setBuilderUpgradeContext("create_community");
+		    setIsBuilderUpgradeOpen(true);
+		  }
+
+		  useEffect(() => {
+		    if (createCommunitySlugEdited) return;
+		    const next = slugify(createCommunityName);
+		    setCreateCommunitySlug(next);
+		  }, [createCommunityName, createCommunitySlugEdited]);
 
   async function handleCreateCommunity() {
     setCreateCommunityError(null);
@@ -5870,14 +6601,15 @@ function isModelReady(modelId: string): boolean {
         return;
       }
 
-      setCommunities((prev) => [community, ...prev]);
-      setActiveCommunityId(community.id);
-      setActivePage("community");
-      setCommunityTab("chat");
-      closeCreateCommunityModal();
-    } catch (error) {
-      const message =
-        typeof error === "string"
+	      setCommunities((prev) => [community, ...prev]);
+	      setActiveCommunityId(community.id);
+	      setActivePage("community");
+	      setCommunityTab("chat");
+	      clearCreateCommunityDraft();
+	      closeCreateCommunityModal();
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
           ? error
           : error instanceof Error
             ? error.message
@@ -5913,10 +6645,10 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<string> {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image();
+	  async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<string> {
+	    const url = URL.createObjectURL(file);
+	    try {
+	      const img = new Image();
       img.decoding = "async";
       const loaded = new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
@@ -5937,18 +6669,276 @@ function isModelReady(modelId: string): boolean {
       ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
 
       return canvas.toDataURL("image/png");
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+	    } finally {
+	      URL.revokeObjectURL(url);
+	    }
+	  }
+
+	  async function readBannerFileAsWideDataUrlWithinLimit(file: File, maxChars: number): Promise<string> {
+	    const url = URL.createObjectURL(file);
+	    try {
+	      const img = new Image();
+	      img.decoding = "async";
+	      const loaded = new Promise<void>((resolve, reject) => {
+	        img.onload = () => resolve();
+	        img.onerror = () => reject(new Error("Failed to load image."));
+	      });
+	      img.src = url;
+	      await loaded;
+
+	      const sourceWidth = img.naturalWidth || img.width;
+	      const sourceHeight = img.naturalHeight || img.height;
+	      if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
+
+	      const candidates: Array<{ width: number; height: number; quality: number }> = [
+	        { width: 960, height: 320, quality: 0.86 },
+	        { width: 768, height: 256, quality: 0.82 },
+	        { width: 576, height: 192, quality: 0.78 },
+	        { width: 480, height: 160, quality: 0.74 }
+	      ];
+
+	      const targetAspect = candidates[0].width / candidates[0].height;
+	      const sourceAspect = sourceWidth / sourceHeight;
+	      let sx = 0;
+	      let sy = 0;
+	      let sw = sourceWidth;
+	      let sh = sourceHeight;
+
+	      if (sourceAspect > targetAspect) {
+	        sh = sourceHeight;
+	        sw = Math.max(1, Math.floor(sourceHeight * targetAspect));
+	        sx = Math.max(0, Math.floor((sourceWidth - sw) / 2));
+	        sy = 0;
+	      } else if (sourceAspect < targetAspect) {
+	        sw = sourceWidth;
+	        sh = Math.max(1, Math.floor(sourceWidth / targetAspect));
+	        sx = 0;
+	        sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
+	      }
+
+	      const canvas = document.createElement("canvas");
+	      const ctx = canvas.getContext("2d");
+	      if (!ctx) throw new Error("Canvas not supported.");
+
+	      let lastDataUrl = "";
+	      for (const { width, height, quality } of candidates) {
+	        canvas.width = width;
+	        canvas.height = height;
+	        ctx.clearRect(0, 0, width, height);
+	        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+	        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+	        lastDataUrl = dataUrl;
+	        if (dataUrl.length <= maxChars) return dataUrl;
+	      }
+
+	      if (lastDataUrl && lastDataUrl.length <= maxChars) return lastDataUrl;
+	      throw new Error("Banner image is too large. Try a smaller image.");
+	    } finally {
+	      URL.revokeObjectURL(url);
+	    }
+	  }
+
+	  async function readFileAsDataUrl(file: File): Promise<string> {
+	    return await new Promise((resolve, reject) => {
+	      const reader = new FileReader();
+	      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
   }
 
-  async function readFileAsDataUrl(file: File): Promise<string> {
+  function isLikelyTextFile(file: File): boolean {
+    const mime = (file.type ?? "").toLowerCase();
+    if (mime.startsWith("text/")) return true;
+    if (mime === "application/json") return true;
+    if (mime === "application/xml") return true;
+    if (mime === "application/x-yaml") return true;
+    const name = (file.name ?? "").toLowerCase();
+    return (
+      name.endsWith(".md") ||
+      name.endsWith(".txt") ||
+      name.endsWith(".csv") ||
+      name.endsWith(".ts") ||
+      name.endsWith(".tsx") ||
+      name.endsWith(".js") ||
+      name.endsWith(".jsx") ||
+      name.endsWith(".json") ||
+      name.endsWith(".py") ||
+      name.endsWith(".rs") ||
+      name.endsWith(".go") ||
+      name.endsWith(".html") ||
+      name.endsWith(".css") ||
+      name.endsWith(".yml") ||
+      name.endsWith(".yaml")
+    );
+  }
+
+  function isLikelyImageFile(file: File): boolean {
+    const mime = (file.type ?? "").toLowerCase();
+    if (mime.startsWith("image/")) return true;
+    const name = (file.name ?? "").toLowerCase();
+    return (
+      name.endsWith(".png") ||
+      name.endsWith(".jpg") ||
+      name.endsWith(".jpeg") ||
+      name.endsWith(".gif") ||
+      name.endsWith(".webp") ||
+      name.endsWith(".svg")
+    );
+  }
+
+  async function readTextAttachmentPreview(file: File): Promise<{ text: string; truncated: boolean }> {
+    const truncated = file.size > MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES;
+    const slice = truncated ? file.slice(0, MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES) : file;
+    const text = await slice.text();
+    return { text, truncated };
+  }
+
+  async function fileToDataUrl(file: File): Promise<string> {
     return await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result ?? ""));
       reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
       reader.readAsDataURL(file);
     });
+  }
+
+  function isSupportedChatRasterImage(file: File): boolean {
+    const mime = (file.type ?? "").toLowerCase();
+    const name = (file.name ?? "").toLowerCase();
+    const isSvg = mime.includes("svg") || name.endsWith(".svg");
+    const isHeic =
+      mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
+    return !isSvg && !isHeic && isLikelyImageFile(file);
+  }
+
+  async function readChatImageAsDataUrl(file: File): Promise<string> {
+    // Fallback: if canvas path fails (some formats), try direct data URL when small enough.
+    const tryDirectDataUrl = async (): Promise<string | null> => {
+      if (file.size > 2 * 1024 * 1024) return null;
+      const raw = await fileToDataUrl(file);
+      if (!raw.startsWith("data:image/")) return null;
+      return raw.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS ? raw : null;
+    };
+
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.decoding = "async";
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image."));
+      });
+      img.src = url;
+      await loaded;
+
+      const candidates: Array<{ maxDim: number; quality: number }> = [
+        { maxDim: 1280, quality: 0.85 },
+        { maxDim: 1024, quality: 0.82 },
+        { maxDim: 768, quality: 0.78 },
+        { maxDim: 512, quality: 0.74 },
+        { maxDim: 384, quality: 0.70 },
+        { maxDim: 320, quality: 0.66 }
+      ];
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not supported.");
+
+      const sourceWidth = img.naturalWidth || img.width;
+      const sourceHeight = img.naturalHeight || img.height;
+      if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
+
+      let lastDataUrl = "";
+      for (const { maxDim, quality } of candidates) {
+        const scale = Math.min(1, maxDim / Math.max(sourceWidth, sourceHeight));
+        const width = Math.max(1, Math.round(sourceWidth * scale));
+        const height = Math.max(1, Math.round(sourceHeight * scale));
+        canvas.width = width;
+        canvas.height = height;
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          lastDataUrl = canvas.toDataURL("image/jpeg", quality);
+        } catch {
+          const direct = await tryDirectDataUrl();
+          if (direct) return direct;
+          throw new Error("Could not process image. Try exporting as PNG or JPG.");
+        }
+        if (lastDataUrl.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS) return lastDataUrl;
+      }
+
+      if (lastDataUrl && lastDataUrl.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS) return lastDataUrl;
+      const direct = await tryDirectDataUrl();
+      if (direct) return direct;
+      throw new Error("Image is too large to attach. Try a smaller one.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function ingestCommunityAttachmentsFromFileList(
+    files: FileList,
+    existing: MessageAttachment[],
+    onError: (message: string) => void,
+  ): Promise<MessageAttachment[]> {
+    if (files.length === 0) return existing;
+    const remaining = Math.max(0, MAX_COMMUNITY_ATTACHMENTS_PER_MESSAGE - existing.length);
+    if (remaining === 0) {
+      onError(`You can attach up to ${MAX_COMMUNITY_ATTACHMENTS_PER_MESSAGE} files per message.`);
+      return existing;
+    }
+
+    const picked = Array.from(files).slice(0, remaining);
+    const next: MessageAttachment[] = [];
+    for (const file of picked) {
+      if (!file) continue;
+      const name = (file.name ?? "").trim() || "attachment";
+      const isImage = isLikelyImageFile(file);
+      const maxBytes = isImage ? MAX_COMMUNITY_IMAGE_UPLOAD_BYTES : MAX_COMMUNITY_FILE_UPLOAD_BYTES;
+      if (file.size > maxBytes) {
+        onError(`${name} is too large (max ${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`);
+        continue;
+      }
+      const base: MessageAttachment = {
+        id: crypto.randomUUID(),
+        name,
+        type: "file",
+        mime: (file.type ?? "").trim() || null,
+        size: file.size,
+      };
+      try {
+        if (isImage) {
+          if (!isSupportedChatRasterImage(file)) {
+            onError(`${name}: unsupported image format. Please use PNG, JPG, GIF, WEBP, or AVIF.`);
+            continue;
+          }
+          base.type = "image";
+          base.data_url = await readChatImageAsDataUrl(file);
+          next.push(base);
+          continue;
+        } else if (isLikelyTextFile(file)) {
+          const { text, truncated } = await readTextAttachmentPreview(file);
+          base.text = text;
+          base.truncated = truncated;
+          next.push(base);
+          continue;
+        }
+        onError(`${name}: only images or text/code files are supported right now.`);
+        continue;
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to read file.";
+        onError(`${name}: ${message}`);
+        continue;
+      }
+    }
+
+    return [...existing, ...next];
   }
 
   async function handleCreateCommunityAvatarUpload(file: File | null) {
@@ -5967,15 +6957,19 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function handleCreateCommunityBannerUpload(file: File | null) {
-    if (!file) return;
-    try {
-      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 320);
-      setCreateCommunityBannerUrl(dataUrl);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
+	  async function handleCreateCommunityBannerUpload(file: File | null) {
+	    if (!file) return;
+	    if (!isLikelyImageFile(file)) {
+	      setCreateCommunityError("Banner must be an image file.");
+	      return;
+	    }
+	    try {
+	      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_COMMUNITY_IMAGE_DATA_URL_CHARS);
+	      setCreateCommunityBannerUrl(dataUrl);
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
           : error instanceof Error
             ? error.message
             : "Failed to load image.";
@@ -6020,6 +7014,7 @@ function isModelReady(modelId: string): boolean {
     try {
       const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
       setCommunitySettingsAvatarUrl(dataUrl);
+      markCommunitySettingsDirty();
     } catch (error) {
       const message =
         typeof error === "string"
@@ -6031,21 +7026,30 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function handleCommunityBannerUpload(file: File | null) {
-    if (!file) return;
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setCommunitySettingsBannerUrl(dataUrl);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load banner.";
-      setCommunitySettingsError(message);
-    }
-  }
+	  async function handleCommunityBannerUpload(file: File | null) {
+	    if (!file) return;
+	    if (!isLikelyImageFile(file)) {
+	      setCommunitySettingsBannerUploadError("Banner must be an image file.");
+	      return;
+	    }
+	    setCommunitySettingsBannerUploadError(null);
+	    setIsProcessingCommunitySettingsBanner(true);
+	    try {
+	      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_COMMUNITY_IMAGE_DATA_URL_CHARS);
+	      setCommunitySettingsBannerUrl(dataUrl);
+	      markCommunitySettingsDirty();
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to load banner.";
+	      setCommunitySettingsBannerUploadError(message);
+	    } finally {
+	      setIsProcessingCommunitySettingsBanner(false);
+	    }
+	  }
 
   async function handleProfileAvatarUpload(file: File | null) {
     if (!file) return;
@@ -6082,13 +7086,18 @@ function isModelReady(modelId: string): boolean {
       return;
     }
 
-    const name = communitySettingsName.trim();
-    const slug = communitySettingsSlug.trim();
-    if (!name || !slug) {
-      setCommunitySettingsError("Name and slug are required.");
-      setIsSavingCommunitySettings(false);
-      return;
-    }
+	    const name = communitySettingsName.trim();
+	    const slug = communitySettingsSlug.trim().toLowerCase();
+	    if (!name || !slug) {
+	      setCommunitySettingsError("Name and slug are required.");
+	      setIsSavingCommunitySettings(false);
+	      return;
+	    }
+	    if (!isValidSlug(slug)) {
+	      setCommunitySettingsError("Slug must be 3–32 characters (letters, numbers, hyphens).");
+	      setIsSavingCommunitySettings(false);
+	      return;
+	    }
 
     const visibility = communitySettingsVisibility;
     if (!["public", "unlisted", "private"].includes(visibility)) {
@@ -6171,6 +7180,8 @@ function isModelReady(modelId: string): boolean {
         );
         setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
         setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
+        communitySettingsDirtyRef.current = false;
+        communityPricingDirtyRef.current = false;
       }
     } catch (error) {
       const message =
@@ -6231,10 +7242,66 @@ function isModelReady(modelId: string): boolean {
     );
   }
 
+  async function handleCommunityFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.target;
+    const files = input.files;
+    if (!files || files.length === 0) {
+      input.value = "";
+      return;
+    }
+    setCommunityChatError(null);
+    const updated = await ingestCommunityAttachmentsFromFileList(
+      files,
+      communityAttachmentsRef.current,
+      (message) => setCommunityChatError(message)
+    );
+    setCommunityAttachments(updated);
+    input.value = "";
+  }
+
+  function removeCommunityAttachment(id: string) {
+    setCommunityAttachments((prev) => prev.filter((att) => att.id !== id));
+  }
+
+  function openCommunityChatLightbox(images: ChatLightboxImage[], index: number) {
+    if (!images || images.length === 0) return;
+    const clamped = Math.min(Math.max(index, 0), images.length - 1);
+    setCommunityChatLightboxImages(images);
+    setCommunityChatLightboxIndex(clamped);
+    setIsCommunityChatLightboxOpen(true);
+  }
+
+  function closeCommunityChatLightbox() {
+    setIsCommunityChatLightboxOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isCommunityChatLightboxOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeCommunityChatLightbox();
+        return;
+      }
+      if (communityChatLightboxImages.length <= 1) return;
+      if (event.key === "ArrowLeft") {
+        setCommunityChatLightboxIndex((prev) => {
+          const next = prev - 1;
+          return next < 0 ? communityChatLightboxImages.length - 1 : next;
+        });
+      }
+      if (event.key === "ArrowRight") {
+        setCommunityChatLightboxIndex((prev) => (prev + 1) % communityChatLightboxImages.length);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isCommunityChatLightboxOpen, communityChatLightboxImages.length]);
+
   async function handleSendCommunityMessage() {
     if (!supabaseSession || !activeCommunityId) return;
     const rawText = communityMessageInput.trim();
-    if (!rawText) return;
+    const attachmentsToSend = [...communityAttachmentsRef.current];
+    if (!rawText && attachmentsToSend.length === 0) return;
 
     const replySnapshot = replyingToMessage;
     const replyToId = replySnapshot ? replySnapshot.id : null;
@@ -6253,12 +7320,14 @@ function isModelReady(modelId: string): boolean {
       community_id: activeCommunityId,
       sender_id: supabaseSession.user.id,
       body: bodyToSend,
+      attachments: attachmentsToSend,
       reply_to_id: replyToId,
       created_at: new Date().toISOString(),
       seq: Number.MAX_SAFE_INTEGER,
     };
     setCommunityMessages((prev) => [...prev, optimisticMessage]);
     setCommunityMessageInput("");
+    setCommunityAttachments([]);
     setReplyingToMessage(null);
     setIsUserAtBottom(true); // Scroll to show new message
 
@@ -6276,6 +7345,7 @@ function isModelReady(modelId: string): boolean {
       // Remove optimistic message on error
       setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setCommunityMessageInput(rawText);
+      setCommunityAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
       setIsSendingCommunityMessage(false);
       return;
@@ -6293,7 +7363,10 @@ function isModelReady(modelId: string): boolean {
 	          body: JSON.stringify({
 	            thread_id: threadId,
 	            role: "user",
-	            content_json: { text: bodyToSend },
+	            content_json: {
+                text: bodyToSend,
+                ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {})
+              },
 	            reply_to_id: replyToId
 	          })
 	        },
@@ -6305,6 +7378,7 @@ function isModelReady(modelId: string): boolean {
         // Remove optimistic message on error
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setCommunityMessageInput(rawText);
+        setCommunityAttachments(attachmentsToSend);
         setReplyingToMessage(replySnapshot);
         return;
       }
@@ -6314,6 +7388,7 @@ function isModelReady(modelId: string): boolean {
         setCommunityChatError("Message sent, but no response payload returned.");
         setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setCommunityMessageInput(rawText);
+        setCommunityAttachments(attachmentsToSend);
         setReplyingToMessage(replySnapshot);
         return;
       }
@@ -6335,6 +7410,7 @@ function isModelReady(modelId: string): boolean {
       setCommunityChatError(message);
       setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setCommunityMessageInput(rawText);
+      setCommunityAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
     } finally {
       setIsSendingCommunityMessage(false);
@@ -6697,15 +7773,13 @@ function isModelReady(modelId: string): boolean {
       }, [libraryResources, selectedLibraryResourceId]);
 	  const filteredDiscoverCommunities = useMemo(() => {
 	    const query = discoverQuery.trim().toLowerCase();
-	    const list = supabaseSession
-      ? discoverCommunities
-      : discoverCommunities.filter((c) => c.visibility === "public");
+	    const list = discoverCommunities;
     if (!query) return list;
     return list.filter((c) => {
       const haystack = `${c.name ?? ""}\n${c.slug ?? ""}\n${c.description ?? ""}`.toLowerCase();
       return haystack.includes(query);
     });
-  }, [discoverCommunities, discoverQuery, supabaseSession]);
+  }, [discoverCommunities, discoverQuery]);
 	  const communityMessageById = useMemo(() => {
 	    const map = new Map<string, CommunityChatMessage>();
 	    for (const message of communityMessages) {
@@ -6717,6 +7791,10 @@ function isModelReady(modelId: string): boolean {
 	  useEffect(() => {
 	    communityMessageIdsRef.current = new Set(communityMessages.map((m) => m.id));
 	  }, [communityMessages]);
+
+    useEffect(() => {
+      communityAttachmentsRef.current = communityAttachments;
+    }, [communityAttachments]);
 	  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
 	  const pinnedThreadCommunityId = activeThread?.community_id ?? null;
 	  const actionablePendingInvites = useMemo(
@@ -6739,7 +7817,15 @@ function isModelReady(modelId: string): boolean {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
 
+  function confirmDiscardUnsavedCommunitySettings(nextCommunityId: string): boolean {
+    if (!communitySettingsDirtyRef.current) return true;
+    if (!activeCommunityId) return true;
+    if (nextCommunityId === activeCommunityId) return true;
+    return window.confirm("You have unsaved community settings. Discard changes?");
+  }
+
   function handleSelectActiveCommunity(next: string) {
+    if (!confirmDiscardUnsavedCommunitySettings(next)) return;
     setActiveCommunityId(next);
     if (!activeThreadId) return;
     if (!pinnedThreadCommunityId) return;
@@ -6759,7 +7845,7 @@ function isModelReady(modelId: string): boolean {
       });
   }
 
-	  // Helper to display user names with session context
+  // Helper to display user names with session context
 	  const displayName = useCallback((userId: string): string => {
 	    const trimmedName = profileName.trim();
 	    const trimmedUsername = profileUsername.trim();
@@ -6772,6 +7858,20 @@ function isModelReady(modelId: string): boolean {
 	    if (remoteName) return remoteName;
 	    return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email ?? undefined);
 	  }, [profileName, profileUsername, profilesByUserId, supabaseSession?.user.id, supabaseSession?.user.email]);
+
+  const isProfileDirty = useMemo(() => {
+    if (!supabaseSession) return false;
+    const nextName = profileName.trim();
+    const nextBio = profileBio.trim();
+    const nextAvatar = profileAvatarUrl ?? null;
+    const prevName = (cloudProfile?.display_name ?? "").trim();
+    const prevBio = (cloudProfile?.bio ?? "").trim();
+    const prevAvatar = cloudProfile?.avatar_url ?? null;
+    if (!cloudProfile) {
+      return Boolean(nextName || nextBio || nextAvatar);
+    }
+    return nextName !== prevName || nextBio !== prevBio || nextAvatar !== prevAvatar;
+  }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
 
   useEffect(() => {
     const trimmed = profileName.trim();
@@ -7215,8 +8315,14 @@ function isModelReady(modelId: string): boolean {
 	      if (session) {
 	        try {
 	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-	        } catch {
-	          // best-effort
+	        } catch (error) {
+	          const message =
+	            typeof error === "string" ? error : error instanceof Error ? error.message : "";
+	          if (message.toLowerCase().includes("cloud history limit reached")) {
+	            setBuilderUpgradeContext("builder");
+	            setBuilderBillingError(message);
+	            setIsBuilderUpgradeOpen(true);
+	          }
 	        }
 	      }
 	      await loadMessages(sessionId);
@@ -7375,8 +8481,14 @@ function isModelReady(modelId: string): boolean {
 	          try {
 	            // Sync the newest assistant message + any trailing system content.
 	            await syncRecentLocalMessagesToCloud(sessionId, session, 3);
-	          } catch {
-	            // best-effort
+	          } catch (error) {
+	            const message =
+	              typeof error === "string" ? error : error instanceof Error ? error.message : "";
+	            if (message.toLowerCase().includes("cloud history limit reached")) {
+	              setBuilderUpgradeContext("builder");
+	              setBuilderBillingError(message);
+	              setIsBuilderUpgradeOpen(true);
+	            }
 	          }
 	        }
 	        await loadMessages(sessionId);
@@ -7396,8 +8508,14 @@ function isModelReady(modelId: string): boolean {
 	      if (session) {
 	        try {
 	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-	        } catch {
-	          // best-effort
+	        } catch (error) {
+	          const message =
+	            typeof error === "string" ? error : error instanceof Error ? error.message : "";
+	          if (message.toLowerCase().includes("cloud history limit reached")) {
+	            setBuilderUpgradeContext("builder");
+	            setBuilderBillingError(message);
+	            setIsBuilderUpgradeOpen(true);
+	          }
 	        }
 	      }
 	      await loadMessages(sessionId);
@@ -7465,14 +8583,8 @@ function isModelReady(modelId: string): boolean {
 
     if (name === "approvals") {
       const globalRules = execPolicyRules.trim() ? execPolicyRules.trim() : "prompt";
-      const sessionRules = sessionExecPolicyRules.trim()
-        ? sessionExecPolicyRules.trim()
-        : "(none)";
       const text = [
         "Approvals",
-        "Session rules (applied first):",
-        sessionRules,
-        "",
         "Global rules:",
         globalRules
       ].join("\n");
@@ -7732,8 +8844,7 @@ function isModelReady(modelId: string): boolean {
   const [sourcesUsed, setSourcesUsed] = useState<SourcesUsedState>({ open: false });
 
   async function resolvePendingToolApproval(
-    approved: boolean,
-    allowWriteEditForSession?: boolean
+    approved: boolean
   ) {
     const pending = pendingToolApproval;
     if (!pending) return;
@@ -7742,12 +8853,8 @@ function isModelReady(modelId: string): boolean {
       await invoke("decide_tool_call_cmd", {
         toolCallId: pending.tool_call_id,
         approved,
-        allowWriteEditForSession,
       });
       setPendingToolApproval(null);
-      if (approved && allowWriteEditForSession && activeThreadId) {
-        setAutoApproveWriteEdit(true);
-      }
     } catch (error) {
       console.error("Failed to resolve tool approval:", error);
       setMemoryToast("Failed to send tool approval decision.");
@@ -8021,7 +9128,7 @@ function isModelReady(modelId: string): boolean {
               <button
                 key={community.id}
                 type="button"
-                className={`community-rail-button${community.id === activeCommunityId ? " active" : ""}`}
+                className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
                 onClick={() => handleSelectActiveCommunity(community.id)}
                 title={community.name}
               >
@@ -8300,10 +9407,10 @@ function isModelReady(modelId: string): boolean {
         </aside>
       )}
       <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
-        {supabaseSession && pendingPurchaseClaims.length > 0 && !isPendingPurchasesBannerDismissed && (
-          <div className="pending-purchase-banner" role="status">
-            <div className="pending-purchase-banner-copy">
-              <div className="pending-purchase-banner-title">Pending community access</div>
+	        {supabaseSession && pendingPurchaseClaims.length > 0 && !isPendingPurchasesBannerDismissed && (
+	          <div className="pending-purchase-banner" role="status">
+	            <div className="pending-purchase-banner-copy">
+	              <div className="pending-purchase-banner-title">Pending community access</div>
               <div className="pending-purchase-banner-subtitle">
                 {pendingPurchaseClaims.length === 1
                   ? `You paid for ${
@@ -8330,13 +9437,271 @@ function isModelReady(modelId: string): boolean {
               >
                 Dismiss
               </button>
-            </div>
-          </div>
-        )}
-        {showCreateCommunityModal && (
-          <div className="modal-overlay" onClick={closeCreateCommunityModal}>
-            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-              <div className="modal-header">
+	            </div>
+	          </div>
+	        )}
+          {isCommunityChatLightboxOpen && communityChatLightboxImages.length > 0 && (() => {
+            const active =
+              communityChatLightboxImages[
+                Math.min(
+                  Math.max(communityChatLightboxIndex, 0),
+                  communityChatLightboxImages.length - 1
+                )
+              ] ?? null;
+            if (!active) return null;
+            const total = communityChatLightboxImages.length;
+            return (
+              <div className="modal-overlay" onClick={closeCommunityChatLightbox}>
+                <div className="modal lightbox-modal" onClick={(event) => event.stopPropagation()}>
+                  <button
+                    className="lightbox-close"
+                    type="button"
+                    onClick={closeCommunityChatLightbox}
+                    title="Close"
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                  {total > 1 && (
+                    <>
+                      <button
+                        className="lightbox-nav prev"
+                        type="button"
+                        onClick={() =>
+                          setCommunityChatLightboxIndex((prev) => (prev - 1 + total) % total)
+                        }
+                        title="Previous"
+                        aria-label="Previous"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        className="lightbox-nav next"
+                        type="button"
+                        onClick={() => setCommunityChatLightboxIndex((prev) => (prev + 1) % total)}
+                        title="Next"
+                        aria-label="Next"
+                      >
+                        ›
+                      </button>
+                      <div className="lightbox-counter" aria-hidden="true">
+                        {communityChatLightboxIndex + 1}/{total}
+                      </div>
+                    </>
+                  )}
+                  <div className="lightbox-body">
+                    <img src={active.url} alt={active.name} />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+	        {supabaseSession && isBuilderUpgradeOpen && (
+	          <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
+	            <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
+	              <div className="modal-header">
+	                <div className="modal-title">Upgrade plan</div>
+	                <button className="modal-close" onClick={() => setIsBuilderUpgradeOpen(false)} title="Close">
+	                  ×
+	                </button>
+	              </div>
+	              <div className="modal-body" ref={builderUpgradeModalBodyRef} onScroll={updateBuilderUpgradeScrollHint}>
+	                <div className="model-note" style={{ marginBottom: 12 }}>
+	                  {builderUpgradeContext === "create_community"
+	                    ? "Choose a builder plan to create your community."
+	                    : "Choose a builder plan to create communities and start earning."}
+	                </div>
+	                {builderUpgradeContext === "create_community" && (
+	                  <div className="model-note" style={{ marginBottom: 12 }}>
+	                    After checkout, we'll create your community automatically.
+	                  </div>
+	                )}
+	                {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+		                {(() => {
+		                  const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+		                  const freeIsCurrent = tier === "free";
+		                  const starterIsCurrent = tier === "builder";
+		                  const proIsCurrent = tier === "pro";
+		                  const feature = (included: boolean, label: string) => (
+		                    <li className={`plan-feature${included ? " on" : " off"}`}>
+		                      <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
+		                        {included ? "✓" : "×"}
+		                      </span>
+		                      <span className="plan-feature-text">{label}</span>
+		                    </li>
+		                  );
+		                  return (
+		                    <div className="plan-grid">
+		                      <div className={`plan-card${freeIsCurrent ? " current" : ""}`}>
+		                        <div className="plan-card-header">
+		                          <div className="plan-name">Free</div>
+		                          {freeIsCurrent && <div className="plan-badge">Current</div>}
+		                        </div>
+		                        <div className="plan-price">
+		                          <span className="plan-price-amount">$0</span>
+		                          <span className="plan-price-period">/mo</span>
+		                        </div>
+		                        <div className="plan-subtitle">0 communities</div>
+		                        <ul className="plan-features plan-features-checks">
+		                          {feature(true, "AI chats (250MB cloud history)")}
+		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Desktop app & local tools")}
+		                          {feature(true, "Cloud sync")}
+		                          {feature(false, "Agent memory")}
+		                          {feature(false, "Create communities")}
+		                          {feature(false, "Stripe payouts")}
+		                          {feature(false, "Analytics")}
+		                          {feature(false, "Automations")}
+		                          {feature(false, "Early feature access")}
+		                        </ul>
+		                        <button type="button" className="plan-cta" disabled>
+		                          {freeIsCurrent ? "Current plan" : "Free"}
+		                        </button>
+		                      </div>
+
+		                      <div className={`plan-card${starterIsCurrent ? " current" : ""}`}>
+		                        <div className="plan-card-header">
+		                          <div className="plan-name">Starter</div>
+		                          {starterIsCurrent && <div className="plan-badge">Current</div>}
+		                        </div>
+		                        <div className="plan-price">
+		                          <span className="plan-price-amount">$20</span>
+		                          <span className="plan-price-period">/mo</span>
+		                        </div>
+		                        <div className="plan-subtitle">10% take · 1 community</div>
+		                        <ul className="plan-features plan-features-checks">
+		                          {feature(true, "AI chats (5GB cloud history)")}
+		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Desktop app & local tools")}
+		                          {feature(true, "Cloud sync")}
+		                          {feature(true, "Agent memory")}
+		                          {feature(true, "Create 1 community")}
+		                          {feature(true, "Stripe payouts")}
+		                          {feature(false, "Analytics")}
+		                          {feature(false, "Automations")}
+		                          {feature(false, "Early feature access")}
+		                        </ul>
+		                        <button
+		                          type="button"
+		                          className="plan-cta"
+		                          onClick={() => {
+		                            void startBuilderPlanCheckout("builder", { context: builderUpgradeContext });
+		                          }}
+		                          disabled={isStartingBuilderCheckout || starterIsCurrent}
+		                        >
+		                          {starterIsCurrent
+		                            ? "Current plan"
+		                            : isStartingBuilderCheckout
+		                              ? "Starting…"
+		                              : "Get Starter"}
+		                        </button>
+		                      </div>
+		
+		                      <div className={`plan-card${proIsCurrent ? " current" : ""}`}>
+		                        <div className="plan-card-header">
+		                          <div className="plan-name">Pro</div>
+		                          {proIsCurrent && <div className="plan-badge">Current</div>}
+		                        </div>
+		                        <div className="plan-price">
+		                          <span className="plan-price-amount">$100</span>
+		                          <span className="plan-price-period">/mo</span>
+		                        </div>
+		                        <div className="plan-subtitle">3% take · 3 communities</div>
+		                        <ul className="plan-features plan-features-checks">
+		                          {feature(true, "AI chats (25GB cloud history)")}
+		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Desktop app & local tools")}
+		                          {feature(true, "Cloud sync")}
+		                          {feature(true, "Agent memory")}
+		                          {feature(true, "Create 3 communities")}
+		                          {feature(true, "Stripe payouts")}
+		                          {feature(true, "Analytics")}
+		                          {feature(true, "Automations")}
+		                          {feature(true, "Early feature access")}
+		                        </ul>
+		                        <button
+		                          type="button"
+		                          className="plan-cta"
+		                          onClick={() => {
+		                            void startBuilderPlanCheckout("pro", { context: builderUpgradeContext });
+		                          }}
+		                        disabled={isStartingBuilderCheckout || proIsCurrent}
+		                      >
+		                        {proIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Pro"}
+		                      </button>
+		                    </div>
+		                  </div>
+		                );
+		              })()}
+	                <div className={`modal-scroll-hint${showBuilderUpgradeScrollHint ? " show" : ""}`} aria-hidden="true">
+	                  <div className="modal-scroll-hint-icon">
+	                    <svg viewBox="0 0 24 24">
+	                      <path d="M6 9l6 6 6-6" />
+	                    </svg>
+	                  </div>
+	                </div>
+		              </div>
+	            </div>
+	          </div>
+	        )}
+	        {builderBillingReturn && (
+	          <div className="modal-overlay" onClick={() => setBuilderBillingReturn(null)}>
+	            <div className="modal" onClick={(event) => event.stopPropagation()}>
+	              <div className="modal-header">
+	                <div className="modal-title">Billing</div>
+	                <button className="modal-close" onClick={() => setBuilderBillingReturn(null)} title="Close">
+	                  ×
+	                </button>
+	              </div>
+	              <div className="modal-body">
+	                {builderBillingReturn.status === "cancel" ? (
+	                  <div className="model-note">Checkout canceled.</div>
+	                ) : builderBillingReturn.status === "return" ? (
+	                  <div className="model-note">Manage your plan and billing details.</div>
+		                ) : (
+		                  <div className="model-note">
+		                    {(() => {
+		                      const wantsCreate = builderBillingReturn.context === "create_community";
+		                      if (isFinalizingCreateCommunityFromBilling) return "Creating your community…";
+		                      if (isFinalizingBuilderReturn) return "Finalizing your plan…";
+		                      return wantsCreate ? "Plan confirmed — finishing your community setup." : "Thanks — confirming your plan.";
+		                    })()}
+		                  </div>
+		                )}
+
+	                {!supabaseSession ? (
+	                  <div className="model-note" style={{ marginTop: 10 }}>
+	                    Sign in to confirm your plan status.
+	                  </div>
+	                ) : (
+	                  <div className="model-note" style={{ marginTop: 10 }}>
+	                    {(() => {
+	                      const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+	                      const max = builderBillingStatus?.max_communities ?? 0;
+	                      const feeBps = builderBillingStatus?.platform_fee_bps ?? 1000;
+	                      const feePct = (feeBps / 100).toFixed(0);
+	                      const label = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
+	                      const limitLabel = max > 0 ? `${max} communities` : "0 communities";
+	                      return `${label} · ${limitLabel} · ${feePct}% take`;
+	                    })()}
+	                  </div>
+	                )}
+
+		                {finalizeCreateCommunityError && <div className="auth-error">{finalizeCreateCommunityError}</div>}
+		                {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+		              </div>
+	              <div className="modal-footer">
+	                <button type="button" className="secondary" onClick={() => setBuilderBillingReturn(null)}>
+	                  Close
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        )}
+	        {showCreateCommunityModal && (
+	          <div className="modal-overlay" onClick={closeCreateCommunityModal}>
+	            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+	              <div className="modal-header">
                 <div className="modal-title">Create community</div>
                 <button className="modal-close" onClick={closeCreateCommunityModal} title="Close">
                   ×
@@ -8360,13 +9725,15 @@ function isModelReady(modelId: string): boolean {
                     )}
                     <label className="create-banner-btn">
                       Upload banner
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) =>
-                          void handleCreateCommunityBannerUpload(event.target.files?.[0] ?? null)
-                        }
-                      />
+	                      <input
+	                        type="file"
+	                        accept="image/*"
+	                        onChange={(event) => {
+	                          const file = event.target.files?.[0] ?? null;
+	                          event.target.value = "";
+	                          void handleCreateCommunityBannerUpload(file);
+	                        }}
+	                      />
                     </label>
                     {createCommunityBannerUrl && (
                       <button
@@ -8468,63 +9835,35 @@ function isModelReady(modelId: string): boolean {
             <div className="modal-footer">
               <div className="create-community-actions">
                 {(() => {
-                  const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-                  const max = builderBillingStatus?.max_communities ?? 0;
-                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
-                  const needsPlan = Boolean(supabaseSession && tier === "free");
-                  const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
-                  const canCreate = Boolean(supabaseSession && !needsPlan && !limitReached);
-                  if (!supabaseSession) {
-                    return (
-                      <button className="create-community-primary" onClick={() => void handleSignIn()}>
-                        Sign in to create
-                      </button>
-                    );
-                  }
-                  if (needsPlan) {
-                    return (
-                      <>
-                        <button
-                          className="create-community-primary"
-                          type="button"
-                          onClick={() => void startBuilderPlanCheckout("builder")}
-                          disabled={isStartingBuilderCheckout}
-                        >
-                          {isStartingBuilderCheckout ? "Starting…" : "Starter ($20/mo)"}
-                        </button>
-                        <button
-                          className="create-community-primary"
-                          type="button"
-                          onClick={() => void startBuilderPlanCheckout("pro")}
-                          disabled={isStartingBuilderCheckout}
-                        >
-                          {isStartingBuilderCheckout ? "Starting…" : "Pro ($100/mo)"}
-                        </button>
-                      </>
-                    );
-                  }
-                  if (limitReached) {
-                    return (
-                      <button
-                        className="create-community-primary"
-                        type="button"
-                        onClick={() => void openBuilderBillingPortal()}
-                        disabled={isStartingBuilderPortal}
-                      >
-                        {isStartingBuilderPortal ? "Opening…" : "Upgrade to Pro"}
-                      </button>
-                    );
-                  }
-                  return (
-                    <button
-                      className="create-community-primary"
-                      onClick={() => void handleCreateCommunity()}
-                      disabled={!canCreate || isCreatingCommunity || createCommunityName.trim().length === 0}
-                    >
-                      {isCreatingCommunity ? "Creating..." : "Create community"}
-                    </button>
-                  );
-                })()}
+		                  const tier = (builderBillingStatus?.builder_tier ?? "unknown").toLowerCase();
+		                  const max = builderBillingStatus?.max_communities ?? 0;
+		                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+		                  const needsPlan = Boolean(supabaseSession && tier === "free");
+		                  const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
+	                  if (!supabaseSession) {
+	                    return (
+	                      <button className="create-community-primary" onClick={() => void handleSignIn()}>
+	                        Sign in to create
+	                      </button>
+	                    );
+	                  }
+	                  return (
+	                    <button
+	                      className="create-community-primary"
+	                      type="button"
+	                      onClick={() => void handleCreateCommunityPrimaryAction()}
+	                      disabled={isCreatingCommunity || isStartingBuilderPortal || createCommunityName.trim().length === 0}
+	                    >
+	                      {isCreatingCommunity
+	                        ? "Creating..."
+	                        : needsPlan
+	                          ? "Continue to checkout"
+	                          : limitReached
+	                            ? "Upgrade plan"
+	                            : "Create community"}
+	                    </button>
+	                  );
+	                })()}
                 <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
                   Cancel
                 </button>
@@ -8700,170 +10039,11 @@ function isModelReady(modelId: string): boolean {
             {settingsPage === "account" && (
               <>
                 <div className="settings-section">
-                  <div className="settings-section-title">Account</div>
-                  <div className="settings-section-desc">
-                    Sign in to join communities and sync your profile.
-                  </div>
-                  {supabaseSession ? (
-                    <div className="account-row">
-                      <div className="account-identity">
-                        <span>Signed in as</span>
-                        <strong>
-                          {supabaseSession.user.email ?? supabaseSession.user.id}
-                        </strong>
-                      </div>
-                      <button className="secondary" onClick={() => void handleSignOut()}>
-                        Sign out
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="account-row">
-                      <button onClick={() => void handleSignIn()}>Sign in</button>
-                    </div>
-                  )}
-                  {authError && <div className="key-error">{authError}</div>}
-                </div>
-
-                {supabaseSession && (
-                  <div className="settings-section">
-                    <div className="settings-section-title">Builder plan</div>
-                    <div className="settings-section-desc">
-                      Starter is $20/month (10% take, 1 community). Pro is $100/month (3% take, 3 communities).
-                    </div>
-                    {(() => {
-                      const status = builderBillingStatus;
-                      const tier = (status?.builder_tier ?? "free").toLowerCase();
-                      const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
-                      const max = status?.max_communities ?? 0;
-                      const pct = status ? status.platform_fee_bps / 100 : 10;
-                      const hasPayouts = Boolean(status?.has_payouts);
-                      return (
-                        <>
-                          <div className="account-row">
-                            <div className="account-identity">
-                              <span>Current</span>
-                              <strong>
-                                {tier === "pro" ? "Pro" : tier === "builder" ? "Starter" : "Free"} · {pct}% take ·{" "}
-                                {max > 0 ? `${ownedCount}/${max} communities` : `${ownedCount} communities`}
-                              </strong>
-                            </div>
-                            <div className="auth-actions">
-                              <button
-                                type="button"
-                                className="secondary"
-                                onClick={() => supabaseSession && void loadBuilderBillingStatus(supabaseSession)}
-                                disabled={isLoadingBuilderBilling}
-                              >
-                                {isLoadingBuilderBilling ? "Refreshing…" : "Refresh"}
-                              </button>
-                            </div>
-                          </div>
-                          <div className="auth-actions">
-                            {tier === "free" ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => void startBuilderPlanCheckout("builder")}
-                                  disabled={isStartingBuilderCheckout}
-                                >
-                                  {isStartingBuilderCheckout ? "Starting…" : "Start Starter"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void startBuilderPlanCheckout("pro")}
-                                  disabled={isStartingBuilderCheckout}
-                                >
-                                  {isStartingBuilderCheckout ? "Starting…" : "Start Pro"}
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => void openBuilderBillingPortal()}
-                                disabled={isStartingBuilderPortal}
-                              >
-                                {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
-                              </button>
-                            )}
-                            {!hasPayouts ? (
-                              <button
-                                type="button"
-                                className="secondary"
-                                onClick={() => void startConnectOnboarding()}
-                                disabled={isStartingConnectOnboarding}
-                              >
-                                {isStartingConnectOnboarding ? "Opening…" : "Set up payouts"}
-                              </button>
-                            ) : (
-                              <button type="button" className="secondary" disabled>
-                                Payouts connected
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
-                    {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-                  </div>
-                )}
-
-                {supabaseSession &&
-                  (isLoadingPendingPurchases ||
-                    pendingPurchaseClaims.length > 0 ||
-                    pendingPurchasesError ||
-                    pendingPurchasesSuccess) && (
-                    <div className="settings-section">
-                      <div className="settings-section-title">Pending purchases</div>
-                      <div className="settings-section-desc">
-                        Recover access if you paid but didn't finish the join flow.
-                      </div>
-                      {isLoadingPendingPurchases && (
-                        <div className="chat-loading">
-                          <div className="loading-spinner" />
-                          <span>Checking…</span>
-                        </div>
-                      )}
-                      {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
-                        <div className="model-list">
-                          {pendingPurchaseClaims.map((claim) => (
-                            <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
-                              <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {!isLoadingPendingPurchases &&
-                        pendingPurchaseClaims.length === 0 &&
-                        pendingPurchasesSuccess && <div className="auth-status">{pendingPurchasesSuccess}</div>}
-                      <div className="auth-actions">
-                        <button
-                          type="button"
-                          onClick={() => void redeemPendingPurchases()}
-                          disabled={
-                            isRedeemingPendingPurchases ||
-                            isLoadingPendingPurchases ||
-                            pendingPurchaseClaims.length === 0
-                          }
-                        >
-                          {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-                        </button>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => supabaseSession && void loadPendingPurchaseClaims(supabaseSession)}
-                          disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
-                        >
-                          Refresh
-                        </button>
-                      </div>
-                      {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
-                    </div>
-                  )}
-
-                <div className="settings-section">
                   <div className="settings-section-title">Profile</div>
                   <div className="settings-section-desc">
-                    Local profile details shown in communities on this device.
+                    {supabaseSession
+                      ? "Profile details shown in communities. Save to sync across devices."
+                      : "Local profile details shown in communities on this device."}
                   </div>
                   <div className="profile-block">
                     <div
@@ -8929,17 +10109,234 @@ function isModelReady(modelId: string): boolean {
                     onChange={(event) => setProfileBio(event.target.value)}
                     rows={3}
                   />
+                  <div className="account-row">
+                    <div className="account-identity">
+                      <span>Sync</span>
+                      <strong>
+                        {supabaseSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
+                      </strong>
+                    </div>
+                    <div className="auth-actions">
+                      <button
+                        type="button"
+                        onClick={() => void saveProfileToCloud()}
+                        disabled={!supabaseSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
+                      >
+                        {isSavingProfile ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                  {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
+                  {profileSaveSuccess && <div className="auth-success">Saved.</div>}
                 </div>
+
+                <div className="settings-section">
+                  <div className="settings-section-title">Account</div>
+                  <div className="settings-section-desc">
+                    Sign in to join communities and sync your profile.
+                  </div>
+                  {supabaseSession ? (
+                    <div className="account-row">
+                      <div className="account-identity">
+                        <span>Signed in as</span>
+                        <strong>
+                          {supabaseSession.user.email ?? supabaseSession.user.id}
+                        </strong>
+                      </div>
+                      <button className="secondary" onClick={() => void handleSignOut()}>
+                        Sign out
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="account-row">
+                      <button onClick={() => void handleSignIn()}>Sign in</button>
+                    </div>
+                  )}
+                  {authError && <div className="key-error">{authError}</div>}
+                </div>
+
+                {supabaseSession && (
+                  <div className="settings-section">
+                    {(() => {
+                      const status = builderBillingStatus;
+                      const tier = (status?.builder_tier ?? "free").toLowerCase();
+                      const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+                      const max = status?.max_communities ?? 0;
+                      const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
+                      const communitiesLabel =
+                        max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
+                      const tierLabel = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
+                      return (
+                        <>
+                          <div className="account-row">
+                            <div className="account-identity">
+                              <span>Plan</span>
+                              <strong>
+                                {tierLabel} · {communitiesLabel}
+                              </strong>
+                            </div>
+                            <div className="auth-actions">
+	                              {tier === "free" ? (
+	                                <button
+	                                  type="button"
+	                                  className="secondary"
+	                                  onClick={() => {
+	                                    setBuilderUpgradeContext("builder");
+	                                    setIsBuilderUpgradeOpen(true);
+	                                  }}
+	                                >
+	                                  Upgrade plan
+	                                </button>
+	                              ) : (
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  onClick={() => void openBuilderBillingPortal()}
+                                  disabled={isStartingBuilderPortal}
+                                >
+                                  {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+                  </div>
+                )}
+
+                {supabaseSession && (
+                  <div className="settings-section">
+                    <div className="settings-section-title">Your communities</div>
+                    <div className="settings-section-desc">
+                      Open a community to manage pricing and payouts.
+                    </div>
+                    {(() => {
+                      const owned = communities
+                        .filter((community) => communityRoleById[community.id] === "owner")
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                      if (owned.length === 0) {
+                        return <div className="model-note">No owned communities yet.</div>;
+                      }
+	                      return (
+	                        <div className="invite-list">
+	                          {owned.map((community) => (
+	                            <div key={community.id} className="invite-row">
+	                              <div className="invite-main with-avatar">
+	                                <div className="invite-avatar" aria-hidden="true">
+	                                  {community.avatar_url ? (
+	                                    <img
+	                                      className="invite-avatar-img"
+	                                      src={community.avatar_url}
+	                                      alt=""
+	                                      loading="lazy"
+	                                    />
+	                                  ) : (
+	                                    <span className="invite-avatar-fallback">{communityInitials(community.name)}</span>
+	                                  )}
+	                                </div>
+	                                <div className="invite-text">
+	                                  <div className="invite-code">{community.name}</div>
+	                                  <div className="invite-status">{`arx.com/c/${community.slug}`}</div>
+	                                </div>
+	                              </div>
+	                              <div className="invite-actions">
+		                                <button
+		                                  type="button"
+		                                  onClick={() => {
+		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                    setActiveView("home");
+		                                    setActivePage("community");
+		                                    setActiveCommunityId(community.id);
+		                                    setCommunityTab("settings");
+		                                  }}
+		                                >
+                                  Open settings
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+	                {supabaseSession &&
+	                  (isLoadingPendingPurchases ||
+	                    pendingPurchaseClaims.length > 0 ||
+	                    pendingPurchasesError ||
+                    pendingPurchasesSuccess) && (
+                    <div className="settings-section">
+                      <div className="settings-section-title">Pending purchases</div>
+                      <div className="settings-section-desc">
+                        Recover access if you paid but didn't finish the join flow.
+                      </div>
+                      {isLoadingPendingPurchases && (
+                        <div className="chat-loading">
+                          <div className="loading-spinner" />
+                          <span>Checking…</span>
+                        </div>
+                      )}
+                      {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
+                        <div className="model-list">
+                          {pendingPurchaseClaims.map((claim) => (
+                            <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
+                              <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!isLoadingPendingPurchases &&
+                        pendingPurchaseClaims.length === 0 &&
+                        pendingPurchasesSuccess && <div className="auth-status">{pendingPurchasesSuccess}</div>}
+                      <div className="auth-actions">
+                        <button
+                          type="button"
+                          onClick={() => void redeemPendingPurchases()}
+                          disabled={
+                            isRedeemingPendingPurchases ||
+                            isLoadingPendingPurchases ||
+                            pendingPurchaseClaims.length === 0
+                          }
+                        >
+                          {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => supabaseSession && void loadPendingPurchaseClaims(supabaseSession)}
+                          disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
+                        >
+                          Refresh
+                        </button>
+                      </div>
+                      {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
+                    </div>
+                    )}
+
               </>
             )}
             {settingsPage === "models" && (
               <>
-                <div className="settings-section">
-                  <div className="settings-section-title">API Key</div>
-                  <div className="settings-section-desc">
-                    Connect your OpenRouter key to access models (synced to your Arx account)
-                  </div>
-                  <div className="key-row">
+	                <div className="settings-section">
+	                  <div className="settings-section-title">API Key</div>
+	                  <div className="settings-section-desc">
+	                    Connect your OpenRouter key to access models (synced to your Arx account). Get one at{" "}
+	                    <a
+	                      href="https://openrouter.ai"
+	                      target="_blank"
+	                      rel="noopener noreferrer"
+	                      onClick={(event) => {
+	                        event.preventDefault();
+	                        void openExternalUrl("https://openrouter.ai");
+	                      }}
+	                    >
+	                      openrouter.ai
+	                    </a>
+	                  </div>
+	                  <div className="key-row">
                     <input
                       type="password"
                       value={providerKeys[0]?.inputValue ?? ""}
@@ -8959,16 +10356,51 @@ function isModelReady(modelId: string): boolean {
                     >
                       Clear
                     </button>
-                  </div>
-                  {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
-                </div>
+	                  </div>
+	                  {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+	                </div>
 
-                <div className="settings-section">
-                  <div className="settings-section-title">Available Models</div>
-                  <div className="settings-section-desc">Select which models to enable</div>
-                  <div className="model-list">
-                    {modelToggles.map((toggle) => (
-                      <label key={toggle.id} className="model-toggle">
+	                <div className="settings-section">
+	                  <div className="settings-section-title">System prompt</div>
+	                  <div className="settings-section-desc">
+	                    Applied to every model run (global). Use this to set tone, format, and defaults.
+	                  </div>
+	                  <textarea
+	                    className="exec-policy-input"
+	                    value={systemPromptDraft}
+	                    onChange={(event) => setSystemPromptDraft(event.target.value)}
+	                    placeholder="e.g. Be concise. Use Markdown. Prefer bullet points. Ask clarifying questions when needed."
+	                    disabled={isLoadingSystemPrompt || isSavingSystemPrompt}
+	                  />
+	                  <div className="exec-policy-actions">
+	                    <button
+	                      type="button"
+	                      onClick={() => void saveSystemPrompt(systemPromptDraft)}
+	                      disabled={isLoadingSystemPrompt || isSavingSystemPrompt}
+	                    >
+	                      {isSavingSystemPrompt ? "Saving..." : "Save"}
+	                    </button>
+	                    <button
+	                      type="button"
+	                      className="secondary"
+	                      onClick={() => {
+	                        setSystemPromptDraft("");
+	                        void saveSystemPrompt("");
+	                      }}
+	                      disabled={isLoadingSystemPrompt || isSavingSystemPrompt}
+	                    >
+	                      Clear
+	                    </button>
+	                    {systemPromptError && <div className="exec-policy-error">{systemPromptError}</div>}
+	                  </div>
+	                </div>
+
+	                <div className="settings-section">
+	                  <div className="settings-section-title">Available Models</div>
+	                  <div className="settings-section-desc">Select which models to enable</div>
+	                  <div className="model-list">
+	                    {modelToggles.map((toggle) => (
+	                      <label key={toggle.id} className="model-toggle">
                         <input
                           type="checkbox"
                           checked={toggle.enabled}
@@ -8986,96 +10418,33 @@ function isModelReady(modelId: string): boolean {
                 </div>
               </>
             )}
-            {settingsPage === "execution" && (
-              <>
-                <div className="settings-section">
-                  <div className="settings-section-title">Approval Mode</div>
-                  <div className="settings-section-desc">Control how tool executions are approved</div>
-                  <div className="approval-selector">
-                    {(["read-only", "agent", "agent-full"] as const).map((mode) => {
-                      const preset = APPROVAL_PRESETS[mode];
-                      const isActive = approvalMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          className={`approval-option${isActive ? " active" : ""}`}
-                          onClick={() => void applyApprovalMode(mode)}
-                        >
-                          <div className="approval-option-title">{preset.label}</div>
-                          <div className="approval-option-desc">{preset.description}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+	            {settingsPage === "execution" && (
+	              <>
+	                <div className="settings-section">
+	                  <div className="settings-section-title">Approval Mode</div>
+	                  <div className="settings-section-desc">Control how tool executions are approved</div>
+	                  <div className="approval-selector">
+	                    {(["read-only", "agent", "agent-full"] as const).map((mode) => {
+	                      const preset = APPROVAL_PRESETS[mode];
+	                      const isActive = approvalMode === mode;
+	                      return (
+	                        <button
+	                          key={mode}
+	                          className={`approval-option${isActive ? " active" : ""}`}
+	                          onClick={() => void applyApprovalMode(mode)}
+	                        >
+	                          <div className="approval-option-title">{preset.label}</div>
+	                          <div className="approval-option-desc">{preset.description}</div>
+	                        </button>
+	                      );
+	                    })}
+	                  </div>
+	                </div>
 
-                <div className="settings-section">
-                  <div className="settings-section-title">Thread Overrides</div>
-                  <div className="settings-section-desc">Settings for the current thread only</div>
-                  <label className="model-toggle">
-                    <input
-                      type="checkbox"
-                      checked={autoApproveWriteEdit}
-                      disabled={!activeThreadId}
-                      onChange={async (event) => {
-                        const next = event.target.checked;
-                        setAutoApproveWriteEdit(next);
-                        if (!activeThreadId) return;
-                        try {
-                          await invoke("set_auto_approve_write_edit_cmd", {
-                            threadId: activeThreadId,
-                            enabled: next,
-                          });
-                        } catch {
-                          setAutoApproveWriteEdit(!next);
-                        }
-                      }}
-                    />
-                    <span>Auto-approve write/edit for this thread</span>
-                  </label>
-                  <div className="approval-note">
-                    Read/search tools never require approval. When enabled, write/edit skip prompts.
-                  </div>
-                  <div className="exec-policy">
-                    <textarea
-                      className="exec-policy-input"
-                      value={sessionExecPolicyRules}
-                      onChange={(event) => setSessionExecPolicyRules(event.target.value)}
-                      placeholder="allow git status\nallow ls"
-                    />
-                    <div className="exec-policy-actions">
-                      <button
-                        onClick={() => void handleSaveSessionExecPolicyRules()}
-                        disabled={isSavingSessionExecPolicy || !activeThreadId}
-                      >
-                        {isSavingSessionExecPolicy ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setSessionExecPolicyRules("");
-                          if (activeThreadId) {
-                            void invoke("set_session_exec_policy_rules_cmd", {
-                              sessionId: activeThreadId,
-                              rules: ""
-                            });
-                          }
-                        }}
-                        disabled={!activeThreadId}
-                      >
-                        Clear
-                      </button>
-                      {sessionExecPolicyError && (
-                        <div className="exec-policy-error">{sessionExecPolicyError}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="settings-section">
-                  <div className="settings-section-title">Global Policy Rules</div>
-                  <div className="settings-section-desc">Default rules applied to all threads</div>
-                  <div className="exec-policy">
+	                <div className="settings-section">
+	                  <div className="settings-section-title">Global Policy Rules</div>
+	                  <div className="settings-section-desc">Default rules applied to all threads</div>
+	                  <div className="exec-policy">
                     <textarea
                       className="exec-policy-input"
                       value={execPolicyRules}
@@ -9096,27 +10465,28 @@ function isModelReady(modelId: string): boolean {
               <>
                 <div className="panel-title">Memory</div>
                 <div className="memory-panel">
-                  {personalMemoryError && (
-                    <div className="memory-error">{personalMemoryError}</div>
-                  )}
+                  {personalMemoryError &&
+                    (builderBillingStatus?.builder_tier ?? "free").toLowerCase() !== "free" && (
+                      <div className="memory-error">{personalMemoryError}</div>
+                    )}
 
-                  <div className="settings-section">
-                    <div className="settings-section-title">Export</div>
-                    <div className="settings-section-desc">
-                      Download your threads, messages, and personal memory as CSV.
-                    </div>
-                    <div className="export-actions">
-                      <button className="secondary" onClick={() => void exportThreadsCsv()}>
-                        Threads CSV
-                      </button>
-                      <button className="secondary" onClick={() => void exportMessagesCsv()}>
-                        Messages CSV
-                      </button>
-                      <button className="secondary" onClick={() => void exportPersonalMemoryCsv()}>
-                        Memory CSV
-                      </button>
-                    </div>
-                  </div>
+		                  <div className="settings-section">
+			                    <div className="settings-section-title">Export</div>
+			                    <div className="settings-section-desc">
+			                      Download your threads, messages, and personal memory as CSV.
+			                    </div>
+			                    <div className="export-actions">
+			                      <button className="secondary" onClick={() => void exportThreadsCsv()}>
+			                        Threads CSV
+			                      </button>
+			                      <button className="secondary" onClick={() => void exportMessagesCsv()}>
+			                        Messages CSV
+			                      </button>
+			                      <button className="secondary" onClick={() => void exportPersonalMemoryCsv()}>
+			                        Memory CSV
+			                      </button>
+			                    </div>
+		                  </div>
 
                   <div className="settings-section">
                     <div className="settings-section-title">Local Cache</div>
@@ -9130,121 +10500,131 @@ function isModelReady(modelId: string): boolean {
                     </div>
                   </div>
 
-                  <div className="memory-editor">
-                    <div className="memory-editor-header">
-                      <div className="memory-editor-title">Personal memory</div>
-                      <div className="memory-editor-meta">
-                        {isLoadingPersonalMemory
-                          ? "loading…"
-                          : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
-                      </div>
-                    </div>
-                    <input
-                      value={personalMemoryQuery}
-                      onChange={(event) => setPersonalMemoryQuery(event.target.value)}
-                      placeholder="Search memory…"
-                    />
-                    <div className="memory-block-meta">
-                      Workspace scope uses: {getEffectiveWorkspacePath()}
-                    </div>
-                    <div className="memory-editor-actions">
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setPersonalMemoryQuery("");
-                          void loadPersonalMemoryItems();
-                        }}
-                        disabled={isLoadingPersonalMemory}
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="memory-block-group">
-                    {personalMemoryItems.length === 0 ? (
-                      <div className="memory-block-empty">No personal memory items yet.</div>
-                    ) : (
-                      personalMemoryItems.map((item) => (
-                        <div key={item.id} className="memory-block">
-                          <div className="memory-block-header">
-                            <div className="memory-block-label">{item.content}</div>
-                            <div className="memory-block-actions">
-                              <button
-                                className="secondary"
-                                onClick={() => void handleTogglePersonalMemoryPinned(item)}
-                              >
-                                {item.pinned ? "Unpin" : "Pin"}
-                              </button>
-                              <button
-                                className="secondary"
-                                onClick={() => void handleDeletePersonalMemoryItem(item.id)}
-                              >
-                                Delete
-                              </button>
-                            </div>
+                  {(() => {
+                    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+                    const hasPersonalMemoryAccess = tier === "builder" || tier === "pro";
+                    if (!supabaseSession) return null;
+                    if (!hasPersonalMemoryAccess) {
+                      return (
+                        <div className="settings-section">
+                          <div className="settings-section-title">Personal memory</div>
+                          <div className="settings-section-desc">
+                            Personal memory is included with Starter and Pro.
                           </div>
-                          <div className="memory-block-meta">
-                            {item.scope}
-                            {item.scope === "workspace" && item.scope_id
-                              ? ` · ${item.scope_id}`
-                              : ""}
-                            {" · "}
-                            updated {formatRelativeTime(item.updated_at)}
+                          <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBuilderUpgradeContext("builder");
+                                setIsBuilderUpgradeOpen(true);
+                              }}
+                            >
+                              Upgrade plan
+                            </button>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
+                      );
+                    }
 
-                  <div className="memory-editor">
-                    <div className="memory-editor-header">
-                      <div className="memory-editor-title">Add memory</div>
-                      <div className="memory-editor-meta">
-                        {newPersonalMemoryScope}
-                      </div>
-                    </div>
-                    <textarea
-                      value={newPersonalMemoryContent}
-                      onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
-                      placeholder="Write a durable preference/fact…"
-                    />
-                    <div className="memory-editor-actions">
-                      <select
-                        className="select-styled"
-                        value={newPersonalMemoryScope}
-                        onChange={(event) =>
-                          setNewPersonalMemoryScope(event.target.value as "global" | "workspace")
-                        }
-                      >
-                        <option value="workspace">Workspace</option>
-                        <option value="global">Global</option>
-                      </select>
-                      <label className="memory-pin-toggle">
-                        <input
-                          type="checkbox"
-                          checked={newPersonalMemoryPinned}
-                          onChange={(event) => setNewPersonalMemoryPinned(event.target.checked)}
-                        />
-                        Pinned
-                      </label>
-                      <button
-                        onClick={() => void handleCreatePersonalMemoryItem()}
-                        disabled={!newPersonalMemoryContent.trim()}
-                      >
-                        Save memory
-                      </button>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setNewPersonalMemoryContent("");
-                          setNewPersonalMemoryPinned(false);
-                        }}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div className="memory-editor">
+                          <div className="memory-editor-header">
+                            <div className="memory-editor-title">Personal memory</div>
+                            <div className="memory-editor-meta">
+                              {isLoadingPersonalMemory
+                                ? "loading…"
+                                : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
+                            </div>
+                          </div>
+                          <input
+                            value={personalMemoryQuery}
+                            onChange={(event) => setPersonalMemoryQuery(event.target.value)}
+                            placeholder="Search memory…"
+                          />
+                          <div className="memory-block-meta">
+                            Workspace scope uses: {getEffectiveWorkspacePath()}
+                          </div>
+                          <div className="memory-editor-actions">
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                setPersonalMemoryQuery("");
+                                void loadPersonalMemoryItems();
+                              }}
+                              disabled={isLoadingPersonalMemory}
+                            >
+                              Refresh
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="memory-block-group">
+                          {personalMemoryItems.length === 0 ? (
+                            <div className="memory-block-empty">No personal memory items yet.</div>
+                          ) : (
+                            personalMemoryItems.map((item) => (
+                              <div key={item.id} className="memory-block">
+                                <div className="memory-block-header">
+                                  <div className="memory-block-label">{item.content}</div>
+                                  <div className="memory-block-actions">
+                                    <button
+                                      className="secondary"
+                                      onClick={() => void handleTogglePersonalMemoryPinned(item)}
+                                    >
+                                      {item.pinned ? "Unpin" : "Pin"}
+                                    </button>
+                                    <button
+                                      className="secondary"
+                                      onClick={() => void handleDeletePersonalMemoryItem(item.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="memory-block-meta">
+                                  {item.scope}
+                                  {item.scope === "workspace" && item.scope_id
+                                    ? ` · ${item.scope_id}`
+                                    : ""}
+                                  {" · "}
+                                  updated {formatRelativeTime(item.updated_at)}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="memory-editor">
+                          <div className="memory-editor-header">
+                            <div className="memory-editor-title">Add memory</div>
+                          </div>
+                          <textarea
+                            value={newPersonalMemoryContent}
+                            onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
+                            placeholder="Write a durable preference/fact…"
+                          />
+                          <div className="memory-editor-actions">
+                            <button
+                              onClick={() => void handleCreatePersonalMemoryItem()}
+                              disabled={!newPersonalMemoryContent.trim()}
+                            >
+                              Save memory
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => {
+                                setNewPersonalMemoryContent("");
+                                setNewPersonalMemoryPinned(false);
+                              }}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </>
             )}
@@ -9999,10 +11379,10 @@ function isModelReady(modelId: string): boolean {
                 </div>
               );
             })()}
-            {pendingToolApproval && (() => {
-              const formatted = formatToolApproval(pendingToolApproval.tool_name, pendingToolApproval.args_json);
-              return (
-                <div className="tool-approval-card">
+	            {pendingToolApproval && (() => {
+	              const formatted = formatToolApproval(pendingToolApproval.tool_name, pendingToolApproval.args_json);
+	              return (
+	                <div className="tool-approval-card">
                   <div className="tool-approval-header">
                     <span className="tool-approval-icon">{formatted.icon}</span>
                     <div className="tool-approval-title">
@@ -10017,36 +11397,25 @@ function isModelReady(modelId: string): boolean {
                       <pre>{formatted.preview}</pre>
                     </div>
                   )}
-                  <div className="tool-approval-actions">
-                    <button
-                      className="tool-action danger"
-                      onClick={() => void resolvePendingToolApproval(false)}
-                      disabled={isToolApprovalSubmitting}
-                    >
-                      Deny
-                    </button>
-                    <button
-                      className="tool-action primary"
-                      onClick={() => void resolvePendingToolApproval(true)}
-                      disabled={isToolApprovalSubmitting}
-                    >
-                      Approve once
-                    </button>
-                    {(pendingToolApproval.tool_name === "write" ||
-                      pendingToolApproval.tool_name === "edit") && (
-                      <button
-                        className="tool-action secondary"
-                        onClick={() => void resolvePendingToolApproval(true, true)}
-                        disabled={isToolApprovalSubmitting}
-                        title="Automatically approve future file-change tool calls in this session"
-                      >
-                        Approve + allow file changes (session)
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+	                  <div className="tool-approval-actions">
+	                    <button
+	                      className="tool-action danger"
+	                      onClick={() => void resolvePendingToolApproval(false)}
+	                      disabled={isToolApprovalSubmitting}
+	                    >
+	                      Deny
+	                    </button>
+	                    <button
+	                      className="tool-action primary"
+	                      onClick={() => void resolvePendingToolApproval(true)}
+	                      disabled={isToolApprovalSubmitting}
+	                    >
+	                      Approve once
+	                    </button>
+	                  </div>
+	                </div>
+	              );
+	            })()}
 	          </div>
           {!isWorkspaceAtBottom && (
             <button
@@ -10284,120 +11653,146 @@ function isModelReady(modelId: string): boolean {
                       Refresh
                     </button>
                   </div>
-                </div>
-                <div className="workspace-body chat-feed">
-                  <div className="chat-messages discover-grid">
-                    {isLoadingDiscover && (
-                      <div className="chat-loading">
-                        <div className="loading-spinner" />
-                        <span>Loading communities…</span>
-                      </div>
-                    )}
-                    {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
-                    {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
-                      <div className="discover-empty">
-                        <div className="discover-empty-title">
-                          {supabaseSession ? "No communities yet." : "No public communities yet."}
-                        </div>
-                        <div className="discover-empty-text">
-                          Start one to make discovery meaningful.
-                        </div>
-                        <button
-                          className="discover-empty-btn"
-                          onClick={openCreateCommunityModal}
-                        >
-                          Create community
-                        </button>
-                      </div>
-                    )}
-                    {!isLoadingDiscover &&
-                      filteredDiscoverCommunities.map((community) => {
-                        const alreadyMember = communities.some((c) => c.id === community.id);
-                        const isJoining = joiningDiscoverCommunityId === community.id;
-                        const visibilityLabel =
-                          community.visibility === "public"
-                            ? "Public"
-                            : community.visibility === "unlisted"
-                              ? "Unlisted"
-                              : "Private";
-                        const isJoinable = community.visibility === "public";
-                        const description =
-                          community.description && community.description.trim().length > 0
-                            ? community.description
-                            : "No description yet.";
-                        return (
-                          <div key={community.id} className="discover-card">
-                            <div className="discover-card-banner" />
-                            <div className="discover-card-body">
-                              <div className="discover-card-header">
-                                {community.avatar_url ? (
-                                  <img
-                                    className="discover-card-avatar"
-                                    src={community.avatar_url}
-                                    alt={community.name}
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  <div className="discover-card-avatar fallback">
-                                    {communityInitials(community.name)}
-                                  </div>
-                                )}
-                                <div className="discover-card-meta">
-                                  <div className="discover-card-name-row">
-                                    <div className="discover-card-name">{community.name}</div>
-                                    <span className={`discover-tag ${community.visibility ?? "private"}`}>
-                                      {visibilityLabel}
-                                    </span>
-                                  </div>
-                                  {community.slug && (
-                                    <div className="discover-card-slug">/{community.slug}</div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="discover-card-stats">
-                                <span>— Members</span>
-                                <span className="discover-card-dot">•</span>
-                                <span>— Active today</span>
-                              </div>
-                              <div className="discover-card-desc">{description}</div>
-                              <div className="discover-card-foot">
-                                <div className="discover-card-actions">
-                                  {alreadyMember ? (
-                                    <button
-                                      className="discover-btn secondary"
-                                      onClick={() => {
-                                        setActiveCommunityId(community.id);
-                                        setActivePage("community");
-                                        setCommunityTab("chat");
-                                      }}
-                                    >
-                                      Open
-                                    </button>
-                                  ) : !isJoinable ? (
-                                    <button className="discover-btn secondary" disabled>
-                                      Invite only
-                                    </button>
-                                  ) : (
-                                    <button
-                                      className="discover-btn primary"
-                                      onClick={() => void handleJoinDiscoverCommunity(community)}
-                                      disabled={isJoining}
-                                    >
-                                      {isJoining ? "Joining…" : supabaseSession ? "Join" : "Sign in"}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              </div>
-            )}
-            {activePage === "community" && communityTab === "chat" && (
-              <div className="community-chat">
+	                </div>
+	                <div className="workspace-body chat-feed">
+	                  <div className="chat-messages discover-scroll">
+	                    <div className="discover-grid">
+	                      {isLoadingDiscover && (
+	                        <div className="chat-loading">
+	                          <div className="loading-spinner" />
+	                          <span>Loading communities…</span>
+	                        </div>
+	                      )}
+	                      {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
+	                      {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
+	                        <div className="discover-empty">
+	                          <div className="discover-empty-title">
+	                            {supabaseSession ? "No communities yet." : "No public communities yet."}
+	                          </div>
+	                          <div className="discover-empty-text">Start one to make discovery meaningful.</div>
+	                          <button className="discover-empty-btn" onClick={openCreateCommunityModal}>
+	                            Create community
+	                          </button>
+	                        </div>
+	                      )}
+	                      {!isLoadingDiscover &&
+	                        filteredDiscoverCommunities.map((community) => {
+	                          const alreadyMember = communities.some((c) => c.id === community.id);
+	                          const isJoining = joiningDiscoverCommunityId === community.id;
+	                          const visibilityLabel =
+	                            community.visibility === "public"
+	                              ? "Public"
+	                              : community.visibility === "unlisted"
+	                                ? "Unlisted"
+	                                : "Private";
+	                          const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
+	                          const isJoinable = community.visibility === "public";
+	                          const description =
+	                            community.description && community.description.trim().length > 0
+	                              ? community.description
+	                              : "No description yet.";
+                            const canActivate = alreadyMember || Boolean(community.slug);
+	                          return (
+	                            <div
+	                              key={community.id}
+	                              className={`discover-card${canActivate ? " clickable" : ""}`}
+	                              role={canActivate ? "button" : undefined}
+	                              tabIndex={canActivate ? 0 : -1}
+	                              aria-label={
+	                                canActivate
+	                                  ? alreadyMember
+	                                    ? `Open ${community.name}`
+	                                    : isJoinable && supabaseSession
+	                                      ? `Join ${community.name}`
+	                                      : `View ${community.name}`
+	                                  : undefined
+	                              }
+		                              onClick={() => {
+		                                if (!canActivate) return;
+		                                if (alreadyMember) {
+		                                  if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                  setActiveCommunityId(community.id);
+		                                  setActivePage("community");
+		                                  setCommunityTab("chat");
+		                                  return;
+	                                }
+	                                if (isJoinable && supabaseSession && !isJoining) {
+	                                  void handleJoinDiscoverCommunity(community);
+	                                  return;
+	                                }
+	                                void openCommunityLandingExternal(community);
+	                              }}
+		                              onKeyDown={(event) => {
+		                                if (!canActivate) return;
+		                                if (event.key !== "Enter" && event.key !== " ") return;
+		                                event.preventDefault();
+		                                if (alreadyMember) {
+		                                  if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                  setActiveCommunityId(community.id);
+		                                  setActivePage("community");
+		                                  setCommunityTab("chat");
+		                                  return;
+	                                }
+	                                if (isJoinable && supabaseSession && !isJoining) {
+	                                  void handleJoinDiscoverCommunity(community);
+	                                  return;
+	                                }
+	                                void openCommunityLandingExternal(community);
+	                              }}
+	                            >
+	                              <div
+	                                className={`discover-card-banner${community.banner_url ? " has-image" : ""}`}
+	                                style={
+	                                  community.banner_url
+	                                    ? { backgroundImage: `url(${community.banner_url})` }
+	                                    : undefined
+	                                }
+	                              />
+	                              <div className="discover-card-body">
+	                                <div className="discover-card-header">
+	                                  {community.avatar_url ? (
+	                                    <img
+	                                      className="discover-card-avatar"
+	                                      src={community.avatar_url}
+	                                      alt={community.name}
+	                                      loading="lazy"
+	                                    />
+	                                  ) : (
+	                                    <div className="discover-card-avatar fallback">{communityInitials(community.name)}</div>
+	                                  )}
+	                                  <div className="discover-card-meta">
+	                                    <div className="discover-card-name-row">
+	                                      <div className="discover-card-name">{community.name}</div>
+	                                      <span className="discover-tag price">{priceLabel}</span>
+	                                      <span className={`discover-visibility-icon ${community.visibility ?? "private"}`} title={visibilityLabel}>
+	                                        {community.visibility === "public" ? (
+	                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+	                                            <circle cx="12" cy="12" r="10" />
+	                                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+	                                          </svg>
+	                                        ) : (
+	                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+	                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+	                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+	                                          </svg>
+	                                        )}
+	                                      </span>
+	                                    </div>
+	                                    {community.slug && <div className="discover-card-slug">/{community.slug}</div>}
+	                                  </div>
+	                                </div>
+	                                <div className="discover-card-desc">{description}</div>
+	                              </div>
+	                            </div>
+	                          );
+	                        })}
+	                  </div>
+	                </div>
+	              </div>
+	            </div>
+	            )}
+	            {activePage === "community" && communityTab === "chat" && (
+	              <div className="community-chat">
                 <div className="workspace-body chat-feed">
                   <div
                     className="chat-messages"
@@ -10445,6 +11840,8 @@ function isModelReady(modelId: string): boolean {
                       const isPending = message.id.startsWith("pending-");
                       const showMeta = shouldShowSender(communityMessages, index);
                       const dateSeparator = shouldShowDateSeparator(communityMessages, index);
+                      const senderLabel = displayName(message.sender_id);
+                      const avatarUrl = isOwn ? profileAvatarUrl : profilesByUserId[message.sender_id]?.avatar_url ?? null;
 	                      const avatarColor = getAvatarColor(message.sender_id);
 	                      const shortTime = new Date(message.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 	                      const replyToId = message.reply_to_id ?? null;
@@ -10465,13 +11862,17 @@ function isModelReady(modelId: string): boolean {
                           <div
                             className="chat-avatar"
                             style={{ backgroundColor: avatarColor }}
-                            title={displayName(message.sender_id)}
+                            title={senderLabel}
                           >
-                            {getInitials(message.sender_id)}
+                            {avatarUrl ? (
+                              <img src={avatarUrl} alt={senderLabel} />
+                            ) : (
+                              <span>{getInitials(senderLabel)}</span>
+                            )}
                           </div>
                           <div className="chat-content">
                             <div className="chat-header">
-                              <span className="chat-sender">{displayName(message.sender_id)}</span>
+                              <span className="chat-sender">{senderLabel}</span>
                               <span className="chat-time">{formatChatTime(message.created_at)}</span>
                             </div>
                             {editingMessageId === message.id ? (
@@ -10503,23 +11904,46 @@ function isModelReady(modelId: string): boolean {
                               </div>
 	                            ) : (
 	                              <>
-	                                {replyTarget && (
-	                                  <button
-	                                    type="button"
-	                                    className="chat-reply-quote"
-	                                    onClick={() => scrollToCommunityMessage(replyToId!)}
-	                                    title="Jump to replied message"
-	                                  >
-	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-	                                      <polyline points="9 14 4 9 9 4" />
-	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-	                                    </svg>
-	                                    <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
-	                                    <span className="chat-reply-text">
-	                                      {truncateReplyPreview(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)}
-	                                    </span>
-	                                  </button>
-	                                )}
+		                                {replyTarget && (
+		                                  <button
+		                                    type="button"
+		                                    className="chat-reply-quote"
+		                                    onClick={() => scrollToCommunityMessage(replyToId!)}
+		                                    title="Jump to replied message"
+		                                  >
+		                                    {(() => {
+		                                      const thumb = replyTarget.attachments?.find(
+		                                        (att) =>
+		                                          att.type === "image" &&
+		                                          typeof att.data_url === "string" &&
+		                                          att.data_url.startsWith("data:image/"),
+		                                      );
+		                                      const text = truncateReplyPreview(
+		                                        (parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body).trim() ||
+		                                          (thumb ? "Image" : "Message"),
+		                                      );
+		                                      return (
+		                                        <>
+		                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+		                                      <polyline points="9 14 4 9 9 4" />
+		                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+		                                    </svg>
+		                                    {thumb?.data_url && (
+		                                      <img
+		                                        className="chat-reply-thumb"
+		                                        src={thumb.data_url}
+		                                        alt=""
+		                                        aria-hidden="true"
+		                                        loading="lazy"
+		                                      />
+		                                    )}
+		                                    <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
+		                                    <span className="chat-reply-text">{text}</span>
+		                                        </>
+		                                      );
+		                                    })()}
+		                                  </button>
+		                                )}
 	                                {!replyTarget && replyToId && (
 	                                  <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
 	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -10540,9 +11964,79 @@ function isModelReady(modelId: string): boolean {
 	                                    <span className="chat-reply-text">{legacyReply.preview}</span>
 	                                  </div>
 	                                )}
-	                                <div className="chat-body">{legacyReply ? legacyReply.rest : message.body}</div>
+	                                <div className="chat-body">
+	                                  {renderTextWithLinks(legacyReply ? legacyReply.rest : message.body)}
+	                                </div>
 	                              </>
 	                            )}
+
+                            {message.attachments && message.attachments.length > 0 && (() => {
+                              const imageAttachments = message.attachments
+                                .filter(
+                                  (att) =>
+                                    att.type === "image" &&
+                                    typeof att.data_url === "string" &&
+                                    att.data_url.startsWith("data:image/")
+                                )
+                                .map((att) => ({ url: att.data_url as string, name: att.name }));
+                              const fileAttachments = message.attachments.filter(
+                                (att) =>
+                                  !(
+                                    att.type === "image" &&
+                                    typeof att.data_url === "string" &&
+                                    att.data_url.startsWith("data:image/")
+                                  )
+                              );
+                              const gridCount = Math.min(imageAttachments.length, 4);
+                              return (
+                                <>
+                                  {imageAttachments.length > 0 && (
+                                    <div className={`chat-media-grid count-${gridCount}`}>
+                                      {imageAttachments.slice(0, 4).map((img, idx) => (
+                                        <button
+                                          key={`${message.id}-img-${idx}`}
+                                          type="button"
+                                          className="chat-media-item"
+                                          onClick={() => openCommunityChatLightbox(imageAttachments, idx)}
+                                          title={img.name}
+                                          aria-label={img.name}
+                                        >
+                                          <img src={img.url} alt={img.name} loading="lazy" />
+                                          {idx === 3 && imageAttachments.length > 4 && (
+                                            <div className="chat-media-more">+{imageAttachments.length - 4}</div>
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {fileAttachments.length > 0 && (
+                                    <div className="attachments-preview chat-attachments-preview">
+                                      {fileAttachments.map((att) => (
+                                        <button
+                                          key={att.id}
+                                          type="button"
+                                          className="attachment-item attachment-chip"
+                                          disabled
+                                          title={att.name}
+                                        >
+                                          <div className="attachment-icon" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24">
+                                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                              <path d="M14 2v6h6" />
+                                              <path d="M16 13H8" />
+                                              <path d="M16 17H8" />
+                                              <path d="M10 9H8" />
+                                            </svg>
+                                          </div>
+                                          <span className="attachment-name">{att.name}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                             {reactionPickerMessageId === message.id && (
                               <div className="reaction-picker">
                                 {REACTION_EMOJIS.map(emoji => (
@@ -10693,7 +12187,99 @@ function isModelReady(modelId: string): boolean {
                           } others are typing…`}
                   </div>
                 )}
+                {communityAttachments.length > 0 && (() => {
+                  const images = communityAttachments.filter(
+                    (att) =>
+                      att.type === "image" &&
+                      typeof att.data_url === "string" &&
+                      att.data_url.startsWith("data:image/")
+                  );
+                  const files = communityAttachments.filter(
+                    (att) =>
+                      !(
+                        att.type === "image" &&
+                        typeof att.data_url === "string" &&
+                        att.data_url.startsWith("data:image/")
+                      )
+                  );
+                  const gridCount = Math.min(Math.max(images.length, 1), 4);
+                  return (
+                    <>
+                      {images.length > 0 && (
+                        <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
+                          {images.map((att) => (
+                            <div key={att.id} className="chat-media-item chat-media-item-static">
+                              <img src={att.data_url ?? ""} alt={att.name} />
+                              <button
+                                type="button"
+                                className="chat-media-remove"
+                                onClick={() => removeCommunityAttachment(att.id)}
+                                title="Remove"
+                                aria-label={`Remove ${att.name}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {files.length > 0 && (
+                        <div className="attachments-preview chat-attachments-preview">
+                          {files.map((att) => (
+                            <div key={att.id} className="attachment-item" title={att.name}>
+                              <div className="attachment-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <path d="M14 2v6h6" />
+                                  <path d="M16 13H8" />
+                                  <path d="M16 17H8" />
+                                  <path d="M10 9H8" />
+                                </svg>
+                              </div>
+                              <span className="attachment-name">{att.name}</span>
+                              <button
+                                className="attachment-remove"
+                                type="button"
+                                onClick={() => removeCommunityAttachment(att.id)}
+                                title="Remove"
+                                aria-label={`Remove ${att.name}`}
+                              >
+                                <svg viewBox="0 0 24 24">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="chat-input-bar">
+                  <button
+                    className="ask-icon-btn ask-plus"
+                    type="button"
+                    onClick={() => communityFileInputRef.current?.click()}
+                    disabled={
+                      !activeCommunity ||
+                      !canPostMessagesActiveCommunity ||
+                      isSendingCommunityMessage
+                    }
+                    aria-label="Attach files"
+                    title="Attach files"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                  <input
+                    ref={communityFileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml"
+                    style={{ display: "none" }}
+                    onChange={handleCommunityFileInputChange}
+                  />
                   <textarea
                     ref={chatInputRef}
                     className="chat-input"
@@ -10722,12 +12308,30 @@ function isModelReady(modelId: string): boolean {
 	                    rows={1}
 	                  />
                   <button
-	                    className="chat-send"
+                    className="ask-icon-btn ask-mic"
+                    type="button"
+                    disabled
+                    aria-label="Voice input"
+                    title="Voice input (coming soon)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+                      <path d="M19 11a7 7 0 0 1-14 0" />
+                      <path d="M12 18v4" />
+                      <path d="M8 22h8" />
+                    </svg>
+                  </button>
+                  <button
+	                    className="chat-send ask-send-btn"
+                      type="button"
+                      aria-label="Send"
+                      title="Send"
 	                    onClick={() => void handleSendCommunityMessage()}
 	                    disabled={
 	                      !activeCommunity ||
 	                      !canPostMessagesActiveCommunity ||
 	                      isSendingCommunityMessage
+                        || (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
 	                    }
 	                  >
                     <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
@@ -10750,41 +12354,56 @@ function isModelReady(modelId: string): boolean {
 		                  <>
 		                    <div className="create-community-form community-settings-form">
 		                      <div className="settings-section">
-		                        <div className="settings-section-title">Branding</div>
-		                      <div
-		                        className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
-		                        onDragOver={(event) => {
-		                          event.preventDefault();
-                          setIsSettingsBannerDragOver(true);
-                        }}
+			                        <div className="settings-section-title">Branding</div>
+			                      <div
+			                        className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
+			                        aria-busy={isProcessingCommunitySettingsBanner || undefined}
+			                        onDragOver={(event) => {
+			                          event.preventDefault();
+	                          setIsSettingsBannerDragOver(true);
+	                        }}
                         onDragLeave={() => setIsSettingsBannerDragOver(false)}
                         onDrop={handleSettingsBannerDrop}
                       >
                         {communitySettingsBannerUrl ? (
                           <img src={communitySettingsBannerUrl} alt="Community banner preview" />
-                        ) : (
-                          <div className="create-community-banner-placeholder">Banner preview</div>
-                        )}
-                        <label className="create-banner-btn">
-                          Upload banner
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) =>
-                              void handleCommunityBannerUpload(event.target.files?.[0] ?? null)
-                            }
-                          />
-                        </label>
-                        {communitySettingsBannerUrl && (
-                          <button
-                            className="create-banner-remove"
-                            type="button"
-                            onClick={() => setCommunitySettingsBannerUrl(null)}
-                          >
-                            Remove
-		                          </button>
-		                        )}
-		                      </div>
+	                        ) : (
+	                          <div className="create-community-banner-placeholder">Banner preview</div>
+	                        )}
+	                        <label className={`create-banner-btn${isProcessingCommunitySettingsBanner ? " disabled" : ""}`}>
+	                          Upload banner
+	                          <input
+	                            type="file"
+	                            accept="image/*"
+	                            disabled={isProcessingCommunitySettingsBanner}
+	                            onChange={(event) => {
+	                              const file = event.target.files?.[0] ?? null;
+	                              event.target.value = "";
+	                              void handleCommunityBannerUpload(file);
+	                            }}
+	                          />
+	                        </label>
+	                        {communitySettingsBannerUrl && (
+	                          <button
+	                            className="create-banner-remove"
+	                            type="button"
+	                            disabled={isProcessingCommunitySettingsBanner}
+	                            onClick={() => {
+	                              setCommunitySettingsBannerUrl(null);
+	                              setCommunitySettingsBannerUploadError(null);
+	                              markCommunitySettingsDirty();
+	                            }}
+	                          >
+	                            Remove
+			                          </button>
+			                        )}
+	                        {isProcessingCommunitySettingsBanner && (
+	                          <div className="create-upload-status">Processing banner…</div>
+	                        )}
+	                        {communitySettingsBannerUploadError && (
+	                          <div className="auth-error">{communitySettingsBannerUploadError}</div>
+	                        )}
+			                      </div>
 		                      <div className="create-community-avatar-row">
                         <div
                           className={`create-community-avatar${isSettingsAvatarDragOver ? " drag-over" : ""}`}
@@ -10816,7 +12435,10 @@ function isModelReady(modelId: string): boolean {
                             <button
                               className="create-avatar-remove"
                               type="button"
-                              onClick={() => setCommunitySettingsAvatarUrl(null)}
+                              onClick={() => {
+                                setCommunitySettingsAvatarUrl(null);
+                                markCommunitySettingsDirty();
+                              }}
                             >
                               Remove
                             </button>
@@ -10829,17 +12451,24 @@ function isModelReady(modelId: string): boolean {
 		                          type="text"
 		                          placeholder="Community name"
 		                          value={communitySettingsName}
-		                          onChange={(event) => setCommunitySettingsName(event.target.value)}
+		                          onChange={(event) => {
+		                            setCommunitySettingsName(event.target.value);
+		                            markCommunitySettingsDirty();
+		                          }}
 		                        />
 		                      </label>
 		                      <label className="create-community-field">
 		                        <span>Slug</span>
-		                        <input
-		                          type="text"
-		                          placeholder="your-community"
-		                          value={communitySettingsSlug}
-		                          onChange={(event) => setCommunitySettingsSlug(event.target.value)}
-		                        />
+			                        <input
+			                          type="text"
+			                          placeholder="your-community"
+			                          value={communitySettingsSlug}
+			                          maxLength={32}
+			                          onChange={(event) => {
+			                            setCommunitySettingsSlug(slugify(event.target.value));
+			                            markCommunitySettingsDirty();
+			                          }}
+			                        />
 		                        <span className="create-community-hint">
 		                          {`arx.com/c/${communitySettingsSlug.trim() || "your-community"}`}
 		                        </span>
@@ -10853,7 +12482,10 @@ function isModelReady(modelId: string): boolean {
 		                          placeholder="Optional description for your community page"
 		                          rows={3}
 		                          value={communitySettingsDescription}
-		                          onChange={(event) => setCommunitySettingsDescription(event.target.value)}
+		                          onChange={(event) => {
+		                            setCommunitySettingsDescription(event.target.value);
+		                            markCommunitySettingsDirty();
+		                          }}
 		                        />
 		                      </label>
 		                    </div>
@@ -10865,20 +12497,23 @@ function isModelReady(modelId: string): boolean {
 		                        <select
 		                          className="select-styled"
 		                          value={communitySettingsVisibility}
-		                          onChange={(event) => setCommunitySettingsVisibility(event.target.value)}
+		                          onChange={(event) => {
+		                            setCommunitySettingsVisibility(event.target.value);
+		                            markCommunitySettingsDirty();
+		                          }}
 		                        >
 		                          <option value="private">Private</option>
 		                          <option value="unlisted">Unlisted</option>
 		                          <option value="public">Public</option>
 		                        </select>
-		                        <span className="create-community-hint">
-		                          {communitySettingsVisibility === "public"
-		                            ? "Anyone can discover and join."
-		                            : communitySettingsVisibility === "unlisted"
-		                              ? "Anyone with the link can join."
-		                            : "Only invited members can join."}
-		                        </span>
-		                      </label>
+			                        <span className="create-community-hint">
+			                          {communitySettingsVisibility === "public"
+			                            ? "Discoverable. Anyone can preview chat and join to participate."
+			                            : communitySettingsVisibility === "unlisted"
+			                              ? "Not listed in discovery. Share the link when you're ready."
+			                              : "Discoverable, but chat is gated until you join."}
+			                        </span>
+			                      </label>
 		                      <div className="create-community-field">
 		                        <span>Pricing</span>
 		                        <div className="analytics-range-toggle" role="tablist" aria-label="Pricing options">
@@ -10896,8 +12531,12 @@ function isModelReady(modelId: string): boolean {
 		                              className={`analytics-range-btn${
 		                                communitySettingsPricingMode === opt.key ? " active" : ""
 		                              }`}
-		                              onClick={() => setCommunitySettingsPricingMode(opt.key)}
-		                            >
+			                              onClick={() => {
+			                                setCommunitySettingsPricingMode(opt.key);
+			                                communityPricingDirtyRef.current = true;
+			                                markCommunitySettingsDirty();
+			                              }}
+			                            >
 		                              {opt.label}
 		                            </button>
 		                          ))}
@@ -10915,8 +12554,12 @@ function isModelReady(modelId: string): boolean {
 		                            inputMode="decimal"
 		                            placeholder="29"
 		                            value={communitySettingsPriceUsdMonthly}
-		                            onChange={(event) => setCommunitySettingsPriceUsdMonthly(event.target.value)}
-		                          />
+			                            onChange={(event) => {
+			                              setCommunitySettingsPriceUsdMonthly(event.target.value);
+			                              communityPricingDirtyRef.current = true;
+			                              markCommunitySettingsDirty();
+			                            }}
+			                          />
 		                          <span className="create-community-hint">Billed monthly.</span>
 		                        </label>
 		                      )}
@@ -10929,22 +12572,64 @@ function isModelReady(modelId: string): boolean {
 		                            inputMode="decimal"
 		                            placeholder="290"
 		                            value={communitySettingsPriceUsdYearly}
-		                            onChange={(event) => setCommunitySettingsPriceUsdYearly(event.target.value)}
-		                          />
+			                            onChange={(event) => {
+			                              setCommunitySettingsPriceUsdYearly(event.target.value);
+			                              communityPricingDirtyRef.current = true;
+			                              markCommunitySettingsDirty();
+			                            }}
+			                          />
 		                          <span className="create-community-hint">Billed yearly.</span>
 		                        </label>
 		                      )}
+                          <div className="create-community-field">
+                            <span>Payouts</span>
+                            <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                              {builderBillingStatus?.has_payouts ? (
+                                <button type="button" className="secondary" disabled>
+                                  Payouts connected
+                                </button>
+	                              ) : (
+	                                <button
+	                                  type="button"
+	                                  onClick={() => void startConnectOnboarding()}
+	                                  disabled={isStartingConnectOnboarding}
+	                                  className="stripe-connect-btn"
+	                                >
+	                                  <svg
+	                                    className="stripe-connect-icon"
+	                                    viewBox="0 0 24 24"
+	                                    aria-hidden="true"
+	                                    focusable="false"
+	                                  >
+	                                    <rect x="2" y="2" width="20" height="20" rx="6" fill="#635BFF" />
+	                                    <path
+	                                      fill="#FFFFFF"
+	                                      d="M14.85 9.14c-.84-.44-1.82-.66-2.78-.66-1.44 0-2.24.54-2.24 1.25 0 .78.84 1.12 2.35 1.46 2.2.5 3.34 1.24 3.34 2.9 0 1.76-1.5 2.95-4.03 2.95-1.38 0-2.66-.34-3.64-.93l.66-1.56c.98.58 2.04.88 3.06.88 1.5 0 2.34-.54 2.34-1.37 0-.78-.74-1.16-2.36-1.52-2.18-.5-3.33-1.24-3.33-2.87 0-1.66 1.5-2.87 3.9-2.87 1.3 0 2.5.28 3.48.74l-.7 1.6z"
+	                                    />
+	                                  </svg>
+	                                  <span>{isStartingConnectOnboarding ? "Opening…" : "Connect with Stripe"}</span>
+	                                </button>
+	                              )}
+                            </div>
+                            <span className="create-community-hint">
+                              Connect Stripe to receive payouts from paid memberships.
+                            </span>
+                          </div>
 		                    </div>
 
 		                    {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
-		                    <div className="create-community-actions">
-		                      <button
-		                        onClick={() => void handleSaveCommunitySettings()}
-		                        disabled={isSavingCommunitySettings}
-		                      >
-		                        {isSavingCommunitySettings ? "Saving..." : "Save changes"}
-		                      </button>
-		                    </div>
+			                    <div className="create-community-actions">
+			                      <button
+			                        onClick={() => void handleSaveCommunitySettings()}
+			                        disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
+			                      >
+			                        {isSavingCommunitySettings
+			                          ? "Saving..."
+			                          : isProcessingCommunitySettingsBanner
+			                            ? "Processing banner…"
+			                            : "Save changes"}
+			                      </button>
+			                    </div>
 		                    </div>
 		                  </>
 		                ) : (
@@ -11299,6 +12984,34 @@ function isModelReady(modelId: string): boolean {
 	                              Arx will POST to <span className="token">/api/identify</span> on{" "}
 	                              <span className="token">Email captured</span>.
 	                            </div>
+	                            <div className="model-note" style={{ marginTop: 8 }}>
+	                              {lastBrandosIdentifyDelivery ? (
+	                                (() => {
+	                                  const isSkipped =
+	                                    lastBrandosIdentifyDelivery.status === "success" &&
+	                                    (lastBrandosIdentifyDelivery.error ?? "").startsWith("skipped_");
+	                                  const statusLabel = isSkipped
+	                                    ? "Skipped"
+	                                    : lastBrandosIdentifyDelivery.status === "success"
+	                                      ? "Success"
+	                                      : "Failed";
+	                                  const attemptedEpoch = Math.floor(
+	                                    new Date(lastBrandosIdentifyDelivery.attempted_at).getTime() / 1000
+	                                  );
+	                                  const detail = [
+	                                    "Last identify",
+	                                    Number.isFinite(attemptedEpoch) ? formatRelativeTime(attemptedEpoch) : "",
+	                                    statusLabel,
+	                                    formatAutomationDeliveryError(lastBrandosIdentifyDelivery.error),
+	                                  ]
+	                                    .filter(Boolean)
+	                                    .join(" • ");
+	                                  return <>{detail}</>;
+	                                })()
+	                              ) : (
+	                                <>No identify attempts yet.</>
+	                              )}
+	                            </div>
 	                          </div>
 	                        )}
 	                      </div>
@@ -11474,6 +13187,7 @@ function isModelReady(modelId: string): boolean {
 	                            {automationDeliveries.map((delivery) => {
 	                              const key = `${delivery.attempted_at}:${delivery.endpoint_name}:${delivery.event_type}`;
 	                              const statusClass = delivery.status === "success" ? "active" : "revoked";
+	                              const formattedError = formatAutomationDeliveryError(delivery.error);
 	                              const attemptedEpoch = Math.floor(new Date(delivery.attempted_at).getTime() / 1000);
 	                              const details = [
 	                                Number.isFinite(attemptedEpoch) ? formatRelativeTime(attemptedEpoch) : "",
@@ -11488,7 +13202,7 @@ function isModelReady(modelId: string): boolean {
 	                                    <div className="invite-code">{delivery.event_type}</div>
 	                                    <div className={`invite-status ${statusClass}`}>
 	                                      {details}
-	                                      {delivery.error ? ` • ${delivery.error}` : ""}
+	                                      {formattedError ? ` • ${formattedError}` : ""}
 	                                    </div>
 	                                  </div>
 	                                </div>
@@ -12678,6 +14392,14 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleDateString();
 }
 
+function formatAutomationDeliveryError(error: string | null): string | null {
+  if (!error) return null;
+  if (error === "skipped_missing_brandos_aid") return "Skipped (missing BrandOS token)";
+  if (error === "skipped_invalid_brandos_aid") return "Skipped (invalid BrandOS token)";
+  if (error === "skipped_unknown_brandos_aid") return "Skipped (no tracked click found)";
+  return error;
+}
+
 function shortId(id: string, currentUserId?: string, currentUserEmail?: string): string {
   // For current user, show email prefix
   if (currentUserId && id === currentUserId && currentUserEmail) {
@@ -12764,6 +14486,67 @@ function formatChatTime(value: string): string {
   } else {
     return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${timeStr}`;
   }
+}
+
+const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+
+function openExternalUrlBestEffort(url: string): void {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  void invoke("open_external_url_cmd", { url: trimmed }).catch(() => {
+    try {
+      window.open(trimmed, "_blank", "noopener,noreferrer");
+    } catch {
+      // Ignore.
+    }
+  });
+}
+
+function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
+  let url = candidate;
+  let trailing = "";
+  while (url.length > 0) {
+    const last = url.slice(-1);
+    if (").,!?;:]}'\"".includes(last)) {
+      trailing = last + trailing;
+      url = url.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return { url, trailing };
+}
+
+function renderTextWithLinks(text: string): ReactNode {
+  if (!text) return "";
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(CHAT_LINK_RE)) {
+    const index = match.index ?? -1;
+    if (index < 0) continue;
+    if (index > lastIndex) nodes.push(text.slice(lastIndex, index));
+    const raw = match[0] ?? "";
+    const { url, trailing } = splitUrlAndTrailingPunctuation(raw);
+    const href = url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+    nodes.push(
+      <a
+        key={`link-${index}`}
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        onClick={(event) => {
+          event.preventDefault();
+          openExternalUrlBestEffort(href);
+        }}
+      >
+        {url}
+      </a>
+    );
+    if (trailing) nodes.push(trailing);
+    lastIndex = index + raw.length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes.length > 0 ? <>{nodes}</> : text;
 }
 
 function parseContentRangeTotal(value: string | null): number | null {

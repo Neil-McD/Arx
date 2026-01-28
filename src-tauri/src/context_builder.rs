@@ -17,12 +17,6 @@ pub struct UsedPersonalMemoryItem {
   pub redacted: bool,
 }
 
-#[derive(Clone, Debug)]
-pub struct BuiltContext {
-  pub handoff_prefix: String,
-  pub used_personal_memory: Vec<UsedPersonalMemoryItem>,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct CloudPersonalMemoryItem {
   pub id: String,
@@ -119,7 +113,7 @@ pub fn build_used_personal_memory_from_cloud_json(
 pub fn build_turn_handoff_prefix(
   conn: &Connection,
   workspace_path: &str,
-) -> anyhow::Result<BuiltContext> {
+) -> anyhow::Result<Vec<UsedPersonalMemoryItem>> {
   let global = db::list_personal_memory_items(conn, Some("global"), None, PERSONAL_MEMORY_FETCH_LIMIT)?;
   let workspace = db::list_personal_memory_items(
     conn,
@@ -129,13 +123,7 @@ pub fn build_turn_handoff_prefix(
   )?;
   let ranked = merge_and_rank_personal_memory(global, workspace);
 
-  let mut out = String::new();
-  out.push_str("You're helping the user with the workspace:\n");
-  out.push_str(workspace_path);
-  out.push_str("\n");
-
   let mut used = Vec::new();
-  let mut memory_lines = Vec::new();
   let mut used_chars: usize = 0;
 
   for item in ranked {
@@ -149,16 +137,11 @@ pub fn build_turn_handoff_prefix(
     }
 
     // Budget applies to just the memory bullets, not the whole prefix.
-    let next_len = if memory_lines.is_empty() {
-      line.len()
-    } else {
-      1 + line.len() // newline
-    };
+    let next_len = if used.is_empty() { line.len() } else { 1 + line.len() };
     if used_chars + next_len > PERSONAL_MEMORY_BUDGET_CHARS {
       break;
     }
     used_chars += next_len;
-    memory_lines.push(line);
     used.push(UsedPersonalMemoryItem {
       id: item.id,
       content: redacted,
@@ -169,16 +152,5 @@ pub fn build_turn_handoff_prefix(
       redacted: !report.redactions.is_empty(),
     });
   }
-
-  if !memory_lines.is_empty() {
-    out.push_str("\nMemory:\n");
-    out.push_str(&memory_lines.join("\n"));
-    out.push_str("\n");
-  }
-
-  out.push('\n');
-  Ok(BuiltContext {
-    handoff_prefix: out,
-    used_personal_memory: used,
-  })
+  Ok(used)
 }

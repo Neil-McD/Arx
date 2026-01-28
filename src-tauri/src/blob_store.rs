@@ -147,19 +147,6 @@ pub fn write_blob(db_path: &Path, bytes: &[u8]) -> anyhow::Result<BlobWriteResul
   })
 }
 
-pub fn read_blob(db_path: &Path, rel_path: &str) -> anyhow::Result<Vec<u8>> {
-  let abs = blob_abs_path(db_path, rel_path)?;
-  fs::read(&abs).with_context(|| format!("read blob: {}", abs.display()))
-}
-
-pub fn delete_blob_file(db_path: &Path, rel_path: &str) -> anyhow::Result<()> {
-  let abs = blob_abs_path(db_path, rel_path)?;
-  if abs.exists() {
-    fs::remove_file(&abs).with_context(|| format!("delete blob: {}", abs.display()))?;
-  }
-  Ok(())
-}
-
 pub fn blob_root(db_path: &Path) -> PathBuf {
   blob_root_for_db(db_path)
 }

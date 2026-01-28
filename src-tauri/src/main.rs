@@ -715,7 +715,7 @@ async fn execute_agent_tool_call(
   workspace_scope_id: &str,
   tool_use_id: &str,
   raw_tool_name: &str,
-  mut tool_args: serde_json::Value,
+  tool_args: serde_json::Value,
   auto_approve_key: &str,
   auto_approve_write_edit: &mut bool,
   cancel_rx: watch::Receiver<bool>,
@@ -1090,6 +1090,7 @@ fn build_atom_system_prompt(
   workspace_path: &str,
   used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
   community_id: Option<&str>,
+  user_system_prompt: Option<&str>,
 ) -> String {
   let os = std::env::consts::OS;
   let git_repo = std::path::Path::new(workspace_path).join(".git").exists();
@@ -1107,14 +1108,26 @@ fn build_atom_system_prompt(
   let community_name = community_id.unwrap_or("none");
   let community_memory_block = "(none)".to_string();
 
+  let user_prompt_block = user_system_prompt
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty())
+    .map(|v| {
+      format!(
+        "\nUser preferences (follow unless they conflict with the Rules):\n{}\n",
+        v
+      )
+    })
+    .unwrap_or_default();
+
   format!(
-    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{{path, content}}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
+    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{{path, content}}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
     workspace_path,
     os,
     if git_repo { "yes" } else { "no" },
     personal_memory_block,
     community_name,
-    community_memory_block
+    community_memory_block,
+    user_prompt_block
   )
 }
 
@@ -2215,13 +2228,12 @@ async fn run_agent_tool(
           return tool_error("writes must be a non-empty array".to_string());
         }
 
-        struct PreparedWrite {
-          rel: String,
-          abs: std::path::PathBuf,
-          content: String,
-          expected: Option<ExpectedBeforeSha>,
-          before_bytes: Option<Vec<u8>>,
-        }
+	        struct PreparedWrite {
+	          rel: String,
+	          abs: std::path::PathBuf,
+	          content: String,
+	          before_bytes: Option<Vec<u8>>,
+	        }
 
         let mut prepared: Vec<PreparedWrite> = Vec::new();
         for (idx, entry) in writes.iter().enumerate() {
@@ -2293,13 +2305,12 @@ async fn run_agent_tool(
           }
 
           let rel = rel_path_display(workspace_root, &abs);
-          prepared.push(PreparedWrite {
-            rel,
-            abs,
-            content,
-            expected,
-            before_bytes,
-          });
+	          prepared.push(PreparedWrite {
+	            rel,
+	            abs,
+	            content,
+	            before_bytes,
+	          });
         }
 
         let mut artifacts: Vec<serde_json::Value> = Vec::new();
@@ -3024,17 +3035,16 @@ async fn send_turn_openrouter_messages_agent(
 	      })
 	      .unwrap_or(false);
 
-	    let mut evidence_event_ids: Vec<String> = Vec::new();
-	    let mut call_seq: u64 = 0;
-	    let mut first_engine_input_event_id: Option<String> = None;
-	    let mut first_engine_input_seq: Option<i64> = None;
-	    let mut final_text: Option<String> = None;
+		    let mut evidence_event_ids: Vec<String> = Vec::new();
+		    let mut call_seq: u64 = 0;
+		    let mut first_engine_input_event_id: Option<String> = None;
+		    let mut first_engine_input_seq: Option<i64> = None;
 
-	    loop {
-	      if *cancel_rx.borrow() {
-	        return Ok(finish_cancelled_openrouter_messages_agent(
-	          window,
-	          &conn,
+		    let content = loop {
+		      if *cancel_rx.borrow() {
+		        return Ok(finish_cancelled_openrouter_messages_agent(
+		          window,
+		          &conn,
 	          db_path,
 	          thread_id,
 	          &run_id,
@@ -3587,11 +3597,10 @@ async fn send_turn_openrouter_messages_agent(
 	        });
 	      }
 
-	      let mut tool_calls = parsed_response.tool_calls;
-	      if tool_calls.is_empty() {
-	        final_text = Some(parsed_response.text.trim().to_string());
-	        break;
-	      }
+		      let mut tool_calls = parsed_response.tool_calls;
+		      if tool_calls.is_empty() {
+		        break parsed_response.text.trim().to_string();
+		      }
 
 	      for tc in &mut tool_calls {
 	        if tc.id.trim().is_empty() {
@@ -3620,7 +3629,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	      for tc in tool_calls {
 	        let mut tool_use_id = tc.id;
-	        let mut raw_tool_name = tc.name;
+		        let raw_tool_name = tc.name;
 	        let mut parsed_args = serde_json::from_str::<serde_json::Value>(&tc.arguments).unwrap_or(serde_json::Value::Null);
 	        if !parsed_args.is_object() {
 	          parsed_args = serde_json::json!({
@@ -3679,13 +3688,12 @@ async fn send_turn_openrouter_messages_agent(
 	          ));
 	        }
 	      }
-	    }
+		    };
 
-	    let content = final_text.unwrap_or_else(|| "".to_string());
-	    if content.trim().is_empty() {
-	      append_openrouter_messages_assistant_message(
-	        &conn,
-	        db_path,
+			    if content.trim().is_empty() {
+		      append_openrouter_messages_assistant_message(
+		        &conn,
+		        db_path,
 	        thread_id,
 	        "Engine error: OpenRouter returned an empty response.",
 	        selected_model_id,
@@ -3789,16 +3797,15 @@ async fn send_turn_openrouter_messages_agent(
 	    })
 	    .unwrap_or(false);
 	
-	  let mut evidence_event_ids: Vec<String> = Vec::new();
-	  let mut call_seq: u64 = 0;
-	  let mut first_engine_input_event_id: Option<String> = None;
-	  let mut first_engine_input_seq: Option<i64> = None;
-	  let mut final_text: Option<String> = None;
+		  let mut evidence_event_ids: Vec<String> = Vec::new();
+		  let mut call_seq: u64 = 0;
+		  let mut first_engine_input_event_id: Option<String> = None;
+		  let mut first_engine_input_seq: Option<i64> = None;
 
-	  loop {
-	    if *cancel_rx.borrow() {
-	      return Ok(finish_cancelled_openrouter_messages_agent(
-	        window,
+		  let content = loop {
+		    if *cancel_rx.borrow() {
+		      return Ok(finish_cancelled_openrouter_messages_agent(
+		        window,
 	        &conn,
 	        db_path,
 	        thread_id,
@@ -4360,9 +4367,9 @@ async fn send_turn_openrouter_messages_agent(
 	        engine_input_seq: Some(engine_input_event.seq),
 	        run_id: Some(run_id),
 	      });
-	    }
+	  };
 
-	    if *cancel_rx.borrow() {
+		  if *cancel_rx.borrow() {
 	      return Ok(finish_cancelled_openrouter_messages_agent(
 	        window,
 	        &conn,
@@ -4455,19 +4462,17 @@ async fn send_turn_openrouter_messages_agent(
       }
     }
 
-    if !saw_tool_use {
-      final_text = Some(text_out.trim().to_string());
-      break;
-    }
+	    if !saw_tool_use {
+	      break text_out.trim().to_string();
+	    }
 
-    messages.push(serde_json::json!({ "role": "assistant", "content": content_blocks }));
-    messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
-  }
+	    messages.push(serde_json::json!({ "role": "assistant", "content": content_blocks }));
+	    messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
+	  };
 
-  let content = final_text.unwrap_or_else(|| "".to_string());
-  if *cancel_rx.borrow() {
-    return Ok(finish_cancelled_openrouter_messages_agent(
-      window,
+		  if *cancel_rx.borrow() {
+	    return Ok(finish_cancelled_openrouter_messages_agent(
+	      window,
       &conn,
       db_path,
       thread_id,
@@ -4579,16 +4584,20 @@ async fn send_turn_cmd(
   // Shared memory injection (both harness + OpenRouter chat). Prefer cloud-canonical items if provided.
   let used_personal_memory = if let Some(json) = personal_memory_items_json.as_deref() {
     context_builder::build_used_personal_memory_from_cloud_json(workspace, json)
-      .or_else(|_| context_builder::build_turn_handoff_prefix(&conn, workspace).map(|b| b.used_personal_memory))
+      .or_else(|_| context_builder::build_turn_handoff_prefix(&conn, workspace))
       .map_err(|e| e.to_string())?
   } else {
     context_builder::build_turn_handoff_prefix(&conn, workspace)
-      .map(|b| b.used_personal_memory)
       .map_err(|e| e.to_string())?
   };
 
-  let atom_system_prompt =
-    build_atom_system_prompt(workspace, &used_personal_memory, thread.community_id.as_deref());
+  let user_system_prompt = get_ui_state(&conn, "system_prompt").ok().flatten();
+  let atom_system_prompt = build_atom_system_prompt(
+    workspace,
+    &used_personal_memory,
+    thread.community_id.as_deref(),
+    user_system_prompt.as_deref(),
+  );
 	  let retrieval_payload = serde_json::json!({
 	    "v": 1,
 	    "workspace_path": workspace,
@@ -4830,23 +4839,6 @@ async fn send_turn_cmd(
     messages: Vec<OpenRouterMessage>,
     max_tokens: u32,
     stream: bool,
-  }
-
-  #[derive(Deserialize)]
-  struct OpenRouterChoiceMessage {
-    content: Option<String>,
-  }
-
-  #[derive(Deserialize)]
-  struct OpenRouterChoice {
-    message: Option<OpenRouterChoiceMessage>,
-    delta: Option<OpenRouterChoiceMessage>,
-  }
-
-  #[derive(Deserialize)]
-  struct OpenRouterResponse {
-    choices: Option<Vec<OpenRouterChoice>>,
-    usage: Option<serde_json::Value>,
   }
 
   // Build a simple conversation: system = handoff_prefix, then last 20 user/assistant messages, then the current input.
@@ -6419,6 +6411,21 @@ fn get_exec_policy_rules_cmd(state: tauri::State<DbState>) -> Result<Option<Stri
 }
 
 #[tauri::command]
+fn get_system_prompt_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
+  let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
+  get_ui_state(&conn, "system_prompt").map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_system_prompt_cmd(state: tauri::State<DbState>, prompt: String) -> Result<(), String> {
+  let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
+  if prompt.len() > 20000 {
+    return Err("prompt too large".to_string());
+  }
+  set_ui_state(&conn, "system_prompt", &prompt).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_approval_mode_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
   get_ui_state(&conn, "approval_mode").map_err(|e| e.to_string())
@@ -6817,9 +6824,11 @@ fn main() {
       get_provider_key_cmd,
       scan_publish_content_cmd,
       get_exec_policy_rules_cmd,
+      get_system_prompt_cmd,
       get_approval_mode_cmd,
       detect_test_commands_cmd,
       set_exec_policy_rules_cmd,
+      set_system_prompt_cmd,
       set_approval_mode_cmd,
       get_session_exec_policy_rules_cmd,
       set_session_exec_policy_rules_cmd,
