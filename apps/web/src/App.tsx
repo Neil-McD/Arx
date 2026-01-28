@@ -135,6 +135,9 @@ type CommunityMember = {
   user_id: string;
   role: string;
   created_at: string;
+  is_entitled?: boolean;
+  entitlement_ends_at?: string | null;
+  access_status?: string;
 };
 
 type CommunityMemberSettings = {
@@ -1960,6 +1963,10 @@ export default function App() {
   const checkoutFinalizeInFlightRef = useRef(false);
   const checkoutFinalizePollCountRef = useRef(0);
   const checkoutFinalizePollTimeoutRef = useRef<number | null>(null);
+  const redeemPendingPurchasesInFlightRef = useRef(false);
+  const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
+  const autoRedeemPendingPurchasesAttemptRef = useRef(0);
+  const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
 
   const updateBuilderUpgradeScrollHint = useCallback(() => {
     const el = builderUpgradeModalBodyRef.current;
@@ -3219,8 +3226,8 @@ export default function App() {
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
-    void loadCommunityMembers(activeCommunityId, supabaseSession);
-  }, [supabaseSession, activeCommunityId, activePage]);
+    void loadCommunityMembers(activeCommunityId, supabaseSession, { includeStatus: canManageMembersActiveCommunity });
+  }, [supabaseSession, activeCommunityId, activePage, canManageMembersActiveCommunity]);
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "analytics") return;
@@ -4302,15 +4309,17 @@ export default function App() {
     }
   }
 
-  async function redeemPendingPurchases(): Promise<void> {
+  async function redeemPendingPurchases(opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       setAuthError("Sign in to claim access.");
       handleSignIn();
-      return;
+      return 0;
     }
 
+    if (redeemPendingPurchasesInFlightRef.current) return 0;
+    redeemPendingPurchasesInFlightRef.current = true;
     setIsRedeemingPendingPurchases(true);
     setPendingPurchasesError(null);
     setPendingPurchasesSuccess(null);
@@ -4328,22 +4337,25 @@ export default function App() {
       const rows = (await response.json()) as Array<{ community_id: string }>;
       const claimedCommunityId = rows[0]?.community_id;
       if (rows.length === 0) {
-        setPendingPurchasesSuccess("No pending purchases found.");
+        if (!opts?.silentNoop) {
+          setPendingPurchasesSuccess("No pending purchases found.");
+        }
         setPendingPurchaseClaims([]);
-        return;
+        return 0;
       }
 
       setPendingPurchasesSuccess(rows.length === 1 ? "Claimed access." : `Claimed ${rows.length} communities.`);
       await loadCommunities(session);
       setPendingPurchaseClaims([]);
 
-      if (claimedCommunityId) {
+      if (claimedCommunityId && opts?.navigate !== false) {
         navigateTo("/", { replace: true });
         setActiveView("home");
         setActivePage("community");
         setCommunityTab("chat");
         setActiveCommunityId(claimedCommunityId);
       }
+      return rows.length;
     } catch (error) {
       const message =
         typeof error === "string"
@@ -4352,8 +4364,10 @@ export default function App() {
             ? error.message
             : "Failed to claim access.";
       setPendingPurchasesError(message);
+      return 0;
     } finally {
       setIsRedeemingPendingPurchases(false);
+      redeemPendingPurchasesInFlightRef.current = false;
     }
   }
 
@@ -4503,6 +4517,48 @@ export default function App() {
   useEffect(() => {
     if (!supabaseSession) return;
     void loadPendingPurchaseClaims(supabaseSession);
+  }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!supabaseSession) {
+      lastAutoRedeemPendingPurchasesUserIdRef.current = null;
+      autoRedeemPendingPurchasesAttemptRef.current = 0;
+      if (autoRedeemPendingPurchasesTimeoutRef.current) {
+        window.clearTimeout(autoRedeemPendingPurchasesTimeoutRef.current);
+        autoRedeemPendingPurchasesTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const userId = getSupabaseAuthUid(supabaseSession);
+    if (!userId) return;
+    if (lastAutoRedeemPendingPurchasesUserIdRef.current === userId) return;
+    lastAutoRedeemPendingPurchasesUserIdRef.current = userId;
+
+    autoRedeemPendingPurchasesAttemptRef.current = 0;
+    if (autoRedeemPendingPurchasesTimeoutRef.current) {
+      window.clearTimeout(autoRedeemPendingPurchasesTimeoutRef.current);
+      autoRedeemPendingPurchasesTimeoutRef.current = null;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      if (cancelled) return;
+      autoRedeemPendingPurchasesAttemptRef.current += 1;
+      const attempt = autoRedeemPendingPurchasesAttemptRef.current;
+      const count = await redeemPendingPurchases({ navigate: false, silentNoop: true });
+      if (cancelled) return;
+      if (count > 0) return;
+      if (attempt >= 6) return;
+      const delayMs = Math.min(12000, 1200 + attempt * 1800);
+      autoRedeemPendingPurchasesTimeoutRef.current = window.setTimeout(() => {
+        void run();
+      }, delayMs);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -6572,18 +6628,40 @@ export default function App() {
     }
   }
 
-	  async function loadCommunityMembers(communityId: string, session: SupabaseSession) {
+	  async function loadCommunityMembers(
+      communityId: string,
+      session: SupabaseSession,
+      opts?: { includeStatus?: boolean },
+    ) {
 	    const url = getSupabaseUrl();
 	    if (!url) return;
+      const membershipsUrl = `${url}/rest/v1/community_memberships?select=id,community_id,user_id,role,created_at&community_id=eq.${communityId}&order=created_at.asc&limit=200`;
+      const adminUrl = `${url}/rest/v1/rpc/list_community_members_admin`;
 	    let response: Response;
 	    try {
       response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_memberships?select=id,community_id,user_id,role,created_at&community_id=eq.${communityId}&order=created_at.asc&limit=200`,
-        {},
+        opts?.includeStatus
+          ? adminUrl
+          : membershipsUrl,
+        opts?.includeStatus
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ p_community_id: communityId }),
+            }
+          : {},
         session
       );
     } catch {
       return;
+    }
+    if (!response.ok && opts?.includeStatus) {
+      // Fallback during rollout if the admin RPC is missing/unavailable.
+      try {
+        response = await fetchWithSupabaseAuth(membershipsUrl, {}, session);
+      } catch {
+        return;
+      }
     }
     if (!response.ok) return;
 	    const rows = (await response.json()) as CommunityMember[];
@@ -7360,7 +7438,7 @@ export default function App() {
     } catch (error) {
       console.warn("Failed to set member role:", error);
     } finally {
-      await loadCommunityMembers(activeCommunityId, supabaseSession);
+      await loadCommunityMembers(activeCommunityId, supabaseSession, { includeStatus: canManageMembersActiveCommunity });
       await loadCommunities(supabaseSession);
       await loadCommunityAccess(activeCommunityId, supabaseSession);
     }
@@ -7391,7 +7469,7 @@ export default function App() {
     } catch (error) {
       console.warn("Failed to remove member:", error);
     } finally {
-      await loadCommunityMembers(activeCommunityId, supabaseSession);
+      await loadCommunityMembers(activeCommunityId, supabaseSession, { includeStatus: canManageMembersActiveCommunity });
       await loadCommunities(supabaseSession);
       await loadCommunityAccess(activeCommunityId, supabaseSession);
     }
@@ -11521,7 +11599,10 @@ export default function App() {
                                       )}
 	                                    </div>
 	                                    <div className="member-info">
-	                                      <span className="member-name">{displayName(member.user_id)}</span>
+	                                      <span className="member-name">
+                                          {displayName(member.user_id)}
+                                          {canManageMembersActiveCommunity && member.access_status === "declined" ? " (declined)" : ""}
+                                        </span>
 	                                      {!canManageMembersActiveCommunity || memberIsOwner ? (
 	                                        <span className="member-role">{member.role}</span>
 	                                      ) : (

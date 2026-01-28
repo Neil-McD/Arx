@@ -4,6 +4,16 @@ import { jsonResponse, noStoreHeaders } from "../_shared/http.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { retrieveCheckoutSession, retrieveSubscription, StripeCheckoutSession, StripeSubscription } from "../_shared/stripe.ts";
+import { generateToken, tokenPrefix } from "../_shared/tokens.ts";
+
+const PURCHASE_CLAIM_TTL_DAYS = 30;
+const SUBSCRIPTION_GRACE_DAYS = 14;
+
+function addDaysIso(iso: string, days: number): string {
+  const baseMs = Date.parse(iso);
+  if (!Number.isFinite(baseMs)) return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  return new Date(baseMs + days * 24 * 60 * 60 * 1000).toISOString();
+}
 
 function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
@@ -52,6 +62,7 @@ async function verifyStripeWebhook(rawBody: string, signatureHeader: string): Pr
 type StripeEvent = {
   id: string;
   type: string;
+  created?: number;
   data: { object: Record<string, unknown> };
 };
 
@@ -199,31 +210,58 @@ async function maybeHandleBuilderPlanCheckoutSession(session: StripeCheckoutSess
   return true;
 }
 
-async function dedupeEvent(event: StripeEvent): Promise<boolean> {
-  const res = await supabaseAdminFetch("/rest/v1/payment_provider_events?on_conflict=provider,provider_event_id", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Prefer: "resolution=ignore-duplicates,return=representation",
-    },
-    body: JSON.stringify({
-      provider: "stripe",
-      provider_event_id: event.id,
-      event_type: event.type,
-      raw_json: event,
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as Array<{ id: string }>;
-  return rows.length === 0; // true => duplicate
-}
-
 function isCheckoutSessionEvent(type: string): boolean {
   return (
     type === "checkout.session.completed" ||
     type === "checkout.session.async_payment_succeeded" ||
     type === "checkout.session.async_payment_failed"
   );
+}
+
+async function ensureIssuedPurchaseClaim(params: {
+  intentId: string;
+  checkoutEmail: string | null;
+  tracking: Record<string, unknown>;
+}): Promise<void> {
+  const existingRes = await supabaseAdminFetch(
+    `/rest/v1/purchase_claims?select=id&payment_intent_id=eq.${encodeURIComponent(params.intentId)}&status=eq.issued&limit=1`,
+    { method: "GET" },
+  );
+  if (!existingRes.ok) throw new Error(await existingRes.text());
+  const existingRows = (await existingRes.json()) as Array<{ id: string }>;
+  if (existingRows.length > 0) return;
+
+  const token = generateToken(24);
+  const expiresAt = new Date(Date.now() + PURCHASE_CLAIM_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const hashRes = await supabaseAdminFetch("/rest/v1/rpc/hash_purchase_claim_token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!hashRes.ok) throw new Error(await hashRes.text());
+  const tokenHash = (await hashRes.json()) as string;
+
+  const insertRes = await supabaseAdminFetch("/rest/v1/purchase_claims", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({
+      payment_intent_id: params.intentId,
+      token_hash: tokenHash,
+      token_prefix: tokenPrefix(token),
+      status: "issued",
+      expires_at: expiresAt,
+      issued_to_email: params.checkoutEmail,
+      tracking: params.tracking,
+    }),
+  });
+
+  if (insertRes.ok) return;
+
+  // Best-effort: tolerate duplicate issuance under webhook retries/races.
+  const bodyText = await insertRes.text();
+  if (insertRes.status === 409 || bodyText.toLowerCase().includes("duplicate")) return;
+  throw new Error(bodyText);
 }
 
 async function handleCheckoutSession(sessionId: string): Promise<void> {
@@ -233,7 +271,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
   if (!/^[0-9a-fA-F-]{36}$/.test(intentId)) return;
 
   const intentRes = await supabaseAdminFetch(
-    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps`,
+    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps,tracking`,
     { method: "GET" },
   );
   if (!intentRes.ok) throw new Error(await intentRes.text());
@@ -245,6 +283,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
     currency: string;
     currency_decimals: number;
     platform_fee_bps?: number | null;
+    tracking?: Record<string, unknown> | null;
   }>;
   const intent = intentRows[0];
   if (!intent) return;
@@ -325,6 +364,11 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
       }),
     });
   }
+
+  if (committed) {
+    const tracking = intent.tracking && typeof intent.tracking === "object" ? intent.tracking : {};
+    await ensureIssuedPurchaseClaim({ intentId: intent.id, checkoutEmail: email, tracking });
+  }
 }
 
 async function handleSubscriptionUpdated(subscriptionId: string): Promise<void> {
@@ -358,9 +402,109 @@ async function handleSubscriptionUpdated(subscriptionId: string): Promise<void> 
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as Array<{ id: string; user_id: string | null; community_id: string }>;
+  const rows = (await res.json()) as Array<{
+    id: string;
+    user_id: string | null;
+    community_id: string;
+    grace_ends_at?: string | null;
+  }>;
   const existing = rows[0];
   if (!existing) return;
+
+  const statusLower = String(sub.status ?? "").trim().toLowerCase();
+  const clearDelinquency = statusLower === "active" || statusLower === "trialing";
+  const currentPeriodEndIso = new Date(sub.current_period_end * 1000).toISOString();
+  const effectiveEntitlementEndsAt = clearDelinquency
+    ? currentPeriodEndIso
+    : (existing.grace_ends_at ?? null) || currentPeriodEndIso;
+
+  const patchRes = await supabaseAdminFetch(
+    `/rest/v1/provider_subscriptions?id=eq.${encodeURIComponent(existing.id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        status: sub.status,
+        current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
+        current_period_end: currentPeriodEndIso,
+        cancel_at_period_end: sub.cancel_at_period_end,
+        provider_customer_id: sub.customer,
+        delinquent_at: clearDelinquency ? null : undefined,
+        grace_ends_at: clearDelinquency ? null : undefined,
+        raw_json: sub,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+  if (!patchRes.ok) throw new Error(await patchRes.text());
+
+  if (existing.user_id) {
+    const providerSubscriptionId = String(sub.id ?? subscriptionId).trim();
+    if (providerSubscriptionId) {
+      // Best-effort entitlement extension. Guard by source_ref so we don't clobber manual_grant/public_join access.
+      await supabaseAdminFetch(
+        `/rest/v1/entitlements?user_id=eq.${encodeURIComponent(existing.user_id)}` +
+          `&community_id=eq.${encodeURIComponent(existing.community_id)}` +
+          `&source_ref=eq.${encodeURIComponent(providerSubscriptionId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            ends_at: effectiveEntitlementEndsAt,
+          }),
+        },
+      );
+    }
+  }
+}
+
+async function handleInvoicePaymentFailed(params: { subscriptionId: string; failedAtIso: string }): Promise<void> {
+  const sub = await retrieveSubscription(params.subscriptionId);
+
+  const builderTier = resolveBuilderTierFromSubscription(sub);
+  if (builderTier) {
+    const providerSubscriptionId = String(sub.id ?? params.subscriptionId).trim();
+    const providerCustomerId = String(sub.customer ?? "").trim() || null;
+    let userId = await loadBuilderSubscriptionUserId(providerSubscriptionId);
+    if (!userId) userId = extractBuilderUserIdFromSubscription(sub);
+
+    await upsertBuilderSubscription({
+      subscription: sub,
+      providerSubscriptionId,
+      providerCustomerId,
+      userId,
+      builderTier,
+    });
+
+    if (userId) {
+      await upsertBuilderAccountCustomerId(userId, providerCustomerId);
+      const effectiveTier: "free" | "builder" | "pro" = isBuilderSubscriptionActive(sub) ? builderTier : "free";
+      await updateProfileBuilderTier(userId, effectiveTier);
+    }
+    return;
+  }
+
+  const providerSubscriptionId = String(sub.id ?? params.subscriptionId).trim();
+  if (!providerSubscriptionId) return;
+
+  const res = await supabaseAdminFetch(
+    `/rest/v1/provider_subscriptions?provider=eq.stripe&provider_subscription_id=eq.${encodeURIComponent(providerSubscriptionId)}` +
+      `&select=id,user_id,community_id,delinquent_at,grace_ends_at&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as Array<{
+    id: string;
+    user_id: string | null;
+    community_id: string;
+    delinquent_at: string | null;
+    grace_ends_at: string | null;
+  }>;
+  const existing = rows[0];
+  if (!existing?.id) return;
+
+  const delinquentAt = existing.delinquent_at ?? params.failedAtIso;
+  const graceEndsAt = existing.grace_ends_at ?? addDaysIso(delinquentAt, SUBSCRIPTION_GRACE_DAYS);
 
   const patchRes = await supabaseAdminFetch(
     `/rest/v1/provider_subscriptions?id=eq.${encodeURIComponent(existing.id)}`,
@@ -373,6 +517,8 @@ async function handleSubscriptionUpdated(subscriptionId: string): Promise<void> 
         current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
         cancel_at_period_end: sub.cancel_at_period_end,
         provider_customer_id: sub.customer,
+        delinquent_at: delinquentAt,
+        grace_ends_at: graceEndsAt,
         raw_json: sub,
         updated_at: new Date().toISOString(),
       }),
@@ -380,18 +526,90 @@ async function handleSubscriptionUpdated(subscriptionId: string): Promise<void> 
   );
   if (!patchRes.ok) throw new Error(await patchRes.text());
 
-  if (existing.user_id) {
-    // Best-effort entitlement extension (claim-first means entitlement may not exist yet).
-    await supabaseAdminFetch(
-      `/rest/v1/entitlements?user_id=eq.${encodeURIComponent(existing.user_id)}&community_id=eq.${encodeURIComponent(existing.community_id)}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({
-          ends_at: new Date(sub.current_period_end * 1000).toISOString(),
-        }),
-      },
-    );
+  if (!existing.user_id) return;
+
+  // Enforce grace window by time-bounding the subscription-backed entitlement.
+  await supabaseAdminFetch(
+    `/rest/v1/entitlements?user_id=eq.${encodeURIComponent(existing.user_id)}` +
+      `&community_id=eq.${encodeURIComponent(existing.community_id)}` +
+      `&source_ref=eq.${encodeURIComponent(providerSubscriptionId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        ends_at: graceEndsAt,
+      }),
+    },
+  );
+}
+
+type ProviderEventRow = {
+  id: string;
+  processed_at: string | null;
+};
+
+async function upsertProviderEvent(event: StripeEvent): Promise<ProviderEventRow> {
+  const res = await supabaseAdminFetch("/rest/v1/payment_provider_events?on_conflict=provider,provider_event_id", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=representation",
+    },
+    body: JSON.stringify({
+      provider: "stripe",
+      provider_event_id: event.id,
+      event_type: event.type,
+      raw_json: event,
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as ProviderEventRow[];
+  const row = rows[0];
+  if (!row?.id) throw new Error("Failed to upsert payment_provider_events row");
+  return row;
+}
+
+async function markProviderEventProcessed(id: string): Promise<void> {
+  const res = await supabaseAdminFetch(`/rest/v1/payment_provider_events?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ processed_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function handleStripeEvent(event: StripeEvent): Promise<void> {
+  if (isCheckoutSessionEvent(event.type)) {
+    const obj = event.data.object as Record<string, unknown>;
+    const sessionId = String(obj.id ?? "");
+    if (sessionId.startsWith("cs_")) {
+      await handleCheckoutSession(sessionId);
+    }
+    return;
+  }
+
+  if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+    const obj = event.data.object as Record<string, unknown>;
+    const subId = String(obj.id ?? "");
+    if (subId) await handleSubscriptionUpdated(subId);
+    return;
+  }
+
+  if (event.type === "invoice.paid") {
+    const obj = event.data.object as Record<string, unknown>;
+    const subId = String(obj.subscription ?? "");
+    if (subId) await handleSubscriptionUpdated(subId);
+    return;
+  }
+
+  if (event.type === "invoice.payment_failed") {
+    const obj = event.data.object as Record<string, unknown>;
+    const subId = String(obj.subscription ?? "");
+    if (subId) {
+      const created = typeof event.created === "number" && Number.isFinite(event.created) ? event.created * 1000 : Date.now();
+      await handleInvoicePaymentFailed({ subscriptionId: subId, failedAtIso: new Date(created).toISOString() });
+    }
+    return;
   }
 }
 
@@ -406,31 +624,11 @@ Deno.serve(async (req: Request) => {
     await verifyStripeWebhook(rawBody, signature);
 
     const event = JSON.parse(rawBody) as StripeEvent;
-    const isDup = await dedupeEvent(event);
-    if (isDup) return new Response("ok", { status: 200, headers });
+    const providerEvent = await upsertProviderEvent(event);
+    if (providerEvent.processed_at) return new Response("ok", { status: 200, headers });
 
-    if (isCheckoutSessionEvent(event.type)) {
-      const obj = event.data.object as Record<string, unknown>;
-      const sessionId = String(obj.id ?? "");
-      if (sessionId.startsWith("cs_")) {
-        await handleCheckoutSession(sessionId);
-      }
-      return new Response("ok", { status: 200, headers });
-    }
-
-    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-      const obj = event.data.object as Record<string, unknown>;
-      const subId = String(obj.id ?? "");
-      if (subId) await handleSubscriptionUpdated(subId);
-      return new Response("ok", { status: 200, headers });
-    }
-
-    if (event.type === "invoice.paid") {
-      const obj = event.data.object as Record<string, unknown>;
-      const subId = String(obj.subscription ?? "");
-      if (subId) await handleSubscriptionUpdated(subId);
-      return new Response("ok", { status: 200, headers });
-    }
+    await handleStripeEvent(event);
+    await markProviderEventProcessed(providerEvent.id);
 
     return new Response("ok", { status: 200, headers });
   } catch (error) {

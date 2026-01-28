@@ -11,6 +11,8 @@ import {
 } from "../_shared/stripe.ts";
 import { generateToken, tokenPrefix } from "../_shared/tokens.ts";
 
+const PURCHASE_CLAIM_TTL_DAYS = 30;
+
 function sanitizeSessionId(value: string): string {
   const v = (value ?? "").trim();
   if (!v) throw new Error("session_id is required");
@@ -244,7 +246,7 @@ Deno.serve(async (req: Request) => {
     const email = session.customer_details?.email ?? session.customer_email ?? null;
     const token = generateToken(24);
     const tracking = intent.tracking && typeof intent.tracking === "object" ? intent.tracking : {};
-    const claim = await insertClaim(intentId, token, email, tracking, 7);
+    const claim = await insertClaim(intentId, token, email, tracking, PURCHASE_CLAIM_TTL_DAYS);
 
     return jsonResponse(
       {

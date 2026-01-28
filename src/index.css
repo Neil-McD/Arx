@@ -926,6 +926,7 @@ html, body {
   gap: 20px;
   align-content: start;
   justify-items: stretch;
+  padding-bottom: 30px;
 }
 
 .discover-grid > .chat-loading,
@@ -981,6 +982,7 @@ html, body {
   width: 100%;
   position: relative;
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
+  will-change: transform;
 }
 
 .discover-card.clickable {
@@ -1251,7 +1253,7 @@ html, body {
 }
 
 .chat-messages.discover-scroll {
-  padding: 16px 48px 28px;
+  padding: 20px 48px 20px;
 }
 
 .chat-messages::-webkit-scrollbar {
