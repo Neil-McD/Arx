@@ -5807,6 +5807,31 @@ function isModelReady(modelId: string): boolean {
 	          return parseContentRangeTotal(response.headers.get("content-range"));
 	        };
 
+	        const fetchEntitledMemberCount = async (): Promise<number | null> => {
+	          try {
+	            const response = await fetchWithSupabaseAuth(
+	              `${url}/rest/v1/rpc/community_entitled_member_count`,
+	              {
+	                method: "POST",
+	                headers: { "Content-Type": "application/json" },
+	                body: JSON.stringify({ p_community_id: communityId }),
+	              },
+	              session
+	            );
+	            if (!response.ok) return null;
+	            const data = await response.json();
+	            if (typeof data === "number") return data;
+	            if (typeof data === "string") return Number(data) || 0;
+	            const asObj = data as Record<string, unknown> | null;
+	            const maybeValue = asObj && typeof asObj === "object" ? asObj["community_entitled_member_count"] : null;
+	            if (typeof maybeValue === "number") return maybeValue;
+	            if (typeof maybeValue === "string") return Number(maybeValue) || 0;
+	            return null;
+	          } catch {
+	            return null;
+	          }
+	        };
+
 	        const startOfBucket = (date: Date, bucket: "day" | "week" | "month"): Date => {
 	          if (bucket === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
 	          if (bucket === "week") {
@@ -5863,7 +5888,8 @@ function isModelReady(modelId: string): boolean {
 	        };
 
 	        try {
-	          const [totalMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
+	          const [entitledMembers, rosterMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
+	            fetchEntitledMemberCount(),
 	            fetchCount(`${url}/rest/v1/community_memberships?select=id&community_id=eq.${communityId}`),
 	            fetchCount(`${url}/rest/v1/community_resources?select=id&community_id=eq.${communityId}`),
 	            sinceWindowIso
@@ -5881,6 +5907,8 @@ function isModelReady(modelId: string): boolean {
 	                )
 	              : null,
 	          ]);
+
+	          const totalMembers = entitledMembers ?? rosterMembers;
 
 	          let memberJoinsWindow: Array<{ created_at: string }> = [];
 	          try {

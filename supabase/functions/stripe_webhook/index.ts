@@ -3,7 +3,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, noStoreHeaders } from "../_shared/http.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
-import { retrieveCheckoutSession, retrieveSubscription, StripeCheckoutSession, StripeSubscription } from "../_shared/stripe.ts";
+import {
+  retrieveCharge,
+  retrieveCheckoutSession,
+  retrieveInvoice,
+  retrieveSubscription,
+  StripeCharge,
+  StripeCheckoutSession,
+  StripeInvoice,
+  StripeSubscription,
+} from "../_shared/stripe.ts";
 import { generateToken, tokenPrefix } from "../_shared/tokens.ts";
 
 const PURCHASE_CLAIM_TTL_DAYS = 30;
@@ -271,7 +280,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
   if (!/^[0-9a-fA-F-]{36}$/.test(intentId)) return;
 
   const intentRes = await supabaseAdminFetch(
-    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps,tracking`,
+    `/rest/v1/payment_intents?id=eq.${encodeURIComponent(intentId)}&select=id,community_id,plan_id,user_id,status,amount_base_units,currency,currency_decimals,platform_fee_bps,tracking`,
     { method: "GET" },
   );
   if (!intentRes.ok) throw new Error(await intentRes.text());
@@ -279,6 +288,7 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
     id: string;
     community_id: string;
     plan_id: string;
+    user_id?: string | null;
     amount_base_units: string;
     currency: string;
     currency_decimals: number;
@@ -362,6 +372,27 @@ async function handleCheckoutSession(sessionId: string): Promise<void> {
         raw_json: sub,
         updated_at: new Date().toISOString(),
       }),
+    });
+  }
+
+  // Revenue analytics: record one-time purchases at checkout (subscriptions are recorded via invoice.paid).
+  if (committed && session.mode === "payment") {
+    await upsertPaymentLedgerEntry({
+      community_id: intent.community_id,
+      user_id: intent.user_id ?? null,
+      payment_intent_id: intent.id,
+      provider: "stripe",
+      kind: "checkout_session",
+      provider_ref: session.id,
+      provider_subscription_id: session.subscription ?? null,
+      provider_customer_id: session.customer ?? null,
+      amount_base_units: String(amountBaseUnits),
+      currency: (session.currency ?? intent.currency).toUpperCase(),
+      currency_decimals: intent.currency_decimals,
+      platform_fee_bps: platformFeeBps,
+      platform_fee_amount_base_units: String(platformFeeAmount),
+      occurred_at: nowIso,
+      raw_json: session,
     });
   }
 
@@ -543,6 +574,412 @@ async function handleInvoicePaymentFailed(params: { subscriptionId: string; fail
   );
 }
 
+type PaymentLedgerKind = "checkout_session" | "invoice_payment" | "refund" | "dispute";
+
+type PaymentLedgerEntryInsert = {
+  community_id: string;
+  user_id: string | null;
+  payment_intent_id: string | null;
+  provider: string;
+  kind: PaymentLedgerKind;
+  provider_ref: string;
+  provider_subscription_id: string | null;
+  provider_customer_id: string | null;
+  amount_base_units: string;
+  currency: string;
+  currency_decimals: number;
+  platform_fee_bps: number;
+  platform_fee_amount_base_units: string | null;
+  occurred_at: string;
+  raw_json: unknown;
+};
+
+async function upsertPaymentLedgerEntry(entry: PaymentLedgerEntryInsert): Promise<void> {
+  const res = await supabaseAdminFetch("/rest/v1/payment_ledger_entries?on_conflict=provider,kind,provider_ref", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+type PlanCurrencyRow = {
+  currency: string;
+  currency_decimals: number;
+};
+
+async function loadPlanCurrency(planId: string): Promise<PlanCurrencyRow | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/plans?id=eq.${encodeURIComponent(planId)}&select=currency,currency_decimals&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as Array<PlanCurrencyRow>;
+  const row = rows[0];
+  if (!row?.currency || row.currency_decimals == null) return null;
+  return row;
+}
+
+type ProviderSubscriptionRow = {
+  community_id: string;
+  user_id: string | null;
+  plan_id: string;
+  payment_intent_id: string | null;
+  platform_fee_bps: number | null;
+  provider_customer_id: string | null;
+};
+
+async function loadProviderSubscriptionRow(providerSubscriptionId: string): Promise<ProviderSubscriptionRow | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/provider_subscriptions?provider=eq.stripe&provider_subscription_id=eq.${encodeURIComponent(providerSubscriptionId)}` +
+      `&select=community_id,user_id,plan_id,payment_intent_id,platform_fee_bps,provider_customer_id&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as ProviderSubscriptionRow[];
+  return rows[0] ?? null;
+}
+
+type LedgerInvoiceRow = {
+  community_id: string;
+  user_id: string | null;
+  payment_intent_id: string | null;
+  provider_subscription_id: string | null;
+  provider_customer_id: string | null;
+  currency: string;
+  currency_decimals: number;
+  platform_fee_bps: number;
+};
+
+async function loadLedgerInvoiceRow(invoiceId: string): Promise<LedgerInvoiceRow | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/payment_ledger_entries?provider=eq.stripe&kind=eq.invoice_payment&provider_ref=eq.${encodeURIComponent(invoiceId)}` +
+      `&select=community_id,user_id,payment_intent_id,provider_subscription_id,provider_customer_id,currency,currency_decimals,platform_fee_bps&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as LedgerInvoiceRow[];
+  return rows[0] ?? null;
+}
+
+type ReceiptContextRow = {
+  payment_intent_id: string;
+  provider_session_id: string;
+  provider_subscription_id: string | null;
+  provider_customer_id: string | null;
+  currency: string;
+  currency_decimals: number;
+  platform_fee_bps: number;
+  payment_intents: { community_id: string; user_id: string | null } | null;
+};
+
+async function loadReceiptContextForProviderPaymentIntentId(providerPaymentIntentId: string): Promise<{
+  community_id: string;
+  user_id: string | null;
+  payment_intent_id: string;
+  provider_session_id: string;
+  provider_subscription_id: string | null;
+  provider_customer_id: string | null;
+  currency: string;
+  currency_decimals: number;
+  platform_fee_bps: number;
+} | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/payment_receipts?provider=eq.stripe&provider_payment_intent_id=eq.${encodeURIComponent(providerPaymentIntentId)}` +
+      `&select=payment_intent_id,provider_session_id,provider_subscription_id,provider_customer_id,currency,currency_decimals,platform_fee_bps,payment_intents(community_id,user_id)` +
+      `&order=created_at.desc&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as ReceiptContextRow[];
+  const row = rows[0];
+  const intent = row?.payment_intents ?? null;
+  if (!row?.payment_intent_id || !intent?.community_id) return null;
+  return {
+    community_id: intent.community_id,
+    user_id: intent.user_id ?? null,
+    payment_intent_id: row.payment_intent_id,
+    provider_session_id: row.provider_session_id,
+    provider_subscription_id: row.provider_subscription_id ?? null,
+    provider_customer_id: row.provider_customer_id ?? null,
+    currency: String(row.currency ?? "").toUpperCase(),
+    currency_decimals: row.currency_decimals,
+    platform_fee_bps: Number.isFinite(row.platform_fee_bps) ? row.platform_fee_bps : 0,
+  };
+}
+
+async function truncateEntitlementForSourceRef(params: {
+  communityId: string;
+  sourceRef: string;
+  endsAtIso: string;
+}): Promise<void> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/entitlements?community_id=eq.${encodeURIComponent(params.communityId)}` +
+      `&source_ref=eq.${encodeURIComponent(params.sourceRef)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ ends_at: params.endsAtIso }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function revokeIssuedClaimsForIntent(paymentIntentId: string): Promise<void> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/purchase_claims?payment_intent_id=eq.${encodeURIComponent(paymentIntentId)}&status=eq.issued`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "revoked" }),
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function markPaymentIntentFailed(paymentIntentId: string): Promise<void> {
+  const res = await supabaseAdminFetch(`/rest/v1/payment_intents?id=eq.${encodeURIComponent(paymentIntentId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({ status: "failed", updated_at: new Date().toISOString() }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+async function handleInvoicePaid(invoice: StripeInvoice, eventCreatedMs: number): Promise<void> {
+  const invoiceId = String(invoice.id ?? "").trim();
+  const subscriptionId = String(invoice.subscription ?? "").trim();
+  if (!invoiceId || !subscriptionId) return;
+
+  const subRow = await loadProviderSubscriptionRow(subscriptionId);
+  if (!subRow?.community_id || !subRow.plan_id) return;
+
+  const amountPaid = typeof invoice.amount_paid === "number" && Number.isFinite(invoice.amount_paid) ? invoice.amount_paid : null;
+  if (!amountPaid) return;
+  const amountBaseUnits = BigInt(Math.trunc(amountPaid));
+  if (amountBaseUnits === 0n) return;
+
+  const planCurrency = await loadPlanCurrency(subRow.plan_id);
+  if (!planCurrency) return;
+
+  const occurredAtMs = (() => {
+    const paidAt = invoice.status_transitions?.paid_at ?? null;
+    if (typeof paidAt === "number" && Number.isFinite(paidAt) && paidAt > 0) return paidAt * 1000;
+    const created = invoice.created ?? null;
+    if (typeof created === "number" && Number.isFinite(created) && created > 0) return created * 1000;
+    return eventCreatedMs;
+  })();
+
+  const platformFeeBps = Number.isFinite(subRow.platform_fee_bps) ? Number(subRow.platform_fee_bps) : 0;
+  const platformFeeAmount = platformFeeBps > 0 ? (amountBaseUnits * BigInt(platformFeeBps)) / 10000n : 0n;
+
+  await upsertPaymentLedgerEntry({
+    community_id: subRow.community_id,
+    user_id: subRow.user_id ?? null,
+    payment_intent_id: subRow.payment_intent_id ?? null,
+    provider: "stripe",
+    kind: "invoice_payment",
+    provider_ref: invoiceId,
+    provider_subscription_id: subscriptionId,
+    provider_customer_id: subRow.provider_customer_id ?? (String(invoice.customer ?? "").trim() || null),
+    amount_base_units: String(amountBaseUnits),
+    currency: String(invoice.currency ?? planCurrency.currency).toUpperCase(),
+    currency_decimals: planCurrency.currency_decimals,
+    platform_fee_bps: platformFeeBps,
+    platform_fee_amount_base_units: String(platformFeeAmount),
+    occurred_at: new Date(occurredAtMs).toISOString(),
+    raw_json: invoice,
+  });
+}
+
+type ChargeContext = {
+  community_id: string;
+  user_id: string | null;
+  payment_intent_id: string | null;
+  provider_subscription_id: string | null;
+  provider_customer_id: string | null;
+  currency: string;
+  currency_decimals: number;
+  platform_fee_bps: number;
+  source_ref: string | null;
+};
+
+async function resolveChargeContext(charge: StripeCharge): Promise<ChargeContext | null> {
+  const invoiceId = String(charge.invoice ?? "").trim() || null;
+  if (invoiceId) {
+    const ledgerInvoice = await loadLedgerInvoiceRow(invoiceId);
+    if (ledgerInvoice) {
+      const sourceRef = ledgerInvoice.provider_subscription_id ?? null;
+      return {
+        community_id: ledgerInvoice.community_id,
+        user_id: ledgerInvoice.user_id ?? null,
+        payment_intent_id: ledgerInvoice.payment_intent_id ?? null,
+        provider_subscription_id: ledgerInvoice.provider_subscription_id ?? null,
+        provider_customer_id: ledgerInvoice.provider_customer_id ?? (String(charge.customer ?? "").trim() || null),
+        currency: String(ledgerInvoice.currency ?? "").toUpperCase(),
+        currency_decimals: ledgerInvoice.currency_decimals,
+        platform_fee_bps: Number.isFinite(ledgerInvoice.platform_fee_bps) ? Number(ledgerInvoice.platform_fee_bps) : 0,
+        source_ref: sourceRef,
+      };
+    }
+
+    const invoice = await retrieveInvoice(invoiceId);
+    const subscriptionId = String(invoice.subscription ?? "").trim();
+    if (!subscriptionId) return null;
+    const subRow = await loadProviderSubscriptionRow(subscriptionId);
+    if (!subRow?.community_id || !subRow.plan_id) return null;
+    const planCurrency = await loadPlanCurrency(subRow.plan_id);
+    if (!planCurrency) return null;
+    const platformFeeBps = Number.isFinite(subRow.platform_fee_bps) ? Number(subRow.platform_fee_bps) : 0;
+    return {
+      community_id: subRow.community_id,
+      user_id: subRow.user_id ?? null,
+      payment_intent_id: subRow.payment_intent_id ?? null,
+      provider_subscription_id: subscriptionId,
+      provider_customer_id:
+        subRow.provider_customer_id ??
+        (String(invoice.customer ?? "").trim() || String(charge.customer ?? "").trim() || null),
+      currency: String(invoice.currency ?? planCurrency.currency).toUpperCase(),
+      currency_decimals: planCurrency.currency_decimals,
+      platform_fee_bps: platformFeeBps,
+      source_ref: subscriptionId,
+    };
+  }
+
+  const providerPaymentIntentId = String(charge.payment_intent ?? "").trim() || null;
+  if (providerPaymentIntentId) {
+    const receipt = await loadReceiptContextForProviderPaymentIntentId(providerPaymentIntentId);
+    if (!receipt) return null;
+    const sourceRef = receipt.provider_subscription_id ?? receipt.provider_session_id ?? null;
+    return {
+      community_id: receipt.community_id,
+      user_id: receipt.user_id ?? null,
+      payment_intent_id: receipt.payment_intent_id,
+      provider_subscription_id: receipt.provider_subscription_id ?? null,
+      provider_customer_id: receipt.provider_customer_id ?? (String(charge.customer ?? "").trim() || null),
+      currency: receipt.currency,
+      currency_decimals: receipt.currency_decimals,
+      platform_fee_bps: receipt.platform_fee_bps,
+      source_ref: sourceRef,
+    };
+  }
+
+  return null;
+}
+
+async function handleChargeRefunded(charge: StripeCharge): Promise<void> {
+  const refunds = charge.refunds?.data ?? [];
+  if (!Array.isArray(refunds) || refunds.length === 0) return;
+
+  const context = await resolveChargeContext(charge);
+  if (!context) return;
+
+  for (const refund of refunds) {
+    const refundId = String(refund?.id ?? "").trim();
+    if (!refundId) continue;
+
+    const refundAmount = typeof refund?.amount === "number" && Number.isFinite(refund.amount) ? refund.amount : 0;
+    const amountBaseUnits = BigInt(-Math.trunc(refundAmount));
+    if (amountBaseUnits === 0n) continue;
+
+    const platformFeeBps = context.platform_fee_bps;
+    const platformFeeAmount = platformFeeBps > 0 ? (amountBaseUnits * BigInt(platformFeeBps)) / 10000n : 0n;
+
+    const occurredAtMs =
+      typeof refund?.created === "number" && Number.isFinite(refund.created) && refund.created > 0
+        ? refund.created * 1000
+        : Date.now();
+
+    await upsertPaymentLedgerEntry({
+      community_id: context.community_id,
+      user_id: context.user_id ?? null,
+      payment_intent_id: context.payment_intent_id ?? null,
+      provider: "stripe",
+      kind: "refund",
+      provider_ref: refundId,
+      provider_subscription_id: context.provider_subscription_id ?? null,
+      provider_customer_id: context.provider_customer_id ?? null,
+      amount_base_units: String(amountBaseUnits),
+      currency: context.currency,
+      currency_decimals: context.currency_decimals,
+      platform_fee_bps: platformFeeBps,
+      platform_fee_amount_base_units: String(platformFeeAmount),
+      occurred_at: new Date(occurredAtMs).toISOString(),
+      raw_json: { refund, charge_id: charge.id },
+    });
+  }
+
+  const fullyRefunded =
+    Boolean(charge.refunded) ||
+    (typeof charge.amount_refunded === "number" &&
+      typeof charge.amount === "number" &&
+      Number.isFinite(charge.amount_refunded) &&
+      Number.isFinite(charge.amount) &&
+      charge.amount_refunded >= charge.amount);
+
+  // For now: only revoke access for fully refunded one-time purchases (subscription access is governed by subscription state).
+  if (fullyRefunded && context.provider_subscription_id == null && context.source_ref && context.payment_intent_id) {
+    const nowIso = new Date().toISOString();
+    await truncateEntitlementForSourceRef({ communityId: context.community_id, sourceRef: context.source_ref, endsAtIso: nowIso });
+    await revokeIssuedClaimsForIntent(context.payment_intent_id);
+    await markPaymentIntentFailed(context.payment_intent_id);
+  }
+}
+
+async function handleChargeDisputeClosed(dispute: Record<string, unknown>, eventCreatedMs: number): Promise<void> {
+  const disputeId = String(dispute.id ?? "").trim();
+  if (!disputeId) return;
+
+  const status = String(dispute.status ?? "").trim().toLowerCase();
+  if (status !== "lost") return;
+
+  const chargeId = String(dispute.charge ?? "").trim();
+  if (!chargeId) return;
+
+  const charge = await retrieveCharge(chargeId);
+  const context = await resolveChargeContext(charge);
+  if (!context) return;
+
+  const amount = typeof dispute.amount === "number" && Number.isFinite(dispute.amount) ? dispute.amount : 0;
+  const amountBaseUnits = BigInt(-Math.trunc(amount));
+  if (amountBaseUnits === 0n) return;
+
+  const platformFeeBps = context.platform_fee_bps;
+  const platformFeeAmount = platformFeeBps > 0 ? (amountBaseUnits * BigInt(platformFeeBps)) / 10000n : 0n;
+
+  const occurredAtMs = (() => {
+    const created = dispute.created ?? null;
+    if (typeof created === "number" && Number.isFinite(created) && created > 0) return created * 1000;
+    return eventCreatedMs;
+  })();
+
+  await upsertPaymentLedgerEntry({
+    community_id: context.community_id,
+    user_id: context.user_id ?? null,
+    payment_intent_id: context.payment_intent_id ?? null,
+    provider: "stripe",
+    kind: "dispute",
+    provider_ref: disputeId,
+    provider_subscription_id: context.provider_subscription_id ?? null,
+    provider_customer_id: context.provider_customer_id ?? null,
+    amount_base_units: String(amountBaseUnits),
+    currency: context.currency,
+    currency_decimals: context.currency_decimals,
+    platform_fee_bps: platformFeeBps,
+    platform_fee_amount_base_units: String(platformFeeAmount),
+    occurred_at: new Date(occurredAtMs).toISOString(),
+    raw_json: dispute,
+  });
+
+  // For now: only revoke access for one-time disputes. Subscription access is governed by subscription state.
+  if (context.provider_subscription_id == null && context.source_ref && context.payment_intent_id) {
+    const nowIso = new Date().toISOString();
+    await truncateEntitlementForSourceRef({ communityId: context.community_id, sourceRef: context.source_ref, endsAtIso: nowIso });
+    await revokeIssuedClaimsForIntent(context.payment_intent_id);
+    await markPaymentIntentFailed(context.payment_intent_id);
+  }
+}
+
 type ProviderEventRow = {
   id: string;
   processed_at: string | null;
@@ -598,7 +1035,11 @@ async function handleStripeEvent(event: StripeEvent): Promise<void> {
   if (event.type === "invoice.paid") {
     const obj = event.data.object as Record<string, unknown>;
     const subId = String(obj.subscription ?? "");
-    if (subId) await handleSubscriptionUpdated(subId);
+    if (subId) {
+      const created = typeof event.created === "number" && Number.isFinite(event.created) ? event.created * 1000 : Date.now();
+      await handleInvoicePaid(obj as unknown as StripeInvoice, created);
+      await handleSubscriptionUpdated(subId);
+    }
     return;
   }
 
@@ -609,6 +1050,19 @@ async function handleStripeEvent(event: StripeEvent): Promise<void> {
       const created = typeof event.created === "number" && Number.isFinite(event.created) ? event.created * 1000 : Date.now();
       await handleInvoicePaymentFailed({ subscriptionId: subId, failedAtIso: new Date(created).toISOString() });
     }
+    return;
+  }
+
+  if (event.type === "charge.refunded") {
+    const obj = event.data.object as unknown as StripeCharge;
+    await handleChargeRefunded(obj);
+    return;
+  }
+
+  if (event.type === "charge.dispute.closed") {
+    const obj = event.data.object as Record<string, unknown>;
+    const created = typeof event.created === "number" && Number.isFinite(event.created) ? event.created * 1000 : Date.now();
+    await handleChargeDisputeClosed(obj, created);
     return;
   }
 }

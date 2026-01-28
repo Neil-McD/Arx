@@ -85,10 +85,47 @@ export type StripeSubscription = {
   } | null;
 };
 
+export type StripeInvoice = {
+  id: string;
+  subscription: string | null;
+  customer: string | null;
+  amount_paid: number | null;
+  currency: string | null;
+  status_transitions?: { paid_at?: number | null } | null;
+  created?: number | null;
+};
+
+export type StripeRefund = {
+  id: string;
+  amount: number;
+  currency: string;
+  created: number;
+};
+
+export type StripeCharge = {
+  id: string;
+  amount: number;
+  amount_refunded: number;
+  refunded: boolean;
+  currency: string;
+  payment_intent: string | null;
+  invoice: string | null;
+  customer: string | null;
+  refunds?: { data?: StripeRefund[] } | null;
+};
+
 export async function retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession> {
   return stripeRequest<StripeCheckoutSession>("GET", `/checkout/sessions/${encodeURIComponent(sessionId)}`);
 }
 
 export async function retrieveSubscription(subscriptionId: string): Promise<StripeSubscription> {
   return stripeRequest<StripeSubscription>("GET", `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+}
+
+export async function retrieveInvoice(invoiceId: string): Promise<StripeInvoice> {
+  return stripeRequest<StripeInvoice>("GET", `/invoices/${encodeURIComponent(invoiceId)}`);
+}
+
+export async function retrieveCharge(chargeId: string): Promise<StripeCharge> {
+  return stripeRequest<StripeCharge>("GET", `/charges/${encodeURIComponent(chargeId)}`);
 }
