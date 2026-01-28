@@ -12,7 +12,6 @@ type CommunityRow = {
   avatar_url: string | null;
   banner_url: string | null;
   visibility: string;
-  owner_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -91,7 +90,7 @@ async function getAuthUser(req: Request): Promise<AuthUser | null> {
 
 async function loadCommunities(params: { limit: number; q: string | null }): Promise<CommunityRow[]> {
   const base =
-    `/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at` +
+    `/rest/v1/communities?select=id,slug,name,description,avatar_url,banner_url,visibility,created_at,updated_at` +
     `&visibility=in.(public,private)&order=updated_at.desc&limit=${params.limit}`;
   const endpoint = params.q ? `${base}&name=ilike.*${encodeURIComponent(params.q)}*` : base;
   const res = await supabaseAdminFetch(endpoint, { method: "GET" });
@@ -102,7 +101,7 @@ async function loadCommunities(params: { limit: number; q: string | null }): Pro
 async function loadUserCommunities(userId: string): Promise<CommunityRow[]> {
   if (!isUuid(userId)) return [];
   const select =
-    "id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at";
+    "id,slug,name,description,avatar_url,banner_url,visibility,created_at,updated_at";
 
   const membershipsRes = await supabaseAdminFetch(
     `/rest/v1/community_memberships?select=community_id,communities(${select})&user_id=eq.${encodeURIComponent(userId)}`,

@@ -46,6 +46,18 @@ type CommunityRecord = {
   updated_at: string;
 };
 
+type PublicCommunityRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  visibility: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type ThreadRecord = {
   id: string;
   title: string | null;
@@ -260,7 +272,7 @@ type PublicPlanSummary = {
   billing_period: string;
 };
 
-type DiscoverCommunity = CommunityRecord & {
+type DiscoverCommunity = PublicCommunityRecord & {
   active_plan?: PublicPlanSummary | null;
 };
 
@@ -1891,7 +1903,7 @@ export default function App() {
     return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
   });
 
-  const [publicCommunity, setPublicCommunity] = useState<CommunityRecord | null>(null);
+  const [publicCommunity, setPublicCommunity] = useState<PublicCommunityRecord | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
   const [selectedPublicCommunityPlanId, setSelectedPublicCommunityPlanId] = useState<string | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
@@ -3968,7 +3980,7 @@ export default function App() {
       if (!response.ok) throw new Error(await readSupabaseError(response));
       const payload = (await response.json()) as {
         ok?: boolean;
-        community?: CommunityRecord;
+        community?: PublicCommunityRecord;
         active_plan?: PublicPlanSummary | null;
         active_plans?: PublicPlanSummary[] | null;
       };
@@ -4022,17 +4034,25 @@ export default function App() {
       const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${origin}${cancelPath}`;
       const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
-      const response = await fetchWithSupabasePublic(`${url}/functions/v1/checkout_start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          community_id: communityId,
-          plan_id: planId,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          tracking: brandosAid ? { brandos_aid: brandosAid } : undefined,
-        }),
+      const body = JSON.stringify({
+        community_id: communityId,
+        plan_id: planId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        tracking: brandosAid ? { brandos_aid: brandosAid } : undefined,
       });
+      const session = sessionRef.current;
+      const response = session
+        ? await fetchWithSupabaseAuth(
+            `${url}/functions/v1/checkout_start`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body },
+            session,
+          )
+        : await fetchWithSupabasePublic(`${url}/functions/v1/checkout_start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
       if (!response.ok) throw new Error(await readSupabaseError(response));
       const data = (await response.json()) as { checkout_url?: unknown };
       const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";

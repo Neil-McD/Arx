@@ -12,7 +12,6 @@ type CommunityRow = {
   avatar_url: string | null;
   banner_url: string | null;
   visibility: string;
-  owner_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -49,7 +48,7 @@ function normalizeSlug(raw: string | null): string {
 
 async function loadCommunityBySlug(slug: string): Promise<CommunityRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at` +
+    `/rest/v1/communities?select=id,slug,name,description,avatar_url,banner_url,visibility,created_at,updated_at` +
       `&slug=eq.${encodeURIComponent(slug)}&visibility=in.(public,private,unlisted)&limit=1`,
     { method: "GET" },
   );

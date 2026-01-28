@@ -35,6 +35,37 @@ function sanitizeOptionalUuid(value: unknown): string | null {
   return v;
 }
 
+function extractBearerToken(header: string | null): string | null {
+  const value = (header ?? "").trim();
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (!lower.startsWith("bearer ")) return null;
+  const token = value.slice(7).trim();
+  return token ? token : null;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function getAuthUserId(req: Request): Promise<string | null> {
+  const token = extractBearerToken(req.headers.get("Authorization"));
+  if (!token) return null;
+  try {
+    const res = await supabaseAdminFetch(`/auth/v1/user`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { id?: string };
+    const id = String(json?.id ?? "").trim();
+    if (!id || !isUuid(id)) return null;
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 type PlanRow = {
   id: string;
   community_id: string;
@@ -115,6 +146,7 @@ async function createPaymentIntent(
   plan: PlanRow,
   platformFeeBps: number,
   tracking: Record<string, unknown>,
+  userId: string | null,
 ): Promise<{ id: string }> {
   const res = await supabaseAdminFetch("/rest/v1/payment_intents?select=id", {
     method: "POST",
@@ -125,6 +157,7 @@ async function createPaymentIntent(
     body: JSON.stringify({
       community_id: plan.community_id,
       plan_id: plan.id,
+      user_id: userId,
       provider: "stripe",
       status: "created",
       amount_base_units: plan.amount_base_units,
@@ -262,7 +295,8 @@ Deno.serve(async (req: Request) => {
       throw new Error("Creator must set up payouts before accepting payments");
     }
     const tracking = brandosAid ? { brandos_aid: brandosAid } : {};
-    const intent = await createPaymentIntent(plan, platformFeeBps, tracking);
+    const userId = await getAuthUserId(req);
+    const intent = await createPaymentIntent(plan, platformFeeBps, tracking, userId);
     const session = await createStripeCheckoutSession(intent.id, plan, platformFeeBps, destinationAccountId, input);
 
     await updatePaymentIntent(intent.id, {
