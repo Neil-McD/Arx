@@ -61,6 +61,27 @@ type MemoryUsedItem = {
   updated_at: string;
 };
 
+type MemorySuggestion = {
+  content: string;
+  pinned: boolean;
+};
+
+type HistoryUsedItem = {
+  thread_id: string;
+  message_id: string;
+  created_at: string;
+  snippet: string;
+};
+
+type UserMemorySettings = {
+  memory_mode: "off" | "suggest" | "auto";
+  remember_intent_enabled: boolean;
+};
+
+type UserModelSettings = {
+  system_prompt: string;
+};
+
 type MessageAttachment = {
   id: string;
   name: string;
@@ -81,6 +102,11 @@ type CommunityChatMessage = {
   reply_to_id?: string | null;
   created_at: string;
   seq: number;
+};
+
+type ChatLightboxImage = {
+  url: string;
+  name: string;
 };
 
 type MessageReaction = {
@@ -162,6 +188,10 @@ type UserProfile = {
   avatar_url: string | null;
 };
 
+type UserProfileDetail = UserProfile & {
+  bio: string | null;
+};
+
 type CommunityInviteRecord = {
   id: string;
   community_id: string;
@@ -215,6 +245,16 @@ type DiscoverCommunity = CommunityRecord & {
   active_plan?: PublicPlanSummary | null;
 };
 
+type PublicChatPreviewMessage = {
+  id: string;
+  seq: number;
+  created_at: string;
+  sender_id: string;
+  sender_display_name: string | null;
+  sender_avatar_url: string | null;
+  body: string;
+};
+
 type PendingPurchaseClaim = {
   community_id: string;
   community_slug: string;
@@ -231,6 +271,28 @@ type BuilderBillingStatus = {
   subscription_status: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean | null;
+};
+
+type BuilderBillingReturn = {
+  status: "success" | "cancel" | "return";
+  source: "web" | "desktop" | "unknown";
+  context: "builder" | "create_community" | "unknown";
+};
+
+type BuilderUpgradeContext = "builder" | "create_community";
+
+type CreateCommunityDraft = {
+  v: 1;
+  id: string;
+  created_at: number;
+  user_id: string | null;
+  name: string;
+  slug: string;
+  slug_edited: boolean;
+  visibility: "public" | "unlisted" | "private";
+  avatar_url: string | null;
+  banner_url: string | null;
+  description: string | null;
 };
 
 type AutomationEndpoint = {
@@ -286,8 +348,11 @@ const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
+const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
 const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
 const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
+const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
+const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
@@ -316,6 +381,7 @@ function getBrandosAidForCommunitySlug(slug: string | null): string | null {
     if (slug) {
       const scoped = (localStorage.getItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`) ?? "").trim();
       if (scoped && isUuid(scoped)) return scoped;
+      return null;
     }
     const last = (localStorage.getItem(BRANDOS_AID_LAST_KEY) ?? "").trim();
     if (last && isUuid(last)) return last;
@@ -324,24 +390,6 @@ function getBrandosAidForCommunitySlug(slug: string | null): string | null {
   }
   return null;
 }
-
-const APPROVAL_PRESETS: Record<
-  "read-only" | "agent" | "agent-full",
-  { label: string; description: string }
-> = {
-  "read-only": {
-    label: "Read Only",
-    description: "Requires approval to edit files and run commands."
-  },
-  agent: {
-    label: "Agent",
-    description: "Read and edit files, and run commands with approval."
-  },
-  "agent-full": {
-    label: "Agent (full access)",
-    description: "Broader command allowlist; use caution."
-  }
-};
 
 async function copyTextToClipboard(text: string): Promise<void> {
   try {
@@ -444,8 +492,75 @@ async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<st
   }
 }
 
+async function readBannerFileAsWideDataUrlWithinLimit(file: File, maxChars: number): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.decoding = "async";
+    const loaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image."));
+    });
+    img.src = url;
+    await loaded;
+
+    const sourceWidth = img.naturalWidth || img.width;
+    const sourceHeight = img.naturalHeight || img.height;
+    if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
+
+    const candidates: Array<{ width: number; height: number; quality: number }> = [
+      { width: 960, height: 320, quality: 0.86 },
+      { width: 768, height: 256, quality: 0.82 },
+      { width: 576, height: 192, quality: 0.78 },
+      { width: 480, height: 160, quality: 0.74 }
+    ];
+
+    const targetAspect = candidates[0].width / candidates[0].height;
+    const sourceAspect = sourceWidth / sourceHeight;
+    let sx = 0;
+    let sy = 0;
+    let sw = sourceWidth;
+    let sh = sourceHeight;
+
+    if (sourceAspect > targetAspect) {
+      // Source is wider: crop left/right.
+      sh = sourceHeight;
+      sw = Math.max(1, Math.floor(sourceHeight * targetAspect));
+      sx = Math.max(0, Math.floor((sourceWidth - sw) / 2));
+      sy = 0;
+    } else if (sourceAspect < targetAspect) {
+      // Source is taller: crop top/bottom.
+      sw = sourceWidth;
+      sh = Math.max(1, Math.floor(sourceWidth / targetAspect));
+      sx = 0;
+      sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
+    }
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported.");
+
+    let lastDataUrl = "";
+    for (const { width, height, quality } of candidates) {
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      lastDataUrl = dataUrl;
+      if (dataUrl.length <= maxChars) return dataUrl;
+    }
+
+    if (lastDataUrl && lastDataUrl.length <= maxChars) return lastDataUrl;
+    throw new Error("Banner image is too large. Try a smaller image.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
-const MAX_WEB_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still compressed before sending)
+const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 
@@ -485,8 +600,16 @@ function isLikelyImageFile(file: File): boolean {
     name.endsWith(".jpeg") ||
     name.endsWith(".gif") ||
     name.endsWith(".webp") ||
-    name.endsWith(".svg")
+    name.endsWith(".avif")
   );
+}
+
+function isSupportedChatRasterImage(file: File): boolean {
+  const mime = (file.type ?? "").toLowerCase();
+  const name = (file.name ?? "").toLowerCase();
+  const isSvg = mime.includes("svg") || name.endsWith(".svg");
+  const isHeic = mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
+  return !isSvg && !isHeic && isLikelyImageFile(file);
 }
 
 async function readTextAttachmentPreview(file: File): Promise<{ text: string; truncated: boolean }> {
@@ -497,6 +620,14 @@ async function readTextAttachmentPreview(file: File): Promise<{ text: string; tr
 }
 
 async function readChatImageAsDataUrl(file: File): Promise<string> {
+  // Fallback: if canvas path fails (some formats), try direct data URL when small enough.
+  const tryDirectDataUrl = async (): Promise<string | null> => {
+    if (file.size > 2 * 1024 * 1024) return null;
+    const raw = await fileToDataUrl(file);
+    if (!raw.startsWith("data:image/")) return null;
+    return raw.length <= MAX_WEB_IMAGE_DATA_URL_CHARS ? raw : null;
+  };
+
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
@@ -512,7 +643,9 @@ async function readChatImageAsDataUrl(file: File): Promise<string> {
       { maxDim: 1280, quality: 0.85 },
       { maxDim: 1024, quality: 0.82 },
       { maxDim: 768, quality: 0.78 },
-      { maxDim: 512, quality: 0.74 }
+      { maxDim: 512, quality: 0.74 },
+      { maxDim: 384, quality: 0.70 },
+      { maxDim: 320, quality: 0.66 }
     ];
 
     const canvas = document.createElement("canvas");
@@ -532,11 +665,19 @@ async function readChatImageAsDataUrl(file: File): Promise<string> {
       canvas.height = height;
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
-      lastDataUrl = canvas.toDataURL("image/jpeg", quality);
+      try {
+        lastDataUrl = canvas.toDataURL("image/jpeg", quality);
+      } catch {
+        const direct = await tryDirectDataUrl();
+        if (direct) return direct;
+        throw new Error("Could not process image. Try exporting as PNG or JPG.");
+      }
       if (lastDataUrl.length <= MAX_WEB_IMAGE_DATA_URL_CHARS) return lastDataUrl;
     }
 
     if (lastDataUrl && lastDataUrl.length <= MAX_WEB_IMAGE_DATA_URL_CHARS) return lastDataUrl;
+    const direct = await tryDirectDataUrl();
+    if (direct) return direct;
     throw new Error("Image is too large to attach. Try a smaller one.");
   } finally {
     URL.revokeObjectURL(url);
@@ -599,6 +740,79 @@ function slugify(input: string): string {
 function isValidSlug(value: string): boolean {
   if (value.length < 3 || value.length > 32) return false;
   return /^(?!-)[a-z0-9-]+(?<!-)$/.test(value);
+}
+
+function createCommunityDraftId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // ignore
+  }
+  return `draft_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+}
+
+function loadCreateCommunityDraft(): CreateCommunityDraft | null {
+  try {
+    const raw = localStorage.getItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    if (record.v !== 1) return null;
+    const createdAt = Number(record.created_at);
+    if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
+    if (Date.now() - createdAt > CREATE_COMMUNITY_DRAFT_TTL_MS) {
+      localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+      return null;
+    }
+
+    const id = typeof record.id === "string" ? record.id : createCommunityDraftId();
+    const user_id = typeof record.user_id === "string" ? record.user_id : null;
+    const name = typeof record.name === "string" ? record.name : "";
+    const slug = typeof record.slug === "string" ? record.slug : "";
+    const slug_edited = Boolean(record.slug_edited);
+    const visibility =
+      record.visibility === "public" || record.visibility === "unlisted" || record.visibility === "private"
+        ? (record.visibility as "public" | "unlisted" | "private")
+        : "private";
+    const avatar_url = typeof record.avatar_url === "string" ? record.avatar_url : null;
+    const banner_url = typeof record.banner_url === "string" ? record.banner_url : null;
+    const description = typeof record.description === "string" ? record.description : null;
+
+    if (!name.trim() || !slug.trim() || !isValidSlug(slug.trim().toLowerCase())) return null;
+
+    return {
+      v: 1,
+      id,
+      created_at: createdAt,
+      user_id,
+      name,
+      slug,
+      slug_edited,
+      visibility,
+      avatar_url,
+      banner_url,
+      description,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveCreateCommunityDraft(draft: CreateCommunityDraft): void {
+  try {
+    localStorage.setItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore
+  }
+}
+
+function clearCreateCommunityDraft(): void {
+  try {
+    localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function toEpochSeconds(input: string): number {
@@ -682,6 +896,89 @@ function parseMessageMemoryUsed(content: unknown): MemoryUsedItem[] {
     if (fromMeta.length > 0) return fromMeta;
   }
   return parseMemoryUsedArray(record.memory_used);
+}
+
+function parseMemorySuggestionsArray(value: unknown): MemorySuggestion[] {
+  if (!Array.isArray(value)) return [];
+  const out: MemorySuggestion[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    const content = typeof record.content === "string" ? record.content.trim() : "";
+    if (!content) continue;
+    out.push({ content, pinned: Boolean(record.pinned) });
+  }
+  return out.slice(0, 6);
+}
+
+function parseMessageMemorySuggestions(content: unknown): MemorySuggestion[] {
+  if (!content || typeof content !== "object") return [];
+  const record = content as Record<string, unknown>;
+  const meta = record.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as Record<string, unknown>;
+    const fromMeta = parseMemorySuggestionsArray(metaRecord.memory_suggestions);
+    if (fromMeta.length > 0) return fromMeta;
+  }
+  return parseMemorySuggestionsArray(record.memory_suggestions);
+}
+
+function parseHistoryUsedArray(value: unknown): HistoryUsedItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: HistoryUsedItem[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const record = raw as Record<string, unknown>;
+    const thread_id = typeof record.thread_id === "string" ? record.thread_id.trim() : "";
+    const message_id = typeof record.message_id === "string" ? record.message_id.trim() : "";
+    const snippet = typeof record.snippet === "string" ? record.snippet.trim() : "";
+    if (!thread_id || !message_id || !snippet) continue;
+    out.push({
+      thread_id,
+      message_id,
+      created_at: typeof record.created_at === "string" ? record.created_at : "",
+      snippet,
+    });
+  }
+  return out.slice(0, 12);
+}
+
+function parseMessageHistoryUsed(content: unknown): HistoryUsedItem[] {
+  if (!content || typeof content !== "object") return [];
+  const record = content as Record<string, unknown>;
+  const meta = record.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as Record<string, unknown>;
+    const fromMeta = parseHistoryUsedArray(metaRecord.history_used);
+    if (fromMeta.length > 0) return fromMeta;
+  }
+  return parseHistoryUsedArray(record.history_used);
+}
+
+function parseMessageMemoryAdded(content: unknown): MemoryUsedItem[] {
+  if (!content || typeof content !== "object") return [];
+  const record = content as Record<string, unknown>;
+  const meta = record.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as Record<string, unknown>;
+    const fromMeta = parseMemoryUsedArray(metaRecord.memory_added);
+    if (fromMeta.length > 0) return fromMeta;
+  }
+  return parseMemoryUsedArray(record.memory_added);
+}
+
+function extractRememberIntent(text: string): string | null {
+  const input = (text ?? "").trim();
+  if (!input) return null;
+  // If the user is asking a question ("remember ...?"), treat it as recall, not an instruction to store memory.
+  if (input.includes("?")) return null;
+  const match = input.match(/^(?:please\s+)?remember(?:\s+that)?[:\s]+(.+)$/i);
+  const content = match?.[1]?.trim() ?? "";
+  if (!content) return null;
+  // Avoid useless "remember this/that/it" memories. Require an actual fact/preference payload.
+  if (/^(?:this|that|it|these|those)$/i.test(content)) return null;
+  if (content.length < 4) return null;
+  return content;
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
@@ -1100,6 +1397,46 @@ function formatChatTime(value: string): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${timeStr}`;
 }
 
+const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+
+function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
+  let url = candidate;
+  let trailing = "";
+  while (url.length > 0) {
+    const last = url.slice(-1);
+    if (").,!?;:]}'\"".includes(last)) {
+      trailing = last + trailing;
+      url = url.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return { url, trailing };
+}
+
+function renderTextWithLinks(text: string): ReactNode {
+  if (!text) return "";
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(CHAT_LINK_RE)) {
+    const index = match.index ?? -1;
+    if (index < 0) continue;
+    if (index > lastIndex) nodes.push(text.slice(lastIndex, index));
+    const raw = match[0] ?? "";
+    const { url, trailing } = splitUrlAndTrailingPunctuation(raw);
+    const href = url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
+    nodes.push(
+      <a key={`link-${index}`} href={href} target="_blank" rel="noreferrer noopener">
+        {url}
+      </a>
+    );
+    if (trailing) nodes.push(trailing);
+    lastIndex = index + raw.length;
+  }
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes.length > 0 ? <>{nodes}</> : text;
+}
+
 function parseContentRangeTotal(value: string | null): number | null {
   if (!value) return null;
   const parts = value.split("/");
@@ -1365,6 +1702,14 @@ function formatRelativeTime(iso: string): string {
   return `${years}y ago`;
 }
 
+function formatAutomationDeliveryError(error: string | null): string | null {
+  if (!error) return null;
+  if (error === "skipped_missing_brandos_aid") return "Skipped (missing BrandOS token)";
+  if (error === "skipped_invalid_brandos_aid") return "Skipped (invalid BrandOS token)";
+  if (error === "skipped_unknown_brandos_aid") return "Skipped (no tracked click found)";
+  return error;
+}
+
 type ReplyPrefix = { sender: string; preview: string; rest: string };
 
 function buildReplyPrefix(sender: string, preview: string): string {
@@ -1562,6 +1907,11 @@ export default function App() {
       return null;
     }
   });
+  const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
+  const profileSaveTimeoutRef = useRef<number | null>(null);
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => {
     return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
@@ -1572,6 +1922,9 @@ export default function App() {
   const [selectedPublicCommunityPlanId, setSelectedPublicCommunityPlanId] = useState<string | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
+  const [publicChatPreviewMessages, setPublicChatPreviewMessages] = useState<PublicChatPreviewMessage[]>([]);
+  const [isLoadingPublicChatPreview, setIsLoadingPublicChatPreview] = useState(false);
+  const [publicChatPreviewError, setPublicChatPreviewError] = useState<string | null>(null);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
   const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
 
@@ -1588,6 +1941,14 @@ export default function App() {
   const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
   const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
   const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
+  const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
+  const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
+  const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
+  const [isFinalizingBuilderReturn, setIsFinalizingBuilderReturn] = useState(false);
+  const [isFinalizingCreateCommunityFromBilling, setIsFinalizingCreateCommunityFromBilling] = useState(false);
+  const [finalizeCreateCommunityError, setFinalizeCreateCommunityError] = useState<string | null>(null);
+  const builderUpgradeModalBodyRef = useRef<HTMLDivElement | null>(null);
+  const [showBuilderUpgradeScrollHint, setShowBuilderUpgradeScrollHint] = useState(false);
 
   const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">("idle");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -1599,6 +1960,31 @@ export default function App() {
   const checkoutFinalizeInFlightRef = useRef(false);
   const checkoutFinalizePollCountRef = useRef(0);
   const checkoutFinalizePollTimeoutRef = useRef<number | null>(null);
+
+  const updateBuilderUpgradeScrollHint = useCallback(() => {
+    const el = builderUpgradeModalBodyRef.current;
+    if (!el) return;
+    const threshold = 8;
+    const scrollable = el.scrollHeight - el.clientHeight > threshold;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
+    setShowBuilderUpgradeScrollHint(scrollable && !atBottom);
+  }, []);
+
+  useEffect(() => {
+    if (!isBuilderUpgradeOpen) {
+      setShowBuilderUpgradeScrollHint(false);
+      return;
+    }
+    updateBuilderUpgradeScrollHint();
+    const handleResize = () => updateBuilderUpgradeScrollHint();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
+
+  useEffect(() => {
+    if (!isBuilderUpgradeOpen) return;
+    updateBuilderUpgradeScrollHint();
+  }, [builderBillingStatus?.builder_tier, builderUpgradeContext, isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
 
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(() => {
     try {
@@ -1683,6 +2069,9 @@ export default function App() {
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
+  const [isCommunityChatLightboxOpen, setIsCommunityChatLightboxOpen] = useState(false);
+  const [communityChatLightboxImages, setCommunityChatLightboxImages] = useState<ChatLightboxImage[]>([]);
+  const [communityChatLightboxIndex, setCommunityChatLightboxIndex] = useState(0);
   const [replyingToMessage, setReplyingToMessage] = useState<CommunityChatMessage | null>(null);
   const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
   const communityTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -1766,6 +2155,22 @@ export default function App() {
   const [isSavingBrandosConnector, setIsSavingBrandosConnector] = useState(false);
   const [isDeletingBrandosConnector, setIsDeletingBrandosConnector] = useState(false);
 
+  const lastBrandosIdentifyDelivery = useMemo(() => {
+    let best: AutomationDelivery | null = null;
+    let bestMs = -1;
+    for (const delivery of automationDeliveries) {
+      if (delivery.endpoint_name !== "BrandOS") continue;
+      if (delivery.event_type !== "identity.email_captured") continue;
+      const ms = new Date(delivery.attempted_at).getTime();
+      if (!Number.isFinite(ms)) continue;
+      if (!best || ms > bestMs) {
+        best = delivery;
+        bestMs = ms;
+      }
+    }
+    return best;
+  }, [automationDeliveries]);
+
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
@@ -1778,9 +2183,24 @@ export default function App() {
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
   const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
   const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
+  const [communitySettingsBannerUploadError, setCommunitySettingsBannerUploadError] = useState<string | null>(null);
+  const [isProcessingCommunitySettingsBanner, setIsProcessingCommunitySettingsBanner] = useState(false);
   const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
   const [isSettingsBannerDragOver, setIsSettingsBannerDragOver] = useState(false);
   const [isSettingsAvatarDragOver, setIsSettingsAvatarDragOver] = useState(false);
+  const communitySettingsLoadedCommunityIdRef = useRef<string | null>(null);
+  const communitySettingsDirtyRef = useRef(false);
+  const communityPricingDirtyRef = useRef(false);
+  const markCommunitySettingsDirty = () => {
+    communitySettingsDirtyRef.current = true;
+  };
+  const confirmDiscardUnsavedCommunitySettings = (nextCommunityId: string | null): boolean => {
+    if (!communitySettingsDirtyRef.current) return true;
+    const currentId = activeCommunityId;
+    if (!currentId) return true;
+    if (!nextCommunityId || nextCommunityId === currentId) return true;
+    return window.confirm("You have unsaved community settings. Discard changes?");
+  };
 
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
   const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
@@ -1801,6 +2221,7 @@ export default function App() {
     engine_id: string;
     model_id: string | null;
     memory_used?: MemoryUsedItem[];
+    history_used?: HistoryUsedItem[];
   } | null>(null);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const streamingContentRef = useRef<string | null>(null);
@@ -1808,7 +2229,24 @@ export default function App() {
   const streamingAbortRef = useRef<AbortController | null>(null);
   const streamingUserCancelledRef = useRef(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [memoryUsedModal, setMemoryUsedModal] = useState<{ items: MemoryUsedItem[] } | null>(null);
+  const [memoryToast, setMemoryToast] = useState<string | null>(null);
+  const memoryToastTimeoutRef = useRef<number | null>(null);
+  const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
+    memory_mode: "off",
+    remember_intent_enabled: true,
+  });
+  const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
+  const [userModelSettings, setUserModelSettings] = useState<UserModelSettings>({ system_prompt: "" });
+  const [systemPromptDraft, setSystemPromptDraft] = useState("");
+  const [isLoadingUserModelSettings, setIsLoadingUserModelSettings] = useState(false);
+  const [isSavingUserModelSettings, setIsSavingUserModelSettings] = useState(false);
+  const [userModelSettingsError, setUserModelSettingsError] = useState<string | null>(null);
+  const [contextModal, setContextModal] = useState<{
+    memory_used: MemoryUsedItem[];
+    history_used: HistoryUsedItem[];
+    memory_suggestions: MemorySuggestion[];
+    memory_added: MemoryUsedItem[];
+  } | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
   const autoScrollEnabledRef = useRef(true);
@@ -1832,6 +2270,18 @@ export default function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    const session = supabaseSession;
+    if (!session) {
+      setUserMemorySettings({ memory_mode: "off", remember_intent_enabled: true });
+      setUserModelSettings({ system_prompt: "" });
+      setSystemPromptDraft("");
+      return;
+    }
+    void loadUserMemorySettings(session);
+    void loadUserModelSettings(session);
+  }, [supabaseSession]);
+
+  useEffect(() => {
     try {
       localStorage.setItem("arx-community-analytics-range", communityAnalyticsRange);
     } catch {
@@ -1841,6 +2291,27 @@ export default function App() {
 
   useEffect(() => {
     captureBrandosAidFromLocation();
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const billing = (url.searchParams.get("billing") ?? "").trim().toLowerCase();
+    if (billing !== "success" && billing !== "cancel" && billing !== "return") return;
+
+    const rawSource = (url.searchParams.get("billing_source") ?? "").trim().toLowerCase();
+    const source = rawSource === "desktop" ? "desktop" : rawSource === "web" ? "web" : "unknown";
+    const rawContext = (url.searchParams.get("billing_context") ?? "").trim().toLowerCase();
+    const context = rawContext === "create_community" ? "create_community" : rawContext === "builder" ? "builder" : "unknown";
+
+    setFinalizeCreateCommunityError(null);
+    setBuilderBillingReturn({ status: billing as BuilderBillingReturn["status"], source, context });
+
+    url.searchParams.delete("billing");
+    url.searchParams.delete("billing_source");
+    url.searchParams.delete("billing_context");
+    url.searchParams.delete("draft_id");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setPublicRoute(readPublicRouteFromLocation());
   }, []);
 
   useEffect(() => {
@@ -1862,6 +2333,8 @@ export default function App() {
       const current = sessionRef.current;
       if (!current) return;
       void loadProviderKeyStatus(current);
+      void loadBuilderBillingStatus(current);
+      void loadCommunities(current);
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -2035,6 +2508,7 @@ export default function App() {
     void loadCommunities(supabaseSession);
     void loadThreads(supabaseSession);
     void loadProviderKeyStatus(supabaseSession);
+    void loadSelfProfile(supabaseSession);
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -2049,7 +2523,24 @@ export default function App() {
     setPendingPurchaseClaims([]);
     setPendingPurchasesError(null);
     setPendingPurchasesSuccess(null);
+    setCloudProfile(null);
+    setProfileSaveError(null);
+    setProfileSaveSuccess(false);
   }, [supabaseSession]);
+
+  const isProfileDirty = useMemo(() => {
+    if (!supabaseSession) return false;
+    const nextName = profileName.trim();
+    const nextBio = profileBio.trim();
+    const nextAvatar = profileAvatarUrl ?? null;
+    const prevName = (cloudProfile?.display_name ?? "").trim();
+    const prevBio = (cloudProfile?.bio ?? "").trim();
+    const prevAvatar = cloudProfile?.avatar_url ?? null;
+    if (!cloudProfile) {
+      return Boolean(nextName || nextBio || nextAvatar);
+    }
+    return nextName !== prevName || nextBio !== prevBio || nextAvatar !== prevAvatar;
+  }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
 
   useEffect(() => {
     if (!supabaseSession || !activeThreadId) {
@@ -2166,11 +2657,24 @@ export default function App() {
     }
   }, [activeCommunityId]);
 
-	  useEffect(() => {
+		  useEffect(() => {
+		    const nextLoadedId = activeCommunityId ?? null;
+		    const switchingCommunity = communitySettingsLoadedCommunityIdRef.current !== nextLoadedId;
+		    if (switchingCommunity) {
+		      communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
+		      communitySettingsDirtyRef.current = false;
+		      communityPricingDirtyRef.current = false;
+		      setCommunitySettingsMonthlyPlanId(null);
+		      setCommunitySettingsYearlyPlanId(null);
+		      setCommunitySettingsPricingMode("free");
+		      setCommunitySettingsPriceUsdMonthly("");
+		      setCommunitySettingsPriceUsdYearly("");
+		    }
+
 	    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
-	    setCommunitySettingsError(null);
-	    setCommunityMemberSettingsError(null);
 	    if (!current) {
+	      setCommunitySettingsError(null);
+	      setCommunityMemberSettingsError(null);
 	      setCommunitySettingsName("");
 	      setCommunitySettingsSlug("");
 	      setCommunitySettingsDescription("");
@@ -2186,12 +2690,19 @@ export default function App() {
 	      setInviteCreateError(null);
 	      return;
 	    }
+
+	    if (!switchingCommunity && communitySettingsDirtyRef.current) return;
+
+	    setCommunitySettingsError(null);
+	    setCommunityMemberSettingsError(null);
 	    setCommunitySettingsName(current.name ?? "");
-	    setCommunitySettingsSlug(current.slug ?? "");
+	    setCommunitySettingsSlug(slugify(current.slug ?? ""));
 	    setCommunitySettingsDescription(current.description ?? "");
 	    setCommunitySettingsVisibility(current.visibility ?? "private");
 	    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
 	    setCommunitySettingsBannerUrl(current.banner_url ?? null);
+	    setCommunitySettingsBannerUploadError(null);
+	    setIsProcessingCommunitySettingsBanner(false);
 	    setInviteCreateError(null);
 	  }, [activeCommunityId, communities]);
 
@@ -2317,43 +2828,48 @@ export default function App() {
 	    }
 	  }
 
-	  useEffect(() => {
-	    if (activePage !== "community" || communityTab !== "settings") return;
-	    if (!supabaseSession || !activeCommunityId) {
-	      setCommunitySettingsMonthlyPlanId(null);
-	      setCommunitySettingsYearlyPlanId(null);
-	      setCommunitySettingsPricingMode("free");
-	      setCommunitySettingsPriceUsdMonthly("");
-	      setCommunitySettingsPriceUsdYearly("");
-	      return;
-	    }
-	    if (!activeCommunityAccess?.can_manage_members) return;
-	    const url = getSupabaseUrl();
-	    if (!url) return;
+		  useEffect(() => {
+		    if (activePage !== "community" || communityTab !== "settings") return;
+		    if (!supabaseSession || !activeCommunityId) {
+		      setCommunitySettingsMonthlyPlanId(null);
+		      setCommunitySettingsYearlyPlanId(null);
+		      setCommunitySettingsPricingMode("free");
+		      setCommunitySettingsPriceUsdMonthly("");
+		      setCommunitySettingsPriceUsdYearly("");
+		      return;
+		    }
+		    if (!activeCommunityAccess?.can_manage_members) return;
+		    const url = getSupabaseUrl();
+		    if (!url) return;
 
-	    (async () => {
-	      try {
-	        const response = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/rpc/get_community_pricing`,
-	          {
-	            method: "POST",
-	            headers: { "Content-Type": "application/json" },
-	            body: JSON.stringify({ p_community_id: activeCommunityId }),
-	          },
-	          supabaseSession
-	        );
-	        if (!response.ok) return;
-	        const rows = (await response.json()) as Array<{
-	          billing_period: string;
-	          plan_id: string;
-	          amount_base_units: number | string;
-	          currency: string;
-	          currency_decimals: number;
-	        }>;
-	        const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
-	        const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
-	        setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
-	        setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
+		    let cancelled = false;
+		    const communityId = activeCommunityId;
+		    (async () => {
+		      try {
+		        const response = await fetchWithSupabaseAuth(
+		          `${url}/rest/v1/rpc/get_community_pricing`,
+		          {
+		            method: "POST",
+		            headers: { "Content-Type": "application/json" },
+		            body: JSON.stringify({ p_community_id: communityId }),
+		          },
+		          supabaseSession
+		        );
+		        if (!response.ok) return;
+		        const rows = (await response.json()) as Array<{
+		          billing_period: string;
+		          plan_id: string;
+		          amount_base_units: number | string;
+		          currency: string;
+		          currency_decimals: number;
+		        }>;
+		        if (cancelled) return;
+		        if (communitySettingsLoadedCommunityIdRef.current !== communityId) return;
+		        if (communityPricingDirtyRef.current) return;
+		        const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
+		        const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
+		        setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
+		        setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
 
 	        const formatPlanAmount = (row: typeof monthly): string => {
 	          if (!row) return "";
@@ -2363,18 +2879,21 @@ export default function App() {
 	        };
 	        setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
 	        setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
-	        setCommunitySettingsPricingMode(
-	          monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
-	        );
-	      } catch {
-	        // ignore
-	      }
-	    })();
-	  }, [
-	    activePage,
-	    communityTab,
-	    supabaseSession,
-	    activeCommunityId,
+		        setCommunitySettingsPricingMode(
+		          monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
+		        );
+		      } catch {
+		        // ignore
+		      }
+		    })();
+		    return () => {
+		      cancelled = true;
+		    };
+		  }, [
+		    activePage,
+		    communityTab,
+		    supabaseSession,
+		    activeCommunityId,
 	    activeCommunityAccess?.can_manage_members,
 	  ]);
 
@@ -2398,8 +2917,12 @@ export default function App() {
 
   async function handleCreateCommunityBannerUpload(file: File | null) {
     if (!file) return;
+    if (!isLikelyImageFile(file)) {
+      setCreateCommunityError("Banner must be an image file.");
+      return;
+    }
     try {
-      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 320);
+      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_WEB_IMAGE_DATA_URL_CHARS);
       setCreateCommunityBannerUrl(dataUrl);
     } catch (error) {
       const message =
@@ -2426,13 +2949,19 @@ export default function App() {
 
   function openCreateCommunityModal() {
     setCreateCommunityError(null);
-    setCreateCommunityName("");
-    setCreateCommunitySlug("");
-    setCreateCommunitySlugEdited(false);
-    setCreateCommunityVisibility("private");
-    setCreateCommunityAvatarUrl(null);
-    setCreateCommunityDescription("");
-    setCreateCommunityBannerUrl(null);
+    const draft = loadCreateCommunityDraft();
+    const currentUserId = supabaseSession?.user.id ?? null;
+    if (draft && draft.user_id && currentUserId && draft.user_id !== currentUserId) {
+      clearCreateCommunityDraft();
+    }
+    const safeDraft = draft && (!draft.user_id || !currentUserId || draft.user_id === currentUserId) ? draft : null;
+    setCreateCommunityName(safeDraft?.name ?? "");
+    setCreateCommunitySlug(safeDraft?.slug ?? "");
+    setCreateCommunitySlugEdited(Boolean(safeDraft?.slug_edited));
+    setCreateCommunityVisibility(safeDraft?.visibility ?? "private");
+    setCreateCommunityAvatarUrl(safeDraft?.avatar_url ?? null);
+    setCreateCommunityDescription(safeDraft?.description ?? "");
+    setCreateCommunityBannerUrl(safeDraft?.banner_url ?? null);
     setIsCreateAvatarDragOver(false);
     setIsCreateBannerDragOver(false);
     setShowCreateCommunityModal(true);
@@ -2441,6 +2970,137 @@ export default function App() {
   function closeCreateCommunityModal() {
     setShowCreateCommunityModal(false);
     setCreateCommunityError(null);
+  }
+
+  function buildCreateCommunityDraftFromState(): CreateCommunityDraft | null {
+    setCreateCommunityError(null);
+    const name = createCommunityName.trim();
+    const rawSlug = createCommunitySlug.trim() || slugify(name);
+    const slug = rawSlug.toLowerCase();
+    if (!name || !slug) {
+      setCreateCommunityError("Name and slug are required.");
+      return null;
+    }
+    if (!isValidSlug(slug)) {
+      setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
+      return null;
+    }
+    if (!["public", "unlisted", "private"].includes(createCommunityVisibility)) {
+      setCreateCommunityError("Visibility must be public, unlisted, or private.");
+      return null;
+    }
+    const userId = supabaseSession?.user.id ?? null;
+    const draft: CreateCommunityDraft = {
+      v: 1,
+      id: createCommunityDraftId(),
+      created_at: Date.now(),
+      user_id: userId,
+      name,
+      slug,
+      slug_edited: createCommunitySlugEdited,
+      visibility: createCommunityVisibility,
+      avatar_url: createCommunityAvatarUrl?.trim() || null,
+      banner_url: createCommunityBannerUrl?.trim() || null,
+      description: createCommunityDescription.trim() || null,
+    };
+    saveCreateCommunityDraft(draft);
+    return draft;
+  }
+
+  async function createCommunityFromDraft(
+    draft: CreateCommunityDraft,
+    session: SupabaseSession,
+  ): Promise<CommunityRecord | null> {
+    const url = getSupabaseUrl();
+    const apiKey = getSupabaseAnonKey();
+    if (!url || !apiKey) {
+      setFinalizeCreateCommunityError("Missing Supabase config.");
+      return null;
+    }
+    setFinalizeCreateCommunityError(null);
+    setIsFinalizingCreateCommunityFromBilling(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/create_community`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_name: draft.name,
+            p_slug: draft.slug,
+            p_visibility: draft.visibility,
+            p_avatar_url: draft.avatar_url,
+            p_description: draft.description,
+            p_banner_url: draft.banner_url,
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const created = (await response.json()) as CommunityRecord[];
+      const community = created[0] ?? null;
+      if (!community?.id) throw new Error("Failed to create community.");
+      setCommunities((prev) => [community, ...prev]);
+      setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
+      setActiveCommunityId(community.id);
+      setActivePage("community");
+      setCommunityTab("chat");
+      setActiveView("home");
+      clearCreateCommunityDraft();
+      closeCreateCommunityModal();
+      setBuilderBillingReturn(null);
+      return community;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to create community.";
+      setFinalizeCreateCommunityError(message);
+      return null;
+    } finally {
+      setIsFinalizingCreateCommunityFromBilling(false);
+    }
+  }
+
+  async function handleCreateCommunityPrimaryAction(): Promise<void> {
+    setFinalizeCreateCommunityError(null);
+    if (!supabaseSession) {
+      handleSignIn();
+      return;
+    }
+    const status = builderBillingStatus ?? (await loadBuilderBillingStatus(supabaseSession));
+    if (!status) {
+      setCreateCommunityError("Couldn't check your plan. Try again.");
+      return;
+    }
+    const tier = (status.builder_tier ?? "free").toLowerCase();
+    const max = status.max_communities ?? 0;
+    const ownedCount = communities.reduce(
+      (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
+      0,
+    );
+    const needsPlan = tier === "free";
+    const limitReached = tier !== "free" && max > 0 && ownedCount >= max;
+    const canCreate = !needsPlan && !limitReached;
+    if (canCreate) {
+      await handleCreateCommunity();
+      return;
+    }
+
+    const draft = buildCreateCommunityDraftFromState();
+    if (!draft) return;
+
+    closeCreateCommunityModal();
+
+    if (limitReached) {
+      await openBuilderBillingPortal("create_community");
+      return;
+    }
+
+    setBuilderUpgradeContext("create_community");
+    setIsBuilderUpgradeOpen(true);
   }
 
   async function handleCreateCommunity() {
@@ -2504,14 +3164,15 @@ export default function App() {
       }
       setCommunities((prev) => [community, ...prev]);
       setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
-      setActiveCommunityId(community.id);
-      setActivePage("community");
-      setCommunityTab("chat");
-      setActiveView("home");
-      closeCreateCommunityModal();
-    } catch (error) {
-      const message =
-        typeof error === "string"
+	      setActiveCommunityId(community.id);
+	      setActivePage("community");
+	      setCommunityTab("chat");
+	      setActiveView("home");
+	      clearCreateCommunityDraft();
+	      closeCreateCommunityModal();
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
           ? error
           : error instanceof Error
             ? error.message
@@ -2811,24 +3472,25 @@ export default function App() {
             payload?: Record<string, unknown>;
           };
 
-          if (data.event === "broadcast" && data.topic === typingTopic) {
-            const payload = data.payload as { event?: unknown; payload?: unknown; type?: unknown };
-            const name =
-              (typeof payload.event === "string" ? payload.event : null) ??
-              (typeof payload.type === "string" ? payload.type : null) ??
-              "";
-            if (name !== "typing") return;
-            const details = payload.payload as { user_id?: unknown; userId?: unknown } | null;
-            const userId =
-              (details && typeof details.user_id === "string" ? details.user_id : null) ??
-              (details && typeof details.userId === "string" ? details.userId : null);
-            if (!userId) return;
-            if (userId === supabaseSession?.user.id) return;
+	          if (data.event === "broadcast" && data.topic === typingTopic) {
+	            const payload = data.payload as { event?: unknown; payload?: unknown; type?: unknown };
+	            const name =
+	              (typeof payload.event === "string" ? payload.event : null) ??
+	              (typeof payload.type === "string" ? payload.type : null) ??
+	              "";
+	            if (name !== "typing") return;
+	            const details = payload.payload as { user_id?: unknown; userId?: unknown } | null;
+	            const userId =
+	              (details && typeof details.user_id === "string" ? details.user_id : null) ??
+	              (details && typeof details.userId === "string" ? details.userId : null);
+	            if (!userId) return;
+	            if (userId === supabaseSession?.user.id) return;
+	            void loadUserProfiles([userId], supabaseSession);
 
-            const existing = communityTypingTimeoutsRef.current.get(userId);
-            if (existing) window.clearTimeout(existing);
-            const timeoutId = window.setTimeout(() => {
-              communityTypingTimeoutsRef.current.delete(userId);
+	            const existing = communityTypingTimeoutsRef.current.get(userId);
+	            if (existing) window.clearTimeout(existing);
+	            const timeoutId = window.setTimeout(() => {
+	              communityTypingTimeoutsRef.current.delete(userId);
               setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
             }, 2500);
             communityTypingTimeoutsRef.current.set(userId, timeoutId);
@@ -2868,15 +3530,16 @@ export default function App() {
               return;
             }
 
-            if (!newRecord) return;
-            if (newRecord.thread_id !== threadId) return;
-            const mapped = toCommunityChatMessage(newRecord);
-            if (!mapped) return;
+	            if (!newRecord) return;
+	            if (newRecord.thread_id !== threadId) return;
+	            const mapped = toCommunityChatMessage(newRecord);
+	            if (!mapped) return;
+	            void loadUserProfiles([mapped.sender_id], supabaseSession);
 
-            setCommunityMessages((prev) => {
-              const idx = prev.findIndex((item) => item.id === mapped.id);
-              if (idx >= 0) {
-                const next = [...prev];
+	            setCommunityMessages((prev) => {
+	              const idx = prev.findIndex((item) => item.id === mapped.id);
+	              if (idx >= 0) {
+	                const next = [...prev];
                 next[idx] = { ...next[idx], ...mapped };
                 next.sort((a, b) => a.seq - b.seq);
                 return next;
@@ -3241,15 +3904,18 @@ export default function App() {
     }
   }
 
-  async function joinPublicCommunity(communityId: string): Promise<void> {
+  async function joinPublicCommunity(communityId: string, communitySlug?: string | null): Promise<void> {
     const trimmed = communityId.trim();
     if (!trimmed) return;
+
+    const brandosAid = communitySlug ? getBrandosAidForCommunitySlug(communitySlug) : null;
 
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       try {
         localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
+        if (brandosAid) localStorage.setItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, brandosAid);
       } catch {
         // ignore
       }
@@ -3260,12 +3926,26 @@ export default function App() {
     setIsJoiningPublicCommunity(true);
     setPublicJoinError(null);
     try {
+      const pendingBrandosAid = (() => {
+        try {
+          return (localStorage.getItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY) ?? "").trim();
+        } catch {
+          return "";
+        }
+      })();
+      const resolvedBrandosAid =
+        (brandosAid && isUuid(brandosAid) ? brandosAid : null) ||
+        (pendingBrandosAid && isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
+
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/rpc/join_public_community`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: trimmed }),
+          body: JSON.stringify({
+            p_community_id: trimmed,
+            ...(resolvedBrandosAid ? { p_brandos_aid: resolvedBrandosAid } : {}),
+          }),
         },
         session,
       );
@@ -3274,6 +3954,7 @@ export default function App() {
       const joinedId = rows[0]?.community_id ?? trimmed;
       try {
         localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+        localStorage.removeItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
       } catch {
         // ignore
       }
@@ -3297,6 +3978,33 @@ export default function App() {
     }
   }
 
+  async function loadPublicChatPreview(communityId: string): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingPublicChatPreview(true);
+    setPublicChatPreviewError(null);
+    setPublicChatPreviewMessages([]);
+    try {
+      const response = await fetchWithSupabasePublic(
+        `${url}/functions/v1/public_chat_preview?community_id=${encodeURIComponent(communityId)}&limit=20`,
+        { method: "GET" },
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const payload = (await response.json()) as { ok?: boolean; messages?: PublicChatPreviewMessage[] };
+      setPublicChatPreviewMessages(Array.isArray(payload?.messages) ? payload.messages : []);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load chat preview.";
+      setPublicChatPreviewError(message);
+    } finally {
+      setIsLoadingPublicChatPreview(false);
+    }
+  }
+
   async function loadPublicCommunity(slug: string): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) {
@@ -3308,6 +4016,9 @@ export default function App() {
     setPublicCommunity(null);
     setPublicCommunityPlans([]);
     setSelectedPublicCommunityPlanId(null);
+    setPublicChatPreviewMessages([]);
+    setPublicChatPreviewError(null);
+    setIsLoadingPublicChatPreview(false);
     try {
       const response = await fetchWithSupabasePublic(
         `${url}/functions/v1/public_community?slug=${encodeURIComponent(slug)}`,
@@ -3334,6 +4045,10 @@ export default function App() {
         plans[0] ??
         null;
       setSelectedPublicCommunityPlanId(preferred?.id ?? null);
+
+      if (payload.community.visibility === "public") {
+        void loadPublicChatPreview(payload.community.id);
+      }
     } catch (error) {
       const message =
         typeof error === "string"
@@ -3394,7 +4109,10 @@ export default function App() {
     }
   }
 
-  async function startBuilderPlanCheckout(tier: "builder" | "pro"): Promise<void> {
+  async function startBuilderPlanCheckout(
+    tier: "builder" | "pro",
+    opts?: { context?: BuilderUpgradeContext },
+  ): Promise<void> {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
@@ -3406,8 +4124,9 @@ export default function App() {
     setIsStartingBuilderCheckout(true);
     try {
       const origin = window.location.origin.replace(/\/+$/, "");
-      const successUrl = `${origin}/?billing=success`;
-      const cancelUrl = `${origin}/?billing=cancel`;
+      const context: BuilderUpgradeContext = opts?.context ?? "builder";
+      const successUrl = `${origin}/?billing=success&billing_source=web&billing_context=${encodeURIComponent(context)}`;
+      const cancelUrl = `${origin}/?billing=cancel&billing_source=web&billing_context=${encodeURIComponent(context)}`;
       const response = await fetchWithSupabaseAuth(
         `${url}/functions/v1/builder_checkout_start`,
         {
@@ -3435,7 +4154,7 @@ export default function App() {
     }
   }
 
-  async function openBuilderBillingPortal(): Promise<void> {
+  async function openBuilderBillingPortal(context: BuilderUpgradeContext = "builder"): Promise<void> {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
@@ -3443,18 +4162,20 @@ export default function App() {
       handleSignIn();
       return;
     }
-    setBuilderBillingError(null);
-    setIsStartingBuilderPortal(true);
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/builder_billing_portal`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ return_url: window.location.href }),
-        },
-        session,
-      );
+	    setBuilderBillingError(null);
+	    setIsStartingBuilderPortal(true);
+	    try {
+	      const origin = window.location.origin.replace(/\/+$/, "");
+	      const returnUrl = `${origin}/?billing=return&billing_source=web&billing_context=${encodeURIComponent(context)}`;
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/functions/v1/builder_billing_portal`,
+	        {
+	          method: "POST",
+	          headers: { "Content-Type": "application/json" },
+	          body: JSON.stringify({ return_url: returnUrl }),
+	        },
+	        session,
+	      );
       if (!response.ok) throw new Error(await readSupabaseError(response));
       const data = (await response.json()) as { url?: unknown };
       const portalUrl = typeof data?.url === "string" ? data.url : "";
@@ -3546,9 +4267,9 @@ export default function App() {
     }
   }
 
-  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<void> {
+  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<BuilderBillingStatus | null> {
     const url = getSupabaseUrl();
-    if (!url) return;
+    if (!url) return null;
     setIsLoadingBuilderBilling(true);
     setBuilderBillingError(null);
     try {
@@ -3565,6 +4286,7 @@ export default function App() {
       const rows = (await response.json()) as BuilderBillingStatus[];
       const row = rows[0] ?? null;
       setBuilderBillingStatus(row);
+      return row;
     } catch (error) {
       const message =
         typeof error === "string"
@@ -3574,6 +4296,7 @@ export default function App() {
             : "Failed to load billing status.";
       setBuilderBillingError(message);
       setBuilderBillingStatus(null);
+      return null;
     } finally {
       setIsLoadingBuilderBilling(false);
     }
@@ -3791,6 +4514,71 @@ export default function App() {
     }
     void loadBuilderBillingStatus(supabaseSession);
   }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!builderBillingReturn) return;
+    if (!supabaseSession) return;
+    if (builderBillingReturn.status === "cancel") return;
+
+	    let cancelled = false;
+	    const run = async () => {
+		      setIsFinalizingBuilderReturn(true);
+		      try {
+		        const wantsCreate = builderBillingReturn.context === "create_community";
+		        const maxAttempts =
+		          builderBillingReturn.status === "success" ? 30 : wantsCreate ? 10 : 1;
+		        const ownedCount = communities.reduce(
+		          (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
+		          0,
+		        );
+		        let lastStatus: BuilderBillingStatus | null = null;
+		        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		          if (cancelled) return;
+		          const status = await loadBuilderBillingStatus(supabaseSession);
+		          lastStatus = status;
+		          const tier = (status?.builder_tier ?? "free").toLowerCase();
+		          const max = status?.max_communities ?? 0;
+		          const hasCapacity = tier !== "free" && max > 0 && ownedCount < max;
+		          if (tier !== "free" && (!wantsCreate || hasCapacity)) break;
+		          if (builderBillingReturn.status !== "success" && !wantsCreate) break;
+		          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+		        }
+
+	        if (cancelled) return;
+	        if (!wantsCreate) return;
+	        if (builderBillingReturn.source === "desktop") return;
+	        if (isFinalizingCreateCommunityFromBilling) return;
+
+	        const draft = loadCreateCommunityDraft();
+	        if (!draft) {
+	          setFinalizeCreateCommunityError("Draft not found. Re-open Create community to continue.");
+	          return;
+	        }
+		        if (draft.user_id && draft.user_id !== supabaseSession.user.id) {
+		          setFinalizeCreateCommunityError("Draft belongs to a different account. Re-open Create community to continue.");
+		          return;
+		        }
+		        const tier = (lastStatus?.builder_tier ?? builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+		        const max = lastStatus?.max_communities ?? builderBillingStatus?.max_communities ?? 0;
+		        if (tier === "free") {
+		          setFinalizeCreateCommunityError("Still finalizing your plan. Wait a moment and try again.");
+		          return;
+		        }
+		        if (max > 0 && ownedCount >= max) {
+		          setFinalizeCreateCommunityError("You've reached your plan limit. Upgrade your plan to create more communities.");
+		          return;
+		        }
+		        await createCommunityFromDraft(draft, supabaseSession);
+		      } finally {
+		        if (!cancelled) setIsFinalizingBuilderReturn(false);
+		      }
+	    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [builderBillingReturn, supabaseSession]);
 
   useEffect(() => {
     if (!supabaseSession) return;
@@ -4058,7 +4846,7 @@ export default function App() {
     setStreamingContent("");
     setStreamingThreadId(threadId);
     setStreamingRunId(params.runIdHint);
-    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId, memory_used: [] });
+    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId, memory_used: [], history_used: [] });
 
     const scheduleStreamingFlush = () => {
       if (streamingRafRef.current) return;
@@ -4106,10 +4894,12 @@ export default function App() {
           if (typeof parsed?.run_id === "string") setStreamingRunId(parsed.run_id);
           if (typeof parsed?.engine_id === "string") {
             const memoryUsed = parseMemoryUsedArray(parsed?.memory_used);
+            const historyUsed = parseHistoryUsedArray(parsed?.history_used);
             setStreamingMeta({
               engine_id: parsed.engine_id,
               model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null,
               memory_used: memoryUsed,
+              history_used: historyUsed,
             });
           }
         } else if (eventName === "delta") {
@@ -4117,6 +4907,8 @@ export default function App() {
           streamingContentRef.current = full;
           scheduleStreamingFlush();
         } else if (eventName === "done") {
+          const memoryAdded = parseMemoryUsedArray(parsed?.memory_added);
+          if (memoryAdded.length > 0) showMemoryToastMessage("Memory updated");
           seenDone = true;
         } else if (eventName === "error") {
           const msg =
@@ -4202,8 +4994,10 @@ export default function App() {
     for (const file of picked) {
       if (!file) continue;
       const name = (file.name ?? "").trim() || "attachment";
-      if (file.size > MAX_WEB_ATTACHMENT_BYTES) {
-        onError(`${name} is too large (max ${(MAX_WEB_ATTACHMENT_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
+      const isImage = isLikelyImageFile(file);
+      const maxBytes = isImage ? MAX_WEB_IMAGE_UPLOAD_BYTES : MAX_WEB_FILE_UPLOAD_BYTES;
+      if (file.size > maxBytes) {
+        onError(`${name} is too large (max ${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`);
         continue;
       }
       const base: MessageAttachment = {
@@ -4214,13 +5008,21 @@ export default function App() {
         size: file.size,
       };
       try {
-        if (isLikelyImageFile(file)) {
+        if (isImage) {
+          if (!isSupportedChatRasterImage(file)) {
+            onError(`${name}: unsupported image format. Please use PNG, JPG, GIF, WEBP, or AVIF.`);
+            continue;
+          }
           base.type = "image";
           base.data_url = await readChatImageAsDataUrl(file);
+          next.push(base);
+          continue;
         } else if (isLikelyTextFile(file)) {
           const { text, truncated } = await readTextAttachmentPreview(file);
           base.text = text;
           base.truncated = truncated;
+          next.push(base);
+          continue;
         }
       } catch (error) {
         const message =
@@ -4230,7 +5032,9 @@ export default function App() {
               ? error.message
               : "Failed to read file.";
         onError(`${name}: ${message}`);
+        continue;
       }
+      // Fallback: allow unknown files to be attached as name-only (no preview yet).
       next.push(base);
     }
 
@@ -4238,25 +5042,33 @@ export default function App() {
   }
 
   async function handleWorkspaceFileInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files;
-    event.target.value = "";
-    if (!files) return;
+    const input = event.target;
+    const files = input.files;
+    if (!files || files.length === 0) {
+      input.value = "";
+      return;
+    }
     setThreadError(null);
     const updated = await ingestAttachmentsFromFileList(files, workspaceAttachmentsRef.current, (message) => {
       setThreadError(message);
     });
     setWorkspaceAttachments(updated);
+    input.value = "";
   }
 
   async function handleCommunityFileInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files;
-    event.target.value = "";
-    if (!files) return;
+    const input = event.target;
+    const files = input.files;
+    if (!files || files.length === 0) {
+      input.value = "";
+      return;
+    }
     setCommunityChatError(null);
     const updated = await ingestAttachmentsFromFileList(files, communityAttachmentsRef.current, (message) => {
       setCommunityChatError(message);
     });
     setCommunityAttachments(updated);
+    input.value = "";
   }
 
   function removeWorkspaceAttachment(id: string) {
@@ -4267,6 +5079,40 @@ export default function App() {
     setCommunityAttachments((prev) => prev.filter((att) => att.id !== id));
   }
 
+  function openCommunityChatLightbox(images: ChatLightboxImage[], index: number) {
+    if (!images || images.length === 0) return;
+    const clamped = Math.min(Math.max(index, 0), images.length - 1);
+    setCommunityChatLightboxImages(images);
+    setCommunityChatLightboxIndex(clamped);
+    setIsCommunityChatLightboxOpen(true);
+  }
+
+  function closeCommunityChatLightbox() {
+    setIsCommunityChatLightboxOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isCommunityChatLightboxOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeCommunityChatLightbox();
+        return;
+      }
+      if (communityChatLightboxImages.length <= 1) return;
+      if (event.key === "ArrowLeft") {
+        setCommunityChatLightboxIndex((prev) => {
+          const next = prev - 1;
+          return next < 0 ? communityChatLightboxImages.length - 1 : next;
+        });
+      }
+      if (event.key === "ArrowRight") {
+        setCommunityChatLightboxIndex((prev) => (prev + 1) % communityChatLightboxImages.length);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isCommunityChatLightboxOpen, communityChatLightboxImages.length]);
+
   async function sendUserMessage() {
     const text = messageInput.trim();
     const hasAttachments = workspaceAttachments.length > 0;
@@ -4276,6 +5122,9 @@ export default function App() {
       handleSignIn();
       return;
     }
+
+    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+    const hasPersonalMemoryAccess = tier === "builder" || tier === "pro";
 
     setThreadError(null);
     setIsSendingMessage(true);
@@ -4299,6 +5148,17 @@ export default function App() {
         DEFAULT_ACTIVE_MODEL_ID;
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         await updateThreadModel(threadId, preferredModelId, session);
+      }
+
+      const rememberEnabled = userMemorySettings.remember_intent_enabled !== false;
+      const remembered = rememberEnabled ? extractRememberIntent(text) : null;
+      if (remembered && hasPersonalMemoryAccess) {
+        try {
+          await createPersonalMemoryItemDirect({ content: remembered, pinned: false });
+          showMemoryToastMessage("Memory updated");
+        } catch (error) {
+          console.warn("Failed to save memory intent:", error);
+        }
       }
 
       const messageId = crypto.randomUUID();
@@ -4343,6 +5203,12 @@ export default function App() {
             ? error.message
             : "Failed to send message.";
       setThreadError(message);
+      const normalized = message.toLowerCase();
+      if (normalized.includes("cloud history limit reached")) {
+        setBuilderUpgradeContext("builder");
+        setBuilderBillingError(message);
+        setIsBuilderUpgradeOpen(true);
+      }
     } finally {
       setIsSendingMessage(false);
     }
@@ -4389,6 +5255,12 @@ export default function App() {
       const message =
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
       setThreadError(message);
+      const normalized = message.toLowerCase();
+      if (normalized.includes("cloud history limit reached")) {
+        setBuilderUpgradeContext("builder");
+        setBuilderBillingError(message);
+        setIsBuilderUpgradeOpen(true);
+      }
     } finally {
       setIsSendingMessage(false);
     }
@@ -4432,6 +5304,12 @@ export default function App() {
       const message =
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
       setThreadError(message);
+      const normalized = message.toLowerCase();
+      if (normalized.includes("cloud history limit reached")) {
+        setBuilderUpgradeContext("builder");
+        setBuilderBillingError(message);
+        setIsBuilderUpgradeOpen(true);
+      }
     } finally {
       setIsSendingMessage(false);
     }
@@ -4585,6 +5463,132 @@ export default function App() {
     }
   }
 
+  function showMemoryToastMessage(message: string) {
+    if (memoryToastTimeoutRef.current) {
+      window.clearTimeout(memoryToastTimeoutRef.current);
+      memoryToastTimeoutRef.current = null;
+    }
+    setMemoryToast(message);
+    memoryToastTimeoutRef.current = window.setTimeout(() => {
+      setMemoryToast(null);
+      memoryToastTimeoutRef.current = null;
+    }, 2400);
+  }
+
+  async function loadUserMemorySettings(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingUserMemorySettings(true);
+    try {
+      const userId = getSupabaseAuthUid(session);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/user_memory_settings?select=memory_mode,remember_intent_enabled&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+        {},
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<Partial<UserMemorySettings>>;
+      const row = rows[0];
+      const mode = row?.memory_mode;
+      setUserMemorySettings({
+        memory_mode: mode === "suggest" || mode === "auto" ? mode : "off",
+        remember_intent_enabled: row?.remember_intent_enabled !== false,
+      });
+    } catch {
+      setUserMemorySettings({ memory_mode: "off", remember_intent_enabled: true });
+    } finally {
+      setIsLoadingUserMemorySettings(false);
+    }
+  }
+
+  async function saveUserMemorySettings(next: UserMemorySettings): Promise<void> {
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) return;
+    setIsLoadingUserMemorySettings(true);
+    try {
+      const userId = getSupabaseAuthUid(session);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/user_memory_settings`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+          body: JSON.stringify({
+            user_id: userId,
+            memory_mode: next.memory_mode,
+            remember_intent_enabled: Boolean(next.remember_intent_enabled),
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setUserMemorySettings(next);
+    } catch (error) {
+      console.warn("Failed to save memory settings:", error);
+    } finally {
+      setIsLoadingUserMemorySettings(false);
+    }
+  }
+
+  async function loadUserModelSettings(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingUserModelSettings(true);
+    setUserModelSettingsError(null);
+    try {
+      const userId = getSupabaseAuthUid(session);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/user_model_settings?select=system_prompt&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+        {},
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as Array<Partial<UserModelSettings>>;
+      const prompt = typeof rows[0]?.system_prompt === "string" ? rows[0]!.system_prompt! : "";
+      setUserModelSettings({ system_prompt: prompt });
+      setSystemPromptDraft(prompt);
+    } catch (error) {
+      setUserModelSettings({ system_prompt: "" });
+      setSystemPromptDraft("");
+      setUserModelSettingsError(
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to load system prompt",
+      );
+    } finally {
+      setIsLoadingUserModelSettings(false);
+    }
+  }
+
+  async function saveUserModelSettings(next: UserModelSettings): Promise<void> {
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) return;
+    setIsSavingUserModelSettings(true);
+    setUserModelSettingsError(null);
+    try {
+      const userId = getSupabaseAuthUid(session);
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/user_model_settings`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify({
+            user_id: userId,
+            system_prompt: String(next.system_prompt ?? ""),
+          }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      setUserModelSettings({ system_prompt: String(next.system_prompt ?? "") });
+    } catch (error) {
+      setUserModelSettingsError(
+        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to save system prompt",
+      );
+    } finally {
+      setIsSavingUserModelSettings(false);
+    }
+  }
+
   function sortPersonalMemory(items: PersonalMemoryItem[]): PersonalMemoryItem[] {
     return [...items].sort((a, b) => {
       const pinnedDiff = Number(b.pinned) - Number(a.pinned);
@@ -4680,6 +5684,32 @@ export default function App() {
     } finally {
       setIsLoadingPersonalMemory(false);
     }
+  }
+
+  async function createPersonalMemoryItemDirect(params: { content: string; pinned: boolean }): Promise<PersonalMemoryItem | null> {
+    const content = params.content.trim();
+    if (!content) return null;
+    const session = sessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (!session || !url) return null;
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,created_at,updated_at`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({
+          user_id: getSupabaseAuthUid(session),
+          content,
+          scope: "global",
+          scope_id: null,
+          pinned: Boolean(params.pinned),
+        }),
+      },
+      session,
+    );
+    if (!response.ok) throw new Error(await readSupabaseError(response));
+    const rows = (await response.json()) as PersonalMemoryItem[];
+    return rows[0] ?? null;
   }
 
   async function handleCreatePersonalMemoryItem() {
@@ -4782,7 +5812,9 @@ export default function App() {
     setIsLoadingDiscover(true);
     setDiscoverError(null);
     try {
-      const response = await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
+      const response = supabaseSession
+        ? await fetchWithSupabaseAuth(`${url}/functions/v1/public_discover`, { method: "GET" }, supabaseSession)
+        : await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
       if (!response.ok) {
         const message = await readSupabaseError(response);
         throw new Error(message);
@@ -4946,6 +5978,10 @@ export default function App() {
       setCommunityChatHasMore(hasMore);
       setCommunityMessages(rows);
       communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
+      void loadUserProfiles(
+        Array.from(new Set(rows.map((m) => m.sender_id))),
+        session
+      );
       setUnreadCount(0);
       setIsUserAtBottom(true);
       isUserAtBottomRef.current = true;
@@ -5008,6 +6044,10 @@ export default function App() {
       const rows = [...mappedDesc].reverse();
       setCommunityChatHasMore(hasMore);
       communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
+      void loadUserProfiles(
+        Array.from(new Set(rows.map((m) => m.sender_id))),
+        session
+      );
 
       setCommunityMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
@@ -5532,11 +6572,11 @@ export default function App() {
     }
   }
 
-  async function loadCommunityMembers(communityId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    let response: Response;
-    try {
+	  async function loadCommunityMembers(communityId: string, session: SupabaseSession) {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    let response: Response;
+	    try {
       response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/community_memberships?select=id,community_id,user_id,role,created_at&community_id=eq.${communityId}&order=created_at.asc&limit=200`,
         {},
@@ -5546,29 +6586,132 @@ export default function App() {
       return;
     }
     if (!response.ok) return;
-    const rows = (await response.json()) as CommunityMember[];
-    setCommunityMembers(rows);
+	    const rows = (await response.json()) as CommunityMember[];
+	    setCommunityMembers(rows);
 
-    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
-    if (userIds.length === 0) return;
-    const idsFilter = userIds.map((id) => `"${id}"`).join(",");
-    try {
-      const profilesResponse = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url&user_id=in.(${idsFilter})`,
-        {},
+	    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+	    void loadUserProfiles(userIds, session);
+	  }
+
+	  async function loadUserProfiles(userIds: string[], session: SupabaseSession) {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    const unique = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
+	    if (unique.length === 0) return;
+	    const idsFilter = unique.map((id) => `"${id}"`).join(",");
+	    try {
+	      const profilesResponse = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url&user_id=in.(${idsFilter})`,
+	        { method: "GET" },
+	        session
+	      );
+	      if (!profilesResponse.ok) return;
+	      const profiles = (await profilesResponse.json()) as UserProfile[];
+	      if (profiles.length === 0) return;
+	      setProfilesByUserId((prev) => {
+	        const next = { ...prev };
+	        for (const profile of profiles) {
+	          next[profile.user_id] = profile;
+	        }
+	        return next;
+	      });
+	    } catch {
+	      // ignore
+	    }
+	  }
+
+	  async function loadSelfProfile(session: SupabaseSession) {
+	    const url = getSupabaseUrl();
+	    if (!url) return;
+	    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url,bio&user_id=eq.${encodeURIComponent(
+          session.user.id
+        )}&limit=1`,
+        { method: "GET" },
         session
       );
-      if (!profilesResponse.ok) return;
-      const profiles = (await profilesResponse.json()) as UserProfile[];
-      setProfilesByUserId((prev) => {
-        const next = { ...prev };
-        for (const profile of profiles) {
-          next[profile.user_id] = profile;
-        }
-        return next;
-      });
+      if (!response.ok) return;
+      const rows = (await response.json()) as UserProfileDetail[];
+      const row = rows[0];
+      if (!row) return;
+      setCloudProfile(row);
+      setProfilesByUserId((prev) => ({
+        ...prev,
+        [row.user_id]: { user_id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url },
+      }));
+      setProfileName((prev) => (prev.trim() ? prev : row.display_name ?? ""));
+      setProfileBio((prev) => (prev.trim() ? prev : row.bio ?? ""));
+      setProfileAvatarUrl((prev) => prev ?? row.avatar_url ?? null);
     } catch {
       // ignore
+    }
+  }
+
+  async function saveProfileToCloud() {
+    const session = sessionRef.current ?? supabaseSession;
+    const url = getSupabaseUrl();
+    if (!session || !url) {
+      setProfileSaveError("Sign in to save your profile.");
+      return;
+    }
+
+    const trimmedName = profileName.trim();
+    const trimmedBio = profileBio.trim();
+    if (trimmedName !== profileName) setProfileName(trimmedName);
+    if (trimmedBio !== profileBio) setProfileBio(trimmedBio);
+
+    if (profileSaveTimeoutRef.current) {
+      window.clearTimeout(profileSaveTimeoutRef.current);
+      profileSaveTimeoutRef.current = null;
+    }
+
+    setIsSavingProfile(true);
+    setProfileSaveError(null);
+    setProfileSaveSuccess(false);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/profiles?on_conflict=user_id&select=user_id,display_name,avatar_url,bio`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=representation",
+          },
+          body: JSON.stringify({
+            user_id: session.user.id,
+            display_name: trimmedName || null,
+            avatar_url: profileAvatarUrl ?? null,
+            bio: trimmedBio || null,
+          }),
+        },
+        session
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const rows = (await response.json()) as UserProfileDetail[];
+      const saved = rows[0];
+      if (saved) {
+        setCloudProfile(saved);
+        setProfilesByUserId((prev) => ({
+          ...prev,
+          [saved.user_id]: { user_id: saved.user_id, display_name: saved.display_name, avatar_url: saved.avatar_url },
+        }));
+        setProfileName(saved.display_name ?? "");
+        setProfileBio(saved.bio ?? "");
+        setProfileAvatarUrl(saved.avatar_url ?? null);
+      }
+      setProfileSaveSuccess(true);
+      profileSaveTimeoutRef.current = window.setTimeout(() => setProfileSaveSuccess(false), 2000);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to save profile.";
+      setProfileSaveError(message);
+    } finally {
+      setIsSavingProfile(false);
     }
   }
 
@@ -6443,9 +7586,14 @@ export default function App() {
     }
 
     const name = communitySettingsName.trim();
-    const slug = communitySettingsSlug.trim();
+    const slug = communitySettingsSlug.trim().toLowerCase();
     if (!name || !slug) {
       setCommunitySettingsError("Name and slug are required.");
+      setIsSavingCommunitySettings(false);
+      return;
+    }
+    if (!isValidSlug(slug)) {
+      setCommunitySettingsError("Slug must be 3–32 characters (letters, numbers, hyphens).");
       setIsSavingCommunitySettings(false);
       return;
     }
@@ -6529,10 +7677,12 @@ export default function App() {
                 : c
             )
           );
-          setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
-          setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
-        }
-	    } catch (error) {
+	          setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
+	          setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
+	          communitySettingsDirtyRef.current = false;
+	          communityPricingDirtyRef.current = false;
+	        }
+		    } catch (error) {
 	      const message =
 	        typeof error === "string"
 	          ? error
@@ -6548,20 +7698,45 @@ export default function App() {
   async function handleCommunityAvatarUpload(file: File | null) {
     if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
+      if (dataUrl.length > MAX_WEB_IMAGE_DATA_URL_CHARS) {
+        throw new Error("Avatar image is too large. Try a smaller image.");
+      }
       setCommunitySettingsAvatarUrl(dataUrl);
-    } catch {
-      setCommunitySettingsError("Failed to read avatar file.");
+      markCommunitySettingsDirty();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to read avatar file.";
+      setCommunitySettingsError(message);
     }
   }
 
   async function handleCommunityBannerUpload(file: File | null) {
     if (!file) return;
+    if (!isLikelyImageFile(file)) {
+      setCommunitySettingsBannerUploadError("Banner must be an image file.");
+      return;
+    }
+    setCommunitySettingsBannerUploadError(null);
+    setIsProcessingCommunitySettingsBanner(true);
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_WEB_IMAGE_DATA_URL_CHARS);
       setCommunitySettingsBannerUrl(dataUrl);
-    } catch {
-      setCommunitySettingsError("Failed to read banner file.");
+      markCommunitySettingsDirty();
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to read banner file.";
+      setCommunitySettingsBannerUploadError(message);
+    } finally {
+      setIsProcessingCommunitySettingsBanner(false);
     }
   }
 
@@ -6715,6 +7890,17 @@ export default function App() {
       publicCommunityPlans.find((plan) => plan.id === selectedPublicCommunityPlanId) ??
       publicCommunityPlans[0] ??
       null;
+    const publicVisibility = (publicCommunity?.visibility ?? "").trim();
+    const publicVisibilityLabel =
+      publicVisibility === "public" ? "Public" : publicVisibility === "unlisted" ? "Unlisted" : "Private";
+    const publicVisibilityHint =
+      publicVisibility === "public"
+        ? "Preview is available. Join to participate."
+        : publicVisibility === "unlisted"
+          ? "Not listed in discovery. Share the link when you're ready."
+          : "Discoverable, but chat is gated until you join.";
+    const canJoinForFree = Boolean(publicCommunity && publicVisibility === "public" && !selectedPublicCommunityPlan);
+    const canJoinWithCheckout = Boolean(publicCommunity && selectedPublicCommunityPlan);
     const pendingToken =
       (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
       (() => {
@@ -6750,21 +7936,22 @@ export default function App() {
         </header>
 
         <main className="workspace community-mode">
-          {publicRoute.kind === "community_landing" && (
-            <div className="community-panel discover-panel">
-              <div className="discover-hero">
-                <div className="discover-hero-copy">
-                  <div className="discover-title">{publicCommunity?.name ?? publicRoute.slug}</div>
-                  <div className="discover-subtitle">
-                    {publicCommunity?.description ?? "Join this community on Arx."}
-                  </div>
-                  <div className="discover-subtitle">
-                    {selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : "Free"}
-                  </div>
-                </div>
-                <div className="discover-controls">
-                  {publicCommunityPlans.length > 1 && (
-                    <div className="analytics-range-toggle" role="tablist" aria-label="Billing period">
+	          {publicRoute.kind === "community_landing" && (
+	            <div className="community-panel discover-panel">
+	              <div className="discover-hero">
+	                <div className="discover-hero-copy">
+	                  <div className="discover-title">{publicCommunity?.name ?? publicRoute.slug}</div>
+	                  <div className="discover-subtitle">
+	                    {publicCommunity?.description ?? "Join this community on Arx."}
+	                  </div>
+	                  <div className="discover-subtitle">
+	                    {selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : "Free"} · {publicVisibilityLabel}
+	                  </div>
+	                  {publicCommunity && <div className="discover-empty-text">{publicVisibilityHint}</div>}
+	                </div>
+	                <div className="discover-controls">
+	                  {publicCommunityPlans.length > 1 && (
+	                    <div className="analytics-range-toggle" role="tablist" aria-label="Billing period">
                       {[
                         ...publicCommunityPlans.slice().sort((a, b) => {
                           const ar = a.billing_period === "monthly" ? 0 : 1;
@@ -6788,42 +7975,51 @@ export default function App() {
                       ))}
                     </div>
                   )}
-                  <button
-                    className="discover-refresh"
-                    type="button"
-                    disabled={isLoadingPublicCommunity || !publicCommunity || checkoutStatus === "loading" || isJoiningPublicCommunity}
-                    onClick={() => {
-                      if (!publicCommunity) return;
-                      if (selectedPublicCommunityPlan) {
-                        void startCheckoutForPlan(
-                          publicCommunity.id,
-                          selectedPublicCommunityPlan.id,
-                          `/c/${encodeURIComponent(publicCommunity.slug)}`,
-                          publicCommunity.slug,
-                        );
-                        return;
-                      }
-                      void joinPublicCommunity(publicCommunity.id);
-                    }}
-                  >
-                    {isJoiningPublicCommunity
-                      ? "Joining…"
-                      : selectedPublicCommunityPlan
-                        ? "Join now"
-                        : "Join free"}
-                  </button>
-                </div>
-              </div>
+	                  <button
+	                    className="discover-refresh"
+	                    type="button"
+	                    disabled={
+	                      isLoadingPublicCommunity ||
+	                      !publicCommunity ||
+	                      checkoutStatus === "loading" ||
+	                      isJoiningPublicCommunity ||
+	                      (!canJoinWithCheckout && !canJoinForFree)
+	                    }
+	                    onClick={() => {
+	                      if (!publicCommunity) return;
+	                      if (selectedPublicCommunityPlan) {
+	                        void startCheckoutForPlan(
+	                          publicCommunity.id,
+	                          selectedPublicCommunityPlan.id,
+	                          `/c/${encodeURIComponent(publicCommunity.slug)}`,
+	                          publicCommunity.slug,
+	                        );
+	                        return;
+	                      }
+	                      if (publicCommunity.visibility !== "public") return;
+	                      void joinPublicCommunity(publicCommunity.id, publicCommunity.slug);
+	                    }}
+	                  >
+	                    {isJoiningPublicCommunity
+	                      ? "Joining…"
+	                      : selectedPublicCommunityPlan
+	                        ? "Join now"
+	                        : publicCommunity?.visibility === "public"
+	                          ? "Join free"
+	                          : "Invite only"}
+	                  </button>
+	                </div>
+	              </div>
               {isLoadingPublicCommunity && <div className="chat-empty">Loading…</div>}
               {!isLoadingPublicCommunity && publicCommunityError && (
                 <div className="auth-error">{publicCommunityError}</div>
               )}
               {publicJoinError && <div className="auth-error">{publicJoinError}</div>}
               {checkoutError && <div className="auth-error">{checkoutError}</div>}
-              {showSignIn && publicCommunity && publicCommunityPlans.length === 0 && (
-                <div className="chat-empty">
-                  <div className="discover-empty-text">Or join with a magic link:</div>
-                  <div className="discover-controls">
+	              {showSignIn && publicCommunity && canJoinForFree && (
+	                <div className="chat-empty">
+	                  <div className="discover-empty-text">Or join with a magic link:</div>
+	                  <div className="discover-controls">
                     <input
                       className="discover-search"
                       type="email"
@@ -6839,6 +8035,8 @@ export default function App() {
                       onClick={() => {
                         try {
                           localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, publicCommunity.id);
+                          const aid = getBrandosAidForCommunitySlug(publicCommunity.slug);
+                          if (aid) localStorage.setItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, aid);
                         } catch {
                           // ignore
                         }
@@ -6851,22 +8049,73 @@ export default function App() {
                   {magicLinkStatus === "sent" && (
                     <div className="chat-empty">Check your email for a sign-in link.</div>
                   )}
-                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-                </div>
-              )}
-              <div className="chat-messages">
-                <div className="discover-empty">
-                  <div className="discover-empty-title">Powered by Arx</div>
-                  <div className="discover-empty-text">
-                    Join to access chat, resources, and the community copilot.
-                  </div>
-                  <button className="secondary" type="button" onClick={() => navigateTo("/claim")}>
-                    Paid but can't access? Recover
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+	                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+	                </div>
+	              )}
+	              <div className="chat-messages">
+	                {publicCommunity?.visibility === "public" ? (
+	                  <>
+	                    {isLoadingPublicChatPreview && <div className="chat-empty">Loading preview…</div>}
+	                    {!isLoadingPublicChatPreview && publicChatPreviewError && (
+	                      <div className="auth-error">{publicChatPreviewError}</div>
+	                    )}
+	                    {!isLoadingPublicChatPreview && !publicChatPreviewError && publicChatPreviewMessages.length === 0 && (
+	                      <div className="discover-empty">
+	                        <div className="discover-empty-title">Preview chat</div>
+	                        <div className="discover-empty-text">No messages yet.</div>
+	                      </div>
+	                    )}
+	                    {!isLoadingPublicChatPreview &&
+	                      !publicChatPreviewError &&
+	                      publicChatPreviewMessages.length > 0 &&
+	                      publicChatPreviewMessages.map((msg) => {
+	                        const senderLabel = msg.sender_display_name ?? "Member";
+	                        const avatarColor = getAvatarColor(msg.sender_id);
+	                        return (
+	                          <div key={msg.id} className="chat-message">
+	                            <div className="chat-avatar" style={{ backgroundColor: avatarColor }} title={senderLabel}>
+	                              {msg.sender_avatar_url ? (
+	                                <img src={msg.sender_avatar_url} alt={senderLabel} />
+	                              ) : (
+	                                <span>{getInitials(senderLabel)}</span>
+	                              )}
+	                            </div>
+	                            <div className="chat-content">
+	                              <div className="chat-header">
+	                                <span className="chat-sender">{senderLabel}</span>
+	                                <span className="chat-time">{formatChatTime(msg.created_at)}</span>
+	                              </div>
+	                                <div className="chat-body">{renderTextWithLinks(msg.body)}</div>
+	                              </div>
+	                            </div>
+	                          );
+	                      })}
+	                    <div className="discover-empty" style={{ marginTop: 18 }}>
+	                      <div className="discover-empty-title">Powered by Arx</div>
+	                      <div className="discover-empty-text">This is a read-only preview. Join to participate.</div>
+	                      <button className="secondary" type="button" onClick={() => navigateTo("/claim")}>
+	                        Paid but can't access? Recover
+	                      </button>
+	                    </div>
+	                  </>
+	                ) : (
+	                  <div className="discover-empty">
+	                    <div className="discover-empty-title">Powered by Arx</div>
+	                    <div className="discover-empty-text">
+	                      {publicCommunity
+	                        ? publicCommunity.visibility === "unlisted"
+	                          ? "This community is unlisted. Join to enter."
+	                          : "This community is private. Join to enter."
+	                        : "Join to access chat, resources, and the community copilot."}
+	                    </div>
+	                    <button className="secondary" type="button" onClick={() => navigateTo("/claim")}>
+	                      Paid but can't access? Recover
+	                    </button>
+	                  </div>
+	                )}
+	              </div>
+	            </div>
+	          )}
 
           {publicRoute.kind === "checkout_success" && (
             <div className="community-panel discover-panel">
@@ -7196,14 +8445,15 @@ export default function App() {
                 <button
                   key={community.id}
                   type="button"
-                  className={`community-rail-button${community.id === activeCommunityId ? " active" : ""}`}
-                  onClick={() => {
-                    setActiveView("home");
-                    setActiveCommunityId(community.id);
-                    setActivePage("community");
-                    setCommunityTab("chat");
-                  }}
-                  title={community.name}
+	                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
+	                  onClick={() => {
+	                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+	                    setActiveView("home");
+	                    setActiveCommunityId(community.id);
+	                    setActivePage("community");
+	                    setCommunityTab("chat");
+	                  }}
+	                  title={community.name}
                 >
                   {community.avatar_url ? (
                     <img
@@ -7468,10 +8718,95 @@ export default function App() {
               </div>
             </div>
           )}
-          {activeView === "settings" ? (
-            <div className="settings-panel">
-              {settingsPage === "account" && (
-                <>
+	          {activeView === "settings" ? (
+	            <div className="settings-panel">
+	              {settingsPage === "account" && (
+	                <>
+	                  <div className="settings-section">
+	                    <div className="settings-section-title">Profile</div>
+	                    <div className="settings-section-desc">
+	                      {supabaseSession
+	                        ? "Profile details shown in communities. Save to sync across devices."
+	                        : "Local profile details shown in communities on this device."}
+	                    </div>
+	                    <div className="profile-block">
+                      <div
+                        className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          setIsProfileAvatarDragOver(true);
+                        }}
+                        onDragLeave={() => setIsProfileAvatarDragOver(false)}
+                        onDrop={handleProfileAvatarDrop}
+                      >
+                        {profileAvatarUrl ? (
+                          <img src={profileAvatarUrl} alt="Profile avatar" />
+                        ) : (
+                          <span>
+                            {getInitials(
+                              (profileName || profileUsername || supabaseSession?.user.email || "AR").replace(/^@/, "")
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <div className="profile-avatar-actions">
+                        <label className="create-avatar-btn">
+                          Upload photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {profileAvatarUrl && (
+                          <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="profile-row">
+                      <input
+                        type="text"
+                        placeholder="Name"
+                        value={profileName}
+                        onChange={(event) => setProfileName(event.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Username"
+                        value={profileUsername}
+                        onChange={(event) => setProfileUsername(event.target.value)}
+                      />
+                    </div>
+	                    <textarea
+	                      className="profile-bio"
+	                      placeholder="Bio"
+	                      value={profileBio}
+	                      onChange={(event) => setProfileBio(event.target.value)}
+	                      rows={3}
+	                    />
+	                    <div className="account-row">
+	                      <div className="account-identity">
+	                        <span>Sync</span>
+	                        <strong>
+	                          {supabaseSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
+	                        </strong>
+	                      </div>
+	                      <div className="auth-actions">
+	                        <button
+	                          type="button"
+	                          onClick={() => void saveProfileToCloud()}
+	                          disabled={!supabaseSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
+	                        >
+	                          {isSavingProfile ? "Saving…" : "Save"}
+	                        </button>
+	                      </div>
+	                    </div>
+	                    {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
+	                    {profileSaveSuccess && <div className="auth-success">Saved.</div>}
+	                  </div>
+
                   <div className="settings-section">
                     <div className="settings-section-title">Account</div>
                     <div className="settings-section-desc">
@@ -7499,82 +8834,50 @@ export default function App() {
 
                   {supabaseSession && (
                     <div className="settings-section">
-                      <div className="settings-section-title">Builder plan</div>
-                      <div className="settings-section-desc">
-                        Starter is $20/month (10% take, 1 community). Pro is $100/month (3% take, 3 communities).
-                      </div>
                       {(() => {
                         const status = builderBillingStatus;
-                        const tier = status?.builder_tier ?? "free";
+                        const tier = (status?.builder_tier ?? "free").toLowerCase();
                         const ownedCount = communities.reduce(
                           (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
                           0,
                         );
                         const max = status?.max_communities ?? 0;
-                        const pct = status ? status.platform_fee_bps / 100 : 10;
-                        const hasPayouts = Boolean(status?.has_payouts);
+                        const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
+                        const communitiesLabel =
+                          max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
+                        const tierLabel = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
                         return (
                           <>
                             <div className="account-row">
                               <div className="account-identity">
-                                <span>Current</span>
+                                <span>Plan</span>
                                 <strong>
-                                  {tier === "pro" ? "Pro" : tier === "builder" ? "Starter" : "Free"} · {pct}% take ·{" "}
-                                  {max > 0 ? `${ownedCount}/${max} communities` : `${ownedCount} communities`}
+                                  {tierLabel} · {communitiesLabel}
                                 </strong>
                               </div>
                               <div className="auth-actions">
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  onClick={() => supabaseSession && void loadBuilderBillingStatus(supabaseSession)}
-                                  disabled={isLoadingBuilderBilling}
-                                >
-                                  {isLoadingBuilderBilling ? "Refreshing…" : "Refresh"}
-                                </button>
+	                                {tier === "free" ? (
+	                                  <button
+	                                    type="button"
+	                                    className="secondary"
+	                                    onClick={() => {
+	                                      setBuilderUpgradeContext("builder");
+	                                      setIsBuilderUpgradeOpen(true);
+	                                    }}
+	                                  >
+	                                    Upgrade plan
+	                                  </button>
+	                                ) : (
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    onClick={() => void openBuilderBillingPortal()}
+                                    disabled={isStartingBuilderPortal}
+                                  >
+                                    {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
+                                  </button>
+                                )}
                               </div>
-                            </div>
-                            <div className="auth-actions">
-                              {tier === "free" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => void startBuilderPlanCheckout("builder")}
-                                    disabled={isStartingBuilderCheckout}
-                                  >
-                                    {isStartingBuilderCheckout ? "Starting…" : "Start Starter"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void startBuilderPlanCheckout("pro")}
-                                    disabled={isStartingBuilderCheckout}
-                                  >
-                                    {isStartingBuilderCheckout ? "Starting…" : "Start Pro"}
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => void openBuilderBillingPortal()}
-                                  disabled={isStartingBuilderPortal}
-                                >
-                                  {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
-                                </button>
-                              )}
-                              {!hasPayouts ? (
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  onClick={() => void startConnectOnboarding()}
-                                  disabled={isStartingConnectOnboarding}
-                                >
-                                  {isStartingConnectOnboarding ? "Opening…" : "Set up payouts"}
-                                </button>
-                              ) : (
-                                <button type="button" className="secondary" disabled>
-                                  Payouts connected
-                                </button>
-                              )}
                             </div>
                           </>
                         );
@@ -7582,6 +8885,61 @@ export default function App() {
                       {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
                     </div>
                   )}
+
+                  {supabaseSession && (
+                    <div className="settings-section">
+                      <div className="settings-section-title">Your communities</div>
+                      <div className="settings-section-desc">Open a community to manage pricing and payouts.</div>
+                      {(() => {
+                        const owned = communities
+                          .filter((community) => communityRoleById[community.id] === "owner")
+                          .sort((a, b) => a.name.localeCompare(b.name));
+                        if (owned.length === 0) {
+                          return <div className="model-note">No owned communities yet.</div>;
+                        }
+	                        return (
+	                          <div className="invite-list">
+	                            {owned.map((community) => (
+	                              <div key={community.id} className="invite-row">
+	                                <div className="invite-main with-avatar">
+	                                  <div className="invite-avatar" aria-hidden="true">
+	                                    {community.avatar_url ? (
+	                                      <img
+	                                        className="invite-avatar-img"
+	                                        src={community.avatar_url}
+	                                        alt=""
+	                                        loading="lazy"
+	                                      />
+	                                    ) : (
+	                                      <span className="invite-avatar-fallback">{communityInitials(community.name)}</span>
+	                                    )}
+	                                  </div>
+	                                  <div className="invite-text">
+	                                    <div className="invite-code">{community.name}</div>
+	                                    <div className="invite-status">{`arx.com/c/${community.slug}`}</div>
+	                                  </div>
+	                                </div>
+	                                <div className="invite-actions">
+		                                  <button
+		                                    type="button"
+		                                    onClick={() => {
+		                                      if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                      setActiveView("home");
+		                                      setActivePage("community");
+		                                      setActiveCommunityId(community.id);
+		                                      setCommunityTab("settings");
+		                                    }}
+		                                  >
+                                    Open settings
+                                  </button>
+                                </div>
+                              </div>
+	                            ))}
+	                          </div>
+	                        );
+	                      })()}
+	                    </div>
+	                  )}
 
                   {supabaseSession &&
                     (isLoadingPendingPurchases ||
@@ -7636,80 +8994,20 @@ export default function App() {
                       </div>
                     )}
 
-                  <div className="settings-section">
-                    <div className="settings-section-title">Profile</div>
-                    <div className="settings-section-desc">
-                      Local profile details shown in communities on this device.
-                    </div>
-                    <div className="profile-block">
-                      <div
-                        className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
-                        onDragOver={(event) => {
-                          event.preventDefault();
-                          setIsProfileAvatarDragOver(true);
-                        }}
-                        onDragLeave={() => setIsProfileAvatarDragOver(false)}
-                        onDrop={handleProfileAvatarDrop}
-                      >
-                        {profileAvatarUrl ? (
-                          <img src={profileAvatarUrl} alt="Profile avatar" />
-                        ) : (
-                          <span>
-                            {getInitials(
-                              (profileName || profileUsername || supabaseSession?.user.email || "AR").replace(/^@/, "")
-                            )}
-                          </span>
-                        )}
-                      </div>
-                      <div className="profile-avatar-actions">
-                        <label className="create-avatar-btn">
-                          Upload photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
-                          />
-                        </label>
-                        {profileAvatarUrl && (
-                          <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="profile-row">
-                      <input
-                        type="text"
-                        placeholder="Name"
-                        value={profileName}
-                        onChange={(event) => setProfileName(event.target.value)}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Username"
-                        value={profileUsername}
-                        onChange={(event) => setProfileUsername(event.target.value)}
-                      />
-                    </div>
-                    <textarea
-                      className="profile-bio"
-                      placeholder="Bio"
-                      value={profileBio}
-                      onChange={(event) => setProfileBio(event.target.value)}
-                      rows={3}
-                    />
-                  </div>
                 </>
               )}
 
               {settingsPage === "models" && (
                 <>
-                  <div className="settings-section">
-                    <div className="settings-section-title">API Key</div>
-                    <div className="settings-section-desc">
-                      Connect your OpenRouter key to access models (synced to your Arx account)
-                    </div>
-                    <div className="key-row">
+		                  <div className="settings-section">
+		                    <div className="settings-section-title">API Key</div>
+		                    <div className="settings-section-desc">
+		                      Connect your OpenRouter key to access models (synced to your Arx account). Get one at{" "}
+		                      <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">
+		                        openrouter.ai
+		                      </a>
+		                    </div>
+	                    <div className="key-row">
                       <input
                         type="password"
                         value={providerKeys[0]?.inputValue ?? ""}
@@ -7734,15 +9032,50 @@ export default function App() {
                         Clear
                       </button>
                     </div>
-                    {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
-                  </div>
+	                    {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+	                  </div>
 
-                  <div className="settings-section">
-                    <div className="settings-section-title">Available Models</div>
-                    <div className="settings-section-desc">Select which models to enable</div>
-                    <div className="model-list">
-                      {modelToggles.map((toggle) => (
-                        <label key={toggle.id} className="model-toggle">
+	                  <div className="settings-section">
+	                    <div className="settings-section-title">System prompt</div>
+	                    <div className="settings-section-desc">
+	                      Applied to every model run (global). Use this to set tone, format, and defaults.
+	                    </div>
+	                    <textarea
+	                      className="exec-policy-input"
+	                      value={systemPromptDraft}
+	                      onChange={(event) => setSystemPromptDraft(event.target.value)}
+	                      placeholder="e.g. Be concise. Use Markdown. Prefer bullet points. Ask clarifying questions when needed."
+	                      disabled={!supabaseSession || isLoadingUserModelSettings}
+	                    />
+	                    <div className="exec-policy-actions">
+	                      <button
+	                        type="button"
+	                        onClick={() => void saveUserModelSettings({ system_prompt: systemPromptDraft })}
+	                        disabled={!supabaseSession || isLoadingUserModelSettings || isSavingUserModelSettings}
+	                      >
+	                        {isSavingUserModelSettings ? "Saving…" : "Save"}
+	                      </button>
+	                      <button
+	                        type="button"
+	                        className="secondary"
+	                        onClick={() => {
+	                          setSystemPromptDraft("");
+	                          void saveUserModelSettings({ system_prompt: "" });
+	                        }}
+	                        disabled={!supabaseSession || isLoadingUserModelSettings || isSavingUserModelSettings}
+	                      >
+	                        Clear
+	                      </button>
+	                      {userModelSettingsError && <div className="exec-policy-error">{userModelSettingsError}</div>}
+	                    </div>
+	                  </div>
+
+	                  <div className="settings-section">
+	                    <div className="settings-section-title">Available Models</div>
+	                    <div className="settings-section-desc">Select which models to enable</div>
+	                    <div className="model-list">
+	                      {modelToggles.map((toggle) => (
+	                        <label key={toggle.id} className="model-toggle">
                           <input
                             type="checkbox"
                             checked={toggle.enabled}
@@ -7764,71 +9097,14 @@ export default function App() {
               {settingsPage === "execution" && (
                 <>
                   <div className="settings-section">
-                    <div className="settings-section-title">Approval Mode</div>
-                    <div className="settings-section-desc">Control how tool executions are approved (desktop only)</div>
-                    <div className="approval-selector">
-                      {(["read-only", "agent", "agent-full"] as const).map((mode) => {
-                        const preset = APPROVAL_PRESETS[mode];
-                        const isActive = mode === "agent";
-                        return (
-                          <button
-                            key={mode}
-                            className={`approval-option${isActive ? " active" : ""}`}
-                            type="button"
-                            disabled
-                          >
-                            <div className="approval-option-title">{preset.label}</div>
-                            <div className="approval-option-desc">{preset.description}</div>
-                          </button>
-                        );
-                      })}
+                    <div className="settings-section-title">Desktop execution</div>
+                    <div className="settings-section-desc">
+                      Local tools (filesystem/shell) run only in the desktop app. Configure approvals and policies there.
                     </div>
-                    <div className="approval-note">Execution policies are configured in the desktop app.</div>
-                  </div>
-
-                  <div className="settings-section">
-                    <div className="settings-section-title">Thread Overrides</div>
-                    <div className="settings-section-desc">Settings for the current thread only (desktop only)</div>
-                    <label className="model-toggle">
-                      <input type="checkbox" defaultChecked={false} disabled />
-                      <span>Auto-approve write/edit for this thread</span>
-                    </label>
-                    <div className="approval-note">
-                      Read/search tools never require approval. When enabled, write/edit skip prompts.
-                    </div>
-                    <div className="exec-policy">
-                      <textarea
-                        className="exec-policy-input"
-                        defaultValue=""
-                        disabled
-                        placeholder="allow git status\nallow ls"
-                      />
-                      <div className="exec-policy-actions">
-                        <button type="button" disabled>
-                          Save
-                        </button>
-                        <button type="button" className="secondary" disabled>
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="settings-section">
-                    <div className="settings-section-title">Global Policy Rules</div>
-                    <div className="settings-section-desc">Default rules applied to all threads (desktop only)</div>
-                    <div className="exec-policy">
-                      <textarea
-                        className="exec-policy-input"
-                        defaultValue=""
-                        disabled
-                        placeholder="prompt\ndefault\nallow git status\nforbid rm -rf /"
-                      />
-                      <div className="exec-policy-actions">
-                        <button type="button" disabled>
-                          Save rules
-                        </button>
-                      </div>
+                    <div className="auth-actions">
+                      <a className="secondary" href="arx://settings/execution">
+                        Open in desktop
+                      </a>
                     </div>
                   </div>
                 </>
@@ -7838,41 +9114,44 @@ export default function App() {
                 <>
                   <div className="panel-title">Memory</div>
                   <div className="memory-panel">
-                    {personalMemoryError && <div className="memory-error">{personalMemoryError}</div>}
+                    {personalMemoryError &&
+                      (builderBillingStatus?.builder_tier ?? "free").toLowerCase() !== "free" && (
+                        <div className="memory-error">{personalMemoryError}</div>
+                      )}
                     {exportError && <div className="auth-error">{exportError}</div>}
 
-                    <div className="settings-section">
-                      <div className="settings-section-title">Export</div>
-                      <div className="settings-section-desc">
-                        Download your threads, messages, and personal memory as CSV.
-                      </div>
-                      <div className="export-actions">
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => void exportThreadsCsv()}
-                          disabled={!supabaseSession || isExporting}
-                        >
-                          Threads CSV
-                        </button>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => void exportMessagesCsv()}
-                          disabled={!supabaseSession || isExporting}
-                        >
-                          Messages CSV
-                        </button>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => void exportMemoryCsv()}
-                          disabled={!supabaseSession || isExporting}
-                        >
-                          Memory CSV
-                        </button>
-                      </div>
-                    </div>
+		                    <div className="settings-section">
+		                      <div className="settings-section-title">Export</div>
+		                      <div className="settings-section-desc">
+		                        Download your threads, messages, and personal memory as CSV.
+		                      </div>
+		                      <div className="export-actions">
+		                        <button
+		                          className="secondary"
+		                          type="button"
+		                          onClick={() => void exportThreadsCsv()}
+		                          disabled={!supabaseSession || isExporting}
+		                        >
+		                          Threads CSV
+		                        </button>
+		                        <button
+		                          className="secondary"
+		                          type="button"
+		                          onClick={() => void exportMessagesCsv()}
+		                          disabled={!supabaseSession || isExporting}
+		                        >
+		                          Messages CSV
+		                        </button>
+		                        <button
+		                          className="secondary"
+		                          type="button"
+		                          onClick={() => void exportMemoryCsv()}
+		                          disabled={!supabaseSession || isExporting}
+		                        >
+		                          Memory CSV
+		                        </button>
+		                      </div>
+		                    </div>
 
                     <div className="settings-section">
                       <div className="settings-section-title">Local Cache</div>
@@ -7886,122 +9165,160 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="memory-editor">
-                      <div className="memory-editor-header">
-                        <div className="memory-editor-title">Personal memory</div>
-                        <div className="memory-editor-meta">
-                          {isLoadingPersonalMemory
-                            ? "loading…"
-                            : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
-                        </div>
-                      </div>
-                      <input
-                        value={personalMemoryQuery}
-                        onChange={(event) => setPersonalMemoryQuery(event.target.value)}
-                        placeholder="Search memory…"
-                      />
-                      <div className="memory-block-meta">Workspace scope is managed from the desktop app.</div>
-                      <div className="memory-editor-actions">
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => {
-                            setPersonalMemoryQuery("");
-                            void loadPersonalMemoryItems();
-                          }}
-                          disabled={isLoadingPersonalMemory}
-                        >
-                          Refresh
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="memory-block-group">
-                      {personalMemoryItems.length === 0 ? (
-                        <div className="memory-block-empty">No personal memory items yet.</div>
-                      ) : (
-                        personalMemoryItems.map((item) => (
-                          <div key={item.id} className="memory-block">
-                            <div className="memory-block-header">
-                              <div className="memory-block-label">{item.content}</div>
-                              <div className="memory-block-actions">
-                                <button
-                                  className="secondary"
-                                  type="button"
-                                  onClick={() => void handleTogglePersonalMemoryPinned(item)}
-                                  disabled={isLoadingPersonalMemory}
-                                >
-                                  {item.pinned ? "Unpin" : "Pin"}
-                                </button>
-                                <button
-                                  className="secondary"
-                                  type="button"
-                                  onClick={() => void handleDeletePersonalMemoryItem(item.id)}
-                                  disabled={isLoadingPersonalMemory}
-                                >
-                                  Delete
-                                </button>
-                              </div>
+                    {(() => {
+                      const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+                      const hasPersonalMemoryAccess = tier === "builder" || tier === "pro";
+                      if (!supabaseSession) return null;
+                      if (!hasPersonalMemoryAccess) {
+                        return (
+                          <div className="settings-section">
+                            <div className="settings-section-title">Personal memory</div>
+                            <div className="settings-section-desc">
+                              Personal memory is included with Starter and Pro.
                             </div>
-                            <div className="memory-block-meta">
-                              {item.scope}
-                              {item.scope === "workspace" && item.scope_id ? ` · ${item.scope_id}` : ""}
-                              {" · "}
-                              updated {formatRelativeTime(item.updated_at)}
+                            <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBuilderUpgradeContext("builder");
+                                  setIsBuilderUpgradeOpen(true);
+                                }}
+                              >
+                                Upgrade plan
+                              </button>
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
+                        );
+                      }
 
-                    <div className="memory-editor">
-                      <div className="memory-editor-header">
-                        <div className="memory-editor-title">Add memory</div>
-                        <div className="memory-editor-meta">{newPersonalMemoryScope}</div>
-                      </div>
-                      <textarea
-                        value={newPersonalMemoryContent}
-                        onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
-                        placeholder="Write a durable preference/fact…"
-                      />
-                      <div className="memory-editor-actions">
-                        <select
-                          className="select-styled"
-                          value={newPersonalMemoryScope}
-                          onChange={(event) => setNewPersonalMemoryScope(event.target.value as "global" | "workspace")}
-                        >
-                          <option value="workspace" disabled>
-                            Workspace (desktop only)
-                          </option>
-                          <option value="global">Global</option>
-                        </select>
-                        <label className="memory-pin-toggle">
-                          <input
-                            type="checkbox"
-                            checked={newPersonalMemoryPinned}
-                            onChange={(event) => setNewPersonalMemoryPinned(event.target.checked)}
-                          />
-                          Pinned
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => void handleCreatePersonalMemoryItem()}
-                          disabled={!newPersonalMemoryContent.trim()}
-                        >
-                          Save memory
-                        </button>
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => {
-                            setNewPersonalMemoryContent("");
-                            setNewPersonalMemoryPinned(false);
-                          }}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
+                      return (
+                        <>
+                          <div className="settings-section">
+                            <div className="settings-section-title">Memory behavior</div>
+                            <div className="settings-section-desc">
+                              Control how Arx suggests and stores personal memory.
+                            </div>
+                            <div className="export-actions">
+                              <label className="model-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={userMemorySettings.memory_mode === "auto"}
+                                  onChange={(event) =>
+                                    void saveUserMemorySettings({
+                                      ...userMemorySettings,
+                                      memory_mode: event.target.checked ? "auto" : "off",
+                                    })
+                                  }
+                                  disabled={isLoadingUserMemorySettings}
+                                />
+                                <span>Auto memory</span>
+                              </label>
+                            </div>
+                            <div className="memory-block-meta">
+                              When enabled, Arx may save useful preferences/facts to your personal memory. You can delete anything later.
+                            </div>
+                          </div>
+
+                          <div className="memory-editor">
+                            <div className="memory-editor-header">
+                              <div className="memory-editor-title">Personal memory</div>
+                              <div className="memory-editor-meta">
+                                {isLoadingPersonalMemory
+                                  ? "loading…"
+                                  : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
+                              </div>
+                            </div>
+                            <input
+                              value={personalMemoryQuery}
+                              onChange={(event) => setPersonalMemoryQuery(event.target.value)}
+                              placeholder="Search memory…"
+                            />
+                            <div className="memory-block-meta">Workspace scope is managed from the desktop app.</div>
+                            <div className="memory-editor-actions">
+                              <button
+                                className="secondary"
+                                type="button"
+                                onClick={() => {
+                                  setPersonalMemoryQuery("");
+                                  void loadPersonalMemoryItems();
+                                }}
+                                disabled={isLoadingPersonalMemory}
+                              >
+                                Refresh
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="memory-block-group">
+                            {personalMemoryItems.length === 0 ? (
+                              <div className="memory-block-empty">No personal memory items yet.</div>
+                            ) : (
+                              personalMemoryItems.map((item) => (
+                                <div key={item.id} className="memory-block">
+                                  <div className="memory-block-header">
+                                    <div className="memory-block-label">{item.content}</div>
+                                    <div className="memory-block-actions">
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => void handleTogglePersonalMemoryPinned(item)}
+                                        disabled={isLoadingPersonalMemory}
+                                      >
+                                        {item.pinned ? "Unpin" : "Pin"}
+                                      </button>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        onClick={() => void handleDeletePersonalMemoryItem(item.id)}
+                                        disabled={isLoadingPersonalMemory}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="memory-block-meta">
+                                    {item.scope}
+                                    {item.scope === "workspace" && item.scope_id ? ` · ${item.scope_id}` : ""}
+                                    {" · "}
+                                    updated {formatRelativeTime(item.updated_at)}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="memory-editor">
+                            <div className="memory-editor-header">
+                              <div className="memory-editor-title">Add memory</div>
+                            </div>
+                            <textarea
+                              value={newPersonalMemoryContent}
+                              onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
+                              placeholder="Write a durable preference/fact…"
+                            />
+                            <div className="memory-editor-actions">
+                              <button
+                                type="button"
+                                onClick={() => void handleCreatePersonalMemoryItem()}
+                                disabled={!newPersonalMemoryContent.trim()}
+                              >
+                                Save memory
+                              </button>
+                              <button
+                                className="secondary"
+                                type="button"
+                                onClick={() => {
+                                  setNewPersonalMemoryContent("");
+                                  setNewPersonalMemoryPinned(false);
+                                }}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </>
               )}
@@ -8051,6 +9368,7 @@ export default function App() {
 	          ) : activePage === "workspace" ? (
 	            <>
 		              <div className="workspace-body">
+                    {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
 		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 		                  <div className="message-list-inner">
 		                    {!supabaseSession && (
@@ -8082,6 +9400,11 @@ export default function App() {
 	                      const textContent = parseMessageText(message.content_json);
                         const attachments = parseMessageAttachments(message.content_json);
                         const memoryUsed = !isUser ? parseMessageMemoryUsed(message.content_json) : [];
+                        const historyUsed = !isUser ? parseMessageHistoryUsed(message.content_json) : [];
+                        const memorySuggestions = !isUser ? parseMessageMemorySuggestions(message.content_json) : [];
+                        const memoryAdded = !isUser ? parseMessageMemoryAdded(message.content_json) : [];
+                        const hasContext =
+                          memoryUsed.length > 0 || historyUsed.length > 0 || memorySuggestions.length > 0 || memoryAdded.length > 0;
 	                      const modelLabel = !isUser
 	                        ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null)
 	                        : null;
@@ -8095,7 +9418,7 @@ export default function App() {
                               <div className="attachments-preview message-attachments-preview">
                                 {attachments.map((att) => {
                                   const openUrl =
-                                    att.type === "image" && typeof att.data_url === "string" && att.data_url.startsWith("data:")
+                                    att.type === "image" && typeof att.data_url === "string" && att.data_url.startsWith("data:image/")
                                       ? att.data_url
                                       : null;
                                   return (
@@ -8152,13 +9475,18 @@ export default function App() {
 	                              <button
 	                                className="message-copy-btn"
 	                                type="button"
-	                                disabled={memoryUsed.length === 0}
+	                                disabled={!hasContext}
 	                                onClick={() => {
-	                                  if (memoryUsed.length === 0) return;
-	                                  setMemoryUsedModal({ items: memoryUsed });
+	                                  if (!hasContext) return;
+	                                  setContextModal({
+	                                    memory_used: memoryUsed,
+	                                    history_used: historyUsed,
+	                                    memory_suggestions: memorySuggestions,
+	                                    memory_added: memoryAdded,
+	                                  });
 	                                }}
-	                                title={memoryUsed.length === 0 ? "No memory used" : "Memory used"}
-	                                aria-label={memoryUsed.length === 0 ? "No memory used" : "Memory used"}
+	                                title={!hasContext ? "No memory/context" : "Memory & context"}
+	                                aria-label={!hasContext ? "No memory/context" : "Memory & context"}
 	                              >
 	                                <svg viewBox="0 0 24 24" aria-hidden="true">
 	                                  <path d="M9 3v2" />
@@ -8220,15 +9548,32 @@ export default function App() {
                                 <button
                                   className="message-copy-btn"
                                   type="button"
-                                  disabled={!streamingMeta.memory_used || streamingMeta.memory_used.length === 0}
+                                  disabled={
+                                    (!streamingMeta.memory_used || streamingMeta.memory_used.length === 0) &&
+                                    (!streamingMeta.history_used || streamingMeta.history_used.length === 0)
+                                  }
                                   onClick={() => {
-                                    const items = streamingMeta.memory_used ?? [];
-                                    if (items.length === 0) return;
-                                    setMemoryUsedModal({ items });
+                                    const used = streamingMeta.memory_used ?? [];
+                                    const history = streamingMeta.history_used ?? [];
+                                    if (used.length === 0 && history.length === 0) return;
+                                    setContextModal({
+                                      memory_used: used,
+                                      history_used: history,
+                                      memory_suggestions: [],
+                                      memory_added: [],
+                                    });
                                   }}
-                                  title={streamingMeta.memory_used && streamingMeta.memory_used.length > 0 ? "Memory used" : "No memory used"}
+                                  title={
+                                    (streamingMeta.memory_used && streamingMeta.memory_used.length > 0) ||
+                                    (streamingMeta.history_used && streamingMeta.history_used.length > 0)
+                                      ? "Memory & context"
+                                      : "No memory/context"
+                                  }
                                   aria-label={
-                                    streamingMeta.memory_used && streamingMeta.memory_used.length > 0 ? "Memory used" : "No memory used"
+                                    (streamingMeta.memory_used && streamingMeta.memory_used.length > 0) ||
+                                    (streamingMeta.history_used && streamingMeta.history_used.length > 0)
+                                      ? "Memory & context"
+                                      : "No memory/context"
                                   }
                                 >
                                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -8440,117 +9785,135 @@ export default function App() {
                         Refresh
                       </button>
                     </div>
-                  </div>
-                  <div className="workspace-body chat-feed">
-                    <div className="chat-messages discover-grid">
-                      {isLoadingDiscover && (
-                        <div className="chat-loading">
-                          <div className="loading-spinner" />
-                          <span>Loading communities…</span>
-                        </div>
-                      )}
-                      {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
-                      {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
-                        <div className="discover-empty">
-                          <div className="discover-empty-title">No communities yet.</div>
-                          <div className="discover-empty-text">
-                            Create one on desktop to make discovery meaningful.
-                          </div>
-                        </div>
-                      )}
-                      {!isLoadingDiscover &&
-                        filteredDiscoverCommunities.map((community) => {
-                          const alreadyMember = communities.some((c) => c.id === community.id);
-                          const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
-                          const visibilityLabel =
-                            community.visibility === "public"
-                              ? "Public"
-                              : community.visibility === "unlisted"
-                                ? "Unlisted"
-                                : "Private";
-                          const description =
-                            community.description && community.description.trim().length > 0
-                              ? community.description
-                              : "No description yet.";
-                          return (
-                            <div key={community.id} className="discover-card">
-                              <div
-                                className={`discover-card-banner${community.banner_url ? " has-image" : ""}`}
-                                style={
-                                  community.banner_url
-                                    ? { backgroundImage: `url(${community.banner_url})` }
-                                    : undefined
-                                }
-                              />
-                              <div className="discover-card-body">
-                                <div className="discover-card-header">
-                                  {community.avatar_url ? (
-                                    <img
-                                      className="discover-card-avatar"
-                                      src={community.avatar_url}
-                                      alt={community.name}
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <div className="discover-card-avatar fallback">
-                                      {communityInitials(community.name)}
-                                    </div>
-                                  )}
-                                  <div className="discover-card-meta">
-                                    <div className="discover-card-name-row">
-                                      <div className="discover-card-name">{community.name}</div>
-                                      <span className="discover-tag">{priceLabel}</span>
-                                      <span className={`discover-tag ${community.visibility ?? "private"}`}>
-                                        {visibilityLabel}
-                                      </span>
-                                    </div>
-                                    {community.slug && <div className="discover-card-slug">/{community.slug}</div>}
-                                  </div>
-                                </div>
-                                <div className="discover-card-stats">
-                                  <span>— Members</span>
-                                  <span className="discover-card-dot">•</span>
-                                  <span>— Active today</span>
-                                </div>
-                                <div className="discover-card-desc">{description}</div>
-                                <div className="discover-card-foot">
-                                  <div className="discover-card-actions">
-                                    {alreadyMember ? (
-                                      <button
-                                        className="discover-btn secondary"
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveView("home");
-                                          setActiveCommunityId(community.id);
-                                          setActivePage("community");
-                                          setCommunityTab("chat");
-                                        }}
-                                      >
-                                        Open
-                                      </button>
-                                    ) : (
-                                      <button
-                                        className="discover-btn secondary"
-                                        type="button"
-                                        onClick={() => {
-                                          if (!community.slug) return;
-                                          navigateTo(`/c/${encodeURIComponent(community.slug)}`);
-                                        }}
-                                        disabled={!community.slug}
-                                      >
-                                        Join
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                </div>
-              )}
+	                  </div>
+	                  <div className="workspace-body chat-feed">
+	                    <div className="chat-messages discover-scroll">
+	                      <div className="discover-grid">
+	                        {isLoadingDiscover && (
+	                          <div className="chat-loading">
+	                            <div className="loading-spinner" />
+	                            <span>Loading communities…</span>
+	                          </div>
+	                        )}
+	                        {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
+	                        {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
+	                          <div className="discover-empty">
+	                            <div className="discover-empty-title">No communities yet.</div>
+	                            <div className="discover-empty-text">
+	                              Create one on desktop to make discovery meaningful.
+	                            </div>
+	                          </div>
+	                        )}
+	                        {!isLoadingDiscover &&
+	                          filteredDiscoverCommunities.map((community) => {
+	                            const alreadyMember = communities.some((c) => c.id === community.id);
+	                            const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
+	                            const visibilityLabel =
+	                              community.visibility === "public"
+	                                ? "Public"
+	                                : community.visibility === "unlisted"
+	                                  ? "Unlisted"
+	                                  : "Private";
+	                            const description =
+	                              community.description && community.description.trim().length > 0
+	                                ? community.description
+	                                : "No description yet.";
+                              const canActivate = alreadyMember || Boolean(community.slug);
+	                            return (
+	                              <div
+	                                key={community.id}
+	                                className={`discover-card${canActivate ? " clickable" : ""}`}
+	                                role={canActivate ? "button" : undefined}
+	                                tabIndex={canActivate ? 0 : -1}
+	                                aria-label={
+	                                  canActivate
+	                                    ? alreadyMember
+	                                      ? `Open ${community.name}`
+	                                      : `View ${community.name}`
+	                                    : undefined
+	                                }
+		                                onClick={() => {
+		                                  if (!canActivate) return;
+		                                  if (alreadyMember) {
+		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                    setActiveView("home");
+		                                    setActiveCommunityId(community.id);
+		                                    setActivePage("community");
+		                                    setCommunityTab("chat");
+		                                    return;
+	                                  }
+	                                  if (!community.slug) return;
+	                                  navigateTo(`/c/${encodeURIComponent(community.slug)}`);
+	                                }}
+		                                onKeyDown={(event) => {
+		                                  if (!canActivate) return;
+		                                  if (event.key !== "Enter" && event.key !== " ") return;
+		                                  event.preventDefault();
+		                                  if (alreadyMember) {
+		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                    setActiveView("home");
+		                                    setActiveCommunityId(community.id);
+		                                    setActivePage("community");
+		                                    setCommunityTab("chat");
+		                                    return;
+	                                  }
+	                                  if (!community.slug) return;
+	                                  navigateTo(`/c/${encodeURIComponent(community.slug)}`);
+	                                }}
+	                              >
+	                                <div
+	                                  className={`discover-card-banner${community.banner_url ? " has-image" : ""}`}
+	                                  style={
+	                                    community.banner_url
+	                                      ? { backgroundImage: `url(${community.banner_url})` }
+	                                      : undefined
+	                                  }
+	                                />
+	                                <div className="discover-card-body">
+	                                  <div className="discover-card-header">
+	                                    {community.avatar_url ? (
+	                                      <img
+	                                        className="discover-card-avatar"
+	                                        src={community.avatar_url}
+	                                        alt={community.name}
+	                                        loading="lazy"
+	                                      />
+	                                    ) : (
+	                                      <div className="discover-card-avatar fallback">
+	                                        {communityInitials(community.name)}
+	                                      </div>
+	                                    )}
+	                                      <div className="discover-card-meta">
+	                                      <div className="discover-card-name-row">
+	                                        <div className="discover-card-name">{community.name}</div>
+	                                        <span className="discover-tag price">{priceLabel}</span>
+	                                        <span className={`discover-visibility-icon ${community.visibility ?? "private"}`} title={visibilityLabel}>
+	                                          {community.visibility === "public" ? (
+	                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+	                                              <circle cx="12" cy="12" r="10" />
+	                                              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+	                                            </svg>
+	                                          ) : (
+	                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+	                                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+	                                              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+	                                            </svg>
+	                                          )}
+	                                        </span>
+	                                      </div>
+	                                      {community.slug && <div className="discover-card-slug">/{community.slug}</div>}
+	                                    </div>
+	                                  </div>
+	                                  <div className="discover-card-desc">{description}</div>
+	                                </div>
+	                              </div>
+	                            );
+	                          })}
+	                      </div>
+	                    </div>
+	                  </div>
+	                </div>
+	              )}
 
               {activePage === "community" && (
                 <>
@@ -8598,16 +9961,20 @@ export default function App() {
                           )}
                       {activeCommunity &&
                             !isLoadingChat &&
-                            communityMessages.map((message, index) => {
-                              const isOwn = message.sender_id === supabaseSession?.user.id;
-                              const isPending = message.id.startsWith("pending-");
-                              const showMeta = shouldShowSender(communityMessages, index);
-                              const dateSeparator = shouldShowDateSeparator(communityMessages, index);
-                              const avatarColor = getAvatarColor(message.sender_id);
-                              const shortTime = new Date(message.created_at).toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit"
-                              });
+	                            communityMessages.map((message, index) => {
+	                              const isOwn = message.sender_id === supabaseSession?.user.id;
+	                              const isPending = message.id.startsWith("pending-");
+	                              const showMeta = shouldShowSender(communityMessages, index);
+	                              const dateSeparator = shouldShowDateSeparator(communityMessages, index);
+	                              const senderLabel = displayName(message.sender_id);
+	                              const avatarUrl = isOwn
+	                                ? profileAvatarUrl
+	                                : profilesByUserId[message.sender_id]?.avatar_url ?? null;
+	                              const avatarColor = getAvatarColor(message.sender_id);
+	                              const shortTime = new Date(message.created_at).toLocaleTimeString([], {
+	                                hour: "numeric",
+	                                minute: "2-digit"
+	                              });
                               const replyToId = message.reply_to_id ?? null;
                               const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
                               const legacyReply = !replyToId ? parseReplyPrefix(message.body) : null;
@@ -8623,18 +9990,22 @@ export default function App() {
                                     className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
                                     data-time={shortTime}
                                   >
-                                    <div
-                                      className="chat-avatar"
-                                      style={{ backgroundColor: avatarColor }}
-                                      title={displayName(message.sender_id)}
-                                    >
-                                      {getInitials(message.sender_id)}
-                                    </div>
-                                    <div className="chat-content">
-                                      <div className="chat-header">
-                                        <span className="chat-sender">{displayName(message.sender_id)}</span>
-                                        <span className="chat-time">{formatChatTime(message.created_at)}</span>
-                                      </div>
+	                                    <div
+	                                      className="chat-avatar"
+	                                      style={{ backgroundColor: avatarColor }}
+	                                      title={senderLabel}
+	                                    >
+	                                      {avatarUrl ? (
+	                                        <img src={avatarUrl} alt={senderLabel} />
+	                                      ) : (
+	                                        getInitials(senderLabel)
+	                                      )}
+	                                    </div>
+	                                    <div className="chat-content">
+	                                      <div className="chat-header">
+	                                        <span className="chat-sender">{senderLabel}</span>
+	                                        <span className="chat-time">{formatChatTime(message.created_at)}</span>
+	                                      </div>
                                       {editingMessageId === message.id ? (
                                         <div className="chat-edit-form">
                                           <textarea
@@ -8664,23 +10035,46 @@ export default function App() {
                                         </div>
                                       ) : (
                                         <>
-                                          {replyTarget && (
-                                            <button
-                                              type="button"
-                                              className="chat-reply-quote"
-                                              onClick={() => scrollToCommunityMessage(replyToId!)}
-                                              title="Jump to replied message"
-                                            >
-                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="9 14 4 9 9 4" />
-                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                              </svg>
-                                              <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
-                                              <span className="chat-reply-text">
-                                                {truncateReplyPreview(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)}
-                                              </span>
-                                            </button>
-                                          )}
+	                                          {replyTarget && (
+	                                            <button
+	                                              type="button"
+	                                              className="chat-reply-quote"
+	                                              onClick={() => scrollToCommunityMessage(replyToId!)}
+	                                              title="Jump to replied message"
+	                                            >
+	                                              {(() => {
+	                                                const thumb = replyTarget.attachments?.find(
+	                                                  (att) =>
+	                                                    att.type === "image" &&
+	                                                    typeof att.data_url === "string" &&
+	                                                    att.data_url.startsWith("data:image/"),
+	                                                );
+	                                                const text = truncateReplyPreview(
+	                                                  (parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body).trim() ||
+	                                                    (thumb ? "Image" : "Message"),
+	                                                );
+	                                                return (
+	                                                  <>
+	                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+	                                                <polyline points="9 14 4 9 9 4" />
+	                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+	                                              </svg>
+	                                              {thumb?.data_url && (
+	                                                <img
+	                                                  className="chat-reply-thumb"
+	                                                  src={thumb.data_url}
+	                                                  alt=""
+	                                                  aria-hidden="true"
+	                                                  loading="lazy"
+	                                                />
+	                                              )}
+	                                              <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
+	                                              <span className="chat-reply-text">{text}</span>
+	                                                  </>
+	                                                );
+	                                              })()}
+	                                            </button>
+	                                          )}
                                           {!replyTarget && replyToId && (
                                             <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
                                               <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -8691,58 +10085,89 @@ export default function App() {
                                               <span className="chat-reply-text">Replied message not loaded</span>
                                             </div>
                                           )}
-                                          {legacyReply && (
-                                            <div className="chat-reply-quote">
-                                              <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="9 14 4 9 9 4" />
-                                                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                                              </svg>
-                                              <span className="chat-reply-sender">{legacyReply.sender}</span>
-                                              <span className="chat-reply-text">{legacyReply.preview}</span>
-                                            </div>
-                                          )}
-                                          <div className="chat-body">{legacyReply ? legacyReply.rest : message.body}</div>
-                                        </>
-                                      )}
+	                                      {legacyReply && (
+	                                        <div className="chat-reply-quote">
+	                                          <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+	                                            <polyline points="9 14 4 9 9 4" />
+	                                            <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+	                                          </svg>
+	                                          <span className="chat-reply-sender">{legacyReply.sender}</span>
+	                                          <span className="chat-reply-text">{legacyReply.preview}</span>
+	                                        </div>
+	                                      )}
+	                                      <div className="chat-body">
+	                                        {renderTextWithLinks(legacyReply ? legacyReply.rest : message.body)}
+	                                      </div>
+	                                    </>
+	                                  )}
 
-                                      {message.attachments && message.attachments.length > 0 && (
-                                        <div className="attachments-preview chat-attachments-preview">
-                                          {message.attachments.map((att) => {
-                                            const openUrl =
-                                              att.type === "image" && typeof att.data_url === "string" && att.data_url.startsWith("data:")
-                                                ? att.data_url
-                                                : null;
-                                            return (
-                                              <button
-                                                key={att.id}
-                                                type="button"
-                                                className="attachment-item attachment-chip"
-                                                onClick={() => {
-                                                  if (!openUrl) return;
-                                                  window.open(openUrl, "_blank", "noopener,noreferrer");
-                                                }}
-                                                disabled={!openUrl}
-                                                title={att.name}
-                                              >
-                                                {att.type === "image" && openUrl ? (
-                                                  <img src={openUrl} alt={att.name} className="attachment-thumb" />
-                                                ) : (
-                                                  <div className="attachment-icon" aria-hidden="true">
-                                                    <svg viewBox="0 0 24 24">
-                                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                                      <path d="M14 2v6h6" />
-                                                      <path d="M16 13H8" />
-                                                      <path d="M16 17H8" />
-                                                      <path d="M10 9H8" />
-                                                    </svg>
-                                                  </div>
-                                                )}
-                                                <span className="attachment-name">{att.name}</span>
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
+                                      {message.attachments && message.attachments.length > 0 && (() => {
+                                        const imageAttachments = message.attachments
+                                          .filter(
+                                            (att) =>
+                                              att.type === "image" &&
+                                              typeof att.data_url === "string" &&
+                                              att.data_url.startsWith("data:image/")
+                                          )
+                                          .map((att) => ({ url: att.data_url as string, name: att.name }));
+                                        const fileAttachments = message.attachments.filter(
+                                          (att) =>
+                                            !(
+                                              att.type === "image" &&
+                                              typeof att.data_url === "string" &&
+                                              att.data_url.startsWith("data:image/")
+                                            )
+                                        );
+                                        const gridCount = Math.min(imageAttachments.length, 4);
+                                        return (
+                                          <>
+                                            {imageAttachments.length > 0 && (
+                                              <div className={`chat-media-grid count-${gridCount}`}>
+                                                {imageAttachments.slice(0, 4).map((img, idx) => (
+                                                  <button
+                                                    key={`${message.id}-img-${idx}`}
+                                                    type="button"
+                                                    className="chat-media-item"
+                                                    onClick={() => openCommunityChatLightbox(imageAttachments, idx)}
+                                                    title={img.name}
+                                                    aria-label={img.name}
+                                                  >
+                                                    <img src={img.url} alt={img.name} loading="lazy" />
+                                                    {idx === 3 && imageAttachments.length > 4 && (
+                                                      <div className="chat-media-more">+{imageAttachments.length - 4}</div>
+                                                    )}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {fileAttachments.length > 0 && (
+                                              <div className="attachments-preview chat-attachments-preview">
+                                                {fileAttachments.map((att) => (
+                                                  <button
+                                                    key={att.id}
+                                                    type="button"
+                                                    className="attachment-item attachment-chip"
+                                                    disabled
+                                                    title={att.name}
+                                                  >
+                                                    <div className="attachment-icon" aria-hidden="true">
+                                                      <svg viewBox="0 0 24 24">
+                                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                                        <path d="M14 2v6h6" />
+                                                        <path d="M16 13H8" />
+                                                        <path d="M16 17H8" />
+                                                        <path d="M10 9H8" />
+                                                      </svg>
+                                                    </div>
+                                                    <span className="attachment-name">{att.name}</span>
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
 
                                       {reactionPickerMessageId === message.id && (
                                         <div className="reaction-picker">
@@ -8885,41 +10310,74 @@ export default function App() {
                         </div>
                       )}
 
-                      {communityAttachments.length > 0 && (
-                        <div className="attachments-preview community-attachments-preview">
-                          {communityAttachments.map((att) => (
-                            <div key={att.id} className="attachment-item">
-                              {att.type === "image" && att.data_url ? (
-                                <img src={att.data_url} alt={att.name} className="attachment-thumb" />
-                              ) : (
-                                <div className="attachment-icon" aria-hidden="true">
-                                  <svg viewBox="0 0 24 24">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                    <path d="M14 2v6h6" />
-                                    <path d="M16 13H8" />
-                                    <path d="M16 17H8" />
-                                    <path d="M10 9H8" />
-                                  </svg>
-                                </div>
-                              )}
-                              <span className="attachment-name" title={att.name}>
-                                {att.name}
-                              </span>
-                              <button
-                                className="attachment-remove"
-                                type="button"
-                                onClick={() => removeCommunityAttachment(att.id)}
-                                title="Remove"
-                                aria-label={`Remove ${att.name}`}
-                              >
-                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                  <path d="M18 6L6 18M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {communityAttachments.length > 0 && (() => {
+                        const images = communityAttachments.filter(
+                          (att) =>
+                            att.type === "image" &&
+                            typeof att.data_url === "string" &&
+                            att.data_url.startsWith("data:image/")
+                        );
+                        const files = communityAttachments.filter(
+                          (att) =>
+                            !(
+                              att.type === "image" &&
+                              typeof att.data_url === "string" &&
+                              att.data_url.startsWith("data:image/")
+                            )
+                        );
+                        const gridCount = Math.min(Math.max(images.length, 1), 4);
+                        return (
+                          <div className="community-attachments-preview">
+                            {images.length > 0 && (
+                              <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
+                                {images.map((att) => (
+                                  <div key={att.id} className="chat-media-item chat-media-item-static">
+                                    <img src={att.data_url ?? ""} alt={att.name} />
+                                    <button
+                                      type="button"
+                                      className="chat-media-remove"
+                                      onClick={() => removeCommunityAttachment(att.id)}
+                                      title="Remove"
+                                      aria-label={`Remove ${att.name}`}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {files.length > 0 && (
+                              <div className="attachments-preview">
+                                {files.map((att) => (
+                                  <div key={att.id} className="attachment-item" title={att.name}>
+                                    <div className="attachment-icon" aria-hidden="true">
+                                      <svg viewBox="0 0 24 24">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                        <path d="M14 2v6h6" />
+                                        <path d="M16 13H8" />
+                                        <path d="M16 17H8" />
+                                        <path d="M10 9H8" />
+                                      </svg>
+                                    </div>
+                                    <span className="attachment-name">{att.name}</span>
+                                    <button
+                                      className="attachment-remove"
+                                      type="button"
+                                      onClick={() => removeCommunityAttachment(att.id)}
+                                      title="Remove"
+                                      aria-label={`Remove ${att.name}`}
+                                    >
+                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {communityTypingUserIds.length > 0 && (
                         <div className="chat-typing-indicator" aria-live="polite">
@@ -9039,41 +10497,58 @@ export default function App() {
 			                        <>
 			                          <div className="create-community-form community-settings-form">
 			                            <div className="settings-section">
-			                              <div className="settings-section-title">Branding</div>
-			                              <div
-			                                className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
-			                                onDragOver={(event) => {
-			                                  event.preventDefault();
-			                                  setIsSettingsBannerDragOver(true);
-			                                }}
-			                                onDragLeave={() => setIsSettingsBannerDragOver(false)}
-			                                onDrop={handleSettingsBannerDrop}
-			                              >
-			                                {communitySettingsBannerUrl ? (
-			                                  <img src={communitySettingsBannerUrl} alt="Community banner preview" />
-			                                ) : (
-			                                  <div className="create-community-banner-placeholder">Banner preview</div>
-			                                )}
-			                                <label className="create-banner-btn">
-			                                  Upload banner
-			                                  <input
-			                                    type="file"
-			                                    accept="image/*"
-			                                    onChange={(event) =>
-			                                      void handleCommunityBannerUpload(event.target.files?.[0] ?? null)
-			                                    }
-			                                  />
-			                                </label>
-			                                {communitySettingsBannerUrl && (
-			                                  <button
-			                                    className="create-banner-remove"
-			                                    type="button"
-			                                    onClick={() => setCommunitySettingsBannerUrl(null)}
-			                                  >
-			                                    Remove
-			                                  </button>
-			                                )}
-			                              </div>
+				                              <div className="settings-section-title">Branding</div>
+				                              <div
+				                                className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
+				                                aria-busy={isProcessingCommunitySettingsBanner || undefined}
+				                                onDragOver={(event) => {
+				                                  event.preventDefault();
+				                                  setIsSettingsBannerDragOver(true);
+				                                }}
+				                                onDragLeave={() => setIsSettingsBannerDragOver(false)}
+				                                onDrop={handleSettingsBannerDrop}
+				                              >
+				                                {communitySettingsBannerUrl ? (
+				                                  <img src={communitySettingsBannerUrl} alt="Community banner preview" />
+				                                ) : (
+				                                  <div className="create-community-banner-placeholder">Banner preview</div>
+				                                )}
+				                                <label
+				                                  className={`create-banner-btn${isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
+				                                >
+				                                  Upload banner
+				                                  <input
+				                                    type="file"
+				                                    accept="image/*"
+				                                    disabled={isProcessingCommunitySettingsBanner}
+				                                    onChange={(event) => {
+				                                      const file = event.target.files?.[0] ?? null;
+				                                      event.target.value = "";
+				                                      void handleCommunityBannerUpload(file);
+				                                    }}
+				                                  />
+				                                </label>
+				                                {communitySettingsBannerUrl && (
+				                                  <button
+				                                    className="create-banner-remove"
+				                                    type="button"
+				                                    disabled={isProcessingCommunitySettingsBanner}
+				                                    onClick={() => {
+				                                      setCommunitySettingsBannerUrl(null);
+				                                      setCommunitySettingsBannerUploadError(null);
+				                                      markCommunitySettingsDirty();
+				                                    }}
+				                                  >
+				                                    Remove
+				                                  </button>
+				                                )}
+				                                {isProcessingCommunitySettingsBanner && (
+				                                  <div className="create-upload-status">Processing banner…</div>
+				                                )}
+				                                {communitySettingsBannerUploadError && (
+				                                  <div className="auth-error">{communitySettingsBannerUploadError}</div>
+				                                )}
+				                              </div>
 			                              <div className="create-community-avatar-row">
 			                                <div
 			                                  className={`create-community-avatar${isSettingsAvatarDragOver ? " drag-over" : ""}`}
@@ -9100,16 +10575,21 @@ export default function App() {
 			                                    <input
 			                                      type="file"
 			                                      accept="image/*"
-			                                      onChange={(event) =>
-			                                        void handleCommunityAvatarUpload(event.target.files?.[0] ?? null)
-			                                      }
+			                                      onChange={(event) => {
+			                                        const file = event.target.files?.[0] ?? null;
+			                                        event.target.value = "";
+			                                        void handleCommunityAvatarUpload(file);
+			                                      }}
 			                                    />
 			                                  </label>
 			                                  {communitySettingsAvatarUrl && (
 			                                    <button
 			                                      className="create-avatar-remove"
 			                                      type="button"
-			                                      onClick={() => setCommunitySettingsAvatarUrl(null)}
+			                                      onClick={() => {
+			                                        setCommunitySettingsAvatarUrl(null);
+			                                        markCommunitySettingsDirty();
+			                                      }}
 			                                    >
 			                                      Remove
 			                                    </button>
@@ -9122,7 +10602,10 @@ export default function App() {
 			                                  type="text"
 			                                  placeholder="Community name"
 			                                  value={communitySettingsName}
-			                                  onChange={(event) => setCommunitySettingsName(event.target.value)}
+			                                  onChange={(event) => {
+			                                    setCommunitySettingsName(event.target.value);
+			                                    markCommunitySettingsDirty();
+			                                  }}
 			                                />
 			                              </label>
 			                              <label className="create-community-field">
@@ -9131,7 +10614,11 @@ export default function App() {
 			                                  type="text"
 			                                  placeholder="your-community"
 			                                  value={communitySettingsSlug}
-			                                  onChange={(event) => setCommunitySettingsSlug(event.target.value)}
+			                                  maxLength={32}
+			                                  onChange={(event) => {
+			                                    setCommunitySettingsSlug(slugify(event.target.value));
+			                                    markCommunitySettingsDirty();
+			                                  }}
 			                                />
 			                                <span className="create-community-hint">
 			                                  {`arx.com/c/${communitySettingsSlug.trim() || "your-community"}`}
@@ -9146,7 +10633,10 @@ export default function App() {
 			                                  placeholder="Optional description for your community page"
 			                                  rows={3}
 			                                  value={communitySettingsDescription}
-			                                  onChange={(event) => setCommunitySettingsDescription(event.target.value)}
+			                                  onChange={(event) => {
+			                                    setCommunitySettingsDescription(event.target.value);
+			                                    markCommunitySettingsDirty();
+			                                  }}
 			                                />
 			                              </label>
 			                            </div>
@@ -9158,20 +10648,23 @@ export default function App() {
 			                                <select
 			                                  className="select-styled"
 			                                  value={communitySettingsVisibility}
-			                                  onChange={(event) => setCommunitySettingsVisibility(event.target.value)}
+			                                  onChange={(event) => {
+			                                    setCommunitySettingsVisibility(event.target.value);
+			                                    markCommunitySettingsDirty();
+			                                  }}
 			                                >
 			                                  <option value="private">Private</option>
 			                                  <option value="unlisted">Unlisted</option>
 			                                  <option value="public">Public</option>
 			                                </select>
-			                                <span className="create-community-hint">
-			                                  {communitySettingsVisibility === "public"
-			                                    ? "Anyone can discover and join."
-			                                    : communitySettingsVisibility === "unlisted"
-			                                      ? "Anyone with the link can join."
-			                                      : "Only invited members can join."}
-			                                </span>
-			                              </label>
+				                                <span className="create-community-hint">
+				                                  {communitySettingsVisibility === "public"
+				                                    ? "Discoverable. Anyone can preview chat and join to participate."
+				                                    : communitySettingsVisibility === "unlisted"
+				                                      ? "Not listed in discovery. Share the link when you're ready."
+				                                      : "Discoverable, but chat is gated until you join."}
+				                                </span>
+				                              </label>
 			                              <div className="create-community-field">
 			                                <span>Pricing</span>
 			                                <div className="analytics-range-toggle" role="tablist" aria-label="Pricing options">
@@ -9183,16 +10676,20 @@ export default function App() {
 			                                      { key: "both", label: "Both" },
 			                                    ] as Array<{ key: CommunityPricingMode; label: string }>
 			                                  ).map((opt) => (
-			                                    <button
-			                                      key={opt.key}
-			                                      type="button"
-			                                      className={`analytics-range-btn${
-			                                        communitySettingsPricingMode === opt.key ? " active" : ""
-			                                      }`}
-			                                      onClick={() => setCommunitySettingsPricingMode(opt.key)}
-			                                    >
-			                                      {opt.label}
-			                                    </button>
+				                                    <button
+				                                      key={opt.key}
+				                                      type="button"
+				                                      className={`analytics-range-btn${
+				                                        communitySettingsPricingMode === opt.key ? " active" : ""
+				                                      }`}
+				                                      onClick={() => {
+				                                        setCommunitySettingsPricingMode(opt.key);
+				                                        communityPricingDirtyRef.current = true;
+				                                        markCommunitySettingsDirty();
+				                                      }}
+				                                    >
+				                                      {opt.label}
+				                                    </button>
 			                                  ))}
 			                                </div>
 			                                <span className="create-community-hint">
@@ -9207,9 +10704,13 @@ export default function App() {
 			                                    type="text"
                                     inputMode="decimal"
 			                                    placeholder="29"
-			                                    value={communitySettingsPriceUsdMonthly}
-			                                    onChange={(event) => setCommunitySettingsPriceUsdMonthly(event.target.value)}
-			                                  />
+				                                    value={communitySettingsPriceUsdMonthly}
+				                                    onChange={(event) => {
+				                                      setCommunitySettingsPriceUsdMonthly(event.target.value);
+				                                      communityPricingDirtyRef.current = true;
+				                                      markCommunitySettingsDirty();
+				                                    }}
+				                                  />
 			                                  <span className="create-community-hint">Billed monthly.</span>
 			                                </label>
 			                              )}
@@ -9221,23 +10722,65 @@ export default function App() {
 			                                    type="text"
                                     inputMode="decimal"
 			                                    placeholder="290"
-			                                    value={communitySettingsPriceUsdYearly}
-			                                    onChange={(event) => setCommunitySettingsPriceUsdYearly(event.target.value)}
-			                                  />
+				                                    value={communitySettingsPriceUsdYearly}
+				                                    onChange={(event) => {
+				                                      setCommunitySettingsPriceUsdYearly(event.target.value);
+				                                      communityPricingDirtyRef.current = true;
+				                                      markCommunitySettingsDirty();
+				                                    }}
+				                                  />
 			                                  <span className="create-community-hint">Billed yearly.</span>
 			                                </label>
 			                              )}
+                                <div className="create-community-field">
+                                  <span>Payouts</span>
+                                  <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                                    {builderBillingStatus?.has_payouts ? (
+                                      <button type="button" className="secondary" disabled>
+                                        Payouts connected
+                                      </button>
+	                                    ) : (
+	                                      <button
+	                                        type="button"
+	                                        onClick={() => void startConnectOnboarding()}
+	                                        disabled={isStartingConnectOnboarding}
+	                                        className="stripe-connect-btn"
+	                                      >
+		                                        <svg
+		                                          className="stripe-connect-icon"
+		                                          viewBox="0 0 24 24"
+		                                          aria-hidden="true"
+		                                          focusable="false"
+		                                        >
+		                                          <rect x="2" y="2" width="20" height="20" rx="6" fill="#635BFF" />
+		                                          <path
+		                                            fill="#FFFFFF"
+		                                            d="M14.85 9.14c-.84-.44-1.82-.66-2.78-.66-1.44 0-2.24.54-2.24 1.25 0 .78.84 1.12 2.35 1.46 2.2.5 3.34 1.24 3.34 2.9 0 1.76-1.5 2.95-4.03 2.95-1.38 0-2.66-.34-3.64-.93l.66-1.56c.98.58 2.04.88 3.06.88 1.5 0 2.34-.54 2.34-1.37 0-.78-.74-1.16-2.36-1.52-2.18-.5-3.33-1.24-3.33-2.87 0-1.66 1.5-2.87 3.9-2.87 1.3 0 2.5.28 3.48.74l-.7 1.6z"
+		                                          />
+		                                        </svg>
+	                                        <span>{isStartingConnectOnboarding ? "Opening…" : "Connect with Stripe"}</span>
+	                                      </button>
+	                                    )}
+                                  </div>
+                                  <span className="create-community-hint">
+                                    Connect Stripe to receive payouts from paid memberships.
+                                  </span>
+                                </div>
 			                            </div>
 
 			                            {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
-			                            <div className="create-community-actions">
-			                              <button
-			                                onClick={() => void handleSaveCommunitySettings()}
-			                                disabled={isSavingCommunitySettings}
-			                              >
-			                                {isSavingCommunitySettings ? "Saving..." : "Save changes"}
-			                              </button>
-			                            </div>
+				                            <div className="create-community-actions">
+				                              <button
+				                                onClick={() => void handleSaveCommunitySettings()}
+				                                disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
+				                              >
+				                                {isSavingCommunitySettings
+				                                  ? "Saving..."
+				                                  : isProcessingCommunitySettingsBanner
+				                                    ? "Processing banner…"
+				                                    : "Save changes"}
+				                              </button>
+				                            </div>
 			                          </div>
 			                        </>
 			                      ) : (
@@ -9706,6 +11249,31 @@ export default function App() {
 	                                    Arx will POST to <span className="token">/api/identify</span> on{" "}
 	                                    <span className="token">Email captured</span>.
 	                                  </div>
+	                                  <div className="model-note" style={{ marginTop: 8 }}>
+	                                    {lastBrandosIdentifyDelivery ? (
+	                                      (() => {
+	                                        const isSkipped =
+	                                          lastBrandosIdentifyDelivery.status === "success" &&
+	                                          (lastBrandosIdentifyDelivery.error ?? "").startsWith("skipped_");
+	                                        const statusLabel = isSkipped
+	                                          ? "Skipped"
+	                                          : lastBrandosIdentifyDelivery.status === "success"
+	                                            ? "Success"
+	                                            : "Failed";
+	                                        const detail = [
+	                                          "Last identify",
+	                                          formatRelativeTime(lastBrandosIdentifyDelivery.attempted_at),
+	                                          statusLabel,
+	                                          formatAutomationDeliveryError(lastBrandosIdentifyDelivery.error),
+	                                        ]
+	                                          .filter(Boolean)
+	                                          .join(" • ");
+	                                        return <>{detail}</>;
+	                                      })()
+	                                    ) : (
+	                                      <>No identify attempts yet.</>
+	                                    )}
+	                                  </div>
 	                                </div>
 	                              )}
 	                            </div>
@@ -9881,6 +11449,7 @@ export default function App() {
 	                                  {automationDeliveries.map((delivery) => {
 	                                    const key = `${delivery.attempted_at}:${delivery.endpoint_name}:${delivery.event_type}`;
 	                                    const statusClass = delivery.status === "success" ? "active" : "revoked";
+	                                    const formattedError = formatAutomationDeliveryError(delivery.error);
 	                                    const details = [
 	                                      formatRelativeTime(delivery.attempted_at),
 	                                      delivery.endpoint_name,
@@ -9894,7 +11463,7 @@ export default function App() {
 	                                          <div className="invite-code">{delivery.event_type}</div>
 	                                          <div className={`invite-status ${statusClass}`}>
 	                                            {details}
-	                                            {delivery.error ? ` • ${delivery.error}` : ""}
+	                                            {formattedError ? ` • ${formattedError}` : ""}
 	                                          </div>
 	                                        </div>
 	                                      </div>
@@ -10210,43 +11779,410 @@ export default function App() {
         </main>
       </div>
 
-      {memoryUsedModal && (
-        <div className="modal-overlay" onClick={() => setMemoryUsedModal(null)}>
+      {contextModal && (
+        <div className="modal-overlay" onClick={() => setContextModal(null)}>
           <div className="modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">Memory used</div>
-              <button className="modal-close" onClick={() => setMemoryUsedModal(null)} title="Close">
+              <div className="modal-title">Memory &amp; context</div>
+              <button className="modal-close" onClick={() => setContextModal(null)} title="Close">
                 ×
               </button>
             </div>
             <div className="modal-body">
-              {memoryUsedModal.items.length === 0 ? (
-                <div className="memory-block-empty">No memory items were used.</div>
+              {contextModal.memory_used.length === 0 &&
+              contextModal.history_used.length === 0 &&
+              contextModal.memory_suggestions.length === 0 &&
+              contextModal.memory_added.length === 0 ? (
+                <div className="memory-block-empty">No memory or context is attached to this message.</div>
               ) : (
                 <div className="memory-blocks">
-                  <div className="memory-block-group">
-                    {memoryUsedModal.items.map((item) => {
-                      const updatedLabel = item.updated_at
-                        ? new Date(item.updated_at).toLocaleDateString()
-                        : "unknown";
-                      return (
-                        <div key={item.id} className="memory-block read-only">
-                          <div className="memory-block-header">
-                            <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
+                  {contextModal.memory_added.length > 0 && (
+                    <>
+                      <div className="memory-block-group-title">Memory updated</div>
+                      <div className="memory-block-group">
+                        {contextModal.memory_added.map((item) => (
+                          <div key={item.id} className="memory-block read-only">
+                            <div className="memory-block-header">
+                              <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
+                            </div>
+                            <div className="memory-block-desc">{item.content}</div>
                           </div>
-                          <div className="memory-block-desc">{item.content}</div>
-                          <div className="memory-block-meta">
-                            {item.scope}
-                            {item.scope_id ? `:${item.scope_id}` : ""}
-                            {item.pinned ? " • pinned" : ""}
-                            {item.updated_at ? ` • updated ${updatedLabel}` : ""}
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {contextModal.memory_used.length > 0 && (
+                    <>
+                      <div className="memory-block-group-title">Memory used</div>
+                      <div className="memory-block-group">
+                        {contextModal.memory_used.map((item) => {
+                          const updatedLabel = item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "unknown";
+                          return (
+                            <div key={item.id} className="memory-block read-only">
+                              <div className="memory-block-header">
+                                <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
+                              </div>
+                              <div className="memory-block-desc">{item.content}</div>
+                              <div className="memory-block-meta">
+                                {item.scope}
+                                {item.scope_id ? `:${item.scope_id}` : ""}
+                                {item.pinned ? " • pinned" : ""}
+                                {item.updated_at ? ` • updated ${updatedLabel}` : ""}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {contextModal.history_used.length > 0 && (
+                    <>
+                      <div className="memory-block-group-title">Relevant history</div>
+                      <div className="memory-block-group">
+                        {contextModal.history_used.map((item) => (
+                          <div key={item.message_id} className="memory-block read-only">
+                            <div className="memory-block-header">
+                              <div className="memory-block-label">Previous chat</div>
+                            </div>
+                            <div className="memory-block-desc">{item.snippet}</div>
+                            {item.created_at && (
+                              <div className="memory-block-meta">
+                                {new Date(item.created_at).toLocaleString()}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {contextModal.memory_suggestions.length > 0 && (
+                    <>
+                      <div className="memory-block-group-title">Suggested memory</div>
+                      <div className="memory-block-group">
+                        {contextModal.memory_suggestions.map((item, idx) => (
+                          <div key={`${item.content}-${idx}`} className="memory-block">
+                            <div className="memory-block-header">
+                              <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
+                              <div className="memory-block-actions">
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  disabled={!supabaseSession}
+                                  onClick={() => {
+                                    if (!supabaseSession) {
+                                      handleSignIn();
+                                      return;
+                                    }
+                                    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+                                    if (tier === "free") {
+                                      setBuilderUpgradeContext("builder");
+                                      setBuilderBillingError("Upgrade to Starter to use personal memory.");
+                                      setIsBuilderUpgradeOpen(true);
+                                      return;
+                                    }
+                                    void createPersonalMemoryItemDirect({ content: item.content, pinned: item.pinned })
+                                      .then(() => showMemoryToastMessage("Memory updated"))
+                                      .catch((error) => console.warn("Failed to save suggested memory:", error));
+                                  }}
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                            <div className="memory-block-desc">{item.content}</div>
+                            <div className="memory-block-meta">
+                              {item.pinned ? "Pinned" : "Not pinned"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+	      )}
+
+        {isCommunityChatLightboxOpen && communityChatLightboxImages.length > 0 && (() => {
+          const active =
+            communityChatLightboxImages[
+              Math.min(
+                Math.max(communityChatLightboxIndex, 0),
+                communityChatLightboxImages.length - 1
+              )
+            ] ?? null;
+          if (!active) return null;
+          const total = communityChatLightboxImages.length;
+          return (
+            <div className="modal-overlay" onClick={closeCommunityChatLightbox}>
+              <div className="modal lightbox-modal" onClick={(event) => event.stopPropagation()}>
+                <button
+                  className="lightbox-close"
+                  type="button"
+                  onClick={closeCommunityChatLightbox}
+                  title="Close"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+                {total > 1 && (
+                  <>
+                    <button
+                      className="lightbox-nav prev"
+                      type="button"
+                      onClick={() => setCommunityChatLightboxIndex((prev) => (prev - 1 + total) % total)}
+                      title="Previous"
+                      aria-label="Previous"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      className="lightbox-nav next"
+                      type="button"
+                      onClick={() => setCommunityChatLightboxIndex((prev) => (prev + 1) % total)}
+                      title="Next"
+                      aria-label="Next"
+                    >
+                      ›
+                    </button>
+                    <div className="lightbox-counter" aria-hidden="true">
+                      {communityChatLightboxIndex + 1}/{total}
+                    </div>
+                  </>
+                )}
+                <div className="lightbox-body">
+                  <img src={active.url} alt={active.name} />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+	      {supabaseSession && isBuilderUpgradeOpen && (
+	        <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
+	          <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
+	            <div className="modal-header">
+	              <div className="modal-title">Upgrade plan</div>
+	              <button
+	                className="modal-close"
+	                type="button"
+	                onClick={() => setIsBuilderUpgradeOpen(false)}
+	                title="Close"
+	              >
+	                ×
+	              </button>
+	            </div>
+	            <div
+	              className="modal-body"
+	              ref={builderUpgradeModalBodyRef}
+	              onScroll={updateBuilderUpgradeScrollHint}
+	            >
+	              <div className="model-note" style={{ marginBottom: 12 }}>
+	                {builderUpgradeContext === "create_community"
+	                  ? "Choose a builder plan to create your community."
+	                  : "Choose a builder plan to create communities and start earning."}
+	              </div>
+	              {builderUpgradeContext === "create_community" && (
+	                <div className="model-note" style={{ marginBottom: 12 }}>
+	                  After checkout, we'll create your community automatically.
+	                </div>
+	              )}
+	              {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+		              {(() => {
+		                const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+		                const freeIsCurrent = tier === "free";
+		                const starterIsCurrent = tier === "builder";
+		                const proIsCurrent = tier === "pro";
+		                const feature = (included: boolean, label: string) => (
+		                  <li className={`plan-feature${included ? " on" : " off"}`}>
+		                    <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
+		                      {included ? "✓" : "×"}
+		                    </span>
+		                    <span className="plan-feature-text">{label}</span>
+		                  </li>
+		                );
+		                return (
+		                  <div className="plan-grid">
+		                    <div className={`plan-card${freeIsCurrent ? " current" : ""}`}>
+		                      <div className="plan-card-header">
+		                        <div className="plan-name">Free</div>
+		                        {freeIsCurrent && <div className="plan-badge">Current</div>}
+		                      </div>
+		                      <div className="plan-price">
+		                        <span className="plan-price-amount">$0</span>
+		                        <span className="plan-price-period">/mo</span>
+		                      </div>
+		                      <div className="plan-subtitle">0 communities</div>
+		                      <ul className="plan-features plan-features-checks">
+		                        {feature(true, "AI chats (250MB cloud history)")}
+		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Desktop app & local tools")}
+		                        {feature(true, "Cloud sync")}
+		                        {feature(false, "Agent memory")}
+		                        {feature(false, "Create communities")}
+		                        {feature(false, "Stripe payouts")}
+		                        {feature(false, "Analytics")}
+		                        {feature(false, "Automations")}
+		                        {feature(false, "Early feature access")}
+		                      </ul>
+		                      <button type="button" className="plan-cta" disabled>
+		                        {freeIsCurrent ? "Current plan" : "Free"}
+		                      </button>
+		                    </div>
+
+		                    <div className={`plan-card${starterIsCurrent ? " current" : ""}`}>
+		                      <div className="plan-card-header">
+		                        <div className="plan-name">Starter</div>
+		                        {starterIsCurrent && <div className="plan-badge">Current</div>}
+		                      </div>
+		                      <div className="plan-price">
+		                        <span className="plan-price-amount">$20</span>
+		                        <span className="plan-price-period">/mo</span>
+		                      </div>
+		                      <div className="plan-subtitle">10% take · 1 community</div>
+		                      <ul className="plan-features plan-features-checks">
+		                        {feature(true, "AI chats (5GB cloud history)")}
+		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Desktop app & local tools")}
+		                        {feature(true, "Cloud sync")}
+		                        {feature(true, "Agent memory")}
+		                        {feature(true, "Create 1 community")}
+		                        {feature(true, "Stripe payouts")}
+		                        {feature(false, "Analytics")}
+		                        {feature(false, "Automations")}
+		                        {feature(false, "Early feature access")}
+		                      </ul>
+		                      <button
+		                        type="button"
+		                        className="plan-cta"
+		                        onClick={() => {
+		                          void startBuilderPlanCheckout("builder", { context: builderUpgradeContext });
+		                        }}
+		                        disabled={isStartingBuilderCheckout || starterIsCurrent}
+		                      >
+		                        {starterIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Starter"}
+		                      </button>
+		                    </div>
+
+		                    <div className={`plan-card${proIsCurrent ? " current" : ""}`}>
+		                      <div className="plan-card-header">
+		                        <div className="plan-name">Pro</div>
+		                        {proIsCurrent && <div className="plan-badge">Current</div>}
+		                      </div>
+		                      <div className="plan-price">
+		                        <span className="plan-price-amount">$100</span>
+		                        <span className="plan-price-period">/mo</span>
+		                      </div>
+		                      <div className="plan-subtitle">3% take · 3 communities</div>
+		                      <ul className="plan-features plan-features-checks">
+		                        {feature(true, "AI chats (25GB cloud history)")}
+		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Desktop app & local tools")}
+		                        {feature(true, "Cloud sync")}
+		                        {feature(true, "Agent memory")}
+		                        {feature(true, "Create 3 communities")}
+		                        {feature(true, "Stripe payouts")}
+		                        {feature(true, "Analytics")}
+		                        {feature(true, "Automations")}
+		                        {feature(true, "Early feature access")}
+		                      </ul>
+		                      <button
+		                        type="button"
+		                        className="plan-cta"
+		                        onClick={() => {
+		                          void startBuilderPlanCheckout("pro", { context: builderUpgradeContext });
+		                        }}
+		                        disabled={isStartingBuilderCheckout || proIsCurrent}
+		                      >
+		                        {proIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Pro"}
+		                      </button>
+		                    </div>
+		                  </div>
+		                );
+		              })()}
+	              <div className={`modal-scroll-hint${showBuilderUpgradeScrollHint ? " show" : ""}`} aria-hidden="true">
+	                <div className="modal-scroll-hint-icon">
+	                  <svg viewBox="0 0 24 24">
+	                    <path d="M6 9l6 6 6-6" />
+	                  </svg>
+	                </div>
+	              </div>
+		            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {builderBillingReturn && (
+	        <div className="modal-overlay" onClick={() => setBuilderBillingReturn(null)}>
+	          <div className="modal" onClick={(event) => event.stopPropagation()}>
+	            <div className="modal-header">
+              <div className="modal-title">Billing</div>
+              <button className="modal-close" onClick={() => setBuilderBillingReturn(null)} title="Close">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+	              {builderBillingReturn.status === "cancel" ? (
+	                <div className="model-note">Checkout canceled.</div>
+	              ) : builderBillingReturn.status === "return" ? (
+	                <div className="model-note">Manage your plan and billing details.</div>
+	              ) : (
+	                <div className="model-note">
+	                  {(() => {
+	                    const wantsCreate = builderBillingReturn.context === "create_community";
+	                    if (isFinalizingCreateCommunityFromBilling) return "Creating your community…";
+	                    if (isFinalizingBuilderReturn) return "Finalizing your plan…";
+	                    return wantsCreate ? "Plan confirmed — finishing your community setup." : "Thanks — confirming your plan.";
+	                  })()}
+	                </div>
+	              )}
+
+              {!supabaseSession ? (
+                <div className="model-note" style={{ marginTop: 10 }}>
+                  Sign in to confirm your plan status.
+                </div>
+              ) : (
+                <div className="model-note" style={{ marginTop: 10 }}>
+                  {(() => {
+                    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+                    const max = builderBillingStatus?.max_communities ?? 0;
+                    const feeBps = builderBillingStatus?.platform_fee_bps ?? 1000;
+                    const feePct = (feeBps / 100).toFixed(0);
+                    const label = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
+                    const limitLabel = max > 0 ? `${max} communities` : "0 communities";
+                    return `${label} · ${limitLabel} · ${feePct}% take`;
+                  })()}
+                </div>
+              )}
+
+	              {builderBillingReturn.source === "desktop" && (
+	                <div className="auth-actions" style={{ marginTop: 14 }}>
+	                  <button
+	                    type="button"
+                    onClick={() => {
+                      const status = builderBillingReturn.status;
+                      const ctx = builderBillingReturn.context;
+                      const deepLink = `arx://billing?status=${encodeURIComponent(status)}&context=${encodeURIComponent(ctx)}`;
+                      window.location.assign(deepLink);
+                    }}
+                  >
+                    Open Arx Desktop
+	                  </button>
+	                </div>
+	              )}
+
+	              {finalizeCreateCommunityError && <div className="auth-error">{finalizeCreateCommunityError}</div>}
+	              {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+	            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary" onClick={() => setBuilderBillingReturn(null)}>
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -10260,12 +12196,11 @@ export default function App() {
                 (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
                 0,
               );
-              const tier = builderBillingStatus?.builder_tier ?? "free";
-              const max = builderBillingStatus?.max_communities ?? 0;
-	              const needsPlan = Boolean(supabaseSession && tier === "free");
-	              const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
-	              const canCreate = Boolean(supabaseSession && !needsPlan && !limitReached);
-	              return (
+	              const tier = builderBillingStatus?.builder_tier ?? "unknown";
+	              const max = builderBillingStatus?.max_communities ?? 0;
+		              const needsPlan = Boolean(supabaseSession && tier === "free");
+		              const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
+		              return (
                 <>
                   <div className="modal-header">
                     <div className="modal-title">Create community</div>
@@ -10289,14 +12224,18 @@ export default function App() {
                   ) : (
                     <div className="create-community-banner-placeholder">Banner preview</div>
                   )}
-                  <label className="create-banner-btn">
-                    Upload banner
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => void handleCreateCommunityBannerUpload(event.target.files?.[0] ?? null)}
-                    />
-                  </label>
+	                  <label className="create-banner-btn">
+	                    Upload banner
+	                    <input
+	                      type="file"
+	                      accept="image/*"
+	                      onChange={(event) => {
+	                        const file = event.target.files?.[0] ?? null;
+	                        event.target.value = "";
+	                        void handleCreateCommunityBannerUpload(file);
+	                      }}
+	                    />
+	                  </label>
                   {createCommunityBannerUrl && (
                     <button
                       className="create-banner-remove"
@@ -10394,51 +12333,30 @@ export default function App() {
                   </div>
                   <div className="modal-footer">
                     <div className="create-community-actions">
-                {!supabaseSession ? (
-                  <button className="create-community-primary" onClick={() => void handleSignIn()}>
-                    Sign in to create
-                  </button>
-                ) : needsPlan ? (
-                  <>
-                    <button
-                      className="create-community-primary"
-                      type="button"
-                      onClick={() => void startBuilderPlanCheckout("builder")}
-                      disabled={isStartingBuilderCheckout}
-                    >
-                      {isStartingBuilderCheckout ? "Starting…" : "Starter ($20/mo)"}
-                    </button>
-                    <button
-                      className="create-community-primary"
-                      type="button"
-                      onClick={() => void startBuilderPlanCheckout("pro")}
-                      disabled={isStartingBuilderCheckout}
-                    >
-                      {isStartingBuilderCheckout ? "Starting…" : "Pro ($100/mo)"}
-                    </button>
-                  </>
-                ) : limitReached ? (
-                  <button
-                    className="create-community-primary"
-                    type="button"
-                    onClick={() => void openBuilderBillingPortal()}
-                    disabled={isStartingBuilderPortal}
-                  >
-                    {isStartingBuilderPortal ? "Opening…" : "Upgrade to Pro"}
-                  </button>
-                ) : (
-                  <button
-                    className="create-community-primary"
-                    onClick={() => void handleCreateCommunity()}
-                    disabled={!canCreate || isCreatingCommunity || createCommunityName.trim().length === 0}
-                  >
-                    {isCreatingCommunity ? "Creating..." : "Create community"}
-                  </button>
-                )}
-                <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
-                  Cancel
-                </button>
-                    </div>
+	                {!supabaseSession ? (
+	                  <button className="create-community-primary" onClick={() => void handleSignIn()}>
+	                    Sign in to create
+	                  </button>
+	                ) : (
+	                  <button
+	                    className="create-community-primary"
+	                    type="button"
+	                    onClick={() => void handleCreateCommunityPrimaryAction()}
+	                    disabled={isCreatingCommunity || isStartingBuilderPortal || createCommunityName.trim().length === 0}
+	                  >
+	                    {isCreatingCommunity
+	                      ? "Creating..."
+	                      : needsPlan
+	                        ? "Continue to checkout"
+	                        : limitReached
+	                          ? "Upgrade plan"
+	                          : "Create community"}
+	                  </button>
+	                )}
+	                <button className="create-community-secondary" onClick={closeCreateCommunityModal}>
+	                  Cancel
+	                </button>
+	                    </div>
                   </div>
                 </>
 	              );

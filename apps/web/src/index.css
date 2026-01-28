@@ -510,6 +510,16 @@
   cursor: default;
 }
 
+.chat-body a {
+  color: var(--accent-gold, var(--bg-button));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-body a:hover {
+  opacity: 0.85;
+}
+
 .scroll-to-bottom.workspace {
   position: absolute;
 }
