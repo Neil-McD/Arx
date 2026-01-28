@@ -181,8 +181,9 @@ Deno.serve(async (req: Request) => {
             if (!accountId || !isUuid(accountId)) throw new Error("missing_brandos_account_id");
 
             if (!brandosAid || !isUuid(brandosAid)) {
-              ok = true; // skip quietly if the event has no attribution token
+              ok = true; // deliver as a no-op so the log is debuggable
               retryable = false;
+              error = brandosAid ? "skipped_invalid_brandos_aid" : "skipped_missing_brandos_aid";
             } else {
               const identifyBody = JSON.stringify({ account_id: accountId, brandos_aid: brandosAid, email });
               const res = await fetchWithTimeout(
@@ -204,7 +205,21 @@ Deno.serve(async (req: Request) => {
               responseCode = res.status;
               ok = res.ok;
               retryable = shouldRetryBrandos(responseCode);
-              if (!res.ok) error = `HTTP ${res.status}`;
+              if (!res.ok) {
+                let bodyText = "";
+                try {
+                  bodyText = (await res.text()).slice(0, 1000);
+                } catch {
+                  bodyText = "";
+                }
+                if (responseCode === 404 && bodyText.toLowerCase().includes("unknown_brandos_aid")) {
+                  ok = true;
+                  retryable = false;
+                  error = "skipped_unknown_brandos_aid";
+                } else {
+                  error = `HTTP ${res.status}`;
+                }
+              }
             }
           } else {
             const sig = await hmacSha256Hex(ep.secret, `${ts}.${body}`);

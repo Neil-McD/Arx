@@ -58,6 +58,15 @@ type ThreadRow = {
   community_id: string | null;
 };
 
+type UserMemorySettingsRow = {
+  memory_mode: "off" | "suggest" | "auto";
+  remember_intent_enabled: boolean;
+};
+
+type UserModelSettingsRow = {
+  system_prompt: string;
+};
+
 type PersonalMemoryRow = {
   id: string;
   content: string;
@@ -66,6 +75,8 @@ type PersonalMemoryRow = {
   pinned: boolean;
   updated_at: string;
 };
+
+type BuilderTier = "free" | "builder" | "pro";
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
   const res = await supabaseAdminFetch(
@@ -79,6 +90,47 @@ async function loadThread(threadId: string): Promise<ThreadRow> {
   return row;
 }
 
+async function loadUserBuilderTier(userId: string): Promise<BuilderTier> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/profiles?select=builder_tier&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) return "free";
+  const rows = (await res.json()) as Array<{ builder_tier?: unknown }>;
+  const raw = String(rows[0]?.builder_tier ?? "free").trim().toLowerCase();
+  return raw === "pro" || raw === "builder" ? raw : "free";
+}
+
+async function loadUserMemorySettings(userId: string): Promise<UserMemorySettingsRow> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/user_memory_settings?select=memory_mode,remember_intent_enabled&user_id=eq.${encodeURIComponent(
+      userId,
+    )}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as Array<Partial<UserMemorySettingsRow>>;
+  const row = rows[0];
+  const mode = row?.memory_mode;
+  return {
+    memory_mode: mode === "suggest" || mode === "auto" ? mode : "off",
+    remember_intent_enabled: row?.remember_intent_enabled !== false,
+  };
+}
+
+async function loadUserModelSettings(userId: string): Promise<UserModelSettingsRow> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/user_model_settings?select=system_prompt&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) {
+    // Best-effort: older deployments may not have this table yet.
+    return { system_prompt: "" };
+  }
+  const rows = (await res.json()) as Array<Partial<UserModelSettingsRow>>;
+  return { system_prompt: typeof rows[0]?.system_prompt === "string" ? rows[0]!.system_prompt! : "" };
+}
+
 async function loadPersonalMemoryItems(userId: string, limit = 32): Promise<PersonalMemoryRow[]> {
   const safeLimit = Math.max(0, Math.min(200, Math.floor(limit)));
   if (safeLimit === 0) return [];
@@ -90,6 +142,35 @@ async function loadPersonalMemoryItems(userId: string, limit = 32): Promise<Pers
   );
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as PersonalMemoryRow[];
+}
+
+type HistorySnippetRow = {
+  thread_id: string;
+  message_id: string;
+  created_at: string;
+  snippet: string;
+};
+
+async function loadHistorySnippets(params: {
+  userId: string;
+  query: string;
+  excludeThreadId: string;
+  limit?: number;
+}): Promise<HistorySnippetRow[]> {
+  const q = (params.query ?? "").trim();
+  if (q.length < 4) return [];
+  const res = await supabaseAdminFetch("/rest/v1/rpc/search_user_message_snippets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_query: q.slice(0, 240),
+      p_exclude_thread_id: params.excludeThreadId,
+      p_limit: Math.max(0, Math.min(12, Math.floor(params.limit ?? 6))),
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as HistorySnippetRow[];
 }
 
 type MessageRow = {
@@ -368,14 +449,10 @@ async function insertAssistantMessage(params: {
   modelId: string;
   openrouterModelId: string;
   runId: string;
-  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
+  meta: Record<string, unknown> | null;
 }): Promise<{ inserted: boolean }> {
   const contentJson: Record<string, unknown> = { text: params.contentText };
-  if (params.memoryUsed.length > 0) {
-    contentJson.meta = {
-      memory_used: params.memoryUsed,
-    };
-  }
+  if (params.meta && Object.keys(params.meta).length > 0) contentJson.meta = params.meta;
   const res = await supabaseAdminFetch(
     "/rest/v1/messages?select=id",
     {
@@ -425,14 +502,10 @@ async function updateAssistantMessage(params: {
   contentText: string;
   modelId: string;
   runId: string;
-  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
+  meta: Record<string, unknown> | null;
 }): Promise<void> {
   const contentJson: Record<string, unknown> = { text: params.contentText };
-  if (params.memoryUsed.length > 0) {
-    contentJson.meta = {
-      memory_used: params.memoryUsed,
-    };
-  }
+  if (params.meta && Object.keys(params.meta).length > 0) contentJson.meta = params.meta;
   const res = await supabaseAdminFetch(
     `/rest/v1/messages?id=eq.${encodeURIComponent(params.id)}`,
     {
@@ -460,7 +533,7 @@ async function writeAssistantReply(params: {
   modelId: string;
   openrouterModelId: string;
   runId: string;
-  memoryUsed: Array<Pick<PersonalMemoryRow, "id" | "content" | "scope" | "scope_id" | "pinned" | "updated_at">>;
+  meta: Record<string, unknown> | null;
   allowUpdate: boolean;
 }): Promise<{ status: "inserted" | "duplicate" | "updated" }> {
   if (params.allowUpdate) {
@@ -471,7 +544,7 @@ async function writeAssistantReply(params: {
         contentText: params.contentText,
         modelId: params.modelId,
         runId: params.runId,
-        memoryUsed: params.memoryUsed,
+        meta: params.meta,
       });
       return { status: "updated" };
     }
@@ -487,7 +560,7 @@ async function writeAssistantReply(params: {
         contentText: params.contentText,
         modelId: params.modelId,
         runId: params.runId,
-        memoryUsed: params.memoryUsed,
+        meta: params.meta,
       });
       return { status: "updated" };
     }
@@ -565,6 +638,363 @@ function buildPersonalMemorySystemPrompt(items: PersonalMemoryRow[]): string | n
   ].join("\n");
 }
 
+type MemoryCandidate = {
+  content: string;
+  pinned: boolean;
+};
+
+const MEMORY_EXTRACTION_CUE_RE =
+  /\b(my|mine|i\b|i'm|im|i am|favorite|prefer|like|love|hate|allerg|timezone|from|live|work|job|call me|name is)\b/i;
+
+function looksLikeQuestion(text: string): boolean {
+  const input = (text ?? "").trim();
+  if (!input) return false;
+  if (input.includes("?")) return true;
+  const lower = input.toLowerCase().replace(/[’']/g, "");
+  return /^(do|does|did|can|could|would|should|is|are|am|was|were|what|whats|which|who|whos|when|where|wheres|why|how|hows)\b/.test(
+    lower,
+  );
+}
+
+const MEMORY_STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "but",
+  "if",
+  "then",
+  "this",
+  "that",
+  "these",
+  "those",
+  "i",
+  "me",
+  "my",
+  "mine",
+  "you",
+  "your",
+  "yours",
+  "we",
+  "us",
+  "our",
+  "ours",
+  "he",
+  "him",
+  "his",
+  "she",
+  "her",
+  "hers",
+  "they",
+  "them",
+  "their",
+  "theirs",
+  "it",
+  "its",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "at",
+  "from",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+]);
+
+function normalizeMemoryText(input: string): string {
+  return (input ?? "")
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeMemoryText(input: string): string[] {
+  const normalized = normalizeMemoryText(input);
+  if (!normalized) return [];
+  return normalized
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !MEMORY_STOPWORDS.has(token))
+    .slice(0, 24);
+}
+
+function memoryJaccardSimilarity(aTokens: Set<string>, bTokens: Set<string>): { score: number; overlap: number } {
+  if (aTokens.size === 0 || bTokens.size === 0) return { score: 0, overlap: 0 };
+  let overlap = 0;
+  for (const token of aTokens) if (bTokens.has(token)) overlap += 1;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  return { score: union === 0 ? 0 : overlap / union, overlap };
+}
+
+function isNearDuplicateMemory(candidate: string, existing: string): boolean {
+  const a = normalizeMemoryText(candidate);
+  const b = normalizeMemoryText(existing);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  if (a.includes(b) || b.includes(a)) {
+    const shorter = Math.min(a.length, b.length);
+    const longer = Math.max(a.length, b.length);
+    if (shorter >= 12 && shorter / longer >= 0.7) return true;
+  }
+
+  const aTokens = new Set(tokenizeMemoryText(a));
+  const bTokens = new Set(tokenizeMemoryText(b));
+  const { score, overlap } = memoryJaccardSimilarity(aTokens, bTokens);
+  return overlap >= 2 && score >= 0.75;
+}
+
+function shouldAttemptMemoryExtraction(params: {
+  userText: string;
+  priorAssistantText: string;
+  existingMemory: PersonalMemoryRow[];
+}): boolean {
+  const userText = (params.userText ?? "").trim();
+  if (!userText) return false;
+  if (userText.length < 6) return false;
+  if (looksLikeQuestion(userText)) return false;
+
+  // If the user is explicitly describing themselves/preferences, attempt extraction.
+  if (MEMORY_EXTRACTION_CUE_RE.test(userText)) return true;
+
+  // If the prior assistant message was a question about user preferences, attempt extraction even if user reply is terse.
+  const prior = (params.priorAssistantText ?? "").trim();
+  if (prior && looksLikeQuestion(prior) && MEMORY_EXTRACTION_CUE_RE.test(prior)) return true;
+
+  // If the user is making a short correction that overlaps existing memory (e.g. refining a preference), attempt extraction.
+  if (userText.length > 120) return false;
+  const userTokens = new Set(tokenizeMemoryText(userText));
+  if (userTokens.size < 2) return false;
+  for (const row of params.existingMemory) {
+    const memText = String(row?.content ?? "").trim();
+    if (!memText) continue;
+    const memTokens = new Set(tokenizeMemoryText(memText));
+    const { overlap } = memoryJaccardSimilarity(userTokens, memTokens);
+    if (overlap >= 1) return true;
+  }
+  return false;
+}
+
+function buildHistorySystemPrompt(items: HistorySnippetRow[]): string | null {
+  if (items.length === 0) return null;
+  const lines = items
+    .map((item) => {
+      const snippet = truncateUtf8(item.snippet ?? "", 260);
+      return snippet ? `- ${snippet}` : null;
+    })
+    .filter(Boolean) as string[];
+  if (lines.length === 0) return null;
+  return [
+    "Relevant past context (from previous chats):",
+    ...lines,
+    "",
+    "Use this context only when relevant. If it might be outdated, ask a clarifying question.",
+  ].join("\n");
+}
+
+function safeJsonParseArray(input: string): unknown[] | null {
+  const trimmed = (input ?? "").trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    const start = trimmed.indexOf("[");
+    const end = trimmed.lastIndexOf("]");
+    if (start < 0 || end <= start) return null;
+    try {
+      const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown;
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function normalizeMemoryCandidates(raw: unknown[]): MemoryCandidate[] {
+  const out: MemoryCandidate[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const content = typeof record.content === "string" ? record.content.trim() : "";
+    if (!content) continue;
+    // Never store questions as memory.
+    if (looksLikeQuestion(content)) continue;
+    out.push({
+      content: content.length > 240 ? content.slice(0, 240).trimEnd() + "…" : content,
+      pinned: Boolean(record.pinned),
+    });
+  }
+  const deduped = new Map<string, MemoryCandidate>();
+  for (const item of out) {
+    const key = item.content.toLowerCase();
+    if (!deduped.has(key)) deduped.set(key, item);
+  }
+  return Array.from(deduped.values()).slice(0, 3);
+}
+
+async function extractMemoryCandidates(params: {
+  openrouterKey: string;
+  model: string;
+  userText: string;
+  priorAssistantText?: string;
+}): Promise<MemoryCandidate[]> {
+  const userText = (params.userText ?? "").trim();
+  if (!userText) return [];
+  const priorAssistantText = (params.priorAssistantText ?? "").trim();
+
+  const prompt: OpenRouterChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You extract durable personal memory about a user.\n" +
+        "Return ONLY valid JSON: an array of objects {\"content\": string, \"pinned\": boolean}.\n" +
+        "Rules:\n" +
+        "- Only store durable facts/preferences/goals that are likely helpful later.\n" +
+        "- Do not store one-off tasks, transient details, secrets, or sensitive info.\n" +
+        "- Never store questions; only store declarative facts about the user.\n" +
+        "- You may use the prior assistant message for context, but only store facts the user explicitly states or affirms.\n" +
+        "- If nothing should be remembered, return [].\n" +
+        "- Keep each content item short (<= 200 chars).",
+    },
+    {
+      role: "user",
+      content:
+        (priorAssistantText ? `Prior assistant message:\n${truncateUtf8(priorAssistantText, 600)}\n\n` : "") +
+        `User message:\n${truncateUtf8(userText, 1600)}`,
+    },
+  ];
+
+  const { text } = await openRouterChatCompletion(params.openrouterKey, params.model, prompt, 220);
+  const parsed = safeJsonParseArray(text);
+  if (!parsed) return [];
+  return normalizeMemoryCandidates(parsed);
+}
+
+async function chooseMemoryExtractionModel(params: {
+  openrouterKey: string;
+  aliasModelId: string;
+  resolvedModelId: string;
+}): Promise<string> {
+  // Keep memory extraction fast:
+  // - Prefer a cheap/fast model if we already warmed the OpenRouter alias cache (i.e. when user picked an alias).
+  // - Otherwise, avoid extra /models fetches and just use the already-resolved model.
+  if (!params.aliasModelId.includes("/")) {
+    try {
+      return await resolveOpenRouterModelId("gemini-3-flash", params.openrouterKey);
+    } catch {
+      // Fall through.
+    }
+  }
+  return params.resolvedModelId;
+}
+
+async function insertPersonalMemoryItems(params: {
+  userId: string;
+  candidates: MemoryCandidate[];
+  existing: PersonalMemoryRow[];
+}): Promise<PersonalMemoryRow[]> {
+  const updatedAt = new Date().toISOString();
+
+  const existing = params.existing
+    .map((row) => ({
+      ...row,
+      content: String(row.content ?? "").trim(),
+    }))
+    .filter((row) => row.content);
+
+  const results: PersonalMemoryRow[] = [];
+  const toInsert: Array<{ content: string; pinned: boolean }> = [];
+
+  for (const cand of params.candidates) {
+    const content = String(cand.content ?? "").trim();
+    if (!content) continue;
+    if (looksLikeQuestion(content)) continue;
+
+    // If this is a refinement of an existing memory, update in place instead of inserting a duplicate.
+    const match = existing.find((row) => isNearDuplicateMemory(content, row.content));
+    if (match) {
+      const nextPinned = Boolean(match.pinned) || Boolean(cand.pinned);
+      const same = normalizeMemoryText(match.content) === normalizeMemoryText(content);
+      if (!same || nextPinned !== Boolean(match.pinned)) {
+        const res = await supabaseAdminFetch(
+          `/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(
+            match.id,
+          )}&select=id,content,scope,scope_id,pinned,updated_at`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify({
+              content,
+              pinned: nextPinned,
+              updated_at: updatedAt,
+            }),
+          },
+        );
+        if (res.ok) {
+          const rows = (await res.json()) as PersonalMemoryRow[];
+          const row = rows[0];
+          if (row) {
+            results.push(row);
+            match.content = content;
+            match.pinned = nextPinned;
+            match.updated_at = updatedAt;
+          }
+        }
+      }
+      continue;
+    }
+
+    // Avoid inserting near-duplicates within the same batch.
+    if (toInsert.some((prev) => isNearDuplicateMemory(content, prev.content))) continue;
+
+    toInsert.push({ content, pinned: Boolean(cand.pinned) });
+  }
+
+  if (toInsert.length > 0) {
+    const res = await supabaseAdminFetch(
+      "/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,updated_at",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify(
+          toInsert.map((row) => ({
+            user_id: params.userId,
+            content: row.content,
+            scope: "global",
+            scope_id: null,
+            pinned: row.pinned,
+            updated_at: updatedAt,
+          })),
+        ),
+      },
+    );
+    if (res.ok) {
+      const inserted = (await res.json()) as PersonalMemoryRow[];
+      results.push(...inserted);
+    }
+  }
+
+  return results;
+}
+
 Deno.serve(async (req: Request) => {
   const headers = withCors(noStoreHeaders(), req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
@@ -582,8 +1012,54 @@ Deno.serve(async (req: Request) => {
     if ((thread.engine_id ?? "").trim() === "community_chat") throw new Error("forbidden");
     if ((thread.owner_id ?? "").trim() !== userId) throw new Error("forbidden");
 
-    const rowsDesc = await loadRecentMessages(threadId, 50);
+    // Parallelize I/O to reduce time-to-first-token.
+    const [
+      rowsDescResult,
+      openrouterKeyResult,
+      builderTierResult,
+      memorySettingsResult,
+      modelSettingsResult,
+      memoryRowsResult,
+    ] = await Promise.allSettled([
+      loadRecentMessages(threadId, 40),
+      loadUserOpenRouterKey(userId),
+      loadUserBuilderTier(userId),
+      loadUserMemorySettings(userId),
+      loadUserModelSettings(userId),
+      loadPersonalMemoryItems(userId, 32),
+    ]);
+
+    if (rowsDescResult.status !== "fulfilled") throw rowsDescResult.reason;
+    if (openrouterKeyResult.status !== "fulfilled") throw openrouterKeyResult.reason;
+
+    const rowsDesc = rowsDescResult.value;
     if (rowsDesc.length === 0) throw new Error("No messages in thread");
+
+    const openrouterKey = openrouterKeyResult.value;
+
+    const builderTier: BuilderTier =
+      builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
+    const hasPersonalMemoryAccess = builderTier !== "free";
+
+    const memorySettings: UserMemorySettingsRow =
+      memorySettingsResult.status === "fulfilled"
+        ? memorySettingsResult.value
+        : { memory_mode: "off", remember_intent_enabled: true };
+
+    if (!hasPersonalMemoryAccess) {
+      memorySettings.memory_mode = "off";
+    }
+
+    const modelSettings: UserModelSettingsRow =
+      modelSettingsResult.status === "fulfilled"
+        ? modelSettingsResult.value
+        : { system_prompt: "" };
+
+    const memoryRows: PersonalMemoryRow[] = hasPersonalMemoryAccess
+      ? memoryRowsResult.status === "fulfilled"
+        ? memoryRowsResult.value
+        : []
+      : [];
 
     const latest = rowsDesc[0];
     if (latest.role !== "user") {
@@ -605,12 +1081,59 @@ Deno.serve(async (req: Request) => {
     const replyToId = latest.id;
     const allowUpdate = input.mode === "regenerate";
     const runId = allowUpdate ? `openrouter_web_regen:${replyToId}:${Date.now()}` : `openrouter_web:${replyToId}`;
-    const openrouterKey = await loadUserOpenRouterKey(userId);
 
     const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
-    const resolvedModelId = await resolveOpenRouterModelId(aliasModelId, openrouterKey);
+    const latestUserText = extractTextFromContentJson(latest.content_json);
+    let priorAssistantText = "";
+    for (let i = 1; i < rowsDesc.length; i++) {
+      const row = rowsDesc[i];
+      if (row?.role !== "assistant") continue;
+      const text = extractTextFromContentJson(row.content_json);
+      if (text.trim()) {
+        priorAssistantText = text;
+        break;
+      }
+    }
 
-    const memoryRows = await loadPersonalMemoryItems(userId, 64);
+    const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
+      resolveOpenRouterModelId(aliasModelId, openrouterKey),
+      loadHistorySnippets({
+        userId,
+        query: latestUserText,
+        excludeThreadId: threadId,
+        limit: 4,
+      }),
+    ]);
+
+    if (resolvedModelResult.status !== "fulfilled") throw resolvedModelResult.reason;
+    const resolvedModelId = resolvedModelResult.value;
+
+    const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
+
+    const memoryExtractorModelId = await chooseMemoryExtractionModel({
+      openrouterKey,
+      aliasModelId,
+      resolvedModelId,
+    });
+
+    const shouldExtractMemory =
+      memorySettings.memory_mode === "suggest" || memorySettings.memory_mode === "auto"
+        ? shouldAttemptMemoryExtraction({
+            userText: latestUserText,
+            priorAssistantText,
+            existingMemory: memoryRows,
+          })
+        : false;
+
+    const memoryCandidatesPromise: Promise<MemoryCandidate[]> = shouldExtractMemory
+      ? extractMemoryCandidates({
+          openrouterKey,
+          model: memoryExtractorModelId,
+          userText: latestUserText,
+          priorAssistantText,
+        }).catch(() => [])
+      : Promise.resolve([]);
+
     const selectedMemory = selectPersonalMemoryForPrompt(memoryRows);
     const memoryPrompt = buildPersonalMemorySystemPrompt(selectedMemory);
     const memoryUsed = selectedMemory.map((item) => ({
@@ -622,11 +1145,26 @@ Deno.serve(async (req: Request) => {
       updated_at: item.updated_at,
     }));
 
+    const historyPrompt = buildHistorySystemPrompt(historyRows);
+    const historyUsed = historyRows.map((row) => ({
+      thread_id: row.thread_id,
+      message_id: row.message_id,
+      created_at: row.created_at,
+      snippet: truncateUtf8(row.snippet, 280),
+    }));
+
     const history = [...rowsDesc].reverse();
     const messages: OpenRouterChatMessage[] = [];
-    messages.push({ role: "system", content: "You are a helpful assistant." });
+    const systemPrompt = String(modelSettings.system_prompt ?? "").trim();
+    messages.push({
+      role: "system",
+      content: systemPrompt ? truncateUtf8(systemPrompt, 6000) : "You are a helpful assistant.",
+    });
     if (memoryPrompt) {
       messages.push({ role: "system", content: memoryPrompt });
+    }
+    if (historyPrompt) {
+      messages.push({ role: "system", content: historyPrompt });
     }
     for (const row of history) {
       const content = extractTextFromContentJson(row.content_json);
@@ -638,6 +1176,24 @@ Deno.serve(async (req: Request) => {
 
     if (!wantsStream) {
       const { text } = await openRouterChatCompletion(openrouterKey, resolvedModelId, messages, maxTokens);
+
+      const memoryCandidates = await memoryCandidatesPromise;
+
+      let memoryAdded: PersonalMemoryRow[] = [];
+      if (memorySettings.memory_mode === "auto" && memoryCandidates.length > 0) {
+        try {
+          memoryAdded = await insertPersonalMemoryItems({ userId, candidates: memoryCandidates, existing: memoryRows });
+        } catch {
+          memoryAdded = [];
+        }
+      }
+
+      const meta: Record<string, unknown> = {};
+      if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
+      if (historyUsed.length > 0) meta.history_used = historyUsed;
+      if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
+      if (memoryAdded.length > 0) meta.memory_added = memoryAdded;
+
       const result = await writeAssistantReply({
         threadId,
         replyToId,
@@ -645,7 +1201,7 @@ Deno.serve(async (req: Request) => {
         modelId: aliasModelId,
         openrouterModelId: resolvedModelId,
         runId,
-        memoryUsed,
+        meta: Object.keys(meta).length > 0 ? meta : null,
         allowUpdate,
       });
       return jsonResponse(
@@ -656,6 +1212,9 @@ Deno.serve(async (req: Request) => {
           reply_to_id: replyToId,
           run_id: runId,
           memory_used: memoryUsed,
+          history_used: historyUsed,
+          memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
+          memory_added: memoryAdded,
         },
         { status: 200, headers },
       );
@@ -672,16 +1231,17 @@ Deno.serve(async (req: Request) => {
       async start(controller) {
         const emit = (event: string, data: unknown) => controller.enqueue(encodeSse(event, data));
         try {
-          emit("start", {
-            ok: true,
-            thread_id: threadId,
-            reply_to_id: replyToId,
-            run_id: runId,
-            engine_id: "openrouter_web",
-            model_id: aliasModelId,
-            resolved_model_id: resolvedModelId,
-            memory_used: memoryUsed,
-          });
+	          emit("start", {
+	            ok: true,
+	            thread_id: threadId,
+	            reply_to_id: replyToId,
+	            run_id: runId,
+	            engine_id: "openrouter_web",
+	            model_id: aliasModelId,
+	            resolved_model_id: resolvedModelId,
+	            memory_used: memoryUsed,
+              history_used: historyUsed,
+	          });
 
           const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -748,29 +1308,49 @@ Deno.serve(async (req: Request) => {
           }
           flushData();
 
-          const finalText = fullContent.trim();
-          if (!finalText) throw new Error("OpenRouter returned an empty response");
+	          const finalText = fullContent.trim();
+	          if (!finalText) throw new Error("OpenRouter returned an empty response");
 
-          const result = await writeAssistantReply({
-            threadId,
-            replyToId,
-            contentText: finalText,
-            modelId: aliasModelId,
-            openrouterModelId: resolvedModelId,
-            runId,
-            memoryUsed,
-            allowUpdate,
-          });
+            const memoryCandidates = await memoryCandidatesPromise;
 
-          emit("done", {
-            ok: true,
-            status: result.status,
-            thread_id: threadId,
-            reply_to_id: replyToId,
-            run_id: runId,
-            memory_used: memoryUsed,
-          });
-          controller.close();
+            let memoryAdded: PersonalMemoryRow[] = [];
+            if (memorySettings.memory_mode === "auto" && memoryCandidates.length > 0) {
+              try {
+                memoryAdded = await insertPersonalMemoryItems({ userId, candidates: memoryCandidates, existing: memoryRows });
+              } catch {
+                memoryAdded = [];
+              }
+            }
+
+            const meta: Record<string, unknown> = {};
+            if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
+            if (historyUsed.length > 0) meta.history_used = historyUsed;
+            if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
+            if (memoryAdded.length > 0) meta.memory_added = memoryAdded;
+
+	          const result = await writeAssistantReply({
+	            threadId,
+	            replyToId,
+	            contentText: finalText,
+	            modelId: aliasModelId,
+	            openrouterModelId: resolvedModelId,
+	            runId,
+              meta: Object.keys(meta).length > 0 ? meta : null,
+	            allowUpdate,
+	          });
+
+	          emit("done", {
+	            ok: true,
+	            status: result.status,
+	            thread_id: threadId,
+	            reply_to_id: replyToId,
+	            run_id: runId,
+	            memory_used: memoryUsed,
+              history_used: historyUsed,
+              memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
+              memory_added: memoryAdded,
+	          });
+	          controller.close();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           emit("error", { ok: false, error: message });

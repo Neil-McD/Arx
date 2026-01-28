@@ -41,7 +41,7 @@ type PublicPlan = {
 };
 
 function normalizeSlug(raw: string | null): string {
-  const trimmed = (raw ?? "").trim();
+  const trimmed = (raw ?? "").trim().toLowerCase();
   if (!trimmed) throw new Error("slug is required");
   if (trimmed.length > 128) throw new Error("slug too long");
   return trimmed;
@@ -50,7 +50,7 @@ function normalizeSlug(raw: string | null): string {
 async function loadCommunityBySlug(slug: string): Promise<CommunityRow> {
   const res = await supabaseAdminFetch(
     `/rest/v1/communities?select=id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at` +
-      `&slug=eq.${encodeURIComponent(slug)}&visibility=in.(public,unlisted)&limit=1`,
+      `&slug=eq.${encodeURIComponent(slug)}&visibility=in.(public,private,unlisted)&limit=1`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
