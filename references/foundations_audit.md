@@ -110,7 +110,21 @@ order by routine_name, grantee;
 
 **Gate:** no sensitive functions should be executable by `anon`, and “server-only” RPCs should be executable only by `service_role`.
 
-### 2.3 Grep for “row_security = off” in function definitions
+### 2.3 Gate: SECURITY DEFINER functions executable by `anon` (should be zero rows)
+
+```sql
+select
+  p.proname as function,
+  pg_get_function_identity_arguments(p.oid) as args
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.prosecdef is true
+  and has_function_privilege('anon', p.oid, 'EXECUTE')
+order by p.proname, args;
+```
+
+### 2.4 Grep for “row_security = off” in function definitions
 
 ```sql
 select
@@ -260,4 +274,3 @@ where n.nspname = 'public'
   and c.relname = 'communities'
   and tgname ilike '%delete%cleanup%';
 ```
-
