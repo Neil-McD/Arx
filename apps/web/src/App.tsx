@@ -16,6 +16,22 @@ import {
   refreshSupabaseSession,
   type SupabaseSession
 } from "./supabase";
+import {
+  captureBrandosAidFromLocation,
+  clearPendingPublicJoin,
+  clearPendingPurchaseClaimToken,
+  getBrandosAidForCommunitySlug,
+  joinPublicCommunityRpc,
+  listPendingPurchaseClaimsRpc,
+  readPendingPublicJoinBrandosAid,
+  readPendingPublicJoinCommunityId,
+  readPendingPurchaseClaimToken,
+  redeemPendingPurchaseClaimsRpc,
+  redeemPurchaseClaimRpc,
+  storePendingPublicJoin,
+  storePendingPurchaseClaimToken,
+  type PendingPurchaseClaim
+} from "../../../shared/pay_first";
 
 type CommunityRecord = {
   id: string;
@@ -258,13 +274,6 @@ type PublicChatPreviewMessage = {
   body: string;
 };
 
-type PendingPurchaseClaim = {
-  community_id: string;
-  community_slug: string;
-  community_name: string;
-  expires_at: string;
-};
-
 type BuilderBillingStatus = {
   user_id: string;
   builder_tier: "free" | "builder" | "pro";
@@ -349,49 +358,11 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
 
 const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
-const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
-const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
-const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
-const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
-const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
 const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
 const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
-}
-
-function captureBrandosAidFromLocation(): void {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const raw = (params.get("bid") ?? params.get("brandos_aid") ?? params.get("aid") ?? "").trim();
-    if (!raw || !isUuid(raw)) return;
-
-    localStorage.setItem(BRANDOS_AID_LAST_KEY, raw);
-
-    const path = window.location.pathname || "/";
-    if (path.startsWith("/c/")) {
-      const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
-      if (slug) localStorage.setItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`, raw);
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function getBrandosAidForCommunitySlug(slug: string | null): string | null {
-  try {
-    if (slug) {
-      const scoped = (localStorage.getItem(`${BRANDOS_AID_SLUG_PREFIX}${slug}`) ?? "").trim();
-      if (scoped && isUuid(scoped)) return scoped;
-      return null;
-    }
-    const last = (localStorage.getItem(BRANDOS_AID_LAST_KEY) ?? "").trim();
-    if (last && isUuid(last)) return last;
-  } catch {
-    // ignore
-  }
-  return null;
 }
 
 async function copyTextToClipboard(text: string): Promise<void> {
@@ -3858,11 +3829,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      try {
-        localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
-      } catch {
-        // ignore
-      }
+      storePendingPurchaseClaimToken(token);
       handleSignIn();
       return;
     }
@@ -3870,24 +3837,14 @@ export default function App() {
     setIsRedeemingClaim(true);
     setRedeemClaimError(null);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/redeem_purchase_claim`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_token: token }),
-        },
+      const communityId = await redeemPurchaseClaimRpc({
+        url,
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as Array<{ community_id: string }>;
-      const communityId = rows[0]?.community_id;
-      if (!communityId) throw new Error("Redeem succeeded but community missing.");
-      try {
-        localStorage.removeItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY);
-      } catch {
-        // ignore
-      }
+        token,
+        fetchWithSupabaseAuth,
+        readSupabaseError
+      });
+      clearPendingPurchaseClaimToken();
       setCheckoutClaimToken(null);
       setCheckoutStatus("idle");
 
@@ -3920,12 +3877,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      try {
-        localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
-        if (brandosAid) localStorage.setItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, brandosAid);
-      } catch {
-        // ignore
-      }
+      storePendingPublicJoin(trimmed, brandosAid);
       handleSignIn();
       return;
     }
@@ -3933,38 +3885,20 @@ export default function App() {
     setIsJoiningPublicCommunity(true);
     setPublicJoinError(null);
     try {
-      const pendingBrandosAid = (() => {
-        try {
-          return (localStorage.getItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY) ?? "").trim();
-        } catch {
-          return "";
-        }
-      })();
+      const pendingBrandosAid = readPendingPublicJoinBrandosAid();
       const resolvedBrandosAid =
         (brandosAid && isUuid(brandosAid) ? brandosAid : null) ||
         (pendingBrandosAid && isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
 
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/join_public_community`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: trimmed,
-            ...(resolvedBrandosAid ? { p_brandos_aid: resolvedBrandosAid } : {}),
-          }),
-        },
+      const joinedId = await joinPublicCommunityRpc({
+        url,
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as Array<{ community_id: string }>;
-      const joinedId = rows[0]?.community_id ?? trimmed;
-      try {
-        localStorage.removeItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-        localStorage.removeItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
-      } catch {
-        // ignore
-      }
+        communityId: trimmed,
+        brandosAid: resolvedBrandosAid,
+        fetchWithSupabaseAuth,
+        readSupabaseError
+      });
+      clearPendingPublicJoin();
 
       navigateTo("/", { replace: true });
       setActiveView("home");
@@ -4248,18 +4182,13 @@ export default function App() {
     setIsLoadingPendingPurchases(true);
     setPendingPurchasesError(null);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/list_pending_purchase_claims`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        },
+      const rows = await listPendingPurchaseClaimsRpc({
+        url,
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as PendingPurchaseClaim[];
-      setPendingPurchaseClaims(Array.isArray(rows) ? rows : []);
+        fetchWithSupabaseAuth,
+        readSupabaseError
+      });
+      setPendingPurchaseClaims(rows);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -4324,17 +4253,12 @@ export default function App() {
     setPendingPurchasesError(null);
     setPendingPurchasesSuccess(null);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/redeem_pending_purchase_claims`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        },
+      const rows = await redeemPendingPurchaseClaimsRpc({
+        url,
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as Array<{ community_id: string }>;
+        fetchWithSupabaseAuth,
+        readSupabaseError
+      });
       const claimedCommunityId = rows[0]?.community_id;
       if (rows.length === 0) {
         if (!opts?.silentNoop) {
@@ -4461,11 +4385,7 @@ export default function App() {
           window.clearTimeout(checkoutFinalizePollTimeoutRef.current);
           checkoutFinalizePollTimeoutRef.current = null;
         }
-        try {
-          localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
-        } catch {
-          // ignore
-        }
+        storePendingPurchaseClaimToken(token);
         if (sessionRef.current) {
           await redeemPurchaseClaim(token);
         }
@@ -4491,24 +4411,14 @@ export default function App() {
   useEffect(() => {
     const token = (claimTokenParam ?? "").trim();
     if (!token) return;
-    try {
-      localStorage.setItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY, token);
-    } catch {
-      // ignore
-    }
+    storePendingPurchaseClaimToken(token);
     if (!sessionRef.current) return;
     void redeemPurchaseClaim(token);
   }, [claimTokenParam]);
 
   useEffect(() => {
     if (!supabaseSession) return;
-    const token = (() => {
-      try {
-        return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
-      } catch {
-        return "";
-      }
-    })();
+    const token = readPendingPurchaseClaimToken();
     if (!token) return;
     if (isRedeemingClaim) return;
     void redeemPurchaseClaim(token);
@@ -4639,21 +4549,9 @@ export default function App() {
   useEffect(() => {
     if (!supabaseSession) return;
     if (isRedeemingClaim || isJoiningPublicCommunity) return;
-    const claimToken = (() => {
-      try {
-        return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
-      } catch {
-        return "";
-      }
-    })();
+    const claimToken = readPendingPurchaseClaimToken();
     if (claimToken) return;
-    const communityId = (() => {
-      try {
-        return (localStorage.getItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY) ?? "").trim();
-      } catch {
-        return "";
-      }
-    })();
+    const communityId = readPendingPublicJoinCommunityId();
     if (!communityId) return;
     void joinPublicCommunity(communityId);
   }, [supabaseSession, isRedeemingClaim, isJoiningPublicCommunity]);
@@ -8009,13 +7907,7 @@ export default function App() {
     const canJoinWithCheckout = Boolean(publicCommunity && selectedPublicCommunityPlan);
     const pendingToken =
       (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
-      (() => {
-        try {
-          return (localStorage.getItem(PENDING_PURCHASE_CLAIM_TOKEN_KEY) ?? "").trim();
-        } catch {
-          return "";
-        }
-      })();
+      readPendingPurchaseClaimToken();
 
     return (
       <div className="app-root public-root">
@@ -8139,13 +8031,8 @@ export default function App() {
                       type="button"
                       disabled={magicLinkStatus === "sending"}
                       onClick={() => {
-                        try {
-                          localStorage.setItem(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, publicCommunity.id);
-                          const aid = getBrandosAidForCommunitySlug(publicCommunity.slug);
-                          if (aid) localStorage.setItem(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, aid);
-                        } catch {
-                          // ignore
-                        }
+                        const aid = getBrandosAidForCommunitySlug(publicCommunity.slug);
+                        storePendingPublicJoin(publicCommunity.id, aid);
                         void handleSendMagicLink(magicLinkEmail);
                       }}
                     >
