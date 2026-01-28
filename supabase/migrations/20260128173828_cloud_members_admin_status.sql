@@ -62,4 +62,3 @@ $$;
 revoke all on function public.list_community_members_admin(uuid) from public;
 grant execute on function public.list_community_members_admin(uuid) to authenticated;
 grant execute on function public.list_community_members_admin(uuid) to service_role;
-

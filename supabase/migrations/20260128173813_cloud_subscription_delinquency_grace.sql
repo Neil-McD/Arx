@@ -9,4 +9,3 @@
 alter table public.provider_subscriptions
   add column if not exists delinquent_at timestamptz,
   add column if not exists grace_ends_at timestamptz;
-
