@@ -29,7 +29,7 @@ type PreviewMessage = {
   id: string;
   seq: number;
   created_at: string;
-  sender_id: string;
+  sender_key: string;
   sender_display_name: string | null;
   sender_avatar_url: string | null;
   body: string;
@@ -135,16 +135,22 @@ Deno.serve(async (req: Request) => {
       .map((row) => (row.sender_id ?? "").trim())
       .filter(Boolean);
     const profiles = await loadProfiles(senderIds);
+    const uniqueSenderIds = Array.from(new Set(senderIds));
+    const senderKeyById = new Map<string, string>();
+    for (let i = 0; i < uniqueSenderIds.length; i++) {
+      senderKeyById.set(uniqueSenderIds[i], `s${i + 1}`);
+    }
 
     const messages: PreviewMessage[] = rows.map((row) => {
-      const senderId = (row.sender_id ?? "").trim() || "unknown";
-      const profile = profiles[senderId] ?? null;
+      const senderId = (row.sender_id ?? "").trim();
+      const senderKey = senderId ? senderKeyById.get(senderId) ?? "unknown" : "unknown";
+      const profile = senderId ? profiles[senderId] ?? null : null;
       const body = extractTextFromContentJson(row.content_json);
       return {
         id: row.id,
         seq: Number(row.seq) || 0,
         created_at: row.created_at,
-        sender_id: senderId,
+        sender_key: senderKey,
         sender_display_name: profile?.display_name ?? null,
         sender_avatar_url: profile?.avatar_url ?? null,
         body,
@@ -158,4 +164,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status, headers });
   }
 });
-

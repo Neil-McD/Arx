@@ -767,7 +767,7 @@ function App() {
       const [isRedeemingClaim, setIsRedeemingClaim] = useState(false);
       const [, setRedeemClaimError] = useState<string | null>(null);
       const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
-      const [isLoadingBuilderBilling, setIsLoadingBuilderBilling] = useState(false);
+      const [, setIsLoadingBuilderBilling] = useState(false);
       const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
 	      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
 	      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
@@ -6849,15 +6849,6 @@ function isModelReady(modelId: string): boolean {
 	      URL.revokeObjectURL(url);
 	    }
 	  }
-
-	  async function readFileAsDataUrl(file: File): Promise<string> {
-	    return await new Promise((resolve, reject) => {
-	      const reader = new FileReader();
-	      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    });
-  }
 
   function isLikelyTextFile(file: File): boolean {
     const mime = (file.type ?? "").toLowerCase();

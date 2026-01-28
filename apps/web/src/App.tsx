@@ -252,7 +252,7 @@ type PublicChatPreviewMessage = {
   id: string;
   seq: number;
   created_at: string;
-  sender_id: string;
+  sender_key: string;
   sender_display_name: string | null;
   sender_avatar_url: string | null;
   body: string;
@@ -8176,7 +8176,7 @@ export default function App() {
 	                      publicChatPreviewMessages.length > 0 &&
 	                      publicChatPreviewMessages.map((msg) => {
 	                        const senderLabel = msg.sender_display_name ?? "Member";
-	                        const avatarColor = getAvatarColor(msg.sender_id);
+	                        const avatarColor = getAvatarColor(msg.sender_key);
 	                        return (
 	                          <div key={msg.id} className="chat-message">
 	                            <div className="chat-avatar" style={{ backgroundColor: avatarColor }} title={senderLabel}>
