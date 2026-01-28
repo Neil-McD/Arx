@@ -1,61 +1,49 @@
-# Arx — Contract (v2.0 mirror)
+# Arx — Contract (v2.1 mirror)
 
 `AGENTS.md` is the source of truth. This file is a shorter, tooling-oriented mirror for contributors and agents.
 
-Arx is a **community + agent platform** with two primary surfaces:
-- **Web/PWA (community-first):** discovery, join/pay, chat, resources/library, members, and a **community copilot**.
-- **Desktop (power surface):** everything web has **plus** a local **operator agent** that can use local tools (filesystem/shell) inside a user-selected workspace.
+## Surfaces
+- **Web/PWA:** community UI (discovery + landing/checkout, join, chat, resources, members/admin/analytics) + **personal AI workspace** (cloud threads/messages; BYOK model provider keys). No local tool execution.
+- **Desktop (Tauri):** web features + **operator runtime** that can run local tools inside a bound workspace with approvals; also handles deep links (e.g. `arx://claim?...`).
 
 ## Canonical truth
-- **Cloud (Supabase) is canonical** for: `users/profiles`, `communities`, `entitlements`, `plans`, `payments`, `threads/messages`, and **personal + community memory**.
+- **Cloud (Supabase) is canonical** for: `profiles`, `communities`, `community_memberships`, `entitlements`, `plans`, `payments`, `threads/messages`, `personal_memory_items`, `community_resources`, and analytics primitives.
 - **Desktop local storage is not canonical cognition.** It exists for:
   - workspace bindings (device-local)
   - approvals/session state (device-local)
-  - operator run evidence + blobs (for crash recovery + “what happened” truth for local side-effects)
-- Users can export their cognition as **CSV** (threads/messages/personal memory) from Settings.
+  - operator run evidence + blobs (truth for local side-effects)
 
-## Threads/messages ordering (non-negotiable)
-- Never rely on timestamps for ordering.
-- Cloud messages are ordered by a **server-assigned per-thread monotonic `seq`**.
+## Access control (non-negotiable)
+- **Entitlements = time-bounded access** (`starts_at`/`ends_at`).
+- **Roles are manual-only** (`community_memberships.role` + `communities.owner_id`).
+- **Checks happen per request**; never rely on UI-only gating.
+- **Membership can outlive entitlements**; admin UX shows access status (e.g. `declined`) without exposing payment internals.
 
-## Surfaces and capabilities (enforced, not advisory)
-- **Web copilot** can only operate on cloud community objects (chat/resources/members), and must be enforced server-side.
-- **Desktop operator** can run local tools only when a workspace is bound and scope checks pass.
-- Prompt “capability manifests” are helpful, but **hard enforcement** (router/tool runner + RBAC/RLS) is the guarantee.
+## Payments
+- **Webhooks are authoritative; redirects are UX-only** (`checkout_finalize` must be idempotent).
+- **Pay-first join** mints/extends entitlements via deterministic server rules; recovery via **Pending purchases** + auto-redeem.
+- **Subscription delinquency** starts a grace window; access is revoked when grace ends.
+- **Revenue analytics** is derived from normalized **payment ledger entries**.
 
-## Payments (monthly/yearly; web-first)
-- Payments are rail-agnostic: store normalized **receipts** + raw payloads, issue/extend **entitlements** deterministically.
-- **Payment finality must not depend on browser redirects.**
-  - Webhooks (and/or provider API verification) are authoritative.
-  - `checkout_finalize` is UX-only and must be idempotent.
-- Subscriptions require stable provider mapping (`provider_subscription_id → community/plan`), and the mapping binds to `user_id` on claim redeem.
+## Threads/messages
+- Never rely on timestamps for ordering; order by **server-assigned per-thread monotonic `seq`**.
+- `engine_id='community_chat'` threads are community-scoped and must satisfy `threads.id == threads.community_id == communities.id`.
+- Personal AI threads are owner-scoped (`engine_id <> 'community_chat'`).
 
-## Memory model
-- **Personal memory:** explicit user-controlled durable items; no silent writes.
-- **Community memory:** curated resources/artifacts; raw chat is not memory by default.
-- Retrieval/injection must be traceable (provenance: what was used and why).
+## AI + memory
+- MVP AI is **personal-thread scoped** (`openrouter_turn`); community-scoped AI over `community_resources` is deferred.
+- Personal memory is user-controlled (`off` / `suggest` / `auto`) and provenance-bearing.
+- Cloud AI history storage is quota-enforced server-side.
 
 ## Desktop operator tools (approvals + scoping)
-Available tool names in the desktop operator runtime:
-- Read-only: `read`, `list_dir`, `glob`, `grep`, `sha256`
+- Allowed by default: `read`, `list_dir`, `glob`, `grep`, `sha256`
 - Approval-gated: `write`, `edit`, `bash`
-
-Scoping:
-- File paths must be resolved to canonical real paths and verified within the bound workspace (deny traversal and symlink escapes).
-
-## Web anti-abuse baseline
-Web write paths must have at minimum:
-- rate limits for posting/resource creation
-- role-gated destructive ops (delete/revoke/ban)
-- per-request entitlement/role enforcement (no “checked once at login”)
-
-## Crypto/decentralized readiness (pragmatic)
-- Keep payment rails swappable (Stripe now; wallet later) without rewriting entitlements.
-- Keep execution substrate swappable (cloud now; decentralized compute later) by routing through adapters and evidence logs.
+- Scoping: enforce canonical real paths; deny traversal and symlink escapes outside the bound workspace.
 
 ## Repo notes
-- `src/`: desktop UI (shared styling/components)
+- `src/`: desktop UI
 - `src-tauri/`: desktop runtime + local tool runner
 - `apps/web/`: web app
-- `supabase/`: edge functions, migrations, and web join/landing plumbing
+- `supabase/`: edge functions, migrations, payments/join plumbing
 - `references/`: research/inspiration; keep separate from product code paths
+- `shared/`: cross-surface shared modules (e.g. pay-first flow core)
