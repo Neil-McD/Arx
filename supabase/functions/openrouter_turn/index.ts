@@ -84,8 +84,7 @@ type PersonalMemoryRow = {
 
 type BuilderTier = "free" | "builder" | "pro";
 
-type OpenRouterKeySource = "user" | "platform";
-type OpenRouterKeyResult = { key: string; source: OpenRouterKeySource };
+type InferenceSource = "user" | "platform";
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
   const res = await supabaseAdminFetch(
@@ -433,6 +432,40 @@ async function openRouterChatCompletion(
   return { text: out, usage: parsed.usage };
 }
 
+type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+
+type OpenAiChatCompletion = {
+  choices?: Array<{ message?: { role?: string; content?: string } }>;
+  usage?: OpenAiUsage;
+};
+
+async function openAiChatCompletion(
+  openaiKey: string,
+  model: string,
+  messages: OpenRouterChatMessage[],
+  maxTokens: number,
+): Promise<{ text: string; usage?: OpenAiUsage }> {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      stream: false,
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${text}`);
+  const parsed = JSON.parse(text) as OpenAiChatCompletion;
+  const out = String(parsed.choices?.[0]?.message?.content ?? "").trim();
+  if (!out) throw new Error("OpenAI returned an empty response");
+  return { text: out, usage: parsed.usage };
+}
+
 type OpenRouterStreamChunk = {
   choices?: Array<{
     delta?: { content?: string | null } | null;
@@ -577,7 +610,7 @@ async function writeAssistantReply(params: {
   return { status: "duplicate" };
 }
 
-async function loadUserOpenRouterKey(userId: string): Promise<OpenRouterKeyResult> {
+async function loadUserOpenRouterKey(userId: string): Promise<string | null> {
   // Prefer per-user BYO keys stored in cloud.
   const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
     method: "POST",
@@ -587,14 +620,7 @@ async function loadUserOpenRouterKey(userId: string): Promise<OpenRouterKeyResul
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as Array<{ api_key: string | null }>;
   const rowKey = String(rows[0]?.api_key ?? "").trim();
-  if (rowKey) return { key: rowKey, source: "user" };
-
-  // Fallback: platform key (optional).
-  const platformEnabled = isTruthyEnv(getEnv("OPENROUTER_PLATFORM_ENABLED"));
-  const fallback = getEnv("OPENROUTER_API_KEY");
-  if (platformEnabled && fallback) return { key: fallback, source: "platform" };
-
-  throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+  return rowKey ? rowKey : null;
 }
 
 async function edgeRateLimitAllowKey(params: {
@@ -887,7 +913,7 @@ function normalizeMemoryCandidates(raw: unknown[]): MemoryCandidate[] {
   return Array.from(deduped.values()).slice(0, 3);
 }
 
-async function extractMemoryCandidates(params: {
+async function extractMemoryCandidatesViaOpenRouter(params: {
   openrouterKey: string;
   model: string;
   userText: string;
@@ -920,6 +946,44 @@ async function extractMemoryCandidates(params: {
   ];
 
   const { text } = await openRouterChatCompletion(params.openrouterKey, params.model, prompt, 220);
+  const parsed = safeJsonParseArray(text);
+  if (!parsed) return [];
+  return normalizeMemoryCandidates(parsed);
+}
+
+async function extractMemoryCandidatesViaOpenAi(params: {
+  openaiKey: string;
+  model: string;
+  userText: string;
+  priorAssistantText?: string;
+}): Promise<MemoryCandidate[]> {
+  const userText = (params.userText ?? "").trim();
+  if (!userText) return [];
+  const priorAssistantText = (params.priorAssistantText ?? "").trim();
+
+  const prompt: OpenRouterChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You extract durable personal memory about a user.\n" +
+        "Return ONLY valid JSON: an array of objects {\"content\": string, \"pinned\": boolean}.\n" +
+        "Rules:\n" +
+        "- Only store durable facts/preferences/goals that are likely helpful later.\n" +
+        "- Do not store one-off tasks, transient details, secrets, or sensitive info.\n" +
+        "- Never store questions; only store declarative facts about the user.\n" +
+        "- You may use the prior assistant message for context, but only store facts the user explicitly states or affirms.\n" +
+        "- If nothing should be remembered, return [].\n" +
+        "- Keep each content item short (<= 200 chars).",
+    },
+    {
+      role: "user",
+      content:
+        (priorAssistantText ? `Prior assistant message:\n${truncateUtf8(priorAssistantText, 600)}\n\n` : "") +
+        `User message:\n${truncateUtf8(userText, 1600)}`,
+    },
+  ];
+
+  const { text } = await openAiChatCompletion(params.openaiKey, params.model, prompt, 220);
   const parsed = safeJsonParseArray(text);
   if (!parsed) return [];
   return normalizeMemoryCandidates(parsed);
@@ -1078,14 +1142,19 @@ Deno.serve(async (req: Request) => {
     const rowsDesc = rowsDescResult.value;
     if (rowsDesc.length === 0) throw new Error("No messages in thread");
 
-    const openrouterKey = openrouterKeyResult.value;
-
     const builderTier: BuilderTier =
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
-    if (openrouterKey.source === "platform" && builderTier === "free") {
-      throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+    const userOpenRouterKey = openrouterKeyResult.value;
+    const platformEnabled = isTruthyEnv(getEnv("OPENROUTER_PLATFORM_ENABLED"));
+    const inferenceSource: InferenceSource =
+      userOpenRouterKey && userOpenRouterKey.trim() ? "user" : "platform";
+
+    if (inferenceSource === "platform") {
+      if (!platformEnabled || builderTier === "free") {
+        throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+      }
     }
 
     const memorySettings: UserMemorySettingsRow =
@@ -1152,15 +1221,15 @@ Deno.serve(async (req: Request) => {
     const userRlAllowed = await edgeRateLimitAllowKey({
       key: `openrouter_turn:user:${userId}`,
       windowSeconds: 60,
-      limit: openrouterKey.source === "platform" ? 20 : 60,
+      limit: inferenceSource === "platform" ? 20 : 60,
     });
     if (!userRlAllowed) throw new Error("rate_limited");
 
     const ipRlAllowed = await edgeRateLimitAllow({
       req,
-      key: openrouterKey.source === "platform" ? "openrouter_turn_platform" : "openrouter_turn",
+      key: inferenceSource === "platform" ? "openrouter_turn_platform" : "openrouter_turn",
       windowSeconds: 60,
-      limit: openrouterKey.source === "platform" ? 120 : 240,
+      limit: inferenceSource === "platform" ? 120 : 240,
     });
     if (!ipRlAllowed) throw new Error("rate_limited");
 
@@ -1171,10 +1240,17 @@ Deno.serve(async (req: Request) => {
       ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
       : 512;
 
-    if (openrouterKey.source === "platform") {
-      if (!platformModelId || !platformModelId.includes("/")) {
-        throw new Error("Missing env var: OPENROUTER_PLATFORM_MODEL_ID");
-      }
+    let platformOpenAiKey: string | null = null;
+    let platformOpenAiModel: string | null = null;
+
+    if (inferenceSource === "platform") {
+      if (!platformModelId || !platformModelId.includes("/")) throw new Error("Missing env var: OPENROUTER_PLATFORM_MODEL_ID");
+      const [provider, ...rest] = platformModelId.split("/");
+      const model = rest.join("/").trim();
+      if (provider !== "openai" || !model) throw new Error("Unsupported platform model provider");
+      platformOpenAiKey = getEnv("OPENAI_API_KEY");
+      if (!platformOpenAiKey) throw new Error("Missing env var: OPENAI_API_KEY");
+      platformOpenAiModel = model;
       platformRemaining = await consumePlatformInferenceStandard(userId, 1);
     }
 
@@ -1192,7 +1268,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
-      openrouterKey.source === "platform" ? Promise.resolve(platformModelId) : resolveOpenRouterModelId(aliasModelId, openrouterKey.key),
+      inferenceSource === "platform"
+        ? Promise.resolve(platformModelId)
+        : resolveOpenRouterModelId(aliasModelId, userOpenRouterKey!),
       loadHistorySnippets({
         userId,
         query: latestUserText,
@@ -1207,10 +1285,10 @@ Deno.serve(async (req: Request) => {
     const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
 
     const memoryExtractorModelId =
-      openrouterKey.source === "platform"
-        ? resolvedModelId
+      inferenceSource === "platform"
+        ? platformOpenAiModel!
         : await chooseMemoryExtractionModel({
-            openrouterKey: openrouterKey.key,
+            openrouterKey: userOpenRouterKey!,
             aliasModelId,
             resolvedModelId,
           });
@@ -1225,12 +1303,19 @@ Deno.serve(async (req: Request) => {
         : false;
 
     const memoryCandidatesPromise: Promise<MemoryCandidate[]> = shouldExtractMemory
-      ? extractMemoryCandidates({
-          openrouterKey: openrouterKey.key,
-          model: memoryExtractorModelId,
-          userText: latestUserText,
-          priorAssistantText,
-        }).catch(() => [])
+      ? inferenceSource === "platform"
+        ? extractMemoryCandidatesViaOpenAi({
+            openaiKey: platformOpenAiKey!,
+            model: memoryExtractorModelId,
+            userText: latestUserText,
+            priorAssistantText,
+          }).catch(() => [])
+        : extractMemoryCandidatesViaOpenRouter({
+            openrouterKey: userOpenRouterKey!,
+            model: memoryExtractorModelId,
+            userText: latestUserText,
+            priorAssistantText,
+          }).catch(() => [])
       : Promise.resolve([]);
 
     const selectedMemory = selectPersonalMemoryForPrompt(memoryRows);
@@ -1271,15 +1356,18 @@ Deno.serve(async (req: Request) => {
       if (row.role === "user" || row.role === "assistant" || row.role === "system") {
         messages.push({
           role: row.role,
-          content: openrouterKey.source === "platform" ? truncateUtf8(content, 2000) : content,
+          content: inferenceSource === "platform" ? truncateUtf8(content, 2000) : content,
         });
       }
     }
 
     if (!wantsStream) {
       const requested = maxTokens;
-      const effectiveMaxTokens = openrouterKey.source === "platform" ? Math.min(requested, platformMaxTokens) : requested;
-      const { text, usage } = await openRouterChatCompletion(openrouterKey.key, resolvedModelId, messages, effectiveMaxTokens);
+      const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+      const { text, usage } =
+        inferenceSource === "platform"
+          ? await openAiChatCompletion(platformOpenAiKey!, platformOpenAiModel!, messages, effectiveMaxTokens)
+          : await openRouterChatCompletion(userOpenRouterKey!, resolvedModelId, messages, effectiveMaxTokens);
 
       const memoryCandidates = await memoryCandidatesPromise;
 
@@ -1293,11 +1381,14 @@ Deno.serve(async (req: Request) => {
       }
 
       const meta: Record<string, unknown> = {};
-      meta.inference_source = openrouterKey.source;
-      if (openrouterKey.source === "platform") {
+      meta.inference_source = inferenceSource;
+      if (inferenceSource === "platform") {
         meta.platform_standard_remaining = platformRemaining;
       }
-      if (usage && typeof usage === "object") meta.openrouter_usage = usage;
+      if (usage && typeof usage === "object") {
+        if (inferenceSource === "platform") meta.platform_usage = usage;
+        else meta.openrouter_usage = usage;
+      }
       if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
       if (historyUsed.length > 0) meta.history_used = historyUsed;
       if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
@@ -1320,7 +1411,7 @@ Deno.serve(async (req: Request) => {
           thread_id: threadId,
           reply_to_id: replyToId,
           run_id: runId,
-          inference_source: openrouterKey.source,
+          inference_source: inferenceSource,
           platform_standard_remaining: platformRemaining,
           memory_used: memoryUsed,
           history_used: historyUsed,
@@ -1350,39 +1441,62 @@ Deno.serve(async (req: Request) => {
 	            engine_id: "openrouter_web",
 	            model_id: aliasModelId,
 	            resolved_model_id: resolvedModelId,
-              inference_source: openrouterKey.source,
+              inference_source: inferenceSource,
               platform_standard_remaining: platformRemaining,
 	            memory_used: memoryUsed,
               history_used: historyUsed,
 	          });
 
           const requested = maxTokens;
-          const effectiveMaxTokens = openrouterKey.source === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+          const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
 
-          const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${openrouterKey.key}`,
-              "Content-Type": "application/json",
-              "X-Title": "Arx",
-            },
-            body: JSON.stringify({
-              model: resolvedModelId,
-              messages,
-              max_tokens: effectiveMaxTokens,
-              stream: true,
-            }),
-          });
-          if (!streamingResponse.ok) throw new Error(`OpenRouter error ${streamingResponse.status}: ${await streamingResponse.text()}`);
+          const streamingResponse =
+            inferenceSource === "platform"
+              ? await fetch("https://api.openai.com/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${platformOpenAiKey!}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: platformOpenAiModel!,
+                    messages,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                  }),
+                })
+              : await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${userOpenRouterKey!}`,
+                    "Content-Type": "application/json",
+                    "X-Title": "Arx",
+                  },
+                  body: JSON.stringify({
+                    model: resolvedModelId,
+                    messages,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                  }),
+                });
+
+          if (!streamingResponse.ok) {
+            const body = await streamingResponse.text();
+            throw new Error(
+              inferenceSource === "platform"
+                ? `OpenAI error ${streamingResponse.status}: ${body}`
+                : `OpenRouter error ${streamingResponse.status}: ${body}`,
+            );
+          }
           const reader = streamingResponse.body?.getReader();
-          if (!reader) throw new Error("Missing OpenRouter stream");
+          if (!reader) throw new Error(inferenceSource === "platform" ? "Missing OpenAI stream" : "Missing OpenRouter stream");
 
           const decoder = new TextDecoder();
           let lineBuffer = "";
           let dataBuffer = "";
           let fullContent = "";
           let done = false;
-          let usage: OpenRouterStreamChunk["usage"] | null = null;
+          let usage: OpenRouterStreamChunk["usage"] | OpenAiUsage | null = null;
 
           const flushData = () => {
             const raw = dataBuffer.trim();
@@ -1427,7 +1541,8 @@ Deno.serve(async (req: Request) => {
           flushData();
 
 	          const finalText = fullContent.trim();
-	          if (!finalText) throw new Error("OpenRouter returned an empty response");
+	          if (!finalText)
+              throw new Error(inferenceSource === "platform" ? "OpenAI returned an empty response" : "OpenRouter returned an empty response");
 
             const memoryCandidates = await memoryCandidatesPromise;
 
@@ -1441,11 +1556,14 @@ Deno.serve(async (req: Request) => {
             }
 
             const meta: Record<string, unknown> = {};
-            meta.inference_source = openrouterKey.source;
-            if (openrouterKey.source === "platform") {
+            meta.inference_source = inferenceSource;
+            if (inferenceSource === "platform") {
               meta.platform_standard_remaining = platformRemaining;
             }
-            if (usage && typeof usage === "object") meta.openrouter_usage = usage;
+            if (usage && typeof usage === "object") {
+              if (inferenceSource === "platform") meta.platform_usage = usage;
+              else meta.openrouter_usage = usage;
+            }
             if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
             if (historyUsed.length > 0) meta.history_used = historyUsed;
             if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
@@ -1468,7 +1586,7 @@ Deno.serve(async (req: Request) => {
 	            thread_id: threadId,
 	            reply_to_id: replyToId,
 	            run_id: runId,
-              inference_source: openrouterKey.source,
+              inference_source: inferenceSource,
               platform_standard_remaining: platformRemaining,
 	            memory_used: memoryUsed,
               history_used: historyUsed,
