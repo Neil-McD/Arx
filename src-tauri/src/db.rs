@@ -1073,10 +1073,19 @@ fn extract_text_from_content_json(content_json: &str) -> Option<String> {
 }
 
 fn content_json_from_payload(payload_json: Option<&str>, text: Option<&str>) -> String {
-  let content_value = payload_json
-    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+  let payload = payload_json.and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+
+  let mut content_value = payload
+    .as_ref()
     .and_then(|v| v.get("content").cloned())
     .unwrap_or_else(|| serde_json::json!({ "text": text.unwrap_or_default() }));
+
+  // Preserve provenance when present. Cloud messages store these under content_json.meta.
+  if let Some(meta) = payload.as_ref().and_then(|v| v.get("meta")) {
+    if let serde_json::Value::Object(map) = &mut content_value {
+      map.insert("meta".to_string(), meta.clone());
+    }
+  }
 
   serde_json::to_string(&content_value).unwrap_or_else(|_| "{\"text\":\"\"}".to_string())
 }

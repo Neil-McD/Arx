@@ -585,8 +585,9 @@ fn append_openrouter_assistant_message(
   prompt: Option<u64>,
   completion: Option<u64>,
   max_tokens: u32,
+  memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
 ) {
-  let payload = serde_json::json!({
+  let mut payload = serde_json::json!({
     "v": 1,
     "role": "assistant",
     "content": { "text": content_text },
@@ -601,6 +602,30 @@ fn append_openrouter_assistant_message(
     },
     "source_event_ids": source_event_ids
   });
+  if let Some(items) = memory_used {
+    if !items.is_empty() {
+      if let Some(meta) = payload.get_mut("meta").and_then(|v| v.as_object_mut()) {
+        meta.insert(
+          "memory_used".to_string(),
+          serde_json::Value::Array(
+            items
+              .iter()
+              .map(|it| {
+                serde_json::json!({
+                  "id": it.id.as_str(),
+                  "content": it.content.as_str(),
+                  "scope": it.scope.as_str(),
+                  "scope_id": it.scope_id.as_deref(),
+                  "pinned": it.pinned != 0,
+                  "updated_at": it.updated_at
+                })
+              })
+              .collect::<Vec<_>>(),
+          ),
+        );
+      }
+    }
+  }
   let (fts_text, _report) = context::redact_secrets(content_text);
   let _ = db::append_event(
     conn,
@@ -2730,8 +2755,9 @@ fn append_openrouter_messages_assistant_message(
   source_event_ids: &[String],
   openrouter_model_id: Option<&str>,
   max_tokens: u32,
+  memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
 ) {
-  let payload = serde_json::json!({
+  let mut payload = serde_json::json!({
     "v": 1,
     "role": "assistant",
     "content": { "text": content_text },
@@ -2744,6 +2770,30 @@ fn append_openrouter_messages_assistant_message(
     },
     "source_event_ids": source_event_ids
   });
+  if let Some(items) = memory_used {
+    if !items.is_empty() {
+      if let Some(meta) = payload.get_mut("meta").and_then(|v| v.as_object_mut()) {
+        meta.insert(
+          "memory_used".to_string(),
+          serde_json::Value::Array(
+            items
+              .iter()
+              .map(|it| {
+                serde_json::json!({
+                  "id": it.id.as_str(),
+                  "content": it.content.as_str(),
+                  "scope": it.scope.as_str(),
+                  "scope_id": it.scope_id.as_deref(),
+                  "pinned": it.pinned != 0,
+                  "updated_at": it.updated_at
+                })
+              })
+              .collect::<Vec<_>>(),
+          ),
+        );
+      }
+    }
+  }
   let (fts_text, _report) = context::redact_secrets(content_text);
   let _ = db::append_event(
     conn,
@@ -2831,6 +2881,7 @@ async fn send_turn_openrouter_messages_agent(
   selected_model_id: &str,
   input: &str,
   atom_system_prompt: &str,
+  used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
   history_messages_json: Option<String>,
   mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<SendTurnResult, String> {
@@ -2850,18 +2901,19 @@ async fn send_turn_openrouter_messages_agent(
 
   let input_trim = input.trim();
   let (input_redacted, input_report) = context::redact_secrets(input_trim);
-	  if input_report.blocked {
-	    append_openrouter_messages_assistant_message(
-	      &conn,
-	      db_path,
-	      thread_id,
-	      "Blocked: sensitive content detected in message. Remove secrets before sending.",
-	      selected_model_id,
-	      &run_id,
-	      &[],
-	      None,
-	      OPENROUTER_MAX_TOKENS,
-	    );
+		  if input_report.blocked {
+		    append_openrouter_messages_assistant_message(
+		      &conn,
+		      db_path,
+		      thread_id,
+		      "Blocked: sensitive content detected in message. Remove secrets before sending.",
+		      selected_model_id,
+		      &run_id,
+		      &[],
+		      None,
+		      OPENROUTER_MAX_TOKENS,
+		      None,
+		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("secret_redaction"));
 	    let _ = window.emit(
 	      "openrouter-turn-finished",
@@ -2888,18 +2940,19 @@ async fn send_turn_openrouter_messages_agent(
     let entry = Entry::new("com.arx.app", "openrouter").map_err(|e| e.to_string())?;
     match entry.get_password() {
       Ok(value) => value,
-	      Err(_) => {
-	        append_openrouter_messages_assistant_message(
-	          &conn,
-	          db_path,
-	          thread_id,
-	          "Missing API key. Add it in Settings.",
-	          selected_model_id,
-	          &run_id,
-	          &[],
-	          None,
-	          OPENROUTER_MAX_TOKENS,
-	        );
+		      Err(_) => {
+		        append_openrouter_messages_assistant_message(
+		          &conn,
+		          db_path,
+		          thread_id,
+		          "Missing API key. Add it in Settings.",
+		          selected_model_id,
+		          &run_id,
+		          &[],
+		          None,
+		          OPENROUTER_MAX_TOKENS,
+		          None,
+		        );
 	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
 	        let _ = window.emit(
 	          "openrouter-turn-finished",
@@ -2936,18 +2989,19 @@ async fn send_turn_openrouter_messages_agent(
   } else {
 	    let map = match fetch_openrouter_model_map(&openrouter_key).await {
 	      Ok(map) => map,
-	      Err(err) => {
-	        append_openrouter_messages_assistant_message(
-	          &conn,
-	          db_path,
-	          thread_id,
-	          &format!("Engine error: OpenRouter model lookup failed: {}", err),
-	          selected_model_id,
-	          &run_id,
-	          &[],
-	          None,
-	          OPENROUTER_MAX_TOKENS,
-	        );
+		      Err(err) => {
+		        append_openrouter_messages_assistant_message(
+		          &conn,
+		          db_path,
+		          thread_id,
+		          &format!("Engine error: OpenRouter model lookup failed: {}", err),
+		          selected_model_id,
+		          &run_id,
+		          &[],
+		          None,
+		          OPENROUTER_MAX_TOKENS,
+		          None,
+		        );
 	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("model_lookup_failed"));
 	        let _ = window.emit(
 	          "openrouter-turn-finished",
@@ -2967,21 +3021,22 @@ async fn send_turn_openrouter_messages_agent(
 	    save_openrouter_model_map(&conn, &map);
 	    match map.get(selected_model_id.trim()).cloned().filter(|v| v.contains('/')) {
 	      Some(value) => value,
-	      None => {
-	        append_openrouter_messages_assistant_message(
-	          &conn,
-	          db_path,
-	          thread_id,
-	          &format!(
-	            "Engine error: Model '{}' is not available for this OpenRouter key.",
-	            selected_model_id
-	          ),
-	          selected_model_id,
-	          &run_id,
-	          &[],
-	          None,
-	          OPENROUTER_MAX_TOKENS,
-	        );
+		      None => {
+		        append_openrouter_messages_assistant_message(
+		          &conn,
+		          db_path,
+		          thread_id,
+		          &format!(
+		            "Engine error: Model '{}' is not available for this OpenRouter key.",
+		            selected_model_id
+		          ),
+		          selected_model_id,
+		          &run_id,
+		          &[],
+		          None,
+		          OPENROUTER_MAX_TOKENS,
+		          None,
+		        );
 	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("model_unavailable"));
 	        let _ = window.emit(
 	          "openrouter-turn-finished",
@@ -3134,18 +3189,19 @@ async fn send_turn_openrouter_messages_agent(
 	            }
 	            evt
 	          }
-	          Err(err) => {
-	            append_openrouter_messages_assistant_message(
-	              &conn,
-	              db_path,
-	              thread_id,
-	              &format!("Storage error: failed to record engine_input: {}", err),
-	              selected_model_id,
-	              &run_id,
-	              &[],
-	              Some(&openrouter_model_id),
-	              request_max_tokens,
-	            );
+		          Err(err) => {
+		            append_openrouter_messages_assistant_message(
+		              &conn,
+		              db_path,
+		              thread_id,
+		              &format!("Storage error: failed to record engine_input: {}", err),
+		              selected_model_id,
+		              &run_id,
+		              &[],
+		              Some(&openrouter_model_id),
+		              request_max_tokens,
+		              None,
+		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("engine_input_record_failed"));
 	            let _ = window.emit(
 	              "openrouter-turn-finished",
@@ -3211,18 +3267,19 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let res = match res {
 	          Ok(r) => r,
-	          Err(err) => {
-	            append_openrouter_messages_assistant_message(
-	              &conn,
-	              db_path,
-	              thread_id,
-	              &format!("Engine error: OpenRouter request failed: {}", err),
-	              selected_model_id,
-	              &run_id,
-	              &[],
-	              Some(&openrouter_model_id),
-	              request_max_tokens,
-	            );
+		          Err(err) => {
+		            append_openrouter_messages_assistant_message(
+		              &conn,
+		              db_path,
+		              thread_id,
+		              &format!("Engine error: OpenRouter request failed: {}", err),
+		              selected_model_id,
+		              &run_id,
+		              &[],
+		              Some(&openrouter_model_id),
+		              request_max_tokens,
+		              None,
+		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_request_failed"));
 	            let _ = window.emit(
 	              "openrouter-turn-finished",
@@ -3397,18 +3454,19 @@ async fn send_turn_openrouter_messages_agent(
 	          let Some(next) = next else { break };
 	          let bytes = match next {
 	            Ok(bytes) => bytes,
-	            Err(err) => {
-	              append_openrouter_messages_assistant_message(
-	                &conn,
-	                db_path,
-	                thread_id,
-	                &format!("Engine error: OpenRouter stream error: {}", err),
-	                selected_model_id,
-	                &run_id,
-	                &evidence_event_ids,
-	                Some(&openrouter_model_id),
-	                request_max_tokens,
-	              );
+		            Err(err) => {
+		              append_openrouter_messages_assistant_message(
+		                &conn,
+		                db_path,
+		                thread_id,
+		                &format!("Engine error: OpenRouter stream error: {}", err),
+		                selected_model_id,
+		                &run_id,
+		                &evidence_event_ids,
+		                Some(&openrouter_model_id),
+		                request_max_tokens,
+		                None,
+		              );
 	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_stream_error"));
 	              let _ = window.emit(
 	                "openrouter-turn-finished",
@@ -3594,19 +3652,20 @@ async fn send_turn_openrouter_messages_agent(
 	        break (engine_input_event, status, resp_bytes, parsed_response);
 	      };
 
-	      if !status.is_success() {
-	        let friendly = format_openrouter_error(&resp_bytes);
-	        append_openrouter_messages_assistant_message(
-	          &conn,
-	          db_path,
-	          thread_id,
-	          &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
-	          selected_model_id,
-	          &run_id,
-	          &evidence_event_ids,
-	          Some(&openrouter_model_id),
-	          request_max_tokens,
-	        );
+		      if !status.is_success() {
+		        let friendly = format_openrouter_error(&resp_bytes);
+		        append_openrouter_messages_assistant_message(
+		          &conn,
+		          db_path,
+		          thread_id,
+		          &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
+		          selected_model_id,
+		          &run_id,
+		          &evidence_event_ids,
+		          Some(&openrouter_model_id),
+		          request_max_tokens,
+		          None,
+		        );
 	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_http_error"));
 	        let _ = window.emit(
 	          "openrouter-turn-finished",
@@ -3716,18 +3775,19 @@ async fn send_turn_openrouter_messages_agent(
 	      }
 		    };
 
-			    if content.trim().is_empty() {
-		      append_openrouter_messages_assistant_message(
-		        &conn,
-		        db_path,
-	        thread_id,
-	        "Engine error: OpenRouter returned an empty response.",
-	        selected_model_id,
-	        &run_id,
-	        &evidence_event_ids,
-	        Some(&openrouter_model_id),
-	        OPENROUTER_MAX_TOKENS,
-	      );
+				    if content.trim().is_empty() {
+			      append_openrouter_messages_assistant_message(
+			        &conn,
+			        db_path,
+		        thread_id,
+		        "Engine error: OpenRouter returned an empty response.",
+		        selected_model_id,
+		        &run_id,
+		        &evidence_event_ids,
+		        Some(&openrouter_model_id),
+		        OPENROUTER_MAX_TOKENS,
+		        None,
+		      );
 	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("empty_response"));
 	      let _ = window.emit(
 	        "openrouter-turn-finished",
@@ -3744,17 +3804,18 @@ async fn send_turn_openrouter_messages_agent(
 	      });
 	    }
 
-	    append_openrouter_messages_assistant_message(
-	      &conn,
-	      db_path,
-	      thread_id,
-	      &content,
-	      selected_model_id,
-	      &run_id,
-	      &evidence_event_ids,
-	      Some(&openrouter_model_id),
-	      OPENROUTER_MAX_TOKENS,
-	    );
+		    append_openrouter_messages_assistant_message(
+		      &conn,
+		      db_path,
+		      thread_id,
+		      &content,
+		      selected_model_id,
+		      &run_id,
+		      &evidence_event_ids,
+		      Some(&openrouter_model_id),
+		      OPENROUTER_MAX_TOKENS,
+		      Some(used_personal_memory),
+		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
 	    let _ = window.emit(
@@ -3901,18 +3962,19 @@ async fn send_turn_openrouter_messages_agent(
 	          }
 	          evt
 	        }
-	        Err(err) => {
-	          append_openrouter_messages_assistant_message(
-	            &conn,
-	            db_path,
-	            thread_id,
-	            &format!("Storage error: failed to record engine_input: {}", err),
-	            selected_model_id,
-	            &run_id,
-	            &[],
-	            Some(&openrouter_model_id),
-	            request_max_tokens,
-	          );
+		        Err(err) => {
+		          append_openrouter_messages_assistant_message(
+		            &conn,
+		            db_path,
+		            thread_id,
+		            &format!("Storage error: failed to record engine_input: {}", err),
+		            selected_model_id,
+		            &run_id,
+		            &[],
+		            Some(&openrouter_model_id),
+		            request_max_tokens,
+		            None,
+		          );
 	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("engine_input_record_failed"));
 	          let _ = window.emit(
 	            "openrouter-turn-finished",
@@ -3979,18 +4041,19 @@ async fn send_turn_openrouter_messages_agent(
 
 	      let res = match res {
 	        Ok(res) => res,
-	        Err(err) => {
-	          append_openrouter_messages_assistant_message(
-	            &conn,
-	            db_path,
-	            thread_id,
-	            &format!("Engine error: OpenRouter request failed: {}", err),
-	            selected_model_id,
-	            &run_id,
-	            &[],
-	            Some(&openrouter_model_id),
-	            request_max_tokens,
-	          );
+		        Err(err) => {
+		          append_openrouter_messages_assistant_message(
+		            &conn,
+		            db_path,
+		            thread_id,
+		            &format!("Engine error: OpenRouter request failed: {}", err),
+		            selected_model_id,
+		            &run_id,
+		            &[],
+		            Some(&openrouter_model_id),
+		            request_max_tokens,
+		            None,
+		          );
 	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_request_failed"));
 	          let _ = window.emit(
 	            "openrouter-turn-finished",
@@ -4128,18 +4191,19 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let bytes = match next {
 	          Ok(bytes) => bytes,
-	          Err(err) => {
-	            append_openrouter_messages_assistant_message(
-	              &conn,
-	              db_path,
-	              thread_id,
-	              &format!("Engine error: OpenRouter stream error: {}", err),
-	              selected_model_id,
-	              &run_id,
-	              &evidence_event_ids,
-	              Some(&openrouter_model_id),
-	              request_max_tokens,
-	            );
+		          Err(err) => {
+		            append_openrouter_messages_assistant_message(
+		              &conn,
+		              db_path,
+		              thread_id,
+		              &format!("Engine error: OpenRouter stream error: {}", err),
+		              selected_model_id,
+		              &run_id,
+		              &evidence_event_ids,
+		              Some(&openrouter_model_id),
+		              request_max_tokens,
+		              None,
+		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_stream_error"));
 	            let _ = window.emit(
 	              "openrouter-turn-finished",
@@ -4370,19 +4434,20 @@ async fn send_turn_openrouter_messages_agent(
 	      break (engine_input_event, status, resp_bytes);
 	    };
 	
-	    if !status.is_success() {
-	      let friendly = format_openrouter_error(&resp_bytes);
-	      append_openrouter_messages_assistant_message(
-	        &conn,
-	        db_path,
-	        thread_id,
-	        &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
-	        selected_model_id,
-	        &run_id,
-	        &evidence_event_ids,
-	        Some(&openrouter_model_id),
-	        request_max_tokens,
-	      );
+		    if !status.is_success() {
+		      let friendly = format_openrouter_error(&resp_bytes);
+		      append_openrouter_messages_assistant_message(
+		        &conn,
+		        db_path,
+		        thread_id,
+		        &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
+		        selected_model_id,
+		        &run_id,
+		        &evidence_event_ids,
+		        Some(&openrouter_model_id),
+		        request_max_tokens,
+		        None,
+		      );
 	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_http_error"));
 	      let _ = window.emit(
 	        "openrouter-turn-finished",
@@ -4511,18 +4576,19 @@ async fn send_turn_openrouter_messages_agent(
       first_engine_input_seq,
     ));
   }
-	  if content.trim().is_empty() {
-	    append_openrouter_messages_assistant_message(
-	      &conn,
-	      db_path,
-	      thread_id,
-	      "Engine error: OpenRouter returned an empty response.",
-	      selected_model_id,
-	      &run_id,
-	      &evidence_event_ids,
-	      Some(&openrouter_model_id),
-	      OPENROUTER_MAX_TOKENS,
-	    );
+		  if content.trim().is_empty() {
+		    append_openrouter_messages_assistant_message(
+		      &conn,
+		      db_path,
+		      thread_id,
+		      "Engine error: OpenRouter returned an empty response.",
+		      selected_model_id,
+		      &run_id,
+		      &evidence_event_ids,
+		      Some(&openrouter_model_id),
+		      OPENROUTER_MAX_TOKENS,
+		      None,
+		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("empty_response"));
 	    let _ = window.emit(
 	      "openrouter-turn-finished",
@@ -4539,17 +4605,18 @@ async fn send_turn_openrouter_messages_agent(
     });
 	  }
 
-	  append_openrouter_messages_assistant_message(
-	    &conn,
-	    db_path,
-	    thread_id,
-	    &content,
-	    selected_model_id,
-	    &run_id,
-	    &evidence_event_ids,
-	    Some(&openrouter_model_id),
-	    OPENROUTER_MAX_TOKENS,
-	  );
+		  append_openrouter_messages_assistant_message(
+		    &conn,
+		    db_path,
+		    thread_id,
+		    &content,
+		    selected_model_id,
+		    &run_id,
+		    &evidence_event_ids,
+		    Some(&openrouter_model_id),
+		    OPENROUTER_MAX_TOKENS,
+		    Some(used_personal_memory),
+		  );
 	  append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
   // Emit "idle" status when done
@@ -4661,22 +4728,23 @@ async fn send_turn_cmd(
     .filter(|v| !v.is_empty())
     .ok_or_else(|| "OpenRouter model is required".to_string())?;
 
-	  if thread.engine_id == ENGINE_OPENROUTER_MESSAGES_AGENT {
-	    return send_turn_openrouter_messages_agent(
-	      &window,
-	      conn,
-	      &state.db_path,
-	      &thread_id,
-	      workspace,
-	      run_mode,
-	      selected_model_id,
-	      &input,
-	      &atom_system_prompt,
-	      history_messages_json.clone(),
-	      cancel_rx.clone(),
-	    )
-	    .await;
-	  }
+		  if thread.engine_id == ENGINE_OPENROUTER_MESSAGES_AGENT {
+		    return send_turn_openrouter_messages_agent(
+		      &window,
+		      conn,
+		      &state.db_path,
+		      &thread_id,
+		      workspace,
+		      run_mode,
+		      selected_model_id,
+		      &input,
+		      &atom_system_prompt,
+		      &used_personal_memory,
+		      history_messages_json.clone(),
+		      cancel_rx.clone(),
+		    )
+		    .await;
+		  }
 
   if thread.engine_id != ENGINE_OPENROUTER_CHAT {
     return Err(format!("Unsupported engine_id: {}", thread.engine_id));
@@ -4720,19 +4788,20 @@ async fn send_turn_cmd(
   let input_trim = input.trim();
   let (input_redacted, input_report) = context::redact_secrets(input_trim);
   if input_report.blocked {
-      append_openrouter_assistant_message(
-        &conn,
-        &state.db_path,
-        &thread_id,
-        "Blocked: sensitive content detected in message. Remove secrets before sending.",
-        selected_model_id,
-        &run_id,
-        &[],
-        None,
-        None,
-        None,
-        OPENROUTER_MAX_TOKENS,
-      );
+	      append_openrouter_assistant_message(
+	        &conn,
+	        &state.db_path,
+	        &thread_id,
+	        "Blocked: sensitive content detected in message. Remove secrets before sending.",
+	        selected_model_id,
+	        &run_id,
+	        &[],
+	        None,
+	        None,
+	        None,
+	        OPENROUTER_MAX_TOKENS,
+	        None,
+	      );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("secret_redaction"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
     return Ok(SendTurnResult {
@@ -4754,19 +4823,20 @@ async fn send_turn_cmd(
     match entry.get_password() {
       Ok(value) => value,
       Err(_) => {
-        append_openrouter_assistant_message(
-          &conn,
-          &state.db_path,
-          &thread_id,
-          "Missing API key. Add it in Settings.",
-          selected_model_id,
-          &run_id,
-          &[],
-          None,
-          None,
-          None,
-          OPENROUTER_MAX_TOKENS,
-        );
+	        append_openrouter_assistant_message(
+	          &conn,
+	          &state.db_path,
+	          &thread_id,
+	          "Missing API key. Add it in Settings.",
+	          selected_model_id,
+	          &run_id,
+	          &[],
+	          None,
+	          None,
+	          None,
+	          OPENROUTER_MAX_TOKENS,
+	          None,
+	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("missing_api_key"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
         return Ok(SendTurnResult {
@@ -4800,19 +4870,20 @@ async fn send_turn_cmd(
     let map = match fetch_openrouter_model_map(&openrouter_key).await {
       Ok(map) => map,
       Err(err) => {
-      append_openrouter_assistant_message(
-        &conn,
-        &state.db_path,
-        &thread_id,
-        &format!("Engine error: OpenRouter model lookup failed: {}", err),
-        selected_model_id,
-        &run_id,
-        &[],
-        None,
-        None,
-        None,
-        OPENROUTER_MAX_TOKENS,
-      );
+	      append_openrouter_assistant_message(
+	        &conn,
+	        &state.db_path,
+	        &thread_id,
+	        &format!("Engine error: OpenRouter model lookup failed: {}", err),
+	        selected_model_id,
+	        &run_id,
+	        &[],
+	        None,
+	        None,
+	        None,
+	        OPENROUTER_MAX_TOKENS,
+	        None,
+	      );
       append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("model_lookup_failed"));
       let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
       return Ok(SendTurnResult {
@@ -4828,22 +4899,23 @@ async fn send_turn_cmd(
     match map.get(selected_model_id.trim()).cloned().filter(|v| v.contains('/')) {
       Some(value) => value,
       None => {
-        append_openrouter_assistant_message(
-          &conn,
-          &state.db_path,
-          &thread_id,
-          &format!(
-            "Engine error: Model '{}' is not available for this OpenRouter key.",
-            selected_model_id
-          ),
-          selected_model_id,
-          &run_id,
-          &[],
-          None,
-          None,
-          None,
-          OPENROUTER_MAX_TOKENS,
-        );
+	        append_openrouter_assistant_message(
+	          &conn,
+	          &state.db_path,
+	          &thread_id,
+	          &format!(
+	            "Engine error: Model '{}' is not available for this OpenRouter key.",
+	            selected_model_id
+	          ),
+	          selected_model_id,
+	          &run_id,
+	          &[],
+	          None,
+	          None,
+	          None,
+	          OPENROUTER_MAX_TOKENS,
+	          None,
+	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("model_unavailable"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
         return Ok(SendTurnResult {
@@ -4951,19 +5023,20 @@ async fn send_turn_cmd(
     ) {
       Ok(evt) => evt,
       Err(err) => {
-        append_openrouter_assistant_message(
-          &conn,
-          &state.db_path,
-          &thread_id,
-          &format!("Storage error: failed to record engine_input: {}", err),
-          selected_model_id,
-          &run_id,
-          &[],
-          Some(&openrouter_model_id),
-          None,
-          None,
-          request_max_tokens,
-        );
+	        append_openrouter_assistant_message(
+	          &conn,
+	          &state.db_path,
+	          &thread_id,
+	          &format!("Storage error: failed to record engine_input: {}", err),
+	          selected_model_id,
+	          &run_id,
+	          &[],
+	          Some(&openrouter_model_id),
+	          None,
+	          None,
+	          request_max_tokens,
+	          None,
+	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("engine_input_record_failed"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
         return Ok(SendTurnResult {
@@ -5031,19 +5104,20 @@ async fn send_turn_cmd(
     let res = match res {
       Ok(res) => res,
       Err(err) => {
-        append_openrouter_assistant_message(
-          &conn,
-          &state.db_path,
-          &thread_id,
-          &format!("Engine error: OpenRouter request failed: {}", err),
-          selected_model_id,
-          &run_id,
-          &[],
-          Some(&openrouter_model_id),
-          None,
-          None,
-          request_max_tokens,
-        );
+	        append_openrouter_assistant_message(
+	          &conn,
+	          &state.db_path,
+	          &thread_id,
+	          &format!("Engine error: OpenRouter request failed: {}", err),
+	          selected_model_id,
+	          &run_id,
+	          &[],
+	          Some(&openrouter_model_id),
+	          None,
+	          None,
+	          request_max_tokens,
+	          None,
+	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_request_failed"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
         return Ok(SendTurnResult {
@@ -5102,19 +5176,20 @@ async fn send_turn_cmd(
       }
     }
 
-    append_openrouter_assistant_message(
-      &conn,
-      &state.db_path,
-      &thread_id,
-      &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
-      selected_model_id,
-      &run_id,
-      &[],
-      Some(&openrouter_model_id),
-      None,
-      None,
-      request_max_tokens,
-    );
+	    append_openrouter_assistant_message(
+	      &conn,
+	      &state.db_path,
+	      &thread_id,
+	      &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
+	      selected_model_id,
+	      &run_id,
+	      &[],
+	      Some(&openrouter_model_id),
+	      None,
+	      None,
+	      request_max_tokens,
+	      None,
+	    );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_http_error"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
     return Ok(SendTurnResult {
@@ -5164,20 +5239,21 @@ async fn send_turn_cmd(
 
     let bytes = match next {
       Ok(bytes) => bytes,
-      Err(err) => {
-        append_openrouter_assistant_message(
-          &conn,
-          &state.db_path,
-          &thread_id,
-          &format!("Engine error: OpenRouter stream error: {}", err),
-          selected_model_id,
-          &run_id,
-          &evidence_event_ids,
-          Some(&openrouter_model_id),
-          prompt_tokens,
-          completion_tokens,
-          OPENROUTER_MAX_TOKENS,
-        );
+	      Err(err) => {
+	        append_openrouter_assistant_message(
+	          &conn,
+	          &state.db_path,
+	          &thread_id,
+	          &format!("Engine error: OpenRouter stream error: {}", err),
+	          selected_model_id,
+	          &run_id,
+	          &evidence_event_ids,
+	          Some(&openrouter_model_id),
+	          prompt_tokens,
+	          completion_tokens,
+	          OPENROUTER_MAX_TOKENS,
+	          None,
+	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_stream_error"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
         return Ok(SendTurnResult {
@@ -5316,20 +5392,21 @@ async fn send_turn_cmd(
   }
 
   let content = assistant.trim().to_string();
-  if content.is_empty() {
-    append_openrouter_assistant_message(
-      &conn,
-      &state.db_path,
-      &thread_id,
-      "Engine error: OpenRouter returned an empty response.",
-      selected_model_id,
-      &run_id,
-      &evidence_event_ids,
-      Some(&openrouter_model_id),
-      prompt_tokens,
-      completion_tokens,
-      OPENROUTER_MAX_TOKENS,
-    );
+	  if content.is_empty() {
+	    append_openrouter_assistant_message(
+	      &conn,
+	      &state.db_path,
+	      &thread_id,
+	      "Engine error: OpenRouter returned an empty response.",
+	      selected_model_id,
+	      &run_id,
+	      &evidence_event_ids,
+	      Some(&openrouter_model_id),
+	      prompt_tokens,
+	      completion_tokens,
+	      OPENROUTER_MAX_TOKENS,
+	      None,
+	    );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("empty_response"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
     return Ok(SendTurnResult {
@@ -5341,19 +5418,20 @@ async fn send_turn_cmd(
     });
   }
 
-  append_openrouter_assistant_message(
-    &conn,
-    &state.db_path,
-    &thread_id,
-    &content,
-    selected_model_id,
-    &run_id,
-    &evidence_event_ids,
-    Some(&openrouter_model_id),
-    prompt_tokens,
-    completion_tokens,
-    OPENROUTER_MAX_TOKENS,
-  );
+	  append_openrouter_assistant_message(
+	    &conn,
+	    &state.db_path,
+	    &thread_id,
+	    &content,
+	    selected_model_id,
+	    &run_id,
+	    &evidence_event_ids,
+	    Some(&openrouter_model_id),
+	    prompt_tokens,
+	    completion_tokens,
+	    OPENROUTER_MAX_TOKENS,
+	    Some(&used_personal_memory),
+	  );
 
   append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "ok", None);
   let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });

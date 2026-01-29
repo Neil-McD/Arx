@@ -3245,16 +3245,41 @@ function App() {
     }
   }
 
-	  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
-	    if (!value || !Number.isFinite(value)) return null;
-	    return new Date(value * 1000).toISOString();
-	  }
+		  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
+		    if (!value || !Number.isFinite(value)) return null;
+		    return new Date(value * 1000).toISOString();
+		  }
 
-	  async function syncRecentLocalMessagesToCloud(
-	    threadId: string,
-	    session: SupabaseSession,
-	    limit: number,
-	  ): Promise<void> {
+		  function normalizeMemoryUsedForCloud(value: unknown): unknown {
+		    if (!Array.isArray(value)) return value;
+		    return value.map((raw) => {
+		      if (!raw || typeof raw !== "object") return raw;
+		      const record = raw as Record<string, unknown>;
+		      const updatedAt = record.updated_at;
+		      if (typeof updatedAt === "number") {
+		        return { ...record, updated_at: toIsoFromUnixSeconds(updatedAt) ?? "" };
+		      }
+		      return record;
+		    });
+		  }
+
+		  function normalizeContentJsonForCloud(value: unknown): unknown {
+		    if (!value || typeof value !== "object") return value;
+		    const record = value as Record<string, unknown>;
+		    const meta = record.meta;
+		    if (!meta || typeof meta !== "object") return value;
+		    const metaRecord = meta as Record<string, unknown>;
+		    if ("memory_used" in metaRecord) {
+		      metaRecord.memory_used = normalizeMemoryUsedForCloud(metaRecord.memory_used);
+		    }
+		    return value;
+		  }
+
+		  async function syncRecentLocalMessagesToCloud(
+		    threadId: string,
+		    session: SupabaseSession,
+		    limit: number,
+		  ): Promise<void> {
 	    const url = getSupabaseUrl();
 	    if (!url) return;
 	    if (!threadId) return;
@@ -3295,17 +3320,18 @@ function App() {
 	    const slice = pending.slice(0, maxTotal);
 	    for (let i = 0; i < slice.length; i += batchSize) {
 	      const batch = slice.slice(i, i + batchSize);
-	      const payload = batch.map((m) => {
-	        let content: unknown = null;
-	        try {
-	          content = JSON.parse(m.content_json);
-	        } catch {
-	          content = { text: m.content_json };
-	        }
-	        return {
-	          id: m.id,
-	          thread_id: threadId,
-	          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
+		      const payload = batch.map((m) => {
+		        let content: unknown = null;
+		        try {
+		          content = JSON.parse(m.content_json);
+		        } catch {
+		          content = { text: m.content_json };
+		        }
+		        content = normalizeContentJsonForCloud(content);
+		        return {
+		          id: m.id,
+		          thread_id: threadId,
+		          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
 	          seq: 0,
 	          role: m.role,
 	          content_json: content ?? { text: "" },
