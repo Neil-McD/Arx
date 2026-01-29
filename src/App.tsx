@@ -1185,7 +1185,7 @@ function App() {
   }, []);
 
   function getEffectiveWorkspacePath(): string {
-    return activeProject?.root_path ?? workspaceRoot ?? ".";
+    return (activeProject?.root_path ?? workspaceRoot ?? "").trim();
   }
 
   function sortPersonalMemory(items: PersonalMemoryItemRecord[]): PersonalMemoryItemRecord[] {
@@ -3258,7 +3258,8 @@ function App() {
 	    const url = getSupabaseUrl();
 	    if (!url) return;
 	    if (!threadId) return;
-	    if (!Number.isFinite(limit) || limit <= 0) return;
+	    const maxTotal = Number.isFinite(limit) ? Math.max(200, Math.trunc(limit)) : 200;
+	    const batchSize = 50;
 
 	    let localMessages: MessageRecord[] = [];
 	    try {
@@ -3268,41 +3269,77 @@ function App() {
 	    }
 	    if (localMessages.length === 0) return;
 
-	    const payload = localMessages.slice(-limit).map((m) => {
-	      let content: unknown = null;
+	    const cursorKey = `arx_cloud_sync_cursor:${threadId}`;
+	    const cursor = (() => {
 	      try {
-	        content = JSON.parse(m.content_json);
+	        return (localStorage.getItem(cursorKey) ?? "").trim();
 	      } catch {
-	        content = { text: m.content_json };
+	        return "";
 	      }
-	      return {
-	        id: m.id,
-	        thread_id: threadId,
-	        // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
-	        seq: 0,
-	        role: m.role,
-	        content_json: content ?? { text: "" },
-	        engine_id: m.engine_id ?? null,
-	        model_id: m.model_id ?? null,
-	        run_id: m.run_id ?? null,
-	        created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
-	      };
-	    });
+	    })();
 
-	    const response = await fetchWithSupabaseAuth(
-	      `${url}/rest/v1/messages?on_conflict=id`,
-	      {
-	        method: "POST",
-	        headers: {
-	          "Content-Type": "application/json",
-	          Prefer: "resolution=ignore-duplicates,return=minimal",
+	    let startIdx = 0;
+	    if (cursor) {
+	      const idx = localMessages.findIndex((m) => m.id === cursor);
+	      if (idx >= 0) startIdx = idx + 1;
+	    }
+	    // If no cursor is present, backfill a bounded window (covers offline bursts).
+	    startIdx = Math.max(startIdx, Math.max(0, localMessages.length - maxTotal));
+
+	    const allowedRoles = new Set(["user", "assistant", "system"]);
+	    const pending = localMessages
+	      .slice(startIdx)
+	      .filter((m) => isUuid(m.id) && allowedRoles.has(m.role));
+	    if (pending.length === 0) return;
+
+	    const slice = pending.slice(0, maxTotal);
+	    for (let i = 0; i < slice.length; i += batchSize) {
+	      const batch = slice.slice(i, i + batchSize);
+	      const payload = batch.map((m) => {
+	        let content: unknown = null;
+	        try {
+	          content = JSON.parse(m.content_json);
+	        } catch {
+	          content = { text: m.content_json };
+	        }
+	        return {
+	          id: m.id,
+	          thread_id: threadId,
+	          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
+	          seq: 0,
+	          role: m.role,
+	          content_json: content ?? { text: "" },
+	          engine_id: m.engine_id ?? null,
+	          model_id: m.model_id ?? null,
+	          run_id: m.run_id ?? null,
+	          created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
+	        };
+	      });
+
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/messages?on_conflict=id`,
+	        {
+	          method: "POST",
+	          headers: {
+	            "Content-Type": "application/json",
+	            Prefer: "resolution=ignore-duplicates,return=minimal",
+	          },
+	          body: JSON.stringify(payload),
 	        },
-	        body: JSON.stringify(payload),
-	      },
-	      session,
-	    );
-	    if (!response.ok) {
-	      throw new Error(await readSupabaseError(response));
+	        session,
+	      );
+	      if (!response.ok) {
+	        throw new Error(await readSupabaseError(response));
+	      }
+
+	      const last = batch[batch.length - 1];
+	      if (last?.id) {
+	        try {
+	          localStorage.setItem(cursorKey, last.id);
+	        } catch {
+	          // ignore
+	        }
+	      }
 	    }
 	  }
 
@@ -7792,7 +7829,7 @@ function isModelReady(modelId: string): boolean {
 	    return pendingInvites.find((invite) => invite.invite_key === activeInviteGateKey) ?? null;
 	  }, [activeInviteGateKey, pendingInvites]);
 	  const showCommunityRail = true;
-	  const effectiveCwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+	  const effectiveCwd = (activeProject?.root_path ?? workspaceRoot ?? "").trim();
 	  const lastThreadWorkspaceRef = useRef<string | null>(null);
 
   function communityInitials(name: string): string {
@@ -7909,13 +7946,21 @@ function isModelReady(modelId: string): boolean {
   }
 
   async function loadWorkspaceRoot() {
-    const root = await invoke<string>("get_workspace_root_cmd");
-    setWorkspaceRoot(root);
+    try {
+      const root = await invoke<string>("get_workspace_root_cmd");
+      setWorkspaceRoot((root ?? "").trim() || null);
+    } catch {
+      setWorkspaceRoot(null);
+    }
   }
 
   async function loadActiveProject() {
-    const active = await invoke<ProjectRecord | null>("get_active_project_cmd");
-    setActiveProject(active);
+    try {
+      const active = await invoke<ProjectRecord | null>("get_active_project_cmd");
+      setActiveProject(active);
+    } catch {
+      setActiveProject(null);
+    }
   }
 
   async function handleChangeWorkspace() {
@@ -8120,11 +8165,15 @@ function isModelReady(modelId: string): boolean {
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
     const nextWorkspace = effectiveCwd;
-    await invoke("set_thread_workspace_cmd", {
-      threadId: thread.id,
-      workspacePath: nextWorkspace
-    });
-    lastThreadWorkspaceRef.current = nextWorkspace;
+    if (nextWorkspace) {
+      await invoke("set_thread_workspace_cmd", {
+        threadId: thread.id,
+        workspacePath: nextWorkspace
+      });
+      lastThreadWorkspaceRef.current = nextWorkspace;
+    } else {
+      lastThreadWorkspaceRef.current = null;
+    }
     setMessages([]);
     setToolCalls([]);
   }
@@ -8368,7 +8417,7 @@ function isModelReady(modelId: string): boolean {
         streamingMetaRef.current = null;
         scheduleStreamingUpdate();
 
-	        const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+	        const cwd = effectiveCwd || "";
 
 	        // Prefer local history (fast, always present during a run). Fall back to cloud if the local DB was reset.
 	        let historyMessagesJson: string | null = null;
@@ -8539,7 +8588,7 @@ function isModelReady(modelId: string): boolean {
         `Session: ${sessionId}`,
         `Mode: ${agentMode}`,
         `Model: ${activeModelId ?? "none"}`,
-        `Workspace: ${workspaceRoot ?? "."}`,
+        `Workspace: ${workspaceRoot ?? "(not bound)"}`,
         `Project: ${activeProject?.name ?? activeProject?.root_path ?? "none"}`,
         `Last message: ${lastMsg}`,
         `Last response: ${responseId}`,
@@ -8584,7 +8633,7 @@ function isModelReady(modelId: string): boolean {
     }
 
     if (name === "test") {
-      const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+      const cwd = effectiveCwd || "";
       const commands = await invoke<string[]>("detect_test_commands_cmd", {
         cwd
       });
@@ -8707,7 +8756,7 @@ function isModelReady(modelId: string): boolean {
 	  async function respondPermission(toolCall: ToolCallRecord, response: "session" | "always") {
 	    if (!activeThreadId) return;
 	    const modelId = activeModelId ?? "";
-	    const cwd = activeProject?.root_path ?? workspaceRoot ?? ".";
+	    const cwd = effectiveCwd || "";
 	    try {
 	      const message = await invoke<string>("respond_permission_cmd", {
 	        sessionId: activeThreadId,
@@ -8987,15 +9036,15 @@ function isModelReady(modelId: string): boolean {
                   onClick={handleChangeWorkspace}
                   title={
                     workspaceRoot
-                      ? `CWD: ${effectiveCwd}\nWorkspace root: ${workspaceRoot}`
-                      : `CWD: ${effectiveCwd}`
+                      ? `CWD: ${effectiveCwd || "(not bound)"}\nWorkspace root: ${workspaceRoot}`
+                      : `CWD: ${effectiveCwd || "(not bound)"}`
                   }
                 >
                   <svg viewBox="0 0 24 24" className="workspace-icon">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
                   <span className="workspace-name">
-                    {effectiveCwd === "."
+                    {!effectiveCwd
                       ? "Select directory..."
                       : effectiveCwd.split("/").pop() ?? effectiveCwd}
                   </span>

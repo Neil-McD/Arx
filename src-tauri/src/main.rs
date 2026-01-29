@@ -1093,7 +1093,17 @@ fn build_atom_system_prompt(
   user_system_prompt: Option<&str>,
 ) -> String {
   let os = std::env::consts::OS;
-  let git_repo = std::path::Path::new(workspace_path).join(".git").exists();
+  let workspace_trimmed = workspace_path.trim();
+  let workspace_display = if workspace_trimmed.is_empty() {
+    "(not bound)".to_string()
+  } else {
+    workspace_trimmed.to_string()
+  };
+  let git_repo = if workspace_trimmed.is_empty() {
+    false
+  } else {
+    std::path::Path::new(workspace_trimmed).join(".git").exists()
+  };
 
   let personal_memory_block = if used_personal_memory.is_empty() {
     "(none)".to_string()
@@ -1108,6 +1118,12 @@ fn build_atom_system_prompt(
   let community_name = community_id.unwrap_or("none");
   let community_memory_block = "(none)".to_string();
 
+  let tool_rules = if workspace_trimmed.is_empty() {
+    "- No workspace is bound; local tools are disabled.\n- Ask the user to bind a workspace before requesting tools.\n"
+  } else {
+    "- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{path, content}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n"
+  };
+
   let user_prompt_block = user_system_prompt
     .map(|v| v.trim())
     .filter(|v| !v.is_empty())
@@ -1120,14 +1136,15 @@ fn build_atom_system_prompt(
     .unwrap_or_default();
 
   format!(
-    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{{path, content}}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
-    workspace_path,
+    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n{}- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
+    workspace_display,
     os,
     if git_repo { "yes" } else { "no" },
     personal_memory_block,
     community_name,
     community_memory_block,
-    user_prompt_block
+    user_prompt_block,
+    tool_rules
   )
 }
 
@@ -1799,6 +1816,11 @@ async fn run_agent_tool(
   tool_name: &str,
   args: &serde_json::Value,
 ) -> ToolExecResult {
+  let workspace_root = workspace_root.trim();
+  if workspace_root.is_empty() || !std::path::Path::new(workspace_root).is_absolute() {
+    return tool_error("workspace not bound; select a workspace before using tools".to_string());
+  }
+
   let Some(obj) = args.as_object() else {
     return tool_error("args must be an object".to_string());
   };
@@ -3021,7 +3043,11 @@ async fn send_turn_openrouter_messages_agent(
 	      messages.push(serde_json::json!({ "role": "user", "content": input_to_send.clone() }));
 	    }
 
-	    let tools_schema = make_agent_tool_schema_openai();
+	    let tools_schema = if workspace.trim().is_empty() {
+	      Vec::new()
+	    } else {
+	      make_agent_tool_schema_openai()
+	    };
 	    let client = reqwest::Client::new();
 	    let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
 	    let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
@@ -3783,7 +3809,11 @@ async fn send_turn_openrouter_messages_agent(
     messages.push(serde_json::json!({ "role": "user", "content": input_to_send.clone() }));
   }
 
-	  let tools_schema = make_agent_tool_schema();
+	  let tools_schema = if workspace.trim().is_empty() {
+	    Vec::new()
+	  } else {
+	    make_agent_tool_schema()
+	  };
 	  let client = reqwest::Client::new();
 	  let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
 	  let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
@@ -4553,7 +4583,7 @@ async fn send_turn_cmd(
   window: tauri::Window,
   state: tauri::State<'_, DbState>,
   thread_id: String,
-  cwd: String,
+  _cwd: String,
   input: String,
   history_messages_json: Option<String>,
   personal_memory_items_json: Option<String>,
@@ -4565,14 +4595,14 @@ async fn send_turn_cmd(
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "thread not found".to_string())?;
 
+  // Workspace bindings are explicit (device-local). Do not fall back to "." when unbound.
   let workspace = thread
     .workspace_path
     .as_deref()
-    .filter(|p| !p.trim().is_empty())
-    .unwrap_or_else(|| if !cwd.trim().is_empty() { cwd.trim() } else { "." });
-  if thread.workspace_path.as_deref().map(|v| v.trim()) != Some(workspace) {
-    let _ = set_thread_workspace_path(&conn, &thread_id, Some(workspace));
-  }
+    .map(|p| p.trim())
+    .filter(|p| !p.is_empty())
+    .filter(|p| std::path::Path::new(p).is_absolute())
+    .unwrap_or("");
 
   let run_mode = get_ui_state(&conn, &format!("agent_mode::{}", thread_id))
     .ok()
@@ -5567,6 +5597,11 @@ fn set_thread_workspace_cmd(
 ) -> Result<(), String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
   let cleaned = workspace_path.as_deref().map(|p| p.trim()).filter(|p| !p.is_empty());
+  if let Some(path) = cleaned {
+    if !std::path::Path::new(path).is_absolute() {
+      return Err("workspace_path must be an absolute path".to_string());
+    }
+  }
   let scope_id = cleaned.map(|p| {
     std::path::Path::new(p)
       .canonicalize()
@@ -5685,8 +5720,15 @@ fn get_workspace_root_cmd(state: tauri::State<DbState>) -> Result<String, String
 #[tauri::command]
 fn set_workspace_root_cmd(state: tauri::State<DbState>, path: String) -> Result<(), String> {
   let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-  std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-  set_ui_state(&conn, "workspace_root", &path).map_err(|e| e.to_string())
+  let cleaned = path.trim();
+  if cleaned.is_empty() {
+    return Err("workspace root is required".to_string());
+  }
+  if !std::path::Path::new(cleaned).is_absolute() {
+    return Err("workspace root must be an absolute path".to_string());
+  }
+  std::fs::create_dir_all(cleaned).map_err(|e| e.to_string())?;
+  set_ui_state(&conn, "workspace_root", cleaned).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

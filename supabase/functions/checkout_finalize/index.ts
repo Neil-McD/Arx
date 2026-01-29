@@ -150,18 +150,6 @@ async function upsertSubscription(
   return sub;
 }
 
-async function revokeIssuedClaims(intentId: string): Promise<void> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/purchase_claims?payment_intent_id=eq.${encodeURIComponent(intentId)}&status=eq.issued`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-      body: JSON.stringify({ status: "revoked" }),
-    },
-  );
-  if (!res.ok) throw new Error(await res.text());
-}
-
 async function insertClaim(
   intentId: string,
   token: string,
@@ -242,7 +230,6 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: false, status: "pending" }, { status: 200, headers });
     }
 
-    await revokeIssuedClaims(intentId);
     const email = session.customer_details?.email ?? session.customer_email ?? null;
     const token = generateToken(24);
     const tracking = intent.tracking && typeof intent.tracking === "object" ? intent.tracking : {};
