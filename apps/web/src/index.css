@@ -4,14 +4,110 @@
 :root {
   --web-chat-max-width: 760px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
+  /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --web-rail-width: 72px;
   --web-sessions-drawer-width: 240px;
+
+  /* Minimal glassmorphism controls (web only). */
+  --web-floating-chrome-bg: rgba(255, 255, 255, 0.5);
+  --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
+  --web-floating-chrome-shadow: none;
+  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
+}
+
+/* Web-only: remove the "bar" treatment so the header blends into the page.
+   Note: theme variables in src/index.css use :root[data-theme=...] (higher specificity),
+   so we override per-theme here too. */
+:root,
+:root[data-theme="dark"],
+:root[data-theme="light-warm"],
+:root[data-theme="dark-warm"] {
+  --bg-header: var(--bg-workspace, var(--bg-app));
+  --header-border: none;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark-warm"] {
+  --web-floating-chrome-bg: rgba(12, 12, 12, 0.22);
+  --web-floating-chrome-border: rgba(255, 255, 255, 0.08);
+  --web-floating-chrome-shadow: none;
+  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.12);
+}
+
+/* Prefer deriving the "glass" tint from the current theme's background so it matches. */
+@supports (background: color-mix(in srgb, #000 50%, transparent)) {
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light-warm"],
+  :root[data-theme="dark-warm"] {
+    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 84%, transparent);
+    --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 9%, transparent);
+    --web-floating-chrome-shadow: none;
+    --web-floating-chrome-highlight: color-mix(in srgb, #fff 16%, transparent);
+  }
 }
 
 /* Web: keep topbar content aligned with the left rail. */
 .app-topbar {
-  padding-left: calc(var(--web-rail-width) + 14px);
+  /* Float the controls while keeping consistent top spacing via padding on the shell. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--web-topbar-height);
+  padding: 8px 14px 0 calc(var(--web-rail-width) + 14px);
+  background: transparent;
+  border-bottom: 0;
+  pointer-events: none;
+}
+
+/* Make the header container click-through; only the controls are interactive. */
+.app-topbar .topbar-left,
+.app-topbar .topbar-center,
+.app-topbar .topbar-right {
+  pointer-events: auto;
+}
+
+/* Web: float the controls as small "islands" instead of a full-width bar. */
+.app-topbar .topbar-left,
+.app-topbar .topbar-center,
+.app-topbar .topbar-right {
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: var(--web-floating-chrome-bg);
+  border: 0;
+  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+/* Shrink header controls a touch so the floating groups feel lighter. */
+.app-topbar .icon-button,
+.app-topbar .new-session-header-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.app-topbar .icon-button svg,
+.app-topbar .new-session-header-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Web: remove the dedicated header row from the grid and offset content manually. */
+.app-root {
+  grid-template-rows: 1fr;
+}
+
+/* Web: reserve space so content never sits under the floating controls. */
+.app-shell {
+  padding-top: var(--web-topbar-height);
+}
+
+.public-root .workspace:not(.scroll-to-bottom) {
+  padding-top: var(--web-topbar-height);
 }
 
 /* Web UX: center the chat feed + composer like chat.openai.com */
