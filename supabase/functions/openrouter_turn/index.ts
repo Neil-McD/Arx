@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { getEnv } from "../_shared/env.ts";
+import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 
 type OpenRouterTurnInput = {
@@ -10,6 +11,11 @@ type OpenRouterTurnInput = {
   stream?: boolean;
   mode?: "respond" | "regenerate";
 };
+
+function isTruthyEnv(value: string): boolean {
+  const v = (value ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
 
 function sanitizeUuid(value: string): string {
   const v = (value ?? "").trim();
@@ -77,6 +83,9 @@ type PersonalMemoryRow = {
 };
 
 type BuilderTier = "free" | "builder" | "pro";
+
+type OpenRouterKeySource = "user" | "platform";
+type OpenRouterKeyResult = { key: string; source: OpenRouterKeySource };
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
   const res = await supabaseAdminFetch(
@@ -568,7 +577,7 @@ async function writeAssistantReply(params: {
   return { status: "duplicate" };
 }
 
-async function loadUserOpenRouterKey(userId: string): Promise<string> {
+async function loadUserOpenRouterKey(userId: string): Promise<OpenRouterKeyResult> {
   // Prefer per-user BYO keys stored in cloud.
   const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
     method: "POST",
@@ -578,13 +587,47 @@ async function loadUserOpenRouterKey(userId: string): Promise<string> {
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as Array<{ api_key: string | null }>;
   const rowKey = String(rows[0]?.api_key ?? "").trim();
-  if (rowKey) return rowKey;
+  if (rowKey) return { key: rowKey, source: "user" };
 
   // Fallback: platform key (optional).
+  const platformEnabled = isTruthyEnv(getEnv("OPENROUTER_PLATFORM_ENABLED"));
   const fallback = getEnv("OPENROUTER_API_KEY");
-  if (fallback) return fallback;
+  if (platformEnabled && fallback) return { key: fallback, source: "platform" };
 
   throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+}
+
+async function edgeRateLimitAllowKey(params: {
+  key: string;
+  windowSeconds: number;
+  limit: number;
+}): Promise<boolean> {
+  const res = await supabaseAdminFetch("/rest/v1/rpc/edge_rate_limit_allow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_key: params.key,
+      p_window_seconds: params.windowSeconds,
+      p_limit: params.limit,
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = (await res.json()) as unknown;
+  if (typeof data === "boolean") return data;
+  return Boolean(data);
+}
+
+async function consumePlatformInferenceStandard(userId: string, units = 1): Promise<number> {
+  const res = await supabaseAdminFetch("/rest/v1/rpc/consume_platform_inference_standard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_user_id: userId, p_units: units }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = (await res.json()) as unknown;
+  const remaining = Number(data);
+  if (!Number.isFinite(remaining) || remaining < 0) return 0;
+  return Math.floor(remaining);
 }
 
 function encodeSse(event: string, data: unknown): Uint8Array {
@@ -1041,6 +1084,10 @@ Deno.serve(async (req: Request) => {
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
+    if (openrouterKey.source === "platform" && builderTier === "free") {
+      throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+    }
+
     const memorySettings: UserMemorySettingsRow =
       memorySettingsResult.status === "fulfilled"
         ? memorySettingsResult.value
@@ -1082,6 +1129,55 @@ Deno.serve(async (req: Request) => {
     const allowUpdate = input.mode === "regenerate";
     const runId = allowUpdate ? `openrouter_web_regen:${replyToId}:${Date.now()}` : `openrouter_web:${replyToId}`;
 
+    if (!allowUpdate) {
+      const existing = await loadAssistantReplyId(threadId, replyToId);
+      if (existing) {
+        if (wantsStream) {
+          const s = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encodeSse("done", { ok: true, status: "noop", thread_id: threadId }));
+              controller.close();
+            },
+          });
+          return new Response(s, {
+            status: 200,
+            headers: { ...headers, "Content-Type": "text/event-stream; charset=utf-8", Connection: "keep-alive" },
+          });
+        }
+        return jsonResponse({ ok: true, status: "noop" }, { status: 200, headers });
+      }
+    }
+
+    // Rate limits (defense in depth): always per-user; optionally also per-IP.
+    const userRlAllowed = await edgeRateLimitAllowKey({
+      key: `openrouter_turn:user:${userId}`,
+      windowSeconds: 60,
+      limit: openrouterKey.source === "platform" ? 20 : 60,
+    });
+    if (!userRlAllowed) throw new Error("rate_limited");
+
+    const ipRlAllowed = await edgeRateLimitAllow({
+      req,
+      key: openrouterKey.source === "platform" ? "openrouter_turn_platform" : "openrouter_turn",
+      windowSeconds: 60,
+      limit: openrouterKey.source === "platform" ? 120 : 240,
+    });
+    if (!ipRlAllowed) throw new Error("rate_limited");
+
+    let platformRemaining: number | null = null;
+    const platformModelId = getEnv("OPENROUTER_PLATFORM_MODEL_ID");
+    const platformMaxTokensRaw = getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
+    const platformMaxTokens = Number.isFinite(Number(platformMaxTokensRaw))
+      ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
+      : 512;
+
+    if (openrouterKey.source === "platform") {
+      if (!platformModelId || !platformModelId.includes("/")) {
+        throw new Error("Missing env var: OPENROUTER_PLATFORM_MODEL_ID");
+      }
+      platformRemaining = await consumePlatformInferenceStandard(userId, 1);
+    }
+
     const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
     const latestUserText = extractTextFromContentJson(latest.content_json);
     let priorAssistantText = "";
@@ -1096,7 +1192,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
-      resolveOpenRouterModelId(aliasModelId, openrouterKey),
+      openrouterKey.source === "platform" ? Promise.resolve(platformModelId) : resolveOpenRouterModelId(aliasModelId, openrouterKey.key),
       loadHistorySnippets({
         userId,
         query: latestUserText,
@@ -1110,11 +1206,14 @@ Deno.serve(async (req: Request) => {
 
     const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
 
-    const memoryExtractorModelId = await chooseMemoryExtractionModel({
-      openrouterKey,
-      aliasModelId,
-      resolvedModelId,
-    });
+    const memoryExtractorModelId =
+      openrouterKey.source === "platform"
+        ? resolvedModelId
+        : await chooseMemoryExtractionModel({
+            openrouterKey: openrouterKey.key,
+            aliasModelId,
+            resolvedModelId,
+          });
 
     const shouldExtractMemory =
       memorySettings.memory_mode === "suggest" || memorySettings.memory_mode === "auto"
@@ -1127,7 +1226,7 @@ Deno.serve(async (req: Request) => {
 
     const memoryCandidatesPromise: Promise<MemoryCandidate[]> = shouldExtractMemory
       ? extractMemoryCandidates({
-          openrouterKey,
+          openrouterKey: openrouterKey.key,
           model: memoryExtractorModelId,
           userText: latestUserText,
           priorAssistantText,
@@ -1170,12 +1269,17 @@ Deno.serve(async (req: Request) => {
       const content = extractTextFromContentJson(row.content_json);
       if (!content.trim()) continue;
       if (row.role === "user" || row.role === "assistant" || row.role === "system") {
-        messages.push({ role: row.role, content });
+        messages.push({
+          role: row.role,
+          content: openrouterKey.source === "platform" ? truncateUtf8(content, 2000) : content,
+        });
       }
     }
 
     if (!wantsStream) {
-      const { text } = await openRouterChatCompletion(openrouterKey, resolvedModelId, messages, maxTokens);
+      const requested = maxTokens;
+      const effectiveMaxTokens = openrouterKey.source === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+      const { text, usage } = await openRouterChatCompletion(openrouterKey.key, resolvedModelId, messages, effectiveMaxTokens);
 
       const memoryCandidates = await memoryCandidatesPromise;
 
@@ -1189,6 +1293,11 @@ Deno.serve(async (req: Request) => {
       }
 
       const meta: Record<string, unknown> = {};
+      meta.inference_source = openrouterKey.source;
+      if (openrouterKey.source === "platform") {
+        meta.platform_standard_remaining = platformRemaining;
+      }
+      if (usage && typeof usage === "object") meta.openrouter_usage = usage;
       if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
       if (historyUsed.length > 0) meta.history_used = historyUsed;
       if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
@@ -1211,6 +1320,8 @@ Deno.serve(async (req: Request) => {
           thread_id: threadId,
           reply_to_id: replyToId,
           run_id: runId,
+          inference_source: openrouterKey.source,
+          platform_standard_remaining: platformRemaining,
           memory_used: memoryUsed,
           history_used: historyUsed,
           memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
@@ -1239,21 +1350,26 @@ Deno.serve(async (req: Request) => {
 	            engine_id: "openrouter_web",
 	            model_id: aliasModelId,
 	            resolved_model_id: resolvedModelId,
+              inference_source: openrouterKey.source,
+              platform_standard_remaining: platformRemaining,
 	            memory_used: memoryUsed,
               history_used: historyUsed,
 	          });
 
+          const requested = maxTokens;
+          const effectiveMaxTokens = openrouterKey.source === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+
           const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${openrouterKey}`,
+              Authorization: `Bearer ${openrouterKey.key}`,
               "Content-Type": "application/json",
               "X-Title": "Arx",
             },
             body: JSON.stringify({
               model: resolvedModelId,
               messages,
-              max_tokens: maxTokens,
+              max_tokens: effectiveMaxTokens,
               stream: true,
             }),
           });
@@ -1266,6 +1382,7 @@ Deno.serve(async (req: Request) => {
           let dataBuffer = "";
           let fullContent = "";
           let done = false;
+          let usage: OpenRouterStreamChunk["usage"] | null = null;
 
           const flushData = () => {
             const raw = dataBuffer.trim();
@@ -1281,6 +1398,7 @@ Deno.serve(async (req: Request) => {
             } catch {
               return;
             }
+            if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
             const delta = extractStreamDelta(parsed);
             if (!delta) return;
             fullContent += delta;
@@ -1323,6 +1441,11 @@ Deno.serve(async (req: Request) => {
             }
 
             const meta: Record<string, unknown> = {};
+            meta.inference_source = openrouterKey.source;
+            if (openrouterKey.source === "platform") {
+              meta.platform_standard_remaining = platformRemaining;
+            }
+            if (usage && typeof usage === "object") meta.openrouter_usage = usage;
             if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
             if (historyUsed.length > 0) meta.history_used = historyUsed;
             if (memorySettings.memory_mode === "suggest" && memoryCandidates.length > 0) meta.memory_suggestions = memoryCandidates;
@@ -1345,6 +1468,8 @@ Deno.serve(async (req: Request) => {
 	            thread_id: threadId,
 	            reply_to_id: replyToId,
 	            run_id: runId,
+              inference_source: openrouterKey.source,
+              platform_standard_remaining: platformRemaining,
 	            memory_used: memoryUsed,
               history_used: historyUsed,
               memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
@@ -1362,7 +1487,7 @@ Deno.serve(async (req: Request) => {
     return new Response(stream, { status: 200, headers: streamHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message === "forbidden" ? 403 : 400;
+    const status = message === "forbidden" ? 403 : message === "rate_limited" ? 429 : 400;
     return jsonResponse({ ok: false, error: message }, { status, headers });
   }
 });
