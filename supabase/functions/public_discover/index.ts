@@ -21,6 +21,13 @@ type AuthUser = {
   email?: string | null;
 };
 
+type EntitlementRow = {
+  community_id: string;
+  starts_at: string;
+  ends_at: string | null;
+  communities: CommunityRow | null;
+};
+
 type PlanRow = {
   id: string;
   community_id: string;
@@ -103,16 +110,18 @@ async function loadUserCommunities(userId: string): Promise<CommunityRow[]> {
   const select =
     "id,slug,name,description,avatar_url,banner_url,visibility,created_at,updated_at";
 
-  const membershipsRes = await supabaseAdminFetch(
-    `/rest/v1/community_memberships?select=community_id,communities(${select})&user_id=eq.${encodeURIComponent(userId)}`,
+  const nowIso = new Date().toISOString();
+  const entitlementsRes = await supabaseAdminFetch(
+    `/rest/v1/entitlements?select=community_id,starts_at,ends_at,communities(${select})` +
+      `&user_id=eq.${encodeURIComponent(userId)}` +
+      `&starts_at=lte.${encodeURIComponent(nowIso)}` +
+      `&or=${encodeURIComponent(`(ends_at.is.null,ends_at.gt.${nowIso})`)}` +
+      `&limit=200`,
     { method: "GET" },
   );
-  if (!membershipsRes.ok) throw new Error(await membershipsRes.text());
-  const membershipRows = (await membershipsRes.json()) as Array<{
-    community_id: string;
-    communities: CommunityRow | null;
-  }>;
-  const membershipCommunities = membershipRows
+  if (!entitlementsRes.ok) throw new Error(await entitlementsRes.text());
+  const entitlementRows = (await entitlementsRes.json()) as EntitlementRow[];
+  const entitlementCommunities = entitlementRows
     .map((row) => row.communities)
     .filter((item): item is CommunityRow => Boolean(item));
 
@@ -124,7 +133,7 @@ async function loadUserCommunities(userId: string): Promise<CommunityRow[]> {
   const ownedCommunities = (await ownedRes.json()) as CommunityRow[];
 
   const merged = new Map<string, CommunityRow>();
-  for (const community of [...membershipCommunities, ...ownedCommunities]) {
+  for (const community of [...entitlementCommunities, ...ownedCommunities]) {
     const id = String(community?.id ?? "").trim();
     if (!id) continue;
     merged.set(id, community);

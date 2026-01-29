@@ -277,7 +277,6 @@ type DiscoverCommunity = PublicCommunityRecord & {
 };
 
 type PublicChatPreviewMessage = {
-  id: string;
   seq: number;
   created_at: string;
   sender_key: string;
@@ -3985,6 +3984,37 @@ export default function App() {
         active_plans?: PublicPlanSummary[] | null;
       };
       if (!payload?.community?.id) throw new Error("Community not found.");
+
+      const session = sessionRef.current;
+      if (session) {
+        try {
+          const accessResponse = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/rpc/get_my_community_access`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ p_community_id: payload.community.id })
+            },
+            session,
+          );
+          if (accessResponse.ok) {
+            const rows = (await accessResponse.json()) as CommunityAccess[];
+            const access = rows[0] ?? null;
+            if (access && (access.can_view || access.is_owner)) {
+              navigateTo("/", { replace: true });
+              setActiveView("home");
+              setActivePage("community");
+              setCommunityTab("chat");
+              setActiveCommunityId(payload.community.id);
+              await loadCommunities(session);
+              return;
+            }
+          }
+        } catch {
+          // ignore; fall back to public landing
+        }
+      }
+
       setPublicCommunity(payload.community);
       const plans = Array.isArray(payload.active_plans)
         ? payload.active_plans
@@ -8085,7 +8115,7 @@ export default function App() {
 	                        const senderLabel = msg.sender_display_name ?? "Member";
 	                        const avatarColor = getAvatarColor(msg.sender_key);
 	                        return (
-	                          <div key={msg.id} className="chat-message">
+	                          <div key={msg.seq} className="chat-message">
 	                            <div className="chat-avatar" style={{ backgroundColor: avatarColor }} title={senderLabel}>
 	                              {msg.sender_avatar_url ? (
 	                                <img src={msg.sender_avatar_url} alt={senderLabel} />

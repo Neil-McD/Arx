@@ -274,3 +274,14 @@ where n.nspname = 'public'
   and c.relname = 'communities'
   and tgname ilike '%delete%cleanup%';
 ```
+
+## 8) Public Surfaces Semantics (Skool-like) — Manual Smoke
+
+These are **behavior gates** (not DB-only) because public landing/discovery are implemented as Edge Functions.
+
+- **Discover (anon):** includes `public` + `private`, excludes `unlisted`
+- **Discover (authed):** also includes any `unlisted` communities the user can access (active entitlements / owner)
+- **Landing `/c/:slug` (anon):** always shows sales page (all visibilities)
+  - `public`: read-only chat preview visible
+  - `private` / `unlisted`: no preview visible
+- **Landing `/c/:slug` (authed + entitled/owner):** redirects into the in-app community view

@@ -10,7 +10,6 @@ type CommunityRow = {
 };
 
 type MessageRow = {
-  id: string;
   thread_id: string;
   seq: number;
   role: string;
@@ -26,7 +25,6 @@ type ProfileRow = {
 };
 
 type PreviewMessage = {
-  id: string;
   seq: number;
   created_at: string;
   sender_key: string;
@@ -82,7 +80,7 @@ async function loadCommunity(communityId: string): Promise<CommunityRow> {
 
 async function loadMessages(communityId: string, limit: number): Promise<MessageRow[]> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,created_at` +
+    `/rest/v1/messages?select=thread_id,seq,role,content_json,sender_id,created_at` +
       `&thread_id=eq.${encodeURIComponent(communityId)}` +
       `&role=eq.user&order=seq.desc&limit=${limit}`,
     { method: "GET" },
@@ -147,7 +145,6 @@ Deno.serve(async (req: Request) => {
       const profile = senderId ? profiles[senderId] ?? null : null;
       const body = extractTextFromContentJson(row.content_json);
       return {
-        id: row.id,
         seq: Number(row.seq) || 0,
         created_at: row.created_at,
         sender_key: senderKey,
