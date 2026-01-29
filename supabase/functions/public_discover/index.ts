@@ -42,13 +42,24 @@ type PlanRow = {
 };
 
 type PublicPlan = {
-  id: string;
   name: string;
   description: string | null;
   amount_base_units: string;
   currency: string;
   currency_decimals: number;
   billing_period: string;
+};
+
+type PublicDiscoverCommunity = {
+  slug: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  visibility: string;
+  created_at: string;
+  updated_at: string;
+  active_plan: PublicPlan | null;
 };
 
 function clampLimit(raw: string | null): number {
@@ -158,7 +169,6 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
     const cid = String(row.community_id ?? "").trim();
     if (!cid) continue;
     const next: PublicPlan = {
-      id: row.id,
       name: row.name,
       description: row.description ?? null,
       amount_base_units: String(row.amount_base_units ?? "0"),
@@ -201,7 +211,7 @@ Deno.serve(async (req: Request) => {
     for (const community of discoverable) merged.set(community.id, community);
     for (const community of accessible) merged.set(community.id, community);
 
-    let combined = Array.from(merged.values());
+    let combined = Array.from(merged.values()).filter((community) => community.visibility !== "unlisted");
     if (q) {
       const needle = q.toLowerCase();
       combined = combined.filter((community) => {
@@ -218,8 +228,15 @@ Deno.serve(async (req: Request) => {
     combined = combined.slice(0, limit);
 
     const planByCommunityId = await loadActivePlans(combined.map((c) => c.id));
-    const enriched = combined.map((community) => ({
-      ...community,
+    const enriched: PublicDiscoverCommunity[] = combined.map((community) => ({
+      slug: community.slug,
+      name: community.name,
+      description: community.description ?? null,
+      avatar_url: community.avatar_url ?? null,
+      banner_url: community.banner_url ?? null,
+      visibility: community.visibility,
+      created_at: community.created_at,
+      updated_at: community.updated_at,
       active_plan: planByCommunityId[community.id] ?? null,
     }));
 

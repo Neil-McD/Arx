@@ -29,8 +29,18 @@ type PlanRow = {
   is_active: boolean;
 };
 
+type PublicCommunity = {
+  slug: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  visibility: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type PublicPlan = {
-  id: string;
   name: string;
   description: string | null;
   amount_base_units: string;
@@ -71,7 +81,6 @@ async function loadActivePlans(communityId: string): Promise<PublicPlan[]> {
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as PlanRow[];
   return rows.map((row) => ({
-    id: row.id,
     name: row.name,
     description: row.description ?? null,
     amount_base_units: String(row.amount_base_units ?? "0"),
@@ -100,8 +109,19 @@ Deno.serve(async (req: Request) => {
       activePlans.find((plan) => plan.billing_period === "monthly") ??
       activePlans.find((plan) => plan.billing_period === "yearly") ??
       null;
+
+    const publicCommunity: PublicCommunity = {
+      slug: community.slug,
+      name: community.name,
+      description: community.description ?? null,
+      avatar_url: community.avatar_url ?? null,
+      banner_url: community.banner_url ?? null,
+      visibility: community.visibility,
+      created_at: community.created_at,
+      updated_at: community.updated_at,
+    };
     return jsonResponse(
-      { ok: true, community, active_plan: preferred, active_plans: activePlans },
+      { ok: true, community: publicCommunity, active_plan: preferred, active_plans: activePlans },
       { status: 200, headers },
     );
   } catch (error) {

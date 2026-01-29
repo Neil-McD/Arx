@@ -25,6 +25,7 @@ import {
   listPendingPurchaseClaimsRpc,
   readPendingPublicJoinBrandosAid,
   readPendingPublicJoinCommunityId,
+  readPendingPublicJoinCommunitySlug,
   readPendingPurchaseClaimToken,
   redeemPendingPurchaseClaimsRpc,
   redeemPurchaseClaimRpc,
@@ -47,7 +48,6 @@ type CommunityRecord = {
 };
 
 type PublicCommunityRecord = {
-  id: string;
   slug: string;
   name: string;
   description: string | null;
@@ -263,7 +263,6 @@ type PersonalMemoryItem = {
 };
 
 type PublicPlanSummary = {
-  id: string;
   name: string;
   description: string | null;
   amount_base_units: string;
@@ -1904,7 +1903,7 @@ export default function App() {
 
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityRecord | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
-  const [selectedPublicCommunityPlanId, setSelectedPublicCommunityPlanId] = useState<string | null>(null);
+  const [selectedPublicCommunityBillingPeriod, setSelectedPublicCommunityBillingPeriod] = useState<string | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [publicChatPreviewMessages, setPublicChatPreviewMessages] = useState<PublicChatPreviewMessage[]>([]);
@@ -3879,16 +3878,17 @@ export default function App() {
     }
   }
 
-  async function joinPublicCommunity(communityId: string, communitySlug?: string | null): Promise<void> {
-    const trimmed = communityId.trim();
-    if (!trimmed) return;
+  async function joinPublicCommunity(opts: { communityId?: string; communitySlug?: string | null }): Promise<void> {
+    const trimmedId = (opts.communityId ?? "").trim();
+    const trimmedSlug = (opts.communitySlug ?? "").trim();
+    if (!trimmedId && !trimmedSlug) return;
 
-    const brandosAid = communitySlug ? getBrandosAidForCommunitySlug(communitySlug) : null;
+    const brandosAid = trimmedSlug ? getBrandosAidForCommunitySlug(trimmedSlug) : null;
 
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      storePendingPublicJoin(trimmed, brandosAid);
+      storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
       handleSignIn();
       return;
     }
@@ -3904,7 +3904,8 @@ export default function App() {
       const joinedId = await joinPublicCommunityRpc({
         url,
         session,
-        communityId: trimmed,
+        communityId: trimmedId || undefined,
+        communitySlug: trimmedSlug || undefined,
         brandosAid: resolvedBrandosAid,
         fetchWithSupabaseAuth,
         readSupabaseError
@@ -3930,7 +3931,9 @@ export default function App() {
     }
   }
 
-  async function loadPublicChatPreview(communityId: string): Promise<void> {
+  async function loadPublicChatPreview(communitySlug: string): Promise<void> {
+    const trimmed = communitySlug.trim();
+    if (!trimmed) return;
     const url = getSupabaseUrl();
     if (!url) return;
     setIsLoadingPublicChatPreview(true);
@@ -3938,7 +3941,7 @@ export default function App() {
     setPublicChatPreviewMessages([]);
     try {
       const response = await fetchWithSupabasePublic(
-        `${url}/functions/v1/public_chat_preview?community_id=${encodeURIComponent(communityId)}&limit=20`,
+        `${url}/functions/v1/public_chat_preview?community_slug=${encodeURIComponent(trimmed)}&limit=20`,
         { method: "GET" },
       );
       if (!response.ok) throw new Error(await readSupabaseError(response));
@@ -3967,7 +3970,7 @@ export default function App() {
     setPublicCommunityError(null);
     setPublicCommunity(null);
     setPublicCommunityPlans([]);
-    setSelectedPublicCommunityPlanId(null);
+    setSelectedPublicCommunityBillingPeriod(null);
     setPublicChatPreviewMessages([]);
     setPublicChatPreviewError(null);
     setIsLoadingPublicChatPreview(false);
@@ -3983,17 +3986,17 @@ export default function App() {
         active_plan?: PublicPlanSummary | null;
         active_plans?: PublicPlanSummary[] | null;
       };
-      if (!payload?.community?.id) throw new Error("Community not found.");
+      if (!payload?.community?.slug) throw new Error("Community not found.");
 
       const session = sessionRef.current;
       if (session) {
         try {
           const accessResponse = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/get_my_community_access`,
+            `${url}/rest/v1/rpc/get_my_community_access_by_slug`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_community_id: payload.community.id })
+              body: JSON.stringify({ p_community_slug: payload.community.slug })
             },
             session,
           );
@@ -4005,7 +4008,7 @@ export default function App() {
               setActiveView("home");
               setActivePage("community");
               setCommunityTab("chat");
-              setActiveCommunityId(payload.community.id);
+              setActiveCommunityId(access.community_id);
               await loadCommunities(session);
               return;
             }
@@ -4027,10 +4030,10 @@ export default function App() {
         plans.find((plan) => plan.billing_period === "yearly") ??
         plans[0] ??
         null;
-      setSelectedPublicCommunityPlanId(preferred?.id ?? null);
+      setSelectedPublicCommunityBillingPeriod(preferred?.billing_period ?? null);
 
       if (payload.community.visibility === "public") {
-        void loadPublicChatPreview(payload.community.id);
+        void loadPublicChatPreview(payload.community.slug);
       }
     } catch (error) {
       const message =
@@ -4046,10 +4049,9 @@ export default function App() {
   }
 
   async function startCheckoutForPlan(
-    communityId: string,
-    planId: string,
+    communitySlug: string,
+    billingPeriod: string,
     cancelPath: string,
-    communitySlug: string | null,
   ): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) {
@@ -4065,8 +4067,8 @@ export default function App() {
       const cancelUrl = `${origin}${cancelPath}`;
       const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
       const body = JSON.stringify({
-        community_id: communityId,
-        plan_id: planId,
+        community_slug: communitySlug,
+        billing_period: billingPeriod,
         success_url: successUrl,
         cancel_url: cancelUrl,
         tracking: brandosAid ? { brandos_aid: brandosAid } : undefined,
@@ -4601,9 +4603,10 @@ export default function App() {
     if (isRedeemingClaim || isJoiningPublicCommunity) return;
     const claimToken = readPendingPurchaseClaimToken();
     if (claimToken) return;
+    const communitySlug = readPendingPublicJoinCommunitySlug();
     const communityId = readPendingPublicJoinCommunityId();
-    if (!communityId) return;
-    void joinPublicCommunity(communityId);
+    if (!communitySlug && !communityId) return;
+    void joinPublicCommunity({ communitySlug: communitySlug || null, communityId: communityId || undefined });
   }, [supabaseSession, isRedeemingClaim, isJoiningPublicCommunity]);
 
   async function loadCommunities(session: SupabaseSession) {
@@ -7941,7 +7944,9 @@ export default function App() {
   if (publicRoute.kind !== "app") {
     const showSignIn = !supabaseSession;
     const selectedPublicCommunityPlan =
-      publicCommunityPlans.find((plan) => plan.id === selectedPublicCommunityPlanId) ??
+      publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
+      publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
+      publicCommunityPlans.find((plan) => plan.billing_period === "yearly") ??
       publicCommunityPlans[0] ??
       null;
     const publicVisibility = (publicCommunity?.visibility ?? "").trim();
@@ -8008,15 +8013,19 @@ export default function App() {
                         }),
                       ].map((plan) => (
                         <button
-                          key={plan.id}
+                          key={plan.billing_period}
                           type="button"
                           className={
-                            plan.id === (selectedPublicCommunityPlanId ?? selectedPublicCommunityPlan?.id)
+                            plan.billing_period ===
+                            (selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlan?.billing_period)
                               ? "analytics-range-btn active"
                               : "analytics-range-btn"
                           }
-                          aria-pressed={plan.id === (selectedPublicCommunityPlanId ?? selectedPublicCommunityPlan?.id)}
-                          onClick={() => setSelectedPublicCommunityPlanId(plan.id)}
+                          aria-pressed={
+                            plan.billing_period ===
+                            (selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlan?.billing_period)
+                          }
+                          onClick={() => setSelectedPublicCommunityBillingPeriod(plan.billing_period)}
                         >
                           {plan.billing_period === "monthly" ? "Monthly" : "Annual"}
                         </button>
@@ -8037,15 +8046,14 @@ export default function App() {
 	                      if (!publicCommunity) return;
 	                      if (selectedPublicCommunityPlan) {
 	                        void startCheckoutForPlan(
-	                          publicCommunity.id,
-	                          selectedPublicCommunityPlan.id,
-	                          `/c/${encodeURIComponent(publicCommunity.slug)}`,
 	                          publicCommunity.slug,
+	                          selectedPublicCommunityPlan.billing_period,
+	                          `/c/${encodeURIComponent(publicCommunity.slug)}`,
 	                        );
 	                        return;
 	                      }
 	                      if (publicCommunity.visibility !== "public") return;
-	                      void joinPublicCommunity(publicCommunity.id, publicCommunity.slug);
+	                      void joinPublicCommunity({ communitySlug: publicCommunity.slug });
 	                    }}
 	                  >
 	                    {isJoiningPublicCommunity
@@ -8082,7 +8090,7 @@ export default function App() {
                       disabled={magicLinkStatus === "sending"}
                       onClick={() => {
                         const aid = getBrandosAidForCommunitySlug(publicCommunity.slug);
-                        storePendingPublicJoin(publicCommunity.id, aid);
+                        storePendingPublicJoin(publicCommunity.slug, aid);
                         void handleSendMagicLink(magicLinkEmail);
                       }}
                     >
@@ -9849,7 +9857,8 @@ export default function App() {
 	                        )}
 	                        {!isLoadingDiscover &&
 	                          filteredDiscoverCommunities.map((community) => {
-	                            const alreadyMember = communities.some((c) => c.id === community.id);
+	                            const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
+	                            const alreadyMember = Boolean(memberCommunity);
 	                            const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
 	                            const visibilityLabel =
 	                              community.visibility === "public"
@@ -9864,7 +9873,7 @@ export default function App() {
                               const canActivate = alreadyMember || Boolean(community.slug);
 	                            return (
 	                              <div
-	                                key={community.id}
+	                                key={community.slug}
 	                                className={`discover-card${canActivate ? " clickable" : ""}`}
 	                                role={canActivate ? "button" : undefined}
 	                                tabIndex={canActivate ? 0 : -1}
@@ -9878,9 +9887,10 @@ export default function App() {
 		                                onClick={() => {
 		                                  if (!canActivate) return;
 		                                  if (alreadyMember) {
-		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                    if (!memberCommunity) return;
+		                                    if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
 		                                    setActiveView("home");
-		                                    setActiveCommunityId(community.id);
+		                                    setActiveCommunityId(memberCommunity.id);
 		                                    setActivePage("community");
 		                                    setCommunityTab("chat");
 		                                    return;
@@ -9893,9 +9903,10 @@ export default function App() {
 		                                  if (event.key !== "Enter" && event.key !== " ") return;
 		                                  event.preventDefault();
 		                                  if (alreadyMember) {
-		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                                    if (!memberCommunity) return;
+		                                    if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
 		                                    setActiveView("home");
-		                                    setActiveCommunityId(community.id);
+		                                    setActiveCommunityId(memberCommunity.id);
 		                                    setActivePage("community");
 		                                    setCommunityTab("chat");
 		                                    return;

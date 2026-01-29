@@ -1,5 +1,6 @@
 export const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 export const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
+export const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
 export const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
 export const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
 export const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
@@ -48,7 +49,15 @@ export function clearPendingPurchaseClaimToken(): void {
 
 export function storePendingPublicJoin(communityId: string, brandosAid?: string | null): void {
   const trimmed = communityId.trim();
-  if (trimmed) safeLocalStorageSet(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
+  if (trimmed) {
+    if (isUuid(trimmed)) {
+      safeLocalStorageSet(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
+      safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
+    } else {
+      safeLocalStorageSet(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY, trimmed.toLowerCase());
+      safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+    }
+  }
   const aid = (brandosAid ?? "").trim();
   if (aid) safeLocalStorageSet(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, aid);
 }
@@ -57,12 +66,17 @@ export function readPendingPublicJoinCommunityId(): string {
   return safeLocalStorageGet(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
 }
 
+export function readPendingPublicJoinCommunitySlug(): string {
+  return safeLocalStorageGet(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
+}
+
 export function readPendingPublicJoinBrandosAid(): string {
   return safeLocalStorageGet(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
 }
 
 export function clearPendingPublicJoin(): void {
   safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
+  safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
   safeLocalStorageRemove(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
 }
 
@@ -184,17 +198,29 @@ export async function redeemPendingPurchaseClaimsRpc<S extends SupabaseSessionLi
 export async function joinPublicCommunityRpc<S extends SupabaseSessionLike>(opts: {
   url: string;
   session: S;
-  communityId: string;
+  communityId?: string;
+  communitySlug?: string;
   brandosAid?: string | null;
   fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
   readSupabaseError: ReadSupabaseError;
 }): Promise<string> {
-  const body: Record<string, unknown> = { p_community_id: opts.communityId };
+  const slug = (opts.communitySlug ?? "").trim();
+  const id = (opts.communityId ?? "").trim();
+  const body: Record<string, unknown> = {};
+  const rpc = slug ? "join_public_community_by_slug" : "join_public_community";
+
+  if (slug) {
+    body.p_community_slug = slug;
+  } else if (id) {
+    body.p_community_id = id;
+  } else {
+    throw new Error("Missing community");
+  }
   const aid = (opts.brandosAid ?? "").trim();
   if (aid) body.p_brandos_aid = aid;
 
   const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/join_public_community`,
+    `${opts.url}/rest/v1/rpc/${rpc}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -204,6 +230,5 @@ export async function joinPublicCommunityRpc<S extends SupabaseSessionLike>(opts
   );
   if (!response.ok) throw new Error(await opts.readSupabaseError(response));
   const rows = (await response.json()) as Array<{ community_id: string }>;
-  return rows[0]?.community_id ?? opts.communityId;
+  return rows[0]?.community_id ?? id;
 }
-

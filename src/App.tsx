@@ -14,6 +14,7 @@ import {
   listPendingPurchaseClaimsRpc,
   readPendingPublicJoinBrandosAid,
   readPendingPublicJoinCommunityId,
+  readPendingPublicJoinCommunitySlug,
   readPendingPurchaseClaimToken,
   redeemPendingPurchaseClaimsRpc,
   redeemPurchaseClaimRpc,
@@ -313,8 +314,18 @@ type CommunityRecord = {
   updated_at?: string | null;
 };
 
+type PublicCommunityRecord = {
+  slug: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  visibility: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type PublicPlanSummary = {
-  id: string;
   name: string;
   description: string | null;
   amount_base_units: string;
@@ -323,7 +334,7 @@ type PublicPlanSummary = {
   billing_period: string;
 };
 
-type DiscoverCommunity = CommunityRecord & {
+type DiscoverCommunity = PublicCommunityRecord & {
   active_plan?: PublicPlanSummary | null;
 };
 
@@ -3938,13 +3949,13 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function openCommunityLandingExternal(community: CommunityRecord): Promise<void> {
+  async function openCommunityLandingExternal(community: { slug?: string | null }): Promise<void> {
     const base = getPublicAppBaseUrl();
     if (!base) {
       setDiscoverError("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable checkout links.");
       return;
     }
-    const slug = (community.slug ?? community.id ?? "").trim();
+    const slug = (community.slug ?? "").trim();
     if (!slug) {
       setDiscoverError("Missing community slug.");
       return;
@@ -4129,16 +4140,18 @@ function isModelReady(modelId: string): boolean {
   }
 
   async function maybeAutoJoinPendingPublicCommunity(session: SupabaseSession) {
+    const slug = readPendingPublicJoinCommunitySlug();
     const id = readPendingPublicJoinCommunityId();
     const brandosAid = readPendingPublicJoinBrandosAid();
-    if (!id) return;
-    if (autoJoinPublicCommunitiesAttemptedRef.current.has(id)) return;
-    autoJoinPublicCommunitiesAttemptedRef.current.add(id);
+    const attemptKey = (slug || id).trim();
+    if (!attemptKey) return;
+    if (autoJoinPublicCommunitiesAttemptedRef.current.has(attemptKey)) return;
+    autoJoinPublicCommunitiesAttemptedRef.current.add(attemptKey);
 
     const url = getSupabaseUrl();
     if (!url) return;
 
-    setJoiningDiscoverCommunityId(id);
+    setJoiningDiscoverCommunityId(attemptKey);
     setDiscoverError(null);
     try {
       const resolvedBrandosAid = (() => {
@@ -4149,7 +4162,8 @@ function isModelReady(modelId: string): boolean {
       const joinedId = await joinPublicCommunityRpc({
         url,
         session,
-        communityId: id,
+        communityId: id || undefined,
+        communitySlug: slug || undefined,
         brandosAid: resolvedBrandosAid,
         fetchWithSupabaseAuth,
         readSupabaseError
@@ -4853,7 +4867,7 @@ function isModelReady(modelId: string): boolean {
 	    }
 	  }
 
-	  async function handleJoinDiscoverCommunity(community: CommunityRecord) {
+	  async function handleJoinDiscoverCommunity(community: DiscoverCommunity) {
 	    const url = getSupabaseUrl();
 	    if (!url) {
 	      setDiscoverError("Missing Supabase URL.");
@@ -4866,14 +4880,14 @@ function isModelReady(modelId: string): boolean {
 	      return;
 	    }
 
-	    setJoiningDiscoverCommunityId(community.id);
+	    setJoiningDiscoverCommunityId(community.slug);
 	    try {
         const brandosAid = getBrandosAidForCommunitySlug(community.slug ?? null);
         const resolvedBrandosAid = brandosAid && isUuid(brandosAid) ? brandosAid : null;
         const joinedId = await joinPublicCommunityRpc({
           url,
           session: supabaseSession,
-          communityId: community.id,
+          communitySlug: community.slug,
           brandosAid: resolvedBrandosAid,
           fetchWithSupabaseAuth,
           readSupabaseError
@@ -11737,8 +11751,9 @@ function isModelReady(modelId: string): boolean {
 	                      )}
 	                      {!isLoadingDiscover &&
 	                        filteredDiscoverCommunities.map((community) => {
-	                          const alreadyMember = communities.some((c) => c.id === community.id);
-	                          const isJoining = joiningDiscoverCommunityId === community.id;
+	                          const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
+	                          const alreadyMember = Boolean(memberCommunity);
+	                          const isJoining = joiningDiscoverCommunityId === community.slug;
 	                          const visibilityLabel =
 	                            community.visibility === "public"
 	                              ? "Public"
@@ -11754,7 +11769,7 @@ function isModelReady(modelId: string): boolean {
                             const canActivate = alreadyMember || Boolean(community.slug);
 	                          return (
 	                            <div
-	                              key={community.id}
+	                              key={community.slug}
 	                              className={`discover-card${canActivate ? " clickable" : ""}`}
 	                              role={canActivate ? "button" : undefined}
 	                              tabIndex={canActivate ? 0 : -1}
@@ -11770,8 +11785,9 @@ function isModelReady(modelId: string): boolean {
 		                              onClick={() => {
 		                                if (!canActivate) return;
 		                                if (alreadyMember) {
-		                                  if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-		                                  setActiveCommunityId(community.id);
+		                                  if (!memberCommunity) return;
+		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+		                                  setActiveCommunityId(memberCommunity.id);
 		                                  setActivePage("community");
 		                                  setCommunityTab("chat");
 		                                  return;
@@ -11787,8 +11803,9 @@ function isModelReady(modelId: string): boolean {
 		                                if (event.key !== "Enter" && event.key !== " ") return;
 		                                event.preventDefault();
 		                                if (alreadyMember) {
-		                                  if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-		                                  setActiveCommunityId(community.id);
+		                                  if (!memberCommunity) return;
+		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+		                                  setActiveCommunityId(memberCommunity.id);
 		                                  setActivePage("community");
 		                                  setCommunityTab("chat");
 		                                  return;

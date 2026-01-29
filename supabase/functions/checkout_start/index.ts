@@ -6,8 +6,10 @@ import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
 
 type CheckoutStartInput = {
-  community_id: string;
-  plan_id: string;
+  community_id?: string;
+  plan_id?: string;
+  community_slug?: string;
+  billing_period?: string;
   success_url: string;
   cancel_url: string;
   tracking?: {
@@ -27,12 +29,25 @@ function sanitizeUuid(value: string): string {
   return v;
 }
 
+function sanitizeSlug(value: unknown): string {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (!v) throw new Error("community_slug is required");
+  if (v.length > 128) throw new Error("community_slug too long");
+  return v;
+}
+
 function sanitizeOptionalUuid(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const v = String(value).trim();
   if (!v) return null;
   if (!/^[0-9a-fA-F-]{36}$/.test(v)) throw new Error("Invalid id");
   return v;
+}
+
+function sanitizeBillingPeriod(value: unknown): "one_time" | "monthly" | "yearly" {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "one_time" || v === "monthly" || v === "yearly") return v;
+  throw new Error("Invalid billing_period");
 }
 
 function extractBearerToken(header: string | null): string | null {
@@ -76,11 +91,12 @@ type PlanRow = {
   billing_period: "one_time" | "monthly" | "yearly";
   stripe_price_id: string | null;
   is_active: boolean;
+  visibility: string;
 };
 
 async function loadPlan(planId: string): Promise<PlanRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/plans?id=eq.${encodeURIComponent(planId)}&select=id,community_id,name,amount_base_units,currency,currency_decimals,billing_period,stripe_price_id,is_active`,
+    `/rest/v1/plans?id=eq.${encodeURIComponent(planId)}&select=id,community_id,name,amount_base_units,currency,currency_decimals,billing_period,stripe_price_id,is_active,visibility`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
@@ -89,6 +105,37 @@ async function loadPlan(planId: string): Promise<PlanRow> {
   if (!row) throw new Error("Plan not found");
   if (!row.is_active) throw new Error("Plan is not active");
   return row;
+}
+
+async function loadCommunityIdBySlug(slug: string): Promise<string> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/communities?select=id&slug=eq.${encodeURIComponent(slug)}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as Array<{ id: string }>;
+  const id = (rows[0]?.id ?? "").trim();
+  if (!id) throw new Error("Community not found");
+  return id;
+}
+
+async function loadActivePlanForCommunity(
+  communityId: string,
+  billingPeriod: PlanRow["billing_period"],
+): Promise<PlanRow> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/plans?select=id,community_id,name,amount_base_units,currency,currency_decimals,billing_period,stripe_price_id,is_active,visibility` +
+      `&community_id=eq.${encodeURIComponent(communityId)}` +
+      `&billing_period=eq.${encodeURIComponent(billingPeriod)}` +
+      `&is_active=eq.true&visibility=in.(public,unlisted)`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as PlanRow[];
+  const preferred = rows.find((row) => (row.visibility ?? "").trim() === "public") ?? rows[0] ?? null;
+  if (!preferred) throw new Error("Plan not found");
+  if (!preferred.is_active) throw new Error("Plan is not active");
+  return preferred;
 }
 
 type CommunityOwnerRow = { id: string; owner_id: string };
@@ -275,14 +322,28 @@ Deno.serve(async (req: Request) => {
     if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
 
     const input = await readJson<CheckoutStartInput>(req);
-    const communityId = sanitizeUuid(input.community_id);
-    const planId = sanitizeUuid(input.plan_id);
     if (!input.success_url?.trim()) throw new Error("success_url is required");
     if (!input.cancel_url?.trim()) throw new Error("cancel_url is required");
     const brandosAid = sanitizeOptionalUuid(input.tracking?.brandos_aid ?? null);
 
-    const plan = await loadPlan(planId);
-    if (plan.community_id !== communityId) throw new Error("Plan does not belong to community");
+    const rawPlanId = String(input.plan_id ?? "").trim();
+    const rawCommunityId = String(input.community_id ?? "").trim();
+    const rawCommunitySlug = String(input.community_slug ?? "").trim();
+
+    const plan = rawPlanId
+      ? await (async () => {
+          const communityId = sanitizeUuid(rawCommunityId);
+          const planId = sanitizeUuid(rawPlanId);
+          const loaded = await loadPlan(planId);
+          if (loaded.community_id !== communityId) throw new Error("Plan does not belong to community");
+          return loaded;
+        })()
+      : await (async () => {
+          const slug = sanitizeSlug(rawCommunitySlug);
+          const billingPeriod = sanitizeBillingPeriod(input.billing_period);
+          const communityId = await loadCommunityIdBySlug(slug);
+          return loadActivePlanForCommunity(communityId, billingPeriod);
+        })();
 
     const community = await loadCommunityOwner(plan.community_id);
     const builderTier = await loadBuilderTier(community.owner_id);

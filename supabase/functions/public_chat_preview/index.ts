@@ -33,10 +33,10 @@ type PreviewMessage = {
   body: string;
 };
 
-function normalizeUuid(raw: string | null): string {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) throw new Error("community_id is required");
-  if (!/^[0-9a-fA-F-]{36}$/.test(trimmed)) throw new Error("Invalid community_id");
+function normalizeSlug(raw: string | null): string {
+  const trimmed = (raw ?? "").trim().toLowerCase();
+  if (!trimmed) throw new Error("community_slug is required");
+  if (trimmed.length > 128) throw new Error("community_slug too long");
   return trimmed;
 }
 
@@ -66,9 +66,9 @@ function extractTextFromContentJson(contentJson: unknown): string {
   return "";
 }
 
-async function loadCommunity(communityId: string): Promise<CommunityRow> {
+async function loadCommunityBySlug(slug: string): Promise<CommunityRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/communities?select=id,visibility&id=eq.${encodeURIComponent(communityId)}&limit=1`,
+    `/rest/v1/communities?select=id,visibility&slug=eq.${encodeURIComponent(slug)}&limit=1`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
@@ -119,15 +119,15 @@ Deno.serve(async (req: Request) => {
     if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
 
     const url = new URL(req.url);
-    const communityId = normalizeUuid(url.searchParams.get("community_id"));
+    const communitySlug = normalizeSlug(url.searchParams.get("community_slug"));
     const limit = clampLimit(url.searchParams.get("limit"));
 
-    const community = await loadCommunity(communityId);
+    const community = await loadCommunityBySlug(communitySlug);
     if (String(community.visibility ?? "").trim() !== "public") {
       return jsonResponse({ ok: true, messages: [] }, { status: 200, headers });
     }
 
-    const rowsDesc = await loadMessages(communityId, limit);
+    const rowsDesc = await loadMessages(community.id, limit);
     const rows = [...rowsDesc].reverse();
     const senderIds = rows
       .map((row) => (row.sender_id ?? "").trim())
