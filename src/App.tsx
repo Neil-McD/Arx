@@ -32,6 +32,7 @@ type ThreadRecord = {
   created_at: number;
   updated_at: number;
   last_event_at: number | null;
+  last_seq?: number;
 };
 
 type ProjectRecord = {
@@ -681,6 +682,7 @@ type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
 function App() {
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const threadsHydratedRef = useRef(false);
   const [newThreadTitle] = useState("Untitled thread");
   const [commandInput, setCommandInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1150,6 +1152,24 @@ function App() {
     lastWorkspaceScrollTopRef.current = 0;
 
     if (!activeThreadId) {
+      // Draft state: clear thread-scoped UI while preserving the composer.
+      setMessages([]);
+      setToolCalls([]);
+      setTurnsByAssistantEventId({});
+      setSessionResume(null);
+      setAgentStatus(null);
+      setRunningTools([]);
+      setTaskPlan(null);
+      setSlashPanel(null);
+      setPendingToolApproval(null);
+      setIsToolApprovalSubmitting(false);
+      streamingContentRef.current = null;
+      streamingTokensRef.current = null;
+      streamingMetaRef.current = null;
+      setStreamingContent(null);
+      setStreamingTokens(null);
+      setStreamingMeta(null);
+
       isLoadingThreadRef.current = false;
       return;
     }
@@ -1542,6 +1562,9 @@ function App() {
 
   useEffect(() => {
     supabaseSessionRef.current = supabaseSession;
+    if (!supabaseSession) {
+      threadsHydratedRef.current = false;
+    }
   }, [supabaseSession]);
 
   useEffect(() => {
@@ -3181,12 +3204,13 @@ function App() {
       community_id: string | null;
       created_at: string;
       updated_at: string;
+      last_seq?: unknown;
     };
 
     const loadCloud = async (auth: SupabaseSession): Promise<ThreadRecord[]> => {
       if (!url) return [];
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&engine_id=neq.community_chat&order=updated_at.desc`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc`,
         { method: "GET" },
         auth,
       );
@@ -3194,17 +3218,26 @@ function App() {
       const rows = (await response.json()) as CloudThreadRow[];
       return rows
         .filter((row) => row.id && row.id !== "system")
-        .map((row) => ({
-          id: row.id,
-          title: row.title ?? null,
-          engine_id: (row.engine_id ?? "").trim() || "arx_harness",
-          model_id: (row.model_id ?? "").trim() || null,
-          workspace_path: null,
-          community_id: (row.community_id ?? "").trim() || null,
-          created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
-          updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
-          last_event_at: null,
-        }));
+        .map((row) => {
+          const parsedLastSeq =
+            typeof row.last_seq === "number"
+              ? row.last_seq
+              : typeof row.last_seq === "string"
+                ? Number(row.last_seq)
+                : Number.NaN;
+          return {
+            id: row.id,
+            title: row.title ?? null,
+            engine_id: (row.engine_id ?? "").trim() || "arx_harness",
+            model_id: (row.model_id ?? "").trim() || null,
+            workspace_path: null,
+            community_id: (row.community_id ?? "").trim() || null,
+            created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
+            updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
+            last_event_at: null,
+            last_seq: Number.isFinite(parsedLastSeq) ? parsedLastSeq : 0,
+          };
+        });
     };
 
     try {
@@ -3218,9 +3251,10 @@ function App() {
 
         if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
           setActiveThreadId(visible.length > 0 ? visible[0].id : null);
-        } else if (!activeThreadId && visible.length > 0) {
+        } else if (!activeThreadId && !threadsHydratedRef.current && visible.length > 0) {
           setActiveThreadId(visible[0].id);
         }
+        threadsHydratedRef.current = true;
         return;
       }
 
@@ -3230,11 +3264,20 @@ function App() {
       );
       setThreads(visible);
 
-      if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
-        setActiveThreadId(visible.length > 0 ? visible[0].id : null);
-      } else if (!activeThreadId && visible.length > 0) {
-        setActiveThreadId(visible[0].id);
+      const selectable = visible.filter((t) => (t.last_seq ?? 0) > 0);
+      const active = activeThreadId;
+      const activeThread = active ? visible.find((t) => t.id === active) ?? null : null;
+      const activeIsEmptyStub = activeThread ? (activeThread.last_seq ?? 0) <= 0 : false;
+
+      if (activeIsEmptyStub) {
+        // Old behavior created empty threads. Treat those as draft and fall back to the latest real chat.
+        setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
+      } else if (active && !visible.some((t) => t.id === active)) {
+        setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
+      } else if (!active && !threadsHydratedRef.current && selectable.length > 0) {
+        setActiveThreadId(selectable[0].id);
       }
+      threadsHydratedRef.current = true;
 
       // Ensure cloud threads are hydrated into the local DB so the desktop runtime can operate on them.
       for (const thread of cloudThreads) {
@@ -7871,6 +7914,10 @@ function isModelReady(modelId: string): boolean {
 	  const showCommunityRail = true;
 	  const effectiveCwd = (activeProject?.root_path ?? workspaceRoot ?? "").trim();
 	  const lastThreadWorkspaceRef = useRef<string | null>(null);
+	  const visibleThreads = useMemo(() => {
+	    if (!supabaseSession) return threads;
+	    return threads.filter((t) => (t.last_seq ?? 0) > 0);
+	  }, [threads, supabaseSession]);
 
   function communityInitials(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -8142,86 +8189,6 @@ function isModelReady(modelId: string): boolean {
     }
   }
 
-  async function handleCreateThread() {
-    if (!activeModelId) {
-      setMemoryToast("No model selected. Enable a model in Settings → Models.");
-      return;
-    }
-
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const threadId = crypto.randomUUID();
-    const thread: ThreadRecord = {
-      id: threadId,
-      title: newThreadTitle || null,
-      engine_id: "openrouter_messages_agent",
-      model_id: activeModelId,
-      community_id: null,
-      workspace_path: null,
-      created_at: nowSec,
-      updated_at: nowSec,
-      last_event_at: null,
-    };
-
-    if (session && url) {
-      try {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/threads`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-            body: JSON.stringify({
-              id: threadId,
-              owner_id: getSupabaseAuthUid(session),
-              title: thread.title,
-              engine_id: thread.engine_id,
-              model_id: thread.model_id,
-              community_id: null,
-            }),
-          },
-          session,
-        );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
-      } catch (error) {
-        console.error("Failed to create cloud thread:", error);
-        setMemoryToast("Failed to create thread.");
-        return;
-      }
-    }
-
-    // Ensure the local runtime can operate on the thread id.
-    try {
-      await invoke("upsert_thread_cmd", {
-        threadId: thread.id,
-        title: thread.title,
-        engineId: thread.engine_id,
-        modelId: thread.model_id,
-        communityId: thread.community_id,
-        createdAt: thread.created_at,
-        updatedAt: thread.updated_at,
-      });
-    } catch {
-      // best-effort
-    }
-
-    setThreads((prev) => [thread, ...prev]);
-    setActiveThreadId(thread.id);
-    const nextWorkspace = effectiveCwd;
-    if (nextWorkspace) {
-      await invoke("set_thread_workspace_cmd", {
-        threadId: thread.id,
-        workspacePath: nextWorkspace
-      });
-      lastThreadWorkspaceRef.current = nextWorkspace;
-    } else {
-      lastThreadWorkspaceRef.current = null;
-    }
-    setMessages([]);
-    setToolCalls([]);
-  }
-
   useEffect(() => {
     if (!activeThreadId) return;
     const nextWorkspace = effectiveCwd;
@@ -8256,7 +8223,10 @@ function isModelReady(modelId: string): boolean {
     setThreads((prev) => prev.filter((t) => t.id !== threadId));
     if (activeThreadId === threadId) {
       const remaining = threads.filter((t) => t.id !== threadId);
-      setActiveThreadId(remaining.length > 0 ? remaining[0].id : null);
+      const selectable = supabaseSession
+        ? remaining.filter((t) => (t.last_seq ?? 0) > 0)
+        : remaining;
+      setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
       setMessages([]);
     }
   }
@@ -8267,6 +8237,39 @@ function isModelReady(modelId: string): boolean {
     if (!firstUserMsg) return "No messages";
     const text = parseMessageText(firstUserMsg.content_json);
     return text.length > 40 ? text.slice(0, 40) + "..." : text;
+  }
+
+  function focusChatInput() {
+    requestAnimationFrame(() => chatInputRef.current?.focus());
+  }
+
+  function enterDraftThread() {
+    // ChatGPT-like: "New chat" is a draft (no thread row until first send).
+    if (!activeThreadId) {
+      focusChatInput();
+      return;
+    }
+
+    setActiveThreadId(null);
+    setMessages([]);
+    setToolCalls([]);
+    setTurnsByAssistantEventId({});
+    setSessionResume(null);
+    setAgentStatus(null);
+    setRunningTools([]);
+    setTaskPlan(null);
+    setSlashPanel(null);
+    setPendingToolApproval(null);
+    setIsToolApprovalSubmitting(false);
+
+    streamingContentRef.current = null;
+    streamingTokensRef.current = null;
+    streamingMetaRef.current = null;
+    setStreamingContent(null);
+    setStreamingTokens(null);
+    setStreamingMeta(null);
+
+    focusChatInput();
   }
 
   async function ensureThreadId(): Promise<string | null> {
@@ -8290,6 +8293,7 @@ function isModelReady(modelId: string): boolean {
       created_at: nowSec,
       updated_at: nowSec,
       last_event_at: null,
+      last_seq: 0,
     };
 
     if (session && url) {
@@ -8334,6 +8338,17 @@ function isModelReady(modelId: string): boolean {
 
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
+    const nextWorkspace = effectiveCwd;
+    if (nextWorkspace) {
+      try {
+        await invoke("set_thread_workspace_cmd", { threadId: thread.id, workspacePath: nextWorkspace });
+        lastThreadWorkspaceRef.current = nextWorkspace;
+      } catch {
+        // best-effort
+      }
+    } else {
+      lastThreadWorkspaceRef.current = null;
+    }
     return thread.id;
   }
 
@@ -8341,6 +8356,10 @@ function isModelReady(modelId: string): boolean {
     const hasText = commandInput.trim().length > 0;
     const hasAttachments = attachments.length > 0;
     if (!hasText && !hasAttachments) return;
+
+    const startedInDraft = !activeThreadId;
+    let createdThreadId: string | null = null;
+    let postedUserMessage = false;
 
     if (providerKeys[0]?.hasKey !== true) {
       let hasKey = false;
@@ -8364,6 +8383,7 @@ function isModelReady(modelId: string): boolean {
 
 	    const sessionId = await ensureThreadId();
 	    if (!sessionId) return;
+	    if (startedInDraft) createdThreadId = sessionId;
 	    const session = supabaseSessionRef.current;
 	    const userText = commandInput.trim();
 	    const currentAttachments = [...attachments];
@@ -8390,6 +8410,18 @@ function isModelReady(modelId: string): boolean {
 	        role: "user",
 	        contentJson: JSON.stringify(contentPayload)
 	      });
+	      postedUserMessage = true;
+	      setThreads((prev) =>
+	        prev.map((t) => {
+	          if (t.id !== sessionId) return t;
+	          const nowSec = Math.floor(Date.now() / 1000);
+	          return {
+	            ...t,
+	            last_seq: Math.max(t.last_seq ?? 0, 1),
+	            updated_at: Math.max(t.updated_at ?? 0, nowSec),
+	          };
+	        }),
+	      );
 	      if (session) {
 	        try {
 	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
@@ -8578,6 +8610,38 @@ function isModelReady(modelId: string): boolean {
           : error instanceof Error
             ? error.message
             : "Unknown error";
+
+      if (createdThreadId && !postedUserMessage) {
+        // We created a thread for this send but didn't persist the user message.
+        // Delete the empty thread and return to the draft state.
+        const latestSession = supabaseSessionRef.current;
+        const url = latestSession ? getSupabaseUrl() : null;
+        if (latestSession && url) {
+          try {
+            const response = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/threads?id=eq.${encodeURIComponent(createdThreadId)}`,
+              { method: "DELETE", headers: { Prefer: "return=minimal" } },
+              latestSession,
+            );
+            if (!response.ok) throw new Error(await readSupabaseError(response));
+          } catch {
+            // best-effort
+          }
+        }
+        try {
+          await invoke("delete_thread_cmd", { threadId: createdThreadId });
+        } catch {
+          // best-effort
+        }
+        setThreads((prev) => prev.filter((t) => t.id !== createdThreadId));
+        setActiveThreadId(null);
+        setMessages([]);
+        setToolCalls([]);
+        setTurnsByAssistantEventId({});
+        setSessionResume(null);
+        setMemoryToast(`Failed to send message: ${message}`);
+        return;
+      }
 	      await invoke("add_message_cmd", {
 	        sessionId,
 	        role: "assistant",
@@ -9096,7 +9160,7 @@ function isModelReady(modelId: string): boolean {
                 <button
                   className="new-session-header-btn"
                   data-tauri-drag-region="false"
-                  onClick={handleCreateThread}
+                  onClick={enterDraftThread}
                   title="New thread"
                 >
                   <svg viewBox="0 0 24 24">
@@ -9296,7 +9360,7 @@ function isModelReady(modelId: string): boolean {
             <>
 	              <div className="panel-title">Threads</div>
 	              <div className="session-list">
-	                {groupThreadsByDate(threads).map((group) => (
+	                {groupThreadsByDate(visibleThreads).map((group) => (
 	                  <div key={group.label} className="session-group">
 	                    <div className="session-group-label">{group.label}</div>
 	                    {group.threads.map((thread) => (
@@ -9331,12 +9395,12 @@ function isModelReady(modelId: string): boolean {
                         </div>
                       </div>
                     ))}
-                  </div>
-                ))}
-                {threads.length === 0 && (
-                  <div className="empty-state">No threads yet. Click + to start.</div>
+	                  </div>
+	                ))}
+                {visibleThreads.length === 0 && (
+                  <div className="empty-state">No chats yet. Send a message to start.</div>
                 )}
-              </div>
+	              </div>
             </>
           )}
         </aside>

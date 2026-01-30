@@ -64,6 +64,7 @@ type ThreadRecord = {
   engine_id: string;
   model_id: string | null;
   community_id: string | null;
+  last_seq: number;
   created_at: number; // epoch seconds
   updated_at: number; // epoch seconds
 };
@@ -2197,6 +2198,7 @@ export default function App() {
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const threadsHydratedRef = useRef(false);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const DESKTOP_INSTALLED_KEY = "arx-desktop-installed";
@@ -2580,6 +2582,7 @@ export default function App() {
     setActiveCommunityId(null);
     setThreads([]);
     setActiveThreadId(null);
+    threadsHydratedRef.current = false;
     setThreadMessages([]);
     setPersonalMemoryItems([]);
     setProviderKeys([{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }]);
@@ -4725,7 +4728,7 @@ export default function App() {
     setThreadError(null);
     try {
       const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
         {},
         session
       );
@@ -4741,23 +4744,45 @@ export default function App() {
         community_id: string | null;
         created_at: string;
         updated_at: string;
+        last_seq: unknown;
       }>;
       const list: ThreadRecord[] = rows
         .filter((row) => (row.engine_id ?? "").trim() !== "community_chat")
-        .map((row) => ({
-          id: row.id,
-          title: row.title ?? null,
-          engine_id: row.engine_id,
-          model_id: row.model_id ?? null,
-          community_id: row.community_id ?? null,
-          created_at: toEpochSeconds(row.created_at),
-          updated_at: toEpochSeconds(row.updated_at)
-        }));
+        .map((row) => {
+          const parsedLastSeq =
+            typeof row.last_seq === "number"
+              ? row.last_seq
+              : typeof row.last_seq === "string"
+                ? Number(row.last_seq)
+                : Number.NaN;
+          return {
+            id: row.id,
+            title: row.title ?? null,
+            engine_id: row.engine_id,
+            model_id: row.model_id ?? null,
+            community_id: row.community_id ?? null,
+            last_seq: Number.isFinite(parsedLastSeq) ? parsedLastSeq : 0,
+            created_at: toEpochSeconds(row.created_at),
+            updated_at: toEpochSeconds(row.updated_at)
+          };
+        });
       setThreads(list);
-      if (!activeThreadId && list.length > 0) setActiveThreadId(list[0].id);
-      if (activeThreadId && !list.some((t) => t.id === activeThreadId) && list.length > 0) {
-        setActiveThreadId(list[0].id);
+      const visible = list.filter((thread) => thread.last_seq > 0);
+
+      // Default selection (first load only): open the most recent real thread.
+      if (!activeThreadId) {
+        if (!threadsHydratedRef.current) {
+          setActiveThreadId(visible[0]?.id ?? null);
+        }
+        threadsHydratedRef.current = true;
+        return;
       }
+
+      // If the selected thread disappeared (or is an empty stub), fall back to the latest real chat.
+      if (!visible.some((t) => t.id === activeThreadId)) {
+        setActiveThreadId(visible[0]?.id ?? null);
+      }
+      threadsHydratedRef.current = true;
     } catch (error) {
       const message =
         typeof error === "string"
@@ -4855,6 +4880,7 @@ export default function App() {
         engine_id: "arx_harness",
         model_id: preferredModelId,
         community_id: null,
+        last_seq: 0,
         created_at: nowSec,
         updated_at: nowSec
       };
@@ -5215,6 +5241,10 @@ export default function App() {
       return;
     }
 
+    const startedInDraft = !activeThreadId;
+    let createdThreadId: string | null = null;
+    let postedUserMessage = false;
+
     const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const hasPersonalMemoryAccess = tier === "builder" || tier === "pro";
 
@@ -5224,8 +5254,12 @@ export default function App() {
     setIsWorkspaceAtBottom(true);
     try {
       const session = supabaseSession;
-      const threadId =
-        activeThreadId ?? (await createThread(session))?.id ?? null;
+      let threadId = activeThreadId;
+      if (!threadId) {
+        const created = await createThread(session);
+        threadId = created?.id ?? null;
+        createdThreadId = threadId;
+      }
       if (!threadId) throw new Error("No thread available.");
 
       const url = getSupabaseUrl();
@@ -5277,6 +5311,15 @@ export default function App() {
         const message = await readSupabaseError(response);
         throw new Error(message);
       }
+      postedUserMessage = true;
+      if (startedInDraft) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === threadId ? { ...t, last_seq: Math.max(t.last_seq, 1), updated_at: nowSec } : t
+          )
+        );
+      }
       setMessageInput("");
       setWorkspaceAttachments([]);
       await loadThreadMessages(threadId, session);
@@ -5295,6 +5338,10 @@ export default function App() {
             ? error.message
             : "Failed to send message.";
       setThreadError(message);
+      if (startedInDraft && createdThreadId && !postedUserMessage) {
+        setThreads((prev) => prev.filter((t) => t.id !== createdThreadId));
+        setActiveThreadId(null);
+      }
       const normalized = message.toLowerCase();
       if (normalized.includes("cloud history limit reached")) {
         setBuilderUpgradeContext("builder");
@@ -7964,6 +8011,8 @@ export default function App() {
     return threads.find((t) => t.id === activeThreadId) ?? null;
   }, [activeThreadId, threads]);
 
+  const visibleThreads = useMemo(() => threads.filter((thread) => thread.last_seq > 0), [threads]);
+
   const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
 
   const selectedModelId = useMemo(() => {
@@ -8500,7 +8549,13 @@ export default function App() {
                       handleSignIn();
                       return;
                     }
-                    void createThread(supabaseSession);
+                    // ChatGPT-style: "New chat" is a draft state until the first message is sent.
+                    if (!activeThreadId) {
+                      workspaceAskInputRef.current?.focus();
+                      return;
+                    }
+                    setActiveThreadId(null);
+                    workspaceAskInputRef.current?.focus();
                   }}
                   title="New thread"
                   aria-label="New thread"
@@ -8548,7 +8603,7 @@ export default function App() {
             >
               {threadError && <div className="auth-error">{threadError}</div>}
               <div className="session-list">
-                {groupThreadsByDate(threads).map((group) => (
+                {groupThreadsByDate(visibleThreads).map((group) => (
                   <div key={group.label} className="session-group">
                     <div className="session-group-label">{group.label}</div>
                     {group.threads.map((thread) => (
@@ -8567,7 +8622,7 @@ export default function App() {
                     ))}
                   </div>
                 ))}
-                {threads.length === 0 && <div className="empty-state">No threads yet. Click + to start.</div>}
+                {visibleThreads.length === 0 && <div className="empty-state">No chats yet. Send a message to start.</div>}
               </div>
             </aside>
           </>
@@ -9526,13 +9581,10 @@ export default function App() {
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
 		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 		                  <div className="message-list-inner">
-		                    {!supabaseSession && (
+	                    {!supabaseSession && (
 		                      <div className="chat-empty">Sign in to start a thread.</div>
 		                    )}
-	                    {supabaseSession && !activeThreadId && threads.length === 0 && (
-	                      <div className="chat-empty">No threads yet. Click + to start.</div>
-	                    )}
-	                    {supabaseSession && activeThreadId && threadMessages.length === 0 && (
+	                    {supabaseSession && !activeThreadId && (
 	                      <div className="web-empty-thread" role="region" aria-label="Start a new thread">
                           <div className="web-empty-thread-title">How can I help?</div>
                           <div className="web-empty-thread-subtitle">
