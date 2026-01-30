@@ -86,6 +86,71 @@ type BuilderTier = "free" | "builder" | "pro";
 
 type InferenceSource = "user" | "platform";
 
+type PlatformProvider = "openai" | "anthropic" | "google" | "x-ai";
+type PlatformModelRef = { provider: PlatformProvider; model: string; ref: string };
+
+function normalizePlatformProvider(input: string): PlatformProvider {
+  const raw = (input ?? "").trim().toLowerCase();
+  if (raw === "openai") return "openai";
+  if (raw === "anthropic") return "anthropic";
+  if (raw === "google") return "google";
+  if (raw === "xai" || raw === "x-ai") return "x-ai";
+  throw new Error("Unsupported platform model provider");
+}
+
+function parsePlatformModelRef(ref: string): PlatformModelRef {
+  const raw = (ref ?? "").trim();
+  const idx = raw.indexOf("/");
+  if (idx <= 0) throw new Error("Invalid platform model mapping");
+  const provider = normalizePlatformProvider(raw.slice(0, idx));
+  const model = raw.slice(idx + 1).trim();
+  if (!model) throw new Error("Invalid platform model mapping");
+  return { provider, model, ref: `${provider}/${model}` };
+}
+
+let cachedPlatformModelMap: { raw: string; parsed: Record<string, string> } | null = null;
+
+function loadPlatformModelMap(): Record<string, string> {
+  const raw = getEnv("PLATFORM_MODEL_MAP_JSON");
+  if (!raw) return {};
+  if (cachedPlatformModelMap?.raw === raw) return cachedPlatformModelMap.parsed;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
+  }
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value !== "string") continue;
+    const id = String(key ?? "").trim();
+    const ref = value.trim();
+    if (!id || !ref) continue;
+    out[id] = ref;
+  }
+  cachedPlatformModelMap = { raw, parsed: out };
+  return out;
+}
+
+function resolvePlatformModelForAlias(aliasModelId: string): PlatformModelRef {
+  const map = loadPlatformModelMap();
+  const cleanedAlias = (aliasModelId ?? "").trim();
+  if (Object.keys(map).length > 0) {
+    const raw = map[cleanedAlias];
+    if (!raw) throw new Error(`Platform model not configured for '${cleanedAlias}'`);
+    return parsePlatformModelRef(raw);
+  }
+
+  // Back-compat: if a single platform model is configured (legacy), use it.
+  const fallback = getEnv("OPENROUTER_PLATFORM_MODEL_ID");
+  if (fallback) return parsePlatformModelRef(fallback);
+
+  throw new Error("Missing PLATFORM_MODEL_MAP_JSON");
+}
+
 async function loadThread(threadId: string): Promise<ThreadRow> {
   const res = await supabaseAdminFetch(
     `/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}&select=id,owner_id,engine_id,model_id,community_id`,
@@ -445,24 +510,41 @@ async function openAiChatCompletion(
   messages: OpenRouterChatMessage[],
   maxTokens: number,
 ): Promise<{ text: string; usage?: OpenAiUsage }> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  return openAiCompatibleChatCompletion({
+    apiKey: openaiKey,
+    baseUrl: "https://api.openai.com/v1",
+    model,
+    messages,
+    maxTokens,
+  });
+}
+
+async function openAiCompatibleChatCompletion(params: {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  messages: OpenRouterChatMessage[];
+  maxTokens: number;
+}): Promise<{ text: string; usage?: OpenAiUsage }> {
+  const url = `${params.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${openaiKey}`,
+      Authorization: `Bearer ${params.apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: maxTokens,
+      model: params.model,
+      messages: params.messages,
+      max_tokens: params.maxTokens,
       stream: false,
     }),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI error ${res.status}: ${text}`);
+  if (!res.ok) throw new Error(`OpenAI-compatible error ${res.status}: ${text}`);
   const parsed = JSON.parse(text) as OpenAiChatCompletion;
   const out = String(parsed.choices?.[0]?.message?.content ?? "").trim();
-  if (!out) throw new Error("OpenAI returned an empty response");
+  if (!out) throw new Error("Model returned an empty response");
   return { text: out, usage: parsed.usage };
 }
 
@@ -482,6 +564,164 @@ function extractStreamDelta(chunk: OpenRouterStreamChunk): string {
   const fromText = typeof choice?.text === "string" ? choice.text : null;
   const fromMessage = choice?.message && typeof choice.message.content === "string" ? choice.message.content : null;
   return (fromDelta ?? fromText ?? fromMessage ?? "").toString();
+}
+
+type AnthropicRole = "user" | "assistant";
+type AnthropicMessage = { role: AnthropicRole; content: string };
+
+function toAnthropicSystemAndMessages(messages: OpenRouterChatMessage[]): { system: string; messages: AnthropicMessage[] } {
+  const systemParts: string[] = [];
+  const out: AnthropicMessage[] = [];
+  for (const msg of messages) {
+    if (!msg) continue;
+    const role = msg.role;
+    const content = String(msg.content ?? "");
+    if (!content.trim()) continue;
+    if (role === "system") {
+      systemParts.push(content);
+      continue;
+    }
+    if (role === "user" || role === "assistant") {
+      out.push({ role, content });
+    }
+  }
+  const system = systemParts.map((part) => part.trim()).filter(Boolean).join("\n\n---\n\n");
+  // Anthropic expects alternating user/assistant; merge consecutive same-role messages.
+  const merged: AnthropicMessage[] = [];
+  for (const msg of out) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === msg.role) {
+      prev.content = `${prev.content}\n\n${msg.content}`;
+      continue;
+    }
+    merged.push({ ...msg });
+  }
+  return { system, messages: merged };
+}
+
+type AnthropicUsage = { input_tokens?: number; output_tokens?: number };
+type AnthropicResponse = { content?: Array<{ type?: string; text?: string }>; usage?: AnthropicUsage };
+
+async function anthropicChatCompletion(params: {
+  apiKey: string;
+  model: string;
+  messages: OpenRouterChatMessage[];
+  maxTokens: number;
+  stream: false;
+}): Promise<{ text: string; usage?: AnthropicUsage }> {
+  const { system, messages } = toAnthropicSystemAndMessages(params.messages);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": params.apiKey,
+      "anthropic-version": getEnv("ANTHROPIC_VERSION") || "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: params.model,
+      max_tokens: params.maxTokens,
+      stream: false,
+      ...(system ? { system } : {}),
+      messages,
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${text}`);
+  const parsed = JSON.parse(text) as AnthropicResponse;
+  const blocks = Array.isArray(parsed.content) ? parsed.content : [];
+  const out = blocks
+    .filter((b) => b && b.type === "text" && typeof b.text === "string")
+    .map((b) => String(b.text))
+    .join("")
+    .trim();
+  if (!out) throw new Error("Model returned an empty response");
+  return { text: out, usage: parsed.usage };
+}
+
+type GeminiRole = "user" | "model";
+type GeminiPart = { text: string };
+type GeminiContent = { role: GeminiRole; parts: GeminiPart[] };
+
+function toGeminiSystemAndContents(messages: OpenRouterChatMessage[]): { system: string; contents: GeminiContent[] } {
+  const systemParts: string[] = [];
+  const raw: GeminiContent[] = [];
+  for (const msg of messages) {
+    if (!msg) continue;
+    const content = String(msg.content ?? "");
+    if (!content.trim()) continue;
+    if (msg.role === "system") {
+      systemParts.push(content);
+      continue;
+    }
+    if (msg.role === "user") {
+      raw.push({ role: "user", parts: [{ text: content }] });
+      continue;
+    }
+    if (msg.role === "assistant") {
+      raw.push({ role: "model", parts: [{ text: content }] });
+      continue;
+    }
+  }
+  const system = systemParts.map((part) => part.trim()).filter(Boolean).join("\n\n---\n\n");
+
+  const merged: GeminiContent[] = [];
+  for (const item of raw) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.role === item.role) {
+      prev.parts[0]!.text = `${prev.parts[0]!.text}\n\n${item.parts[0]!.text}`;
+      continue;
+    }
+    merged.push({ role: item.role, parts: [{ text: item.parts[0]!.text }] });
+  }
+
+  return { system, contents: merged };
+}
+
+type GeminiUsage = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+};
+
+type GeminiResponse = {
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  usageMetadata?: GeminiUsage;
+};
+
+async function googleGenerateContent(params: {
+  apiKey: string;
+  model: string;
+  messages: OpenRouterChatMessage[];
+  maxTokens: number;
+}): Promise<{ text: string; usage?: GeminiUsage }> {
+  const { system, contents } = toGeminiSystemAndContents(params.messages);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    params.model,
+  )}:generateContent`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": params.apiKey,
+    },
+    body: JSON.stringify({
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      contents,
+      generationConfig: { maxOutputTokens: params.maxTokens },
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Google error ${res.status}: ${text}`);
+  const parsed = JSON.parse(text) as GeminiResponse;
+  const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+  const out = parts
+    .map((p) => (typeof p?.text === "string" ? p.text : ""))
+    .join("")
+    .trim();
+  if (!out) throw new Error("Model returned an empty response");
+  return { text: out, usage: parsed.usageMetadata };
 }
 
 async function insertAssistantMessage(params: {
@@ -659,6 +899,43 @@ async function consumePlatformInferenceStandard(userId: string, units = 1): Prom
 function encodeSse(event: string, data: unknown): Uint8Array {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   return new TextEncoder().encode(payload);
+}
+
+async function consumeSseEvents(params: {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  onData: (data: string) => boolean | void;
+}): Promise<void> {
+  const decoder = new TextDecoder();
+  let lineBuffer = "";
+  let dataBuffer = "";
+
+  const flush = (): boolean => {
+    const raw = dataBuffer.trim();
+    dataBuffer = "";
+    if (!raw) return false;
+    return Boolean(params.onData(raw));
+  };
+
+  while (true) {
+    const { value, done } = await params.reader.read();
+    if (done) break;
+    lineBuffer += decoder.decode(value, { stream: true });
+    while (true) {
+      const idx = lineBuffer.indexOf("\n");
+      if (idx < 0) break;
+      let line = lineBuffer.slice(0, idx);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      lineBuffer = lineBuffer.slice(idx + 1);
+      if (line === "") {
+        if (flush()) return;
+        continue;
+      }
+      if (line.startsWith("data:")) {
+        dataBuffer += line.slice(5).trim();
+      }
+    }
+  }
+  flush();
 }
 
 function truncateUtf8(input: string, maxChars: number): string {
@@ -953,6 +1230,7 @@ async function extractMemoryCandidatesViaOpenRouter(params: {
 
 async function extractMemoryCandidatesViaOpenAi(params: {
   openaiKey: string;
+  baseUrl?: string;
   model: string;
   userText: string;
   priorAssistantText?: string;
@@ -983,7 +1261,100 @@ async function extractMemoryCandidatesViaOpenAi(params: {
     },
   ];
 
-  const { text } = await openAiChatCompletion(params.openaiKey, params.model, prompt, 220);
+  const { text } = await openAiCompatibleChatCompletion({
+    apiKey: params.openaiKey,
+    baseUrl: params.baseUrl ?? "https://api.openai.com/v1",
+    model: params.model,
+    messages: prompt,
+    maxTokens: 220,
+  });
+  const parsed = safeJsonParseArray(text);
+  if (!parsed) return [];
+  return normalizeMemoryCandidates(parsed);
+}
+
+async function extractMemoryCandidatesViaAnthropic(params: {
+  apiKey: string;
+  model: string;
+  userText: string;
+  priorAssistantText?: string;
+}): Promise<MemoryCandidate[]> {
+  const userText = (params.userText ?? "").trim();
+  if (!userText) return [];
+  const priorAssistantText = (params.priorAssistantText ?? "").trim();
+
+  const prompt: OpenRouterChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You extract durable personal memory about a user.\n" +
+        "Return ONLY valid JSON: an array of objects {\"content\": string, \"pinned\": boolean}.\n" +
+        "Rules:\n" +
+        "- Only store durable facts/preferences/goals that are likely helpful later.\n" +
+        "- Do not store one-off tasks, transient details, secrets, or sensitive info.\n" +
+        "- Never store questions; only store declarative facts about the user.\n" +
+        "- You may use the prior assistant message for context, but only store facts the user explicitly states or affirms.\n" +
+        "- If nothing should be remembered, return [].\n" +
+        "- Keep each content item short (<= 200 chars).",
+    },
+    {
+      role: "user",
+      content:
+        (priorAssistantText ? `Prior assistant message:\n${truncateUtf8(priorAssistantText, 600)}\n\n` : "") +
+        `User message:\n${truncateUtf8(userText, 1600)}`,
+    },
+  ];
+
+  const { text } = await anthropicChatCompletion({
+    apiKey: params.apiKey,
+    model: params.model,
+    messages: prompt,
+    maxTokens: 220,
+    stream: false,
+  });
+  const parsed = safeJsonParseArray(text);
+  if (!parsed) return [];
+  return normalizeMemoryCandidates(parsed);
+}
+
+async function extractMemoryCandidatesViaGoogle(params: {
+  apiKey: string;
+  model: string;
+  userText: string;
+  priorAssistantText?: string;
+}): Promise<MemoryCandidate[]> {
+  const userText = (params.userText ?? "").trim();
+  if (!userText) return [];
+  const priorAssistantText = (params.priorAssistantText ?? "").trim();
+
+  const prompt: OpenRouterChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "You extract durable personal memory about a user.\n" +
+        "Return ONLY valid JSON: an array of objects {\"content\": string, \"pinned\": boolean}.\n" +
+        "Rules:\n" +
+        "- Only store durable facts/preferences/goals that are likely helpful later.\n" +
+        "- Do not store one-off tasks, transient details, secrets, or sensitive info.\n" +
+        "- Never store questions; only store declarative facts about the user.\n" +
+        "- You may use the prior assistant message for context, but only store facts the user explicitly states or affirms.\n" +
+        "- If nothing should be remembered, return [].\n" +
+        "- Keep each content item short (<= 200 chars).",
+    },
+    {
+      role: "user",
+      content:
+        (priorAssistantText ? `Prior assistant message:\n${truncateUtf8(priorAssistantText, 600)}\n\n` : "") +
+        `User message:\n${truncateUtf8(userText, 1600)}`,
+    },
+  ];
+
+  const { text } = await googleGenerateContent({
+    apiKey: params.apiKey,
+    model: params.model,
+    messages: prompt,
+    maxTokens: 220,
+  });
   const parsed = safeJsonParseArray(text);
   if (!parsed) return [];
   return normalizeMemoryCandidates(parsed);
@@ -1118,6 +1489,7 @@ Deno.serve(async (req: Request) => {
     const thread = await loadThread(threadId);
     if ((thread.engine_id ?? "").trim() === "community_chat") throw new Error("forbidden");
     if ((thread.owner_id ?? "").trim() !== userId) throw new Error("forbidden");
+    const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
 
     // Parallelize I/O to reduce time-to-first-token.
     const [
@@ -1234,27 +1606,46 @@ Deno.serve(async (req: Request) => {
     if (!ipRlAllowed) throw new Error("rate_limited");
 
     let platformRemaining: number | null = null;
-    const platformModelId = getEnv("OPENROUTER_PLATFORM_MODEL_ID");
     const platformMaxTokensRaw = getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
     const platformMaxTokens = Number.isFinite(Number(platformMaxTokensRaw))
       ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
       : 512;
 
-    let platformOpenAiKey: string | null = null;
-    let platformOpenAiModel: string | null = null;
+    let platformModel: PlatformModelRef | null = null;
+    let platformProviderKey: string | null = null;
+    let platformOpenAiCompatibleBaseUrl: string | null = null;
 
     if (inferenceSource === "platform") {
-      if (!platformModelId || !platformModelId.includes("/")) throw new Error("Missing env var: OPENROUTER_PLATFORM_MODEL_ID");
-      const [provider, ...rest] = platformModelId.split("/");
-      const model = rest.join("/").trim();
-      if (provider !== "openai" || !model) throw new Error("Unsupported platform model provider");
-      platformOpenAiKey = getEnv("OPENAI_API_KEY");
-      if (!platformOpenAiKey) throw new Error("Missing env var: OPENAI_API_KEY");
-      platformOpenAiModel = model;
+      platformModel = resolvePlatformModelForAlias(aliasModelId);
+      switch (platformModel.provider) {
+        case "openai": {
+          platformProviderKey = getEnv("OPENAI_API_KEY");
+          platformOpenAiCompatibleBaseUrl = "https://api.openai.com/v1";
+          if (!platformProviderKey) throw new Error("Missing env var: OPENAI_API_KEY");
+          break;
+        }
+        case "x-ai": {
+          platformProviderKey = getEnv("XAI_API_KEY");
+          platformOpenAiCompatibleBaseUrl = "https://api.x.ai/v1";
+          if (!platformProviderKey) throw new Error("Missing env var: XAI_API_KEY");
+          break;
+        }
+        case "anthropic": {
+          platformProviderKey = getEnv("ANTHROPIC_API_KEY");
+          if (!platformProviderKey) throw new Error("Missing env var: ANTHROPIC_API_KEY");
+          break;
+        }
+        case "google": {
+          platformProviderKey = getEnv("GOOGLE_API_KEY");
+          if (!platformProviderKey) throw new Error("Missing env var: GOOGLE_API_KEY");
+          break;
+        }
+        default:
+          throw new Error("Unsupported platform model provider");
+      }
       platformRemaining = await consumePlatformInferenceStandard(userId, 1);
     }
 
-    const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
     const latestUserText = extractTextFromContentJson(latest.content_json);
     let priorAssistantText = "";
     for (let i = 1; i < rowsDesc.length; i++) {
@@ -1269,7 +1660,7 @@ Deno.serve(async (req: Request) => {
 
     const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
       inferenceSource === "platform"
-        ? Promise.resolve(platformModelId)
+        ? Promise.resolve(platformModel!.ref)
         : resolveOpenRouterModelId(aliasModelId, userOpenRouterKey!),
       loadHistorySnippets({
         userId,
@@ -1286,7 +1677,7 @@ Deno.serve(async (req: Request) => {
 
     const memoryExtractorModelId =
       inferenceSource === "platform"
-        ? platformOpenAiModel!
+        ? platformModel!.model
         : await chooseMemoryExtractionModel({
             openrouterKey: userOpenRouterKey!,
             aliasModelId,
@@ -1304,12 +1695,41 @@ Deno.serve(async (req: Request) => {
 
     const memoryCandidatesPromise: Promise<MemoryCandidate[]> = shouldExtractMemory
       ? inferenceSource === "platform"
-        ? extractMemoryCandidatesViaOpenAi({
-            openaiKey: platformOpenAiKey!,
-            model: memoryExtractorModelId,
-            userText: latestUserText,
-            priorAssistantText,
-          }).catch(() => [])
+        ? (async () => {
+            switch (platformModel!.provider) {
+              case "openai":
+                return extractMemoryCandidatesViaOpenAi({
+                  openaiKey: platformProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "x-ai":
+                return extractMemoryCandidatesViaOpenAi({
+                  openaiKey: platformProviderKey!,
+                  baseUrl: platformOpenAiCompatibleBaseUrl!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "anthropic":
+                return extractMemoryCandidatesViaAnthropic({
+                  apiKey: platformProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "google":
+                return extractMemoryCandidatesViaGoogle({
+                  apiKey: platformProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              default:
+                return [];
+            }
+          })().catch(() => [])
         : extractMemoryCandidatesViaOpenRouter({
             openrouterKey: userOpenRouterKey!,
             model: memoryExtractorModelId,
@@ -1366,7 +1786,37 @@ Deno.serve(async (req: Request) => {
       const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
       const { text, usage } =
         inferenceSource === "platform"
-          ? await openAiChatCompletion(platformOpenAiKey!, platformOpenAiModel!, messages, effectiveMaxTokens)
+          ? await (async () => {
+              switch (platformModel!.provider) {
+                case "openai":
+                  return openAiChatCompletion(platformProviderKey!, platformModel!.model, messages, effectiveMaxTokens);
+                case "x-ai":
+                  return openAiCompatibleChatCompletion({
+                    apiKey: platformProviderKey!,
+                    baseUrl: platformOpenAiCompatibleBaseUrl!,
+                    model: platformModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                  });
+                case "anthropic":
+                  return anthropicChatCompletion({
+                    apiKey: platformProviderKey!,
+                    model: platformModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                    stream: false,
+                  });
+                case "google":
+                  return googleGenerateContent({
+                    apiKey: platformProviderKey!,
+                    model: platformModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                  });
+                default:
+                  throw new Error("Unsupported platform model provider");
+              }
+            })()
           : await openRouterChatCompletion(userOpenRouterKey!, resolvedModelId, messages, effectiveMaxTokens);
 
       const memoryCandidates = await memoryCandidatesPromise;
@@ -1384,6 +1834,8 @@ Deno.serve(async (req: Request) => {
       meta.inference_source = inferenceSource;
       if (inferenceSource === "platform") {
         meta.platform_standard_remaining = platformRemaining;
+        meta.platform_provider = platformModel!.provider;
+        meta.platform_model = platformModel!.model;
       }
       if (usage && typeof usage === "object") {
         if (inferenceSource === "platform") meta.platform_usage = usage;
@@ -1449,100 +1901,207 @@ Deno.serve(async (req: Request) => {
 
           const requested = maxTokens;
           const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+          let fullContent = "";
+          let usage: unknown | null = null;
 
-          const streamingResponse =
-            inferenceSource === "platform"
-              ? await fetch("https://api.openai.com/v1/chat/completions", {
+          if (inferenceSource === "platform") {
+            switch (platformModel!.provider) {
+              case "openai":
+              case "x-ai": {
+                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+                const streamingResponse = await fetch(url, {
                   method: "POST",
                   headers: {
-                    Authorization: `Bearer ${platformOpenAiKey!}`,
+                    Authorization: `Bearer ${platformProviderKey!}`,
                     "Content-Type": "application/json",
                   },
                   body: JSON.stringify({
-                    model: platformOpenAiModel!,
-                    messages,
-                    max_tokens: effectiveMaxTokens,
-                    stream: true,
-                  }),
-                })
-              : await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${userOpenRouterKey!}`,
-                    "Content-Type": "application/json",
-                    "X-Title": "Arx",
-                  },
-                  body: JSON.stringify({
-                    model: resolvedModelId,
+                    model: platformModel!.model,
                     messages,
                     max_tokens: effectiveMaxTokens,
                     stream: true,
                   }),
                 });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
 
-          if (!streamingResponse.ok) {
-            const body = await streamingResponse.text();
-            throw new Error(
-              inferenceSource === "platform"
-                ? `OpenAI error ${streamingResponse.status}: ${body}`
-                : `OpenRouter error ${streamingResponse.status}: ${body}`,
-            );
-          }
-          const reader = streamingResponse.body?.getReader();
-          if (!reader) throw new Error(inferenceSource === "platform" ? "Missing OpenAI stream" : "Missing OpenRouter stream");
-
-          const decoder = new TextDecoder();
-          let lineBuffer = "";
-          let dataBuffer = "";
-          let fullContent = "";
-          let done = false;
-          let usage: OpenRouterStreamChunk["usage"] | OpenAiUsage | null = null;
-
-          const flushData = () => {
-            const raw = dataBuffer.trim();
-            dataBuffer = "";
-            if (!raw) return;
-            if (raw === "[DONE]") {
-              done = true;
-              return;
-            }
-            let parsed: OpenRouterStreamChunk | null = null;
-            try {
-              parsed = JSON.parse(raw) as OpenRouterStreamChunk;
-            } catch {
-              return;
-            }
-            if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
-            const delta = extractStreamDelta(parsed);
-            if (!delta) return;
-            fullContent += delta;
-            emit("delta", { delta, full_content: fullContent });
-          };
-
-          while (!done) {
-            const { value, done: streamDone } = await reader.read();
-            if (streamDone) break;
-            lineBuffer += decoder.decode(value, { stream: true });
-            while (true) {
-              const idx = lineBuffer.indexOf("\n");
-              if (idx < 0) break;
-              let line = lineBuffer.slice(0, idx);
-              if (line.endsWith("\r")) line = line.slice(0, -1);
-              lineBuffer = lineBuffer.slice(idx + 1);
-              if (line === "") {
-                flushData();
-                continue;
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: OpenRouterStreamChunk | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+                    } catch {
+                      return;
+                    }
+                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+                    const delta = extractStreamDelta(parsed);
+                    if (!delta) return;
+                    fullContent += delta;
+                    emit("delta", { delta, full_content: fullContent });
+                  },
+                });
+                break;
               }
-              if (line.startsWith("data:")) {
-                dataBuffer += line.slice(5).trim();
+              case "anthropic": {
+                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
+                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": platformProviderKey!,
+                    "anthropic-version": getEnv("ANTHROPIC_VERSION") || "2023-06-01",
+                  },
+                  body: JSON.stringify({
+                    model: platformModel!.model,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                    ...(system ? { system } : {}),
+                    messages: anthropicMessages,
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Anthropic error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
+
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: Record<string, unknown> | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as Record<string, unknown>;
+                    } catch {
+                      return;
+                    }
+                    if (parsed && typeof parsed.usage === "object" && parsed.usage) usage = parsed.usage;
+                    const type = String(parsed?.type ?? "").trim();
+                    if (type === "message_stop") return true;
+                    if (type === "error") {
+                      const err = parsed?.error;
+                      const msg =
+                        err && typeof err === "object" && typeof (err as any).message === "string"
+                          ? String((err as any).message)
+                          : "Anthropic stream error";
+                      throw new Error(msg);
+                    }
+                    if (type !== "content_block_delta") return;
+                    const deltaObj = parsed?.delta as any;
+                    const deltaText = typeof deltaObj?.text === "string" ? String(deltaObj.text) : "";
+                    if (!deltaText) return;
+                    fullContent += deltaText;
+                    emit("delta", { delta: deltaText, full_content: fullContent });
+                  },
+                });
+                break;
               }
+              case "google": {
+                const { system, contents } = toGeminiSystemAndContents(messages);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+                  platformModel!.model,
+                )}:streamGenerateContent?alt=sse`;
+                const streamingResponse = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": platformProviderKey!,
+                  },
+                  body: JSON.stringify({
+                    ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+                    contents,
+                    generationConfig: { maxOutputTokens: effectiveMaxTokens },
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Google error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
+
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: GeminiResponse | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as GeminiResponse;
+                    } catch {
+                      return;
+                    }
+                    if (parsed?.usageMetadata && typeof parsed.usageMetadata === "object") usage = parsed.usageMetadata;
+                    const parts = parsed?.candidates?.[0]?.content?.parts ?? [];
+                    const nextText = parts
+                      .map((p) => (typeof p?.text === "string" ? p.text : ""))
+                      .join("")
+                      .trim();
+                    if (!nextText) return;
+                    if (nextText.startsWith(fullContent)) {
+                      const delta = nextText.slice(fullContent.length);
+                      if (!delta) return;
+                      fullContent = nextText;
+                      emit("delta", { delta, full_content: fullContent });
+                      return;
+                    }
+                    // Fallback: emit the entire nextText if the stream is non-monotonic.
+                    fullContent = nextText;
+                    emit("delta", { delta: nextText, full_content: fullContent });
+                  },
+                });
+                break;
+              }
+              default:
+                throw new Error("Unsupported platform model provider");
             }
+          } else {
+            const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${userOpenRouterKey!}`,
+                "Content-Type": "application/json",
+                "X-Title": "Arx",
+              },
+              body: JSON.stringify({
+                model: resolvedModelId,
+                messages,
+                max_tokens: effectiveMaxTokens,
+                stream: true,
+              }),
+            });
+
+            if (!streamingResponse.ok) throw new Error(`OpenRouter error ${streamingResponse.status}: ${await streamingResponse.text()}`);
+            const reader = streamingResponse.body?.getReader();
+            if (!reader) throw new Error("Missing OpenRouter stream");
+
+            await consumeSseEvents({
+              reader,
+              onData: (raw) => {
+                if (raw === "[DONE]") return true;
+                let parsed: OpenRouterStreamChunk | null = null;
+                try {
+                  parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+                } catch {
+                  return;
+                }
+                if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+                const delta = extractStreamDelta(parsed);
+                if (!delta) return;
+                fullContent += delta;
+                emit("delta", { delta, full_content: fullContent });
+              },
+            });
           }
-          flushData();
 
 	          const finalText = fullContent.trim();
-	          if (!finalText)
-              throw new Error(inferenceSource === "platform" ? "OpenAI returned an empty response" : "OpenRouter returned an empty response");
+	          if (!finalText) throw new Error("Model returned an empty response");
 
             const memoryCandidates = await memoryCandidatesPromise;
 
@@ -1559,6 +2118,8 @@ Deno.serve(async (req: Request) => {
             meta.inference_source = inferenceSource;
             if (inferenceSource === "platform") {
               meta.platform_standard_remaining = platformRemaining;
+              meta.platform_provider = platformModel!.provider;
+              meta.platform_model = platformModel!.model;
             }
             if (usage && typeof usage === "object") {
               if (inferenceSource === "platform") meta.platform_usage = usage;
