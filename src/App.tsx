@@ -974,7 +974,7 @@ function App() {
   const [slashHover, setSlashHover] = useState<string | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   // User preference for panels (what they toggled)
-  const [userWantsSessions, setUserWantsSessions] = useState(true);
+  const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [userWantsCommunity, setUserWantsCommunity] = useState(true);
 
   // Actual visibility (computed based on window size)
@@ -7888,6 +7888,10 @@ function isModelReady(modelId: string): boolean {
 
   function handleSelectActiveCommunity(next: string) {
     if (!confirmDiscardUnsavedCommunitySettings(next)) return;
+    setActiveView("home");
+    setActivePage("community");
+    setCommunityTab("chat");
+    setUnreadCount(0);
     setActiveCommunityId(next);
     if (!activeThreadId) return;
     if (!pinnedThreadCommunityId) return;
@@ -9038,7 +9042,7 @@ function isModelReady(modelId: string): boolean {
   }
 
   return (
-    <div className="app-root">
+    <div className="app-root desktop-root">
       <header className="app-topbar" data-tauri-drag-region>
         <div className="topbar-left" data-tauri-drag-region>
           {activePage === "workspace" ? (
@@ -9138,17 +9142,11 @@ function isModelReady(modelId: string): boolean {
             </button>
           )}
           <button
-            className={`icon-button community-btn${activePage !== "workspace" ? " active" : ""}`}
+            className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
             data-tauri-drag-region="false"
             onClick={() => {
               if (activeView === "settings") {
                 setActiveView("home");
-              }
-
-              if (activePage !== "workspace") {
-                setActiveView("home");
-                setActivePage("workspace");
-                return;
               }
 
               if (communities.length === 0) {
@@ -9161,6 +9159,7 @@ function isModelReady(modelId: string): boolean {
               setActivePage("community");
               setCommunityTab("chat");
               setUnreadCount(0); // Clear unread when opening community
+              setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
             }}
             aria-label="Community"
             title="Community"
@@ -9177,7 +9176,9 @@ function isModelReady(modelId: string): boolean {
           </button>
         </div>
       </header>
-      <div className={`app-shell${showCommunityRail ? " with-community-rail" : ""}${((activePage === "workspace" && !showSidePanel) || activePage === "discover") ? " no-left" : ""}${(activePage === "workspace" || !showCommunityPanel) ? " no-right" : ""}${sessionsCompact ? " sessions-compact" : ""}`}>
+      <div
+        className={`app-shell${activePage === "workspace" ? " desktop-sessions-layout" : ""}${showCommunityRail ? " with-community-rail" : ""}${((activePage === "workspace" && !showSidePanel) || activePage === "discover") ? " no-left" : ""}${(activePage === "workspace" || !showCommunityPanel) ? " no-right" : ""}${sessionsCompact ? " sessions-compact" : ""}`}
+      >
       {showCommunityRail && (
         <aside className="rail community-rail" aria-label="Communities">
           <div className="rail-main">
@@ -9250,7 +9251,6 @@ function isModelReady(modelId: string): boolean {
               onClick={() => {
                 setActivePage("workspace");
                 setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
-                setUserWantsSessions(true);
               }}
               title="Settings"
               aria-label="Settings"
@@ -9272,8 +9272,8 @@ function isModelReady(modelId: string): boolean {
           </div>
         </aside>
       )}
-            {showSidePanel && activePage === "workspace" && (
-        <aside className="sessions">
+      {activePage === "workspace" && (
+        <aside className={`sessions${showSidePanel ? "" : " is-collapsed"}`} aria-hidden={!showSidePanel}>
           {activeView === "settings" ? (
             <>
               <div className="panel-title">Settings</div>

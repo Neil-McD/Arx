@@ -2199,6 +2199,29 @@ export default function App() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const DESKTOP_INSTALLED_KEY = "arx-desktop-installed";
+  const DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY = "arx-desktop-download-dismissed-until";
+  const DESKTOP_DOWNLOAD_DISMISS_MS = 12 * 60 * 60 * 1000;
+  const isTauriEnv = Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__);
+  const [desktopInstalled, setDesktopInstalled] = useState(() => {
+    if (isTauriEnv) return true;
+    try {
+      return localStorage.getItem(DESKTOP_INSTALLED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [desktopDownloadDismissedUntil, setDesktopDownloadDismissedUntil] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
+      const parsed = raw ? Number(raw) : NaN;
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+      return 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [emptyThreadSection, setEmptyThreadSection] = useState<"community" | "plan" | "ops" | "learn">("community");
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -2252,6 +2275,55 @@ export default function App() {
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
+
+  const desktopDownloadUrl = (((import.meta as any)?.env?.VITE_ARX_DESKTOP_DOWNLOAD_URL as string | undefined) ?? "").trim();
+  const dismissDesktopDownload = () => {
+    const until = Date.now() + DESKTOP_DOWNLOAD_DISMISS_MS;
+    try {
+      localStorage.setItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY, String(until));
+    } catch {
+      // ignore
+    }
+    setDesktopDownloadDismissedUntil(until);
+  };
+
+  useEffect(() => {
+    setEmptyThreadSection("community");
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    // If we're running inside the desktop app, remember it so the web app can hide the CTA
+    // when it shares storage/origin (e.g. hosted web app loaded by Tauri).
+    if (!isTauriEnv) return;
+    try {
+      localStorage.setItem(DESKTOP_INSTALLED_KEY, "1");
+      localStorage.removeItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
+    } catch {
+      // ignore
+    }
+    setDesktopInstalled(true);
+    setDesktopDownloadDismissedUntil(0);
+  }, [isTauriEnv]);
+
+  useEffect(() => {
+    if (!desktopDownloadDismissedUntil) return;
+    const remaining = desktopDownloadDismissedUntil - Date.now();
+    if (remaining <= 0) return;
+    const id = window.setTimeout(() => {
+      setDesktopDownloadDismissedUntil((current) => {
+        if (current && Date.now() >= current) {
+          try {
+            localStorage.removeItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
+          } catch {
+            // ignore
+          }
+          return 0;
+        }
+        return current;
+      });
+    }, remaining + 50);
+    return () => window.clearTimeout(id);
+  }, [desktopDownloadDismissedUntil]);
 
   useEffect(() => {
     sessionRef.current = supabaseSession;
@@ -5120,8 +5192,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isCommunityChatLightboxOpen, communityChatLightboxImages.length]);
 
-  async function sendUserMessage() {
-    const text = messageInput.trim();
+  async function sendUserMessage(opts?: { text?: string }) {
+    const text = (opts?.text ?? messageInput).trim();
     const hasAttachments = workspaceAttachments.length > 0;
     if (!text && !hasAttachments) return;
 
@@ -8337,8 +8409,41 @@ export default function App() {
     );
   }
 
+  const showHeaderIslands = activePage === "workspace" && activeView === "home";
+  const communityHomeButton = (
+    <button
+      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
+      onClick={() => {
+        setActiveView("home");
+        if (communities.length === 0) {
+          setActivePage("discover");
+          return;
+        }
+        setActivePage("community");
+        setCommunityTab("chat");
+        setUnreadCount(0);
+        setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
+      }}
+      aria-label="Community"
+      title="Community"
+      type="button"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+      {unreadCount > 0 && activePage !== "community" && (
+        <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+      )}
+    </button>
+  );
+
   return (
-    <div className={`app-root${isSessionsDrawerOpen ? " sessions-drawer-open" : ""}`}>
+    <div
+      className={`app-root${showHeaderIslands ? " web-header-islands" : ""}${isSessionsDrawerOpen ? " sessions-drawer-open" : ""}`}
+    >
       <header className="app-topbar">
         <div className="topbar-left">
           {activePage === "workspace" ? (
@@ -8347,7 +8452,7 @@ export default function App() {
                 <svg viewBox="0 0 24 24" className="back-icon">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
-                <span className="back-path">settings / {settingsPageLabel(settingsPage)}</span>
+                <span className="back-path">settings</span>
               </button>
             ) : (
               <>
@@ -8402,37 +8507,11 @@ export default function App() {
         </div>
 
         <div className="topbar-right">
-          <button
-            className={`icon-button community-btn${activePage !== "workspace" ? " active" : ""}`}
-            onClick={() => {
-              setActiveView("home");
-              if (activePage !== "workspace") {
-                setActivePage("workspace");
-                return;
-              }
-              if (communities.length === 0) {
-                setActivePage("discover");
-                return;
-              }
-              setActivePage("community");
-              setCommunityTab("chat");
-              setUnreadCount(0);
-              setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
-            }}
-            aria-label="Community"
-            title="Community"
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            {unreadCount > 0 && activePage !== "community" && (
-              <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-            )}
-          </button>
+          {activePage === "community"
+            ? null
+            : showHeaderIslands
+              ? communityHomeButton
+              : <div className="web-floating-island">{communityHomeButton}</div>}
         </div>
 	      </header>
 
@@ -8565,7 +8644,6 @@ export default function App() {
 
 	        {isWorkspaceSettings && (
 	          <aside className="sessions">
-	            <div className="panel-title">Settings</div>
 	            <div className="session-list">
 	              {(["account", "models", "execution", "memory", "appearance"] as const).map((page) => (
 	                <button
@@ -9429,7 +9507,120 @@ export default function App() {
 	                      <div className="chat-empty">No threads yet. Click + to start.</div>
 	                    )}
 	                    {supabaseSession && activeThreadId && threadMessages.length === 0 && (
-	                      <div className="chat-empty">No messages yet.</div>
+	                      <div className="web-empty-thread" role="region" aria-label="Start a new thread">
+                          <div className="web-empty-thread-title">How can I help?</div>
+                          <div className="web-empty-thread-subtitle">
+                            Start with a prompt, or ask anything.
+                          </div>
+                          <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
+                            {(
+                              [
+                                { id: "community", label: "Community" },
+                                { id: "plan", label: "Plan" },
+                                { id: "ops", label: "Desktop" },
+                                { id: "learn", label: "Learn" },
+                              ] as const
+                            ).map((tab) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
+                                aria-pressed={emptyThreadSection === tab.id}
+                                onClick={() => setEmptyThreadSection(tab.id)}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="web-starter-list" role="list">
+                            {(
+                              {
+                                community: [
+                                  "Draft a welcome message for my community.",
+                                  "Write community rules (short, clear, friendly).",
+                                  "Create a 7-day onboarding sequence for new members.",
+                                  "Suggest 5 resources I should pin first.",
+                                ],
+                                plan: [
+                                  "Plan my community week: 3 posts + 1 live session.",
+                                  "Propose a simple content calendar for the next 30 days.",
+                                  "Help me define KPIs for community health (MVP).",
+                                  "Write a launch checklist for a pay-first join flow.",
+                                ],
+                                ops: [
+                                  "What can the desktop app do that web can’t?",
+                                  "Help me set up a safe workflow for local tools + approvals.",
+                                  "Design a workspace binding policy for my project.",
+                                  "Turn this goal into a step-by-step execution plan.",
+                                ],
+                                learn: [
+                                  "Explain Arx claims + entitlements in simple terms.",
+                                  "What are the key MVP guardrails for Arx (in plain English)?",
+                                  "Summarize the pay-first join flow and failure recovery.",
+                                  "Explain personal memory modes (off/suggest/auto).",
+                                ],
+                              }[emptyThreadSection] ?? []
+                            ).map((prompt) => (
+                              <button
+                                key={prompt}
+                                className="web-starter-row"
+                                type="button"
+                                disabled={isSendingMessage}
+                                onClick={() => {
+                                  void sendUserMessage({ text: prompt });
+                                  workspaceAskInputRef.current?.focus();
+                                }}
+                              >
+                                <span className="web-starter-row-text">{prompt}</span>
+                                <span className="web-starter-row-arrow" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24">
+                                    <path d="M9 18l6-6-6-6" />
+                                  </svg>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
+                            <div className="web-download-card" role="note" aria-label="Desktop app">
+                              <button
+                                className="web-download-close"
+                                type="button"
+                                onClick={dismissDesktopDownload}
+                                title="Dismiss"
+                                aria-label="Dismiss"
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                              <div className="web-download-title">Download desktop app</div>
+                              <div className="web-download-subtitle">Get access to full agents on desktop.</div>
+                              <div className="web-download-actions">
+                                <button
+                                  className="secondary web-download-button"
+                                  type="button"
+                                  disabled={!desktopDownloadUrl}
+                                  title={
+                                    desktopDownloadUrl
+                                      ? "Download desktop app"
+                                      : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
+                                  }
+                                  onClick={() => {
+                                    if (!desktopDownloadUrl) return;
+                                    window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
+                                  }}
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3v10" />
+                                    <path d="M7 10l5 5 5-5" />
+                                    <path d="M5 21h14" />
+                                  </svg>
+                                  Download
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 	                    )}
                       {threadError && (
                         <div className="auth-error">

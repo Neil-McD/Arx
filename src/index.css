@@ -535,6 +535,40 @@ html, body {
   grid-template-columns: 72px minmax(0, 1fr);
 }
 
+/* Desktop-only: animate the workspace sessions panel open/close smoothly. */
+.desktop-root .app-shell.desktop-sessions-layout {
+  transition: grid-template-columns 220ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: grid-template-columns;
+}
+
+/* Keep a stable 3-column grid (rail + sessions + content) so the sessions column can animate to 0px. */
+.desktop-root .app-shell.desktop-sessions-layout.with-community-rail.no-right {
+  grid-template-columns: 72px minmax(0, 240px) minmax(0, 1fr);
+}
+
+.desktop-root .app-shell.desktop-sessions-layout.with-community-rail.no-left.no-right {
+  grid-template-columns: 72px minmax(0, 0px) minmax(0, 1fr);
+}
+
+.desktop-root .app-shell.desktop-sessions-layout.with-community-rail.sessions-compact.no-right {
+  grid-template-columns: 72px minmax(0, 160px) minmax(0, 1fr);
+}
+
+.desktop-root .app-shell.desktop-sessions-layout.with-community-rail.sessions-compact.no-left.no-right {
+  grid-template-columns: 72px minmax(0, 0px) minmax(0, 1fr);
+}
+
+.desktop-root .sessions {
+  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: opacity, transform;
+}
+
+.desktop-root .sessions.is-collapsed {
+  opacity: 0;
+  transform: translateX(-8px);
+  pointer-events: none;
+}
+
 /* Compact mode: hide meta visually but keep space to preserve row height */
 .app-shell.sessions-compact .session-meta {
   visibility: hidden;
