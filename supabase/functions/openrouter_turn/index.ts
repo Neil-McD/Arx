@@ -145,7 +145,7 @@ function resolvePlatformModelForAlias(aliasModelId: string): PlatformModelRef {
   }
 
   // Back-compat: if a single platform model is configured (legacy), use it.
-  const fallback = getEnv("OPENROUTER_PLATFORM_MODEL_ID");
+  const fallback = getEnv("ARX_PLATFORM_MODEL_REF") || getEnv("OPENROUTER_PLATFORM_MODEL_ID");
   if (fallback) return parsePlatformModelRef(fallback);
 
   throw new Error("Missing PLATFORM_MODEL_MAP_JSON");
@@ -1519,7 +1519,7 @@ Deno.serve(async (req: Request) => {
     const hasPersonalMemoryAccess = builderTier !== "free";
 
     const userOpenRouterKey = openrouterKeyResult.value;
-    const platformEnabled = isTruthyEnv(getEnv("OPENROUTER_PLATFORM_ENABLED"));
+    const platformEnabled = isTruthyEnv(getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"));
     const inferenceSource: InferenceSource =
       userOpenRouterKey && userOpenRouterKey.trim() ? "user" : "platform";
 
@@ -1606,7 +1606,8 @@ Deno.serve(async (req: Request) => {
     if (!ipRlAllowed) throw new Error("rate_limited");
 
     let platformRemaining: number | null = null;
-    const platformMaxTokensRaw = getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
+    const platformMaxTokensRaw =
+      getEnv("ARX_PLATFORM_INFERENCE_MAX_TOKENS") || getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
     const platformMaxTokens = Number.isFinite(Number(platformMaxTokensRaw))
       ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
       : 512;
