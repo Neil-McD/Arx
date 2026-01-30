@@ -86,8 +86,21 @@ type BuilderTier = "free" | "builder" | "pro";
 
 type InferenceSource = "user" | "platform";
 
+type InferenceFallbackReason = "platform_quota_exceeded";
+
+type InferenceFallback = {
+  from: InferenceSource;
+  to: InferenceSource;
+  reason: InferenceFallbackReason;
+};
+
 type PlatformProvider = "openai" | "anthropic" | "google" | "x-ai";
 type PlatformModelRef = { provider: PlatformProvider; model: string; ref: string };
+
+function isPlatformQuotaExceededErrorMessage(message: string): boolean {
+  const raw = String(message ?? "");
+  return raw.toLowerCase().includes("platform_inference_quota_exceeded");
+}
 
 function normalizePlatformProvider(input: string): PlatformProvider {
   const raw = (input ?? "").trim().toLowerCase();
@@ -1509,7 +1522,6 @@ Deno.serve(async (req: Request) => {
     ]);
 
     if (rowsDescResult.status !== "fulfilled") throw rowsDescResult.reason;
-    if (openrouterKeyResult.status !== "fulfilled") throw openrouterKeyResult.reason;
 
     const rowsDesc = rowsDescResult.value;
     if (rowsDesc.length === 0) throw new Error("No messages in thread");
@@ -1518,15 +1530,27 @@ Deno.serve(async (req: Request) => {
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
-    const userOpenRouterKey = openrouterKeyResult.value;
-    const platformEnabled = isTruthyEnv(getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"));
-    const inferenceSource: InferenceSource =
-      userOpenRouterKey && userOpenRouterKey.trim() ? "user" : "platform";
+    const openrouterKeyLoadError =
+      openrouterKeyResult.status === "fulfilled"
+        ? null
+        : openrouterKeyResult.reason instanceof Error
+          ? openrouterKeyResult.reason.message
+          : String(openrouterKeyResult.reason);
+    const userOpenRouterKey = openrouterKeyResult.status === "fulfilled" ? openrouterKeyResult.value : null;
+    const hasUserKey = Boolean(userOpenRouterKey && userOpenRouterKey.trim());
+    const platformEnabled = isTruthyEnv(
+      getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"),
+    );
+    // Default behavior:
+    // - Free: BYOK only.
+    // - Paid: use platform-provided inference first; fall back to BYOK only on quota exhaustion.
+    let inferenceSource: InferenceSource =
+      builderTier !== "free" && platformEnabled ? "platform" : "user";
+    let inferenceFallback: InferenceFallback | null = null;
 
-    if (inferenceSource === "platform") {
-      if (!platformEnabled || builderTier === "free") {
-        throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
-      }
+    if (inferenceSource === "user" && !hasUserKey) {
+      if (openrouterKeyLoadError) throw new Error(openrouterKeyLoadError);
+      throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
     }
 
     const memorySettings: UserMemorySettingsRow =
@@ -1644,7 +1668,31 @@ Deno.serve(async (req: Request) => {
         default:
           throw new Error("Unsupported platform model provider");
       }
-      platformRemaining = await consumePlatformInferenceStandard(userId, 1);
+      try {
+        platformRemaining = await consumePlatformInferenceStandard(userId, 1);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (isPlatformQuotaExceededErrorMessage(message)) {
+          if (!hasUserKey) {
+            if (openrouterKeyLoadError) throw new Error(openrouterKeyLoadError);
+            throw new Error(
+              "You've used your Arx AI quota for this month. Add an OpenRouter key in Settings → Models to continue.",
+            );
+          }
+          inferenceFallback = {
+            from: "platform",
+            to: "user",
+            reason: "platform_quota_exceeded",
+          };
+          inferenceSource = "user";
+          platformRemaining = 0;
+          platformModel = null;
+          platformProviderKey = null;
+          platformOpenAiCompatibleBaseUrl = null;
+        } else {
+          throw error;
+        }
+      }
     }
 
     const latestUserText = extractTextFromContentJson(latest.content_json);
@@ -1833,6 +1881,7 @@ Deno.serve(async (req: Request) => {
 
       const meta: Record<string, unknown> = {};
       meta.inference_source = inferenceSource;
+      if (inferenceFallback) meta.inference_fallback = inferenceFallback;
       if (inferenceSource === "platform") {
         meta.platform_standard_remaining = platformRemaining;
         meta.platform_provider = platformModel!.provider;
@@ -1865,6 +1914,7 @@ Deno.serve(async (req: Request) => {
           reply_to_id: replyToId,
           run_id: runId,
           inference_source: inferenceSource,
+          inference_fallback: inferenceFallback,
           platform_standard_remaining: platformRemaining,
           memory_used: memoryUsed,
           history_used: historyUsed,
@@ -1886,19 +1936,20 @@ Deno.serve(async (req: Request) => {
       async start(controller) {
         const emit = (event: string, data: unknown) => controller.enqueue(encodeSse(event, data));
         try {
-	          emit("start", {
-	            ok: true,
-	            thread_id: threadId,
-	            reply_to_id: replyToId,
-	            run_id: runId,
-	            engine_id: "openrouter_web",
-	            model_id: aliasModelId,
-	            resolved_model_id: resolvedModelId,
-              inference_source: inferenceSource,
-              platform_standard_remaining: platformRemaining,
-	            memory_used: memoryUsed,
-              history_used: historyUsed,
-	          });
+          emit("start", {
+            ok: true,
+            thread_id: threadId,
+            reply_to_id: replyToId,
+            run_id: runId,
+            engine_id: "openrouter_web",
+            model_id: aliasModelId,
+            resolved_model_id: resolvedModelId,
+            inference_source: inferenceSource,
+            inference_fallback: inferenceFallback,
+            platform_standard_remaining: platformRemaining,
+            memory_used: memoryUsed,
+            history_used: historyUsed,
+          });
 
           const requested = maxTokens;
           const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
@@ -2117,6 +2168,7 @@ Deno.serve(async (req: Request) => {
 
             const meta: Record<string, unknown> = {};
             meta.inference_source = inferenceSource;
+            if (inferenceFallback) meta.inference_fallback = inferenceFallback;
             if (inferenceSource === "platform") {
               meta.platform_standard_remaining = platformRemaining;
               meta.platform_provider = platformModel!.provider;
@@ -2142,15 +2194,16 @@ Deno.serve(async (req: Request) => {
 	            allowUpdate,
 	          });
 
-	          emit("done", {
-	            ok: true,
-	            status: result.status,
-	            thread_id: threadId,
-	            reply_to_id: replyToId,
-	            run_id: runId,
+            emit("done", {
+              ok: true,
+              status: result.status,
+              thread_id: threadId,
+              reply_to_id: replyToId,
+              run_id: runId,
               inference_source: inferenceSource,
+              inference_fallback: inferenceFallback,
               platform_standard_remaining: platformRemaining,
-	            memory_used: memoryUsed,
+              memory_used: memoryUsed,
               history_used: historyUsed,
               memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
               memory_added: memoryAdded,

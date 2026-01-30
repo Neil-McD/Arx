@@ -2242,6 +2242,9 @@ export default function App() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const memoryToastTimeoutRef = useRef<number | null>(null);
+  const [inferenceToast, setInferenceToast] = useState<string | null>(null);
+  const inferenceToastTimeoutRef = useRef<number | null>(null);
+  const inferenceFallbackToastShownRef = useRef(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "off",
     remember_intent_enabled: true,
@@ -4981,6 +4984,16 @@ export default function App() {
               history_used: historyUsed,
             });
           }
+          if (!inferenceFallbackToastShownRef.current) {
+            const fallbackReason =
+              typeof parsed?.inference_fallback?.reason === "string"
+                ? parsed.inference_fallback.reason.trim()
+                : "";
+            if (fallbackReason === "platform_quota_exceeded") {
+              inferenceFallbackToastShownRef.current = true;
+              showInferenceToastMessage("Arx quota reached — switching to your API key.");
+            }
+          }
         } else if (eventName === "delta") {
           const full = typeof parsed?.full_content === "string" ? parsed.full_content : "";
           streamingContentRef.current = full;
@@ -5552,6 +5565,18 @@ export default function App() {
       setMemoryToast(null);
       memoryToastTimeoutRef.current = null;
     }, 2400);
+  }
+
+  function showInferenceToastMessage(message: string) {
+    if (inferenceToastTimeoutRef.current) {
+      window.clearTimeout(inferenceToastTimeoutRef.current);
+      inferenceToastTimeoutRef.current = null;
+    }
+    setInferenceToast(message);
+    inferenceToastTimeoutRef.current = window.setTimeout(() => {
+      setInferenceToast(null);
+      inferenceToastTimeoutRef.current = null;
+    }, 3200);
   }
 
   async function loadUserMemorySettings(session: SupabaseSession): Promise<void> {
@@ -9497,6 +9522,7 @@ export default function App() {
 	          ) : activePage === "workspace" ? (
 	            <>
 		              <div className="workspace-body">
+                    {inferenceToast && <div className="memory-toast success-toast">{inferenceToast}</div>}
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
 		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 		                  <div className="message-list-inner">
