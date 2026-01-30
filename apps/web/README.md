@@ -8,7 +8,7 @@ This is the browser version of Arx. It intentionally **reuses the desktop UI sty
    - `cd apps/web`
    - `npm install`
 2. Set env:
-   - Copy `apps/web/.env.example` → `apps/web/.env.local`
+   - Copy repo root `.env.example` → `.env`
    - Fill `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`
 3. Run:
    - `npm run dev`
@@ -39,4 +39,3 @@ Supabase Auth redirect allowlist:
 - Cloud-only agent threads/messages (no Tauri/local tools)
 - Community memberships rail + discover grid
 - Community chat/resources/members are planned next (desktop remains the power surface).
-
