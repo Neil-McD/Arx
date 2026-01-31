@@ -682,6 +682,8 @@ type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance"
 type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
 
 function App() {
+  const ARX_OWNER_EMAIL = "neilmcdevittd@gmail.com";
+
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const threadsHydratedRef = useRef(false);
@@ -757,6 +759,8 @@ function App() {
       const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
       const [, setIsLoadingBuilderBilling] = useState(false);
       const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
+      const [isDevSettingBuilderTier, setIsDevSettingBuilderTier] = useState(false);
+      const [devSetBuilderTierError, setDevSetBuilderTierError] = useState<string | null>(null);
 	      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
 	      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
 	      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
@@ -4530,6 +4534,42 @@ function App() {
 	      return null;
 	    } finally {
 	      setIsLoadingBuilderBilling(false);
+	    }
+	  }
+
+	  async function handleDevSetBuilderTier(nextTier: "free" | "builder" | "pro") {
+	    const session = supabaseSessionRef.current;
+	    const url = session ? getSupabaseUrl() : null;
+	    if (!session || !url) return;
+
+	    // Defense-in-depth: the RPC is also server-guarded.
+	    if ((session.user.email ?? "").toLowerCase() !== ARX_OWNER_EMAIL) return;
+
+	    if (isDevSettingBuilderTier) return;
+	    setIsDevSettingBuilderTier(true);
+	    setDevSetBuilderTierError(null);
+	    try {
+	      const response = await fetchWithSupabaseAuth(
+	        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
+	        {
+	          method: "POST",
+	          headers: { "Content-Type": "application/json" },
+	          body: JSON.stringify({ p_builder_tier: nextTier }),
+	        },
+	        session,
+	      );
+	      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      await loadBuilderBillingStatus(session);
+	    } catch (error) {
+	      const message =
+	        typeof error === "string"
+	          ? error
+	          : error instanceof Error
+	            ? error.message
+	            : "Failed to update builder tier.";
+	      setDevSetBuilderTierError(message);
+	    } finally {
+	      setIsDevSettingBuilderTier(false);
 	    }
 	  }
 
@@ -10311,6 +10351,7 @@ function App() {
                       const communitiesLabel =
                         max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
                       const tierLabel = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
+                      const isArxOwner = (supabaseSession.user.email ?? "").toLowerCase() === ARX_OWNER_EMAIL;
                       return (
                         <>
                           <div className="account-row">
@@ -10344,10 +10385,50 @@ function App() {
                               )}
                             </div>
                           </div>
+                          {isArxOwner && (
+                            <>
+                              <div className="model-note" style={{ marginTop: 10 }}>
+                                Owner dev: temporarily override your builder tier to test gated features.
+                              </div>
+                              <div className="account-row">
+                                <div className="account-identity">
+                                  <span>Dev tier override</span>
+                                  <strong>{tierLabel}</strong>
+                                </div>
+                                <div className="auth-actions">
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={isDevSettingBuilderTier || tier === "free"}
+                                    onClick={() => void handleDevSetBuilderTier("free")}
+                                  >
+                                    Free
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={isDevSettingBuilderTier || tier === "builder"}
+                                    onClick={() => void handleDevSetBuilderTier("builder")}
+                                  >
+                                    Builder
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="secondary"
+                                    disabled={isDevSettingBuilderTier || tier === "pro"}
+                                    onClick={() => void handleDevSetBuilderTier("pro")}
+                                  >
+                                    Pro
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </>
                       );
                     })()}
                     {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+                    {devSetBuilderTierError && <div className="auth-error">{devSetBuilderTierError}</div>}
                   </div>
                 )}
 
