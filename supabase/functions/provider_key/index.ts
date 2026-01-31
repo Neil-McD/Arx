@@ -45,10 +45,14 @@ async function readJson<T>(req: Request): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-function normalizeProvider(value: string): "openrouter" {
+function normalizeProvider(value: string): "openrouter" | "openai" | "anthropic" | "google" | "x-ai" {
   const v = (value ?? "").trim().toLowerCase();
-  if (v !== "openrouter") throw new Error("Unsupported provider");
-  return "openrouter";
+  if (v === "openrouter") return "openrouter";
+  if (v === "openai") return "openai";
+  if (v === "anthropic") return "anthropic";
+  if (v === "google") return "google";
+  if (v === "x-ai" || v === "xai") return "x-ai";
+  throw new Error("Unsupported provider");
 }
 
 async function upsertProviderKey(params: { userId: string; provider: string; apiKey: string }): Promise<void> {

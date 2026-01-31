@@ -92,6 +92,13 @@ type OpenedUrlsPayload = {
   urls: string[];
 };
 
+type InferenceFallbackPayload = {
+  session_id: string;
+  from: string;
+  to: string;
+  reason: string;
+};
+
 type RunningTool = {
   id: string;
   name: string;
@@ -189,11 +196,6 @@ type ModelToggle = {
   id: string;
   label: string;
   enabled: boolean;
-};
-
-type ModelAvailability = {
-  id: string;
-  available: boolean;
 };
 
 type ProviderKey = {
@@ -721,13 +723,16 @@ function App() {
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [toolDebug] = useState<ToolDebug | null>(null);
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([
-    { id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }
+    { id: "openai", label: "OpenAI", hasKey: false, inputValue: "", error: null },
+    { id: "anthropic", label: "Anthropic", hasKey: false, inputValue: "", error: null },
+    { id: "google", label: "Google (Gemini)", hasKey: false, inputValue: "", error: null },
+    { id: "x-ai", label: "xAI", hasKey: false, inputValue: "", error: null },
   ]);
   const [systemPromptDraft, setSystemPromptDraft] = useState("");
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(false);
   const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false);
   const [systemPromptError, setSystemPromptError] = useState<string | null>(null);
-  const [modelAvailability, setModelAvailability] = useState<Record<string, boolean>>({});
+  // Model availability is derived from provider keys for now (no remote "models list" fetch).
 			  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
 		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
       const providerKeySyncInFlightRef = useRef<Promise<void> | null>(null);
@@ -1705,37 +1710,38 @@ function App() {
     return response.ok;
   }
 
-  async function syncOpenRouterKeyWithCloud(session: SupabaseSession): Promise<void> {
-    const provider = "openrouter";
+  const providerIdsToSync = ["openai", "anthropic", "google", "x-ai"] as const;
 
-    const localKey = await invoke<string | null>("get_provider_key_cmd", { provider }).catch(() => null);
-    const localTrimmed = (localKey ?? "").trim();
+  async function syncProviderKeysWithCloud(session: SupabaseSession): Promise<void> {
+    for (const provider of providerIdsToSync) {
+      const localKey = await invoke<string | null>("get_provider_key_cmd", { provider }).catch(() => null);
+      const localTrimmed = (localKey ?? "").trim();
 
-    const cloudStatus = await fetchCloudProviderKey(session, { provider, reveal: false }).catch(() => null);
-    if (cloudStatus?.hasKey) {
-      const cloudRevealed = await fetchCloudProviderKey(session, { provider, reveal: true }).catch(() => null);
-      const cloudKey = (cloudRevealed?.key ?? "").trim();
-      if (cloudKey && cloudKey !== localTrimmed) {
-        await invoke("set_provider_key_cmd", { provider, key: cloudKey });
+      const cloudStatus = await fetchCloudProviderKey(session, { provider, reveal: false }).catch(() => null);
+      if (cloudStatus?.hasKey) {
+        const cloudRevealed = await fetchCloudProviderKey(session, { provider, reveal: true }).catch(() => null);
+        const cloudKey = (cloudRevealed?.key ?? "").trim();
+        if (cloudKey && cloudKey !== localTrimmed) {
+          await invoke("set_provider_key_cmd", { provider, key: cloudKey });
+        }
+        continue;
       }
-      await loadProviderKeys();
-      return;
-    }
 
-    if (localTrimmed) {
-      await setCloudProviderKey(session, provider, localTrimmed);
+      if (localTrimmed) {
+        await setCloudProviderKey(session, provider, localTrimmed);
+      }
     }
     await loadProviderKeys();
   }
 
-  function scheduleOpenRouterKeySync(session: SupabaseSession, reason: "session" | "focus") {
+  function scheduleProviderKeySync(session: SupabaseSession, reason: "session" | "focus") {
     const now = Date.now();
     const minIntervalMs = reason === "focus" ? 10_000 : 0;
     if (now - lastProviderKeySyncAtRef.current < minIntervalMs) return;
     lastProviderKeySyncAtRef.current = now;
 
     if (providerKeySyncInFlightRef.current) return;
-    providerKeySyncInFlightRef.current = syncOpenRouterKeyWithCloud(session)
+    providerKeySyncInFlightRef.current = syncProviderKeysWithCloud(session)
       .catch((error) => console.warn("Provider key sync failed:", error))
       .finally(() => {
         providerKeySyncInFlightRef.current = null;
@@ -1793,7 +1799,7 @@ function App() {
 	      if (current.expires_at <= now + 60) {
 	        void refreshSupabaseSessionLocked(current.refresh_token);
 	      }
-	      scheduleOpenRouterKeySync(current, "focus");
+	      scheduleProviderKeySync(current, "focus");
 	      void loadBuilderBillingStatus(current);
         void loadSelfProfile(current);
 	    };
@@ -1809,7 +1815,7 @@ function App() {
       void loadPendingPurchaseClaims(supabaseSession);
       void loadBuilderBillingStatus(supabaseSession);
       void loadSelfProfile(supabaseSession);
-      scheduleOpenRouterKeySync(supabaseSession, "session");
+      scheduleProviderKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
 
     useEffect(() => {
@@ -2941,6 +2947,25 @@ function App() {
       }
     );
 
+    const unlistenInferenceFallback = listen<InferenceFallbackPayload>(
+      "inference-fallback",
+      (event) => {
+        if (event.payload.session_id !== activeThreadId) return;
+        const reason = (event.payload.reason ?? "").trim();
+        const message =
+          reason === "platform_quota_exceeded"
+            ? "Arx AI quota reached — switching to your API key."
+            : "Arx AI unavailable — switching to your API key.";
+        setMemoryToast(message);
+        if (memoryToastTimeoutRef.current) {
+          window.clearTimeout(memoryToastTimeoutRef.current);
+        }
+        memoryToastTimeoutRef.current = window.setTimeout(() => {
+          setMemoryToast(null);
+        }, 2500);
+      }
+    );
+
     const unlistenPlan = listen<{ session_id: string; args: TaskPlanPayload }>(
       "plan-updated",
       (event) => {
@@ -3123,6 +3148,7 @@ function App() {
       void unlistenOpenRouterStream.then((fn) => fn());
       void unlistenOpenRouterDone.then((fn) => fn());
       void unlistenMemory.then((fn) => fn());
+      void unlistenInferenceFallback.then((fn) => fn());
       void unlistenPlan.then((fn) => fn());
       void unlistenToolCallsUpdated.then((fn) => fn());
       void unlistenToolApproval.then((fn) => fn());
@@ -3691,42 +3717,25 @@ function App() {
     setProviderKeys(updated);
   }
 
-  async function refreshModelAvailability() {
-    if (!providerKeys[0]?.hasKey) {
-      setModelAvailability({});
-      return;
-    }
-    try {
-      const data = await invoke<ModelAvailability[]>("refresh_openrouter_models_cmd");
-      const byId: Record<string, boolean> = {};
-      for (const item of data) {
-        byId[item.id] = item.available;
-      }
-      setModelAvailability(byId);
-    } catch (error) {
-      console.error(error);
-    }
+  function providerIdForModelId(modelId: string): ProviderKey["id"] | null {
+    const id = (modelId ?? "").trim().toLowerCase();
+    if (!id) return null;
+    if (id.startsWith("gpt-")) return "openai";
+    if (id.startsWith("sonnet-") || id.startsWith("opus-")) return "anthropic";
+    if (id.startsWith("gemini-")) return "google";
+    if (id.startsWith("grok-")) return "x-ai";
+    return "openai";
   }
 
-  useEffect(() => {
-    if (activeView !== "settings") return;
-    if (settingsPage !== "models") return;
-    if (!providerKeys[0]?.hasKey) return;
-    void refreshModelAvailability();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeView, settingsPage, providerKeys[0]?.hasKey]);
+  function hasKeyForProvider(providerId: ProviderKey["id"]): boolean {
+    return providerKeys.find((p) => p.id === providerId)?.hasKey === true;
+  }
 
-  useEffect(() => {
-    if (!providerKeys[0]?.hasKey) return;
-    void refreshModelAvailability();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerKeys[0]?.hasKey]);
-
-function isModelReady(modelId: string): boolean {
-  if (!providerKeys[0]?.hasKey) return false;
-  const available = modelAvailability[modelId];
-  return available !== false;
-}
+  function isModelReady(modelId: string): boolean {
+    const providerId = providerIdForModelId(modelId);
+    if (!providerId) return false;
+    return hasKeyForProvider(providerId);
+  }
 
   async function loadExecPolicyRules() {
     try {
@@ -7695,9 +7704,6 @@ function isModelReady(modelId: string): boolean {
             : item
         )
       );
-      if (id === "openrouter" && hasKey) {
-        await refreshModelAvailability();
-      }
       if (supabaseSession) {
         const ok = await setCloudProviderKey(supabaseSession, id, value);
         if (!ok) {
@@ -7727,9 +7733,6 @@ function isModelReady(modelId: string): boolean {
           item.id === id ? { ...item, hasKey: false, inputValue: "", error: null } : item
         )
       );
-      if (id === "openrouter") {
-        setModelAvailability({});
-      }
       if (supabaseSession) {
         const ok = await clearCloudProviderKey(supabaseSession, id);
         if (!ok) {
@@ -7788,7 +7791,7 @@ function isModelReady(modelId: string): boolean {
 
   useEffect(() => {
     void syncActiveModel(modelToggles);
-  }, [modelToggles, activeModelId, providerKeys[0]?.hasKey, modelAvailability]);
+  }, [modelToggles, activeModelId, providerKeys]);
 
   useEffect(() => {
     if (!isSending) {
@@ -8361,26 +8364,6 @@ function isModelReady(modelId: string): boolean {
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
 
-    if (providerKeys[0]?.hasKey !== true) {
-      let hasKey = false;
-      try {
-        hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: "openrouter" });
-      } catch {
-        hasKey = false;
-      }
-      if (!hasKey) {
-        setMemoryToast("Missing OpenRouter key. Add it in Settings → Models.");
-        setActiveView("settings");
-        setSettingsPage("models");
-        return;
-      }
-      setProviderKeys((prev) =>
-        prev.map((item) =>
-          item.id === "openrouter" ? { ...item, hasKey: true, error: null } : item
-        )
-      );
-    }
-
 	    const sessionId = await ensureThreadId();
 	    if (!sessionId) return;
 	    if (startedInDraft) createdThreadId = sessionId;
@@ -8453,16 +8436,37 @@ function isModelReady(modelId: string): boolean {
             setMemoryToast("No model selected. Enable a model in Settings → Models.");
             return null;
           }
-          if (!isModelReady(modelToUse)) {
-            setMemoryToast("Selected model is unavailable. Pick another model in Settings → Models.");
+          const providerId = providerIdForModelId(modelToUse);
+          if (!providerId) {
+            setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
+            return null;
+          }
+          let hasKey = hasKeyForProvider(providerId);
+          if (!hasKey) {
+            try {
+              hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: providerId });
+            } catch {
+              hasKey = false;
+            }
+            if (hasKey) {
+              setProviderKeys((prev) =>
+                prev.map((item) =>
+                  item.id === providerId ? { ...item, hasKey: true, error: null } : item
+                )
+              );
+            }
+          }
+          if (!hasKey) {
+            const label = providerKeys.find((p) => p.id === providerId)?.label ?? providerId;
+            setMemoryToast(`Missing ${label} API key. Add it in Settings → Models.`);
             setActiveView("settings");
             setSettingsPage("models");
             return null;
           }
-	          if (
-	            fromDb &&
-	            fromDb.engine_id === "openrouter_messages_agent" &&
-	            (fromDb.model_id ?? "").trim() === modelToUse
+          if (
+            fromDb &&
+            fromDb.engine_id === "openrouter_messages_agent" &&
+            (fromDb.model_id ?? "").trim() === modelToUse
 	          ) {
 	            return fromDb;
 	          }
@@ -8586,6 +8590,9 @@ function isModelReady(modelId: string): boolean {
 	          input: userText,
 	          historyMessagesJson,
 	          personalMemoryItemsJson,
+	          supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
+	          supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
+	          supabaseAccessToken: session ? (session.access_token ?? "") : "",
 	        });
 	        if (session) {
 	          try {
@@ -10456,46 +10463,44 @@ function isModelReady(modelId: string): boolean {
 
               </>
             )}
-            {settingsPage === "models" && (
+	            {settingsPage === "models" && (
               <>
 	                <div className="settings-section">
-	                  <div className="settings-section-title">API Key</div>
+	                  <div className="settings-section-title">API Keys</div>
 	                  <div className="settings-section-desc">
-	                    Connect your OpenRouter key to access models (synced to your Arx account). Get one at{" "}
-	                    <a
-	                      href="https://openrouter.ai"
-	                      target="_blank"
-	                      rel="noopener noreferrer"
-	                      onClick={(event) => {
-	                        event.preventDefault();
-	                        void openExternalUrl("https://openrouter.ai");
-	                      }}
-	                    >
-	                      openrouter.ai
-	                    </a>
+	                    Add your provider keys to enable models. Keys are stored in your OS keychain and synced to your Arx account.
 	                  </div>
-	                  <div className="key-row">
-                    <input
-                      type="password"
-                      value={providerKeys[0]?.inputValue ?? ""}
-                      placeholder={providerKeys[0]?.hasKey ? "Key saved" : "Enter OpenRouter API key"}
-                      onChange={(event) =>
-                        setProviderKeys((prev) => [
-                          { ...prev[0], inputValue: event.target.value }
-                        ])
-                      }
-                    />
-                    <button onClick={() => void handleSaveProviderKey("openrouter")}>
-                      Save
-                    </button>
-                    <button
-                      className="secondary"
-                      onClick={() => void handleClearProviderKey("openrouter")}
-                    >
-                      Clear
-                    </button>
-	                  </div>
-	                  {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+	                  {providerKeys.map((provider) => (
+                      <div key={provider.id}>
+                        <div className="settings-section-desc">{provider.label}</div>
+                        <div className="key-row">
+                          <input
+                            type="password"
+                            value={provider.inputValue ?? ""}
+                            placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
+                            onChange={(event) =>
+                              setProviderKeys((prev) =>
+                                prev.map((item) =>
+                                  item.id === provider.id
+                                    ? { ...item, inputValue: event.target.value }
+                                    : item
+                                )
+                              )
+                            }
+                          />
+                          <button onClick={() => void handleSaveProviderKey(provider.id)}>
+                            Save
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={() => void handleClearProviderKey(provider.id)}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        {provider.error && <div className="key-error">{provider.error}</div>}
+                      </div>
+                    ))}
 	                </div>
 
 	                <div className="settings-section">
@@ -10537,21 +10542,26 @@ function isModelReady(modelId: string): boolean {
 	                  <div className="settings-section-title">Available Models</div>
 	                  <div className="settings-section-desc">Select which models to enable</div>
 	                  <div className="model-list">
-	                    {modelToggles.map((toggle) => (
-	                      <label key={toggle.id} className="model-toggle">
-                        <input
-                          type="checkbox"
-                          checked={toggle.enabled}
-                          disabled={providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false}
-                          onChange={() => void handleToggleModel(toggle.id)}
-                        />
-                        <span>
-                          {toggle.label}
-                          {!providerKeys[0]?.hasKey && " (missing key)"}
-                          {providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false && " (unavailable)"}
-                        </span>
-                      </label>
-                    ))}
+	                    {modelToggles.map((toggle) => {
+                        const providerId = providerIdForModelId(toggle.id);
+                        const providerLabel = providerId
+                          ? providerKeys.find((p) => p.id === providerId)?.label ?? providerId
+                          : "provider";
+                        const missingKey = providerId ? !hasKeyForProvider(providerId) : true;
+                        return (
+                          <label key={toggle.id} className="model-toggle">
+                            <input
+                              type="checkbox"
+                              checked={toggle.enabled}
+                              onChange={() => void handleToggleModel(toggle.id)}
+                            />
+                            <span>
+                              {toggle.label}
+                              {missingKey && ` (missing ${providerLabel} key)`}
+                            </span>
+                          </label>
+                        );
+                      })}
                   </div>
                 </div>
               </>
@@ -11740,17 +11750,23 @@ function isModelReady(modelId: string): boolean {
 	                >
 	                  <optgroup label="Models">
 	                    {enabledModels.length === 0 && <option value="" disabled>No models enabled</option>}
-	                    {enabledModels.map((toggle) => (
-	                      <option
-	                        key={toggle.id}
-	                        value={toggle.id}
-	                        disabled={!isModelReady(toggle.id)}
-	                      >
-	                        {toggle.label}
-	                        {!providerKeys[0]?.hasKey && " (missing key)"}
-	                        {providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false && " (unavailable)"}
-                      </option>
-                    ))}
+	                    {enabledModels.map((toggle) => {
+                        const providerId = providerIdForModelId(toggle.id);
+                        const providerLabel = providerId
+                          ? providerKeys.find((p) => p.id === providerId)?.label ?? providerId
+                          : "provider";
+                        const ready = isModelReady(toggle.id);
+                        return (
+                          <option
+                            key={toggle.id}
+                            value={toggle.id}
+                            disabled={!ready}
+                          >
+                            {toggle.label}
+                            {!ready && ` (missing ${providerLabel} key)`}
+                          </option>
+                        );
+                      })}
                   </optgroup>
                 </select>
               </div>

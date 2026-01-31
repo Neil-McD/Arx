@@ -37,6 +37,136 @@ const OPENROUTER_MAX_TOKENS: u32 = 1024;
 const IO_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
 const RIPGREP_VERSION: &str = "14.1.1";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlatformProvider {
+  OpenAi,
+  Anthropic,
+  Google,
+  XAi,
+}
+
+#[derive(Clone, Debug)]
+struct PlatformModelRef {
+  provider: PlatformProvider,
+  model: String,
+  ref_str: String,
+}
+
+#[derive(Clone, Debug)]
+struct PlatformProxyConfig {
+  supabase_url: String,
+  supabase_anon_key: String,
+  access_token: String,
+}
+
+fn normalize_platform_provider(input: &str) -> Result<PlatformProvider, String> {
+  let raw = input.trim().to_lowercase();
+  match raw.as_str() {
+    "openai" => Ok(PlatformProvider::OpenAi),
+    "anthropic" => Ok(PlatformProvider::Anthropic),
+    "google" => Ok(PlatformProvider::Google),
+    "xai" | "x-ai" => Ok(PlatformProvider::XAi),
+    _ => Err("Unsupported platform model provider".to_string()),
+  }
+}
+
+fn parse_platform_model_ref(ref_str: &str) -> Result<PlatformModelRef, String> {
+  let raw = ref_str.trim();
+  let Some((provider_raw, model_raw)) = raw.split_once('/') else {
+    return Err("Invalid platform model mapping".to_string());
+  };
+  let provider = normalize_platform_provider(provider_raw)?;
+  let model = model_raw.trim();
+  if model.is_empty() {
+    return Err("Invalid platform model mapping".to_string());
+  }
+  Ok(PlatformModelRef {
+    provider,
+    model: model.to_string(),
+    ref_str: format!("{}/{}", provider_raw.trim().to_lowercase(), model),
+  })
+}
+
+fn load_platform_model_map() -> Result<std::collections::HashMap<String, String>, String> {
+  let raw = std::env::var("PLATFORM_MODEL_MAP_JSON").unwrap_or_default();
+  let raw = raw.trim().to_string();
+  if raw.is_empty() {
+    return Ok(std::collections::HashMap::new());
+  }
+  let parsed: serde_json::Value =
+    serde_json::from_str(&raw).map_err(|_| "Invalid PLATFORM_MODEL_MAP_JSON".to_string())?;
+  let obj = parsed
+    .as_object()
+    .ok_or_else(|| "Invalid PLATFORM_MODEL_MAP_JSON".to_string())?;
+  let mut out: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+  for (k, v) in obj.iter() {
+    let id = k.trim();
+    let Some(v) = v.as_str() else { continue };
+    let ref_str = v.trim();
+    if id.is_empty() || ref_str.is_empty() {
+      continue;
+    }
+    out.insert(id.to_string(), ref_str.to_string());
+  }
+  Ok(out)
+}
+
+fn resolve_platform_model_for_alias(alias_model_id: &str) -> Result<PlatformModelRef, String> {
+  let cleaned = alias_model_id.trim();
+  if cleaned.is_empty() {
+    return Err("model_id is required".to_string());
+  }
+  if cleaned.contains('/') {
+    return parse_platform_model_ref(cleaned);
+  }
+
+  let map = load_platform_model_map()?;
+  if !map.is_empty() {
+    let Some(raw) = map.get(cleaned) else {
+      return Err(format!("Platform model not configured for '{}'", cleaned));
+    };
+    return parse_platform_model_ref(raw);
+  }
+
+  Err("Missing PLATFORM_MODEL_MAP_JSON".to_string())
+}
+
+fn platform_provider_key_name(provider: PlatformProvider) -> &'static str {
+  match provider {
+    PlatformProvider::OpenAi => "openai",
+    PlatformProvider::Anthropic => "anthropic",
+    PlatformProvider::Google => "google",
+    PlatformProvider::XAi => "x-ai",
+  }
+}
+
+fn platform_provider_id(provider: PlatformProvider) -> &'static str {
+  match provider {
+    PlatformProvider::OpenAi => "openai",
+    PlatformProvider::Anthropic => "anthropic",
+    PlatformProvider::Google => "google",
+    PlatformProvider::XAi => "x-ai",
+  }
+}
+
+fn platform_provider_display_name(provider: PlatformProvider) -> &'static str {
+  match provider {
+    PlatformProvider::OpenAi => "OpenAI",
+    PlatformProvider::Anthropic => "Anthropic",
+    PlatformProvider::Google => "Google",
+    PlatformProvider::XAi => "xAI",
+  }
+}
+
+fn platform_openai_compatible_base_url(provider: PlatformProvider) -> Option<&'static str> {
+  match provider {
+    PlatformProvider::OpenAi => Some("https://api.openai.com/v1"),
+    PlatformProvider::Google => Some("https://generativelanguage.googleapis.com/v1beta/openai"),
+    PlatformProvider::XAi => Some("https://api.x.ai/v1"),
+    PlatformProvider::Anthropic => None,
+  }
+}
+
 static THREAD_RUN_LOCKS: Lazy<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_TOOL_APPROVALS: Lazy<Mutex<HashMap<String, oneshot::Sender<ToolApprovalDecision>>>> =
@@ -155,6 +285,21 @@ fn parse_boolish(value: &str) -> bool {
     value.trim().to_lowercase().as_str(),
     "1" | "true" | "yes" | "on"
   )
+}
+
+fn is_platform_inference_quota_exceeded(resp_bytes: &[u8]) -> bool {
+  String::from_utf8_lossy(resp_bytes)
+    .to_lowercase()
+    .contains("platform_inference_quota_exceeded")
+}
+
+fn is_platform_inference_not_allowed(resp_bytes: &[u8]) -> bool {
+  let lower = String::from_utf8_lossy(resp_bytes).to_lowercase();
+  lower.contains("platform_inference_not_allowed")
+    || lower.contains("platform_inference_disabled")
+    || lower.contains("missing bearer token")
+    || lower.contains("invalid jwt")
+    || lower.contains("session expired")
 }
 
 async fn lock_thread_run(thread_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
@@ -724,6 +869,87 @@ fn tool_requires_approval(tool_name: &str) -> bool {
   matches!(tool_name, "write" | "edit" | "bash")
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+struct TaskPlanItem {
+  step: String,
+  status: String, // "pending" | "in_progress" | "completed"
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct TaskPlanPayload {
+  explanation: Option<String>,
+  plan: Vec<TaskPlanItem>,
+}
+
+#[derive(Clone, Serialize)]
+struct PlanUpdatedPayload {
+  session_id: String,
+  args: TaskPlanPayload,
+}
+
+fn normalize_task_plan_status(raw: &str) -> Option<String> {
+  let lower = raw.trim().to_lowercase();
+  match lower.as_str() {
+    "pending" => Some("pending".to_string()),
+    "in_progress" | "inprogress" | "in-progress" => Some("in_progress".to_string()),
+    "completed" | "complete" | "done" => Some("completed".to_string()),
+    _ => None,
+  }
+}
+
+fn parse_task_plan_payload(args: &serde_json::Value) -> Result<TaskPlanPayload, String> {
+  let obj = args
+    .as_object()
+    .ok_or_else(|| "args must be an object".to_string())?;
+  let explanation = obj
+    .get("explanation")
+    .and_then(|v| v.as_str())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty());
+  let plan_val = obj
+    .get("plan")
+    .ok_or_else(|| "plan is required".to_string())?;
+  let plan_arr = plan_val
+    .as_array()
+    .ok_or_else(|| "plan must be an array".to_string())?;
+  if plan_arr.is_empty() {
+    return Err("plan must be a non-empty array".to_string());
+  }
+
+  let mut items: Vec<TaskPlanItem> = Vec::new();
+  for (idx, entry) in plan_arr.iter().enumerate() {
+    let entry_obj = entry
+      .as_object()
+      .ok_or_else(|| format!("plan[{}] must be an object", idx))?;
+    let step = entry_obj
+      .get("step")
+      .and_then(|v| v.as_str())
+      .unwrap_or("")
+      .trim()
+      .to_string();
+    if step.is_empty() {
+      return Err(format!("plan[{}].step is required", idx));
+    }
+    let raw_status = entry_obj
+      .get("status")
+      .and_then(|v| v.as_str())
+      .unwrap_or("")
+      .trim();
+    let status = normalize_task_plan_status(raw_status)
+      .ok_or_else(|| format!("plan[{}].status must be pending|in_progress|completed", idx))?;
+    items.push(TaskPlanItem { step, status });
+  }
+
+  if items.len() > 24 {
+    items.truncate(24);
+  }
+
+  Ok(TaskPlanPayload {
+    explanation,
+    plan: items,
+  })
+}
+
 struct AgentToolCallOutcome {
   tool_result_content: String,
   cancelled: bool,
@@ -777,12 +1003,12 @@ async fn execute_agent_tool_call(
     msg.push_str(&detail);
     if let Some(input) = tool_args_input.as_deref() {
       msg.push_str("\n\ninput:\n");
-      msg.push_str(input);
+    msg.push_str(input);
     }
     if !msg.ends_with('\n') {
       msg.push('\n');
     }
-    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -799,7 +1025,7 @@ async fn execute_agent_tool_call(
     if !msg.ends_with('\n') {
       msg.push('\n');
     }
-    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -811,7 +1037,7 @@ async fn execute_agent_tool_call(
   } else if !is_known_agent_tool_name(tool_name.as_str()) {
     let mut msg = String::new();
     msg.push_str(&format!("unknown tool: {}\n", tool_name));
-    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -1055,6 +1281,24 @@ async fn execute_agent_tool_call(
 
   let exec = if let Some(exec) = synthetic_exec {
     exec
+  } else if tool_name == "update_plan" {
+    match parse_task_plan_payload(&tool_args_for_exec) {
+      Ok(plan_payload) => {
+        if let Ok(value) = serde_json::to_string(&plan_payload) {
+          let key = format!("task_plan::{}", thread_id);
+          let _ = set_ui_state(conn, &key, &value);
+        }
+        let _ = window.emit(
+          "plan-updated",
+          PlanUpdatedPayload {
+            session_id: thread_id.to_string(),
+            args: plan_payload,
+          },
+        );
+        tool_ok("ok".to_string())
+      }
+      Err(err) => tool_error(err),
+    }
   } else {
     run_agent_tool(workspace, db_path, &tool_name, &tool_args_for_exec).await
   };
@@ -1144,9 +1388,9 @@ fn build_atom_system_prompt(
   let community_memory_block = "(none)".to_string();
 
   let tool_rules = if workspace_trimmed.is_empty() {
-    "- No workspace is bound; local tools are disabled.\n- Ask the user to bind a workspace before requesting tools.\n"
+    "- No workspace is bound; local filesystem tools are disabled.\n- You may still use update_plan to keep the Plan panel current.\n- Ask the user to bind a workspace before requesting read/list_dir/glob/grep/sha256/write/edit/bash.\n"
   } else {
-    "- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{path, content}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n"
+    "- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash.\n  - update_plan is safe and updates the visible Plan panel.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{path, content}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- At the start of work, call update_plan with 3–6 short steps; keep exactly one in_progress; update as you go.\n"
   };
 
   let user_prompt_block = user_system_prompt
@@ -1226,8 +1470,159 @@ fn load_recent_history_messages(
   Vec::new()
 }
 
+const AGENT_MAX_PREFIX_MESSAGES_BEFORE_GOAL: usize = 12;
+const AGENT_MAX_TAIL_MESSAGES_AFTER_GOAL: usize = 50;
+const AGENT_MAX_TOOL_RESULT_BYTES_FOR_PROMPT: usize = 20_000;
+
+fn json_role(value: &serde_json::Value) -> Option<&str> {
+  value.get("role").and_then(|v| v.as_str())
+}
+
+fn truncate_utf8_for_prompt(value: &str, max_bytes: usize) -> (String, bool) {
+  let trimmed = value.trim();
+  if trimmed.len() <= max_bytes {
+    return (trimmed.to_string(), false);
+  }
+  let mut end = max_bytes;
+  while end > 0 && !trimmed.is_char_boundary(end) {
+    end -= 1;
+  }
+  let out = trimmed[..end].to_string();
+  (out, true)
+}
+
+fn truncate_tool_result_for_prompt(value: &str) -> String {
+  let (mut out, truncated) = truncate_utf8_for_prompt(value, AGENT_MAX_TOOL_RESULT_BYTES_FOR_PROMPT);
+  if truncated {
+    if !out.ends_with('\n') {
+      out.push('\n');
+    }
+    out.push_str("\n(…output truncated for prompt; see tool logs for full output)");
+  }
+  out
+}
+
+fn trim_openai_tool_loop_messages(messages: &mut Vec<serde_json::Value>) {
+  if messages.len() <= 1 {
+    return;
+  }
+  let Some(system) = messages.first().cloned() else {
+    return;
+  };
+  if json_role(&system) != Some("system") {
+    return;
+  }
+  let Some(goal_idx) = messages.iter().rposition(|m| json_role(m) == Some("user")) else {
+    return;
+  };
+
+  let prefix_start = std::cmp::max(
+    1,
+    goal_idx.saturating_sub(AGENT_MAX_PREFIX_MESSAGES_BEFORE_GOAL),
+  );
+
+  let tail_all_start = goal_idx.saturating_add(1);
+  let tail_len = messages.len().saturating_sub(tail_all_start);
+  let mut tail_start = tail_all_start.saturating_add(
+    tail_len.saturating_sub(AGENT_MAX_TAIL_MESSAGES_AFTER_GOAL),
+  );
+  if tail_start < tail_all_start {
+    tail_start = tail_all_start;
+  }
+
+  while tail_start > tail_all_start && json_role(&messages[tail_start]) == Some("tool") {
+    tail_start = tail_start.saturating_sub(1);
+  }
+  while tail_start < messages.len() && json_role(&messages[tail_start]) == Some("tool") {
+    tail_start += 1;
+  }
+
+  let mut out: Vec<serde_json::Value> = Vec::new();
+  out.push(system);
+  if prefix_start <= goal_idx {
+    out.extend(messages[prefix_start..=goal_idx].iter().cloned());
+  }
+  if tail_start < messages.len() {
+    out.extend(messages[tail_start..].iter().cloned());
+  }
+  *messages = out;
+}
+
+fn is_anthropic_tool_result_only_user_message(message: &serde_json::Value) -> bool {
+  if json_role(message) != Some("user") {
+    return false;
+  }
+  let Some(arr) = message.get("content").and_then(|v| v.as_array()) else {
+    return false;
+  };
+  if arr.is_empty() {
+    return false;
+  }
+  arr.iter().all(|block| block.get("type").and_then(|v| v.as_str()) == Some("tool_result"))
+}
+
+fn trim_anthropic_tool_loop_messages(messages: &mut Vec<serde_json::Value>) {
+  if messages.is_empty() {
+    return;
+  }
+  let Some(goal_idx) = messages.iter().rposition(|m| {
+    json_role(m) == Some("user") && !is_anthropic_tool_result_only_user_message(m)
+  }) else {
+    return;
+  };
+
+  let prefix_start = goal_idx.saturating_sub(AGENT_MAX_PREFIX_MESSAGES_BEFORE_GOAL);
+
+  let tail_all_start = goal_idx.saturating_add(1);
+  let tail_len = messages.len().saturating_sub(tail_all_start);
+  let mut tail_start = tail_all_start.saturating_add(
+    tail_len.saturating_sub(AGENT_MAX_TAIL_MESSAGES_AFTER_GOAL),
+  );
+  if tail_start < tail_all_start {
+    tail_start = tail_all_start;
+  }
+
+  if tail_start < messages.len() && is_anthropic_tool_result_only_user_message(&messages[tail_start])
+  {
+    if tail_start > tail_all_start {
+      tail_start -= 1;
+    } else {
+      tail_start += 1;
+    }
+  }
+
+  let mut out: Vec<serde_json::Value> = Vec::new();
+  out.extend(messages[prefix_start..=goal_idx].iter().cloned());
+  if tail_start < messages.len() {
+    out.extend(messages[tail_start..].iter().cloned());
+  }
+  *messages = out;
+}
+
 fn make_agent_tool_schema() -> Vec<serde_json::Value> {
   vec![
+    serde_json::json!({
+      "name": "update_plan",
+      "description": "Update the UI Plan panel for this session. Use a short plan with 3–6 steps and statuses: pending|in_progress|completed.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "explanation": { "type": "string" },
+          "plan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": { "type": "string" },
+                "status": { "type": "string", "enum": ["pending", "in_progress", "completed"] }
+              },
+              "required": ["step", "status"]
+            }
+          }
+        },
+        "required": ["plan"]
+      }
+    }),
     serde_json::json!({
       "name": "read",
       "description": "Read a file with line numbers. Use offset/limit for large files.",
@@ -1350,8 +1745,34 @@ fn make_agent_tool_schema() -> Vec<serde_json::Value> {
   ]
 }
 
+fn make_agent_tool_schema_update_plan_only() -> Vec<serde_json::Value> {
+  make_agent_tool_schema()
+    .into_iter()
+    .filter(|tool| tool.get("name").and_then(|v| v.as_str()) == Some("update_plan"))
+    .collect()
+}
+
 fn make_agent_tool_schema_openai() -> Vec<serde_json::Value> {
   make_agent_tool_schema()
+    .into_iter()
+    .filter_map(|tool| {
+      let name = tool.get("name")?.as_str()?.to_string();
+      let description = tool.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      let parameters = tool.get("input_schema").cloned().unwrap_or(serde_json::Value::Null);
+      Some(serde_json::json!({
+        "type": "function",
+        "function": {
+          "name": name,
+          "description": description,
+          "parameters": parameters
+        }
+      }))
+    })
+    .collect()
+}
+
+fn make_agent_tool_schema_openai_update_plan_only() -> Vec<serde_json::Value> {
+  make_agent_tool_schema_update_plan_only()
     .into_iter()
     .filter_map(|tool| {
       let name = tool.get("name")?.as_str()?.to_string();
@@ -1800,6 +2221,7 @@ fn normalize_agent_tool_name(tool_name: &str) -> String {
   let lower = trimmed.to_lowercase();
   match lower.as_str() {
     "list" | "ls" => "list_dir".to_string(),
+    "updateplan" => "update_plan".to_string(),
     _ => lower,
   }
 }
@@ -1807,7 +2229,8 @@ fn normalize_agent_tool_name(tool_name: &str) -> String {
 fn is_known_agent_tool_name(tool_name: &str) -> bool {
   matches!(
     tool_name,
-    "read"
+    "update_plan"
+      | "read"
       | "list_dir"
       | "sha256"
       | "write"
@@ -2719,6 +3142,14 @@ struct SessionIdPayload {
 }
 
 #[derive(Clone, Serialize)]
+struct InferenceFallbackPayload {
+  session_id: String,
+  from: String,
+  to: String,
+  reason: String,
+}
+
+#[derive(Clone, Serialize)]
 struct AgentStatusPayload {
   session_id: String,
   status: String,        // "thinking" | "working" | "idle"
@@ -2753,7 +3184,8 @@ fn append_openrouter_messages_assistant_message(
   model_id: &str,
   run_id: &str,
   source_event_ids: &[String],
-  openrouter_model_id: Option<&str>,
+  provider_id: &str,
+  provider_model_ref: Option<&str>,
   max_tokens: u32,
   memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
 ) {
@@ -2764,7 +3196,8 @@ fn append_openrouter_messages_assistant_message(
     "meta": {
       "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
       "model_id": model_id,
-      "openrouter_model_id": openrouter_model_id,
+      "provider_id": provider_id,
+      "provider_model_ref": provider_model_ref,
       "run_id": run_id,
       "max_tokens": max_tokens
     },
@@ -2883,6 +3316,7 @@ async fn send_turn_openrouter_messages_agent(
   atom_system_prompt: &str,
   used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
   history_messages_json: Option<String>,
+  platform_proxy: Option<PlatformProxyConfig>,
   mut cancel_rx: watch::Receiver<bool>,
 ) -> Result<SendTurnResult, String> {
   let run_id = uuid::Uuid::new_v4().to_string();
@@ -2899,6 +3333,15 @@ async fn send_turn_openrouter_messages_agent(
 	    Some(selected_model_id),
 	  );
 
+  let resolved_model = resolve_platform_model_for_alias(selected_model_id).ok();
+  let provider_id = resolved_model
+    .as_ref()
+    .map(|m| platform_provider_id(m.provider))
+    .unwrap_or("unknown");
+  let provider_model_ref = resolved_model
+    .as_ref()
+    .map(|m| m.ref_str.as_str());
+
   let input_trim = input.trim();
   let (input_redacted, input_report) = context::redact_secrets(input_trim);
 		  if input_report.blocked {
@@ -2910,7 +3353,8 @@ async fn send_turn_openrouter_messages_agent(
 		      selected_model_id,
 		      &run_id,
 		      &[],
-		      None,
+		      provider_id,
+		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      None,
 		    );
@@ -2936,126 +3380,69 @@ async fn send_turn_openrouter_messages_agent(
     input_redacted.trim().to_string()
   };
 
-  let openrouter_key = {
-    let entry = Entry::new("com.arx.app", "openrouter").map_err(|e| e.to_string())?;
+  let model_ref = match resolve_platform_model_for_alias(selected_model_id) {
+    Ok(v) => v,
+    Err(err) => {
+      append_openrouter_messages_assistant_message(
+        &conn,
+        db_path,
+        thread_id,
+        &format!("Engine error: {}", err),
+        selected_model_id,
+        &run_id,
+        &[],
+        "unknown",
+        None,
+        OPENROUTER_MAX_TOKENS,
+        None,
+      );
+      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_model_mapping"));
+      let _ = window.emit(
+        "openrouter-turn-finished",
+        SessionIdPayload {
+          session_id: thread_id.to_string(),
+        },
+      );
+      return Ok(SendTurnResult {
+        thread_id: thread_id.to_string(),
+        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+        engine_input_event_id: None,
+        engine_input_seq: None,
+        run_id: Some(run_id),
+      });
+    }
+  };
+  let provider_id = platform_provider_id(model_ref.provider);
+  let provider_model_ref_str = model_ref.ref_str.clone();
+  let provider_model_ref = Some(provider_model_ref_str.as_str());
+  let provider_model_id = model_ref.model.clone();
+
+  let mut platform_available_for_run = platform_proxy.as_ref().is_some();
+  let platform_agent_infer_url = platform_proxy
+    .as_ref()
+    .map(|cfg| format!("{}/functions/v1/platform_agent_infer", cfg.supabase_url.trim_end_matches('/')));
+  let mut platform_fallback_notified = false;
+
+  let mut byok_provider_key: Option<String> = None;
+  let mut get_byok_provider_key = || -> Result<String, String> {
+    if let Some(value) = byok_provider_key.clone() {
+      return Ok(value);
+    }
+    let key_name = platform_provider_key_name(model_ref.provider);
+    let entry = Entry::new("com.arx.app", key_name).map_err(|e| e.to_string())?;
     match entry.get_password() {
-      Ok(value) => value,
-		      Err(_) => {
-		        append_openrouter_messages_assistant_message(
-		          &conn,
-		          db_path,
-		          thread_id,
-		          "Missing API key. Add it in Settings.",
-		          selected_model_id,
-		          &run_id,
-		          &[],
-		          None,
-		          OPENROUTER_MAX_TOKENS,
-		          None,
-		        );
-	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
-	        let _ = window.emit(
-	          "openrouter-turn-finished",
-	          SessionIdPayload {
-	            session_id: thread_id.to_string(),
-          },
-        );
-        return Ok(SendTurnResult {
-          thread_id: thread_id.to_string(),
-          engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
-          engine_input_event_id: None,
-          engine_input_seq: None,
-          run_id: Some(run_id),
-        });
+      Ok(value) => {
+        byok_provider_key = Some(value.clone());
+        Ok(value)
       }
+      Err(_) => Err(format!(
+        "Missing {} API key. Add it in Settings → Models.",
+        platform_provider_display_name(model_ref.provider)
+      )),
     }
   };
 
-	  let openrouter_model_id = {
-	    let trimmed = selected_model_id.trim();
-	    if trimmed.contains('/') {
-	      trimmed.to_string()
-	    } else if let Some(map) = load_openrouter_model_map(&conn) {
-	      map.get(trimmed)
-	        .and_then(|v| if v.contains('/') { Some(v.clone()) } else { None })
-	        .unwrap_or_else(|| trimmed.to_string())
-	    } else {
-      trimmed.to_string()
-    }
-  };
-
-  let openrouter_model_id = if openrouter_model_id.contains('/') {
-    openrouter_model_id
-  } else {
-	    let map = match fetch_openrouter_model_map(&openrouter_key).await {
-	      Ok(map) => map,
-		      Err(err) => {
-		        append_openrouter_messages_assistant_message(
-		          &conn,
-		          db_path,
-		          thread_id,
-		          &format!("Engine error: OpenRouter model lookup failed: {}", err),
-		          selected_model_id,
-		          &run_id,
-		          &[],
-		          None,
-		          OPENROUTER_MAX_TOKENS,
-		          None,
-		        );
-	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("model_lookup_failed"));
-	        let _ = window.emit(
-	          "openrouter-turn-finished",
-	          SessionIdPayload {
-	            session_id: thread_id.to_string(),
-          },
-        );
-        return Ok(SendTurnResult {
-          thread_id: thread_id.to_string(),
-          engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
-          engine_input_event_id: None,
-          engine_input_seq: None,
-          run_id: Some(run_id),
-	        });
-	      }
-	    };
-	    save_openrouter_model_map(&conn, &map);
-	    match map.get(selected_model_id.trim()).cloned().filter(|v| v.contains('/')) {
-	      Some(value) => value,
-		      None => {
-		        append_openrouter_messages_assistant_message(
-		          &conn,
-		          db_path,
-		          thread_id,
-		          &format!(
-		            "Engine error: Model '{}' is not available for this OpenRouter key.",
-		            selected_model_id
-		          ),
-		          selected_model_id,
-		          &run_id,
-		          &[],
-		          None,
-		          OPENROUTER_MAX_TOKENS,
-		          None,
-		        );
-	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("model_unavailable"));
-	        let _ = window.emit(
-	          "openrouter-turn-finished",
-	          SessionIdPayload {
-	            session_id: thread_id.to_string(),
-          },
-        );
-        return Ok(SendTurnResult {
-          thread_id: thread_id.to_string(),
-          engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
-          engine_input_event_id: None,
-          engine_input_seq: None,
-          run_id: Some(run_id),
-        });
-      }
-		    }
-		  };
-
-	  if !openrouter_model_id.starts_with("anthropic/") {
+	  if model_ref.provider != PlatformProvider::Anthropic {
 	    #[derive(Default, Clone)]
 	    struct PartialToolCall {
 	      id: String,
@@ -3099,11 +3486,15 @@ async fn send_turn_openrouter_messages_agent(
 	    }
 
 	    let tools_schema = if workspace.trim().is_empty() {
-	      Vec::new()
+	      make_agent_tool_schema_openai_update_plan_only()
 	    } else {
 	      make_agent_tool_schema_openai()
 	    };
 	    let client = reqwest::Client::new();
+	    let base_url = platform_openai_compatible_base_url(model_ref.provider)
+	      .unwrap_or("https://api.openai.com/v1")
+	      .trim_end_matches('/');
+	    let chat_url = format!("{}/chat/completions", base_url);
 	    let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
 	    let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
 	      .ok()
@@ -3137,31 +3528,50 @@ async fn send_turn_openrouter_messages_agent(
 	      call_seq += 1;
 	      let mut request_max_tokens = OPENROUTER_MAX_TOKENS;
 	      let mut request_attempt: u32 = 1;
+	      let mut use_platform_for_call = platform_available_for_run;
 
 	      let (engine_input_event, status, resp_bytes, parsed_response) = loop {
-	        let request = serde_json::json!({
-	          "model": openrouter_model_id,
+	        let provider_request = serde_json::json!({
+	          "model": provider_model_id.as_str(),
 	          "max_tokens": request_max_tokens,
 	          "stream": true,
 	          "messages": messages,
 	          "tools": tools_schema
 	        });
-	        let request_bytes = serde_json::to_vec(&request)
-	          .map_err(|e| format!("OpenRouter request serialization failed: {}", e))?;
+	        let using_platform = use_platform_for_call && platform_agent_infer_url.is_some();
+	        let (request_bytes, request_format, inference_source) = if using_platform {
+	          let wrapped = serde_json::json!({
+	            "model_id": selected_model_id,
+	            "request": provider_request
+	          });
+	          (
+	            serde_json::to_vec(&wrapped).map_err(|e| format!("Request serialization failed: {}", e))?,
+	            "arx.platform_agent_infer.json",
+	            "platform",
+	          )
+	        } else {
+	          (
+	            serde_json::to_vec(&provider_request).map_err(|e| format!("Request serialization failed: {}", e))?,
+	            "openai_compatible.chat_completions.json",
+	            "user",
+	          )
+	        };
 	        let request_blob = blob_store::write_blob(db_path, &request_bytes)
-	          .map_err(|e| format!("OpenRouter request blob write failed: {}", e))?;
+	          .map_err(|e| format!("Request blob write failed: {}", e))?;
 	        let _ = db::record_blob(&conn, &request_blob.id, &request_blob.rel_path, request_blob.byte_len);
 
 	        let engine_input_payload = serde_json::json!({
 	          "v": 1,
 	          "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
-	          "provider_id": "openrouter",
+	          "provider_id": provider_id,
 	          "model_id": selected_model_id,
-	          "openrouter_model_id": openrouter_model_id,
+	          "provider_model_ref": provider_model_ref_str.as_str(),
+	          "provider_model_id": provider_model_id.as_str(),
+	          "inference_source": inference_source,
 	          "run_id": run_id,
 	          "seq": call_seq,
 	          "attempt": request_attempt,
-	          "request_format": "openrouter.chat_completions.json",
+	          "request_format": request_format,
 	          "sent_blob_id": request_blob.id,
 	          "sent_blob_ref": request_blob.rel_path,
 	          "sent_byte_len": request_blob.byte_len,
@@ -3198,7 +3608,8 @@ async fn send_turn_openrouter_messages_agent(
 		              selected_model_id,
 		              &run_id,
 		              &[],
-		              Some(&openrouter_model_id),
+		              provider_id,
+		              provider_model_ref,
 		              request_max_tokens,
 		              None,
 		            );
@@ -3242,13 +3653,58 @@ async fn send_turn_openrouter_messages_agent(
 	          ));
 	        }
 
-	        let send_fut = client
-	          .post("https://openrouter.ai/api/v1/chat/completions")
-	          .header("Authorization", format!("Bearer {}", openrouter_key))
-	          .header("Content-Type", "application/json")
-	          .header("Accept", "text/event-stream")
-	          .body(request_bytes)
-	          .send();
+	        let send_fut = if using_platform {
+	          let url = platform_agent_infer_url.clone().unwrap_or_default();
+	          let cfg = platform_proxy.as_ref().ok_or_else(|| "platform proxy is not configured".to_string())?;
+	          client
+	            .post(url)
+	            .header("apikey", cfg.supabase_anon_key.clone())
+	            .header("Authorization", format!("Bearer {}", cfg.access_token))
+	            .header("Content-Type", "application/json")
+	            .header("Accept", "text/event-stream")
+	            .body(request_bytes)
+	            .send()
+	        } else {
+	          let provider_key = match get_byok_provider_key() {
+	            Ok(value) => value,
+	            Err(message) => {
+	              append_openrouter_messages_assistant_message(
+	                &conn,
+	                db_path,
+	                thread_id,
+	                &message,
+	                selected_model_id,
+	                &run_id,
+	                &[],
+	                provider_id,
+	                provider_model_ref,
+	                request_max_tokens,
+	                None,
+	              );
+	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
+	              let _ = window.emit(
+	                "openrouter-turn-finished",
+	                SessionIdPayload {
+	                  session_id: thread_id.to_string(),
+	                },
+	              );
+	              return Ok(SendTurnResult {
+	                thread_id: thread_id.to_string(),
+	                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                engine_input_event_id: Some(engine_input_event.id),
+	                engine_input_seq: Some(engine_input_event.seq),
+	                run_id: Some(run_id),
+	              });
+	            }
+	          };
+	          client
+	            .post(chat_url.clone())
+	            .header("Authorization", format!("Bearer {}", provider_key))
+	            .header("Content-Type", "application/json")
+	            .header("Accept", "text/event-stream")
+	            .body(request_bytes)
+	            .send()
+	        };
 
 	        let res = tokio::select! {
 	          _ = cancel_rx.changed() => {
@@ -3272,15 +3728,16 @@ async fn send_turn_openrouter_messages_agent(
 		              &conn,
 		              db_path,
 		              thread_id,
-		              &format!("Engine error: OpenRouter request failed: {}", err),
+		              &format!("Engine error: request failed: {}", err),
 		              selected_model_id,
 		              &run_id,
 		              &[],
-		              Some(&openrouter_model_id),
+		              provider_id,
+		              provider_model_ref,
 		              request_max_tokens,
 		              None,
 		            );
-	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_request_failed"));
+	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_request_failed"));
 	            let _ = window.emit(
 	              "openrouter-turn-finished",
 	              SessionIdPayload {
@@ -3325,15 +3782,16 @@ async fn send_turn_openrouter_messages_agent(
 	          };
 
 	          let resp_blob = blob_store::write_blob(db_path, &resp_bytes)
-	            .map_err(|e| format!("OpenRouter response blob write failed: {}", e))?;
+	            .map_err(|e| format!("Response blob write failed: {}", e))?;
 	          let _ = db::record_blob(&conn, &resp_blob.id, &resp_blob.rel_path, resp_blob.byte_len);
 
 	          let engine_io_payload = serde_json::json!({
 	            "v": 1,
 	            "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
-	            "provider_id": "openrouter",
+	            "provider_id": provider_id,
 	            "model_id": selected_model_id,
-	            "openrouter_model_id": openrouter_model_id,
+	            "provider_model_ref": provider_model_ref_str.as_str(),
+	            "provider_model_id": provider_model_id.as_str(),
 	            "run_id": run_id,
 	            "call_seq": call_seq,
 	            "attempt": request_attempt,
@@ -3353,6 +3811,84 @@ async fn send_turn_openrouter_messages_agent(
 	            Some(&resp_blob.rel_path),
 	          ) {
 	            evidence_event_ids.push(evt.id);
+	          }
+
+	          if using_platform && !status.is_success() {
+	            platform_available_for_run = false;
+
+	            if is_platform_inference_quota_exceeded(&resp_bytes) {
+	              let provider_key_ok = get_byok_provider_key().is_ok();
+	              if !provider_key_ok {
+	                append_openrouter_messages_assistant_message(
+	                  &conn,
+	                  db_path,
+	                  thread_id,
+	                  &format!(
+	                    "You've used your Arx AI quota for this month. Add your {} API key in Settings → Models to continue.",
+	                    platform_provider_display_name(model_ref.provider)
+	                  ),
+	                  selected_model_id,
+	                  &run_id,
+	                  &evidence_event_ids,
+	                  provider_id,
+	                  provider_model_ref,
+	                  request_max_tokens,
+	                  None,
+	                );
+	                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_quota_exceeded"));
+	                let _ = window.emit(
+	                  "openrouter-turn-finished",
+	                  SessionIdPayload {
+	                    session_id: thread_id.to_string(),
+	                  },
+	                );
+	                return Ok(SendTurnResult {
+	                  thread_id: thread_id.to_string(),
+	                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                  engine_input_event_id: Some(engine_input_event.id),
+	                  engine_input_seq: Some(engine_input_event.seq),
+	                  run_id: Some(run_id),
+	                });
+	              }
+
+	              if !platform_fallback_notified {
+	                let _ = window.emit(
+	                  "inference-fallback",
+	                  InferenceFallbackPayload {
+	                    session_id: thread_id.to_string(),
+	                    from: "platform".to_string(),
+	                    to: "user".to_string(),
+	                    reason: "platform_quota_exceeded".to_string(),
+	                  },
+	                );
+	                platform_fallback_notified = true;
+	              }
+	              use_platform_for_call = false;
+	              continue;
+	            }
+
+	            if is_platform_inference_not_allowed(&resp_bytes) {
+	              use_platform_for_call = false;
+	              continue;
+	            }
+
+	            // Best-effort: if platform is misconfigured/unavailable but the user has a BYOK key, fall back.
+	            if get_byok_provider_key().is_ok() {
+	              if !platform_fallback_notified {
+	                let _ = window.emit(
+	                  "inference-fallback",
+	                  InferenceFallbackPayload {
+	                    session_id: thread_id.to_string(),
+	                    from: "platform".to_string(),
+	                    to: "user".to_string(),
+	                    reason: "platform_error".to_string(),
+	                  },
+	                );
+	                platform_fallback_notified = true;
+	              }
+	              use_platform_for_call = false;
+	              continue;
+	            }
 	          }
 
 	          let friendly = format_openrouter_error(&resp_bytes);
@@ -3453,21 +3989,22 @@ async fn send_turn_openrouter_messages_agent(
 
 	          let Some(next) = next else { break };
 	          let bytes = match next {
-	            Ok(bytes) => bytes,
+		            Ok(bytes) => bytes,
 		            Err(err) => {
 		              append_openrouter_messages_assistant_message(
 		                &conn,
 		                db_path,
 		                thread_id,
-		                &format!("Engine error: OpenRouter stream error: {}", err),
+		                &format!("Engine error: stream error: {}", err),
 		                selected_model_id,
 		                &run_id,
 		                &evidence_event_ids,
-		                Some(&openrouter_model_id),
+		                provider_id,
+		                provider_model_ref,
 		                request_max_tokens,
 		                None,
 		              );
-	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_stream_error"));
+	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_stream_error"));
 	              let _ = window.emit(
 	                "openrouter-turn-finished",
 	                SessionIdPayload {
@@ -3498,8 +4035,9 @@ async fn send_turn_openrouter_messages_agent(
 	              serde_json::json!({
 	                "v": 1,
 	                "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	                "provider_id": provider_id,
 	                "model_id": selected_model_id,
-	                "openrouter_model_id": openrouter_model_id,
+	                "provider_model_ref": provider_model_ref_str.as_str(),
 	                "run_id": run_id,
 	                "call_seq": call_seq,
 	                "chunk_seq": chunk_seq,
@@ -3512,8 +4050,9 @@ async fn send_turn_openrouter_messages_agent(
 	              serde_json::json!({
 	                "v": 1,
 	                "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	                "provider_id": provider_id,
 	                "model_id": selected_model_id,
-	                "openrouter_model_id": openrouter_model_id,
+	                "provider_model_ref": provider_model_ref_str.as_str(),
 	                "run_id": run_id,
 	                "call_seq": call_seq,
 	                "chunk_seq": chunk_seq,
@@ -3525,8 +4064,9 @@ async fn send_turn_openrouter_messages_agent(
 	            serde_json::json!({
 	              "v": 1,
 	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
-	              "openrouter_model_id": openrouter_model_id,
+	              "provider_model_ref": provider_model_ref_str.as_str(),
 	              "run_id": run_id,
 	              "call_seq": call_seq,
 	              "chunk_seq": chunk_seq,
@@ -3658,15 +4198,16 @@ async fn send_turn_openrouter_messages_agent(
 		          &conn,
 		          db_path,
 		          thread_id,
-		          &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
+		          &format!("Engine error: error {}: {}", status.as_u16(), friendly),
 		          selected_model_id,
 		          &run_id,
 		          &evidence_event_ids,
-		          Some(&openrouter_model_id),
+		          provider_id,
+		          provider_model_ref,
 		          request_max_tokens,
 		          None,
 		        );
-	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_http_error"));
+	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_http_error"));
 	        let _ = window.emit(
 	          "openrouter-turn-finished",
 	          SessionIdPayload {
@@ -3755,10 +4296,11 @@ async fn send_turn_openrouter_messages_agent(
 	          ));
 	        }
 
+	        let tool_result_content = truncate_tool_result_for_prompt(&outcome.tool_result_content);
 	        messages.push(serde_json::json!({
 	          "role": "tool",
 	          "tool_call_id": tool_use_id,
-	          "content": outcome.tool_result_content
+	          "content": tool_result_content
 	        }));
 
 	        if *cancel_rx.borrow() {
@@ -3773,6 +4315,8 @@ async fn send_turn_openrouter_messages_agent(
 	          ));
 	        }
 	      }
+
+	      trim_openai_tool_loop_messages(&mut messages);
 		    };
 
 				    if content.trim().is_empty() {
@@ -3780,11 +4324,12 @@ async fn send_turn_openrouter_messages_agent(
 			        &conn,
 			        db_path,
 		        thread_id,
-		        "Engine error: OpenRouter returned an empty response.",
+		        "Engine error: empty response.",
 		        selected_model_id,
 		        &run_id,
 		        &evidence_event_ids,
-		        Some(&openrouter_model_id),
+		        provider_id,
+		        provider_model_ref,
 		        OPENROUTER_MAX_TOKENS,
 		        None,
 		      );
@@ -3812,7 +4357,8 @@ async fn send_turn_openrouter_messages_agent(
 		      selected_model_id,
 		      &run_id,
 		      &evidence_event_ids,
-		      Some(&openrouter_model_id),
+		      provider_id,
+		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      Some(used_personal_memory),
 		    );
@@ -3862,16 +4408,18 @@ async fn send_turn_openrouter_messages_agent(
       if redacted.is_empty() {
         continue;
       }
-      messages.push(serde_json::json!({ "role": role, "content": redacted }));
+      messages.push(serde_json::json!({
+        "role": role,
+        "content": [{ "type": "text", "text": redacted }]
+      }));
     }
-  if messages.last().and_then(|m| m.get("role")).and_then(|v| v.as_str()) != Some("user")
-    || messages.last().and_then(|m| m.get("content")).and_then(|v| v.as_str()) != Some(input_to_send.as_str())
-  {
-    messages.push(serde_json::json!({ "role": "user", "content": input_to_send.clone() }));
-  }
+    messages.push(serde_json::json!({
+      "role": "user",
+      "content": [{ "type": "text", "text": input_to_send.clone() }]
+    }));
 
 	  let tools_schema = if workspace.trim().is_empty() {
-	    Vec::new()
+	    make_agent_tool_schema_update_plan_only()
 	  } else {
 	    make_agent_tool_schema()
 	  };
@@ -3909,32 +4457,51 @@ async fn send_turn_openrouter_messages_agent(
 	    call_seq += 1;
 	    let mut request_max_tokens = OPENROUTER_MAX_TOKENS;
 	    let mut request_attempt: u32 = 1;
+	    let mut use_platform_for_call = platform_available_for_run;
 	
 	    let (engine_input_event, status, resp_bytes) = loop {
-	      let request = serde_json::json!({
-	        "model": openrouter_model_id,
+	      let provider_request = serde_json::json!({
+	        "model": provider_model_id.as_str(),
 	        "max_tokens": request_max_tokens,
 	        "stream": true,
 	        "system": system_prompt,
 	        "messages": messages,
 	        "tools": tools_schema
 	      });
-	      let request_bytes = serde_json::to_vec(&request)
-	        .map_err(|e| format!("OpenRouter request serialization failed: {}", e))?;
+	      let using_platform = use_platform_for_call && platform_agent_infer_url.is_some();
+	      let (request_bytes, request_format, inference_source) = if using_platform {
+	        let wrapped = serde_json::json!({
+	          "model_id": selected_model_id,
+	          "request": provider_request
+	        });
+	        (
+	          serde_json::to_vec(&wrapped).map_err(|e| format!("Request serialization failed: {}", e))?,
+	          "arx.platform_agent_infer.json",
+	          "platform",
+	        )
+	      } else {
+	        (
+	          serde_json::to_vec(&provider_request).map_err(|e| format!("Request serialization failed: {}", e))?,
+	          "anthropic.messages.json",
+	          "user",
+	        )
+	      };
 	      let request_blob = blob_store::write_blob(db_path, &request_bytes)
-	        .map_err(|e| format!("OpenRouter request blob write failed: {}", e))?;
+	        .map_err(|e| format!("Request blob write failed: {}", e))?;
 	      let _ = db::record_blob(&conn, &request_blob.id, &request_blob.rel_path, request_blob.byte_len);
 	
 	      let engine_input_payload = serde_json::json!({
 	        "v": 1,
 	        "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
-	        "provider_id": "openrouter",
+	        "provider_id": provider_id,
 	        "model_id": selected_model_id,
-	        "openrouter_model_id": openrouter_model_id,
+	        "provider_model_ref": provider_model_ref_str.as_str(),
+	        "provider_model_id": provider_model_id.as_str(),
+	        "inference_source": inference_source,
 	        "run_id": run_id,
 	        "seq": call_seq,
 	        "attempt": request_attempt,
-	        "request_format": "openrouter.messages.json",
+	        "request_format": request_format,
 	        "sent_blob_id": request_blob.id,
 	        "sent_blob_ref": request_blob.rel_path,
 	        "sent_byte_len": request_blob.byte_len,
@@ -3971,7 +4538,8 @@ async fn send_turn_openrouter_messages_agent(
 		            selected_model_id,
 		            &run_id,
 		            &[],
-		            Some(&openrouter_model_id),
+		            provider_id,
+		            provider_model_ref,
 		            request_max_tokens,
 		            None,
 		          );
@@ -4015,14 +4583,59 @@ async fn send_turn_openrouter_messages_agent(
 	        ));
 	      }
 
-	      let send_fut = client
-	        .post("https://openrouter.ai/api/v1/messages")
-	        .header("Authorization", format!("Bearer {}", openrouter_key))
-	        .header("Content-Type", "application/json")
-	        .header("Accept", "text/event-stream")
-	        .header("anthropic-version", "2023-06-01")
-	        .body(request_bytes)
-	        .send();
+	      let send_fut = if using_platform {
+	        let url = platform_agent_infer_url.clone().unwrap_or_default();
+	        let cfg = platform_proxy.as_ref().ok_or_else(|| "platform proxy is not configured".to_string())?;
+	        client
+	          .post(url)
+	          .header("apikey", cfg.supabase_anon_key.clone())
+	          .header("Authorization", format!("Bearer {}", cfg.access_token))
+	          .header("Content-Type", "application/json")
+	          .header("Accept", "text/event-stream")
+	          .body(request_bytes)
+	          .send()
+	      } else {
+	        let provider_key = match get_byok_provider_key() {
+	          Ok(value) => value,
+	          Err(message) => {
+	            append_openrouter_messages_assistant_message(
+	              &conn,
+	              db_path,
+	              thread_id,
+	              &message,
+	              selected_model_id,
+	              &run_id,
+	              &[],
+	              provider_id,
+	              provider_model_ref,
+	              request_max_tokens,
+	              None,
+	            );
+	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
+	            let _ = window.emit(
+	              "openrouter-turn-finished",
+	              SessionIdPayload {
+	                session_id: thread_id.to_string(),
+	              },
+	            );
+	            return Ok(SendTurnResult {
+	              thread_id: thread_id.to_string(),
+	              engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	              engine_input_event_id: Some(engine_input_event.id),
+	              engine_input_seq: Some(engine_input_event.seq),
+	              run_id: Some(run_id),
+	            });
+	          }
+	        };
+	        client
+	          .post("https://api.anthropic.com/v1/messages")
+	          .header("x-api-key", provider_key)
+	          .header("Content-Type", "application/json")
+	          .header("Accept", "text/event-stream")
+	          .header("anthropic-version", "2023-06-01")
+	          .body(request_bytes)
+	          .send()
+	      };
 
 	      let res = tokio::select! {
 	        _ = cancel_rx.changed() => {
@@ -4046,15 +4659,16 @@ async fn send_turn_openrouter_messages_agent(
 		            &conn,
 		            db_path,
 		            thread_id,
-		            &format!("Engine error: OpenRouter request failed: {}", err),
+		            &format!("Engine error: request failed: {}", err),
 		            selected_model_id,
 		            &run_id,
 		            &[],
-		            Some(&openrouter_model_id),
+		            provider_id,
+		            provider_model_ref,
 		            request_max_tokens,
 		            None,
 		          );
-	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_request_failed"));
+	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_request_failed"));
 	          let _ = window.emit(
 	            "openrouter-turn-finished",
 	            SessionIdPayload {
@@ -4097,15 +4711,16 @@ async fn send_turn_openrouter_messages_agent(
 	        };
 
 	        let resp_blob = blob_store::write_blob(db_path, &resp_bytes)
-	          .map_err(|e| format!("OpenRouter response blob write failed: {}", e))?;
+	          .map_err(|e| format!("Response blob write failed: {}", e))?;
 	        let _ = db::record_blob(&conn, &resp_blob.id, &resp_blob.rel_path, resp_blob.byte_len);
 
 	        let engine_io_payload = serde_json::json!({
 	          "v": 1,
 	          "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
-	          "provider_id": "openrouter",
+	          "provider_id": provider_id,
 	          "model_id": selected_model_id,
-	          "openrouter_model_id": openrouter_model_id,
+	          "provider_model_ref": provider_model_ref_str.as_str(),
+	          "provider_model_id": provider_model_id.as_str(),
 	          "run_id": run_id,
 	          "seq": call_seq,
 	          "attempt": request_attempt,
@@ -4126,6 +4741,83 @@ async fn send_turn_openrouter_messages_agent(
 	        )
 	        .map_err(|e| format!("Storage error: failed to record engine_io_chunk: {}", e))?;
 	        evidence_event_ids.push(engine_io_event.id.clone());
+
+	        if using_platform && !status.is_success() {
+	          platform_available_for_run = false;
+
+	          if is_platform_inference_quota_exceeded(&resp_bytes) {
+	            let provider_key_ok = get_byok_provider_key().is_ok();
+	            if !provider_key_ok {
+	              append_openrouter_messages_assistant_message(
+	                &conn,
+	                db_path,
+	                thread_id,
+	                &format!(
+	                  "You've used your Arx AI quota for this month. Add your {} API key in Settings → Models to continue.",
+	                  platform_provider_display_name(model_ref.provider)
+	                ),
+	                selected_model_id,
+	                &run_id,
+	                &evidence_event_ids,
+	                provider_id,
+	                provider_model_ref,
+	                request_max_tokens,
+	                None,
+	              );
+	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_quota_exceeded"));
+	              let _ = window.emit(
+	                "openrouter-turn-finished",
+	                SessionIdPayload {
+	                  session_id: thread_id.to_string(),
+	                },
+	              );
+	              return Ok(SendTurnResult {
+	                thread_id: thread_id.to_string(),
+	                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                engine_input_event_id: Some(engine_input_event.id),
+	                engine_input_seq: Some(engine_input_event.seq),
+	                run_id: Some(run_id),
+	              });
+	            }
+
+	            if !platform_fallback_notified {
+	              let _ = window.emit(
+	                "inference-fallback",
+	                InferenceFallbackPayload {
+	                  session_id: thread_id.to_string(),
+	                  from: "platform".to_string(),
+	                  to: "user".to_string(),
+	                  reason: "platform_quota_exceeded".to_string(),
+	                },
+	              );
+	              platform_fallback_notified = true;
+	            }
+	            use_platform_for_call = false;
+	            continue;
+	          }
+
+	          if is_platform_inference_not_allowed(&resp_bytes) {
+	            use_platform_for_call = false;
+	            continue;
+	          }
+
+	          if get_byok_provider_key().is_ok() {
+	            if !platform_fallback_notified {
+	              let _ = window.emit(
+	                "inference-fallback",
+	                InferenceFallbackPayload {
+	                  session_id: thread_id.to_string(),
+	                  from: "platform".to_string(),
+	                  to: "user".to_string(),
+	                  reason: "platform_error".to_string(),
+	                },
+	              );
+	              platform_fallback_notified = true;
+	            }
+	            use_platform_for_call = false;
+	            continue;
+	          }
+	        }
 
 	        if status.as_u16() == 402 && request_attempt == 1 {
 	          let friendly = serde_json::from_slice::<serde_json::Value>(&resp_bytes)
@@ -4196,15 +4888,16 @@ async fn send_turn_openrouter_messages_agent(
 		              &conn,
 		              db_path,
 		              thread_id,
-		              &format!("Engine error: OpenRouter stream error: {}", err),
+		              &format!("Engine error: stream error: {}", err),
 		              selected_model_id,
 		              &run_id,
 		              &evidence_event_ids,
-		              Some(&openrouter_model_id),
+		              provider_id,
+		              provider_model_ref,
 		              request_max_tokens,
 		              None,
 		            );
-	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_stream_error"));
+	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_stream_error"));
 	            let _ = window.emit(
 	              "openrouter-turn-finished",
 	              SessionIdPayload {
@@ -4235,8 +4928,9 @@ async fn send_turn_openrouter_messages_agent(
 	            serde_json::json!({
 	              "v": 1,
 	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
-	              "openrouter_model_id": openrouter_model_id,
+	              "provider_model_ref": provider_model_ref_str.as_str(),
 	              "run_id": run_id,
 	              "call_seq": call_seq,
 	              "chunk_seq": chunk_seq,
@@ -4249,8 +4943,9 @@ async fn send_turn_openrouter_messages_agent(
 	            serde_json::json!({
 	              "v": 1,
 	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
-	              "openrouter_model_id": openrouter_model_id,
+	              "provider_model_ref": provider_model_ref_str.as_str(),
 	              "run_id": run_id,
 	              "call_seq": call_seq,
 	              "chunk_seq": chunk_seq,
@@ -4262,8 +4957,9 @@ async fn send_turn_openrouter_messages_agent(
 	          serde_json::json!({
 	            "v": 1,
 	            "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	            "provider_id": provider_id,
 	            "model_id": selected_model_id,
-	            "openrouter_model_id": openrouter_model_id,
+	            "provider_model_ref": provider_model_ref_str.as_str(),
 	            "run_id": run_id,
 	            "call_seq": call_seq,
 	            "chunk_seq": chunk_seq,
@@ -4440,15 +5136,16 @@ async fn send_turn_openrouter_messages_agent(
 		        &conn,
 		        db_path,
 		        thread_id,
-		        &format!("Engine error: OpenRouter error {}: {}", status.as_u16(), friendly),
+		        &format!("Engine error: error {}: {}", status.as_u16(), friendly),
 		        selected_model_id,
 		        &run_id,
 		        &evidence_event_ids,
-		        Some(&openrouter_model_id),
+		        provider_id,
+		        provider_model_ref,
 		        request_max_tokens,
 		        None,
 		      );
-	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("openrouter_http_error"));
+	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_http_error"));
 	      let _ = window.emit(
 	        "openrouter-turn-finished",
 	        SessionIdPayload {
@@ -4477,7 +5174,7 @@ async fn send_turn_openrouter_messages_agent(
 	    }
 
 	    let parsed: serde_json::Value = serde_json::from_slice(&resp_bytes)
-	      .map_err(|e| format!("OpenRouter response parse failed: {}", e))?;
+	      .map_err(|e| format!("Response parse failed: {}", e))?;
     let content_blocks = parsed.get("content").and_then(|v| v.as_array()).cloned().unwrap_or_default();
 
     let mut tool_results: Vec<serde_json::Value> = Vec::new();
@@ -4541,7 +5238,7 @@ async fn send_turn_openrouter_messages_agent(
 		      tool_results.push(serde_json::json!({
 		        "type": "tool_result",
 		        "tool_use_id": tool_use_id,
-		        "content": outcome.tool_result_content
+		        "content": truncate_tool_result_for_prompt(&outcome.tool_result_content)
 		      }));
 
 	      if *cancel_rx.borrow() {
@@ -4563,6 +5260,8 @@ async fn send_turn_openrouter_messages_agent(
 
 	    messages.push(serde_json::json!({ "role": "assistant", "content": content_blocks }));
 	    messages.push(serde_json::json!({ "role": "user", "content": tool_results }));
+
+	    trim_anthropic_tool_loop_messages(&mut messages);
 	  };
 
 		  if *cancel_rx.borrow() {
@@ -4581,11 +5280,12 @@ async fn send_turn_openrouter_messages_agent(
 		      &conn,
 		      db_path,
 		      thread_id,
-		      "Engine error: OpenRouter returned an empty response.",
+		      "Engine error: empty response.",
 		      selected_model_id,
 		      &run_id,
 		      &evidence_event_ids,
-		      Some(&openrouter_model_id),
+		      provider_id,
+		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      None,
 		    );
@@ -4613,7 +5313,8 @@ async fn send_turn_openrouter_messages_agent(
 		    selected_model_id,
 		    &run_id,
 		    &evidence_event_ids,
-		    Some(&openrouter_model_id),
+		    provider_id,
+		    provider_model_ref,
 		    OPENROUTER_MAX_TOKENS,
 		    Some(used_personal_memory),
 		  );
@@ -4654,6 +5355,9 @@ async fn send_turn_cmd(
   input: String,
   history_messages_json: Option<String>,
   personal_memory_items_json: Option<String>,
+  supabase_url: Option<String>,
+  supabase_anon_key: Option<String>,
+  supabase_access_token: Option<String>,
 ) -> Result<SendTurnResult, String> {
   let _thread_lock = lock_thread_run(&thread_id).await;
   let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
@@ -4661,6 +5365,26 @@ async fn send_turn_cmd(
   let thread = get_thread_by_id(&conn, &thread_id)
     .map_err(|e| e.to_string())?
     .ok_or_else(|| "thread not found".to_string())?;
+
+  let platform_proxy = match (supabase_url.as_deref(), supabase_anon_key.as_deref(), supabase_access_token.as_deref()) {
+    (Some(url), Some(anon), Some(token)) => {
+      let url = url.trim();
+      let anon = anon.trim();
+      let token = token.trim();
+      if url.is_empty() || anon.is_empty() || token.is_empty() {
+        None
+      } else if !(url.starts_with("https://") || url.starts_with("http://")) {
+        None
+      } else {
+        Some(PlatformProxyConfig {
+          supabase_url: url.trim_end_matches('/').to_string(),
+          supabase_anon_key: anon.to_string(),
+          access_token: token.to_string(),
+        })
+      }
+    }
+    _ => None,
+  };
 
   // Workspace bindings are explicit (device-local). Do not fall back to "." when unbound.
   let workspace = thread
@@ -4726,7 +5450,7 @@ async fn send_turn_cmd(
     .as_deref()
     .map(|v| v.trim())
     .filter(|v| !v.is_empty())
-    .ok_or_else(|| "OpenRouter model is required".to_string())?;
+    .ok_or_else(|| "model_id is required".to_string())?;
 
 		  if thread.engine_id == ENGINE_OPENROUTER_MESSAGES_AGENT {
 		    return send_turn_openrouter_messages_agent(
@@ -4741,6 +5465,7 @@ async fn send_turn_cmd(
 		      &atom_system_prompt,
 		      &used_personal_memory,
 		      history_messages_json.clone(),
+		      platform_proxy,
 		      cancel_rx.clone(),
 		    )
 		    .await;
@@ -5454,6 +6179,9 @@ async fn engine_send_turn_cmd(
   input: String,
   history_messages_json: Option<String>,
   personal_memory_items_json: Option<String>,
+  supabase_url: Option<String>,
+  supabase_anon_key: Option<String>,
+  supabase_access_token: Option<String>,
 ) -> Result<SendTurnResult, String> {
   send_turn_cmd(
     window,
@@ -5463,6 +6191,9 @@ async fn engine_send_turn_cmd(
     input,
     history_messages_json,
     personal_memory_items_json,
+    supabase_url,
+    supabase_anon_key,
+    supabase_access_token,
   )
   .await
 }
@@ -5753,7 +6484,7 @@ fn set_thread_engine_cmd(
   let requires_model = cleaned_engine == ENGINE_OPENROUTER_CHAT
     || cleaned_engine == ENGINE_OPENROUTER_MESSAGES_AGENT;
   let final_model = if requires_model {
-    cleaned_model.ok_or_else(|| "model_id is required for OpenRouter".to_string())?
+    cleaned_model.ok_or_else(|| "model_id is required".to_string())?
   } else {
     ""
   };
