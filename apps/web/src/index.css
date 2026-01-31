@@ -14,6 +14,9 @@
   --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
+
+  /* Match the desktop rail tint even though the web topbar is transparent. */
+  --web-rail-bg: #ffffff;
 }
 
 /* Web-only: remove the "bar" treatment so the header blends into the page.
@@ -33,6 +36,16 @@
   --web-floating-chrome-border: rgba(255, 255, 255, 0.08);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.12);
+
+  --web-rail-bg: rgba(18, 18, 18, 0.95);
+}
+
+:root[data-theme="light-warm"] {
+  --web-rail-bg: #f0ede5;
+}
+
+:root[data-theme="dark-warm"] {
+  --web-rail-bg: rgba(20, 18, 15, 0.95);
 }
 
 /* Prefer deriving the "glass" tint from the current theme's background so it matches. */
@@ -46,6 +59,11 @@
     --web-floating-chrome-shadow: none;
     --web-floating-chrome-highlight: color-mix(in srgb, #fff 16%, transparent);
   }
+}
+
+/* Web-only: keep the left rail tint consistent with desktop (the web topbar is transparent). */
+.rail {
+  background: var(--web-rail-bg);
 }
 
 /* Web: keep topbar content aligned with the left rail. */
@@ -166,7 +184,8 @@
 }
 
 .workspace:not(.scroll-to-bottom) {
-  padding: 0 0 12px 12px;
+  /* Symmetric gutters so the chat feed + composer center cleanly within the column. */
+  padding: 0 12px 12px;
   transition: padding-left 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -417,6 +436,92 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.agent-drafts-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-draft-slot {
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.agent-draft-slot:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.agent-draft-slot.active {
+  border-color: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.agent-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 940px) {
+  .agent-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agent-preview-shell {
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.agent-preview-shell .web-starter-list {
+  width: 100%;
+  text-align: left;
+}
+
+.agent-tab-editor {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.agent-tab-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.agent-tab-label {
+  width: 100%;
+}
+
+.agent-tab-prompts {
+  width: 100%;
+  resize: vertical;
+}
+
+.web-starter-row.is-preview {
+  cursor: default;
+}
+
+.web-starter-row.is-preview:hover {
+  background: transparent;
 }
 
 .web-download-button {

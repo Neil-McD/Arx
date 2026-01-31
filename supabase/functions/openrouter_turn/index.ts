@@ -64,6 +64,11 @@ type ThreadRow = {
   community_id: string | null;
 };
 
+type CommunityAgentSystemPromptRow = {
+  draft_id: string;
+  system_prompt: string;
+};
+
 type UserMemorySettingsRow = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
@@ -174,6 +179,30 @@ async function loadThread(threadId: string): Promise<ThreadRow> {
   const row = rows[0];
   if (!row) throw new Error("Thread not found");
   return row;
+}
+
+async function loadCommunityAgentSystemPrompt(params: {
+  userId: string;
+  communityId: string;
+}): Promise<{ draftId: string; systemPrompt: string } | null> {
+  const communityId = (params.communityId ?? "").trim();
+  if (!communityId) return null;
+  try {
+    const res = await supabaseAdminFetch("/rest/v1/rpc/get_active_community_agent_system_prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ p_user_id: params.userId, p_community_id: communityId }),
+    });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<Partial<CommunityAgentSystemPromptRow>>;
+    const row = rows[0];
+    const systemPrompt = typeof row?.system_prompt === "string" ? row.system_prompt.trim() : "";
+    if (!systemPrompt) return null;
+    return { draftId: String(row?.draft_id ?? "").trim(), systemPrompt };
+  } catch {
+    // Best-effort: don't block inference if the RPC isn't deployed yet.
+    return null;
+  }
 }
 
 async function loadUserBuilderTier(userId: string): Promise<BuilderTier> {
@@ -1512,6 +1541,7 @@ Deno.serve(async (req: Request) => {
       memorySettingsResult,
       modelSettingsResult,
       memoryRowsResult,
+      communityAgentPromptResult,
     ] = await Promise.allSettled([
       loadRecentMessages(threadId, 40),
       loadUserOpenRouterKey(userId),
@@ -1519,6 +1549,9 @@ Deno.serve(async (req: Request) => {
       loadUserMemorySettings(userId),
       loadUserModelSettings(userId),
       loadPersonalMemoryItems(userId, 32),
+      thread.community_id
+        ? loadCommunityAgentSystemPrompt({ userId, communityId: thread.community_id })
+        : Promise.resolve(null),
     ]);
 
     if (rowsDescResult.status !== "fulfilled") throw rowsDescResult.reason;
@@ -1813,6 +1846,11 @@ Deno.serve(async (req: Request) => {
       role: "system",
       content: systemPrompt ? truncateUtf8(systemPrompt, 6000) : "You are a helpful assistant.",
     });
+    const communityAgentPrompt =
+      communityAgentPromptResult.status === "fulfilled" ? communityAgentPromptResult.value : null;
+    if (communityAgentPrompt?.systemPrompt) {
+      messages.push({ role: "system", content: truncateUtf8(communityAgentPrompt.systemPrompt, 6000) });
+    }
     if (memoryPrompt) {
       messages.push({ role: "system", content: memoryPrompt });
     }
@@ -1882,6 +1920,7 @@ Deno.serve(async (req: Request) => {
       const meta: Record<string, unknown> = {};
       meta.inference_source = inferenceSource;
       if (inferenceFallback) meta.inference_fallback = inferenceFallback;
+      if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
       if (inferenceSource === "platform") {
         meta.platform_standard_remaining = platformRemaining;
         meta.platform_provider = platformModel!.provider;
@@ -2169,6 +2208,7 @@ Deno.serve(async (req: Request) => {
             const meta: Record<string, unknown> = {};
             meta.inference_source = inferenceSource;
             if (inferenceFallback) meta.inference_fallback = inferenceFallback;
+            if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
             if (inferenceSource === "platform") {
               meta.platform_standard_remaining = platformRemaining;
               meta.platform_provider = platformModel!.provider;

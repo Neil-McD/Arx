@@ -138,6 +138,110 @@ type ChatLightboxImage = {
   name: string;
 };
 
+type CommunityAgentLandingTab = {
+  id: string;
+  label: string;
+  prompts: string[];
+};
+
+type CommunityAgentLanding = {
+  title: string;
+  subtitle: string;
+  tabs: CommunityAgentLandingTab[];
+};
+
+type CommunityAgentDraft = {
+  id: string;
+  community_id: string;
+  slot: number;
+  name: string | null;
+  landing_json: unknown;
+  system_prompt: string;
+  is_active: boolean;
+  updated_at: string;
+};
+
+const DEFAULT_EMPTY_THREAD_LANDING: CommunityAgentLanding = {
+  title: "How can I help?",
+  subtitle: "Start with a prompt, or ask anything.",
+  tabs: [
+    {
+      id: "community",
+      label: "Community",
+      prompts: [
+        "What is a community, and why would I start one?",
+        "Help me pick a community topic people will care about.",
+        "Write my welcome message and simple rules.",
+        "How do I get my first 20 members? Give me a simple plan.",
+      ],
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      prompts: [
+        "Help me plan my week so I actually ship.",
+        "Turn my big goal into 5 small steps. Ask me 2 questions first.",
+        "Make a simple 30-day plan for a launch.",
+        "What should I do first today? Ask me 3 questions.",
+      ],
+    },
+    {
+      id: "ops",
+      label: "Desktop",
+      prompts: [
+        "What can the desktop app do that the web can't?",
+        "Help me set up the desktop app in a safe way.",
+        "How do I use the desktop app with my project folder (simple steps)?",
+        "Should I use web or desktop for this? Ask me a few questions.",
+      ],
+    },
+    {
+      id: "learn",
+      label: "Learn",
+      prompts: [
+        "What is Arx, in plain English?",
+        "What does Arx remember, and what does it forget?",
+        "What gets saved online vs on my computer?",
+        "How do paid communities work here (simple version)?",
+      ],
+    },
+  ],
+};
+
+function normalizeCommunityAgentLanding(input: unknown): CommunityAgentLanding | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const title = typeof raw.title === "string" ? raw.title.trim() : "";
+  const subtitle = typeof raw.subtitle === "string" ? raw.subtitle.trim() : "";
+  const tabsRaw = Array.isArray(raw.tabs) ? raw.tabs : [];
+  const tabs: CommunityAgentLandingTab[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < tabsRaw.length; i++) {
+    if (tabs.length >= 4) break;
+    const tabRaw = tabsRaw[i];
+    if (!tabRaw || typeof tabRaw !== "object") continue;
+    const tab = tabRaw as Record<string, unknown>;
+    const label = typeof tab.label === "string" ? tab.label.trim() : "";
+    const promptsRaw = Array.isArray(tab.prompts) ? tab.prompts : [];
+    const prompts = promptsRaw
+      .map((p) => (typeof p === "string" ? p.trim() : ""))
+      .filter((p) => p)
+      .slice(0, 12);
+    if (!label || prompts.length === 0) continue;
+    let id = typeof tab.id === "string" ? tab.id.trim() : "";
+    if (!id) id = `tab-${i + 1}`;
+    while (seenIds.has(id)) id = `${id}-x`;
+    seenIds.add(id);
+    tabs.push({ id, label, prompts });
+  }
+  if (tabs.length === 0) return null;
+  return {
+    title: title || DEFAULT_EMPTY_THREAD_LANDING.title,
+    subtitle: subtitle || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
+    tabs,
+  };
+}
+
 type MessageReaction = {
   id: string;
   message_id: string;
@@ -2032,7 +2136,7 @@ export default function App() {
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<
-    "chat" | "library" | "resources" | "members" | "settings" | "analytics" | "automations"
+    "chat" | "library" | "resources" | "members" | "settings" | "ai_agent" | "analytics" | "automations"
   >(
     "chat"
   );
@@ -2191,6 +2295,25 @@ export default function App() {
     return window.confirm("You have unsaved community settings. Discard changes?");
   };
 
+  const [communityAgentDrafts, setCommunityAgentDrafts] = useState<CommunityAgentDraft[]>([]);
+  const [isLoadingCommunityAgentDrafts, setIsLoadingCommunityAgentDrafts] = useState(false);
+  const [communityAgentDraftsError, setCommunityAgentDraftsError] = useState<string | null>(null);
+  const communityAgentDraftsLoadedCommunityIdRef = useRef<string | null>(null);
+
+  const [communityAgentSelectedSlot, setCommunityAgentSelectedSlot] = useState(1);
+  const [communityAgentDraftName, setCommunityAgentDraftName] = useState("");
+  const [communityAgentDraftLanding, setCommunityAgentDraftLanding] = useState<CommunityAgentLanding>(
+    DEFAULT_EMPTY_THREAD_LANDING,
+  );
+  const [communityAgentDraftSystemPrompt, setCommunityAgentDraftSystemPrompt] = useState("");
+  const [communityAgentPreviewTabId, setCommunityAgentPreviewTabId] = useState<string>("");
+  const [isSavingCommunityAgentDraft, setIsSavingCommunityAgentDraft] = useState(false);
+  const [communityAgentDraftSaveError, setCommunityAgentDraftSaveError] = useState<string | null>(null);
+  const communityAgentDraftDirtyRef = useRef(false);
+  const markCommunityAgentDraftDirty = () => {
+    communityAgentDraftDirtyRef.current = true;
+  };
+
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
   const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
   const [communityMemberSettingsError, setCommunityMemberSettingsError] = useState<string | null>(null);
@@ -2223,7 +2346,9 @@ export default function App() {
       return 0;
     }
   });
-  const [emptyThreadSection, setEmptyThreadSection] = useState<"community" | "plan" | "ops" | "learn">("community");
+  const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
+  const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
+  const [emptyThreadSection, setEmptyThreadSection] = useState<string>("community");
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -2293,7 +2418,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    setEmptyThreadSection("community");
+    const desired = DEFAULT_EMPTY_THREAD_LANDING.tabs[0]?.id ?? "community";
+    setEmptyThreadSection(desired);
   }, [activeThreadId]);
 
   useEffect(() => {
@@ -2333,6 +2459,43 @@ export default function App() {
   useEffect(() => {
     sessionRef.current = supabaseSession;
   }, [supabaseSession]);
+
+  useEffect(() => {
+    const session = supabaseSession;
+    const communityId = activeCommunityId;
+    if (!session || !communityId || !activeCommunityAccess?.can_view) {
+      setActiveCommunityAgentLanding(null);
+      activeCommunityAgentLandingCommunityIdRef.current = null;
+      return;
+    }
+    if (activeCommunityAgentLandingCommunityIdRef.current === communityId) return;
+    activeCommunityAgentLandingCommunityIdRef.current = communityId;
+
+    const url = getSupabaseUrl();
+    if (!url) return;
+
+    void (async () => {
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/get_active_community_agent_landing`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_community_id: communityId }),
+          },
+          session,
+        );
+        if (!response.ok) {
+          setActiveCommunityAgentLanding(null);
+          return;
+        }
+        const data = (await response.json()) as unknown;
+        setActiveCommunityAgentLanding(data ?? null);
+      } catch {
+        setActiveCommunityAgentLanding(null);
+      }
+    })();
+  }, [supabaseSession, activeCommunityId, activeCommunityAccess?.can_view]);
 
   useEffect(() => {
     const session = supabaseSession;
@@ -3282,6 +3445,18 @@ export default function App() {
     if (communityTab !== "resources" && communityTab !== "library") return;
     void loadCommunityResources(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, activePage, communityTab]);
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    if (!supabaseSession || !activeCommunityId || !canManageMembersActiveCommunity) {
+      setCommunityAgentDrafts([]);
+      setCommunityAgentDraftsError(null);
+      communityAgentDraftsLoadedCommunityIdRef.current = null;
+      return;
+    }
+    if (communityAgentDraftsLoadedCommunityIdRef.current === activeCommunityId) return;
+    void loadCommunityAgentDrafts(activeCommunityId, supabaseSession);
+  }, [activePage, communityTab, supabaseSession, activeCommunityId, canManageMembersActiveCommunity]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
@@ -4846,6 +5021,7 @@ export default function App() {
     const nowSec = Math.floor(Date.now() / 1000);
     const id = crypto.randomUUID();
     const ownerId = getSupabaseAuthUid(session);
+    const communityId = activeCommunityId;
     const enabled = modelToggles.filter((toggle) => toggle.enabled);
     const preferredModelId =
       (activeModelId ?? "").trim() ||
@@ -4858,7 +5034,7 @@ export default function App() {
       title: null,
       engine_id: "arx_harness",
       model_id: preferredModelId,
-      community_id: null
+      community_id: communityId
     };
     try {
       const response = await fetchWithSupabaseAuth(
@@ -4879,7 +5055,7 @@ export default function App() {
         title: null,
         engine_id: "arx_harness",
         model_id: preferredModelId,
-        community_id: null,
+        community_id: communityId,
         last_seq: 0,
         created_at: nowSec,
         updated_at: nowSec
@@ -6584,6 +6760,184 @@ export default function App() {
     }
   }
 
+  function hydrateCommunityAgentEditor(slot: number, drafts: CommunityAgentDraft[]) {
+    const safeSlot = Math.max(1, Math.min(3, Math.floor(slot)));
+    const row = drafts.find((d) => d.slot === safeSlot) ?? null;
+    const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
+    setCommunityAgentSelectedSlot(safeSlot);
+    setCommunityAgentDraftName(row?.name ?? "");
+    setCommunityAgentDraftLanding(landing);
+    setCommunityAgentDraftSystemPrompt(row?.system_prompt ?? "");
+    setCommunityAgentDraftSaveError(null);
+    communityAgentDraftDirtyRef.current = false;
+    setCommunityAgentPreviewTabId(landing.tabs[0]?.id ?? "");
+  }
+
+  function normalizeCommunityAgentDraftForSave(draft: CommunityAgentLanding): CommunityAgentLanding | null {
+    const tabs = draft.tabs
+      .map((tab) => ({
+        id: tab.id,
+        label: (tab.label ?? "").trim(),
+        prompts: (tab.prompts ?? []).map((p) => (p ?? "").trim()).filter(Boolean),
+      }))
+      .filter((tab) => tab.label && tab.prompts.length > 0)
+      .slice(0, 4);
+    if (tabs.length === 0) return null;
+    return {
+      title: (draft.title ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.title,
+      subtitle: (draft.subtitle ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
+      tabs,
+    };
+  }
+
+  async function loadCommunityAgentDrafts(communityId: string, session: SupabaseSession) {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingCommunityAgentDrafts(true);
+    setCommunityAgentDraftsError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/list_community_agent_drafts`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_community_id: communityId }),
+        },
+        session,
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        setCommunityAgentDrafts([]);
+        setCommunityAgentDraftsError(message);
+        communityAgentDraftsLoadedCommunityIdRef.current = communityId;
+        return;
+      }
+      const rows = (await response.json()) as CommunityAgentDraft[];
+      rows.sort((a, b) => a.slot - b.slot);
+      setCommunityAgentDrafts(rows);
+      communityAgentDraftsLoadedCommunityIdRef.current = communityId;
+
+      const activeSlot = rows.find((d) => d.is_active)?.slot ?? 1;
+      hydrateCommunityAgentEditor(activeSlot, rows);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load AI agent drafts.";
+      setCommunityAgentDrafts([]);
+      setCommunityAgentDraftsError(message);
+      communityAgentDraftsLoadedCommunityIdRef.current = communityId;
+    } finally {
+      setIsLoadingCommunityAgentDrafts(false);
+    }
+  }
+
+  async function handleSaveCommunityAgentDraft() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const normalized = normalizeCommunityAgentDraftForSave(communityAgentDraftLanding);
+    if (!normalized) {
+      setCommunityAgentDraftSaveError("Add at least one tab with a label and one prompt.");
+      return;
+    }
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsSavingCommunityAgentDraft(true);
+    setCommunityAgentDraftSaveError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/upsert_community_agent_draft`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_community_id: activeCommunityId,
+            p_slot: communityAgentSelectedSlot,
+            p_name: communityAgentDraftName,
+            p_landing_json: normalized,
+            p_system_prompt: communityAgentDraftSystemPrompt,
+          }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        setCommunityAgentDraftSaveError(message);
+        return;
+      }
+      const rows = (await response.json()) as Array<{ id: string; slot: number; is_active: boolean; updated_at: string }>;
+      const row = rows[0];
+      if (!row) return;
+      setCommunityAgentDrafts((prev) => {
+        const without = prev.filter((d) => d.slot !== row.slot);
+        const next: CommunityAgentDraft[] = [
+          ...without,
+          {
+            id: row.id,
+            community_id: activeCommunityId,
+            slot: row.slot,
+            name: communityAgentDraftName.trim() ? communityAgentDraftName.trim() : null,
+            landing_json: normalized,
+            system_prompt: communityAgentDraftSystemPrompt,
+            is_active: row.is_active,
+            updated_at: row.updated_at,
+          },
+        ];
+        next.sort((a, b) => a.slot - b.slot);
+        return next;
+      });
+      communityAgentDraftDirtyRef.current = false;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to save AI agent draft.";
+      setCommunityAgentDraftSaveError(message);
+    } finally {
+      setIsSavingCommunityAgentDraft(false);
+    }
+  }
+
+  async function handleSetLiveCommunityAgentDraft() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsSavingCommunityAgentDraft(true);
+    setCommunityAgentDraftSaveError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/set_active_community_agent_draft`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_community_id: activeCommunityId, p_slot: communityAgentSelectedSlot }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        setCommunityAgentDraftSaveError(message);
+        return;
+      }
+      setCommunityAgentDrafts((prev) =>
+        prev.map((d) => (d.community_id === activeCommunityId ? { ...d, is_active: d.slot === communityAgentSelectedSlot } : d)),
+      );
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to set live draft.";
+      setCommunityAgentDraftSaveError(message);
+    } finally {
+      setIsSavingCommunityAgentDraft(false);
+    }
+  }
+
   function resetResourceForm() {
     setEditingResourceId(null);
     setResourceTitleInput("");
@@ -8011,6 +8365,29 @@ export default function App() {
     return threads.find((t) => t.id === activeThreadId) ?? null;
   }, [activeThreadId, threads]);
 
+  const emptyThreadLanding = useMemo(() => {
+    const communityLanding = normalizeCommunityAgentLanding(activeCommunityAgentLanding);
+    return communityLanding ?? DEFAULT_EMPTY_THREAD_LANDING;
+  }, [activeCommunityAgentLanding]);
+
+  useEffect(() => {
+    const first = emptyThreadLanding.tabs[0]?.id ?? "community";
+    setEmptyThreadSection((prev) => {
+      if (!prev) return first;
+      if (emptyThreadLanding.tabs.some((tab) => tab.id === prev)) return prev;
+      return first;
+    });
+  }, [emptyThreadLanding]);
+
+  useEffect(() => {
+    const first = communityAgentDraftLanding.tabs[0]?.id ?? "";
+    setCommunityAgentPreviewTabId((prev) => {
+      if (!prev) return first;
+      if (communityAgentDraftLanding.tabs.some((tab) => tab.id === prev)) return prev;
+      return first;
+    });
+  }, [communityAgentDraftLanding]);
+
   const visibleThreads = useMemo(() => threads.filter((thread) => thread.last_seq > 0), [threads]);
 
   const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
@@ -8839,6 +9216,27 @@ export default function App() {
 	                  </span>
 	                  Settings
 	                </button>
+                  {canManageMembersActiveCommunity && (
+                    <button
+                      className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
+                      type="button"
+                      onClick={() => {
+                        setActivePage("community");
+                        setActiveView("home");
+                        setCommunityTab("ai_agent");
+                      }}
+                      title="AI Agent"
+                    >
+                      <span className="nav-icon">
+                        <svg viewBox="0 0 24 24">
+                          <path d="M12 2l1.2 3.6L17 7l-3.8 1.4L12 12l-1.2-3.6L7 7l3.8-1.4L12 2z" />
+                          <path d="M19 13l.8 2.4L22 16l-2.2.6L19 19l-.8-2.4L16 16l2.2-.6L19 13z" />
+                          <path d="M5 13l.8 2.4L8 16l-2.2.6L5 19l-.8-2.4L2 16l2.2-.6L5 13z" />
+                        </svg>
+                      </span>
+                      AI Agent
+                    </button>
+                  )}
 	                {canViewActiveCommunityAnalytics && (
 	                  <>
 	                    <button
@@ -9580,84 +9978,59 @@ export default function App() {
                     {inferenceToast && <div className="memory-toast success-toast">{inferenceToast}</div>}
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
 		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
-		                  <div className="message-list-inner">
-	                    {!supabaseSession && (
-		                      <div className="chat-empty">Sign in to start a thread.</div>
-		                    )}
-	                    {supabaseSession && !activeThreadId && (
+	                    <div className="message-list-inner">
+	                    {!activeThreadId && (
 	                      <div className="web-empty-thread" role="region" aria-label="Start a new thread">
-                          <div className="web-empty-thread-title">How can I help?</div>
+                          <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
                           <div className="web-empty-thread-subtitle">
-                            Start with a prompt, or ask anything.
+                            {emptyThreadLanding.subtitle}
                           </div>
-                          <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
-                            {(
-                              [
-                                { id: "community", label: "Community" },
-                                { id: "plan", label: "Plan" },
-                                { id: "ops", label: "Desktop" },
-                                { id: "learn", label: "Learn" },
-                              ] as const
-                            ).map((tab) => (
-                              <button
-                                key={tab.id}
-                                type="button"
-                                className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
-                                aria-pressed={emptyThreadSection === tab.id}
-                                onClick={() => setEmptyThreadSection(tab.id)}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="web-starter-list" role="list">
-                            {(
-                              {
-                                community: [
-                                  "Draft a welcome message for my community.",
-                                  "Write community rules (short, clear, friendly).",
-                                  "Create a 7-day onboarding sequence for new members.",
-                                  "Suggest 5 resources I should pin first.",
-                                ],
-                                plan: [
-                                  "Plan my community week: 3 posts + 1 live session.",
-                                  "Propose a simple content calendar for the next 30 days.",
-                                  "Help me define KPIs for community health (MVP).",
-                                  "Write a launch checklist for a pay-first join flow.",
-                                ],
-                                ops: [
-                                  "What can the desktop app do that web can’t?",
-                                  "Help me set up a safe workflow for local tools + approvals.",
-                                  "Design a workspace binding policy for my project.",
-                                  "Turn this goal into a step-by-step execution plan.",
-                                ],
-                                learn: [
-                                  "Explain Arx claims + entitlements in simple terms.",
-                                  "What are the key MVP guardrails for Arx (in plain English)?",
-                                  "Summarize the pay-first join flow and failure recovery.",
-                                  "Explain personal memory modes (off/suggest/auto).",
-                                ],
-                              }[emptyThreadSection] ?? []
-                            ).map((prompt) => (
-                              <button
-                                key={prompt}
-                                className="web-starter-row"
-                                type="button"
-                                disabled={isSendingMessage}
-                                onClick={() => {
-                                  void sendUserMessage({ text: prompt });
-                                  workspaceAskInputRef.current?.focus();
-                                }}
-                              >
-                                <span className="web-starter-row-text">{prompt}</span>
-                                <span className="web-starter-row-arrow" aria-hidden="true">
-                                  <svg viewBox="0 0 24 24">
-                                    <path d="M9 18l6-6-6-6" />
-                                  </svg>
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                          {(() => {
+                            const activeTab =
+                              emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
+                              emptyThreadLanding.tabs[0];
+                            const prompts = activeTab?.prompts ?? [];
+                            return (
+                              <>
+                                {emptyThreadLanding.tabs.length > 1 && (
+                                  <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
+                                    {emptyThreadLanding.tabs.map((tab) => (
+                                      <button
+                                        key={tab.id}
+                                        type="button"
+                                        className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
+                                        aria-pressed={emptyThreadSection === tab.id}
+                                        onClick={() => setEmptyThreadSection(tab.id)}
+                                      >
+                                        {tab.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="web-starter-list" role="list">
+                                  {prompts.map((prompt) => (
+                                    <button
+                                      key={prompt}
+                                      className="web-starter-row"
+                                      type="button"
+                                      disabled={isSendingMessage}
+                                      onClick={() => {
+                                        void sendUserMessage({ text: prompt });
+                                        workspaceAskInputRef.current?.focus();
+                                      }}
+                                    >
+                                      <span className="web-starter-row-text">{prompt}</span>
+                                      <span className="web-starter-row-arrow" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24">
+                                          <path d="M9 18l6-6-6-6" />
+                                        </svg>
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            );
+                          })()}
                           {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
                             <div className="web-download-card" role="note" aria-label="Desktop app">
                               <button
@@ -11195,6 +11568,295 @@ export default function App() {
 		                      )}
 	                    </div>
 	                  )}
+
+                  {communityTab === "ai_agent" && (
+                    <div className="settings-panel community-settings-panel">
+                      {!activeCommunity ? (
+                        <div className="chat-empty">Select a community to configure the AI agent.</div>
+                      ) : !supabaseSession ? (
+                        <div className="chat-empty">Sign in to configure the AI agent.</div>
+                      ) : !canManageMembersActiveCommunity ? (
+                        <div className="chat-empty">Only owners and admins can configure the AI agent.</div>
+                      ) : isLoadingCommunityAgentDrafts ? (
+                        <div className="chat-empty">Loading…</div>
+                      ) : communityAgentDraftsError &&
+                        communityAgentDraftsError.toLowerCase().includes("pro_plan_required") ? (
+                        <>
+                          <div className="panel-title">AI Agent</div>
+                          <div className="model-note">
+                            This is a Builder Pro feature ($100/mo). Upgrade to customize the empty-thread landing page
+                            and a community system prompt.
+                          </div>
+                          {isActiveCommunityOwner ? (
+                            <div className="create-community-actions" style={{ marginTop: 12 }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBuilderUpgradeContext("builder");
+                                  setIsBuilderUpgradeOpen(true);
+                                }}
+                              >
+                                Upgrade to Pro
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="model-note">Ask the community owner to upgrade to Builder Pro.</div>
+                          )}
+                        </>
+                      ) : communityAgentDraftsError ? (
+                        <div className="auth-error">{communityAgentDraftsError}</div>
+                      ) : (
+                        <>
+                          {(() => {
+                            const activeSlot = communityAgentDrafts.find((d) => d.is_active)?.slot ?? null;
+                            const savedRow =
+                              communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot) ?? null;
+                            const canSetLive = Boolean(savedRow && !savedRow.is_active);
+                            const previewLanding =
+                              normalizeCommunityAgentDraftForSave(communityAgentDraftLanding) ?? communityAgentDraftLanding;
+                            const previewActiveTab =
+                              previewLanding.tabs.find((t) => t.id === communityAgentPreviewTabId) ??
+                              previewLanding.tabs[0];
+                            const previewPrompts = previewActiveTab?.prompts ?? [];
+
+                            return (
+                              <>
+                                <div className="panel-title">AI Agent</div>
+                                <div className="model-note">
+                                  Customize what members see on a fresh chat (no messages) and set a community-wide
+                                  system prompt.
+                                </div>
+
+                                <div className="agent-drafts-row" role="tablist" aria-label="Draft slots">
+                                  {[1, 2, 3].map((slot) => {
+                                    const isSlotActive = activeSlot === slot;
+                                    const isSelected = communityAgentSelectedSlot === slot;
+                                    return (
+                                      <button
+                                        key={slot}
+                                        type="button"
+                                        className={`agent-draft-slot${isSelected ? " active" : ""}`}
+                                        aria-pressed={isSelected}
+                                        onClick={() => {
+                                          if (slot === communityAgentSelectedSlot) return;
+                                          if (communityAgentDraftDirtyRef.current) {
+                                            const ok = window.confirm("Discard unsaved changes?");
+                                            if (!ok) return;
+                                          }
+                                          hydrateCommunityAgentEditor(slot, communityAgentDrafts);
+                                        }}
+                                      >
+                                        Draft {slot}
+                                        {isSlotActive ? " (Live)" : ""}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="settings-section">
+                                  <div className="settings-section-title">Draft</div>
+                                  <label className="create-community-field">
+                                    <span>Name (optional)</span>
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. Onboarding v1"
+                                      value={communityAgentDraftName}
+                                      onChange={(event) => {
+                                        setCommunityAgentDraftName(event.target.value);
+                                        markCommunityAgentDraftDirty();
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+
+                                <div className="settings-section">
+                                  <div className="settings-section-title">Landing page (empty chat)</div>
+                                  <div className="agent-editor-grid">
+                                    <div className="agent-editor-form">
+                                      <label className="create-community-field">
+                                        <span>Title</span>
+                                        <input
+                                          type="text"
+                                          value={communityAgentDraftLanding.title}
+                                          onChange={(event) => {
+                                            const value = event.target.value;
+                                            setCommunityAgentDraftLanding((prev) => ({ ...prev, title: value }));
+                                            markCommunityAgentDraftDirty();
+                                          }}
+                                        />
+                                      </label>
+                                      <label className="create-community-field">
+                                        <span>Subtitle</span>
+                                        <input
+                                          type="text"
+                                          value={communityAgentDraftLanding.subtitle}
+                                          onChange={(event) => {
+                                            const value = event.target.value;
+                                            setCommunityAgentDraftLanding((prev) => ({ ...prev, subtitle: value }));
+                                            markCommunityAgentDraftDirty();
+                                          }}
+                                        />
+                                      </label>
+
+                                      <div className="agent-tabs-editor">
+                                        <div className="settings-section-title">Tabs (1–4)</div>
+                                        {communityAgentDraftLanding.tabs.map((tab) => (
+                                          <div key={tab.id} className="agent-tab-editor">
+                                            <div className="agent-tab-row">
+                                              <input
+                                                className="agent-tab-label"
+                                                type="text"
+                                                placeholder="Tab name"
+                                                value={tab.label}
+                                                onChange={(event) => {
+                                                  const value = event.target.value;
+                                                  setCommunityAgentDraftLanding((prev) => ({
+                                                    ...prev,
+                                                    tabs: prev.tabs.map((t) =>
+                                                      t.id === tab.id ? { ...t, label: value } : t,
+                                                    ),
+                                                  }));
+                                                  markCommunityAgentDraftDirty();
+                                                }}
+                                              />
+                                              {communityAgentDraftLanding.tabs.length > 1 && (
+                                                <button
+                                                  className="secondary agent-tab-remove"
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setCommunityAgentDraftLanding((prev) => ({
+                                                      ...prev,
+                                                      tabs: prev.tabs.filter((t) => t.id !== tab.id),
+                                                    }));
+                                                    markCommunityAgentDraftDirty();
+                                                  }}
+                                                >
+                                                  Remove
+                                                </button>
+                                              )}
+                                            </div>
+                                            <textarea
+                                              className="agent-tab-prompts"
+                                              placeholder={"One prompt per line.\nExample: Help me plan my week."}
+                                              value={tab.prompts.join("\n")}
+                                              onChange={(event) => {
+                                                const lines = event.target.value
+                                                  .split("\n")
+                                                  .map((line) => line.trim())
+                                                  .filter(Boolean);
+                                                setCommunityAgentDraftLanding((prev) => ({
+                                                  ...prev,
+                                                  tabs: prev.tabs.map((t) =>
+                                                    t.id === tab.id ? { ...t, prompts: lines } : t,
+                                                  ),
+                                                }));
+                                                markCommunityAgentDraftDirty();
+                                              }}
+                                              rows={4}
+                                            />
+                                          </div>
+                                        ))}
+                                        {communityAgentDraftLanding.tabs.length < 4 && (
+                                          <button
+                                            className="secondary"
+                                            type="button"
+                                            onClick={() => {
+                                              setCommunityAgentDraftLanding((prev) => ({
+                                                ...prev,
+                                                tabs: [
+                                                  ...prev.tabs,
+                                                  { id: crypto.randomUUID(), label: `Tab ${prev.tabs.length + 1}`, prompts: [] },
+                                                ],
+                                              }));
+                                              markCommunityAgentDraftDirty();
+                                            }}
+                                          >
+                                            Add tab
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="agent-editor-preview">
+                                      <div className="agent-preview-shell" aria-label="Preview">
+                                        <div className="web-empty-thread-title">{previewLanding.title}</div>
+                                        <div className="web-empty-thread-subtitle">{previewLanding.subtitle}</div>
+                                        {previewLanding.tabs.length > 1 && (
+                                          <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
+                                            {previewLanding.tabs.map((tab) => (
+                                              <button
+                                                key={tab.id}
+                                                type="button"
+                                                className={`web-starter-tab${communityAgentPreviewTabId === tab.id ? " active" : ""}`}
+                                                aria-pressed={communityAgentPreviewTabId === tab.id}
+                                                onClick={() => setCommunityAgentPreviewTabId(tab.id)}
+                                              >
+                                                {tab.label}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="web-starter-list" role="list">
+                                          {previewPrompts.map((prompt) => (
+                                            <div key={prompt} className="web-starter-row is-preview" role="listitem">
+                                              <span className="web-starter-row-text">{prompt}</span>
+                                              <span className="web-starter-row-arrow" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24">
+                                                  <path d="M9 18l6-6-6-6" />
+                                                </svg>
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div className="model-note" style={{ marginTop: 10 }}>
+                                        The “Download desktop app” card is always shown by Arx when desktop isn’t
+                                        installed.
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="settings-section">
+                                  <div className="settings-section-title">System prompt (community-wide)</div>
+                                  <textarea
+                                    className="system-prompt-input"
+                                    placeholder="Optional. This applies to every chat in this community."
+                                    value={communityAgentDraftSystemPrompt}
+                                    onChange={(event) => {
+                                      setCommunityAgentDraftSystemPrompt(event.target.value);
+                                      markCommunityAgentDraftDirty();
+                                    }}
+                                    rows={6}
+                                  />
+                                </div>
+
+                                {communityAgentDraftSaveError && <div className="auth-error">{communityAgentDraftSaveError}</div>}
+
+                                <div className="create-community-actions">
+                                  <button type="button" onClick={() => void handleSaveCommunityAgentDraft()} disabled={isSavingCommunityAgentDraft}>
+                                    {isSavingCommunityAgentDraft ? "Saving…" : "Save draft"}
+                                  </button>
+                                  <button
+                                    className="secondary"
+                                    type="button"
+                                    disabled={!savedRow || !canSetLive || isSavingCommunityAgentDraft}
+                                    onClick={() => {
+                                      const ok = window.confirm("Set this draft live for all members?");
+                                      if (!ok) return;
+                                      void handleSetLiveCommunityAgentDraft();
+                                    }}
+                                  >
+                                    {savedRow?.is_active ? "Live" : "Set live"}
+                                  </button>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </>
+                      )}
+                    </div>
+                  )}
 
 	                  {communityTab === "analytics" && (
 	                    <div className="settings-panel community-settings-panel">
