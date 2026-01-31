@@ -11728,7 +11728,6 @@ export default function App() {
                       ) : communityAgentDraftsError &&
                         communityAgentDraftsError.toLowerCase().includes("pro_plan_required") ? (
                         <>
-                          <div className="panel-title">AI Agent</div>
                           {(() => {
                             const previewLanding = DEFAULT_EMPTY_THREAD_LANDING;
                             const previewTab = previewLanding.tabs[0];
@@ -11843,47 +11842,51 @@ export default function App() {
 
                             return (
                               <>
-                                <div className="panel-title">AI Agent</div>
-                                <div className="model-note">
-                                  Customize what members see on a fresh chat (no messages) and set a community-wide
-                                  system prompt.
-                                </div>
+                                <div className="agent-header-row">
+                                  <div className="model-note">
+                                    Customize what members see on a fresh chat (no messages) and set a community-wide
+                                    system prompt.
+                                  </div>
 
-                                {(() => {
-                                  const usedSlots = new Set(communityAgentDrafts.map((d) => d.slot));
-                                  const selectedSlotHasSavedRow = Boolean(savedRow);
-                                  const reservedSlots = new Set(usedSlots);
-                                  if (!selectedSlotHasSavedRow) reservedSlots.add(communityAgentSelectedSlot);
-                                  const nextAvailableSlot = [1, 2, 3].find((slot) => !reservedSlots.has(slot)) ?? null;
+                                  {(() => {
+                                    const usedSlots = new Set(communityAgentDrafts.map((d) => d.slot));
+                                    const selectedSlotHasSavedRow = Boolean(savedRow);
+                                    const reservedSlots = new Set(usedSlots);
+                                    if (!selectedSlotHasSavedRow) reservedSlots.add(communityAgentSelectedSlot);
+                                    const nextAvailableSlot =
+                                      [1, 2, 3].find((slot) => !reservedSlots.has(slot)) ?? null;
 
-                                  const baseOptions = [...communityAgentDrafts]
-                                    .sort((a, b) => a.slot - b.slot)
-                                    .map((d) => {
-                                      const name = (d.name ?? "").trim() || `Template ${d.slot}`;
-                                      return {
-                                        slot: d.slot,
-                                        label: `${name}${d.is_active ? " (Live)" : ""}`,
-                                      };
-                                    });
+                                    const baseOptions = [...communityAgentDrafts]
+                                      .sort((a, b) => a.slot - b.slot)
+                                      .map((d) => {
+                                        const name = (d.name ?? "").trim() || `Template ${d.slot}`;
+                                        return {
+                                          slot: d.slot,
+                                          label: `${name}${d.is_active ? " (Live)" : ""}`,
+                                        };
+                                      });
 
-                                  // If the selected slot hasn't been saved yet, keep it selectable in the dropdown.
-                                  const hasSelectedOption = baseOptions.some((opt) => opt.slot === communityAgentSelectedSlot);
-                                  const options = hasSelectedOption
-                                    ? baseOptions
-                                    : [
-                                        ...baseOptions,
-                                        {
-                                          slot: communityAgentSelectedSlot,
-                                          label: `${communityAgentDraftName.trim() || `Template ${communityAgentSelectedSlot}`} (Unsaved)`,
-                                        },
-                                      ].sort((a, b) => a.slot - b.slot);
+                                    // If the selected slot hasn't been saved yet, keep it selectable in the dropdown.
+                                    const hasSelectedOption = baseOptions.some(
+                                      (opt) => opt.slot === communityAgentSelectedSlot,
+                                    );
+                                    const options = hasSelectedOption
+                                      ? baseOptions
+                                      : [
+                                          ...baseOptions,
+                                          {
+                                            slot: communityAgentSelectedSlot,
+                                            label: `${
+                                              communityAgentDraftName.trim() || `Template ${communityAgentSelectedSlot}`
+                                            } (Unsaved)`,
+                                          },
+                                        ].sort((a, b) => a.slot - b.slot);
 
-                                  return (
-                                    <div className="agent-drafts-row">
-                                      <label className="create-community-field" style={{ width: "min(420px, 100%)" }}>
-                                        <span>Template</span>
+                                    return (
+                                      <div className="agent-template-picker">
+                                        <span className="agent-template-label">Template</span>
                                         <select
-                                          className="select-styled"
+                                          className="select-styled agent-template-select"
                                           value={String(communityAgentSelectedSlot)}
                                           onChange={(event) => {
                                             const value = event.target.value;
@@ -11913,10 +11916,10 @@ export default function App() {
                                           ))}
                                           {nextAvailableSlot && <option value="__new">+ New template</option>}
                                         </select>
-                                      </label>
-                                    </div>
-                                  );
-                                })()}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
 
                                 <div className="settings-section">
                                   <div className="settings-section-title">Draft</div>
