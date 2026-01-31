@@ -9317,18 +9317,24 @@ export default function App() {
                         setActiveView("home");
                         setCommunityTab("ai_agent");
                       }}
-                      title={activeCommunityOwnerIsPro === false ? "AI Agent (Pro)" : "AI Agent"}
-                    >
-                      <span className="nav-icon">
-                        <svg viewBox="0 0 24 24">
-                          <path d="M12 2l1.2 3.6L17 7l-3.8 1.4L12 12l-1.2-3.6L7 7l3.8-1.4L12 2z" />
-                          <path d="M19 13l.8 2.4L22 16l-2.2.6L19 19l-.8-2.4L16 16l2.2-.6L19 13z" />
-                          <path d="M5 13l.8 2.4L8 16l-2.2.6L5 19l-.8-2.4L2 16l2.2-.6L5 13z" />
-                        </svg>
-                      </span>
-                      AI Agent
-                      {activeCommunityOwnerIsPro === false && (
-                        <span className="nav-premium-badge" aria-hidden="true">
+	                      title={activeCommunityOwnerIsPro === false ? "AI Agent (Pro)" : "AI Agent"}
+	                    >
+	                      <span className="nav-icon">
+	                        <svg viewBox="0 0 24 24">
+	                          <circle cx="6" cy="7" r="2" />
+	                          <circle cx="6" cy="17" r="2" />
+	                          <circle cx="12" cy="12" r="2" />
+	                          <circle cx="18" cy="7" r="2" />
+	                          <circle cx="18" cy="17" r="2" />
+	                          <path d="M7.5 8.3L10.5 10.7" />
+	                          <path d="M7.5 15.7L10.5 13.3" />
+	                          <path d="M13.5 10.7L16.5 8.3" />
+	                          <path d="M13.5 13.3L16.5 15.7" />
+	                        </svg>
+	                      </span>
+	                      AI Agent
+	                      {activeCommunityOwnerIsPro === false && (
+	                        <span className="nav-premium-badge" aria-hidden="true">
                           <svg viewBox="0 0 24 24">
                             <path d="M4 7l4 4 4-6 4 6 4-4-2 13H6L4 7z" />
                           </svg>
@@ -11733,12 +11739,15 @@ export default function App() {
                                 <div className="premium-gate-blur" aria-hidden="true">
                                   <div className="agent-editor-grid">
                                     <div className="settings-section">
-                                      <div className="settings-section-title">Drafts</div>
-                                      <div className="agent-drafts-row">
-                                        <div className="agent-draft-slot active">Draft 1</div>
-                                        <div className="agent-draft-slot">Draft 2</div>
-                                        <div className="agent-draft-slot">Draft 3</div>
-                                      </div>
+                                      <div className="settings-section-title">Templates</div>
+                                      <label className="create-community-field" style={{ marginTop: 10 }}>
+                                        <span>Template</span>
+                                        <select className="select-styled" disabled>
+                                          <option>Template 1 (Live)</option>
+                                          <option>Template 2</option>
+                                          <option>Template 3</option>
+                                        </select>
+                                      </label>
                                       <div className="model-note" style={{ marginTop: 12 }}>
                                         Set your empty-thread landing prompts and a community system prompt.
                                       </div>
@@ -11840,31 +11849,74 @@ export default function App() {
                                   system prompt.
                                 </div>
 
-                                <div className="agent-drafts-row" role="tablist" aria-label="Draft slots">
-                                  {[1, 2, 3].map((slot) => {
-                                    const isSlotActive = activeSlot === slot;
-                                    const isSelected = communityAgentSelectedSlot === slot;
-                                    return (
-                                      <button
-                                        key={slot}
-                                        type="button"
-                                        className={`agent-draft-slot${isSelected ? " active" : ""}`}
-                                        aria-pressed={isSelected}
-                                        onClick={() => {
-                                          if (slot === communityAgentSelectedSlot) return;
-                                          if (communityAgentDraftDirtyRef.current) {
-                                            const ok = window.confirm("Discard unsaved changes?");
-                                            if (!ok) return;
-                                          }
-                                          hydrateCommunityAgentEditor(slot, communityAgentDrafts);
-                                        }}
-                                      >
-                                        Draft {slot}
-                                        {isSlotActive ? " (Live)" : ""}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                                {(() => {
+                                  const usedSlots = new Set(communityAgentDrafts.map((d) => d.slot));
+                                  const selectedSlotHasSavedRow = Boolean(savedRow);
+                                  const reservedSlots = new Set(usedSlots);
+                                  if (!selectedSlotHasSavedRow) reservedSlots.add(communityAgentSelectedSlot);
+                                  const nextAvailableSlot = [1, 2, 3].find((slot) => !reservedSlots.has(slot)) ?? null;
+
+                                  const baseOptions = [...communityAgentDrafts]
+                                    .sort((a, b) => a.slot - b.slot)
+                                    .map((d) => {
+                                      const name = (d.name ?? "").trim() || `Template ${d.slot}`;
+                                      return {
+                                        slot: d.slot,
+                                        label: `${name}${d.is_active ? " (Live)" : ""}`,
+                                      };
+                                    });
+
+                                  // If the selected slot hasn't been saved yet, keep it selectable in the dropdown.
+                                  const hasSelectedOption = baseOptions.some((opt) => opt.slot === communityAgentSelectedSlot);
+                                  const options = hasSelectedOption
+                                    ? baseOptions
+                                    : [
+                                        ...baseOptions,
+                                        {
+                                          slot: communityAgentSelectedSlot,
+                                          label: `${communityAgentDraftName.trim() || `Template ${communityAgentSelectedSlot}`} (Unsaved)`,
+                                        },
+                                      ].sort((a, b) => a.slot - b.slot);
+
+                                  return (
+                                    <div className="agent-drafts-row">
+                                      <label className="create-community-field" style={{ width: "min(420px, 100%)" }}>
+                                        <span>Template</span>
+                                        <select
+                                          className="select-styled"
+                                          value={String(communityAgentSelectedSlot)}
+                                          onChange={(event) => {
+                                            const value = event.target.value;
+                                            const confirmDiscard = () => {
+                                              if (!communityAgentDraftDirtyRef.current) return true;
+                                              return window.confirm("Discard unsaved changes?");
+                                            };
+
+                                            if (value === "__new") {
+                                              if (!nextAvailableSlot) return;
+                                              if (!confirmDiscard()) return;
+                                              hydrateCommunityAgentEditor(nextAvailableSlot, communityAgentDrafts);
+                                              return;
+                                            }
+
+                                            const nextSlot = Number.parseInt(value, 10);
+                                            if (!Number.isFinite(nextSlot) || nextSlot < 1 || nextSlot > 3) return;
+                                            if (nextSlot === communityAgentSelectedSlot) return;
+                                            if (!confirmDiscard()) return;
+                                            hydrateCommunityAgentEditor(nextSlot, communityAgentDrafts);
+                                          }}
+                                        >
+                                          {options.map((opt) => (
+                                            <option key={opt.slot} value={String(opt.slot)}>
+                                              {opt.label}
+                                            </option>
+                                          ))}
+                                          {nextAvailableSlot && <option value="__new">+ New template</option>}
+                                        </select>
+                                      </label>
+                                    </div>
+                                  );
+                                })()}
 
                                 <div className="settings-section">
                                   <div className="settings-section-title">Draft</div>
