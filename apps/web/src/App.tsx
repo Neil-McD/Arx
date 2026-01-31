@@ -3491,9 +3491,16 @@ export default function App() {
       communityAgentDraftsLoadedCommunityIdRef.current = null;
       return;
     }
+    // If we already know the community owner's tier isn't Pro, avoid calling Pro-only RPCs.
+    if (activeCommunityOwnerIsPro === false) {
+      setCommunityAgentDrafts([]);
+      setCommunityAgentDraftsError("pro_plan_required");
+      communityAgentDraftsLoadedCommunityIdRef.current = activeCommunityId;
+      return;
+    }
     if (communityAgentDraftsLoadedCommunityIdRef.current === activeCommunityId) return;
     void loadCommunityAgentDrafts(activeCommunityId, supabaseSession);
-  }, [activePage, communityTab, supabaseSession, activeCommunityId, canManageMembersActiveCommunity]);
+  }, [activePage, communityTab, supabaseSession, activeCommunityId, canManageMembersActiveCommunity, activeCommunityOwnerIsPro]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
@@ -9260,11 +9267,6 @@ export default function App() {
                       }`}
                       type="button"
                       onClick={() => {
-                        if (activeCommunityOwnerIsPro === false) {
-                          setBuilderUpgradeContext("builder");
-                          setIsBuilderUpgradeOpen(true);
-                          return;
-                        }
                         setActivePage("community");
                         setActiveView("home");
                         setCommunityTab("ai_agent");
@@ -11634,25 +11636,98 @@ export default function App() {
                         communityAgentDraftsError.toLowerCase().includes("pro_plan_required") ? (
                         <>
                           <div className="panel-title">AI Agent</div>
-                          <div className="model-note">
-                            This is a Builder Pro feature ($100/mo). Upgrade to customize the empty-thread landing page
-                            and a community system prompt.
-                          </div>
-                          {isActiveCommunityOwner ? (
-                            <div className="create-community-actions" style={{ marginTop: 12 }}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBuilderUpgradeContext("builder");
-                                  setIsBuilderUpgradeOpen(true);
-                                }}
-                              >
-                                Upgrade to Pro
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="model-note">Ask the community owner to upgrade to Builder Pro.</div>
-                          )}
+                          {(() => {
+                            const previewLanding = DEFAULT_EMPTY_THREAD_LANDING;
+                            const previewTab = previewLanding.tabs[0];
+                            const previewPrompts = previewTab?.prompts ?? [];
+
+                            return (
+                              <div className="premium-gate-shell">
+                                <div className="premium-gate-blur" aria-hidden="true">
+                                  <div className="agent-editor-grid">
+                                    <div className="settings-section">
+                                      <div className="settings-section-title">Drafts</div>
+                                      <div className="agent-drafts-row">
+                                        <div className="agent-draft-slot active">Draft 1</div>
+                                        <div className="agent-draft-slot">Draft 2</div>
+                                        <div className="agent-draft-slot">Draft 3</div>
+                                      </div>
+                                      <div className="model-note" style={{ marginTop: 12 }}>
+                                        Set your empty-thread landing prompts and a community system prompt.
+                                      </div>
+                                      <div className="model-list" style={{ marginTop: 12 }}>
+                                        <label className="model-field">
+                                          <span>System prompt</span>
+                                          <textarea value={"You are the community assistant."} readOnly rows={3} />
+                                        </label>
+                                      </div>
+                                    </div>
+
+                                    <div className="agent-editor-preview">
+                                      <div className="agent-preview-shell" aria-label="Preview">
+                                        <div className="web-empty-thread-title">{previewLanding.title}</div>
+                                        <div className="web-empty-thread-subtitle">{previewLanding.subtitle}</div>
+                                        {previewLanding.tabs.length > 1 && (
+                                          <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
+                                            {previewLanding.tabs.map((tab) => (
+                                              <button
+                                                key={tab.id}
+                                                type="button"
+                                                className={`web-starter-tab${tab.id === previewTab?.id ? " active" : ""}`}
+                                                aria-pressed={tab.id === previewTab?.id}
+                                              >
+                                                {tab.label}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="web-starter-list" role="list">
+                                          {previewPrompts.map((prompt) => (
+                                            <div key={prompt} className="web-starter-row is-preview" role="listitem">
+                                              <span className="web-starter-row-text">{prompt}</span>
+                                              <span className="web-starter-row-arrow" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24">
+                                                  <path d="M9 18l6-6-6-6" />
+                                                </svg>
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="premium-gate-overlay">
+                                  <div className="premium-gate-card">
+                                    <div className="premium-gate-eyebrow">PRO</div>
+                                    <div className="premium-gate-title">For Pro members only</div>
+                                    <div className="model-note" style={{ marginTop: 8 }}>
+                                      Upgrade to Builder Pro ($100/mo) to customize the empty-thread landing page and a
+                                      community system prompt.
+                                    </div>
+                                    {isActiveCommunityOwner ? (
+                                      <div className="create-community-actions" style={{ marginTop: 12 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setBuilderUpgradeContext("builder");
+                                            setIsBuilderUpgradeOpen(true);
+                                          }}
+                                        >
+                                          Upgrade to Pro
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="model-note" style={{ marginTop: 12 }}>
+                                        Ask the community owner to upgrade to Builder Pro.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </>
                       ) : communityAgentDraftsError ? (
                         <div className="auth-error">{communityAgentDraftsError}</div>
