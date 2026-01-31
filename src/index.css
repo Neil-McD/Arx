@@ -830,6 +830,50 @@ html, body {
   color: var(--text-primary);
 }
 
+.nav-item.premium-locked {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--border-muted) 75%, transparent);
+}
+
+.nav-item.premium-locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--bg-card) 65%, transparent) 0%,
+    transparent 65%
+  );
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.nav-premium-badge {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--accent-gold, var(--bg-button));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-premium-badge svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .nav-icon {
   width: 16px;
   height: 16px;

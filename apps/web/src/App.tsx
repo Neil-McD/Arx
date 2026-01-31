@@ -3430,6 +3430,43 @@ export default function App() {
   const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
   const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
   const canViewActiveCommunityAutomations = canManageMembersActiveCommunity;
+  const [activeCommunityOwnerIsPro, setActiveCommunityOwnerIsPro] = useState<boolean | null>(null);
+  const activeCommunityOwnerIsProLoadedCommunityIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!supabaseSession || !activeCommunityId || !canManageMembersActiveCommunity) {
+      setActiveCommunityOwnerIsPro(null);
+      activeCommunityOwnerIsProLoadedCommunityIdRef.current = null;
+      return;
+    }
+    if (activeCommunityOwnerIsProLoadedCommunityIdRef.current === activeCommunityId) return;
+    activeCommunityOwnerIsProLoadedCommunityIdRef.current = activeCommunityId;
+
+    const url = getSupabaseUrl();
+    if (!url) return;
+
+    void (async () => {
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/community_owner_is_pro`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_community_id: activeCommunityId }),
+          },
+          supabaseSession,
+        );
+        if (!response.ok) {
+          setActiveCommunityOwnerIsPro(null);
+          return;
+        }
+        const data = (await response.json()) as unknown;
+        setActiveCommunityOwnerIsPro(typeof data === "boolean" ? data : null);
+      } catch {
+        setActiveCommunityOwnerIsPro(null);
+      }
+    })();
+  }, [supabaseSession, activeCommunityId, canManageMembersActiveCommunity]);
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "members") return;
@@ -9218,14 +9255,21 @@ export default function App() {
 	                </button>
                   {canManageMembersActiveCommunity && (
                     <button
-                      className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
+                      className={`${communityTab === "ai_agent" ? "nav-item active" : "nav-item"}${
+                        activeCommunityOwnerIsPro === false ? " premium-locked" : ""
+                      }`}
                       type="button"
                       onClick={() => {
+                        if (activeCommunityOwnerIsPro === false) {
+                          setBuilderUpgradeContext("builder");
+                          setIsBuilderUpgradeOpen(true);
+                          return;
+                        }
                         setActivePage("community");
                         setActiveView("home");
                         setCommunityTab("ai_agent");
                       }}
-                      title="AI Agent"
+                      title={activeCommunityOwnerIsPro === false ? "AI Agent (Pro)" : "AI Agent"}
                     >
                       <span className="nav-icon">
                         <svg viewBox="0 0 24 24">
@@ -9235,6 +9279,13 @@ export default function App() {
                         </svg>
                       </span>
                       AI Agent
+                      {activeCommunityOwnerIsPro === false && (
+                        <span className="nav-premium-badge" aria-hidden="true">
+                          <svg viewBox="0 0 24 24">
+                            <path d="M4 7l4 4 4-6 4 6 4-4-2 13H6L4 7z" />
+                          </svg>
+                        </span>
+                      )}
                     </button>
                   )}
 	                {canViewActiveCommunityAnalytics && (
