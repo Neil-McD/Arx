@@ -833,7 +833,11 @@ html, body {
 .nav-item.premium-locked {
   position: relative;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--border-muted) 75%, transparent);
+  border-color: transparent;
+}
+
+.nav-item.premium-locked.active {
+  border-color: transparent;
 }
 
 .nav-item.premium-locked::after {
