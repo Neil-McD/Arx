@@ -261,7 +261,7 @@ Deno.serve(async (req: Request) => {
     if (platformModel.provider !== "anthropic") {
       const base = platformOpenAiCompatibleBaseUrl(platformModel.provider);
       if (!base) throw new Error("unsupported_provider");
-      const url = `${base.replace(/\\/+$/, "")}/chat/completions`;
+      const url = `${base.replace(/\/+$/, "")}/chat/completions`;
       const upstream = await fetch(url, {
         method: "POST",
         headers: {
@@ -317,4 +317,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
-
