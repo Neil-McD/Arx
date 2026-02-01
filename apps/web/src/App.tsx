@@ -5522,6 +5522,139 @@ export default function App() {
     }
   }
 
+  async function setThreadCommunityLens(
+    threadId: string,
+    communityId: string | null,
+    session: SupabaseSession,
+  ): Promise<{ thread_id: string; community_id: string | null; updated_at: string } | null> {
+    const url = getSupabaseUrl();
+    if (!url) return null;
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/rpc/set_thread_community_lens`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ p_thread_id: threadId, p_community_id: communityId }),
+      },
+      session,
+    );
+    if (!response.ok) throw new Error(await readSupabaseError(response));
+    const rows = (await response.json()) as Array<{ thread_id: string; community_id: string | null; updated_at: string }>;
+    const row = rows[0] ?? null;
+    if (!row?.thread_id) return null;
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? { ...t, community_id: row.community_id ?? null, updated_at: toEpochSeconds(row.updated_at) }
+          : t,
+      ),
+    );
+    return row;
+  }
+
+  type WorkspaceLensTarget = {
+    threadId: string;
+    communityId: string | null;
+    communityName: string;
+    session: SupabaseSession;
+  };
+
+  // "Last click wins" lens switching: keep a single in-flight RPC and coalesce rapid
+  // community changes so the active thread ends up in the user's last-selected lens.
+  const workspaceLensEpochRef = useRef(0);
+  const workspaceLensAppliedEpochRef = useRef(0);
+  const workspaceLensDesiredRef = useRef<WorkspaceLensTarget | null>(null);
+  const workspaceLensInFlightRef = useRef(false);
+  const workspaceLensWaitersRef = useRef<
+    Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }>
+  >([]);
+  const [workspaceLensStatus, setWorkspaceLensStatus] = useState<{ inFlight: boolean; targetName: string | null }>({
+    inFlight: false,
+    targetName: null,
+  });
+
+  const settleWorkspaceLensWaiters = (upToEpoch: number, error: unknown | null) => {
+    const remaining: Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }> = [];
+    for (const waiter of workspaceLensWaitersRef.current) {
+      if (waiter.epoch <= upToEpoch) {
+        if (error) waiter.reject(error);
+        else waiter.resolve();
+      } else {
+        remaining.push(waiter);
+      }
+    }
+    workspaceLensWaitersRef.current = remaining;
+  };
+
+  const runWorkspaceLensWorker = async (): Promise<void> => {
+    if (workspaceLensInFlightRef.current) return;
+    workspaceLensInFlightRef.current = true;
+    setWorkspaceLensStatus((prev) => (prev.inFlight ? prev : { inFlight: true, targetName: prev.targetName }));
+    try {
+      while (workspaceLensAppliedEpochRef.current < workspaceLensEpochRef.current) {
+        const epoch = workspaceLensEpochRef.current;
+        const desired = workspaceLensDesiredRef.current;
+        if (!desired) {
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, null);
+          break;
+        }
+
+        setWorkspaceLensStatus({ inFlight: true, targetName: desired.communityName });
+        try {
+          await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, null);
+          // Only toast once the final requested lens has settled (avoid spam on rapid clicks).
+          if (epoch === workspaceLensEpochRef.current) {
+            showAppToastMessage(
+              desired.communityId ? `Now using ${desired.communityName}.` : "Cleared community context.",
+            );
+          }
+        } catch (error) {
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, error);
+          if (epoch === workspaceLensEpochRef.current) {
+            const message =
+              typeof error === "string"
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : "Failed to switch community context.";
+            showAppToastMessage(message);
+          }
+        }
+      }
+    } finally {
+      workspaceLensInFlightRef.current = false;
+      setWorkspaceLensStatus({ inFlight: false, targetName: null });
+    }
+  };
+
+  const requestWorkspaceThreadLens = (target: WorkspaceLensTarget): Promise<void> => {
+    const currentLens = threads.find((t) => t.id === target.threadId)?.community_id ?? null;
+    if (currentLens === target.communityId && !workspaceLensInFlightRef.current) {
+      return Promise.resolve();
+    }
+
+    const epoch = (workspaceLensEpochRef.current += 1);
+    workspaceLensDesiredRef.current = target;
+    void runWorkspaceLensWorker();
+    return new Promise<void>((resolve, reject) => {
+      workspaceLensWaitersRef.current.push({ epoch, resolve, reject });
+    });
+  };
+
+  const ensureWorkspaceThreadLensBeforeSend = async (threadId: string, session: SupabaseSession): Promise<void> => {
+    if (activePage !== "workspace") return;
+    const desiredCommunityId = activeCommunityId ?? null;
+    const currentLens = threads.find((t) => t.id === threadId)?.community_id ?? null;
+    if (currentLens === desiredCommunityId) return;
+    if (!desiredCommunityId) return;
+    const desiredName = communities.find((c) => c.id === desiredCommunityId)?.name ?? desiredCommunityId;
+    await requestWorkspaceThreadLens({ threadId, communityId: desiredCommunityId, communityName: desiredName, session });
+  };
+
   function getLastThreadMessageId(messages: ThreadMessage[], role: "user" | "assistant" | "system"): string | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
@@ -5609,7 +5742,12 @@ export default function App() {
             : messageFromServer || "Too many requests. Try again soon.";
           return { cancelled: false, error: message };
         }
-        if (code === "platform_inference_quota_exceeded" || code === "platform_inference_misconfigured") {
+        if (
+          code === "platform_inference_quota_exceeded" ||
+          code === "platform_inference_misconfigured" ||
+          code === "platform_inference_disabled" ||
+          code === "platform_inference_not_allowed"
+        ) {
           const rawProvider = typeof parsed?.provider === "string" ? parsed.provider.trim().toLowerCase() : "";
           const providerId: ProviderId | null =
             rawProvider === "openai"
@@ -5963,6 +6101,11 @@ export default function App() {
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         await updateThreadModel(threadId, preferredModelId, session);
       }
+
+      // Option 1: on the AI/workspace page, the selected community is the lens.
+      // Ensure the cloud thread lens is up to date before inference so we don't
+      // accidentally answer under a stale community context.
+      await ensureWorkspaceThreadLensBeforeSend(threadId, session);
 
       const rememberEnabled = userMemorySettings.remember_intent_enabled !== false;
       const remembered = rememberEnabled ? extractRememberIntent(text) : null;
@@ -7288,7 +7431,12 @@ export default function App() {
   function hydrateCommunityAgentEditor(slot: number, drafts: CommunityAgentDraft[]) {
     const safeSlot = Math.max(1, Math.min(3, Math.floor(slot)));
     const row = drafts.find((d) => d.slot === safeSlot) ?? null;
-    const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
+    const communityName =
+      activeCommunityId ? (communities.find((c) => c.id === activeCommunityId)?.name ?? "").trim() : "";
+    const fallbackLanding = communityName
+      ? buildDefaultCommunityEmptyThreadLanding(communityName)
+      : DEFAULT_EMPTY_THREAD_LANDING;
+    const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? fallbackLanding;
     setCommunityAgentSelectedSlot(safeSlot);
     setCommunityAgentDraftName(row?.name ?? "");
     setCommunityAgentDraftLanding(landing);
@@ -9038,8 +9186,15 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isSessionsDrawerOpen]);
 
-  const lastThreadMessage = threadMessages[threadMessages.length - 1] ?? null;
-  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
+	  let lastThreadMessage: ThreadMessage | null = null;
+	  for (let i = threadMessages.length - 1; i >= 0; i--) {
+	    const candidate = threadMessages[i] ?? null;
+	    if (!candidate) continue;
+	    if (candidate.role === "system") continue;
+	    lastThreadMessage = candidate;
+	    break;
+	  }
+	  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
   const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
   const lastThreadAssistantMessageId = getLastThreadMessageId(threadMessages, "assistant");
   const canRetryLastThreadTurn = Boolean(
@@ -9474,18 +9629,32 @@ export default function App() {
         setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
       }}
       aria-label="Community"
-      title="Community"
+      title={activeCommunity?.name ?? "Community"}
       type="button"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
+      {activeCommunity ? (
+        activeCommunity.avatar_url ? (
+          <img
+            className="community-btn-avatar"
+            src={activeCommunity.avatar_url}
+            alt={activeCommunity.name}
+            loading="lazy"
+          />
+        ) : (
+          <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
+        )
+      ) : (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      )}
       {unreadCount > 0 && activePage !== "community" && (
         <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
       )}
+      {workspaceLensStatus.inFlight && showHeaderIslands && <span className="community-btn-spinner" aria-hidden="true" />}
     </button>
   );
 
@@ -9583,15 +9752,16 @@ export default function App() {
                 {groupThreadsByDate(visibleThreads).map((group) => (
                   <div key={group.label} className="session-group">
                     <div className="session-group-label">{group.label}</div>
-                    {group.threads.map((thread) => (
-                      <div
-                        key={thread.id}
-                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                        onClick={() => {
-                          setWorkspaceWantsNewChatMode(false);
-                          setActiveThreadId(thread.id);
-                        }}
-                      >
+	                    {group.threads.map((thread) => (
+	                      <div
+	                        key={thread.id}
+	                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+	                        onClick={() => {
+	                          setWorkspaceWantsNewChatMode(false);
+	                          setActiveCommunityId(thread.community_id ?? null);
+	                          setActiveThreadId(thread.id);
+	                        }}
+	                      >
                         <div className="session-content">
                           <div className="session-title">{(thread.title ?? "").trim() || "Untitled thread"}</div>
                           <div className="session-preview">
@@ -9631,26 +9801,29 @@ export default function App() {
                 </svg>
               </button>
               <div className="community-rail-divider" />
-              {communities.map((community) => (
-                <button
-                  key={community.id}
-                  type="button"
-	                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
-	                  onClick={() => {
-	                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-	                    setActiveCommunityId(community.id);
-                      // Keep the user on their current page; only the selected community context changes.
-                      if (activePage === "workspace") {
-                        const currentThread = activeThreadId ? threads.find((t) => t.id === activeThreadId) ?? null : null;
-                        const currentThreadCommunityId = currentThread?.community_id ?? null;
-                        if (currentThreadCommunityId !== community.id) {
-                          setWorkspaceWantsNewChatMode(true);
-                          setActiveThreadId(null);
-                        }
-                      }
-	                  }}
-	                  title={community.name}
-                >
+	              {communities.map((community) => (
+	                <button
+	                  key={community.id}
+	                  type="button"
+		                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
+		                  onClick={() => {
+		                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+		                    setActiveCommunityId(community.id);
+	                      // Keep the user on their current page; only the selected community context changes.
+	                      if (activePage === "workspace") {
+	                        const session = supabaseSession;
+	                        if (session && activeThreadId) {
+	                          void requestWorkspaceThreadLens({
+	                            threadId: activeThreadId,
+	                            communityId: community.id,
+	                            communityName: community.name,
+	                            session,
+	                          });
+	                        }
+	                      }
+		                  }}
+		                  title={community.name}
+	                >
                   {community.avatar_url ? (
                     <img
                       className="community-rail-avatar"
@@ -10772,14 +10945,15 @@ export default function App() {
                           )}
                         </div>
                       )}
-	                    {threadMessages.map((message) => {
-	                      const isUser = message.role === "user";
-	                      const textContent = parseMessageText(message.content_json);
-                        const attachments = parseMessageAttachments(message.content_json);
-                        const memoryUsed = !isUser ? parseMessageMemoryUsed(message.content_json) : [];
-                        const historyUsed = !isUser ? parseMessageHistoryUsed(message.content_json) : [];
-                        const memorySuggestions = !isUser ? parseMessageMemorySuggestions(message.content_json) : [];
-                        const memoryAdded = !isUser ? parseMessageMemoryAdded(message.content_json) : [];
+		                    {threadMessages.map((message) => {
+		                      if (message.role === "system") return null;
+		                      const isUser = message.role === "user";
+		                      const textContent = parseMessageText(message.content_json);
+	                        const attachments = parseMessageAttachments(message.content_json);
+	                        const memoryUsed = !isUser ? parseMessageMemoryUsed(message.content_json) : [];
+	                        const historyUsed = !isUser ? parseMessageHistoryUsed(message.content_json) : [];
+	                        const memorySuggestions = !isUser ? parseMessageMemorySuggestions(message.content_json) : [];
+	                        const memoryAdded = !isUser ? parseMessageMemoryAdded(message.content_json) : [];
                         const hasContext =
                           memoryUsed.length > 0 || historyUsed.length > 0 || memorySuggestions.length > 0 || memoryAdded.length > 0;
 	                      const modelLabel = !isUser
