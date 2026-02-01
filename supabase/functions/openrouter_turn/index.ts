@@ -10,11 +10,19 @@ type OpenRouterTurnInput = {
   max_tokens?: number;
   stream?: boolean;
   mode?: "respond" | "regenerate";
+  inference_source?: "user" | "platform";
 };
 
 function isTruthyEnv(value: string): boolean {
   const v = (value ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+function normalizeInferenceSource(value: unknown): "user" | "platform" | null {
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (v === "user") return "user";
+  if (v === "platform") return "platform";
+  return null;
 }
 
 function sanitizeUuid(value: string): string {
@@ -127,6 +135,21 @@ function normalizePlatformProvider(input: string): PlatformProvider {
   throw new Error("Unsupported platform model provider");
 }
 
+function formatProviderLabel(provider: PlatformProvider): string {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "google":
+      return "Google";
+    case "x-ai":
+      return "xAI";
+    default:
+      return provider;
+  }
+}
+
 function parsePlatformModelRef(ref: string): PlatformModelRef {
   const raw = (ref ?? "").trim();
   const idx = raw.indexOf("/");
@@ -213,6 +236,24 @@ async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Pro
   if (row) {
     if (!row.enabled || !row.platform_enabled) {
       throw new Error("platform_inference_not_allowed");
+    }
+    const provider = normalizePlatformProvider(row.provider);
+    const providerModel = String(row.provider_model ?? "").trim();
+    if (providerModel) return { provider, model: providerModel, ref: `${provider}/${providerModel}` };
+    // Transition fallback: allow legacy env mapping until provider_model is populated.
+  }
+
+  return resolvePlatformModelForAliasLegacy(cleanedAlias);
+}
+
+async function resolveByokModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
+  const cleanedAlias = (aliasModelId ?? "").trim();
+  if (!cleanedAlias) throw new Error("model_id is required");
+
+  const row = await loadModelRegistryRow(cleanedAlias);
+  if (row) {
+    if (!row.enabled || !row.byok_enabled) {
+      throw new Error("byok_inference_not_allowed");
     }
     const provider = normalizePlatformProvider(row.provider);
     const providerModel = String(row.provider_model ?? "").trim();
@@ -429,169 +470,7 @@ function extractTextFromContentJson(contentJson: unknown): string {
   return "";
 }
 
-type OpenRouterModel = { id: string; name?: string | null };
-type OpenRouterModelsResponse = { data: OpenRouterModel[] };
-
-async function sha256Hex(input: string): Promise<string> {
-  const bytes = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const out = Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return out;
-}
-
-type AliasDef = {
-  alias: string;
-  keywords: string[];
-  preferred_provider?: string;
-};
-
-const ALIASES: AliasDef[] = [
-  { alias: "gpt-5.1", keywords: ["gpt", "5.1"], preferred_provider: "openai" },
-  { alias: "gpt-5.2", keywords: ["gpt", "5.2"], preferred_provider: "openai" },
-  { alias: "sonnet-4.5", keywords: ["sonnet", "4.5"], preferred_provider: "anthropic" },
-  { alias: "opus-4.5", keywords: ["opus", "4.5"], preferred_provider: "anthropic" },
-  { alias: "gemini-3-flash", keywords: ["gemini", "3", "flash"], preferred_provider: "google" },
-  { alias: "gemini-3-pro", keywords: ["gemini", "3", "pro"], preferred_provider: "google" },
-  { alias: "grok-4.1", keywords: ["grok", "4.1"], preferred_provider: "x-ai" },
-];
-
-function providerWeight(provider: string): number {
-  switch (provider) {
-    case "openai":
-      return 0;
-    case "anthropic":
-      return 1;
-    case "google":
-      return 2;
-    case "x-ai":
-      return 3;
-    default:
-      return 9;
-  }
-}
-
-function providerPrefix(id: string): string | null {
-  const idx = id.indexOf("/");
-  return idx > 0 ? id.slice(0, idx) : null;
-}
-
-let openRouterAliasCache: { fetchedAt: number; keyHash: string; map: Record<string, string> } | null = null;
-
-async function fetchOpenRouterAliasMap(openrouterKey: string): Promise<Record<string, string>> {
-  const res = await fetch("https://openrouter.ai/api/v1/models", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${openrouterKey}` },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenRouter models error ${res.status}: ${text}`);
-  const parsed = JSON.parse(text) as OpenRouterModelsResponse;
-
-  const candidates = new Map<string, Array<[number, number, number, string]>>();
-  for (const def of ALIASES) candidates.set(def.alias, []);
-
-  for (const model of parsed.data ?? []) {
-    const id = String(model.id ?? "");
-    if (!id.includes("/")) continue;
-
-    const idLower = id.toLowerCase();
-    const nameLower = String(model.name ?? "").toLowerCase();
-    const provider = providerPrefix(idLower);
-
-    for (const def of ALIASES) {
-      let score: number | null = null;
-      if (idLower === def.alias || idLower.endsWith(`/${def.alias}`)) {
-        score = 0;
-      } else if (nameLower && def.keywords.every((k) => nameLower.includes(k))) {
-        score = 1;
-      } else if (idLower.endsWith(def.alias)) {
-        score = 2;
-      }
-      if (score === null) continue;
-
-      const prefMismatch =
-        def.preferred_provider && provider
-          ? provider === def.preferred_provider
-            ? 0
-            : 1
-          : 0;
-      const weight = providerWeight(provider ?? "");
-      candidates.get(def.alias)!.push([score, prefMismatch, weight, id]);
-    }
-  }
-
-  const map: Record<string, string> = {};
-  for (const def of ALIASES) {
-    const list = candidates.get(def.alias) ?? [];
-    list.sort((a, b) => {
-      for (let i = 0; i < 3; i++) {
-        if (a[i] !== b[i]) return a[i] - b[i];
-      }
-      return a[3].localeCompare(b[3]);
-    });
-    const best = list[0]?.[3];
-    if (best && best.includes("/")) map[def.alias] = best;
-  }
-  return map;
-}
-
-async function resolveOpenRouterModelId(modelId: string, openrouterKey: string): Promise<string> {
-  const cleaned = (modelId ?? "").trim();
-  if (!cleaned) throw new Error("Missing model_id");
-  if (cleaned.includes("/")) return cleaned;
-
-  const now = Date.now();
-  const ttlMs = 60 * 60 * 1000;
-  const keyHash = await sha256Hex(openrouterKey);
-  if (
-    !openRouterAliasCache ||
-    openRouterAliasCache.keyHash !== keyHash ||
-    now - openRouterAliasCache.fetchedAt > ttlMs
-  ) {
-    const map = await fetchOpenRouterAliasMap(openrouterKey);
-    openRouterAliasCache = { fetchedAt: now, keyHash, map };
-  }
-
-  const resolved = openRouterAliasCache.map[cleaned];
-  if (!resolved) throw new Error(`Model '${cleaned}' is not available for this OpenRouter key`);
-  return resolved;
-}
-
 type OpenRouterChatMessage = { role: "system" | "user" | "assistant"; content: string };
-
-type OpenRouterChatCompletion = {
-  id?: string;
-  choices?: Array<{ message?: { role?: string; content?: string } }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-};
-
-async function openRouterChatCompletion(
-  openrouterKey: string,
-  model: string,
-  messages: OpenRouterChatMessage[],
-  maxTokens: number,
-): Promise<{ text: string; usage?: OpenRouterChatCompletion["usage"] }> {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterKey}`,
-      "Content-Type": "application/json",
-      "X-Title": "Arx",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: maxTokens,
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenRouter error ${res.status}: ${text}`);
-  const parsed = JSON.parse(text) as OpenRouterChatCompletion;
-  const out = String(parsed.choices?.[0]?.message?.content ?? "").trim();
-  if (!out) throw new Error("OpenRouter returned an empty response");
-  return { text: out, usage: parsed.usage };
-}
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 
@@ -946,17 +825,24 @@ async function writeAssistantReply(params: {
   return { status: "duplicate" };
 }
 
-async function loadUserOpenRouterKey(userId: string): Promise<string | null> {
-  // Prefer per-user BYO keys stored in cloud.
+type UserProviderKeyRpcRow = { has_key?: unknown; api_key?: unknown };
+
+async function readUserProviderKeySecret(params: {
+  userId: string;
+  provider: PlatformProvider;
+  reveal: boolean;
+}): Promise<{ hasKey: boolean; key: string | null }> {
   const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId, p_provider: "openrouter", p_reveal: true }),
+    body: JSON.stringify({ p_user_id: params.userId, p_provider: params.provider, p_reveal: params.reveal }),
   });
   if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as Array<{ api_key: string | null }>;
-  const rowKey = String(rows[0]?.api_key ?? "").trim();
-  return rowKey ? rowKey : null;
+  const rows = (await res.json()) as UserProviderKeyRpcRow[];
+  const row = rows[0] ?? {};
+  const hasKey = Boolean(row.has_key);
+  const key = typeof row.api_key === "string" ? row.api_key.trim() : "";
+  return { hasKey, key: key ? key : null };
 }
 
 async function edgeRateLimitAllowKey(params: {
@@ -1286,44 +1172,6 @@ function normalizeMemoryCandidates(raw: unknown[]): MemoryCandidate[] {
   return Array.from(deduped.values()).slice(0, 3);
 }
 
-async function extractMemoryCandidatesViaOpenRouter(params: {
-  openrouterKey: string;
-  model: string;
-  userText: string;
-  priorAssistantText?: string;
-}): Promise<MemoryCandidate[]> {
-  const userText = (params.userText ?? "").trim();
-  if (!userText) return [];
-  const priorAssistantText = (params.priorAssistantText ?? "").trim();
-
-  const prompt: OpenRouterChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "You extract durable personal memory about a user.\n" +
-        "Return ONLY valid JSON: an array of objects {\"content\": string, \"pinned\": boolean}.\n" +
-        "Rules:\n" +
-        "- Only store durable facts/preferences/goals that are likely helpful later.\n" +
-        "- Do not store one-off tasks, transient details, secrets, or sensitive info.\n" +
-        "- Never store questions; only store declarative facts about the user.\n" +
-        "- You may use the prior assistant message for context, but only store facts the user explicitly states or affirms.\n" +
-        "- If nothing should be remembered, return [].\n" +
-        "- Keep each content item short (<= 200 chars).",
-    },
-    {
-      role: "user",
-      content:
-        (priorAssistantText ? `Prior assistant message:\n${truncateUtf8(priorAssistantText, 600)}\n\n` : "") +
-        `User message:\n${truncateUtf8(userText, 1600)}`,
-    },
-  ];
-
-  const { text } = await openRouterChatCompletion(params.openrouterKey, params.model, prompt, 220);
-  const parsed = safeJsonParseArray(text);
-  if (!parsed) return [];
-  return normalizeMemoryCandidates(parsed);
-}
-
 async function extractMemoryCandidatesViaOpenAi(params: {
   openaiKey: string;
   baseUrl?: string;
@@ -1456,24 +1304,6 @@ async function extractMemoryCandidatesViaGoogle(params: {
   return normalizeMemoryCandidates(parsed);
 }
 
-async function chooseMemoryExtractionModel(params: {
-  openrouterKey: string;
-  aliasModelId: string;
-  resolvedModelId: string;
-}): Promise<string> {
-  // Keep memory extraction fast:
-  // - Prefer a cheap/fast model if we already warmed the OpenRouter alias cache (i.e. when user picked an alias).
-  // - Otherwise, avoid extra /models fetches and just use the already-resolved model.
-  if (!params.aliasModelId.includes("/")) {
-    try {
-      return await resolveOpenRouterModelId("gemini-3-flash", params.openrouterKey);
-    } catch {
-      // Fall through.
-    }
-  }
-  return params.resolvedModelId;
-}
-
 async function insertPersonalMemoryItems(params: {
   userId: string;
   candidates: MemoryCandidate[];
@@ -1590,7 +1420,6 @@ Deno.serve(async (req: Request) => {
     // Parallelize I/O to reduce time-to-first-token.
     const [
       rowsDescResult,
-      openrouterKeyResult,
       builderTierResult,
       memorySettingsResult,
       modelSettingsResult,
@@ -1599,7 +1428,6 @@ Deno.serve(async (req: Request) => {
       modelRegistryResult,
     ] = await Promise.allSettled([
       loadRecentMessages(threadId, 40),
-      loadUserOpenRouterKey(userId),
       loadUserBuilderTier(userId),
       loadUserMemorySettings(userId),
       loadUserModelSettings(userId),
@@ -1619,17 +1447,10 @@ Deno.serve(async (req: Request) => {
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
-    const openrouterKeyLoadError =
-      openrouterKeyResult.status === "fulfilled"
-        ? null
-        : openrouterKeyResult.reason instanceof Error
-          ? openrouterKeyResult.reason.message
-          : String(openrouterKeyResult.reason);
-    const userOpenRouterKey = openrouterKeyResult.status === "fulfilled" ? openrouterKeyResult.value : null;
-    const hasUserKey = Boolean(userOpenRouterKey && userOpenRouterKey.trim());
     const platformEnabled = isTruthyEnv(
       getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"),
     );
+    const requestedInferenceSource = normalizeInferenceSource(input.inference_source);
 
     const modelRegistryRow: ModelRegistryRow | null =
       modelRegistryResult.status === "fulfilled" ? modelRegistryResult.value : null;
@@ -1639,19 +1460,24 @@ Deno.serve(async (req: Request) => {
 
     // Default behavior:
     // - Free: BYOK only.
-    // - Paid: use platform-provided inference first; fall back to BYOK only on quota exhaustion.
-    let inferenceSource: InferenceSource =
-      builderTier !== "free" && platformEnabled ? "platform" : "user";
+    // - Paid: use platform-provided inference first (BYOK only on explicit request or when platform is unavailable for this model).
+    let inferenceSource: InferenceSource = builderTier !== "free" && platformEnabled ? "platform" : "user";
+    if (requestedInferenceSource) {
+      if (requestedInferenceSource === "platform" && (builderTier === "free" || !platformEnabled)) {
+        throw new Error("platform_inference_not_allowed");
+      }
+      inferenceSource = requestedInferenceSource;
+    }
     let inferenceFallback: InferenceFallback | null = null;
 
     // Model-level gating: if this model isn't enabled for platform inference, go straight to BYOK.
     if (inferenceSource === "platform" && modelRegistryRow?.platform_enabled === false) {
+      if (requestedInferenceSource === "platform") throw new Error("platform_inference_not_allowed");
       inferenceSource = "user";
     }
 
-    if (inferenceSource === "user" && !hasUserKey) {
-      if (openrouterKeyLoadError) throw new Error(openrouterKeyLoadError);
-      throw new Error("Missing OpenRouter key. Add it in Settings → Models.");
+    if (inferenceSource === "user" && modelRegistryRow?.byok_enabled === false) {
+      throw new Error("byok_inference_not_allowed");
     }
 
     const memorySettings: UserMemorySettingsRow =
@@ -1741,6 +1567,10 @@ Deno.serve(async (req: Request) => {
     let platformProviderKey: string | null = null;
     let platformOpenAiCompatibleBaseUrl: string | null = null;
 
+    let byokModel: PlatformModelRef | null = null;
+    let byokProviderKey: string | null = null;
+    let byokOpenAiCompatibleBaseUrl: string | null = null;
+
     if (inferenceSource === "platform") {
       platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
       switch (platformModel.provider) {
@@ -1774,26 +1604,42 @@ Deno.serve(async (req: Request) => {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (isPlatformQuotaExceededErrorMessage(message)) {
-          if (!hasUserKey) {
-            if (openrouterKeyLoadError) throw new Error(openrouterKeyLoadError);
-            throw new Error(
-              "You've used your Arx AI quota for this month. Add an OpenRouter key in Settings → Models to continue.",
-            );
-          }
-          inferenceFallback = {
-            from: "platform",
-            to: "user",
-            reason: "platform_quota_exceeded",
-          };
-          inferenceSource = "user";
-          platformRemaining = 0;
-          platformModel = null;
-          platformProviderKey = null;
-          platformOpenAiCompatibleBaseUrl = null;
+          const byokKey = await readUserProviderKeySecret({
+            userId,
+            provider: platformModel.provider,
+            reveal: false,
+          }).catch(() => ({ hasKey: false, key: null }));
+          return jsonResponse(
+            {
+              ok: false,
+              code: "platform_inference_quota_exceeded",
+              provider: platformModel.provider,
+              has_byok_key: byokKey.hasKey,
+              message: "You've used your Arx AI quota for this month.",
+            },
+            { status: 403, headers },
+          );
         } else {
           throw error;
         }
       }
+    }
+
+    if (inferenceSource === "user") {
+      byokModel = await resolveByokModelForAliasOrRegistry(aliasModelId);
+      const keyRow = await readUserProviderKeySecret({
+        userId,
+        provider: byokModel.provider,
+        reveal: true,
+      });
+      const key = (keyRow.key ?? "").trim();
+      if (!key) {
+        throw new Error(`Missing ${formatProviderLabel(byokModel.provider)} API key. Add it in Settings → Models.`);
+      }
+      byokProviderKey = key;
+
+      if (byokModel.provider === "openai") byokOpenAiCompatibleBaseUrl = "https://api.openai.com/v1";
+      if (byokModel.provider === "x-ai") byokOpenAiCompatibleBaseUrl = "https://api.x.ai/v1";
     }
 
     const latestUserText = extractTextFromContentJson(latest.content_json);
@@ -1809,9 +1655,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
-      inferenceSource === "platform"
-        ? Promise.resolve(platformModel!.ref)
-        : resolveOpenRouterModelId(aliasModelId, userOpenRouterKey!),
+      Promise.resolve(inferenceSource === "platform" ? platformModel!.ref : byokModel!.ref),
       loadHistorySnippets({
         userId,
         query: latestUserText,
@@ -1825,14 +1669,7 @@ Deno.serve(async (req: Request) => {
 
     const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
 
-    const memoryExtractorModelId =
-      inferenceSource === "platform"
-        ? platformModel!.model
-        : await chooseMemoryExtractionModel({
-            openrouterKey: userOpenRouterKey!,
-            aliasModelId,
-            resolvedModelId,
-          });
+    const memoryExtractorModelId = inferenceSource === "platform" ? platformModel!.model : byokModel!.model;
 
     const shouldExtractMemory =
       memorySettings.memory_mode === "suggest" || memorySettings.memory_mode === "auto"
@@ -1880,12 +1717,41 @@ Deno.serve(async (req: Request) => {
                 return [];
             }
           })().catch(() => [])
-        : extractMemoryCandidatesViaOpenRouter({
-            openrouterKey: userOpenRouterKey!,
-            model: memoryExtractorModelId,
-            userText: latestUserText,
-            priorAssistantText,
-          }).catch(() => [])
+        : (async () => {
+            switch (byokModel!.provider) {
+              case "openai":
+                return extractMemoryCandidatesViaOpenAi({
+                  openaiKey: byokProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "x-ai":
+                return extractMemoryCandidatesViaOpenAi({
+                  openaiKey: byokProviderKey!,
+                  baseUrl: byokOpenAiCompatibleBaseUrl!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "anthropic":
+                return extractMemoryCandidatesViaAnthropic({
+                  apiKey: byokProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              case "google":
+                return extractMemoryCandidatesViaGoogle({
+                  apiKey: byokProviderKey!,
+                  model: memoryExtractorModelId,
+                  userText: latestUserText,
+                  priorAssistantText,
+                });
+              default:
+                return [];
+            }
+          })().catch(() => [])
       : Promise.resolve([]);
 
     const selectedMemory = selectPersonalMemoryForPrompt(memoryRows);
@@ -1972,7 +1838,37 @@ Deno.serve(async (req: Request) => {
                   throw new Error("Unsupported platform model provider");
               }
             })()
-          : await openRouterChatCompletion(userOpenRouterKey!, resolvedModelId, messages, effectiveMaxTokens);
+          : await (async () => {
+              switch (byokModel!.provider) {
+                case "openai":
+                  return openAiChatCompletion(byokProviderKey!, byokModel!.model, messages, effectiveMaxTokens);
+                case "x-ai":
+                  return openAiCompatibleChatCompletion({
+                    apiKey: byokProviderKey!,
+                    baseUrl: byokOpenAiCompatibleBaseUrl!,
+                    model: byokModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                  });
+                case "anthropic":
+                  return anthropicChatCompletion({
+                    apiKey: byokProviderKey!,
+                    model: byokModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                    stream: false,
+                  });
+                case "google":
+                  return googleGenerateContent({
+                    apiKey: byokProviderKey!,
+                    model: byokModel!.model,
+                    messages,
+                    maxTokens: effectiveMaxTokens,
+                  });
+                default:
+                  throw new Error("Unsupported BYOK model provider");
+              }
+            })();
 
       const memoryCandidates = await memoryCandidatesPromise;
 
@@ -1993,10 +1889,13 @@ Deno.serve(async (req: Request) => {
         meta.platform_standard_remaining = platformRemaining;
         meta.platform_provider = platformModel!.provider;
         meta.platform_model = platformModel!.model;
+      } else {
+        meta.byok_provider = byokModel!.provider;
+        meta.byok_model = byokModel!.model;
       }
       if (usage && typeof usage === "object") {
         if (inferenceSource === "platform") meta.platform_usage = usage;
-        else meta.openrouter_usage = usage;
+        else meta.byok_usage = usage;
       }
       if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
       if (historyUsed.length > 0) meta.history_used = historyUsed;
@@ -2221,42 +2120,162 @@ Deno.serve(async (req: Request) => {
                 throw new Error("Unsupported platform model provider");
             }
           } else {
-            const streamingResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${userOpenRouterKey!}`,
-                "Content-Type": "application/json",
-                "X-Title": "Arx",
-              },
-              body: JSON.stringify({
-                model: resolvedModelId,
-                messages,
-                max_tokens: effectiveMaxTokens,
-                stream: true,
-              }),
-            });
-
-            if (!streamingResponse.ok) throw new Error(`OpenRouter error ${streamingResponse.status}: ${await streamingResponse.text()}`);
-            const reader = streamingResponse.body?.getReader();
-            if (!reader) throw new Error("Missing OpenRouter stream");
-
-            await consumeSseEvents({
-              reader,
-              onData: (raw) => {
-                if (raw === "[DONE]") return true;
-                let parsed: OpenRouterStreamChunk | null = null;
-                try {
-                  parsed = JSON.parse(raw) as OpenRouterStreamChunk;
-                } catch {
-                  return;
+            switch (byokModel!.provider) {
+              case "openai":
+              case "x-ai": {
+                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+                const streamingResponse = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${byokProviderKey!}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: byokModel!.model,
+                    messages,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
                 }
-                if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
-                const delta = extractStreamDelta(parsed);
-                if (!delta) return;
-                fullContent += delta;
-                emit("delta", { delta, full_content: fullContent });
-              },
-            });
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
+
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: OpenRouterStreamChunk | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+                    } catch {
+                      return;
+                    }
+                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+                    const delta = extractStreamDelta(parsed);
+                    if (!delta) return;
+                    fullContent += delta;
+                    emit("delta", { delta, full_content: fullContent });
+                  },
+                });
+                break;
+              }
+              case "anthropic": {
+                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
+                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": byokProviderKey!,
+                    "anthropic-version": getEnv("ANTHROPIC_VERSION") || "2023-06-01",
+                  },
+                  body: JSON.stringify({
+                    model: byokModel!.model,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                    ...(system ? { system } : {}),
+                    messages: anthropicMessages,
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Anthropic error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
+
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: Record<string, unknown> | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as Record<string, unknown>;
+                    } catch {
+                      return;
+                    }
+                    if (parsed && typeof parsed.usage === "object" && parsed.usage) usage = parsed.usage;
+                    const type = String(parsed?.type ?? "").trim();
+                    if (type === "message_stop") return true;
+                    if (type === "error") {
+                      const err = parsed?.error;
+                      const msg =
+                        err && typeof err === "object" && typeof (err as any).message === "string"
+                          ? String((err as any).message)
+                          : "Anthropic stream error";
+                      throw new Error(msg);
+                    }
+                    if (type !== "content_block_delta") return;
+                    const deltaObj = parsed?.delta as any;
+                    const deltaText = typeof deltaObj?.text === "string" ? String(deltaObj.text) : "";
+                    if (!deltaText) return;
+                    fullContent += deltaText;
+                    emit("delta", { delta: deltaText, full_content: fullContent });
+                  },
+                });
+                break;
+              }
+              case "google": {
+                const { system, contents } = toGeminiSystemAndContents(messages);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+                  byokModel!.model,
+                )}:streamGenerateContent?alt=sse`;
+                const streamingResponse = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": byokProviderKey!,
+                  },
+                  body: JSON.stringify({
+                    ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+                    contents,
+                    generationConfig: { maxOutputTokens: effectiveMaxTokens },
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Google error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
+
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: GeminiResponse | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as GeminiResponse;
+                    } catch {
+                      return;
+                    }
+                    if (parsed?.usageMetadata && typeof parsed.usageMetadata === "object") usage = parsed.usageMetadata;
+                    const parts = parsed?.candidates?.[0]?.content?.parts ?? [];
+                    const nextText = parts
+                      .map((p) => (typeof p?.text === "string" ? p.text : ""))
+                      .join("")
+                      .trim();
+                    if (!nextText) return;
+                    if (nextText.startsWith(fullContent)) {
+                      const delta = nextText.slice(fullContent.length);
+                      if (!delta) return;
+                      fullContent = nextText;
+                      emit("delta", { delta, full_content: fullContent });
+                      return;
+                    }
+                    // Fallback: emit the entire nextText if the stream is non-monotonic.
+                    fullContent = nextText;
+                    emit("delta", { delta: nextText, full_content: fullContent });
+                  },
+                });
+                break;
+              }
+              default:
+                throw new Error("Unsupported BYOK model provider");
+            }
           }
 
 	          const finalText = fullContent.trim();
@@ -2281,10 +2300,13 @@ Deno.serve(async (req: Request) => {
               meta.platform_standard_remaining = platformRemaining;
               meta.platform_provider = platformModel!.provider;
               meta.platform_model = platformModel!.model;
+            } else {
+              meta.byok_provider = byokModel!.provider;
+              meta.byok_model = byokModel!.model;
             }
             if (usage && typeof usage === "object") {
               if (inferenceSource === "platform") meta.platform_usage = usage;
-              else meta.openrouter_usage = usage;
+              else meta.byok_usage = usage;
             }
             if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
             if (historyUsed.length > 0) meta.history_used = historyUsed;

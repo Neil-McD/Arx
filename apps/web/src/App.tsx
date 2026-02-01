@@ -355,13 +355,22 @@ type ModelRegistryListRow = {
   sort_order: number | null;
 };
 
+type ProviderId = "openai" | "anthropic" | "google" | "x-ai";
+
 type ProviderKey = {
-  id: "openrouter";
+  id: ProviderId;
   label: string;
   hasKey: boolean;
   inputValue: string;
   error: string | null;
 };
+
+const DEFAULT_PROVIDER_KEYS: ProviderKey[] = [
+  { id: "openai", label: "OpenAI", hasKey: false, inputValue: "", error: null },
+  { id: "anthropic", label: "Anthropic", hasKey: false, inputValue: "", error: null },
+  { id: "google", label: "Google", hasKey: false, inputValue: "", error: null },
+  { id: "x-ai", label: "xAI", hasKey: false, inputValue: "", error: null },
+];
 
 type PersonalMemoryItem = {
   id: string;
@@ -2109,9 +2118,7 @@ export default function App() {
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const profileSaveTimeoutRef = useRef<number | null>(null);
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
-  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => {
-    return [{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }];
-  });
+  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>(() => DEFAULT_PROVIDER_KEYS);
 
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityRecord | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
@@ -2520,7 +2527,16 @@ export default function App() {
   const memoryToastTimeoutRef = useRef<number | null>(null);
   const [inferenceToast, setInferenceToast] = useState<string | null>(null);
   const inferenceToastTimeoutRef = useRef<number | null>(null);
-  const inferenceFallbackToastShownRef = useRef(false);
+  const [appToast, setAppToast] = useState<string | null>(null);
+  const appToastTimeoutRef = useRef<number | null>(null);
+  const [platformQuotaModal, setPlatformQuotaModal] = useState<{
+    threadId: string;
+    mode: "respond" | "regenerate";
+    providerId: ProviderId;
+    providerLabel: string;
+    hasKey: boolean;
+  } | null>(null);
+  const [isPlatformQuotaModalRunning, setIsPlatformQuotaModalRunning] = useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "off",
     remember_intent_enabled: true,
@@ -2959,7 +2975,7 @@ export default function App() {
     threadsHydratedRef.current = false;
     setThreadMessages([]);
     setPersonalMemoryItems([]);
-    setProviderKeys([{ id: "openrouter", label: "OpenRouter", hasKey: false, inputValue: "", error: null }]);
+    setProviderKeys(DEFAULT_PROVIDER_KEYS);
     setPendingPurchaseClaims([]);
     setPendingPurchasesError(null);
     setPendingPurchasesSuccess(null);
@@ -3388,6 +3404,16 @@ export default function App() {
   }
 
   function openCreateCommunityModal() {
+    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+    const max = builderBillingStatus?.max_communities ?? 0;
+    const ownedCount = communities.reduce(
+      (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
+      0,
+    );
+    if (tier === "pro" && max > 0 && ownedCount >= max) {
+      showAppToastMessage("You've built the maximum number of communities");
+      return;
+    }
     setCreateCommunityError(null);
     const draft = loadCreateCommunityDraft();
     const currentUserId = supabaseSession?.user.id ?? null;
@@ -5303,21 +5329,34 @@ export default function App() {
     const url = getSupabaseUrl();
     if (!url) return;
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/provider_key`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "get", provider: "openrouter" }),
-        },
-        session,
+      const results = await Promise.all(
+        DEFAULT_PROVIDER_KEYS.map(async (provider) => {
+          try {
+            const response = await fetchWithSupabaseAuth(
+              `${url}/functions/v1/provider_key`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "get", provider: provider.id }),
+              },
+              session,
+            );
+            if (!response.ok) return { id: provider.id, hasKey: false };
+            const data = (await response.json()) as { has_key?: unknown };
+            return { id: provider.id, hasKey: Boolean(data?.has_key) };
+          } catch {
+            return { id: provider.id, hasKey: false };
+          }
+        }),
       );
-      if (!response.ok) return;
-      const data = (await response.json()) as { has_key?: unknown };
-      const hasKey = Boolean(data?.has_key);
-      setProviderKeys((prev) =>
-        prev.map((item) => (item.id === "openrouter" ? { ...item, hasKey, error: null } : item)),
-      );
+      const nextById = new Map(results.map((row) => [row.id, row.hasKey] as const));
+      setProviderKeys((prev) => {
+        const normalized = prev.length ? prev : DEFAULT_PROVIDER_KEYS;
+        return normalized.map((item) => {
+          const hasKey = nextById.get(item.id);
+          return typeof hasKey === "boolean" ? { ...item, hasKey } : item;
+        });
+      });
     } catch {
       // ignore (BYO is optional in some flows)
     }
@@ -5462,6 +5501,7 @@ export default function App() {
       preferredModelId: string;
       mode?: "respond" | "regenerate";
       runIdHint: string;
+      inferenceSource?: "platform" | "user";
     },
   ): Promise<{ cancelled: boolean; error: string | null }> {
     const url = getSupabaseUrl();
@@ -5491,12 +5531,50 @@ export default function App() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ thread_id: threadId, stream: true, ...(params.mode ? { mode: params.mode } : null) }),
+          body: JSON.stringify({
+            thread_id: threadId,
+            stream: true,
+            ...(params.mode ? { mode: params.mode } : null),
+            ...(params.inferenceSource ? { inference_source: params.inferenceSource } : null),
+          }),
           signal: abort.signal,
         },
         session,
       );
       if (!turn.ok) {
+        let parsed: any = null;
+        try {
+          parsed = await turn.clone().json();
+        } catch {
+          parsed = null;
+        }
+        const code = typeof parsed?.code === "string" ? parsed.code.trim() : "";
+        if (code === "platform_inference_quota_exceeded") {
+          const rawProvider = typeof parsed?.provider === "string" ? parsed.provider.trim().toLowerCase() : "";
+          const providerId: ProviderId | null =
+            rawProvider === "openai"
+              ? "openai"
+              : rawProvider === "anthropic"
+                ? "anthropic"
+                : rawProvider === "google"
+                  ? "google"
+                  : rawProvider === "x-ai" || rawProvider === "xai"
+                    ? "x-ai"
+                    : null;
+          if (providerId) {
+            const providerLabel = DEFAULT_PROVIDER_KEYS.find((p) => p.id === providerId)?.label ?? providerId;
+            const hasKeyFromServer = typeof parsed?.has_byok_key === "boolean" ? parsed.has_byok_key : null;
+            const hasKeyFromState = Boolean(providerKeys.find((p) => p.id === providerId)?.hasKey);
+            setPlatformQuotaModal({
+              threadId,
+              mode: params.mode === "regenerate" ? "regenerate" : "respond",
+              providerId,
+              providerLabel,
+              hasKey: hasKeyFromServer ?? hasKeyFromState,
+            });
+            return { cancelled: false, error: null };
+          }
+        }
         const message = await readSupabaseError(turn);
         throw new Error(message || "Failed to run model.");
       }
@@ -5530,16 +5608,6 @@ export default function App() {
               memory_used: memoryUsed,
               history_used: historyUsed,
             });
-          }
-          if (!inferenceFallbackToastShownRef.current) {
-            const fallbackReason =
-              typeof parsed?.inference_fallback?.reason === "string"
-                ? parsed.inference_fallback.reason.trim()
-                : "";
-            if (fallbackReason === "platform_quota_exceeded") {
-              inferenceFallbackToastShownRef.current = true;
-              showInferenceToastMessage("Arx quota reached — switching to your API key.");
-            }
           }
         } else if (eventName === "delta") {
           const full = typeof parsed?.full_content === "string" ? parsed.full_content : "";
@@ -5613,6 +5681,40 @@ export default function App() {
       setStreamingRunId(null);
       setStreamingMeta(null);
       streamingUserCancelledRef.current = false;
+    }
+  }
+
+  async function retryTurnWithByokFromQuotaModal(): Promise<void> {
+    const modal = platformQuotaModal;
+    if (!modal) return;
+    if (!supabaseSession) {
+      setPlatformQuotaModal(null);
+      handleSignIn();
+      return;
+    }
+    if (isPlatformQuotaModalRunning) return;
+    if (!modal.hasKey) {
+      setActiveView("settings");
+      setSettingsPage("models");
+      return;
+    }
+
+    setIsPlatformQuotaModalRunning(true);
+    setThreadError(null);
+    setPlatformQuotaModal(null);
+    setActiveThreadId(modal.threadId);
+    try {
+      const threadModelId = (threads.find((t) => t.id === modal.threadId)?.model_id ?? "").trim();
+      const preferredModelId = threadModelId || DEFAULT_ACTIVE_MODEL_ID;
+      const result = await runOpenRouterTurn(supabaseSession, modal.threadId, {
+        preferredModelId,
+        mode: modal.mode,
+        runIdHint: `byok_web:${modal.threadId}:${Date.now()}`,
+        inferenceSource: "user",
+      });
+      if (result.error) setThreadError(result.error);
+    } finally {
+      setIsPlatformQuotaModalRunning(false);
     }
   }
 
@@ -6146,6 +6248,18 @@ export default function App() {
       setInferenceToast(null);
       inferenceToastTimeoutRef.current = null;
     }, 3200);
+  }
+
+  function showAppToastMessage(message: string) {
+    if (appToastTimeoutRef.current) {
+      window.clearTimeout(appToastTimeoutRef.current);
+      appToastTimeoutRef.current = null;
+    }
+    setAppToast(message);
+    appToastTimeoutRef.current = window.setTimeout(() => {
+      setAppToast(null);
+      appToastTimeoutRef.current = null;
+    }, 2400);
   }
 
   async function loadUserMemorySettings(session: SupabaseSession): Promise<void> {
@@ -10083,39 +10197,41 @@ export default function App() {
               {settingsPage === "models" && (
                 <>
 		                  <div className="settings-section">
-		                    <div className="settings-section-title">API Key</div>
+		                    <div className="settings-section-title">API Keys</div>
 		                    <div className="settings-section-desc">
-		                      Connect your OpenRouter key to access models (synced to your Arx account). Get one at{" "}
-		                      <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">
-		                        openrouter.ai
-		                      </a>
+		                      Optional: add provider API keys for BYOK. When your Arx AI quota runs out, you&apos;ll be prompted before using your keys.
 		                    </div>
-	                    <div className="key-row">
-                      <input
-                        type="password"
-                        value={providerKeys[0]?.inputValue ?? ""}
-                        placeholder={providerKeys[0]?.hasKey ? "Key saved" : "Enter OpenRouter API key"}
-                        onChange={(event) =>
-                          setProviderKeys((prev) => {
-                            const current = prev[0] ?? {
-                              id: "openrouter",
-                              label: "OpenRouter",
-                              hasKey: false,
-                              inputValue: "",
-                              error: null
-                            };
-                            return [{ ...current, inputValue: event.target.value }];
-                          })
-                        }
-                      />
-                      <button type="button" onClick={() => void handleSaveProviderKey("openrouter")}>
-                        Save
-                      </button>
-                      <button className="secondary" type="button" onClick={() => void handleClearProviderKey("openrouter")}>
-                        Clear
-                      </button>
-                    </div>
-	                    {providerKeys[0]?.error && <div className="key-error">{providerKeys[0].error}</div>}
+                      {providerKeys.map((provider) => (
+                        <div key={provider.id} style={{ marginTop: 12 }}>
+                          <div className="model-note" style={{ marginBottom: 8 }}>
+                            {provider.label}
+                          </div>
+                          <div className="key-row">
+                            <input
+                              type="password"
+                              value={provider.inputValue}
+                              placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setProviderKeys((prev) =>
+                                  prev.map((item) => (item.id === provider.id ? { ...item, inputValue: value } : item)),
+                                );
+                              }}
+                            />
+                            <button type="button" onClick={() => void handleSaveProviderKey(provider.id)}>
+                              Save
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => void handleClearProviderKey(provider.id)}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          {provider.error && <div className="key-error">{provider.error}</div>}
+                        </div>
+                      ))}
 	                  </div>
 
 	                  <div className="settings-section">
@@ -10162,13 +10278,10 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={toggle.enabled}
-                            disabled={providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false}
                             onChange={() => void handleToggleModel(toggle.id)}
                           />
                           <span>
                             {toggle.label}
-                            {!providerKeys[0]?.hasKey && " (missing key)"}
-                            {providerKeys[0]?.hasKey === true && modelAvailability[toggle.id] === false && " (unavailable)"}
                           </span>
                         </label>
                       ))}
@@ -13781,7 +13894,7 @@ export default function App() {
                             />
                             <input
                               type="text"
-                              placeholder="Optional link or video URL (YouTube/Wistia)"
+                              placeholder="Embed video (YouTube/Wistia URL)"
                               value={resourceUrlInput}
                               onChange={(event) => setResourceUrlInput(event.target.value)}
                               onKeyDown={(event) => {
@@ -14021,6 +14134,75 @@ export default function App() {
             </div>
           );
         })()}
+
+	      {supabaseSession && platformQuotaModal && (
+	        <div
+	          className="modal-overlay"
+	          onClick={() => {
+	            if (isPlatformQuotaModalRunning) return;
+	            setPlatformQuotaModal(null);
+	          }}
+	        >
+	          <div className="modal" onClick={(event) => event.stopPropagation()}>
+	            <div className="modal-header">
+	              <div className="modal-title">Arx AI quota reached</div>
+	              <button
+	                className="modal-close"
+	                type="button"
+	                onClick={() => setPlatformQuotaModal(null)}
+	                title="Close"
+	                disabled={isPlatformQuotaModalRunning}
+	              >
+	                ×
+	              </button>
+	            </div>
+	            <div className="modal-body">
+	              <div className="model-note" style={{ marginBottom: 12 }}>
+	                You&apos;ve used your included Arx AI quota for this month.
+	              </div>
+	              <div className="model-note" style={{ marginBottom: 12 }}>
+	                To continue with {platformQuotaModal.providerLabel}, you can use your own API key.
+	              </div>
+	              {!platformQuotaModal.hasKey && (
+	                <div className="auth-error">
+	                  No {platformQuotaModal.providerLabel} API key is saved yet. Add one in Settings → Models.
+	                </div>
+	              )}
+	            </div>
+	            <div className="modal-footer">
+	              <div className="auth-actions">
+	                <button
+	                  type="button"
+	                  className="secondary"
+	                  onClick={() => setPlatformQuotaModal(null)}
+	                  disabled={isPlatformQuotaModalRunning}
+	                >
+	                  Cancel
+	                </button>
+	                <button
+	                  type="button"
+	                  className="secondary"
+	                  onClick={() => {
+	                    setActiveView("settings");
+	                    setSettingsPage("models");
+	                    setPlatformQuotaModal(null);
+	                  }}
+	                  disabled={isPlatformQuotaModalRunning}
+	                >
+	                  Add API key
+	                </button>
+	                <button
+	                  type="button"
+	                  onClick={() => void retryTurnWithByokFromQuotaModal()}
+	                  disabled={!platformQuotaModal.hasKey || isPlatformQuotaModalRunning}
+	                >
+	                  {isPlatformQuotaModalRunning ? "Running…" : "Use my API key"}
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      )}
 
 	      {supabaseSession && isBuilderUpgradeOpen && (
 	        <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
@@ -14427,6 +14609,12 @@ export default function App() {
       {authError && (
         <div className="toast error" role="status">
           {authError}
+        </div>
+      )}
+
+      {appToast && (
+        <div className="app-toast" role="status" aria-live="polite">
+          <div className="app-toast-inner">{appToast}</div>
         </div>
       )}
     </div>
