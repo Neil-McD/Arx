@@ -276,7 +276,12 @@ async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Pro
   const row = await loadModelRegistryRow(cleanedAlias);
   if (row) {
     if (!row.enabled || !row.platform_enabled) {
-      throw new Error("platform_inference_not_allowed");
+      throw createApiError(
+        "platform_inference_not_allowed",
+        "Arx platform inference isn't available for this model.",
+        403,
+        { model_id: cleanedAlias },
+      );
     }
     const provider = normalizePlatformProvider(row.provider);
     const providerModel = String(row.provider_model ?? "").trim();
@@ -340,6 +345,24 @@ async function loadCommunityAgentSystemPrompt(params: {
   } catch {
     // Best-effort: don't block inference if the RPC isn't deployed yet.
     return null;
+  }
+}
+
+async function userHasActiveEntitlement(params: { userId: string; communityId: string }): Promise<boolean> {
+  const userId = (params.userId ?? "").trim();
+  const communityId = (params.communityId ?? "").trim();
+  if (!userId || !communityId) return false;
+  try {
+    const res = await supabaseAdminFetch("/rest/v1/rpc/user_has_active_entitlement", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ p_user_id: userId, p_community_id: communityId }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as unknown;
+    return data === true;
+  } catch {
+    return false;
   }
 }
 
@@ -545,18 +568,23 @@ async function openAiCompatibleChatCompletion(params: {
   maxTokens: number;
 }): Promise<{ text: string; usage?: OpenAiUsage }> {
   const url = `${params.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const tokenKey = params.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens";
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${params.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: params.model,
-      messages: params.messages,
-      max_tokens: params.maxTokens,
-      stream: false,
-    }),
+    body: JSON.stringify(
+      Object.assign(
+        {
+          model: params.model,
+          messages: params.messages,
+          stream: false,
+        },
+        { [tokenKey]: params.maxTokens },
+      ),
+    ),
   });
   const text = await res.text();
   if (!res.ok) throw new Error(`OpenAI-compatible error ${res.status}: ${text}`);
@@ -1467,6 +1495,7 @@ Deno.serve(async (req: Request) => {
       memorySettingsResult,
       modelSettingsResult,
       memoryRowsResult,
+      contextEntitlementResult,
       communityAgentPromptResult,
       modelRegistryResult,
     ] = await Promise.allSettled([
@@ -1475,6 +1504,7 @@ Deno.serve(async (req: Request) => {
       loadUserMemorySettings(userId),
       loadUserModelSettings(userId),
       loadPersonalMemoryItems(userId, 32),
+      thread.community_id ? userHasActiveEntitlement({ userId, communityId: thread.community_id }) : Promise.resolve(true),
       thread.community_id
         ? loadCommunityAgentSystemPrompt({ userId, communityId: thread.community_id })
         : Promise.resolve(null),
@@ -1490,9 +1520,9 @@ Deno.serve(async (req: Request) => {
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
-    const platformEnabled = isTruthyEnv(
-      getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"),
-    );
+    const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
+    // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
+    const platformEnabled = platformEnabledRaw ? isTruthyEnv(platformEnabledRaw) : true;
     const requestedInferenceSource = normalizeInferenceSource(input.inference_source);
 
     const modelRegistryRow: ModelRegistryRow | null =
@@ -1502,23 +1532,61 @@ Deno.serve(async (req: Request) => {
     }
 
     const byokAllowed = modelRegistryRow?.byok_enabled !== false;
+    let providerHint: PlatformProvider | null = null;
+    if (modelRegistryRow?.provider) {
+      try {
+        providerHint = normalizePlatformProvider(modelRegistryRow.provider);
+      } catch {
+        providerHint = null;
+      }
+    }
 
     // Default behavior:
     // - Free: BYOK only.
     // - Paid: use platform-provided inference first (BYOK only on explicit request or when platform is unavailable for this model).
-    let inferenceSource: InferenceSource = builderTier !== "free" && platformEnabled ? "platform" : "user";
+    let inferenceSource: InferenceSource = builderTier !== "free" ? "platform" : "user";
     if (requestedInferenceSource) {
-      if (requestedInferenceSource === "platform" && (builderTier === "free" || !platformEnabled)) {
-        throw new Error("platform_inference_not_allowed");
+      if (requestedInferenceSource === "platform" && builderTier === "free") {
+        throw createApiError(
+          "platform_inference_not_allowed",
+          "Arx platform inference is not included in your plan.",
+          403,
+          { model_id: aliasModelId, provider: providerHint, byok_allowed: byokAllowed },
+        );
       }
       inferenceSource = requestedInferenceSource;
     }
     let inferenceFallback: InferenceFallback | null = null;
 
-    // Model-level gating: if this model isn't enabled for platform inference, go straight to BYOK.
+    if (inferenceSource === "platform" && !platformEnabled) {
+      const byokKey = providerHint
+        ? await readUserProviderKeySecret({ userId, provider: providerHint, reveal: false }).catch(() => ({
+            hasKey: false,
+            key: null,
+          }))
+        : { hasKey: false, key: null };
+      throw createApiError("platform_inference_disabled", "Arx AI is temporarily unavailable.", 503, {
+        model_id: aliasModelId,
+        provider: providerHint,
+        byok_allowed: byokAllowed,
+        has_byok_key: byokKey.hasKey,
+      });
+    }
+
+    // Model-level gating: avoid silently falling back to BYOK (which can spend user credits).
     if (inferenceSource === "platform" && modelRegistryRow?.platform_enabled === false) {
-      if (requestedInferenceSource === "platform") throw new Error("platform_inference_not_allowed");
-      inferenceSource = "user";
+      const byokKey = providerHint
+        ? await readUserProviderKeySecret({ userId, provider: providerHint, reveal: false }).catch(() => ({
+            hasKey: false,
+            key: null,
+          }))
+        : { hasKey: false, key: null };
+      throw createApiError("platform_inference_not_allowed", "Arx AI isn't available for this model.", 403, {
+        model_id: aliasModelId,
+        provider: providerHint,
+        byok_allowed: byokAllowed,
+        has_byok_key: byokKey.hasKey,
+      });
     }
 
     if (inferenceSource === "user" && modelRegistryRow?.byok_enabled === false) {
@@ -1546,6 +1614,10 @@ Deno.serve(async (req: Request) => {
         ? memoryRowsResult.value
         : []
       : [];
+
+    const hasCommunityContextEntitlement: boolean =
+      contextEntitlementResult.status === "fulfilled" ? Boolean(contextEntitlementResult.value) : false;
+    const contextCommunityId: string | null = hasCommunityContextEntitlement ? (thread.community_id ?? null) : null;
 
     const latest = rowsDesc[0];
     if (latest.role !== "user") {
@@ -1923,7 +1995,7 @@ Deno.serve(async (req: Request) => {
       content: systemPrompt ? truncateUtf8(systemPrompt, 6000) : "You are a helpful assistant.",
     });
     const communityAgentPrompt =
-      communityAgentPromptResult.status === "fulfilled" ? communityAgentPromptResult.value : null;
+      contextCommunityId && communityAgentPromptResult.status === "fulfilled" ? communityAgentPromptResult.value : null;
     if (communityAgentPrompt?.systemPrompt) {
       messages.push({ role: "system", content: truncateUtf8(communityAgentPrompt.systemPrompt, 6000) });
     }
@@ -2024,6 +2096,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const meta: Record<string, unknown> = {};
+      if (contextCommunityId) meta.context_community_id = contextCommunityId;
       meta.inference_source = inferenceSource;
       if (inferenceFallback) meta.inference_fallback = inferenceFallback;
       if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
@@ -2104,29 +2177,28 @@ Deno.serve(async (req: Request) => {
           let fullContent = "";
           let usage: unknown | null = null;
 
-          if (inferenceSource === "platform") {
-            switch (platformModel!.provider) {
-              case "openai":
-              case "x-ai": {
-                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-                const streamingResponse = await fetch(url, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${platformProviderKey!}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: platformModel!.model,
-                    messages,
-                    max_tokens: effectiveMaxTokens,
-                    stream: true,
-                  }),
-                });
-                if (!streamingResponse.ok) {
-                  const body = await streamingResponse.text();
-                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
-                }
-                const reader = streamingResponse.body?.getReader();
+	          if (inferenceSource === "platform") {
+	            switch (platformModel!.provider) {
+	              case "openai": {
+	                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const streamingResponse = await fetch(url, {
+	                  method: "POST",
+	                  headers: {
+	                    Authorization: `Bearer ${platformProviderKey!}`,
+	                    "Content-Type": "application/json",
+	                  },
+	                  body: JSON.stringify({
+	                    model: platformModel!.model,
+	                    messages,
+	                    max_completion_tokens: effectiveMaxTokens,
+	                    stream: true,
+	                  }),
+	                });
+	                if (!streamingResponse.ok) {
+	                  const body = await streamingResponse.text();
+	                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
+	                }
+	                const reader = streamingResponse.body?.getReader();
                 if (!reader) throw new Error("Missing model stream");
 
                 await consumeSseEvents({
@@ -2145,13 +2217,54 @@ Deno.serve(async (req: Request) => {
                     fullContent += delta;
                     emit("delta", { delta, full_content: fullContent });
                   },
-                });
-                break;
-              }
-              case "anthropic": {
-                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
-                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
-                  method: "POST",
+	                });
+	                break;
+	              }
+	              case "x-ai": {
+	                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const streamingResponse = await fetch(url, {
+	                  method: "POST",
+	                  headers: {
+	                    Authorization: `Bearer ${platformProviderKey!}`,
+	                    "Content-Type": "application/json",
+	                  },
+	                  body: JSON.stringify({
+	                    model: platformModel!.model,
+	                    messages,
+	                    max_tokens: effectiveMaxTokens,
+	                    stream: true,
+	                  }),
+	                });
+	                if (!streamingResponse.ok) {
+	                  const body = await streamingResponse.text();
+	                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
+	                }
+	                const reader = streamingResponse.body?.getReader();
+	                if (!reader) throw new Error("Missing model stream");
+
+	                await consumeSseEvents({
+	                  reader,
+	                  onData: (raw) => {
+	                    if (raw === "[DONE]") return true;
+	                    let parsed: OpenRouterStreamChunk | null = null;
+	                    try {
+	                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+	                    } catch {
+	                      return;
+	                    }
+	                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+	                    const delta = extractStreamDelta(parsed);
+	                    if (!delta) return;
+	                    fullContent += delta;
+	                    emit("delta", { delta, full_content: fullContent });
+	                  },
+	                });
+	                break;
+	              }
+	              case "anthropic": {
+	                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
+	                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
+	                  method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                     "x-api-key": platformProviderKey!,
@@ -2259,31 +2372,30 @@ Deno.serve(async (req: Request) => {
                 break;
               }
               default:
-                throw new Error("Unsupported platform model provider");
-            }
-          } else {
-            switch (byokModel!.provider) {
-              case "openai":
-              case "x-ai": {
-                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-                const streamingResponse = await fetch(url, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${byokProviderKey!}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: byokModel!.model,
-                    messages,
-                    max_tokens: effectiveMaxTokens,
-                    stream: true,
-                  }),
-                });
-                if (!streamingResponse.ok) {
-                  const body = await streamingResponse.text();
-                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
-                }
-                const reader = streamingResponse.body?.getReader();
+	                throw new Error("Unsupported platform model provider");
+	            }
+	          } else {
+	            switch (byokModel!.provider) {
+	              case "openai": {
+	                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const streamingResponse = await fetch(url, {
+	                  method: "POST",
+	                  headers: {
+	                    Authorization: `Bearer ${byokProviderKey!}`,
+	                    "Content-Type": "application/json",
+	                  },
+	                  body: JSON.stringify({
+	                    model: byokModel!.model,
+	                    messages,
+	                    max_completion_tokens: effectiveMaxTokens,
+	                    stream: true,
+	                  }),
+	                });
+	                if (!streamingResponse.ok) {
+	                  const body = await streamingResponse.text();
+	                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
+	                }
+	                const reader = streamingResponse.body?.getReader();
                 if (!reader) throw new Error("Missing model stream");
 
                 await consumeSseEvents({
@@ -2302,13 +2414,54 @@ Deno.serve(async (req: Request) => {
                     fullContent += delta;
                     emit("delta", { delta, full_content: fullContent });
                   },
-                });
-                break;
-              }
-              case "anthropic": {
-                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
-                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
-                  method: "POST",
+	                });
+	                break;
+	              }
+	              case "x-ai": {
+	                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const streamingResponse = await fetch(url, {
+	                  method: "POST",
+	                  headers: {
+	                    Authorization: `Bearer ${byokProviderKey!}`,
+	                    "Content-Type": "application/json",
+	                  },
+	                  body: JSON.stringify({
+	                    model: byokModel!.model,
+	                    messages,
+	                    max_tokens: effectiveMaxTokens,
+	                    stream: true,
+	                  }),
+	                });
+	                if (!streamingResponse.ok) {
+	                  const body = await streamingResponse.text();
+	                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
+	                }
+	                const reader = streamingResponse.body?.getReader();
+	                if (!reader) throw new Error("Missing model stream");
+
+	                await consumeSseEvents({
+	                  reader,
+	                  onData: (raw) => {
+	                    if (raw === "[DONE]") return true;
+	                    let parsed: OpenRouterStreamChunk | null = null;
+	                    try {
+	                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+	                    } catch {
+	                      return;
+	                    }
+	                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+	                    const delta = extractStreamDelta(parsed);
+	                    if (!delta) return;
+	                    fullContent += delta;
+	                    emit("delta", { delta, full_content: fullContent });
+	                  },
+	                });
+	                break;
+	              }
+	              case "anthropic": {
+	                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
+	                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
+	                  method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                     "x-api-key": byokProviderKey!,
@@ -2435,6 +2588,7 @@ Deno.serve(async (req: Request) => {
             }
 
             const meta: Record<string, unknown> = {};
+            if (contextCommunityId) meta.context_community_id = contextCommunityId;
             meta.inference_source = inferenceSource;
             if (inferenceFallback) meta.inference_fallback = inferenceFallback;
             if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;

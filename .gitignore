@@ -5,4 +5,5 @@ src-tauri/target/
 .worktrees/
 .DS_Store
 .env
+supabase/.secrets.env
 supabase/.temp/

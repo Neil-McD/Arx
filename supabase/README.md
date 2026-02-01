@@ -20,3 +20,11 @@ Arx treats **the repo as the source of truth** for the cloud schema and Edge Fun
 - Any deployed function must exist in git (avoid “deployed but untracked” drift).
 - Shared helpers belong in `supabase/functions/_shared/`.
 
+## Secrets (Edge Functions)
+
+Edge Functions run on Supabase and read secrets from the Supabase project (not your local `.env`).
+
+- Copy `supabase/.secrets.example.env` → `supabase/.secrets.env`
+- Paste keys into `supabase/.secrets.env`
+- Apply:
+  - `supabase secrets set --project-ref pbjgkggfcpxewhsmgveu --env-file supabase/.secrets.env`

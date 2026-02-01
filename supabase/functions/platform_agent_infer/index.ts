@@ -233,16 +233,32 @@ Deno.serve(async (req: Request) => {
     const token = getBearerToken(req);
     const userId = getVerifiedJwtSub(token);
 
-    const platformEnabled = isTruthyEnv(
-      getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"),
-    );
+    const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
+    // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
+    const platformEnabled = platformEnabledRaw ? isTruthyEnv(platformEnabledRaw) : true;
     if (!platformEnabled) {
-      return jsonResponse({ ok: false, error: "platform_inference_disabled" }, { status: 403, headers });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "platform_inference_disabled",
+          code: "platform_inference_disabled",
+          message: "Arx platform inference is disabled.",
+        },
+        { status: 403, headers },
+      );
     }
 
     const builderTier = await loadUserBuilderTier(userId);
     if (builderTier === "free") {
-      return jsonResponse({ ok: false, error: "platform_inference_not_allowed" }, { status: 403, headers });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "platform_inference_not_allowed",
+          code: "platform_inference_not_allowed",
+          message: "Arx platform inference is not included in your plan.",
+        },
+        { status: 403, headers },
+      );
     }
 
     const input = await readJsonBounded<PlatformAgentInferInput>(req);
@@ -269,29 +285,83 @@ Deno.serve(async (req: Request) => {
     });
     if (!ipRlAllowed) throw new Error("rate_limited");
 
+    let platformModel: PlatformModelRef;
+    try {
+      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes("platform_inference_not_allowed")) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "platform_inference_not_allowed",
+            code: "platform_inference_not_allowed",
+            model_id: aliasModelId,
+          },
+          { status: 403, headers },
+        );
+      }
+      return jsonResponse(
+        {
+          ok: false,
+          error: "platform_inference_misconfigured",
+          code: "platform_inference_misconfigured",
+          model_id: aliasModelId,
+          message,
+        },
+        { status: 503, headers },
+      );
+    }
+
+    const providerEnvKey = platformProviderEnvKey(platformModel.provider);
+    const platformProviderKey = getEnv(providerEnvKey);
+    if (!platformProviderKey) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "platform_inference_misconfigured",
+          code: "platform_inference_misconfigured",
+          provider: platformModel.provider,
+          model_id: aliasModelId,
+          message: `Missing env var: ${providerEnvKey}`,
+        },
+        { status: 503, headers },
+      );
+    }
+
     // Charge quota per model call (1 unit). The desktop agent loop may call repeatedly.
     let platformRemaining: number | null = null;
     try {
       platformRemaining = await consumePlatformInferenceStandard(userId, 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Must be stable for desktop to detect and auto-fallback to BYOK.
+      // Must be stable for desktop to detect platform quota exhaustion.
       if (message.toLowerCase().includes("platform_inference_quota_exceeded")) {
-        return jsonResponse({ ok: false, error: "platform_inference_quota_exceeded" }, { status: 403, headers });
+        return jsonResponse(
+          {
+            ok: false,
+            error: "platform_inference_quota_exceeded",
+            code: "platform_inference_quota_exceeded",
+            provider: platformModel.provider,
+            model_id: aliasModelId,
+            message: "You've used your Arx AI quota for this month.",
+          },
+          { status: 403, headers },
+        );
       }
       if (message.toLowerCase().includes("platform_inference_not_allowed")) {
-        return jsonResponse({ ok: false, error: "platform_inference_not_allowed" }, { status: 403, headers });
+        return jsonResponse(
+          {
+            ok: false,
+            error: "platform_inference_not_allowed",
+            code: "platform_inference_not_allowed",
+            provider: platformModel.provider,
+            model_id: aliasModelId,
+          },
+          { status: 403, headers },
+        );
       }
       throw error;
-    }
-
-    const platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
-    const platformProviderKey = getEnv(platformProviderEnvKey(platformModel.provider));
-    if (!platformProviderKey) {
-      return jsonResponse(
-        { ok: false, error: `Missing env var: ${platformProviderEnvKey(platformModel.provider)}` },
-        { status: 500, headers },
-      );
     }
 
     const platformMaxTokensRaw =
@@ -304,7 +374,18 @@ Deno.serve(async (req: Request) => {
     const request: Record<string, unknown> = { ...(requestObj as Record<string, unknown>) };
     request.model = platformModel.model;
     request.stream = true;
-    request.max_tokens = clampMaxTokens(request.max_tokens, platformMaxTokens);
+    const requestedMax =
+      request.max_completion_tokens ?? request.max_tokens ?? (request as Record<string, unknown>).max_output_tokens;
+    const clamped = clampMaxTokens(requestedMax, platformMaxTokens);
+    if (platformModel.provider === "openai") {
+      delete request.max_tokens;
+      delete request.max_output_tokens;
+      request.max_completion_tokens = clamped;
+    } else {
+      delete request.max_completion_tokens;
+      delete request.max_output_tokens;
+      request.max_tokens = clamped;
+    }
 
     const acceptHeaders = {
       ...headers,
@@ -368,6 +449,12 @@ Deno.serve(async (req: Request) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (message.toLowerCase().includes("rate_limited")) {
+      return jsonResponse(
+        { ok: false, error: "rate_limited", code: "rate_limited", message: "Too many requests. Try again soon." },
+        { status: 429, headers: { ...headers, "Retry-After": "60" } },
+      );
+    }
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
