@@ -99,6 +99,15 @@ type InferenceFallbackPayload = {
   reason: string;
 };
 
+type PlatformInferenceActionRequiredPayload = {
+  session_id: string;
+  approval_id: string;
+  provider_id: string;
+  provider_label: string;
+  model_id: string;
+  reason: string;
+};
+
 type RunningTool = {
   id: string;
   name: string;
@@ -703,6 +712,9 @@ function App() {
   const [agentMode, setAgentMode] = useState<AgentMode>("build");
   const [pendingToolApproval, setPendingToolApproval] = useState<ToolApprovalRequestedPayload | null>(null);
   const [isToolApprovalSubmitting, setIsToolApprovalSubmitting] = useState(false);
+  const [pendingInferenceFallback, setPendingInferenceFallback] =
+    useState<PlatformInferenceActionRequiredPayload | null>(null);
+  const [isInferenceFallbackSubmitting, setIsInferenceFallbackSubmitting] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AgentStatusPayload | null>(null);
   const [runningTools, setRunningTools] = useState<RunningTool[]>([]);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
@@ -2964,24 +2976,33 @@ function App() {
       }
     );
 
-    const unlistenInferenceFallback = listen<InferenceFallbackPayload>(
-      "inference-fallback",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        const reason = (event.payload.reason ?? "").trim();
-        const message =
-          reason === "platform_quota_exceeded"
-            ? "Arx AI quota reached — switching to your API key."
-            : "Arx AI unavailable — switching to your API key.";
-        setMemoryToast(message);
-        if (memoryToastTimeoutRef.current) {
-          window.clearTimeout(memoryToastTimeoutRef.current);
-        }
-        memoryToastTimeoutRef.current = window.setTimeout(() => {
-          setMemoryToast(null);
-        }, 2500);
-      }
-    );
+	    const unlistenInferenceFallback = listen<InferenceFallbackPayload>(
+	      "inference-fallback",
+	      (event) => {
+	        if (event.payload.session_id !== activeThreadId) return;
+	        const reason = (event.payload.reason ?? "").trim();
+	        const message =
+	          reason === "platform_quota_exceeded"
+	            ? "Arx AI quota reached — switching to your API key."
+	            : "Arx AI unavailable — switching to your API key.";
+	        setMemoryToast(message);
+	        if (memoryToastTimeoutRef.current) {
+	          window.clearTimeout(memoryToastTimeoutRef.current);
+	        }
+	        memoryToastTimeoutRef.current = window.setTimeout(() => {
+	          setMemoryToast(null);
+	        }, 2500);
+	      }
+	    );
+
+	    const unlistenInferenceActionRequired = listen<PlatformInferenceActionRequiredPayload>(
+	      "platform-inference-action-required",
+	      (event) => {
+	        if (event.payload.session_id !== activeThreadId) return;
+	        setIsInferenceFallbackSubmitting(false);
+	        setPendingInferenceFallback(event.payload);
+	      }
+	    );
 
     const unlistenPlan = listen<{ session_id: string; args: TaskPlanPayload }>(
       "plan-updated",
@@ -3164,9 +3185,10 @@ function App() {
       void unlistenStream.then((fn) => fn());
       void unlistenOpenRouterStream.then((fn) => fn());
       void unlistenOpenRouterDone.then((fn) => fn());
-      void unlistenMemory.then((fn) => fn());
-      void unlistenInferenceFallback.then((fn) => fn());
-      void unlistenPlan.then((fn) => fn());
+	      void unlistenMemory.then((fn) => fn());
+	      void unlistenInferenceFallback.then((fn) => fn());
+	      void unlistenInferenceActionRequired.then((fn) => fn());
+	      void unlistenPlan.then((fn) => fn());
       void unlistenToolCallsUpdated.then((fn) => fn());
       void unlistenToolApproval.then((fn) => fn());
       void unlistenAgentStatus.then((fn) => fn());
@@ -3189,12 +3211,13 @@ function App() {
       // If the slash menu is active, let the input handler consume Escape.
       if (slashState.query !== null) return;
 
-      const cancelActiveRun = () => {
-        setPendingToolApproval(null);
-        void invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId }).catch(() => {
-          // best-effort
-        });
-      };
+	      const cancelActiveRun = () => {
+	        setPendingToolApproval(null);
+	        setPendingInferenceFallback(null);
+	        void invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId }).catch(() => {
+	          // best-effort
+	        });
+	      };
 
       // Cancel a running tool call if present, otherwise cancel the agent turn.
       if (runningToolCallId) {
@@ -8034,7 +8057,6 @@ function App() {
       communityAttachmentsRef.current = communityAttachments;
     }, [communityAttachments]);
 	  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
-	  const pinnedThreadCommunityId = activeThread?.community_id ?? null;
 	  const actionablePendingInvites = useMemo(
 	    () => pendingInvites.filter((invite) => invite.status === "pending"),
 	    [pendingInvites]
@@ -8066,12 +8088,167 @@ function App() {
     return window.confirm("You have unsaved community settings. Discard changes?");
   }
 
+  async function setThreadCommunityLensInCloud(params: {
+    threadId: string;
+    communityId: string | null;
+    session: SupabaseSession;
+  }): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) throw new Error("Missing Supabase URL.");
+    const response = await fetchWithSupabaseAuth(
+      `${url}/rest/v1/rpc/set_thread_community_lens`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ p_thread_id: params.threadId, p_community_id: params.communityId }),
+      },
+      params.session,
+    );
+    if (!response.ok) throw new Error(await readSupabaseError(response));
+  }
+
+  type WorkspaceLensTarget = {
+    threadId: string;
+    communityId: string | null;
+    communityName: string;
+    session: SupabaseSession;
+  };
+
+  // Desktop "last click wins" lens switching: serialize lens updates and coalesce
+  // rapid rail clicks so the active thread ends up in the user's last-selected lens.
+  const workspaceLensEpochRef = useRef(0);
+  const workspaceLensAppliedEpochRef = useRef(0);
+  const workspaceLensDesiredRef = useRef<WorkspaceLensTarget | null>(null);
+  const workspaceLensInFlightRef = useRef(false);
+  const workspaceLensWaitersRef = useRef<
+    Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }>
+  >([]);
+  const [workspaceLensUi, setWorkspaceLensUi] = useState<{
+    inFlight: boolean;
+    targetName: string | null;
+  }>({ inFlight: false, targetName: null });
+
+  const settleWorkspaceLensWaiters = (upToEpoch: number, error: unknown | null) => {
+    const remaining: Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }> = [];
+    for (const waiter of workspaceLensWaitersRef.current) {
+      if (waiter.epoch <= upToEpoch) {
+        if (error) waiter.reject(error);
+        else waiter.resolve();
+      } else {
+        remaining.push(waiter);
+      }
+    }
+    workspaceLensWaitersRef.current = remaining;
+  };
+
+  const runWorkspaceLensWorker = async (): Promise<void> => {
+    if (workspaceLensInFlightRef.current) return;
+    workspaceLensInFlightRef.current = true;
+    try {
+      while (workspaceLensAppliedEpochRef.current < workspaceLensEpochRef.current) {
+        const epoch = workspaceLensEpochRef.current;
+        const desired = workspaceLensDesiredRef.current;
+        if (!desired) {
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, null);
+          break;
+        }
+
+        try {
+          await setThreadCommunityLensInCloud({
+            threadId: desired.threadId,
+            communityId: desired.communityId,
+            session: desired.session,
+          });
+          const updated = await invoke<ThreadRecord>("set_thread_community_cmd", {
+            threadId: desired.threadId,
+            communityId: desired.communityId,
+          });
+          setThreads((prev) => {
+            const idx = prev.findIndex((t) => t.id === updated.id);
+            if (idx === -1) return prev;
+            const copy = [...prev];
+            copy[idx] = updated;
+            return copy;
+          });
+
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, null);
+          if (epoch === workspaceLensEpochRef.current) {
+            showAppToastMessage(
+              desired.communityId ? `Now using ${desired.communityName}.` : "Cleared community context.",
+            );
+          }
+        } catch (error) {
+          workspaceLensAppliedEpochRef.current = epoch;
+          settleWorkspaceLensWaiters(epoch, error);
+          if (epoch === workspaceLensEpochRef.current) {
+            const message =
+              typeof error === "string"
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : "Failed to switch community context.";
+            showAppToastMessage(message);
+          }
+        }
+      }
+    } finally {
+      workspaceLensInFlightRef.current = false;
+      setWorkspaceLensUi((prev) => (prev.inFlight ? { inFlight: false, targetName: null } : prev));
+    }
+  };
+
+  const requestWorkspaceThreadLens = (target: WorkspaceLensTarget): Promise<void> => {
+    const currentLens = threads.find((t) => t.id === target.threadId)?.community_id ?? null;
+    if (currentLens === target.communityId && !workspaceLensInFlightRef.current) {
+      return Promise.resolve();
+    }
+
+    const epoch = (workspaceLensEpochRef.current += 1);
+    workspaceLensDesiredRef.current = target;
+    setWorkspaceLensUi({ inFlight: true, targetName: target.communityId ? target.communityName : "none" });
+    void runWorkspaceLensWorker();
+    return new Promise<void>((resolve, reject) => {
+      workspaceLensWaitersRef.current.push({ epoch, resolve, reject });
+    });
+  };
+
+  const ensureWorkspaceThreadLensBeforeSend = async (threadId: string, session: SupabaseSession): Promise<void> => {
+    if (activePage !== "workspace") return;
+    const desiredCommunityId = activeCommunityId ?? null;
+    const currentLens = threads.find((t) => t.id === threadId)?.community_id ?? null;
+    if (currentLens === desiredCommunityId) return;
+    const desiredName = desiredCommunityId
+      ? (communities.find((c) => c.id === desiredCommunityId)?.name ?? desiredCommunityId)
+      : "none";
+    await requestWorkspaceThreadLens({ threadId, communityId: desiredCommunityId, communityName: desiredName, session });
+  };
+
   function handleSelectActiveCommunity(next: string) {
     if (!confirmDiscardUnsavedCommunitySettings(next)) return;
     setActiveCommunityId(next);
+    // Desktop community rail is a context selector. We only retarget the *active
+    // personal thread* lens while the user is on the AI workspace page, to match Web.
+    if (activePage !== "workspace") return;
     if (!activeThreadId) return;
-    if (!pinnedThreadCommunityId) return;
-    if (next === pinnedThreadCommunityId) return;
+    const currentLensCommunityId = activeThread?.community_id ?? null;
+    if (next === currentLensCommunityId) return;
+
+    const thread = activeThread;
+    const session = supabaseSessionRef.current;
+    const url = session ? getSupabaseUrl() : null;
+    if (thread && thread.engine_id !== "community_chat" && session && url) {
+      const toCommunityName = communities.find((c) => c.id === next)?.name ?? next;
+      void requestWorkspaceThreadLens({
+        threadId: activeThreadId,
+        communityId: next,
+        communityName: toCommunityName,
+        session,
+      });
+      return;
+    }
+
     void invoke<ThreadRecord>("set_thread_community_cmd", { threadId: activeThreadId, communityId: next })
       .then((updated) => {
         setThreads((prev) => {
@@ -8297,27 +8474,6 @@ function App() {
     event.preventDefault();
   }
 
-  async function handleToggleThreadCommunityPin() {
-    if (!activeThreadId) return;
-    const next = pinnedThreadCommunityId ? null : activeCommunityId;
-    if (!next && !pinnedThreadCommunityId) return;
-    try {
-      const updated = await invoke<ThreadRecord>("set_thread_community_cmd", {
-        threadId: activeThreadId,
-        communityId: next
-      });
-      setThreads((prev) => {
-        const idx = prev.findIndex((t) => t.id === updated.id);
-        if (idx === -1) return prev;
-        const copy = [...prev];
-        copy[idx] = updated;
-        return copy;
-      });
-    } catch (error) {
-      console.error("Failed to set thread community:", error);
-    }
-  }
-
   useEffect(() => {
     if (!activeThreadId) return;
     const nextWorkspace = effectiveCwd;
@@ -8490,17 +8646,24 @@ function App() {
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
 
-	    const sessionId = await ensureThreadId();
-	    if (!sessionId) return;
-	    if (startedInDraft) createdThreadId = sessionId;
-	    const session = supabaseSessionRef.current;
-	    const userText = commandInput.trim();
-	    const currentAttachments = [...attachments];
-	    setCommandInput("");
-	    setAttachments([]);
-	    setIsSending(true);
+    // Capture inputs at click time, but don't clear until we've ensured the lens/context.
+    const userText = commandInput.trim();
+    const currentAttachments = [...attachments];
+
+    setIsSending(true);
     autoScrollEnabledRef.current = true;
     try {
+      const sessionId = await ensureThreadId();
+      if (!sessionId) return;
+      if (startedInDraft) createdThreadId = sessionId;
+      const session = supabaseSessionRef.current;
+
+      if (session) {
+        await ensureWorkspaceThreadLensBeforeSend(sessionId, session);
+      }
+
+      setCommandInput("");
+      setAttachments([]);
       // Build content JSON with text and attachments
       const contentPayload: {
         text: string;
@@ -9103,7 +9266,7 @@ function App() {
 
   const combinedFeed = useMemo((): FeedItem[] => {
     const items: FeedItem[] = [
-      ...messages.map((m): FeedItem => ({ type: "message", data: m })),
+      ...messages.filter((m) => m.role !== "system").map((m): FeedItem => ({ type: "message", data: m })),
       ...activeToolGroups.map((t): FeedItem => ({ type: "tool_group", data: t })),
       ...activeUngroupedToolCalls.map((t): FeedItem => ({ type: "tool", data: t })),
     ];
@@ -9135,6 +9298,24 @@ function App() {
       setMemoryToast("Failed to send tool approval decision.");
     } finally {
       setIsToolApprovalSubmitting(false);
+    }
+  }
+
+  async function resolvePendingInferenceFallback(approved: boolean) {
+    const pending = pendingInferenceFallback;
+    if (!pending) return;
+    setIsInferenceFallbackSubmitting(true);
+    try {
+      await invoke("decide_inference_fallback_cmd", {
+        approvalId: pending.approval_id,
+        approved,
+      });
+      setPendingInferenceFallback(null);
+    } catch (error) {
+      console.error("Failed to resolve inference fallback:", error);
+      setMemoryToast("Failed to send inference decision.");
+    } finally {
+      setIsInferenceFallbackSubmitting(false);
     }
   }
 
@@ -9320,24 +9501,6 @@ function App() {
           )}
         </div>
         <div className="topbar-right" data-tauri-drag-region>
-          {activeThreadId && (
-            <button
-              className={`icon-button${pinnedThreadCommunityId ? " active" : ""}`}
-              data-tauri-drag-region="false"
-              onClick={handleToggleThreadCommunityPin}
-              disabled={!activeCommunityId && !pinnedThreadCommunityId}
-              aria-label="Toggle community context for thread"
-              title={
-                pinnedThreadCommunityId
-                  ? "Disable community context for this thread"
-                  : "Enable community context for this thread"
-              }
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M16 3l5 5-4 4v6l-2 2-4-4H5l6-6-4-4 2-2h6z" />
-              </svg>
-            </button>
-          )}
           <button
             className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
             data-tauri-drag-region="false"
@@ -9359,16 +9522,32 @@ function App() {
               setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
             }}
             aria-label="Community"
-            title="Community"
+            title={activeCommunity?.name ?? "Community"}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+            {activeCommunity ? (
+              activeCommunity.avatar_url ? (
+                <img
+                  className="community-btn-avatar"
+                  src={activeCommunity.avatar_url}
+                  alt={activeCommunity.name}
+                  loading="lazy"
+                />
+              ) : (
+                <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
+              )
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            )}
             {unreadCount > 0 && activePage !== "community" && (
               <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+            )}
+            {workspaceLensUi.inFlight && activePage === "workspace" && (
+              <span className="community-btn-spinner" aria-hidden="true" />
             )}
           </button>
         </div>
@@ -9771,12 +9950,70 @@ function App() {
                 </div>
               </div>
             );
-          })()}
-	        {supabaseSession && isBuilderUpgradeOpen && (
-	          <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
-	            <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
-	              <div className="modal-header">
-	                <div className="modal-title">Upgrade plan</div>
+	          })()}
+		        {pendingInferenceFallback && (() => {
+		          const isQuota = pendingInferenceFallback.reason === "platform_quota_exceeded";
+		          const providerLabel =
+		            (pendingInferenceFallback.provider_label ?? "").trim() ||
+		            (pendingInferenceFallback.provider_id ?? "").trim() ||
+		            "your";
+		          const modelId = (pendingInferenceFallback.model_id ?? "").trim();
+		          const title = isQuota ? "Arx AI quota reached" : "Arx AI unavailable";
+		          const note = isQuota
+		            ? "You’ve used your Arx AI quota for this month."
+		            : "Arx platform inference is unavailable right now.";
+		          const modelNote = modelId ? `Model: ${modelId}` : null;
+		          return (
+		            <div className="modal-overlay" onClick={() => void resolvePendingInferenceFallback(false)}>
+		              <div className="modal" onClick={(event) => event.stopPropagation()}>
+		                <div className="modal-header">
+		                  <div className="modal-title">{title}</div>
+		                  <button
+		                    className="modal-close"
+		                    onClick={() => void resolvePendingInferenceFallback(false)}
+		                    title="Close"
+		                  >
+		                    ×
+		                  </button>
+		                </div>
+		                <div className="modal-body">
+		                  <div className="model-note">{note}</div>
+		                  <div className="model-note" style={{ marginTop: 10 }}>
+		                    Continue by using {providerLabel} API key{modelId ? " for this model" : ""}?
+		                  </div>
+		                  {modelNote && (
+		                    <div className="model-note" style={{ marginTop: 10 }}>
+		                      {modelNote}
+		                    </div>
+		                  )}
+		                </div>
+		                <div className="modal-footer">
+		                  <button
+		                    type="button"
+		                    className="secondary"
+		                    onClick={() => void resolvePendingInferenceFallback(false)}
+		                    disabled={isInferenceFallbackSubmitting}
+		                  >
+		                    Cancel
+		                  </button>
+		                  <button
+		                    type="button"
+		                    className="primary"
+		                    onClick={() => void resolvePendingInferenceFallback(true)}
+		                    disabled={isInferenceFallbackSubmitting}
+		                  >
+		                    Use my API key
+		                  </button>
+		                </div>
+		              </div>
+		            </div>
+		          );
+		        })()}
+		        {supabaseSession && isBuilderUpgradeOpen && (
+		          <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
+		            <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
+		              <div className="modal-header">
+		                <div className="modal-title">Upgrade plan</div>
 	                <button className="modal-close" onClick={() => setIsBuilderUpgradeOpen(false)} title="Close">
 	                  ×
 	                </button>

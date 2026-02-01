@@ -254,6 +254,8 @@ static THREAD_RUN_LOCKS: Lazy<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_TOOL_APPROVALS: Lazy<Mutex<HashMap<String, oneshot::Sender<ToolApprovalDecision>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
+static PENDING_INFERENCE_APPROVALS: Lazy<Mutex<HashMap<String, oneshot::Sender<bool>>>> =
+  Lazy::new(|| Mutex::new(HashMap::new()));
 static CANCEL_RUN_SIGNALS: Lazy<Mutex<HashMap<String, watch::Sender<bool>>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 
@@ -580,6 +582,24 @@ async fn decide_tool_call_cmd(
 }
 
 #[tauri::command]
+async fn decide_inference_fallback_cmd(approval_id: String, approved: bool) -> Result<(), String> {
+  let approval_id = approval_id.trim().to_string();
+  if approval_id.is_empty() {
+    return Err("approval_id is required".to_string());
+  }
+  let sender = {
+    let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
+    map.remove(&approval_id)
+  };
+  let Some(sender) = sender else {
+    return Err("inference fallback not awaiting approval".to_string());
+  };
+  sender
+    .send(approved)
+    .map_err(|_| "inference fallback approval receiver dropped".to_string())
+}
+
+#[tauri::command]
 fn get_auto_approve_write_edit_cmd(
   state: tauri::State<DbState>,
   thread_id: String,
@@ -814,6 +834,7 @@ fn append_openrouter_assistant_message(
   completion: Option<u64>,
   max_tokens: u32,
   memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
+  context_community_id: Option<&str>,
 ) {
   let mut payload = serde_json::json!({
     "v": 1,
@@ -823,6 +844,7 @@ fn append_openrouter_assistant_message(
       "engine_id": ENGINE_OPENROUTER_CHAT,
       "model_id": model_id,
       "openrouter_model_id": openrouter_model_id,
+      "context_community_id": context_community_id,
       "run_id": run_id,
       "prompt_tokens": prompt,
       "completion_tokens": completion,
@@ -3233,6 +3255,16 @@ struct InferenceFallbackPayload {
 }
 
 #[derive(Clone, Serialize)]
+struct PlatformInferenceActionRequiredPayload {
+  session_id: String,
+  approval_id: String,
+  provider_id: String,
+  provider_label: String,
+  model_id: String,
+  reason: String,
+}
+
+#[derive(Clone, Serialize)]
 struct AgentStatusPayload {
   session_id: String,
   status: String,        // "thinking" | "working" | "idle"
@@ -3271,6 +3303,7 @@ fn append_openrouter_messages_assistant_message(
   provider_model_ref: Option<&str>,
   max_tokens: u32,
   memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
+  context_community_id: Option<&str>,
 ) {
   let mut payload = serde_json::json!({
     "v": 1,
@@ -3281,6 +3314,7 @@ fn append_openrouter_messages_assistant_message(
       "model_id": model_id,
       "provider_id": provider_id,
       "provider_model_ref": provider_model_ref,
+      "context_community_id": context_community_id,
       "run_id": run_id,
       "max_tokens": max_tokens
     },
@@ -3370,6 +3404,54 @@ async fn await_tool_approval(
   }
 }
 
+async fn await_inference_fallback_approval(
+  window: &tauri::Window,
+  session_id: &str,
+  model_id: &str,
+  provider: PlatformProvider,
+  reason: &str,
+  mut cancel_rx: watch::Receiver<bool>,
+) -> bool {
+  let approval_id = uuid::Uuid::new_v4().to_string();
+  let (tx, rx) = oneshot::channel::<bool>();
+  {
+    let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
+    map.insert(approval_id.clone(), tx);
+  }
+
+  let _ = window.emit(
+    "platform-inference-action-required",
+    PlatformInferenceActionRequiredPayload {
+      session_id: session_id.to_string(),
+      approval_id: approval_id.clone(),
+      provider_id: platform_provider_id(provider).to_string(),
+      provider_label: platform_provider_display_name(provider).to_string(),
+      model_id: model_id.to_string(),
+      reason: reason.to_string(),
+    },
+  );
+
+  if *cancel_rx.borrow() {
+    let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
+    map.remove(&approval_id);
+    return false;
+  }
+
+  let decision = tokio::select! {
+    decision = rx => {
+      match decision {
+        Ok(approved) => approved,
+        Err(_) => false,
+      }
+    }
+    _ = cancel_rx.changed() => false
+  };
+
+  let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
+  map.remove(&approval_id);
+  decision
+}
+
 fn write_blob_and_record(
   conn: &rusqlite::Connection,
   db_path: &Path,
@@ -3401,8 +3483,13 @@ async fn send_turn_openrouter_messages_agent(
   history_messages_json: Option<String>,
   platform_proxy: Option<PlatformProxyConfig>,
   mut cancel_rx: watch::Receiver<bool>,
+  context_community_id: Option<String>,
 ) -> Result<SendTurnResult, String> {
   let run_id = uuid::Uuid::new_v4().to_string();
+  let context_community_id = context_community_id
+    .as_deref()
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty());
   let workspace_scope_id = workspace_scope_id_from_path(workspace);
 
 	  append_run_started(
@@ -3431,6 +3518,7 @@ async fn send_turn_openrouter_messages_agent(
         None,
         OPENROUTER_MAX_TOKENS,
         None,
+        context_community_id,
       );
       append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_model_mapping"));
       let _ = window.emit(
@@ -3468,6 +3556,7 @@ async fn send_turn_openrouter_messages_agent(
 		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      None,
+		      context_community_id,
 		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("secret_redaction"));
 	    let _ = window.emit(
@@ -3686,6 +3775,7 @@ async fn send_turn_openrouter_messages_agent(
 		              provider_model_ref,
 		              request_max_tokens,
 		              None,
+		              context_community_id,
 		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("engine_input_record_failed"));
 	            let _ = window.emit(
@@ -3754,6 +3844,7 @@ async fn send_turn_openrouter_messages_agent(
 	                provider_model_ref,
 	                request_max_tokens,
 	                None,
+	                context_community_id,
 	              );
 	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
 	              let _ = window.emit(
@@ -3810,6 +3901,7 @@ async fn send_turn_openrouter_messages_agent(
 		              provider_model_ref,
 		              request_max_tokens,
 		              None,
+		              context_community_id,
 		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_request_failed"));
 	            let _ = window.emit(
@@ -3887,12 +3979,12 @@ async fn send_turn_openrouter_messages_agent(
 	            evidence_event_ids.push(evt.id);
 	          }
 
-	          if using_platform && !status.is_success() {
-	            platform_available_for_run = false;
+		        if using_platform && !status.is_success() {
+		          platform_available_for_run = false;
 
-	            if is_platform_inference_quota_exceeded(&resp_bytes) {
-	              let provider_key_ok = get_byok_provider_key().is_ok();
-	              if !provider_key_ok {
+		          if is_platform_inference_quota_exceeded(&resp_bytes) {
+		            let provider_key_ok = get_byok_provider_key().is_ok();
+		            if !provider_key_ok {
 	                append_openrouter_messages_assistant_message(
 	                  &conn,
 	                  db_path,
@@ -3908,6 +4000,7 @@ async fn send_turn_openrouter_messages_agent(
 	                  provider_model_ref,
 	                  request_max_tokens,
 	                  None,
+	                  context_community_id,
 	                );
 	                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_quota_exceeded"));
 	                let _ = window.emit(
@@ -3916,54 +4009,183 @@ async fn send_turn_openrouter_messages_agent(
 	                    session_id: thread_id.to_string(),
 	                  },
 	                );
-	                return Ok(SendTurnResult {
-	                  thread_id: thread_id.to_string(),
-	                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
-	                  engine_input_event_id: Some(engine_input_event.id),
-	                  engine_input_seq: Some(engine_input_event.seq),
-	                  run_id: Some(run_id),
-	                });
-	              }
+		                return Ok(SendTurnResult {
+		                  thread_id: thread_id.to_string(),
+		                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                  engine_input_event_id: Some(engine_input_event.id),
+		                  engine_input_seq: Some(engine_input_event.seq),
+		                  run_id: Some(run_id),
+		                });
+		              }
 
-	              if !platform_fallback_notified {
-	                let _ = window.emit(
-	                  "inference-fallback",
-	                  InferenceFallbackPayload {
-	                    session_id: thread_id.to_string(),
-	                    from: "platform".to_string(),
-	                    to: "user".to_string(),
-	                    reason: "platform_quota_exceeded".to_string(),
-	                  },
-	                );
-	                platform_fallback_notified = true;
-	              }
-	              use_platform_for_call = false;
-	              continue;
-	            }
+		              let approved = await_inference_fallback_approval(
+		                window,
+		                thread_id,
+		                selected_model_id,
+		                model_ref.provider,
+		                "platform_quota_exceeded",
+		                cancel_rx.clone(),
+		              )
+		              .await;
+		              if !approved {
+		                append_openrouter_messages_assistant_message(
+		                  &conn,
+		                  db_path,
+		                  thread_id,
+		                  &format!(
+		                    "Arx AI quota reached. Cancelled — I didn’t switch to your {} API key.",
+		                    platform_provider_display_name(model_ref.provider)
+		                  ),
+		                  selected_model_id,
+		                  &run_id,
+		                  &evidence_event_ids,
+		                  provider_id,
+		                  provider_model_ref,
+		                  request_max_tokens,
+		                  None,
+		                  context_community_id,
+		                );
+		                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_fallback_denied"));
+		                let _ = window.emit(
+		                  "openrouter-turn-finished",
+		                  SessionIdPayload {
+		                    session_id: thread_id.to_string(),
+		                  },
+		                );
+		              return Ok(SendTurnResult {
+		                thread_id: thread_id.to_string(),
+		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_input_event_id: Some(engine_input_event.id),
+		                engine_input_seq: Some(engine_input_event.seq),
+		                run_id: Some(run_id),
+		              });
+		            }
+
+		            let approved = await_inference_fallback_approval(
+		              window,
+		              thread_id,
+		              selected_model_id,
+		              model_ref.provider,
+		              "platform_quota_exceeded",
+		              cancel_rx.clone(),
+		            )
+		            .await;
+		            if !approved {
+		              append_openrouter_messages_assistant_message(
+		                &conn,
+		                db_path,
+		                thread_id,
+		                &format!(
+		                  "Arx AI quota reached. Cancelled — I didn’t switch to your {} API key.",
+		                  platform_provider_display_name(model_ref.provider)
+		                ),
+		                selected_model_id,
+		                &run_id,
+		                &evidence_event_ids,
+		                provider_id,
+		                provider_model_ref,
+		                request_max_tokens,
+		                None,
+		                context_community_id,
+		              );
+		              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_fallback_denied"));
+		              let _ = window.emit(
+		                "openrouter-turn-finished",
+		                SessionIdPayload {
+		                  session_id: thread_id.to_string(),
+		                },
+		              );
+		              return Ok(SendTurnResult {
+		                thread_id: thread_id.to_string(),
+		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_input_event_id: Some(engine_input_event.id),
+		                engine_input_seq: Some(engine_input_event.seq),
+		                run_id: Some(run_id),
+		              });
+		            }
+
+		            if !platform_fallback_notified {
+		              let _ = window.emit(
+		                "inference-fallback",
+		                InferenceFallbackPayload {
+		                  session_id: thread_id.to_string(),
+		                  from: "platform".to_string(),
+		                  to: "user".to_string(),
+		                  reason: "platform_quota_exceeded".to_string(),
+		                },
+		              );
+		              platform_fallback_notified = true;
+		            }
+		            use_platform_for_call = false;
+		            continue;
+		          }
 
 	            if is_platform_inference_not_allowed(&resp_bytes) {
 	              use_platform_for_call = false;
 	              continue;
 	            }
 
-	            // Best-effort: if platform is misconfigured/unavailable but the user has a BYOK key, fall back.
-	            if get_byok_provider_key().is_ok() {
-	              if !platform_fallback_notified {
-	                let _ = window.emit(
-	                  "inference-fallback",
-	                  InferenceFallbackPayload {
-	                    session_id: thread_id.to_string(),
-	                    from: "platform".to_string(),
-	                    to: "user".to_string(),
-	                    reason: "platform_error".to_string(),
-	                  },
-	                );
-	                platform_fallback_notified = true;
-	              }
-	              use_platform_for_call = false;
-	              continue;
-	            }
-	          }
+		            // Best-effort: if platform is misconfigured/unavailable but the user has a BYOK key, fall back.
+		            if get_byok_provider_key().is_ok() {
+		              let approved = await_inference_fallback_approval(
+		                window,
+		                thread_id,
+		                selected_model_id,
+		                model_ref.provider,
+		                "platform_error",
+		                cancel_rx.clone(),
+		              )
+		              .await;
+		              if !approved {
+		                append_openrouter_messages_assistant_message(
+		                  &conn,
+		                  db_path,
+		                  thread_id,
+		                  &format!(
+		                    "Arx AI unavailable. Cancelled — I didn’t switch to your {} API key.",
+		                    platform_provider_display_name(model_ref.provider)
+		                  ),
+		                  selected_model_id,
+		                  &run_id,
+		                  &evidence_event_ids,
+		                  provider_id,
+		                  provider_model_ref,
+		                  request_max_tokens,
+		                  None,
+		                  context_community_id,
+		                );
+		                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_fallback_denied"));
+		                let _ = window.emit(
+		                  "openrouter-turn-finished",
+		                  SessionIdPayload {
+		                    session_id: thread_id.to_string(),
+		                  },
+		                );
+		                return Ok(SendTurnResult {
+		                  thread_id: thread_id.to_string(),
+		                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                  engine_input_event_id: Some(engine_input_event.id),
+		                  engine_input_seq: Some(engine_input_event.seq),
+		                  run_id: Some(run_id),
+		                });
+		              }
+
+		              if !platform_fallback_notified {
+		                let _ = window.emit(
+		                  "inference-fallback",
+		                  InferenceFallbackPayload {
+		                    session_id: thread_id.to_string(),
+		                    from: "platform".to_string(),
+		                    to: "user".to_string(),
+		                    reason: "platform_error".to_string(),
+		                  },
+		                );
+		                platform_fallback_notified = true;
+		              }
+		              use_platform_for_call = false;
+		              continue;
+		            }
+		          }
 
 	          let friendly = format_openrouter_error(&resp_bytes);
 	          if status.as_u16() == 402 && request_attempt == 1 {
@@ -4077,6 +4299,7 @@ async fn send_turn_openrouter_messages_agent(
 		                provider_model_ref,
 		                request_max_tokens,
 		                None,
+		                context_community_id,
 		              );
 	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_stream_error"));
 	              let _ = window.emit(
@@ -4280,6 +4503,7 @@ async fn send_turn_openrouter_messages_agent(
 		          provider_model_ref,
 		          request_max_tokens,
 		          None,
+		          context_community_id,
 		        );
 	        append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_http_error"));
 	        let _ = window.emit(
@@ -4406,6 +4630,7 @@ async fn send_turn_openrouter_messages_agent(
 		        provider_model_ref,
 		        OPENROUTER_MAX_TOKENS,
 		        None,
+		        context_community_id,
 		      );
 	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("empty_response"));
 	      let _ = window.emit(
@@ -4435,6 +4660,7 @@ async fn send_turn_openrouter_messages_agent(
 		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      Some(used_personal_memory),
+		      context_community_id,
 		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
@@ -4616,6 +4842,7 @@ async fn send_turn_openrouter_messages_agent(
 		            provider_model_ref,
 		            request_max_tokens,
 		            None,
+		            context_community_id,
 		          );
 	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("engine_input_record_failed"));
 	          let _ = window.emit(
@@ -4684,6 +4911,7 @@ async fn send_turn_openrouter_messages_agent(
 	              provider_model_ref,
 	              request_max_tokens,
 	              None,
+	              context_community_id,
 	            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
 	            let _ = window.emit(
@@ -4741,6 +4969,7 @@ async fn send_turn_openrouter_messages_agent(
 		            provider_model_ref,
 		            request_max_tokens,
 		            None,
+		            context_community_id,
 		          );
 	          append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_request_failed"));
 	          let _ = window.emit(
@@ -4837,6 +5066,7 @@ async fn send_turn_openrouter_messages_agent(
 	                provider_model_ref,
 	                request_max_tokens,
 	                None,
+	                context_community_id,
 	              );
 	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_quota_exceeded"));
 	              let _ = window.emit(
@@ -4875,23 +5105,66 @@ async fn send_turn_openrouter_messages_agent(
 	            continue;
 	          }
 
-	          if get_byok_provider_key().is_ok() {
-	            if !platform_fallback_notified {
-	              let _ = window.emit(
-	                "inference-fallback",
-	                InferenceFallbackPayload {
-	                  session_id: thread_id.to_string(),
-	                  from: "platform".to_string(),
-	                  to: "user".to_string(),
-	                  reason: "platform_error".to_string(),
-	                },
-	              );
-	              platform_fallback_notified = true;
-	            }
-	            use_platform_for_call = false;
-	            continue;
-	          }
-	        }
+		          if get_byok_provider_key().is_ok() {
+		            let approved = await_inference_fallback_approval(
+		              window,
+		              thread_id,
+		              selected_model_id,
+		              model_ref.provider,
+		              "platform_error",
+		              cancel_rx.clone(),
+		            )
+		            .await;
+		            if !approved {
+		              append_openrouter_messages_assistant_message(
+		                &conn,
+		                db_path,
+		                thread_id,
+		                &format!(
+		                  "Arx AI unavailable. Cancelled — I didn’t switch to your {} API key.",
+		                  platform_provider_display_name(model_ref.provider)
+		                ),
+		                selected_model_id,
+		                &run_id,
+		                &evidence_event_ids,
+		                provider_id,
+		                provider_model_ref,
+		                request_max_tokens,
+		                None,
+		                context_community_id,
+		              );
+		              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("platform_fallback_denied"));
+		              let _ = window.emit(
+		                "openrouter-turn-finished",
+		                SessionIdPayload {
+		                  session_id: thread_id.to_string(),
+		                },
+		              );
+		              return Ok(SendTurnResult {
+		                thread_id: thread_id.to_string(),
+		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_input_event_id: Some(engine_input_event.id),
+		                engine_input_seq: Some(engine_input_event.seq),
+		                run_id: Some(run_id),
+		              });
+		            }
+
+		            if !platform_fallback_notified {
+		              let _ = window.emit(
+		                "inference-fallback",
+		                InferenceFallbackPayload {
+		                  session_id: thread_id.to_string(),
+		                  from: "platform".to_string(),
+		                  to: "user".to_string(),
+		                  reason: "platform_error".to_string(),
+		                },
+		              );
+		              platform_fallback_notified = true;
+		            }
+		            use_platform_for_call = false;
+		            continue;
+		          }
+		        }
 
 	        if status.as_u16() == 402 && request_attempt == 1 {
 	          let friendly = serde_json::from_slice::<serde_json::Value>(&resp_bytes)
@@ -4970,6 +5243,7 @@ async fn send_turn_openrouter_messages_agent(
 		              provider_model_ref,
 		              request_max_tokens,
 		              None,
+		              context_community_id,
 		            );
 	            append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_stream_error"));
 	            let _ = window.emit(
@@ -5218,6 +5492,7 @@ async fn send_turn_openrouter_messages_agent(
 		        provider_model_ref,
 		        request_max_tokens,
 		        None,
+		        context_community_id,
 		      );
 	      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("provider_http_error"));
 	      let _ = window.emit(
@@ -5362,6 +5637,7 @@ async fn send_turn_openrouter_messages_agent(
 		      provider_model_ref,
 		      OPENROUTER_MAX_TOKENS,
 		      None,
+		      context_community_id,
 		    );
 	    append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("empty_response"));
 	    let _ = window.emit(
@@ -5391,6 +5667,7 @@ async fn send_turn_openrouter_messages_agent(
 		    provider_model_ref,
 		    OPENROUTER_MAX_TOKENS,
 		    Some(used_personal_memory),
+		    context_community_id,
 		  );
 	  append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
@@ -5541,6 +5818,7 @@ async fn send_turn_cmd(
 		      history_messages_json.clone(),
 		      platform_proxy,
 		      cancel_rx.clone(),
+		      thread.community_id.clone(),
 		    )
 		    .await;
 		  }
@@ -5600,6 +5878,7 @@ async fn send_turn_cmd(
 	        None,
 	        OPENROUTER_MAX_TOKENS,
 	        None,
+	        thread.community_id.as_deref(),
 	      );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("secret_redaction"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5635,6 +5914,7 @@ async fn send_turn_cmd(
 	          None,
 	          OPENROUTER_MAX_TOKENS,
 	          None,
+	          thread.community_id.as_deref(),
 	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("missing_api_key"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5682,6 +5962,7 @@ async fn send_turn_cmd(
 	        None,
 	        OPENROUTER_MAX_TOKENS,
 	        None,
+	        thread.community_id.as_deref(),
 	      );
       append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("model_lookup_failed"));
       let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5714,6 +5995,7 @@ async fn send_turn_cmd(
 	          None,
 	          OPENROUTER_MAX_TOKENS,
 	          None,
+	          thread.community_id.as_deref(),
 	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("model_unavailable"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5835,6 +6117,7 @@ async fn send_turn_cmd(
 	          None,
 	          request_max_tokens,
 	          None,
+	          thread.community_id.as_deref(),
 	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("engine_input_record_failed"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5916,6 +6199,7 @@ async fn send_turn_cmd(
 	          None,
 	          request_max_tokens,
 	          None,
+	          thread.community_id.as_deref(),
 	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_request_failed"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -5988,6 +6272,7 @@ async fn send_turn_cmd(
 	      None,
 	      request_max_tokens,
 	      None,
+	      thread.community_id.as_deref(),
 	    );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_http_error"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -6052,6 +6337,7 @@ async fn send_turn_cmd(
 	          completion_tokens,
 	          OPENROUTER_MAX_TOKENS,
 	          None,
+	          thread.community_id.as_deref(),
 	        );
         append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("openrouter_stream_error"));
         let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -6205,6 +6491,7 @@ async fn send_turn_cmd(
 	      completion_tokens,
 	      OPENROUTER_MAX_TOKENS,
 	      None,
+	      thread.community_id.as_deref(),
 	    );
     append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "error", Some("empty_response"));
     let _ = window.emit("openrouter-turn-finished", SessionIdPayload { session_id: thread_id.clone() });
@@ -6230,6 +6517,7 @@ async fn send_turn_cmd(
 	    completion_tokens,
 	    OPENROUTER_MAX_TOKENS,
 	    Some(&used_personal_memory),
+	    thread.community_id.as_deref(),
 	  );
 
   append_run_finished(&conn, &state.db_path, &thread_id, &run_id, "ok", None);
@@ -7709,6 +7997,7 @@ fn main() {
       set_agent_mode_cmd,
       respond_permission_cmd,
       decide_tool_call_cmd,
+      decide_inference_fallback_cmd,
       get_auto_approve_write_edit_cmd,
       set_auto_approve_write_edit_cmd,
       cancel_run_cmd,
