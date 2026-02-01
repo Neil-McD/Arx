@@ -9546,9 +9546,6 @@ function App() {
             {unreadCount > 0 && activePage !== "community" && (
               <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
             )}
-            {workspaceLensUi.inFlight && activePage === "workspace" && (
-              <span className="community-btn-spinner" aria-hidden="true" />
-            )}
           </button>
         </div>
       </header>
