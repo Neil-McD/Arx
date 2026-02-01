@@ -981,6 +981,7 @@ function App() {
   const [editingMessagePrefix, setEditingMessagePrefix] = useState<string | null>(null);
   const [resourceSuccess, setResourceSuccess] = useState(false);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
+  const [appToast, setAppToast] = useState<string | null>(null);
   const [taskPlan, setTaskPlan] = useState<TaskPlanPayload | null>(null);
 	  const [unreadCount, setUnreadCount] = useState(0);
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
@@ -1026,6 +1027,7 @@ function App() {
   const [expandedCommandIds, setExpandedCommandIds] = useState<Set<string>>(new Set());
   const [actionErrors] = useState<Record<string, string>>({});
   const memoryToastTimeoutRef = useRef<number | null>(null);
+  const appToastTimeoutRef = useRef<number | null>(null);
   const [execPolicyRules, setExecPolicyRules] = useState("");
   const [isSavingExecPolicy, setIsSavingExecPolicy] = useState(false);
   const [execPolicyError, setExecPolicyError] = useState<string | null>(null);
@@ -6615,6 +6617,16 @@ function App() {
   }
 
 	  function openCreateCommunityModal() {
+	    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
+	    const max = builderBillingStatus?.max_communities ?? 0;
+	    const ownedCount = communities.reduce(
+	      (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
+	      0,
+	    );
+	    if (tier === "pro" && max > 0 && ownedCount >= max) {
+	      showAppToastMessage("You've built the maximum number of communities");
+	      return;
+	    }
 	    setCreateCommunityError(null);
 	    const draft = loadCreateCommunityDraft();
 	    const currentUserId = supabaseSession?.user.id ?? null;
@@ -6637,6 +6649,18 @@ function App() {
 	  function closeCreateCommunityModal() {
 	    setShowCreateCommunityModal(false);
 	    setCreateCommunityError(null);
+	  }
+
+	  function showAppToastMessage(message: string) {
+	    if (appToastTimeoutRef.current) {
+	      window.clearTimeout(appToastTimeoutRef.current);
+	      appToastTimeoutRef.current = null;
+	    }
+	    setAppToast(message);
+	    appToastTimeoutRef.current = window.setTimeout(() => {
+	      setAppToast(null);
+	      appToastTimeoutRef.current = null;
+	    }, 2400);
 	  }
 
 	  function buildCreateCommunityDraftFromState(): CreateCommunityDraft | null {
@@ -9349,6 +9373,11 @@ function App() {
           </button>
         </div>
       </header>
+      {appToast && (
+        <div className="app-toast" role="status" aria-live="polite">
+          <div className="app-toast-inner">{appToast}</div>
+        </div>
+      )}
       <div
         className={`app-shell${activePage === "workspace" ? " desktop-sessions-layout" : ""}${showCommunityRail ? " with-community-rail" : ""}${((activePage === "workspace" && !showSidePanel) || activePage === "discover") ? " no-left" : ""}${(activePage === "workspace" || !showCommunityPanel) ? " no-right" : ""}${sessionsCompact ? " sessions-compact" : ""}`}
       >
@@ -10145,13 +10174,13 @@ function App() {
                     }}
                     disabled={!activeCommunity}
                   />
-                  <input
-                    type="text"
-                    placeholder="Optional link or video URL (YouTube/Wistia)"
-                    value={resourceUrlInput}
-                    onChange={(event) => setResourceUrlInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
+                    <input
+                      type="text"
+                      placeholder="Embed video (YouTube/Wistia URL)"
+                      value={resourceUrlInput}
+                      onChange={(event) => setResourceUrlInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
                         void handleSaveCommunityResource();
                       }

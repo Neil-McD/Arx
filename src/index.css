@@ -12,6 +12,7 @@
   --bg-app: #ffffff;
   --bg-header: #ffffff;
   --bg-panel: #ffffff;
+  --bg-modal: #ffffff;
   --bg-workspace: #f7f7f8;
   --bg-card: #ffffff;
   --bg-card-alt: #fafafa;
@@ -64,6 +65,7 @@
   --bg-app: #1a1a1a;
   --bg-header: rgba(18, 18, 18, 0.95);
   --bg-panel: rgba(24, 24, 24, 0.9);
+  --bg-modal: rgba(20, 20, 20, 0.98);
   --bg-workspace: rgba(30, 30, 30, 0.95);
   --bg-card: rgba(42, 42, 42, 0.9);
   --bg-card-solid: #2a2a2a;
@@ -117,6 +119,7 @@
   --bg-app: #f0ede5;
   --bg-header: #f0ede5;
   --bg-panel: #f0ede5;
+  --bg-modal: #f0ede5;
   --bg-workspace: #f0ede5;
   --bg-card: #f5f2ea;
   --bg-card-alt: #f2efe7;
@@ -187,6 +190,7 @@
   --bg-app: #1a1714;
   --bg-header: rgba(20, 18, 15, 0.95);
   --bg-panel: rgba(28, 25, 21, 0.9);
+  --bg-modal: rgba(20, 18, 15, 0.98);
   --bg-workspace: rgba(32, 29, 25, 0.95);
   --bg-card: rgba(42, 38, 34, 0.9);
   --bg-card-solid: #2a2622;
@@ -661,6 +665,12 @@ html, body {
 }
 
 .community-rail-initials {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.2px;
@@ -2344,6 +2354,29 @@ button.chat-reply-quote:hover {
   pointer-events: none;
 }
 
+/* App toast (neutral) */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.app-toast-inner {
+  background: var(--bg-modal, var(--bg-panel));
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 /* Pending purchases banner */
 .pending-purchase-banner {
   margin: 12px 16px;
@@ -3806,9 +3839,11 @@ button.chat-reply-quote:hover {
   max-height: min(80vh, 720px);
   overflow: hidden;
   border-radius: 12px;
-  background: var(--bg-panel);
+  background: var(--bg-modal, var(--bg-panel));
   border: 1px solid var(--border-default);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
   display: flex;
   flex-direction: column;
 }
