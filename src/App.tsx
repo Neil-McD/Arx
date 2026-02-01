@@ -198,6 +198,14 @@ type ModelToggle = {
   enabled: boolean;
 };
 
+type ModelRegistryListRow = {
+  id: string;
+  provider: string | null;
+  display_name: string | null;
+  sort_order: number | null;
+  enabled: boolean | null;
+};
+
 type ProviderKey = {
   id: string;
   label: string;
@@ -723,6 +731,7 @@ function App() {
   >("chat");
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
+  const [modelProviderById, setModelProviderById] = useState<Record<string, ProviderKey["id"]>>({});
   const [toolDebug] = useState<ToolDebug | null>(null);
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([
     { id: "openai", label: "OpenAI", hasKey: false, inputValue: "", error: null },
@@ -1806,6 +1815,7 @@ function App() {
 	      scheduleProviderKeySync(current, "focus");
 	      void loadBuilderBillingStatus(current);
         void loadSelfProfile(current);
+        void loadModelRegistry(current);
 	    };
 	    window.addEventListener("focus", onFocus);
 		    return () => window.removeEventListener("focus", onFocus);
@@ -1819,6 +1829,7 @@ function App() {
       void loadPendingPurchaseClaims(supabaseSession);
       void loadBuilderBillingStatus(supabaseSession);
       void loadSelfProfile(supabaseSession);
+      void loadModelRegistry(supabaseSession);
       scheduleProviderKeySync(supabaseSession, "session");
 	  }, [supabaseSession]);
 
@@ -3721,9 +3732,64 @@ function App() {
     setProviderKeys(updated);
   }
 
+  function normalizeProviderKeyId(value: string): ProviderKey["id"] | null {
+    const v = (value ?? "").trim().toLowerCase();
+    if (v === "openai") return "openai";
+    if (v === "anthropic") return "anthropic";
+    if (v === "google") return "google";
+    if (v === "x-ai" || v === "xai") return "x-ai";
+    return null;
+  }
+
+  async function loadModelRegistry(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/model_registry?select=id,provider,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
+        { method: "GET" },
+        session,
+      );
+      if (!response.ok) return;
+      const rows = (await response.json()) as Array<Partial<ModelRegistryListRow>>;
+      const catalog = rows
+        .map((row) => {
+          const id = typeof row?.id === "string" ? row.id.trim() : "";
+          if (!id) return null;
+          const label = (typeof row.display_name === "string" ? row.display_name.trim() : "") || id;
+          return { id, label, enabled: true } satisfies ModelToggle;
+        })
+        .filter(Boolean) as ModelToggle[];
+      if (!catalog.length) return;
+
+      const nextProviderById: Record<string, ProviderKey["id"]> = {};
+      for (const row of rows) {
+        const id = typeof row?.id === "string" ? row.id.trim() : "";
+        if (!id) continue;
+        const provider = typeof row?.provider === "string" ? normalizeProviderKeyId(row.provider) : null;
+        if (!provider) continue;
+        nextProviderById[id] = provider;
+      }
+
+      const prevById = new Map(modelToggles.map((t) => [t.id, t]));
+      const merged = catalog.map((toggle) => {
+        const existing = prevById.get(toggle.id);
+        return existing ? { ...toggle, enabled: existing.enabled } : toggle;
+      });
+
+      setModelProviderById(nextProviderById);
+      setModelToggles(merged);
+      await invoke("set_model_toggles_cmd", { toggles: merged }).catch(() => null);
+    } catch {
+      // ignore
+    }
+  }
+
   function providerIdForModelId(modelId: string): ProviderKey["id"] | null {
     const id = (modelId ?? "").trim().toLowerCase();
     if (!id) return null;
+    const mappedProvider = modelProviderById[id];
+    if (mappedProvider) return mappedProvider;
     if (id.startsWith("gpt-")) return "openai";
     if (id.startsWith("sonnet-") || id.startsWith("opus-")) return "anthropic";
     if (id.startsWith("gemini-")) return "google";
@@ -7978,10 +8044,6 @@ function App() {
 
   function handleSelectActiveCommunity(next: string) {
     if (!confirmDiscardUnsavedCommunitySettings(next)) return;
-    setActiveView("home");
-    setActivePage("community");
-    setCommunityTab("chat");
-    setUnreadCount(0);
     setActiveCommunityId(next);
     if (!activeThreadId) return;
     if (!pinnedThreadCommunityId) return;
@@ -13469,7 +13531,16 @@ function App() {
 	                          </div>
 	                        )}
 	                        {!isLoadingResources && libraryResources.length === 0 && (
-	                          <div className="chat-empty">Pin resources to add them to the library.</div>
+	                          <div className="chat-empty-state">
+                              <div className="chat-empty-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
+                                  <path d="M4 5.5V19.5" />
+                                </svg>
+                              </div>
+                              <div className="chat-empty-title">Welcome to the library</div>
+                              <div className="chat-empty-text">Pin resources to add them here.</div>
+                            </div>
 	                        )}
 	                        {!isLoadingResources &&
 	                          libraryResources.map((resource) => (
@@ -13542,7 +13613,13 @@ function App() {
                 {resourceSuccess && (
                   <div className="success-toast">Resource saved successfully!</div>
                 )}
-                <div className="resource-list">
+                <div
+                  className={
+                    !isLoadingResources && communityResources.length === 0
+                      ? "resource-list resource-list-empty"
+                      : "resource-list"
+                  }
+                >
                   {isLoadingResources && (
                     <div className="chat-loading">
                       <div className="loading-spinner" />
@@ -13550,7 +13627,20 @@ function App() {
                     </div>
                   )}
                   {!isLoadingResources && communityResources.length === 0 && (
-                    <div className="chat-empty">No resources yet.</div>
+                    <div className="chat-empty-state">
+                      <div className="chat-empty-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                          <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+                        </svg>
+                      </div>
+                      <div className="chat-empty-title">
+                        Welcome to {activeCommunity ? activeCommunity.name : "your"} resources
+                      </div>
+                      <div className="chat-empty-text">
+                        Share links, posts, and videos with your members. Add your first resource to get started.
+                      </div>
+                    </div>
                   )}
                   {!isLoadingResources && communityResources.map((resource) => (
                     <div key={resource.id} className="resource-item">

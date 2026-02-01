@@ -59,6 +59,16 @@ struct PlatformProxyConfig {
   access_token: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct ModelRegistryApiRow {
+  id: String,
+  provider: Option<String>,
+  provider_model: Option<String>,
+  enabled: Option<bool>,
+  platform_enabled: Option<bool>,
+  byok_enabled: Option<bool>,
+}
+
 fn normalize_platform_provider(input: &str) -> Result<PlatformProvider, String> {
   let raw = input.trim().to_lowercase();
   match raw.as_str() {
@@ -129,6 +139,79 @@ fn resolve_platform_model_for_alias(alias_model_id: &str) -> Result<PlatformMode
   }
 
   Err("Missing PLATFORM_MODEL_MAP_JSON".to_string())
+}
+
+async fn fetch_model_registry_row(
+  proxy: &PlatformProxyConfig,
+  model_id: &str,
+) -> Option<ModelRegistryApiRow> {
+  let cleaned = model_id.trim();
+  if cleaned.is_empty() {
+    return None;
+  }
+
+  let base = format!(
+    "{}/rest/v1/model_registry",
+    proxy.supabase_url.trim_end_matches('/')
+  );
+  let id_filter = format!("eq.{}", cleaned);
+  let url = reqwest::Url::parse_with_params(
+    &base,
+    [
+      ("select", "id,provider,provider_model,enabled,platform_enabled,byok_enabled"),
+      ("id", id_filter.as_str()),
+      ("limit", "1"),
+    ],
+  )
+  .ok()?;
+
+  let res = reqwest::Client::new()
+    .get(url)
+    .header("apikey", proxy.supabase_anon_key.clone())
+    .bearer_auth(proxy.access_token.clone())
+    .send()
+    .await
+    .ok()?;
+  if !res.status().is_success() {
+    return None;
+  }
+
+  let rows: Vec<ModelRegistryApiRow> = res.json().await.ok()?;
+  rows.into_iter().next()
+}
+
+async fn resolve_platform_model_for_alias_with_registry(
+  alias_model_id: &str,
+  platform_proxy: Option<&PlatformProxyConfig>,
+) -> Result<PlatformModelRef, String> {
+  let cleaned = alias_model_id.trim();
+  if cleaned.is_empty() {
+    return Err("model_id is required".to_string());
+  }
+  if cleaned.contains('/') {
+    return parse_platform_model_ref(cleaned);
+  }
+
+  if let Some(proxy) = platform_proxy {
+    if let Some(row) = fetch_model_registry_row(proxy, cleaned).await {
+      if row.enabled == Some(false) {
+        return Err("Model is not available.".to_string());
+      }
+      let provider_raw = row.provider.unwrap_or_default();
+      let provider = normalize_platform_provider(&provider_raw)?;
+      let provider_model = row.provider_model.unwrap_or_default().trim().to_string();
+      if !provider_model.is_empty() {
+        return Ok(PlatformModelRef {
+          provider,
+          model: provider_model.clone(),
+          ref_str: format!("{}/{}", platform_provider_id(provider), provider_model),
+        });
+      }
+    }
+  }
+
+  // Transition fallback: allow legacy env mapping until provider_model is populated in model_registry.
+  resolve_platform_model_for_alias(cleaned)
 }
 
 fn platform_provider_key_name(provider: PlatformProvider) -> &'static str {
@@ -3333,14 +3416,42 @@ async fn send_turn_openrouter_messages_agent(
 	    Some(selected_model_id),
 	  );
 
-  let resolved_model = resolve_platform_model_for_alias(selected_model_id).ok();
-  let provider_id = resolved_model
-    .as_ref()
-    .map(|m| platform_provider_id(m.provider))
-    .unwrap_or("unknown");
-  let provider_model_ref = resolved_model
-    .as_ref()
-    .map(|m| m.ref_str.as_str());
+  let model_ref = match resolve_platform_model_for_alias_with_registry(selected_model_id, platform_proxy.as_ref()).await {
+    Ok(v) => v,
+    Err(err) => {
+      append_openrouter_messages_assistant_message(
+        &conn,
+        db_path,
+        thread_id,
+        &format!("Engine error: {}", err),
+        selected_model_id,
+        &run_id,
+        &[],
+        "unknown",
+        None,
+        OPENROUTER_MAX_TOKENS,
+        None,
+      );
+      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_model_mapping"));
+      let _ = window.emit(
+        "openrouter-turn-finished",
+        SessionIdPayload {
+          session_id: thread_id.to_string(),
+        },
+      );
+      return Ok(SendTurnResult {
+        thread_id: thread_id.to_string(),
+        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+        engine_input_event_id: None,
+        engine_input_seq: None,
+        run_id: Some(run_id),
+      });
+    }
+  };
+  let provider_id = platform_provider_id(model_ref.provider);
+  let provider_model_ref_str = model_ref.ref_str.clone();
+  let provider_model_ref = Some(provider_model_ref_str.as_str());
+  let provider_model_id = model_ref.model.clone();
 
   let input_trim = input.trim();
   let (input_redacted, input_report) = context::redact_secrets(input_trim);
@@ -3379,43 +3490,6 @@ async fn send_turn_openrouter_messages_agent(
   } else {
     input_redacted.trim().to_string()
   };
-
-  let model_ref = match resolve_platform_model_for_alias(selected_model_id) {
-    Ok(v) => v,
-    Err(err) => {
-      append_openrouter_messages_assistant_message(
-        &conn,
-        db_path,
-        thread_id,
-        &format!("Engine error: {}", err),
-        selected_model_id,
-        &run_id,
-        &[],
-        "unknown",
-        None,
-        OPENROUTER_MAX_TOKENS,
-        None,
-      );
-      append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_model_mapping"));
-      let _ = window.emit(
-        "openrouter-turn-finished",
-        SessionIdPayload {
-          session_id: thread_id.to_string(),
-        },
-      );
-      return Ok(SendTurnResult {
-        thread_id: thread_id.to_string(),
-        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
-        engine_input_event_id: None,
-        engine_input_seq: None,
-        run_id: Some(run_id),
-      });
-    }
-  };
-  let provider_id = platform_provider_id(model_ref.provider);
-  let provider_model_ref_str = model_ref.ref_str.clone();
-  let provider_model_ref = Some(provider_model_ref_str.as_str());
-  let provider_model_id = model_ref.model.clone();
 
   let mut platform_available_for_run = platform_proxy.as_ref().is_some();
   let platform_agent_infer_url = platform_proxy

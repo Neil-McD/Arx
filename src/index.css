@@ -2464,8 +2464,11 @@ button.chat-reply-quote:hover {
 
 .resources-panel {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 16px;
   padding: 24px;
+  flex: 1;
+  min-height: 0;
 }
 
 .resources-header-row {
@@ -2636,6 +2639,20 @@ button.chat-reply-quote:hover {
   align-content: start;
   justify-content: start;
   grid-template-columns: repeat(auto-fill, minmax(320px, 420px));
+  min-height: 0;
+  overflow: auto;
+}
+
+.resource-list.resource-list-empty {
+  grid-template-columns: 1fr;
+  justify-content: stretch;
+  align-content: center;
+}
+
+.resource-list.resource-list-empty .chat-empty-state {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: 100%;
 }
 
 .resource-item {
@@ -2922,6 +2939,8 @@ button.chat-reply-quote:hover {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .library-layout {

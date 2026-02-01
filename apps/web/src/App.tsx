@@ -349,6 +349,12 @@ type ModelToggle = {
   enabled: boolean;
 };
 
+type ModelRegistryListRow = {
+  id: string;
+  display_name: string | null;
+  sort_order: number | null;
+};
+
 type ProviderKey = {
   id: "openrouter";
   label: string;
@@ -457,6 +463,28 @@ type PublicRoute =
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
 
+type AppPage = "workspace" | "community" | "discover";
+type AppView = "home" | "settings";
+type CommunityTab =
+  | "chat"
+  | "library"
+  | "resources"
+  | "members"
+  | "settings"
+  | "ai_agent"
+  | "analytics"
+  | "automations";
+
+type AppRouteState = {
+  page: AppPage;
+  view: AppView;
+  settingsPage: SettingsPage;
+  communityId: string | null;
+  communityTab: CommunityTab;
+  threadId: string | null;
+  threadIsExplicit: boolean;
+};
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
@@ -519,6 +547,81 @@ function readPublicRouteFromLocation(): PublicRoute {
     return { kind: "claim", token };
   }
   return { kind: "app" };
+}
+
+function readAppRouteFromLocation(): AppRouteState {
+  const rawHash = window.location.hash ? window.location.hash.slice(1) : "";
+  const normalized = rawHash.replace(/^\/+/, "").replace(/^\?/, "");
+  const params = new URLSearchParams(normalized);
+
+  const rawPage = (params.get("page") ?? "").trim();
+  const page: AppPage = rawPage === "community" ? "community" : rawPage === "discover" ? "discover" : "workspace";
+
+  const rawView = (params.get("view") ?? "").trim();
+  const view: AppView = rawView === "settings" ? "settings" : "home";
+
+  const rawSettings = (params.get("settings") ?? "").trim();
+  const settingsPage: SettingsPage =
+    rawSettings === "account"
+      ? "account"
+      : rawSettings === "execution"
+        ? "execution"
+        : rawSettings === "memory"
+          ? "memory"
+          : rawSettings === "appearance"
+            ? "appearance"
+            : "models";
+
+  const rawCommunity = (params.get("community") ?? "").trim();
+  const communityId = rawCommunity && isUuid(rawCommunity) ? rawCommunity : null;
+
+  const rawCommunityTab = (params.get("ctab") ?? "").trim();
+  const communityTab: CommunityTab =
+    rawCommunityTab === "library"
+      ? "library"
+      : rawCommunityTab === "resources"
+        ? "resources"
+        : rawCommunityTab === "members"
+          ? "members"
+          : rawCommunityTab === "settings"
+            ? "settings"
+            : rawCommunityTab === "ai_agent"
+              ? "ai_agent"
+              : rawCommunityTab === "analytics"
+                ? "analytics"
+                : rawCommunityTab === "automations"
+                  ? "automations"
+                  : "chat";
+
+  const rawThread = (params.get("thread") ?? "").trim();
+  const threadIsExplicit = params.has("thread");
+  const threadId = rawThread === "new" || !rawThread ? null : isUuid(rawThread) ? rawThread : null;
+
+  return { page, view, settingsPage, communityId, communityTab, threadId, threadIsExplicit };
+}
+
+function buildAppRouteHash(state: {
+  page: AppPage;
+  view: AppView;
+  settingsPage: SettingsPage;
+  communityId: string | null;
+  communityTab: CommunityTab;
+  threadToken?: string | null;
+}): string {
+  const params = new URLSearchParams();
+  params.set("page", state.page);
+  params.set("view", state.view);
+  if (state.view === "settings") {
+    params.set("settings", state.settingsPage);
+  }
+  if (state.communityId) {
+    params.set("community", state.communityId);
+    params.set("ctab", state.communityTab);
+  }
+  if (typeof state.threadToken === "string" && state.threadToken.trim()) {
+    params.set("thread", state.threadToken);
+  }
+  return `#${params.toString()}`;
 }
 
 function formatPlanPrice(plan: PublicPlanSummary): string {
@@ -1941,8 +2044,10 @@ function settingsPageLabel(page: SettingsPage): string {
 
 export default function App() {
   const ARX_OWNER_EMAIL = "neilmcdevittd@gmail.com";
+  const initialPublicRoute = readPublicRouteFromLocation();
+  const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
 
-  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
+  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(() => loadPersistedSupabaseSession());
   const [authError, setAuthError] = useState<string | null>(null);
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -1953,11 +2058,11 @@ export default function App() {
   const refreshTimeoutRef = useRef<number | null>(null);
   const lastCheckoutFinalizeSessionIdRef = useRef<string | null>(null);
 
-  const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => readPublicRouteFromLocation());
+  const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
 
-  const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
-  const [activeView, setActiveView] = useState<"home" | "settings">("home");
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
+  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
+  const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "models");
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
@@ -2119,9 +2224,10 @@ export default function App() {
   const [newPersonalMemoryContent, setNewPersonalMemoryContent] = useState("");
   const [newPersonalMemoryScope, setNewPersonalMemoryScope] = useState<"global" | "workspace">("global");
   const [newPersonalMemoryPinned, setNewPersonalMemoryPinned] = useState(false);
+  const [isLoadingCommunities, setIsLoadingCommunities] = useState<boolean>(() => Boolean(supabaseSession));
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
-  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
+  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
@@ -2139,11 +2245,7 @@ export default function App() {
   const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
-  const [communityTab, setCommunityTab] = useState<
-    "chat" | "library" | "resources" | "members" | "settings" | "ai_agent" | "analytics" | "automations"
-  >(
-    "chat"
-  );
+  const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
@@ -2292,11 +2394,11 @@ export default function App() {
     communitySettingsDirtyRef.current = true;
   };
   const confirmDiscardUnsavedCommunitySettings = (nextCommunityId: string | null): boolean => {
-    if (!communitySettingsDirtyRef.current) return true;
+    if (!communitySettingsDirtyRef.current && !communityAgentDraftDirtyRef.current) return true;
     const currentId = activeCommunityId;
     if (!currentId) return true;
     if (!nextCommunityId || nextCommunityId === currentId) return true;
-    return window.confirm("You have unsaved community settings. Discard changes?");
+    return window.confirm("You have unsaved changes. Discard changes?");
   };
 
   const [communityAgentDrafts, setCommunityAgentDrafts] = useState<CommunityAgentDraft[]>([]);
@@ -2311,11 +2413,45 @@ export default function App() {
   );
   const [communityAgentDraftSystemPrompt, setCommunityAgentDraftSystemPrompt] = useState("");
   const [communityAgentPreviewTabId, setCommunityAgentPreviewTabId] = useState<string>("");
+  type CommunityAgentLandingEdit =
+    | { kind: "title" }
+    | { kind: "subtitle" }
+    | { kind: "tab_label"; tabId: string }
+    | { kind: "prompt"; tabId: string; index: number }
+    | { kind: "add_prompt"; tabId: string };
+  const [communityAgentLandingEdit, setCommunityAgentLandingEdit] = useState<CommunityAgentLandingEdit | null>(null);
+  const [communityAgentLandingEditValue, setCommunityAgentLandingEditValue] = useState("");
   const [isSavingCommunityAgentDraft, setIsSavingCommunityAgentDraft] = useState(false);
   const [communityAgentDraftSaveError, setCommunityAgentDraftSaveError] = useState<string | null>(null);
   const communityAgentDraftDirtyRef = useRef(false);
+  const [isCommunityAgentTemplateMenuOpen, setIsCommunityAgentTemplateMenuOpen] = useState(false);
+  const [communityAgentRenamingSlot, setCommunityAgentRenamingSlot] = useState<number | null>(null);
+  const [communityAgentRenamingValue, setCommunityAgentRenamingValue] = useState("");
+  const [communityAgentSavedSlot, setCommunityAgentSavedSlot] = useState<number | null>(null);
+  const communityAgentSavedTimerRef = useRef<number | null>(null);
+  const communityAgentTemplatePickerRef = useRef<HTMLDivElement | null>(null);
   const markCommunityAgentDraftDirty = () => {
     communityAgentDraftDirtyRef.current = true;
+  };
+  const flashCommunityAgentTemplateSaved = (slot: number) => {
+    setCommunityAgentSavedSlot(slot);
+    if (communityAgentSavedTimerRef.current) {
+      window.clearTimeout(communityAgentSavedTimerRef.current);
+    }
+    communityAgentSavedTimerRef.current = window.setTimeout(() => {
+      setCommunityAgentSavedSlot(null);
+      communityAgentSavedTimerRef.current = null;
+    }, 1200);
+  };
+
+  const beginCommunityAgentLandingEdit = (edit: CommunityAgentLandingEdit, value: string) => {
+    setCommunityAgentLandingEdit(edit);
+    setCommunityAgentLandingEditValue(value);
+  };
+
+  const clearCommunityAgentLandingEdit = () => {
+    setCommunityAgentLandingEdit(null);
+    setCommunityAgentLandingEditValue("");
   };
 
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
@@ -2324,7 +2460,16 @@ export default function App() {
   const [isLeavingCommunity, setIsLeavingCommunity] = useState(false);
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
+  const initialWorkspaceWantsNewChat = Boolean(
+    initialAppRoute && initialAppRoute.threadIsExplicit && initialAppRoute.threadId === null,
+  );
+  const [workspaceWantsNewChat, setWorkspaceWantsNewChat] = useState<boolean>(initialWorkspaceWantsNewChat);
+  const workspaceWantsNewChatRef = useRef<boolean>(initialWorkspaceWantsNewChat);
+  const setWorkspaceWantsNewChatMode = (next: boolean) => {
+    workspaceWantsNewChatRef.current = next;
+    setWorkspaceWantsNewChat(next);
+  };
   const threadsHydratedRef = useRef(false);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
@@ -2553,6 +2698,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (publicRoute.kind !== "app") return;
+
+    const url = new URL(window.location.href);
+    const threadToken =
+      activeThreadId ?? (workspaceWantsNewChat || threadsHydratedRef.current ? "new" : null);
+
+    const nextHash = buildAppRouteHash({
+      page: activePage,
+      view: activeView,
+      settingsPage,
+      communityId: activeCommunityId,
+      communityTab,
+      threadToken,
+    });
+
+    if (url.hash === nextHash) return;
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${nextHash}`);
+  }, [publicRoute.kind, activePage, activeView, settingsPage, activeCommunityId, communityTab, activeThreadId, workspaceWantsNewChat]);
+
+  useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
   }, [workspaceAttachments]);
 
@@ -2565,6 +2730,7 @@ export default function App() {
       const current = sessionRef.current;
       if (!current) return;
       void loadProviderKeyStatus(current);
+      void loadModelRegistry(current);
       void loadBuilderBillingStatus(current);
       void loadCommunities(current);
     };
@@ -2652,12 +2818,7 @@ export default function App() {
     }
   }, [activeModelId]);
 
-  useEffect(() => {
-    const stored = loadPersistedSupabaseSession();
-    if (stored) {
-      setSupabaseSession(stored);
-    }
-  }, []);
+  // Supabase session is bootstrapped from localStorage in useState(), so refresh keeps app state stable.
 
   useLayoutEffect(() => {
     const el = workspaceAskInputRef.current;
@@ -2687,6 +2848,49 @@ export default function App() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isModelPickerOpen]);
+
+  useEffect(() => {
+    if (!isCommunityAgentTemplateMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const root = communityAgentTemplatePickerRef.current;
+      if (!root) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!root.contains(target)) setIsCommunityAgentTemplateMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsCommunityAgentTemplateMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCommunityAgentTemplateMenuOpen]);
+
+  useEffect(() => {
+    if (isCommunityAgentTemplateMenuOpen) return;
+    setCommunityAgentRenamingSlot(null);
+    setCommunityAgentRenamingValue("");
+  }, [isCommunityAgentTemplateMenuOpen]);
+
+  useEffect(() => {
+    const first = communityAgentDraftLanding.tabs[0]?.id ?? "";
+    if (!first) return;
+    if (!communityAgentDraftLanding.tabs.some((t) => t.id === communityAgentPreviewTabId)) {
+      setCommunityAgentPreviewTabId(first);
+    }
+  }, [communityAgentDraftLanding.tabs, communityAgentPreviewTabId]);
+
+  useEffect(() => {
+    return () => {
+      if (communityAgentSavedTimerRef.current) {
+        window.clearTimeout(communityAgentSavedTimerRef.current);
+        communityAgentSavedTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const parsed = parseOAuthHash();
@@ -2740,14 +2944,17 @@ export default function App() {
     void loadCommunities(supabaseSession);
     void loadThreads(supabaseSession);
     void loadProviderKeyStatus(supabaseSession);
+    void loadModelRegistry(supabaseSession);
     void loadSelfProfile(supabaseSession);
   }, [supabaseSession]);
 
   useEffect(() => {
     if (supabaseSession) return;
     setCommunities([]);
+    setIsLoadingCommunities(false);
     setActiveCommunityId(null);
     setThreads([]);
+    setWorkspaceWantsNewChatMode(false);
     setActiveThreadId(null);
     threadsHydratedRef.current = false;
     setThreadMessages([]);
@@ -4028,6 +4235,7 @@ export default function App() {
     clearPersistedSupabaseSession();
     setSupabaseSession(null);
     setCommunities([]);
+    setIsLoadingCommunities(false);
     setCommunityRoleById({});
     setActiveCommunityId(null);
     setCommunityTab("chat");
@@ -4079,6 +4287,7 @@ export default function App() {
     setIsSettingsBannerDragOver(false);
     setIsSettingsAvatarDragOver(false);
     setThreads([]);
+    setWorkspaceWantsNewChatMode(false);
     setActiveThreadId(null);
     setThreadMessages([]);
     streamingAbortRef.current?.abort();
@@ -4957,6 +5166,7 @@ export default function App() {
     if (!url) return;
     const userId = getSupabaseAuthUid(session);
     try {
+      setIsLoadingCommunities(true);
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/community_memberships?select=community_id,role,communities(id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at)&user_id=eq.${userId}`,
         {},
@@ -4983,7 +5193,10 @@ export default function App() {
       }
     } catch (error) {
       console.warn("Failed to load communities:", error);
-      setCommunities([]);
+      // Keep the previous list so the rail doesn't flicker to "empty" on transient failures.
+      // (The canonical list will refresh on the next successful request.)
+    } finally {
+      setIsLoadingCommunities(false);
     }
   }
 
@@ -5037,14 +5250,19 @@ export default function App() {
       // Default selection (first load only): open the most recent real thread.
       if (!activeThreadId) {
         if (!threadsHydratedRef.current) {
-          setActiveThreadId(visible[0]?.id ?? null);
+          if (!workspaceWantsNewChatRef.current) {
+            setActiveThreadId(visible[0]?.id ?? null);
+          }
         }
         threadsHydratedRef.current = true;
         return;
       }
 
-      // If the selected thread disappeared (or is an empty stub), fall back to the latest real chat.
-      if (!visible.some((t) => t.id === activeThreadId)) {
+      // If the selected thread is an empty stub, fall back to the latest real chat.
+      // When the active thread isn't in the list (e.g., older than the current limit),
+      // keep the selection so refresh/deep links don't jump elsewhere.
+      const selected = list.find((t) => t.id === activeThreadId) ?? null;
+      if (selected && selected.last_seq <= 0) {
         setActiveThreadId(visible[0]?.id ?? null);
       }
       threadsHydratedRef.current = true;
@@ -5105,6 +5323,42 @@ export default function App() {
     }
   }
 
+  async function loadModelRegistry(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/model_registry?select=id,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
+        {},
+        session,
+      );
+      if (!response.ok) return;
+      const rows = (await response.json()) as Array<Partial<ModelRegistryListRow>>;
+      const catalog = rows
+        .map((row) => {
+          const id = typeof row?.id === "string" ? row.id.trim() : "";
+          if (!id) return null;
+          const label =
+            (typeof row.display_name === "string" ? row.display_name.trim() : "") ||
+            formatModelLabel(id) ||
+            id;
+          return { id, label, enabled: true } satisfies ModelToggle;
+        })
+        .filter(Boolean) as ModelToggle[];
+
+      if (!catalog.length) return;
+      setModelToggles((prev) => {
+        const prevById = new Map(prev.map((t) => [t.id, t]));
+        return catalog.map((toggle) => {
+          const existing = prevById.get(toggle.id);
+          return existing ? { ...toggle, enabled: existing.enabled } : toggle;
+        });
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   async function createThread(session: SupabaseSession): Promise<ThreadRecord | null> {
     const url = getSupabaseUrl();
     if (!url) return null;
@@ -5151,6 +5405,7 @@ export default function App() {
         updated_at: nowSec
       };
       setThreads((prev) => [record, ...prev]);
+      setWorkspaceWantsNewChatMode(false);
       setActiveThreadId(id);
       return record;
     } catch (error) {
@@ -5606,6 +5861,7 @@ export default function App() {
       setThreadError(message);
       if (startedInDraft && createdThreadId && !postedUserMessage) {
         setThreads((prev) => prev.filter((t) => t.id !== createdThreadId));
+        setWorkspaceWantsNewChatMode(true);
         setActiveThreadId(null);
       }
       const normalized = message.toLowerCase();
@@ -6693,7 +6949,7 @@ export default function App() {
   }
 
   async function handleSendCommunityMessage() {
-    if (!supabaseSession || !activeCommunityId) return;
+    if (!supabaseSession || !activeCommunityId) return false;
     const rawText = communityMessageInput.trim();
     const attachmentsToSend = [...communityAttachmentsRef.current];
     if (!rawText && attachmentsToSend.length === 0) return;
@@ -6861,6 +7117,7 @@ export default function App() {
     setCommunityAgentDraftSaveError(null);
     communityAgentDraftDirtyRef.current = false;
     setCommunityAgentPreviewTabId(landing.tabs[0]?.id ?? "");
+    clearCommunityAgentLandingEdit();
   }
 
   function normalizeCommunityAgentDraftForSave(draft: CommunityAgentLanding): CommunityAgentLanding | null {
@@ -6988,6 +7245,66 @@ export default function App() {
       setCommunityAgentDraftSaveError(message);
     } finally {
       setIsSavingCommunityAgentDraft(false);
+    }
+  }
+
+  async function persistCommunityAgentTemplateName(slot: number, nextName: string): Promise<boolean> {
+    if (!supabaseSession || !activeCommunityId) return;
+
+    const row = communityAgentDrafts.find((d) => d.slot === slot);
+    if (!row) return false;
+
+    const url = getSupabaseUrl();
+    if (!url) return false;
+
+    try {
+      const normalized = nextName.trim();
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/upsert_community_agent_draft`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            p_community_id: activeCommunityId,
+            p_slot: slot,
+            p_name: normalized ? normalized : null,
+            p_landing_json: row.landing_json ?? {},
+            p_system_prompt: row.system_prompt ?? "",
+          }),
+        },
+        supabaseSession,
+      );
+      if (!response.ok) {
+        const message = await readSupabaseError(response);
+        setCommunityAgentDraftSaveError(message);
+        return false;
+      }
+      const rows = (await response.json()) as Array<{ id: string; slot: number; is_active: boolean; updated_at: string }>;
+      const updated = rows[0];
+      if (!updated) return false;
+      setCommunityAgentDrafts((prev) =>
+        prev.map((d) =>
+          d.slot === slot
+            ? {
+                ...d,
+                id: updated.id,
+                name: normalized ? normalized : null,
+                is_active: updated.is_active,
+                updated_at: updated.updated_at,
+              }
+            : d,
+        ),
+      );
+      return true;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to rename template.";
+      setCommunityAgentDraftSaveError(message);
+      return false;
     }
   }
 
@@ -9018,9 +9335,11 @@ export default function App() {
                     }
                     // ChatGPT-style: "New chat" is a draft state until the first message is sent.
                     if (!activeThreadId) {
+                      setWorkspaceWantsNewChatMode(true);
                       workspaceAskInputRef.current?.focus();
                       return;
                     }
+                    setWorkspaceWantsNewChatMode(true);
                     setActiveThreadId(null);
                     workspaceAskInputRef.current?.focus();
                   }}
@@ -9077,7 +9396,10 @@ export default function App() {
                       <div
                         key={thread.id}
                         className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                        onClick={() => setActiveThreadId(thread.id)}
+                        onClick={() => {
+                          setWorkspaceWantsNewChatMode(false);
+                          setActiveThreadId(thread.id);
+                        }}
                       >
                         <div className="session-content">
                           <div className="session-title">{(thread.title ?? "").trim() || "Untitled thread"}</div>
@@ -9125,10 +9447,16 @@ export default function App() {
 	                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
 	                  onClick={() => {
 	                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-	                    setActiveView("home");
 	                    setActiveCommunityId(community.id);
-	                    setActivePage("community");
-	                    setCommunityTab("chat");
+                      // Keep the user on their current page; only the selected community context changes.
+                      if (activePage === "workspace") {
+                        const currentThread = activeThreadId ? threads.find((t) => t.id === activeThreadId) ?? null : null;
+                        const currentThreadCommunityId = currentThread?.community_id ?? null;
+                        if (currentThreadCommunityId !== community.id) {
+                          setWorkspaceWantsNewChatMode(true);
+                          setActiveThreadId(null);
+                        }
+                      }
 	                  }}
 	                  title={community.name}
                 >
@@ -9144,9 +9472,11 @@ export default function App() {
                   )}
                 </button>
               ))}
-              {communities.length === 0 && (
-                <div className="community-rail-empty">
-                  {supabaseSession ? "No communities yet." : "Sign in to access communities."}
+              {communities.length === 0 && isLoadingCommunities && (
+                <div className="community-rail-skeleton" aria-hidden="true">
+                  <div className="community-rail-skeleton-item" />
+                  <div className="community-rail-skeleton-item" />
+                  <div className="community-rail-skeleton-item" />
                 </div>
               )}
               <div className="community-rail-divider" />
@@ -11829,15 +12159,20 @@ export default function App() {
                       ) : (
                         <>
                           {(() => {
-                            const activeSlot = communityAgentDrafts.find((d) => d.is_active)?.slot ?? null;
                             const savedRow =
                               communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot) ?? null;
                             const canSetLive = Boolean(savedRow && !savedRow.is_active);
-                            const previewLanding =
-                              normalizeCommunityAgentDraftForSave(communityAgentDraftLanding) ?? communityAgentDraftLanding;
+                            const previewLanding = communityAgentDraftLanding;
+                            const previewTitle = previewLanding.title.trim()
+                              ? previewLanding.title
+                              : DEFAULT_EMPTY_THREAD_LANDING.title;
+                            const previewSubtitle = previewLanding.subtitle.trim()
+                              ? previewLanding.subtitle
+                              : DEFAULT_EMPTY_THREAD_LANDING.subtitle;
+                            const previewTabs = previewLanding.tabs.length ? previewLanding.tabs : DEFAULT_EMPTY_THREAD_LANDING.tabs;
                             const previewActiveTab =
-                              previewLanding.tabs.find((t) => t.id === communityAgentPreviewTabId) ??
-                              previewLanding.tabs[0];
+                              previewTabs.find((t) => t.id === communityAgentPreviewTabId) ??
+                              previewTabs[0];
                             const previewPrompts = previewActiveTab?.prompts ?? [];
 
                             return (
@@ -11856,236 +12191,696 @@ export default function App() {
                                     const nextAvailableSlot =
                                       [1, 2, 3].find((slot) => !reservedSlots.has(slot)) ?? null;
 
-                                    const baseOptions = [...communityAgentDrafts]
-                                      .sort((a, b) => a.slot - b.slot)
-                                      .map((d) => {
-                                        const name = (d.name ?? "").trim() || `Template ${d.slot}`;
-                                        return {
-                                          slot: d.slot,
-                                          label: `${name}${d.is_active ? " (Live)" : ""}`,
-                                        };
-                                      });
+                                  return (
+                                      <div className="agent-template-picker" ref={communityAgentTemplatePickerRef}>
+                                          {(() => {
+                                            const selectedLabel =
+                                              communityAgentDraftName.trim() ||
+                                              communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot)?.name?.trim() ||
+                                              `Template ${communityAgentSelectedSlot}`;
+                                            const selectedIsLive = Boolean(
+                                              communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot)?.is_active,
+                                            );
 
-                                    // If the selected slot hasn't been saved yet, keep it selectable in the dropdown.
-                                    const hasSelectedOption = baseOptions.some(
-                                      (opt) => opt.slot === communityAgentSelectedSlot,
-                                    );
-                                    const options = hasSelectedOption
-                                      ? baseOptions
-                                      : [
-                                          ...baseOptions,
-                                          {
-                                            slot: communityAgentSelectedSlot,
-                                            label: `${
-                                              communityAgentDraftName.trim() || `Template ${communityAgentSelectedSlot}`
-                                            } (Unsaved)`,
-                                          },
-                                        ].sort((a, b) => a.slot - b.slot);
+                                            const menuSlots = Array.from(
+                                              new Set([...communityAgentDrafts.map((d) => d.slot), communityAgentSelectedSlot]),
+                                            ).sort((a, b) => a - b);
 
-                                    return (
-                                      <div className="agent-template-picker">
-                                        <span className="agent-template-label">Template</span>
-                                        <select
-                                          className="select-styled agent-template-select"
-                                          value={String(communityAgentSelectedSlot)}
-                                          onChange={(event) => {
-                                            const value = event.target.value;
                                             const confirmDiscard = () => {
                                               if (!communityAgentDraftDirtyRef.current) return true;
                                               return window.confirm("Discard unsaved changes?");
                                             };
 
-                                            if (value === "__new") {
-                                              if (!nextAvailableSlot) return;
+                                            const selectSlot = (slot: number) => {
+                                              if (slot === communityAgentSelectedSlot) return;
                                               if (!confirmDiscard()) return;
-                                              hydrateCommunityAgentEditor(nextAvailableSlot, communityAgentDrafts);
-                                              return;
-                                            }
+                                              hydrateCommunityAgentEditor(slot, communityAgentDrafts);
+                                            };
 
-                                            const nextSlot = Number.parseInt(value, 10);
-                                            if (!Number.isFinite(nextSlot) || nextSlot < 1 || nextSlot > 3) return;
-                                            if (nextSlot === communityAgentSelectedSlot) return;
-                                            if (!confirmDiscard()) return;
-                                            hydrateCommunityAgentEditor(nextSlot, communityAgentDrafts);
-                                          }}
-                                        >
-                                          {options.map((opt) => (
-                                            <option key={opt.slot} value={String(opt.slot)}>
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                          {nextAvailableSlot && <option value="__new">+ New template</option>}
-                                        </select>
+                                            return (
+                                              <>
+                                                <button
+                                                  className="agent-template-btn"
+                                                  type="button"
+                                                  aria-haspopup="listbox"
+                                                  aria-expanded={isCommunityAgentTemplateMenuOpen}
+                                                  onClick={() =>
+                                                    setIsCommunityAgentTemplateMenuOpen((prev) => !prev)
+                                                  }
+                                                >
+                                                  <span className="agent-template-btn-text">
+                                                    {selectedLabel}
+                                                    {selectedIsLive ? " · Live" : ""}
+                                                  </span>
+                                                  <svg className="agent-template-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="M6 9l6 6 6-6" />
+                                                  </svg>
+                                                </button>
+
+                                                {isCommunityAgentTemplateMenuOpen && (
+                                                  <div className="agent-template-menu" role="listbox" aria-label="Templates">
+                                                    {menuSlots.map((slot) => {
+                                                      const row =
+                                                        communityAgentDrafts.find((d) => d.slot === slot) ?? null;
+                                                      const isSelected = slot === communityAgentSelectedSlot;
+                                                      const isLive = Boolean(row?.is_active);
+                                                      const displayName =
+                                                        (isSelected ? communityAgentDraftName : (row?.name ?? ""))?.trim() ||
+                                                        `Template ${slot}`;
+                                                      const isEditing = communityAgentRenamingSlot === slot;
+                                                      const isSaved = communityAgentSavedSlot === slot;
+
+                                                      return (
+                                                        <div
+                                                          key={slot}
+                                                          role="option"
+                                                          aria-selected={isSelected}
+                                                          tabIndex={0}
+                                                          className={`agent-template-option${isSelected ? " active" : ""}${
+                                                            isEditing ? " editing" : ""
+                                                          }`}
+                                                          onClick={() => {
+                                                            if (isEditing) return;
+                                                            selectSlot(slot);
+                                                            setIsCommunityAgentTemplateMenuOpen(false);
+                                                          }}
+                                                          onKeyDown={(event) => {
+                                                            if (event.key === "Enter" || event.key === " ") {
+                                                              event.preventDefault();
+                                                              if (isEditing) return;
+                                                              selectSlot(slot);
+                                                              setIsCommunityAgentTemplateMenuOpen(false);
+                                                            }
+                                                          }}
+                                                        >
+                                                          <div className="agent-template-option-main">
+                                                            <span className="agent-template-slot" aria-hidden="true">
+                                                              {slot}
+                                                            </span>
+                                                            {isEditing ? (
+                                                              <input
+                                                                className="agent-template-name"
+                                                                type="text"
+                                                                value={communityAgentRenamingValue}
+                                                                placeholder={displayName}
+                                                                autoFocus
+                                                                onClick={(event) => event.stopPropagation()}
+                                                                onChange={(event) =>
+                                                                  setCommunityAgentRenamingValue(event.target.value)
+                                                                }
+                                                                onKeyDown={(event) => {
+                                                                  if (event.key === "Enter") {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                    void (async () => {
+                                                                      const next = communityAgentRenamingValue.trim();
+                                                                      const rowExists = Boolean(row);
+
+                                                                      if (isSelected) {
+                                                                        setCommunityAgentDraftName(next);
+                                                                        if (!rowExists) {
+                                                                          markCommunityAgentDraftDirty();
+                                                                          setCommunityAgentRenamingSlot(null);
+                                                                          setCommunityAgentRenamingValue("");
+                                                                          return;
+                                                                        }
+                                                                        const ok = await persistCommunityAgentTemplateName(slot, next);
+                                                                        if (!ok) return;
+                                                                      } else {
+                                                                        setCommunityAgentDrafts((prev) =>
+                                                                          prev.map((d) =>
+                                                                            d.slot === slot
+                                                                              ? { ...d, name: next ? next : null }
+                                                                              : d,
+                                                                          ),
+                                                                        );
+                                                                        const ok = await persistCommunityAgentTemplateName(slot, next);
+                                                                        if (!ok) return;
+                                                                      }
+
+                                                                      flashCommunityAgentTemplateSaved(slot);
+                                                                      setCommunityAgentRenamingSlot(null);
+                                                                      setCommunityAgentRenamingValue("");
+                                                                    })();
+                                                                  }
+                                                                  if (event.key === "Escape") {
+                                                                    event.preventDefault();
+                                                                    event.stopPropagation();
+                                                                    setCommunityAgentRenamingSlot(null);
+                                                                    setCommunityAgentRenamingValue("");
+                                                                  }
+                                                                }}
+                                                              />
+                                                            ) : (
+                                                              <span className="agent-template-name-text" title={displayName}>
+                                                                {displayName}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                          <div className="agent-template-option-right">
+                                                            <div className="agent-template-badges" aria-hidden="true">
+                                                              {isLive && (
+                                                                <span className="agent-template-badge">LIVE</span>
+                                                              )}
+                                                            </div>
+                                                            <div className="agent-template-actions">
+                                                              {isEditing ? (
+                                                                <button
+                                                                  type="button"
+                                                                  className="agent-template-save"
+                                                                  onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    void (async () => {
+                                                                      const next = communityAgentRenamingValue.trim();
+                                                                      const rowExists = Boolean(row);
+
+                                                                      if (isSelected) {
+                                                                        setCommunityAgentDraftName(next);
+                                                                        if (!rowExists) {
+                                                                          markCommunityAgentDraftDirty();
+                                                                          setCommunityAgentRenamingSlot(null);
+                                                                          setCommunityAgentRenamingValue("");
+                                                                          return;
+                                                                        }
+                                                                        const ok = await persistCommunityAgentTemplateName(slot, next);
+                                                                        if (!ok) return;
+                                                                      } else {
+                                                                        setCommunityAgentDrafts((prev) =>
+                                                                          prev.map((d) =>
+                                                                            d.slot === slot
+                                                                              ? { ...d, name: next ? next : null }
+                                                                              : d,
+                                                                          ),
+                                                                        );
+                                                                        const ok = await persistCommunityAgentTemplateName(slot, next);
+                                                                        if (!ok) return;
+                                                                      }
+
+                                                                      flashCommunityAgentTemplateSaved(slot);
+                                                                      setCommunityAgentRenamingSlot(null);
+                                                                      setCommunityAgentRenamingValue("");
+                                                                    })();
+                                                                  }}
+                                                                >
+                                                                  Save
+                                                                </button>
+                                                              ) : isSaved ? (
+                                                                <span className="agent-template-saved" aria-label="Saved">
+                                                                  Saved
+                                                                </span>
+                                                              ) : (
+                                                                <button
+                                                                  type="button"
+                                                                  className="agent-template-action"
+                                                                  title="Rename"
+                                                                  onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    setCommunityAgentRenamingSlot(slot);
+                                                                    setCommunityAgentRenamingValue(
+                                                                      (isSelected ? communityAgentDraftName : (row?.name ?? "")) ??
+                                                                        "",
+                                                                    );
+                                                                  }}
+                                                                >
+                                                                  <svg viewBox="0 0 24 24">
+                                                                    <path d="M12 20h9" />
+                                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                                                                  </svg>
+                                                                </button>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                        </div>
+                                                      );
+                                                    })}
+                                                    {nextAvailableSlot && (
+                                                      <button
+                                                        type="button"
+                                                        className="agent-template-new"
+                                                        onClick={() => {
+                                                          if (!confirmDiscard()) return;
+                                                          hydrateCommunityAgentEditor(nextAvailableSlot, communityAgentDrafts);
+                                                          setIsCommunityAgentTemplateMenuOpen(false);
+                                                        }}
+                                                      >
+                                                        + New template
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </>
+                                            );
+                                          })()}
                                       </div>
                                     );
                                   })()}
                                 </div>
 
-                                <div className="settings-section">
-                                  <div className="settings-section-title">Draft</div>
-                                  <label className="create-community-field">
-                                    <span>Name (optional)</span>
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. Onboarding v1"
-                                      value={communityAgentDraftName}
-                                      onChange={(event) => {
-                                        setCommunityAgentDraftName(event.target.value);
-                                        markCommunityAgentDraftDirty();
-                                      }}
-                                    />
-                                  </label>
-                                </div>
+                                {communityAgentDraftSaveError && (
+                                  <div className="auth-error" style={{ marginTop: 10 }}>
+                                    {communityAgentDraftSaveError}
+                                  </div>
+                                )}
 
                                 <div className="settings-section">
                                   <div className="settings-section-title">Landing page (empty chat)</div>
-                                  <div className="agent-editor-grid">
-                                    <div className="agent-editor-form">
-                                      <label className="create-community-field">
-                                        <span>Title</span>
-                                        <input
-                                          type="text"
-                                          value={communityAgentDraftLanding.title}
-                                          onChange={(event) => {
-                                            const value = event.target.value;
-                                            setCommunityAgentDraftLanding((prev) => ({ ...prev, title: value }));
-                                            markCommunityAgentDraftDirty();
-                                          }}
-                                        />
-                                      </label>
-                                      <label className="create-community-field">
-                                        <span>Subtitle</span>
-                                        <input
-                                          type="text"
-                                          value={communityAgentDraftLanding.subtitle}
-                                          onChange={(event) => {
-                                            const value = event.target.value;
-                                            setCommunityAgentDraftLanding((prev) => ({ ...prev, subtitle: value }));
-                                            markCommunityAgentDraftDirty();
-                                          }}
-                                        />
-                                      </label>
+                                  <div className="agent-preview-editor">
+                                    <div className="agent-preview-actions">
+                                      {(() => {
+                                        const row =
+                                          communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot) ?? null;
+                                        const isUnsaved = !row || communityAgentDraftDirtyRef.current;
+                                        if (!isUnsaved) return null;
+                                        return <span className="agent-unsaved-badge">UNSAVED</span>;
+                                      })()}
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleSaveCommunityAgentDraft()}
+                                        disabled={isSavingCommunityAgentDraft}
+                                      >
+                                        {isSavingCommunityAgentDraft ? "Saving…" : "Save draft"}
+                                      </button>
+                                      <button
+                                        className="secondary"
+                                        type="button"
+                                        disabled={!savedRow || !canSetLive || isSavingCommunityAgentDraft}
+                                        onClick={() => {
+                                          const ok = window.confirm("Set this draft live for all members?");
+                                          if (!ok) return;
+                                          void handleSetLiveCommunityAgentDraft();
+                                        }}
+                                      >
+                                        {savedRow?.is_active ? "Live" : "Set live"}
+                                      </button>
+                                    </div>
 
-                                      <div className="agent-tabs-editor">
-                                        <div className="settings-section-title">Tabs (1–4)</div>
-                                        {communityAgentDraftLanding.tabs.map((tab) => (
-                                          <div key={tab.id} className="agent-tab-editor">
-                                            <div className="agent-tab-row">
-                                              <input
-                                                className="agent-tab-label"
-                                                type="text"
-                                                placeholder="Tab name"
-                                                value={tab.label}
-                                                onChange={(event) => {
-                                                  const value = event.target.value;
-                                                  setCommunityAgentDraftLanding((prev) => ({
-                                                    ...prev,
-                                                    tabs: prev.tabs.map((t) =>
-                                                      t.id === tab.id ? { ...t, label: value } : t,
-                                                    ),
-                                                  }));
-                                                  markCommunityAgentDraftDirty();
-                                                }}
-                                              />
-                                              {communityAgentDraftLanding.tabs.length > 1 && (
-                                                <button
-                                                  className="secondary agent-tab-remove"
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setCommunityAgentDraftLanding((prev) => ({
-                                                      ...prev,
-                                                      tabs: prev.tabs.filter((t) => t.id !== tab.id),
-                                                    }));
-                                                    markCommunityAgentDraftDirty();
-                                                  }}
-                                                >
-                                                  Remove
-                                                </button>
-                                              )}
-                                            </div>
-                                            <textarea
-                                              className="agent-tab-prompts"
-                                              placeholder={"One prompt per line.\nExample: Help me plan my week."}
-                                              value={tab.prompts.join("\n")}
-                                              onChange={(event) => {
-                                                const lines = event.target.value
-                                                  .split("\n")
-                                                  .map((line) => line.trim())
-                                                  .filter(Boolean);
-                                                setCommunityAgentDraftLanding((prev) => ({
-                                                  ...prev,
-                                                  tabs: prev.tabs.map((t) =>
-                                                    t.id === tab.id ? { ...t, prompts: lines } : t,
-                                                  ),
-                                                }));
-                                                markCommunityAgentDraftDirty();
-                                              }}
-                                              rows={4}
-                                            />
-                                          </div>
-                                        ))}
-                                        {communityAgentDraftLanding.tabs.length < 4 && (
-                                          <button
-                                            className="secondary"
-                                            type="button"
-                                            onClick={() => {
+                                    <div
+                                      className="agent-preview-shell agent-preview-shell-editable"
+                                      aria-label="Preview"
+                                    >
+                                      {communityAgentLandingEdit?.kind === "title" ? (
+                                        <input
+                                          className="web-empty-thread-title-input"
+                                          type="text"
+                                          autoFocus
+                                          value={communityAgentLandingEditValue}
+                                          placeholder={DEFAULT_EMPTY_THREAD_LANDING.title}
+                                          onChange={(event) => setCommunityAgentLandingEditValue(event.target.value)}
+                                          onBlur={() => {
+                                            const next = communityAgentLandingEditValue;
+                                            if (next !== previewLanding.title) {
                                               setCommunityAgentDraftLanding((prev) => ({
                                                 ...prev,
-                                                tabs: [
-                                                  ...prev.tabs,
-                                                  { id: crypto.randomUUID(), label: `Tab ${prev.tabs.length + 1}`, prompts: [] },
-                                                ],
+                                                title: next,
                                               }));
                                               markCommunityAgentDraftDirty();
+                                            }
+                                            clearCommunityAgentLandingEdit();
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                              event.preventDefault();
+                                              (event.currentTarget as HTMLInputElement).blur();
+                                            }
+                                            if (event.key === "Escape") {
+                                              event.preventDefault();
+                                              clearCommunityAgentLandingEdit();
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className={`web-empty-thread-title web-empty-thread-editable${
+                                            previewLanding.title.trim() ? "" : " is-placeholder"
+                                          }`}
+                                          title="Click to edit"
+                                          onClick={() =>
+                                            beginCommunityAgentLandingEdit(
+                                              { kind: "title" },
+                                              previewLanding.title,
+                                            )
+                                          }
+                                        >
+                                          {previewTitle}
+                                        </button>
+                                      )}
+
+                                      {communityAgentLandingEdit?.kind === "subtitle" ? (
+                                        <input
+                                          className="web-empty-thread-subtitle-input"
+                                          type="text"
+                                          autoFocus
+                                          value={communityAgentLandingEditValue}
+                                          placeholder={DEFAULT_EMPTY_THREAD_LANDING.subtitle}
+                                          onChange={(event) => setCommunityAgentLandingEditValue(event.target.value)}
+                                          onBlur={() => {
+                                            const next = communityAgentLandingEditValue;
+                                            if (next !== previewLanding.subtitle) {
+                                              setCommunityAgentDraftLanding((prev) => ({
+                                                ...prev,
+                                                subtitle: next,
+                                              }));
+                                              markCommunityAgentDraftDirty();
+                                            }
+                                            clearCommunityAgentLandingEdit();
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                              event.preventDefault();
+                                              (event.currentTarget as HTMLInputElement).blur();
+                                            }
+                                            if (event.key === "Escape") {
+                                              event.preventDefault();
+                                              clearCommunityAgentLandingEdit();
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className={`web-empty-thread-subtitle web-empty-thread-editable${
+                                            previewLanding.subtitle.trim() ? "" : " is-placeholder"
+                                          }`}
+                                          title="Click to edit"
+                                          onClick={() =>
+                                            beginCommunityAgentLandingEdit(
+                                              { kind: "subtitle" },
+                                              previewLanding.subtitle,
+                                            )
+                                          }
+                                        >
+                                          {previewSubtitle}
+                                        </button>
+                                      )}
+
+                                      <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
+                                        {previewTabs.map((tab, index) => {
+                                          const isActive = communityAgentPreviewTabId === tab.id;
+                                          const isEditingLabel =
+                                            communityAgentLandingEdit?.kind === "tab_label" &&
+                                            communityAgentLandingEdit.tabId === tab.id;
+                                          const labelText = tab.label.trim() ? tab.label : `Tab ${index + 1}`;
+
+                                          return (
+                                            <button
+                                              key={tab.id}
+                                              type="button"
+                                              className={`web-starter-tab${isActive ? " active" : ""}`}
+                                              aria-pressed={isActive}
+                                              onClick={() => {
+                                                if (isEditingLabel) return;
+                                                if (!isActive) {
+                                                  setCommunityAgentPreviewTabId(tab.id);
+                                                  return;
+                                                }
+                                                beginCommunityAgentLandingEdit(
+                                                  { kind: "tab_label", tabId: tab.id },
+                                                  tab.label,
+                                                );
+                                              }}
+                                            >
+                                              {isEditingLabel ? (
+                                                <input
+                                                  className="web-starter-tab-input"
+                                                  type="text"
+                                                  autoFocus
+                                                  value={communityAgentLandingEditValue}
+                                                  placeholder={labelText}
+                                                  onClick={(event) => event.stopPropagation()}
+                                                  onChange={(event) =>
+                                                    setCommunityAgentLandingEditValue(event.target.value)
+                                                  }
+                                                  onBlur={() => {
+                                                    const next = communityAgentLandingEditValue.trim();
+                                                    if (next && next !== tab.label.trim()) {
+                                                      setCommunityAgentDraftLanding((prev) => ({
+                                                        ...prev,
+                                                        tabs: prev.tabs.map((t, idx) =>
+                                                          t.id === tab.id
+                                                            ? { ...t, label: next || `Tab ${idx + 1}` }
+                                                            : t,
+                                                        ),
+                                                      }));
+                                                      markCommunityAgentDraftDirty();
+                                                    }
+                                                    clearCommunityAgentLandingEdit();
+                                                  }}
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                      event.preventDefault();
+                                                      (event.currentTarget as HTMLInputElement).blur();
+                                                    }
+                                                    if (event.key === "Escape") {
+                                                      event.preventDefault();
+                                                      clearCommunityAgentLandingEdit();
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                <>
+                                                  <span className="web-starter-tab-label">{labelText}</span>
+                                                  {previewTabs.length > 1 && (
+                                                    <span
+                                                      role="button"
+                                                      tabIndex={0}
+                                                      className="web-starter-tab-remove"
+                                                      aria-label="Remove tab"
+                                                      onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        setCommunityAgentDraftLanding((prev) => ({
+                                                          ...prev,
+                                                          tabs: prev.tabs.filter((t) => t.id !== tab.id),
+                                                        }));
+                                                        markCommunityAgentDraftDirty();
+                                                        clearCommunityAgentLandingEdit();
+                                                      }}
+                                                      onKeyDown={(event) => {
+                                                        if (event.key !== "Enter" && event.key !== " ") return;
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        setCommunityAgentDraftLanding((prev) => ({
+                                                          ...prev,
+                                                          tabs: prev.tabs.filter((t) => t.id !== tab.id),
+                                                        }));
+                                                        markCommunityAgentDraftDirty();
+                                                        clearCommunityAgentLandingEdit();
+                                                      }}
+                                                    >
+                                                      ×
+                                                    </span>
+                                                  )}
+                                                </>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                        {previewTabs.length < 4 && (
+                                          <button
+                                            type="button"
+                                            className="web-starter-tab web-starter-tab-add"
+                                            title="Add tab"
+                                            onClick={() => {
+                                              const nextId = crypto.randomUUID();
+                                              const nextLabel = `Tab ${previewTabs.length + 1}`;
+                                              setCommunityAgentDraftLanding((prev) => ({
+                                                ...prev,
+                                                tabs:
+                                                  prev.tabs.length >= 4
+                                                    ? prev.tabs
+                                                    : [...prev.tabs, { id: nextId, label: nextLabel, prompts: [] }],
+                                              }));
+                                              markCommunityAgentDraftDirty();
+                                              setCommunityAgentPreviewTabId(nextId);
+                                              beginCommunityAgentLandingEdit(
+                                                { kind: "tab_label", tabId: nextId },
+                                                nextLabel,
+                                              );
                                             }}
                                           >
-                                            Add tab
+                                            +
                                           </button>
                                         )}
                                       </div>
+
+                                      <div className="web-starter-list web-starter-list-editable" role="list">
+                                        {previewPrompts.map((prompt, idx) => {
+                                          const isEditingPrompt =
+                                            communityAgentLandingEdit?.kind === "prompt" &&
+                                            communityAgentLandingEdit.tabId === previewActiveTab?.id &&
+                                            communityAgentLandingEdit.index === idx;
+
+                                          return (
+                                            <div
+                                              key={`${previewActiveTab?.id ?? "tab"}:${idx}`}
+                                              className="web-starter-row is-preview web-starter-row-editable"
+                                              role="listitem"
+                                              onClick={() => {
+                                                if (!previewActiveTab) return;
+                                                beginCommunityAgentLandingEdit(
+                                                  { kind: "prompt", tabId: previewActiveTab.id, index: idx },
+                                                  prompt,
+                                                );
+                                              }}
+                                            >
+                                              {isEditingPrompt ? (
+                                                <input
+                                                  className="web-starter-row-input"
+                                                  type="text"
+                                                  autoFocus
+                                                  value={communityAgentLandingEditValue}
+                                                  placeholder={prompt}
+                                                  onClick={(event) => event.stopPropagation()}
+                                                  onChange={(event) =>
+                                                    setCommunityAgentLandingEditValue(event.target.value)
+                                                  }
+                                                  onBlur={() => {
+                                                    if (!previewActiveTab) return;
+                                                    const next = communityAgentLandingEditValue.trim();
+                                                    if (next && next !== prompt.trim()) {
+                                                      setCommunityAgentDraftLanding((prev) => ({
+                                                        ...prev,
+                                                        tabs: prev.tabs.map((t) =>
+                                                          t.id === previewActiveTab.id
+                                                            ? {
+                                                                ...t,
+                                                                prompts: t.prompts.map((p, i) =>
+                                                                  i === idx ? next : p,
+                                                                ),
+                                                              }
+                                                            : t,
+                                                        ),
+                                                      }));
+                                                      markCommunityAgentDraftDirty();
+                                                    }
+                                                    clearCommunityAgentLandingEdit();
+                                                  }}
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                      event.preventDefault();
+                                                      (event.currentTarget as HTMLInputElement).blur();
+                                                    }
+                                                    if (event.key === "Escape") {
+                                                      event.preventDefault();
+                                                      clearCommunityAgentLandingEdit();
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                <>
+                                                  <span className="web-starter-row-text">{prompt}</span>
+                                                  <span className="web-starter-row-actions" aria-hidden="true">
+                                                    <button
+                                                      type="button"
+                                                      className="web-starter-row-delete"
+                                                      aria-label="Remove prompt"
+                                                      onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        if (!previewActiveTab) return;
+                                                        setCommunityAgentDraftLanding((prev) => ({
+                                                          ...prev,
+                                                          tabs: prev.tabs.map((t) =>
+                                                            t.id === previewActiveTab.id
+                                                              ? {
+                                                                  ...t,
+                                                                  prompts: t.prompts.filter((_, i) => i !== idx),
+                                                                }
+                                                              : t,
+                                                          ),
+                                                        }));
+                                                        markCommunityAgentDraftDirty();
+                                                        clearCommunityAgentLandingEdit();
+                                                      }}
+                                                    >
+                                                      ×
+                                                    </button>
+                                                    <span className="web-starter-row-arrow" aria-hidden="true">
+                                                      <svg viewBox="0 0 24 24">
+                                                        <path d="M9 18l6-6-6-6" />
+                                                      </svg>
+                                                    </span>
+                                                  </span>
+                                                </>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+
+                                        {(() => {
+                                          const tabId = previewActiveTab?.id ?? "";
+                                          const isAdding =
+                                            communityAgentLandingEdit?.kind === "add_prompt" &&
+                                            communityAgentLandingEdit.tabId === tabId;
+
+                                          if (isAdding) {
+                                            return (
+                                              <div className="web-starter-row is-preview web-starter-row-editable" role="listitem">
+                                                <input
+                                                  className="web-starter-row-input"
+                                                  type="text"
+                                                  autoFocus
+                                                  value={communityAgentLandingEditValue}
+                                                  placeholder="New prompt…"
+                                                  onChange={(event) =>
+                                                    setCommunityAgentLandingEditValue(event.target.value)
+                                                  }
+                                                  onBlur={() => {
+                                                    const next = communityAgentLandingEditValue.trim();
+                                                    if (next && previewActiveTab) {
+                                                      setCommunityAgentDraftLanding((prev) => ({
+                                                        ...prev,
+                                                        tabs: prev.tabs.map((t) =>
+                                                          t.id === previewActiveTab.id
+                                                            ? { ...t, prompts: [...t.prompts, next] }
+                                                            : t,
+                                                        ),
+                                                      }));
+                                                      markCommunityAgentDraftDirty();
+                                                    }
+                                                    clearCommunityAgentLandingEdit();
+                                                  }}
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                      event.preventDefault();
+                                                      (event.currentTarget as HTMLInputElement).blur();
+                                                    }
+                                                    if (event.key === "Escape") {
+                                                      event.preventDefault();
+                                                      clearCommunityAgentLandingEdit();
+                                                    }
+                                                  }}
+                                                />
+                                              </div>
+                                            );
+                                          }
+
+                                          return (
+                                            <div
+                                              className="web-starter-row is-preview web-starter-row-add"
+                                              role="listitem"
+                                              onClick={() => {
+                                                if (!previewActiveTab) return;
+                                                beginCommunityAgentLandingEdit(
+                                                  { kind: "add_prompt", tabId: previewActiveTab.id },
+                                                  "",
+                                                );
+                                              }}
+                                            >
+                                              <span className="web-starter-row-text">+ Add prompt</span>
+                                            </div>
+                                          );
+                                        })()}
+                                      </div>
                                     </div>
 
-                                    <div className="agent-editor-preview">
-                                      <div className="agent-preview-shell" aria-label="Preview">
-                                        <div className="web-empty-thread-title">{previewLanding.title}</div>
-                                        <div className="web-empty-thread-subtitle">{previewLanding.subtitle}</div>
-                                        {previewLanding.tabs.length > 1 && (
-                                          <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
-                                            {previewLanding.tabs.map((tab) => (
-                                              <button
-                                                key={tab.id}
-                                                type="button"
-                                                className={`web-starter-tab${communityAgentPreviewTabId === tab.id ? " active" : ""}`}
-                                                aria-pressed={communityAgentPreviewTabId === tab.id}
-                                                onClick={() => setCommunityAgentPreviewTabId(tab.id)}
-                                              >
-                                                {tab.label}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
-                                        <div className="web-starter-list" role="list">
-                                          {previewPrompts.map((prompt) => (
-                                            <div key={prompt} className="web-starter-row is-preview" role="listitem">
-                                              <span className="web-starter-row-text">{prompt}</span>
-                                              <span className="web-starter-row-arrow" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24">
-                                                  <path d="M9 18l6-6-6-6" />
-                                                </svg>
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <div className="model-note" style={{ marginTop: 10 }}>
-                                        The “Download desktop app” card is always shown by Arx when desktop isn’t
-                                        installed.
-                                      </div>
+                                    <div className="model-note" style={{ marginTop: 10 }}>
+                                      The “Download desktop app” card is always shown by Arx when desktop isn’t
+                                      installed.
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="settings-section">
+                                <div className="settings-section agent-system-prompt">
                                   <div className="settings-section-title">System prompt (community-wide)</div>
                                   <textarea
                                     className="system-prompt-input"
@@ -12097,26 +12892,6 @@ export default function App() {
                                     }}
                                     rows={6}
                                   />
-                                </div>
-
-                                {communityAgentDraftSaveError && <div className="auth-error">{communityAgentDraftSaveError}</div>}
-
-                                <div className="create-community-actions">
-                                  <button type="button" onClick={() => void handleSaveCommunityAgentDraft()} disabled={isSavingCommunityAgentDraft}>
-                                    {isSavingCommunityAgentDraft ? "Saving…" : "Save draft"}
-                                  </button>
-                                  <button
-                                    className="secondary"
-                                    type="button"
-                                    disabled={!savedRow || !canSetLive || isSavingCommunityAgentDraft}
-                                    onClick={() => {
-                                      const ok = window.confirm("Set this draft live for all members?");
-                                      if (!ok) return;
-                                      void handleSetLiveCommunityAgentDraft();
-                                    }}
-                                  >
-                                    {savedRow?.is_active ? "Live" : "Set live"}
-                                  </button>
                                 </div>
                               </>
                             );
@@ -12257,7 +13032,13 @@ export default function App() {
 		                        )}
 	                      </div>
                       {resourceSuccess && <div className="success-toast">Resource saved successfully!</div>}
-                      <div className="resource-list">
+                      <div
+                        className={
+                          !isLoadingResources && communityResources.length === 0
+                            ? "resource-list resource-list-empty"
+                            : "resource-list"
+                        }
+                      >
                         {isLoadingResources && (
                           <div className="chat-loading">
                             <div className="loading-spinner" />
@@ -12265,7 +13046,20 @@ export default function App() {
                           </div>
                         )}
                         {!isLoadingResources && communityResources.length === 0 && (
-                          <div className="chat-empty">No resources yet.</div>
+                          <div className="chat-empty-state">
+                            <div className="chat-empty-icon">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                                <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+                              </svg>
+                            </div>
+                            <div className="chat-empty-title">
+                              Welcome to {activeCommunity ? activeCommunity.name : "your"} resources
+                            </div>
+                            <div className="chat-empty-text">
+                              Share links, posts, and videos with your members. Add your first resource to get started.
+                            </div>
+                          </div>
                         )}
                         {!isLoadingResources &&
                           communityResources.map((resource) => (
@@ -12948,7 +13742,16 @@ export default function App() {
 
                   {communityTab === "library" && (
                     <div className="community-panel library-panel">
-                      <div className="chat-empty">Library on web is coming next.</div>
+                      <div className="chat-empty-state">
+                        <div className="chat-empty-icon">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
+                            <path d="M4 5.5V19.5" />
+                          </svg>
+                        </div>
+                        <div className="chat-empty-title">Welcome to the library</div>
+                        <div className="chat-empty-text">Library on web is coming next.</div>
+                      </div>
                     </div>
                   )}
 

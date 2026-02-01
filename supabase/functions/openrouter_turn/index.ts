@@ -102,6 +102,17 @@ type InferenceFallback = {
 type PlatformProvider = "openai" | "anthropic" | "google" | "x-ai";
 type PlatformModelRef = { provider: PlatformProvider; model: string; ref: string };
 
+type ModelRegistryRow = {
+  id: string;
+  provider: string;
+  provider_model: string | null;
+  enabled: boolean;
+  platform_enabled: boolean;
+  byok_enabled: boolean;
+  display_name: string | null;
+  sort_order: number | null;
+};
+
 function isPlatformQuotaExceededErrorMessage(message: string): boolean {
   const raw = String(message ?? "");
   return raw.toLowerCase().includes("platform_inference_quota_exceeded");
@@ -124,6 +135,31 @@ function parsePlatformModelRef(ref: string): PlatformModelRef {
   const model = raw.slice(idx + 1).trim();
   if (!model) throw new Error("Invalid platform model mapping");
   return { provider, model, ref: `${provider}/${model}` };
+}
+
+async function loadModelRegistryRow(modelId: string): Promise<ModelRegistryRow | null> {
+  const id = (modelId ?? "").trim();
+  if (!id) return null;
+  const res = await supabaseAdminFetch(
+    `/rest/v1/model_registry?select=id,provider,provider_model,enabled,platform_enabled,byok_enabled,display_name,sort_order&id=eq.${encodeURIComponent(
+      id,
+    )}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Array<Partial<ModelRegistryRow>>;
+  const row = rows[0];
+  if (!row || typeof row.id !== "string") return null;
+  return {
+    id: row.id,
+    provider: String(row.provider ?? "").trim(),
+    provider_model: typeof row.provider_model === "string" ? row.provider_model : null,
+    enabled: row.enabled !== false,
+    platform_enabled: row.platform_enabled !== false,
+    byok_enabled: row.byok_enabled !== false,
+    display_name: typeof row.display_name === "string" ? row.display_name : null,
+    sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
+  };
 }
 
 let cachedPlatformModelMap: { raw: string; parsed: Record<string, string> } | null = null;
@@ -153,7 +189,7 @@ function loadPlatformModelMap(): Record<string, string> {
   return out;
 }
 
-function resolvePlatformModelForAlias(aliasModelId: string): PlatformModelRef {
+function resolvePlatformModelForAliasLegacy(aliasModelId: string): PlatformModelRef {
   const map = loadPlatformModelMap();
   const cleanedAlias = (aliasModelId ?? "").trim();
   if (Object.keys(map).length > 0) {
@@ -167,6 +203,24 @@ function resolvePlatformModelForAlias(aliasModelId: string): PlatformModelRef {
   if (fallback) return parsePlatformModelRef(fallback);
 
   throw new Error("Missing PLATFORM_MODEL_MAP_JSON");
+}
+
+async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
+  const cleanedAlias = (aliasModelId ?? "").trim();
+  if (!cleanedAlias) throw new Error("model_id is required");
+
+  const row = await loadModelRegistryRow(cleanedAlias);
+  if (row) {
+    if (!row.enabled || !row.platform_enabled) {
+      throw new Error("platform_inference_not_allowed");
+    }
+    const provider = normalizePlatformProvider(row.provider);
+    const providerModel = String(row.provider_model ?? "").trim();
+    if (providerModel) return { provider, model: providerModel, ref: `${provider}/${providerModel}` };
+    // Transition fallback: allow legacy env mapping until provider_model is populated.
+  }
+
+  return resolvePlatformModelForAliasLegacy(cleanedAlias);
 }
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
@@ -1542,6 +1596,7 @@ Deno.serve(async (req: Request) => {
       modelSettingsResult,
       memoryRowsResult,
       communityAgentPromptResult,
+      modelRegistryResult,
     ] = await Promise.allSettled([
       loadRecentMessages(threadId, 40),
       loadUserOpenRouterKey(userId),
@@ -1552,6 +1607,7 @@ Deno.serve(async (req: Request) => {
       thread.community_id
         ? loadCommunityAgentSystemPrompt({ userId, communityId: thread.community_id })
         : Promise.resolve(null),
+      loadModelRegistryRow(aliasModelId),
     ]);
 
     if (rowsDescResult.status !== "fulfilled") throw rowsDescResult.reason;
@@ -1574,12 +1630,24 @@ Deno.serve(async (req: Request) => {
     const platformEnabled = isTruthyEnv(
       getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED"),
     );
+
+    const modelRegistryRow: ModelRegistryRow | null =
+      modelRegistryResult.status === "fulfilled" ? modelRegistryResult.value : null;
+    if (modelRegistryRow && !modelRegistryRow.enabled) {
+      throw new Error("Model is not available.");
+    }
+
     // Default behavior:
     // - Free: BYOK only.
     // - Paid: use platform-provided inference first; fall back to BYOK only on quota exhaustion.
     let inferenceSource: InferenceSource =
       builderTier !== "free" && platformEnabled ? "platform" : "user";
     let inferenceFallback: InferenceFallback | null = null;
+
+    // Model-level gating: if this model isn't enabled for platform inference, go straight to BYOK.
+    if (inferenceSource === "platform" && modelRegistryRow?.platform_enabled === false) {
+      inferenceSource = "user";
+    }
 
     if (inferenceSource === "user" && !hasUserKey) {
       if (openrouterKeyLoadError) throw new Error(openrouterKeyLoadError);
@@ -1674,7 +1742,7 @@ Deno.serve(async (req: Request) => {
     let platformOpenAiCompatibleBaseUrl: string | null = null;
 
     if (inferenceSource === "platform") {
-      platformModel = resolvePlatformModelForAlias(aliasModelId);
+      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
       switch (platformModel.provider) {
         case "openai": {
           platformProviderKey = getEnv("OPENAI_API_KEY");
