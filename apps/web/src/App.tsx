@@ -208,6 +208,46 @@ const DEFAULT_EMPTY_THREAD_LANDING: CommunityAgentLanding = {
   ],
 };
 
+function buildDefaultCommunityEmptyThreadLanding(communityName: string): CommunityAgentLanding {
+  const name = communityName.trim();
+  return {
+    title: name ? `Welcome to ${name}` : "Welcome",
+    subtitle: "Say hi in Chat, browse Resources, or ask the AI agent for help.",
+    tabs: [
+      {
+        id: "start",
+        label: "Start here",
+        prompts: [
+          "Where do I find Chat, Library, and Resources in this community?",
+          "Help me write a short intro message to post in Chat.",
+          "Ask me 5 questions so you can point me to the right place in this community.",
+          "What should I do first to get value here?",
+        ],
+      },
+      {
+        id: "community",
+        label: "Community",
+        prompts: [
+          "Help me write a post asking for feedback (short + clear).",
+          "Help me turn my idea into a good question for the community.",
+          "Write a friendly reply to someone who responded to my post.",
+          "Suggest 3 ways I can contribute here this week (even as a beginner).",
+        ],
+      },
+      {
+        id: "agent",
+        label: "AI Agent",
+        prompts: [
+          "What can the AI agent help me do here? Give me 5 simple examples.",
+          "Help me make a simple plan for the next 7 days.",
+          "Turn my notes into a clean outline, then a first draft.",
+          "Ask me 5 questions to scope my goal before we start.",
+        ],
+      },
+    ],
+  };
+}
+
 function normalizeCommunityAgentLanding(input: unknown): CommunityAgentLanding | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Record<string, unknown>;
@@ -2504,6 +2544,8 @@ export default function App() {
   });
   const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
   const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
+  const activeCommunityIdRef = useRef<string | null>(null);
+  const communityAgentLandingFetchSeqRef = useRef(0);
   const [emptyThreadSection, setEmptyThreadSection] = useState<string>("community");
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
@@ -2530,11 +2572,14 @@ export default function App() {
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const [platformQuotaModal, setPlatformQuotaModal] = useState<{
+    reason: "quota" | "unavailable";
     threadId: string;
     mode: "respond" | "regenerate";
     providerId: ProviderId;
     providerLabel: string;
     hasKey: boolean;
+    byokAllowed: boolean;
+    message: string | null;
   } | null>(null);
   const [isPlatformQuotaModalRunning, setIsPlatformQuotaModalRunning] = useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
@@ -2583,11 +2628,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    const desired = DEFAULT_EMPTY_THREAD_LANDING.tabs[0]?.id ?? "community";
-    setEmptyThreadSection(desired);
-  }, [activeThreadId]);
-
-  useEffect(() => {
     // If we're running inside the desktop app, remember it so the web app can hide the CTA
     // when it shares storage/origin (e.g. hosted web app loaded by Tauri).
     if (!isTauriEnv) return;
@@ -2626,18 +2666,25 @@ export default function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    activeCommunityIdRef.current = activeCommunityId;
+  }, [activeCommunityId]);
+
+  useEffect(() => {
     const session = supabaseSession;
     const communityId = activeCommunityId;
-    if (!session || !communityId || !activeCommunityAccess?.can_view) {
+    const canView = activeCommunityAccess ? activeCommunityAccess.can_view : true;
+    if (!session || !communityId || !canView) {
       setActiveCommunityAgentLanding(null);
       activeCommunityAgentLandingCommunityIdRef.current = null;
       return;
     }
     if (activeCommunityAgentLandingCommunityIdRef.current === communityId) return;
-    activeCommunityAgentLandingCommunityIdRef.current = communityId;
 
     const url = getSupabaseUrl();
     if (!url) return;
+
+    communityAgentLandingFetchSeqRef.current += 1;
+    const fetchSeq = communityAgentLandingFetchSeqRef.current;
 
     void (async () => {
       try {
@@ -2650,14 +2697,16 @@ export default function App() {
           },
           session,
         );
-        if (!response.ok) {
-          setActiveCommunityAgentLanding(null);
-          return;
-        }
-        const data = (await response.json()) as unknown;
+        const data = response.ok ? ((await response.json()) as unknown) : null;
+        if (communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
+        if (activeCommunityIdRef.current !== communityId) return;
         setActiveCommunityAgentLanding(data ?? null);
+        activeCommunityAgentLandingCommunityIdRef.current = communityId;
       } catch {
+        if (communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
+        if (activeCommunityIdRef.current !== communityId) return;
         setActiveCommunityAgentLanding(null);
+        activeCommunityAgentLandingCommunityIdRef.current = communityId;
       }
     })();
   }, [supabaseSession, activeCommunityId, activeCommunityAccess?.can_view]);
@@ -5549,7 +5598,18 @@ export default function App() {
           parsed = null;
         }
         const code = typeof parsed?.code === "string" ? parsed.code.trim() : "";
-        if (code === "platform_inference_quota_exceeded") {
+        if (code === "rate_limited") {
+          const retryAfter =
+            typeof parsed?.retry_after_seconds === "number" && Number.isFinite(parsed.retry_after_seconds)
+              ? Math.max(0, Math.floor(parsed.retry_after_seconds))
+              : null;
+          const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : "";
+          const message = retryAfter
+            ? `Too many requests. Try again in ${retryAfter}s.`
+            : messageFromServer || "Too many requests. Try again soon.";
+          return { cancelled: false, error: message };
+        }
+        if (code === "platform_inference_quota_exceeded" || code === "platform_inference_misconfigured") {
           const rawProvider = typeof parsed?.provider === "string" ? parsed.provider.trim().toLowerCase() : "";
           const providerId: ProviderId | null =
             rawProvider === "openai"
@@ -5565,12 +5625,17 @@ export default function App() {
             const providerLabel = DEFAULT_PROVIDER_KEYS.find((p) => p.id === providerId)?.label ?? providerId;
             const hasKeyFromServer = typeof parsed?.has_byok_key === "boolean" ? parsed.has_byok_key : null;
             const hasKeyFromState = Boolean(providerKeys.find((p) => p.id === providerId)?.hasKey);
+            const byokAllowedFromServer = typeof parsed?.byok_allowed === "boolean" ? parsed.byok_allowed : true;
+            const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : null;
             setPlatformQuotaModal({
+              reason: code === "platform_inference_quota_exceeded" ? "quota" : "unavailable",
               threadId,
               mode: params.mode === "regenerate" ? "regenerate" : "respond",
               providerId,
               providerLabel,
               hasKey: hasKeyFromServer ?? hasKeyFromState,
+              byokAllowed: byokAllowedFromServer,
+              message: messageFromServer,
             });
             return { cancelled: false, error: null };
           }
@@ -8886,19 +8951,31 @@ export default function App() {
     return threads.find((t) => t.id === activeThreadId) ?? null;
   }, [activeThreadId, threads]);
 
+  const showEmptyThreadLandingSkeleton = Boolean(
+    !activeThreadId &&
+      supabaseSession &&
+      activeCommunityId &&
+      activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
+  );
+
   const emptyThreadLanding = useMemo(() => {
-    const communityLanding = normalizeCommunityAgentLanding(activeCommunityAgentLanding);
-    return communityLanding ?? DEFAULT_EMPTY_THREAD_LANDING;
-  }, [activeCommunityAgentLanding]);
+    const landingMatchesCommunity = Boolean(
+      activeCommunityId && activeCommunityAgentLandingCommunityIdRef.current === activeCommunityId,
+    );
+    const communityLanding = landingMatchesCommunity ? normalizeCommunityAgentLanding(activeCommunityAgentLanding) : null;
+    if (communityLanding) return communityLanding;
+    const canViewCommunity = activeCommunityAccess ? activeCommunityAccess.can_view : true;
+    if (activeCommunity && canViewCommunity) {
+      return buildDefaultCommunityEmptyThreadLanding(activeCommunity.name);
+    }
+    return DEFAULT_EMPTY_THREAD_LANDING;
+  }, [activeCommunity, activeCommunityAccess?.can_view, activeCommunityAgentLanding, activeCommunityId]);
 
   useEffect(() => {
+    if (activeThreadId) return;
     const first = emptyThreadLanding.tabs[0]?.id ?? "community";
-    setEmptyThreadSection((prev) => {
-      if (!prev) return first;
-      if (emptyThreadLanding.tabs.some((tab) => tab.id === prev)) return prev;
-      return first;
-    });
-  }, [emptyThreadLanding]);
+    setEmptyThreadSection(first);
+  }, [activeThreadId, emptyThreadLanding]);
 
   useEffect(() => {
     const first = communityAgentDraftLanding.tabs[0]?.id ?? "";
@@ -10569,98 +10646,116 @@ export default function App() {
 		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 	                    <div className="message-list-inner">
 	                    {!activeThreadId && (
-	                      <div className="web-empty-thread" role="region" aria-label="Start a new thread">
-                          <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
-                          <div className="web-empty-thread-subtitle">
-                            {emptyThreadLanding.subtitle}
-                          </div>
-                          {(() => {
-                            const activeTab =
-                              emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
-                              emptyThreadLanding.tabs[0];
-                            const prompts = activeTab?.prompts ?? [];
-                            return (
-                              <>
-                                {emptyThreadLanding.tabs.length > 1 && (
-                                  <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
-                                    {emptyThreadLanding.tabs.map((tab) => (
-                                      <button
-                                        key={tab.id}
-                                        type="button"
-                                        className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
-                                        aria-pressed={emptyThreadSection === tab.id}
-                                        onClick={() => setEmptyThreadSection(tab.id)}
-                                      >
-                                        {tab.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="web-starter-list" role="list">
-                                  {prompts.map((prompt) => (
-                                    <button
-                                      key={prompt}
-                                      className="web-starter-row"
-                                      type="button"
-                                      disabled={isSendingMessage}
-                                      onClick={() => {
-                                        void sendUserMessage({ text: prompt });
-                                        workspaceAskInputRef.current?.focus();
-                                      }}
-                                    >
-                                      <span className="web-starter-row-text">{prompt}</span>
-                                      <span className="web-starter-row-arrow" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24">
-                                          <path d="M9 18l6-6-6-6" />
-                                        </svg>
-                                      </span>
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
-                            );
-                          })()}
-                          {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
-                            <div className="web-download-card" role="note" aria-label="Desktop app">
-                              <button
-                                className="web-download-close"
-                                type="button"
-                                onClick={dismissDesktopDownload}
-                                title="Dismiss"
-                                aria-label="Dismiss"
-                              >
-                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                  <path d="M18 6L6 18M6 6l12 12" />
-                                </svg>
-                              </button>
-                              <div className="web-download-title">Download desktop app</div>
-                              <div className="web-download-subtitle">Get access to full agents on desktop.</div>
-                              <div className="web-download-actions">
-                                <button
-                                  className="secondary web-download-button"
-                                  type="button"
-                                  disabled={!desktopDownloadUrl}
-                                  title={
-                                    desktopDownloadUrl
-                                      ? "Download desktop app"
-                                      : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
-                                  }
-                                  onClick={() => {
-                                    if (!desktopDownloadUrl) return;
-                                    window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
-                                  }}
-                                >
-                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M12 3v10" />
-                                    <path d="M7 10l5 5 5-5" />
-                                    <path d="M5 21h14" />
-                                  </svg>
-                                  Download
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
+	                      <>
+	                        {showEmptyThreadLandingSkeleton ? (
+	                          <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
+	                            <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
+	                            <div className="web-skeleton-block web-skeleton-subtitle" aria-hidden="true" />
+	                            <div className="web-starter-tabs web-starter-tabs-skeleton" aria-hidden="true">
+	                              <div className="web-skeleton-pill" />
+	                              <div className="web-skeleton-pill" />
+	                              <div className="web-skeleton-pill" />
+	                            </div>
+	                            <div className="web-starter-list web-starter-list-skeleton" aria-hidden="true">
+	                              <div className="web-skeleton-row" />
+	                              <div className="web-skeleton-row" />
+	                              <div className="web-skeleton-row" />
+	                              <div className="web-skeleton-row" />
+	                            </div>
+	                          </div>
+	                        ) : (
+	                          <div className="web-empty-thread" role="region" aria-label="Start a new thread">
+	                            <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
+	                            <div className="web-empty-thread-subtitle">{emptyThreadLanding.subtitle}</div>
+	                            {(() => {
+	                              const activeTab =
+	                                emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
+	                                emptyThreadLanding.tabs[0];
+	                              const prompts = activeTab?.prompts ?? [];
+	                              return (
+	                                <>
+	                                  {emptyThreadLanding.tabs.length > 1 && (
+	                                    <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
+	                                      {emptyThreadLanding.tabs.map((tab) => (
+	                                        <button
+	                                          key={tab.id}
+	                                          type="button"
+	                                          className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
+	                                          aria-pressed={emptyThreadSection === tab.id}
+	                                          onClick={() => setEmptyThreadSection(tab.id)}
+	                                        >
+	                                          {tab.label}
+	                                        </button>
+	                                      ))}
+	                                    </div>
+	                                  )}
+	                                  <div className="web-starter-list" role="list">
+	                                    {prompts.map((prompt) => (
+	                                      <button
+	                                        key={prompt}
+	                                        className="web-starter-row"
+	                                        type="button"
+	                                        disabled={isSendingMessage}
+	                                        onClick={() => {
+	                                          void sendUserMessage({ text: prompt });
+	                                          workspaceAskInputRef.current?.focus();
+	                                        }}
+	                                      >
+	                                        <span className="web-starter-row-text">{prompt}</span>
+	                                        <span className="web-starter-row-arrow" aria-hidden="true">
+	                                          <svg viewBox="0 0 24 24">
+	                                            <path d="M9 18l6-6-6-6" />
+	                                          </svg>
+	                                        </span>
+	                                      </button>
+	                                    ))}
+	                                  </div>
+	                                </>
+	                              );
+	                            })()}
+	                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
+	                              <div className="web-download-card" role="note" aria-label="Desktop app">
+	                                <button
+	                                  className="web-download-close"
+	                                  type="button"
+	                                  onClick={dismissDesktopDownload}
+	                                  title="Dismiss"
+	                                  aria-label="Dismiss"
+	                                >
+	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                    <path d="M18 6L6 18M6 6l12 12" />
+	                                  </svg>
+	                                </button>
+	                                <div className="web-download-title">Download desktop app</div>
+	                                <div className="web-download-subtitle">Get access to full agents on desktop.</div>
+	                                <div className="web-download-actions">
+	                                  <button
+	                                    className="secondary web-download-button"
+	                                    type="button"
+	                                    disabled={!desktopDownloadUrl}
+	                                    title={
+	                                      desktopDownloadUrl
+	                                        ? "Download desktop app"
+	                                        : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
+	                                    }
+	                                    onClick={() => {
+	                                      if (!desktopDownloadUrl) return;
+	                                      window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
+	                                    }}
+	                                  >
+	                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                      <path d="M12 3v10" />
+	                                      <path d="M7 10l5 5 5-5" />
+	                                      <path d="M5 21h14" />
+	                                    </svg>
+	                                    Download
+	                                  </button>
+	                                </div>
+	                              </div>
+	                            )}
+	                          </div>
+	                        )}
+	                      </>
 	                    )}
                       {threadError && (
                         <div className="auth-error">
@@ -14145,7 +14240,9 @@ export default function App() {
 	        >
 	          <div className="modal" onClick={(event) => event.stopPropagation()}>
 	            <div className="modal-header">
-	              <div className="modal-title">Arx AI quota reached</div>
+	              <div className="modal-title">
+                  {platformQuotaModal.reason === "quota" ? "Arx AI quota reached" : "Arx AI unavailable"}
+                </div>
 	              <button
 	                className="modal-close"
 	                type="button"
@@ -14158,12 +14255,19 @@ export default function App() {
 	            </div>
 	            <div className="modal-body">
 	              <div className="model-note" style={{ marginBottom: 12 }}>
-	                You&apos;ve used your included Arx AI quota for this month.
+	                {platformQuotaModal.reason === "quota"
+	                  ? "You've used your included Arx AI quota for this month."
+	                  : platformQuotaModal.message || "Arx AI is temporarily unavailable."}
 	              </div>
 	              <div className="model-note" style={{ marginBottom: 12 }}>
 	                To continue with {platformQuotaModal.providerLabel}, you can use your own API key.
 	              </div>
-	              {!platformQuotaModal.hasKey && (
+                {!platformQuotaModal.byokAllowed && (
+                  <div className="auth-error" style={{ marginBottom: 12 }}>
+                    This model can&apos;t be used with BYOK. Choose a different model.
+                  </div>
+                )}
+	              {platformQuotaModal.byokAllowed && !platformQuotaModal.hasKey && (
 	                <div className="auth-error">
 	                  No {platformQuotaModal.providerLabel} API key is saved yet. Add one in Settings → Models.
 	                </div>
@@ -14179,25 +14283,49 @@ export default function App() {
 	                >
 	                  Cancel
 	                </button>
-	                <button
-	                  type="button"
-	                  className="secondary"
-	                  onClick={() => {
-	                    setActiveView("settings");
-	                    setSettingsPage("models");
-	                    setPlatformQuotaModal(null);
-	                  }}
-	                  disabled={isPlatformQuotaModalRunning}
-	                >
-	                  Add API key
-	                </button>
-	                <button
-	                  type="button"
-	                  onClick={() => void retryTurnWithByokFromQuotaModal()}
-	                  disabled={!platformQuotaModal.hasKey || isPlatformQuotaModalRunning}
-	                >
-	                  {isPlatformQuotaModalRunning ? "Running…" : "Use my API key"}
-	                </button>
+                  {(!platformQuotaModal.byokAllowed || !platformQuotaModal.hasKey) && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        const threadId = platformQuotaModal.threadId;
+                        setPlatformQuotaModal(null);
+                        setActiveThreadId(threadId);
+                        setIsModelPickerOpen(true);
+                        window.setTimeout(() => {
+                          const root = modelPickerRef.current;
+                          const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
+                          btn?.focus();
+                        }, 60);
+                      }}
+                      disabled={isPlatformQuotaModalRunning}
+                    >
+                      Change model
+                    </button>
+                  )}
+                  {platformQuotaModal.byokAllowed && !platformQuotaModal.hasKey && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setActiveView("settings");
+                        setSettingsPage("models");
+                        setPlatformQuotaModal(null);
+                      }}
+                      disabled={isPlatformQuotaModalRunning}
+                    >
+                      Add API key
+                    </button>
+                  )}
+                  {platformQuotaModal.byokAllowed && platformQuotaModal.hasKey && (
+                    <button
+                      type="button"
+                      onClick={() => void retryTurnWithByokFromQuotaModal()}
+                      disabled={isPlatformQuotaModalRunning}
+                    >
+                      {isPlatformQuotaModalRunning ? "Running…" : "Use my API key"}
+                    </button>
+                  )}
 	              </div>
 	            </div>
 	          </div>

@@ -13,6 +13,36 @@ type OpenRouterTurnInput = {
   inference_source?: "user" | "platform";
 };
 
+type ApiError = Error & {
+  code: string;
+  status: number;
+  details?: Record<string, unknown>;
+};
+
+function createApiError(
+  code: string,
+  message: string,
+  status: number,
+  details?: Record<string, unknown>,
+): ApiError {
+  const err = new Error(message) as ApiError;
+  err.code = code;
+  err.status = status;
+  if (details) err.details = details;
+  return err;
+}
+
+function isApiError(error: unknown): error is ApiError {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      "status" in error &&
+      typeof (error as { code?: unknown }).code === "string" &&
+      typeof (error as { status?: unknown }).status === "number",
+  );
+}
+
 function isTruthyEnv(value: string): boolean {
   const v = (value ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes" || v === "on";
@@ -124,6 +154,17 @@ type ModelRegistryRow = {
 function isPlatformQuotaExceededErrorMessage(message: string): boolean {
   const raw = String(message ?? "");
   return raw.toLowerCase().includes("platform_inference_quota_exceeded");
+}
+
+function isPlatformModelRoutingMisconfiguredMessage(message: string): boolean {
+  const raw = String(message ?? "").trim().toLowerCase();
+  if (!raw) return false;
+  return (
+    raw.includes("platform_model_map_json") ||
+    raw.includes("platform model not configured") ||
+    raw.includes("invalid platform model mapping") ||
+    raw.includes("unsupported platform model provider")
+  );
 }
 
 function normalizePlatformProvider(input: string): PlatformProvider {
@@ -253,7 +294,9 @@ async function resolveByokModelForAliasOrRegistry(aliasModelId: string): Promise
   const row = await loadModelRegistryRow(cleanedAlias);
   if (row) {
     if (!row.enabled || !row.byok_enabled) {
-      throw new Error("byok_inference_not_allowed");
+      throw createApiError("byok_inference_not_allowed", "BYOK is not available for this model.", 403, {
+        model_id: cleanedAlias,
+      });
     }
     const provider = normalizePlatformProvider(row.provider);
     const providerModel = String(row.provider_model ?? "").trim();
@@ -1458,6 +1501,8 @@ Deno.serve(async (req: Request) => {
       throw new Error("Model is not available.");
     }
 
+    const byokAllowed = modelRegistryRow?.byok_enabled !== false;
+
     // Default behavior:
     // - Free: BYOK only.
     // - Paid: use platform-provided inference first (BYOK only on explicit request or when platform is unavailable for this model).
@@ -1477,7 +1522,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (inferenceSource === "user" && modelRegistryRow?.byok_enabled === false) {
-      throw new Error("byok_inference_not_allowed");
+      throw createApiError("byok_inference_not_allowed", "BYOK is not available for this model.", 403, {
+        model_id: aliasModelId,
+      });
     }
 
     const memorySettings: UserMemorySettingsRow =
@@ -1541,12 +1588,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // Rate limits (defense in depth): always per-user; optionally also per-IP.
+    const retryAfterSeconds = 60;
     const userRlAllowed = await edgeRateLimitAllowKey({
       key: `openrouter_turn:user:${userId}`,
       windowSeconds: 60,
       limit: inferenceSource === "platform" ? 20 : 60,
     });
-    if (!userRlAllowed) throw new Error("rate_limited");
+    if (!userRlAllowed) {
+      throw createApiError("rate_limited", "Too many requests. Try again soon.", 429, {
+        retry_after_seconds: retryAfterSeconds,
+      });
+    }
 
     const ipRlAllowed = await edgeRateLimitAllow({
       req,
@@ -1554,7 +1606,11 @@ Deno.serve(async (req: Request) => {
       windowSeconds: 60,
       limit: inferenceSource === "platform" ? 120 : 240,
     });
-    if (!ipRlAllowed) throw new Error("rate_limited");
+    if (!ipRlAllowed) {
+      throw createApiError("rate_limited", "Too many requests. Try again soon.", 429, {
+        retry_after_seconds: retryAfterSeconds,
+      });
+    }
 
     let platformRemaining: number | null = null;
     const platformMaxTokensRaw =
@@ -1572,28 +1628,112 @@ Deno.serve(async (req: Request) => {
     let byokOpenAiCompatibleBaseUrl: string | null = null;
 
     if (inferenceSource === "platform") {
-      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
+      let providerHint: PlatformProvider | null = null;
+      if (modelRegistryRow?.provider) {
+        try {
+          providerHint = normalizePlatformProvider(modelRegistryRow.provider);
+        } catch {
+          providerHint = null;
+        }
+      }
+
+      try {
+        platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (isPlatformModelRoutingMisconfiguredMessage(message)) {
+          const provider = providerHint;
+          const byokKey = provider
+            ? await readUserProviderKeySecret({ userId, provider, reveal: false }).catch(() => ({ hasKey: false, key: null }))
+            : { hasKey: false, key: null };
+          throw createApiError(
+            "platform_inference_misconfigured",
+            "Arx AI isn't configured yet for this model.",
+            503,
+            {
+              model_id: aliasModelId,
+              provider: provider ?? null,
+              byok_allowed: byokAllowed,
+              has_byok_key: byokKey.hasKey,
+              misconfig: "model_routing",
+            },
+          );
+        }
+        throw error;
+      }
       switch (platformModel.provider) {
         case "openai": {
           platformProviderKey = getEnv("OPENAI_API_KEY");
           platformOpenAiCompatibleBaseUrl = "https://api.openai.com/v1";
-          if (!platformProviderKey) throw new Error("Missing env var: OPENAI_API_KEY");
+          if (!platformProviderKey) {
+            const byokKey = await readUserProviderKeySecret({ userId, provider: "openai", reveal: false }).catch(() => ({
+              hasKey: false,
+              key: null,
+            }));
+            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for OpenAI.", 503, {
+              model_id: aliasModelId,
+              provider: "openai",
+              byok_allowed: byokAllowed,
+              has_byok_key: byokKey.hasKey,
+              misconfig: "missing_secret",
+              missing_secret: "OPENAI_API_KEY",
+            });
+          }
           break;
         }
         case "x-ai": {
           platformProviderKey = getEnv("XAI_API_KEY");
           platformOpenAiCompatibleBaseUrl = "https://api.x.ai/v1";
-          if (!platformProviderKey) throw new Error("Missing env var: XAI_API_KEY");
+          if (!platformProviderKey) {
+            const byokKey = await readUserProviderKeySecret({ userId, provider: "x-ai", reveal: false }).catch(() => ({
+              hasKey: false,
+              key: null,
+            }));
+            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for xAI.", 503, {
+              model_id: aliasModelId,
+              provider: "x-ai",
+              byok_allowed: byokAllowed,
+              has_byok_key: byokKey.hasKey,
+              misconfig: "missing_secret",
+              missing_secret: "XAI_API_KEY",
+            });
+          }
           break;
         }
         case "anthropic": {
           platformProviderKey = getEnv("ANTHROPIC_API_KEY");
-          if (!platformProviderKey) throw new Error("Missing env var: ANTHROPIC_API_KEY");
+          if (!platformProviderKey) {
+            const byokKey = await readUserProviderKeySecret({ userId, provider: "anthropic", reveal: false }).catch(() => ({
+              hasKey: false,
+              key: null,
+            }));
+            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for Anthropic.", 503, {
+              model_id: aliasModelId,
+              provider: "anthropic",
+              byok_allowed: byokAllowed,
+              has_byok_key: byokKey.hasKey,
+              misconfig: "missing_secret",
+              missing_secret: "ANTHROPIC_API_KEY",
+            });
+          }
           break;
         }
         case "google": {
           platformProviderKey = getEnv("GOOGLE_API_KEY");
-          if (!platformProviderKey) throw new Error("Missing env var: GOOGLE_API_KEY");
+          if (!platformProviderKey) {
+            const byokKey = await readUserProviderKeySecret({ userId, provider: "google", reveal: false }).catch(() => ({
+              hasKey: false,
+              key: null,
+            }));
+            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for Google.", 503, {
+              model_id: aliasModelId,
+              provider: "google",
+              byok_allowed: byokAllowed,
+              has_byok_key: byokKey.hasKey,
+              misconfig: "missing_secret",
+              missing_secret: "GOOGLE_API_KEY",
+            });
+          }
           break;
         }
         default:
@@ -1615,6 +1755,8 @@ Deno.serve(async (req: Request) => {
               code: "platform_inference_quota_exceeded",
               provider: platformModel.provider,
               has_byok_key: byokKey.hasKey,
+              byok_allowed: byokAllowed,
+              model_id: aliasModelId,
               message: "You've used your Arx AI quota for this month.",
             },
             { status: 403, headers },
@@ -2349,6 +2491,26 @@ Deno.serve(async (req: Request) => {
 
     return new Response(stream, { status: 200, headers: streamHeaders });
   } catch (error) {
+    if (isApiError(error)) {
+      const details = (error.details ?? {}) as Record<string, unknown>;
+      const retryAfter =
+        typeof details.retry_after_seconds === "number" && Number.isFinite(details.retry_after_seconds)
+          ? Math.max(0, Math.floor(details.retry_after_seconds))
+          : null;
+      return jsonResponse(
+        {
+          ok: false,
+          code: error.code,
+          error: error.code,
+          message: error.message,
+          ...details,
+        },
+        {
+          status: error.status,
+          headers: retryAfter ? { ...headers, "Retry-After": String(retryAfter) } : headers,
+        },
+      );
+    }
     const message = error instanceof Error ? error.message : String(error);
     const status = message === "forbidden" ? 403 : message === "rate_limited" ? 429 : 400;
     return jsonResponse({ ok: false, error: message }, { status, headers });
