@@ -629,8 +629,8 @@ fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
         title,
         CASE
           WHEN harness_id IS NOT NULL AND TRIM(harness_id) <> '' THEN harness_id
-          WHEN model_id IS NOT NULL AND TRIM(model_id) <> '' THEN 'openrouter_chat'
-          ELSE 'openrouter_chat'
+          WHEN model_id IS NOT NULL AND TRIM(model_id) <> '' THEN 'openrouter_messages_agent'
+          ELSE 'openrouter_messages_agent'
         END,
         model_id,
         workspace_path,
@@ -945,7 +945,7 @@ fn backfill_contract_tables(conn: &Connection) -> anyhow::Result<()> {
            SELECT
              s.id,
              s.title,
-             'openrouter_chat',
+             'openrouter_messages_agent',
              NULL,
              NULL,
              NULL,
@@ -965,7 +965,7 @@ fn backfill_contract_tables(conn: &Connection) -> anyhow::Result<()> {
            SELECT
              s.id,
              s.title,
-             'openrouter_chat',
+             'openrouter_messages_agent',
              NULL,
              NULL,
              NULL,
