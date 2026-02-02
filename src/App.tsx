@@ -13206,15 +13206,19 @@ function App() {
                       value={discoverQuery}
                       onChange={(event) => setDiscoverQuery(event.target.value)}
                     />
-                    <button className="discover-refresh" onClick={() => void loadDiscoverCommunities()}>
-                      Refresh
+                    <button
+                      className="discover-refresh"
+                      disabled={isLoadingDiscover}
+                      onClick={() => void loadDiscoverCommunities()}
+                    >
+                      {isLoadingDiscover ? "Refreshing…" : "Refresh"}
                     </button>
                   </div>
 	                </div>
 	                <div className="workspace-body chat-feed">
 	                  <div className="chat-messages discover-scroll">
 	                    <div className="discover-grid">
-	                      {isLoadingDiscover && (
+	                      {isLoadingDiscover && discoverCommunities.length === 0 && (
 	                        <div className="chat-loading">
 	                          <div className="loading-spinner" />
 	                          <span>Loading communities…</span>
@@ -13232,8 +13236,7 @@ function App() {
 	                          </button>
 	                        </div>
 	                      )}
-	                      {!isLoadingDiscover &&
-	                        filteredDiscoverCommunities.map((community) => {
+	                      {filteredDiscoverCommunities.map((community) => {
 	                          const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
 	                          const alreadyMember = Boolean(memberCommunity);
 	                          const isJoining = joiningDiscoverCommunityId === community.slug;
@@ -13349,11 +13352,11 @@ function App() {
 	                            </div>
 	                          );
 	                        })}
+	                    </div>
 	                  </div>
 	                </div>
-	              </div>
-	            </div>
-	            )}
+              </div>
+            )}
 	            {activePage === "community" && communityTab === "chat" && (
 	              <div className="community-chat">
                 <div className="workspace-body chat-feed">

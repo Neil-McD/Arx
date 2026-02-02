@@ -11390,15 +11390,20 @@ export default function App() {
                         value={discoverQuery}
                         onChange={(event) => setDiscoverQuery(event.target.value)}
                       />
-                      <button className="discover-refresh" type="button" onClick={() => void loadDiscoverCommunities()}>
-                        Refresh
+                      <button
+                        className="discover-refresh"
+                        type="button"
+                        disabled={isLoadingDiscover}
+                        onClick={() => void loadDiscoverCommunities()}
+                      >
+                        {isLoadingDiscover ? "Refreshing…" : "Refresh"}
                       </button>
                     </div>
 	                  </div>
 	                  <div className="workspace-body chat-feed">
 	                    <div className="chat-messages discover-scroll">
 	                      <div className="discover-grid">
-	                        {isLoadingDiscover && (
+	                        {isLoadingDiscover && discoverCommunities.length === 0 && (
 	                          <div className="chat-loading">
 	                            <div className="loading-spinner" />
 	                            <span>Loading communities…</span>
@@ -11413,8 +11418,7 @@ export default function App() {
 	                            </div>
 	                          </div>
 	                        )}
-	                        {!isLoadingDiscover &&
-	                          filteredDiscoverCommunities.map((community) => {
+	                        {filteredDiscoverCommunities.map((community) => {
 	                            const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
 	                            const alreadyMember = Boolean(memberCommunity);
 	                            const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
