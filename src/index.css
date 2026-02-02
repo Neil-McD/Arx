@@ -615,7 +615,7 @@ html, body {
   width: 44px;
   height: 44px;
   border-radius: var(--radius-sm);
-  border: 0;
+  border: 1px solid var(--border-default);
   background: var(--bg-card);
   color: var(--text-primary);
   display: grid;
@@ -624,6 +624,12 @@ html, body {
   position: relative;
   overflow: visible;
   transition: background 0.15s ease, transform 0.15s ease;
+}
+
+/* Dark themes: drop the thin tile border (it reads noisy). */
+:root[data-theme="dark"] .community-rail-button,
+:root[data-theme="dark-warm"] .community-rail-button {
+  border: 0;
 }
 
 /* Discord-style selection/hover indicator "lip" */
@@ -637,7 +643,7 @@ html, body {
   width: 4px;
   height: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--text-primary);
   opacity: 0;
   pointer-events: none;
   transition: height 0.15s ease, opacity 0.15s ease;
@@ -667,7 +673,7 @@ html, body {
 }
 
 .community-rail-button:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline: 2px solid var(--border-active);
   outline-offset: 3px;
 }
 

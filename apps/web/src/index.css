@@ -66,6 +66,34 @@
   background: var(--web-rail-bg);
 }
 
+/* Web light themes: add enough contrast so the selection lip + buttons read on white rails. */
+:root[data-theme="light"] .community-rail-button,
+:root[data-theme="light-warm"] .community-rail-button {
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+}
+
+:root[data-theme="light"] .community-rail-button.community-rail-community,
+:root[data-theme="light-warm"] .community-rail-button.community-rail-community {
+  background: var(--bg-card);
+}
+
+:root[data-theme="light"] .community-rail-button.community-rail-community::before,
+:root[data-theme="light-warm"] .community-rail-button.community-rail-community::before {
+  background: var(--text-primary);
+}
+
+:root[data-theme="light"] .community-rail-button:focus-visible,
+:root[data-theme="light-warm"] .community-rail-button:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.25);
+}
+
+/* If we show initials, don't paint the full tile white in light mode. */
+:root[data-theme="light"] .community-rail-initials,
+:root[data-theme="light-warm"] .community-rail-initials {
+  background: transparent;
+}
+
 .community-rail-skeleton {
   display: flex;
   flex-direction: column;
@@ -219,27 +247,15 @@
 
 /* Web: move scrollbars to the window edge without flattening content gutters. */
 .settings-panel {
-  padding: var(--web-topbar-height) 0 24px 24px;
-}
-
-.settings-panel > * {
-  margin-right: 24px;
+  padding: var(--web-topbar-height) 24px 24px 24px;
 }
 
 .chat-messages {
   padding-right: 0;
 }
 
-.chat-messages > * {
-  margin-right: 12px;
-}
-
 .chat-messages.discover-scroll {
   padding-inline: 0;
-}
-
-.chat-messages.discover-scroll > * {
-  margin-right: 0;
 }
 
 .web-sessions-drawer {
@@ -1337,6 +1353,7 @@
   max-width: var(--web-chat-max-width);
   margin-left: auto;
   margin-right: auto;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: row;
   align-items: center;
