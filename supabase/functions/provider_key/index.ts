@@ -45,9 +45,8 @@ async function readJson<T>(req: Request): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-function normalizeProvider(value: string): "openrouter" | "openai" | "anthropic" | "google" | "x-ai" {
+function normalizeProvider(value: string): "openai" | "anthropic" | "google" | "x-ai" {
   const v = (value ?? "").trim().toLowerCase();
-  if (v === "openrouter") return "openrouter";
   if (v === "openai") return "openai";
   if (v === "anthropic") return "anthropic";
   if (v === "google") return "google";

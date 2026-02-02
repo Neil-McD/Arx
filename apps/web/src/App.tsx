@@ -540,7 +540,6 @@ const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
-  { id: "gpt-5.1", label: "GPT 5.1", enabled: true },
   { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
   { id: "opus-4.5", label: "Opus 4.5", enabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
@@ -2251,14 +2250,16 @@ export default function App() {
           return { id, label, enabled } satisfies ModelToggle;
         })
         .filter(Boolean) as ModelToggle[];
-      return normalized.length ? normalized : DEFAULT_MODEL_TOGGLES;
+      const pruned = normalized.filter((toggle) => toggle.id !== "gpt-5.1");
+      return pruned.length ? pruned : DEFAULT_MODEL_TOGGLES;
     } catch {
       return DEFAULT_MODEL_TOGGLES;
     }
   });
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
-      return localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
+      const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
+      return stored === "gpt-5.1" ? null : stored;
     } catch {
       return null;
     }
@@ -5676,7 +5677,7 @@ export default function App() {
     streamingAbortRef.current.abort();
   }
 
-  async function runOpenRouterTurn(
+  async function runAgentTurn(
     session: SupabaseSession,
     threadId: string,
     params: {
@@ -5697,7 +5698,7 @@ export default function App() {
     setStreamingContent("");
     setStreamingThreadId(threadId);
     setStreamingRunId(params.runIdHint);
-    setStreamingMeta({ engine_id: "openrouter_web", model_id: params.preferredModelId, memory_used: [], history_used: [] });
+    setStreamingMeta({ engine_id: "agent_web", model_id: params.preferredModelId, memory_used: [], history_used: [] });
 
     const scheduleStreamingFlush = () => {
       if (streamingRafRef.current) return;
@@ -5709,7 +5710,7 @@ export default function App() {
 
     try {
       const turn = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/openrouter_turn`,
+        `${url}/functions/v1/agent_turn`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -5909,7 +5910,7 @@ export default function App() {
     try {
       const threadModelId = (threads.find((t) => t.id === modal.threadId)?.model_id ?? "").trim();
       const preferredModelId = threadModelId || DEFAULT_ACTIVE_MODEL_ID;
-      const result = await runOpenRouterTurn(supabaseSession, modal.threadId, {
+      const result = await runAgentTurn(supabaseSession, modal.threadId, {
         preferredModelId,
         mode: modal.mode,
         runIdHint: `byok_web:${modal.threadId}:${Date.now()}`,
@@ -6155,10 +6156,10 @@ export default function App() {
       setWorkspaceAttachments([]);
       await loadThreadMessages(threadId, session);
 
-      const turnResult = await runOpenRouterTurn(session, threadId, {
+      const turnResult = await runAgentTurn(session, threadId, {
         preferredModelId,
         mode: "respond",
-        runIdHint: `openrouter_web:${messageId}`,
+        runIdHint: `agent_web:${messageId}`,
       });
       if (turnResult.error) throw new Error(turnResult.error);
     } catch (error) {
@@ -6216,10 +6217,10 @@ export default function App() {
         await updateThreadModel(threadId, preferredModelId, session);
       }
 
-      const turnResult = await runOpenRouterTurn(session, threadId, {
+      const turnResult = await runAgentTurn(session, threadId, {
         preferredModelId,
         mode: "respond",
-        runIdHint: `openrouter_web:${lastUserMessageId}`,
+        runIdHint: `agent_web:${lastUserMessageId}`,
       });
       if (turnResult.error) throw new Error(turnResult.error);
     } catch (error) {
@@ -6265,10 +6266,10 @@ export default function App() {
         await updateThreadModel(threadId, preferredModelId, session);
       }
 
-      const turnResult = await runOpenRouterTurn(session, threadId, {
+      const turnResult = await runAgentTurn(session, threadId, {
         preferredModelId,
         mode: "regenerate",
-        runIdHint: `openrouter_web_regen:${lastUserMessageId}:${Date.now()}`,
+        runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
       });
       if (turnResult.error) throw new Error(turnResult.error);
     } catch (error) {
