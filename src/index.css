@@ -5394,6 +5394,12 @@ h3.md-header {
   background: rgba(210, 80, 80, 0.18);
 }
 
+.delete-community-btn {
+  align-self: flex-start;
+  width: auto;
+  min-width: 200px;
+}
+
 /* Model list - simple rows, no card backgrounds */
 .model-list {
   display: flex;

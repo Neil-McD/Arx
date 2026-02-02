@@ -14199,7 +14199,7 @@ function App() {
                               </div>
                               <button
                                 type="button"
-                                className="danger"
+                                className="danger delete-community-btn"
                                 onClick={openDeleteCommunityModal}
                                 disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
                               >
