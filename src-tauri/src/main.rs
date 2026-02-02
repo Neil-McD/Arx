@@ -26,7 +26,8 @@ use keyring::Entry;
 use tauri::Emitter;
 use tauri::Manager;
 use futures::StreamExt;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::process::Command as TokioCommand;
 use tokio::sync::{oneshot, watch, Mutex};
 use sha2::{Digest as _, Sha256};
@@ -1640,6 +1641,24 @@ fn make_agent_tool_schema_openai() -> Vec<serde_json::Value> {
     .collect()
 }
 
+fn make_agent_tool_schema_openai_responses() -> Vec<serde_json::Value> {
+  make_agent_tool_schema()
+    .into_iter()
+    .filter_map(|tool| {
+      let name = tool.get("name")?.as_str()?.to_string();
+      let description = tool.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      let parameters = tool.get("input_schema").cloned().unwrap_or(serde_json::Value::Null);
+      Some(serde_json::json!({
+        "type": "function",
+        "name": name,
+        "description": description,
+        "parameters": parameters,
+        "strict": false
+      }))
+    })
+    .collect()
+}
+
 fn make_agent_tool_schema_openai_update_plan_only() -> Vec<serde_json::Value> {
   make_agent_tool_schema_update_plan_only()
     .into_iter()
@@ -1654,6 +1673,24 @@ fn make_agent_tool_schema_openai_update_plan_only() -> Vec<serde_json::Value> {
           "description": description,
           "parameters": parameters
         }
+      }))
+    })
+    .collect()
+}
+
+fn make_agent_tool_schema_openai_responses_update_plan_only() -> Vec<serde_json::Value> {
+  make_agent_tool_schema_update_plan_only()
+    .into_iter()
+    .filter_map(|tool| {
+      let name = tool.get("name")?.as_str()?.to_string();
+      let description = tool.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      let parameters = tool.get("input_schema").cloned().unwrap_or(serde_json::Value::Null);
+      Some(serde_json::json!({
+        "type": "function",
+        "name": name,
+        "description": description,
+        "parameters": parameters,
+        "strict": false
       }))
     })
     .collect()
@@ -2997,6 +3034,7 @@ struct OpenRouterStreamPayload {
   run_id: String,
   engine_id: String,
   model_id: String,
+  inference_source: String,
   chunk: String,
   full_content: String,
   seq: u64,
@@ -3065,6 +3103,7 @@ fn append_messages_agent_assistant_message(
   source_event_ids: &[String],
   provider_id: &str,
   provider_model_ref: Option<&str>,
+  inference_source: &str,
   max_tokens: u32,
   memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
   context_community_id: Option<&str>,
@@ -3078,6 +3117,7 @@ fn append_messages_agent_assistant_message(
       "model_id": model_id,
       "provider_id": provider_id,
       "provider_model_ref": provider_model_ref,
+      "inference_source": inference_source,
       "context_community_id": context_community_id,
       "run_id": run_id,
       "max_tokens": max_tokens
@@ -3250,6 +3290,7 @@ async fn send_turn_messages_agent(
   context_community_id: Option<String>,
 ) -> Result<SendTurnResult, String> {
   let run_id = uuid::Uuid::new_v4().to_string();
+  let mut final_inference_source: Option<String> = None;
   let context_community_id = context_community_id
     .as_deref()
     .map(|v| v.trim())
@@ -3280,6 +3321,7 @@ async fn send_turn_messages_agent(
         &[],
         "unknown",
         None,
+        "system",
         DEFAULT_MAX_TOKENS,
         None,
         context_community_id,
@@ -3318,6 +3360,7 @@ async fn send_turn_messages_agent(
 		      &[],
 		      provider_id,
 		      provider_model_ref,
+          "system",
 		      DEFAULT_MAX_TOKENS,
 		      None,
 		      context_community_id,
@@ -3387,7 +3430,7 @@ async fn send_turn_messages_agent(
 
 	    // Base conversation: system in messages, then last ~20 user/assistant text messages.
 	    let mut messages: Vec<serde_json::Value> = Vec::new();
-	    messages.push(serde_json::json!({ "role": "system", "content": system_prompt }));
+	    messages.push(serde_json::json!({ "role": "system", "content": system_prompt.clone() }));
 	    for (role, value) in load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref()) {
 	        let text = value
 	          .get("text")
@@ -3412,18 +3455,33 @@ async fn send_turn_messages_agent(
 	      messages.push(serde_json::json!({ "role": "user", "content": input_to_send.clone() }));
 	    }
 
-	    let tools_schema = if workspace.trim().is_empty() {
+	    let tools_schema_chat = if workspace.trim().is_empty() {
 	      make_agent_tool_schema_openai_update_plan_only()
 	    } else {
 	      make_agent_tool_schema_openai()
+	    };
+	    let tools_schema_responses = if workspace.trim().is_empty() {
+	      make_agent_tool_schema_openai_responses_update_plan_only()
+	    } else {
+	      make_agent_tool_schema_openai_responses()
 	    };
 	    let client = reqwest::Client::new();
 	    let base_url = platform_openai_compatible_base_url(model_ref.provider)
 	      .unwrap_or("https://api.openai.com/v1")
 	      .trim_end_matches('/');
 	    let chat_url = format!("{}/chat/completions", base_url);
-	    let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
-	    let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
+		    let mut chatgpt_auth: Option<ChatgptAuthV1> = if model_ref.provider == PlatformProvider::OpenAi {
+		      match get_chatgpt_auth_for_inference().await {
+		        Ok(value) => value,
+		        Err(_) => None,
+		      }
+		    } else {
+		      None
+		    };
+		    let mut chatgpt_fallback_approved_for_run = false;
+		    let mut chatgpt_fallback_notified = false;
+		    let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
+		    let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
 	      .ok()
 	      .flatten()
 	      .map(|value| {
@@ -3453,19 +3511,130 @@ async fn send_turn_messages_agent(
 	      }
 
 	      call_seq += 1;
-	      let mut request_max_tokens = DEFAULT_MAX_TOKENS;
-	      let mut request_attempt: u32 = 1;
-	      let mut use_platform_for_call = platform_available_for_run;
+		      let mut request_max_tokens = DEFAULT_MAX_TOKENS;
+		      let mut request_attempt: u32 = 1;
+		      let mut use_platform_for_call =
+		        platform_available_for_run
+		          && !(model_ref.provider == PlatformProvider::OpenAi && chatgpt_auth.is_some());
 
 	      let (engine_input_event, status, resp_bytes, parsed_response) = loop {
-	        let provider_request = serde_json::json!({
-	          "model": provider_model_id.as_str(),
-	          "max_tokens": request_max_tokens,
-	          "stream": true,
-	          "messages": messages,
-	          "tools": tools_schema
-	        });
-	        let using_platform = use_platform_for_call && platform_agent_infer_url.is_some();
+		        let using_platform = use_platform_for_call && platform_agent_infer_url.is_some();
+		        let using_chatgpt =
+		          !using_platform
+		            && model_ref.provider == PlatformProvider::OpenAi
+		            && chatgpt_auth.is_some();
+	        let request_model_id = if using_chatgpt {
+	          selected_model_id
+	        } else {
+	          provider_model_id.as_str()
+	        };
+	        let provider_request = if using_chatgpt {
+	          let mut input: Vec<serde_json::Value> = Vec::new();
+	          for msg in &messages {
+	            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+	            match role {
+	              "system" => {}
+	              "user" => {
+	                let text = msg
+	                  .get("content")
+	                  .and_then(|v| v.as_str())
+	                  .unwrap_or("")
+	                  .to_string();
+	                if !text.trim().is_empty() {
+	                  input.push(serde_json::json!({
+	                    "role": "user",
+	                    "content": [{ "type": "input_text", "text": text }]
+	                  }));
+	                }
+	              }
+	              "assistant" => {
+	                let text = msg
+	                  .get("content")
+	                  .and_then(|v| v.as_str())
+	                  .unwrap_or("")
+	                  .to_string();
+	                if !text.trim().is_empty() {
+	                  input.push(serde_json::json!({
+	                    "role": "assistant",
+	                    "content": [{ "type": "output_text", "text": text }]
+	                  }));
+	                }
+	                if let Some(tcs) = msg.get("tool_calls").and_then(|v| v.as_array()) {
+	                  for tc in tcs {
+	                    let call_id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+	                    let name = tc
+	                      .get("function")
+	                      .and_then(|f| f.get("name"))
+	                      .and_then(|v| v.as_str())
+	                      .unwrap_or("")
+	                      .to_string();
+	                    let arguments = tc
+	                      .get("function")
+	                      .and_then(|f| f.get("arguments"))
+	                      .and_then(|v| v.as_str())
+	                      .unwrap_or("")
+	                      .to_string();
+	                    if !call_id.trim().is_empty() && !name.trim().is_empty() {
+	                      input.push(serde_json::json!({
+	                        "type": "function_call",
+	                        "call_id": call_id,
+	                        "name": name,
+	                        "arguments": arguments
+	                      }));
+	                    }
+	                  }
+	                }
+	              }
+	              "tool" => {
+	                let call_id = msg
+	                  .get("tool_call_id")
+	                  .and_then(|v| v.as_str())
+	                  .unwrap_or("")
+	                  .to_string();
+	                let output = msg
+	                  .get("content")
+	                  .and_then(|v| v.as_str())
+	                  .unwrap_or("")
+	                  .to_string();
+	                if !call_id.trim().is_empty() {
+	                  input.push(serde_json::json!({
+	                    "type": "function_call_output",
+	                    "call_id": call_id,
+	                    "output": output
+	                  }));
+	                }
+	              }
+	              _ => {}
+	            }
+	          }
+	          serde_json::json!({
+	            "model": request_model_id,
+	            "instructions": system_prompt.clone(),
+	            "store": false,
+	            "stream": true,
+	            "input": input,
+	            "tools": tools_schema_responses,
+	            "tool_choice": "auto",
+	            "parallel_tool_calls": false,
+	            "include": []
+	          })
+	        } else if model_ref.provider == PlatformProvider::OpenAi {
+	          serde_json::json!({
+	            "model": request_model_id,
+	            "max_completion_tokens": request_max_tokens,
+	            "stream": true,
+	            "messages": messages,
+	            "tools": tools_schema_chat
+	          })
+	        } else {
+	          serde_json::json!({
+	            "model": request_model_id,
+	            "max_tokens": request_max_tokens,
+	            "stream": true,
+	            "messages": messages,
+	            "tools": tools_schema_chat
+	          })
+	        };
 	        let (request_bytes, request_format, inference_source) = if using_platform {
 	          let wrapped = serde_json::json!({
 	            "model_id": selected_model_id,
@@ -3479,13 +3648,25 @@ async fn send_turn_messages_agent(
 	        } else {
 	          (
 	            serde_json::to_vec(&provider_request).map_err(|e| format!("Request serialization failed: {}", e))?,
-	            "openai_compatible.chat_completions.json",
-	            "user",
+	            if using_chatgpt {
+	              "openai.responses.json"
+	            } else {
+	              "openai_compatible.chat_completions.json"
+	            },
+	            if using_chatgpt { "chatgpt" } else { "user" },
 	          )
 	        };
+	        final_inference_source = Some(inference_source.to_string());
 	        let request_blob = blob_store::write_blob(db_path, &request_bytes)
 	          .map_err(|e| format!("Request blob write failed: {}", e))?;
 	        let _ = db::record_blob(&conn, &request_blob.id, &request_blob.rel_path, request_blob.byte_len);
+
+	        let engine_input_max_tokens = if using_chatgpt {
+	          // ChatGPT/Codex subscription endpoint rejects max token params; keep evidence truthful.
+	          serde_json::Value::Null
+	        } else {
+	          serde_json::json!(request_max_tokens)
+	        };
 
 	        let engine_input_payload = serde_json::json!({
 	          "v": 1,
@@ -3502,7 +3683,7 @@ async fn send_turn_messages_agent(
 	          "sent_blob_id": request_blob.id,
 	          "sent_blob_ref": request_blob.rel_path,
 	          "sent_byte_len": request_blob.byte_len,
-	          "max_tokens": request_max_tokens,
+	          "max_tokens": engine_input_max_tokens,
 	          "stream": true,
 	          "input_redaction_report": {
 	            "blocked": input_report.blocked,
@@ -3537,6 +3718,7 @@ async fn send_turn_messages_agent(
 		              &[],
 		              provider_id,
 		              provider_model_ref,
+                  inference_source,
 		              request_max_tokens,
 		              None,
 		              context_community_id,
@@ -3593,46 +3775,63 @@ async fn send_turn_messages_agent(
 	            .body(request_bytes)
 	            .send()
 	        } else {
-	          let provider_key = match get_byok_provider_key() {
-	            Ok(value) => value,
-	            Err(message) => {
-	              append_messages_agent_assistant_message(
-	                &conn,
-	                db_path,
-	                thread_id,
-	                &message,
-	                selected_model_id,
-	                &run_id,
-	                &[],
-	                provider_id,
-	                provider_model_ref,
-	                request_max_tokens,
-	                None,
-	                context_community_id,
-	              );
-	              append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
-	              let _ = window.emit(
-	                "openrouter-turn-finished",
-	                SessionIdPayload {
-	                  session_id: thread_id.to_string(),
-	                },
-	              );
-	              return Ok(SendTurnResult {
-	                thread_id: thread_id.to_string(),
-	                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-	                engine_input_event_id: Some(engine_input_event.id),
-	                engine_input_seq: Some(engine_input_event.seq),
-	                run_id: Some(run_id),
-	              });
+	          if using_chatgpt {
+	            let auth = chatgpt_auth
+	              .as_ref()
+	              .ok_or_else(|| "ChatGPT session not available. Sign in again.".to_string())?;
+	            let mut req = client
+	              .post(CHATGPT_CODEX_RESPONSES_URL)
+	              .header("Authorization", format!("Bearer {}", auth.access_token))
+	              .header("User-Agent", "codex-cli")
+	              .header("Content-Type", "application/json")
+	              .header("Accept", "text/event-stream");
+	            if let Some(account_id) = auth.account_id.as_deref().filter(|v| !v.trim().is_empty()) {
+	              req = req.header("ChatGPT-Account-Id", account_id.trim());
 	            }
-	          };
-	          client
-	            .post(chat_url.clone())
-	            .header("Authorization", format!("Bearer {}", provider_key))
-	            .header("Content-Type", "application/json")
-	            .header("Accept", "text/event-stream")
-	            .body(request_bytes)
-	            .send()
+	            req.body(request_bytes).send()
+	          } else {
+	            let provider_key = match get_byok_provider_key() {
+	              Ok(value) => value,
+	              Err(message) => {
+	                append_messages_agent_assistant_message(
+	                  &conn,
+	                  db_path,
+	                  thread_id,
+	                  &message,
+	                  selected_model_id,
+	                  &run_id,
+	                  &[],
+	                  provider_id,
+	                  provider_model_ref,
+                    inference_source,
+	                  request_max_tokens,
+	                  None,
+	                  context_community_id,
+	                );
+	                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("missing_api_key"));
+	                let _ = window.emit(
+	                  "openrouter-turn-finished",
+	                  SessionIdPayload {
+	                    session_id: thread_id.to_string(),
+	                  },
+	                );
+	                return Ok(SendTurnResult {
+	                  thread_id: thread_id.to_string(),
+	                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                  engine_input_event_id: Some(engine_input_event.id),
+	                  engine_input_seq: Some(engine_input_event.seq),
+	                  run_id: Some(run_id),
+	                });
+	              }
+	            };
+	            client
+	              .post(chat_url.clone())
+	              .header("Authorization", format!("Bearer {}", provider_key))
+	              .header("Content-Type", "application/json")
+	              .header("Accept", "text/event-stream")
+	              .body(request_bytes)
+	              .send()
+	          }
 	        };
 
 	        let res = tokio::select! {
@@ -3663,6 +3862,7 @@ async fn send_turn_messages_agent(
 		              &[],
 		              provider_id,
 		              provider_model_ref,
+                  inference_source,
 		              request_max_tokens,
 		              None,
 		              context_community_id,
@@ -3695,7 +3895,7 @@ async fn send_turn_messages_agent(
 	        let mut resp_bytes: Vec<u8> = Vec::new();
 	        let mut parsed_response = ChatCallResponse::default();
 
-	        if !status.is_success() || !content_type.contains("text/event-stream") {
+	        if !status.is_success() || (!content_type.contains("text/event-stream") && !using_chatgpt) {
 	          resp_bytes = tokio::select! {
 	            _ = cancel_rx.changed() => {
 	              return Ok(finish_cancelled_messages_agent(
@@ -3762,6 +3962,7 @@ async fn send_turn_messages_agent(
 	                  &evidence_event_ids,
 	                  provider_id,
 	                  provider_model_ref,
+                    inference_source,
 	                  request_max_tokens,
 	                  None,
 	                  context_community_id,
@@ -3805,6 +4006,7 @@ async fn send_turn_messages_agent(
 		                  &evidence_event_ids,
 		                  provider_id,
 		                  provider_model_ref,
+                      inference_source,
 		                  request_max_tokens,
 		                  None,
 		                  context_community_id,
@@ -3848,6 +4050,7 @@ async fn send_turn_messages_agent(
 		                &evidence_event_ids,
 		                provider_id,
 		                provider_model_ref,
+                    inference_source,
 		                request_max_tokens,
 		                None,
 		                context_community_id,
@@ -3914,6 +4117,7 @@ async fn send_turn_messages_agent(
 		                  &evidence_event_ids,
 		                  provider_id,
 		                  provider_model_ref,
+                      inference_source,
 		                  request_max_tokens,
 		                  None,
 		                  context_community_id,
@@ -3950,6 +4154,126 @@ async fn send_turn_messages_agent(
 		              continue;
 		            }
 		          }
+
+	          if using_chatgpt && !status.is_success() {
+	            // First try: refresh ChatGPT token and retry once.
+	            if request_attempt == 1 {
+	              if let Ok(value) = get_chatgpt_auth_for_inference().await {
+	                if value.is_some() {
+	                  chatgpt_auth = value;
+	                  request_attempt = 2;
+	                  continue;
+	                }
+	              }
+	            }
+
+	            // ChatGPT auth isn't usable for this run; fall back to Arx platform if available.
+	            chatgpt_auth = None;
+	            if platform_available_for_run && platform_agent_infer_url.is_some() {
+	              if !chatgpt_fallback_notified {
+	                let friendly = format_provider_error(&resp_bytes);
+	                let reason = if friendly.trim().is_empty() {
+	                  format!("chatgpt_http_{}", status.as_u16())
+	                } else {
+	                  format!("chatgpt_http_{}: {}", status.as_u16(), friendly)
+	                };
+	                let _ = window.emit(
+	                  "inference-fallback",
+	                  InferenceFallbackPayload {
+	                    session_id: thread_id.to_string(),
+	                    from: "chatgpt".to_string(),
+	                    to: "platform".to_string(),
+	                    reason,
+	                  },
+	                );
+	                chatgpt_fallback_notified = true;
+	              }
+	              use_platform_for_call = true;
+	              continue;
+	            }
+
+	            // Otherwise, require explicit approval before switching to BYOK.
+	            if !chatgpt_fallback_approved_for_run {
+	              let provider_key_ok = get_byok_provider_key().is_ok();
+	              if !provider_key_ok {
+	                append_messages_agent_assistant_message(
+	                  &conn,
+	                  db_path,
+	                  thread_id,
+	                  "ChatGPT sign-in failed. Add your OpenAI API key in Settings → Models to continue.",
+	                  selected_model_id,
+	                  &run_id,
+	                  &evidence_event_ids,
+	                  provider_id,
+	                  provider_model_ref,
+                    inference_source,
+	                  request_max_tokens,
+	                  None,
+	                  context_community_id,
+	                );
+	                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("chatgpt_auth_failed"));
+	                let _ = window.emit(
+	                  "openrouter-turn-finished",
+	                  SessionIdPayload {
+	                    session_id: thread_id.to_string(),
+	                  },
+	                );
+	                return Ok(SendTurnResult {
+	                  thread_id: thread_id.to_string(),
+	                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                  engine_input_event_id: Some(engine_input_event.id),
+	                  engine_input_seq: Some(engine_input_event.seq),
+	                  run_id: Some(run_id),
+	                });
+	              }
+
+	              let approved = await_inference_fallback_approval(
+	                window,
+	                thread_id,
+	                selected_model_id,
+	                model_ref.provider,
+	                "chatgpt_error",
+	                cancel_rx.clone(),
+	              )
+	              .await;
+	              if !approved {
+	                append_messages_agent_assistant_message(
+	                  &conn,
+	                  db_path,
+	                  thread_id,
+	                  "ChatGPT sign-in failed. Cancelled — I didn’t switch to your OpenAI API key.",
+	                  selected_model_id,
+	                  &run_id,
+	                  &evidence_event_ids,
+	                  provider_id,
+	                  provider_model_ref,
+                    inference_source,
+	                  request_max_tokens,
+	                  None,
+	                  context_community_id,
+	                );
+	                append_run_finished(&conn, db_path, thread_id, &run_id, "error", Some("chatgpt_fallback_denied"));
+	                let _ = window.emit(
+	                  "openrouter-turn-finished",
+	                  SessionIdPayload {
+	                    session_id: thread_id.to_string(),
+	                  },
+	                );
+	                return Ok(SendTurnResult {
+	                  thread_id: thread_id.to_string(),
+	                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                  engine_input_event_id: Some(engine_input_event.id),
+	                  engine_input_seq: Some(engine_input_event.seq),
+	                  run_id: Some(run_id),
+	                });
+	              }
+
+	              chatgpt_fallback_approved_for_run = true;
+	            }
+
+	            use_platform_for_call = false;
+	            continue;
+	          }
 
 	          let friendly = format_provider_error(&resp_bytes);
 	          if status.as_u16() == 402 && request_attempt == 1 {
@@ -4016,6 +4340,8 @@ async fn send_turn_messages_agent(
 	        let mut stream_seq: u64 = 0;
 	        let mut assistant = String::new();
 	        let mut tool_calls: Vec<PartialToolCall> = Vec::new();
+	        let mut saw_chatgpt_output_text_delta = false;
+	        let mut saw_chatgpt_output_text_done = false;
 	        let mut prompt_tokens: Option<u64> = None;
 	        let mut completion_tokens: Option<u64> = None;
 
@@ -4061,6 +4387,7 @@ async fn send_turn_messages_agent(
 		                &evidence_event_ids,
 		                provider_id,
 		                provider_model_ref,
+                    inference_source,
 		                request_max_tokens,
 		                None,
 		                context_community_id,
@@ -4168,75 +4495,198 @@ async fn send_turn_messages_agent(
 	              Err(_) => continue,
 	            };
 
-	            if let Some(usage) = parsed.get("usage") {
-	              prompt_tokens = usage.get("prompt_tokens").and_then(|v| v.as_u64()).or(prompt_tokens);
-	              completion_tokens = usage.get("completion_tokens").and_then(|v| v.as_u64()).or(completion_tokens);
-	            }
+	            if using_chatgpt {
+	              let kind = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-	            let choice = parsed
-	              .get("choices")
-	              .and_then(|v| v.as_array())
-	              .and_then(|arr| arr.first())
-	              .cloned()
-	              .unwrap_or(serde_json::Value::Null);
-
-	            if let Some(delta) = choice
-	              .get("delta")
-	              .and_then(|d| d.get("content"))
-	              .and_then(|v| v.as_str())
-	            {
-	              if !delta.is_empty() {
-	                assistant.push_str(delta);
-	                stream_seq += 1;
-	                let _ = window.emit(
-	                  "openrouter-stream",
-	                  OpenRouterStreamPayload {
-	                    session_id: thread_id.to_string(),
-	                    run_id: run_id.clone(),
-	                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-	                    model_id: selected_model_id.to_string(),
-	                    chunk: delta.to_string(),
-	                    full_content: assistant.clone(),
-	                    seq: stream_seq,
-	                    prompt_tokens,
-	                    completion_tokens,
-	                    max_tokens: request_max_tokens,
-	                  },
-	                );
+	              if matches!(kind, "response.completed" | "response.done") {
+	                if let Some(usage) = parsed
+	                  .get("response")
+	                  .and_then(|r| r.get("usage"))
+	                {
+	                  prompt_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).or(prompt_tokens);
+	                  completion_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).or(completion_tokens);
+	                }
 	              }
-	            }
 
-	            if let Some(tcs) = choice
-	              .get("delta")
-	              .and_then(|d| d.get("tool_calls"))
-	              .and_then(|v| v.as_array())
-	            {
-	              for tc in tcs {
-	                let idx = tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-	                if tool_calls.len() <= idx {
-	                  tool_calls.resize_with(idx + 1, Default::default);
-	                }
-	                if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
-	                  if !id.trim().is_empty() {
-	                    tool_calls[idx].id = id.to_string();
+	              if kind == "response.output_text.delta" {
+	                if let Some(delta) = parsed.get("delta").and_then(|v| v.as_str()) {
+	                  if !delta.is_empty() {
+	                    saw_chatgpt_output_text_delta = true;
+	                    assistant.push_str(delta);
+	                    stream_seq += 1;
+	                    let _ = window.emit(
+	                      "openrouter-stream",
+	                      OpenRouterStreamPayload {
+	                        session_id: thread_id.to_string(),
+	                        run_id: run_id.clone(),
+	                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                        model_id: selected_model_id.to_string(),
+	                        inference_source: inference_source.to_string(),
+	                        chunk: delta.to_string(),
+	                        full_content: assistant.clone(),
+	                        seq: stream_seq,
+	                        prompt_tokens,
+	                        completion_tokens,
+	                        max_tokens: request_max_tokens,
+	                      },
+	                    );
 	                  }
 	                }
-	                if let Some(name) = tc
-	                  .get("function")
-	                  .and_then(|f| f.get("name"))
-	                  .and_then(|v| v.as_str())
-	                {
-	                  if !name.trim().is_empty() {
-	                    tool_calls[idx].name = name.to_string();
+	              }
+
+	              if kind == "response.output_text.done"
+	                && !saw_chatgpt_output_text_delta
+	                && !saw_chatgpt_output_text_done
+	              {
+	                if let Some(text) = parsed.get("text").and_then(|v| v.as_str()) {
+	                  if !text.trim().is_empty() {
+	                    saw_chatgpt_output_text_done = true;
+	                    assistant.push_str(text);
+	                    stream_seq += 1;
+	                    let _ = window.emit(
+	                      "openrouter-stream",
+	                      OpenRouterStreamPayload {
+	                        session_id: thread_id.to_string(),
+	                        run_id: run_id.clone(),
+	                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                        model_id: selected_model_id.to_string(),
+	                        inference_source: inference_source.to_string(),
+	                        chunk: text.to_string(),
+	                        full_content: assistant.clone(),
+	                        seq: stream_seq,
+	                        prompt_tokens,
+	                        completion_tokens,
+	                        max_tokens: request_max_tokens,
+	                      },
+	                    );
 	                  }
 	                }
-	                if let Some(args_part) = tc
-	                  .get("function")
-	                  .and_then(|f| f.get("arguments"))
-	                  .and_then(|v| v.as_str())
-	                {
-	                  if !args_part.is_empty() {
-	                    tool_calls[idx].arguments.push_str(args_part);
+	              }
+
+	              if kind == "response.output_item.done" {
+	                if let Some(item) = parsed.get("item") {
+	                  let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+	                  if item_type == "message"
+	                    && !saw_chatgpt_output_text_delta
+	                    && !saw_chatgpt_output_text_done
+	                  {
+	                    if let Some(content) = item.get("content").and_then(|v| v.as_array()) {
+	                      let mut text = String::new();
+	                      for part in content {
+	                        let part_type = part.get("type").and_then(|v| v.as_str()).unwrap_or("");
+	                        if part_type == "output_text" {
+	                          if let Some(t) = part.get("text").and_then(|v| v.as_str()) {
+	                            if !t.is_empty() {
+	                              text.push_str(t);
+	                            }
+	                          }
+	                        }
+	                      }
+	                      if !text.trim().is_empty() {
+	                        saw_chatgpt_output_text_done = true;
+	                        assistant.push_str(&text);
+	                        stream_seq += 1;
+	                        let _ = window.emit(
+	                          "openrouter-stream",
+	                          OpenRouterStreamPayload {
+	                            session_id: thread_id.to_string(),
+	                            run_id: run_id.clone(),
+	                            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                            model_id: selected_model_id.to_string(),
+	                            inference_source: inference_source.to_string(),
+	                            chunk: text,
+	                            full_content: assistant.clone(),
+	                            seq: stream_seq,
+	                            prompt_tokens,
+	                            completion_tokens,
+	                            max_tokens: request_max_tokens,
+	                          },
+	                        );
+	                      }
+	                    }
+	                  }
+	                  if item_type == "function_call" {
+	                    let call_id = item.get("call_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+	                    let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+	                    let arguments = item.get("arguments").and_then(|v| v.as_str()).unwrap_or("").to_string();
+	                    if !call_id.trim().is_empty() && !name.trim().is_empty() {
+	                      tool_calls.push(PartialToolCall { id: call_id, name, arguments });
+	                    }
+	                  }
+	                }
+	              }
+	            } else {
+	              if let Some(usage) = parsed.get("usage") {
+	                prompt_tokens = usage.get("prompt_tokens").and_then(|v| v.as_u64()).or(prompt_tokens);
+	                completion_tokens = usage.get("completion_tokens").and_then(|v| v.as_u64()).or(completion_tokens);
+	              }
+
+	              let choice = parsed
+	                .get("choices")
+	                .and_then(|v| v.as_array())
+	                .and_then(|arr| arr.first())
+	                .cloned()
+	                .unwrap_or(serde_json::Value::Null);
+
+	              if let Some(delta) = choice
+	                .get("delta")
+	                .and_then(|d| d.get("content"))
+	                .and_then(|v| v.as_str())
+	              {
+	                if !delta.is_empty() {
+	                  assistant.push_str(delta);
+	                  stream_seq += 1;
+	                  let _ = window.emit(
+	                    "openrouter-stream",
+	                    OpenRouterStreamPayload {
+	                      session_id: thread_id.to_string(),
+	                      run_id: run_id.clone(),
+	                      engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+	                      model_id: selected_model_id.to_string(),
+	                      inference_source: inference_source.to_string(),
+	                      chunk: delta.to_string(),
+	                      full_content: assistant.clone(),
+	                      seq: stream_seq,
+	                      prompt_tokens,
+	                      completion_tokens,
+	                      max_tokens: request_max_tokens,
+	                    },
+	                  );
+	                }
+	              }
+
+	              if let Some(tcs) = choice
+	                .get("delta")
+	                .and_then(|d| d.get("tool_calls"))
+	                .and_then(|v| v.as_array())
+	              {
+	                for tc in tcs {
+	                  let idx = tc.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+	                  if tool_calls.len() <= idx {
+	                    tool_calls.resize_with(idx + 1, Default::default);
+	                  }
+	                  if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
+	                    if !id.trim().is_empty() {
+	                      tool_calls[idx].id = id.to_string();
+	                    }
+	                  }
+	                  if let Some(name) = tc
+	                    .get("function")
+	                    .and_then(|f| f.get("name"))
+	                    .and_then(|v| v.as_str())
+	                  {
+	                    if !name.trim().is_empty() {
+	                      tool_calls[idx].name = name.to_string();
+	                    }
+	                  }
+	                  if let Some(args_part) = tc
+	                    .get("function")
+	                    .and_then(|f| f.get("arguments"))
+	                    .and_then(|v| v.as_str())
+	                  {
+	                    if !args_part.is_empty() {
+	                      tool_calls[idx].arguments.push_str(args_part);
+	                    }
 	                  }
 	                }
 	              }
@@ -4265,6 +4715,7 @@ async fn send_turn_messages_agent(
 		          &evidence_event_ids,
 		          provider_id,
 		          provider_model_ref,
+              final_inference_source.as_deref().unwrap_or("system"),
 		          request_max_tokens,
 		          None,
 		          context_community_id,
@@ -4392,6 +4843,7 @@ async fn send_turn_messages_agent(
 		        &evidence_event_ids,
 		        provider_id,
 		        provider_model_ref,
+            final_inference_source.as_deref().unwrap_or("system"),
 		        DEFAULT_MAX_TOKENS,
 		        None,
 		        context_community_id,
@@ -4422,6 +4874,7 @@ async fn send_turn_messages_agent(
 		      &evidence_event_ids,
 		      provider_id,
 		      provider_model_ref,
+          final_inference_source.as_deref().unwrap_or("system"),
 		      DEFAULT_MAX_TOKENS,
 		      Some(used_personal_memory),
 		      context_community_id,
@@ -4550,6 +5003,7 @@ async fn send_turn_messages_agent(
 	          "user",
 	        )
 	      };
+        final_inference_source = Some(inference_source.to_string());
 	      let request_blob = blob_store::write_blob(db_path, &request_bytes)
 	        .map_err(|e| format!("Request blob write failed: {}", e))?;
 	      let _ = db::record_blob(&conn, &request_blob.id, &request_blob.rel_path, request_blob.byte_len);
@@ -4604,6 +5058,7 @@ async fn send_turn_messages_agent(
 		            &[],
 		            provider_id,
 		            provider_model_ref,
+                inference_source,
 		            request_max_tokens,
 		            None,
 		            context_community_id,
@@ -4673,6 +5128,7 @@ async fn send_turn_messages_agent(
 	              &[],
 	              provider_id,
 	              provider_model_ref,
+                inference_source,
 	              request_max_tokens,
 	              None,
 	              context_community_id,
@@ -4731,6 +5187,7 @@ async fn send_turn_messages_agent(
 		            &[],
 		            provider_id,
 		            provider_model_ref,
+                inference_source,
 		            request_max_tokens,
 		            None,
 		            context_community_id,
@@ -4828,6 +5285,7 @@ async fn send_turn_messages_agent(
 	                &evidence_event_ids,
 	                provider_id,
 	                provider_model_ref,
+                  inference_source,
 	                request_max_tokens,
 	                None,
 	                context_community_id,
@@ -4893,6 +5351,7 @@ async fn send_turn_messages_agent(
 		                &evidence_event_ids,
 		                provider_id,
 		                provider_model_ref,
+                    inference_source,
 		                request_max_tokens,
 		                None,
 		                context_community_id,
@@ -5005,6 +5464,7 @@ async fn send_turn_messages_agent(
 		              &evidence_event_ids,
 		              provider_id,
 		              provider_model_ref,
+                  inference_source,
 		              request_max_tokens,
 		              None,
 		              context_community_id,
@@ -5187,6 +5647,7 @@ async fn send_turn_messages_agent(
 	                  run_id: run_id.clone(),
 	                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                  model_id: selected_model_id.to_string(),
+	                  inference_source: inference_source.to_string(),
 	                  chunk: delta_text.to_string(),
 	                  full_content: assistant.clone(),
 	                  seq: stream_seq,
@@ -5254,6 +5715,7 @@ async fn send_turn_messages_agent(
 		        &evidence_event_ids,
 		        provider_id,
 		        provider_model_ref,
+            final_inference_source.as_deref().unwrap_or("system"),
 		        request_max_tokens,
 		        None,
 		        context_community_id,
@@ -5399,6 +5861,7 @@ async fn send_turn_messages_agent(
 		      &evidence_event_ids,
 		      provider_id,
 		      provider_model_ref,
+          final_inference_source.as_deref().unwrap_or("system"),
 		      DEFAULT_MAX_TOKENS,
 		      None,
 		      context_community_id,
@@ -5429,6 +5892,7 @@ async fn send_turn_messages_agent(
 		    &evidence_event_ids,
 		    provider_id,
 		    provider_model_ref,
+        final_inference_source.as_deref().unwrap_or("system"),
 		    DEFAULT_MAX_TOKENS,
 		    Some(used_personal_memory),
 		    context_community_id,
@@ -6346,6 +6810,473 @@ fn scan_publish_content_cmd(text: String) -> Result<SecretScanResult, String> {
 }
 
 const KEYCHAIN_SUPABASE_SESSION: &str = "supabase_session";
+const KEYCHAIN_CHATGPT_AUTH_V1: &str = "chatgpt_auth_v1";
+const CHATGPT_OAUTH_ISSUER: &str = "https://auth.openai.com";
+const CHATGPT_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CHATGPT_OAUTH_SCOPE: &str = "openid profile email offline_access";
+const CHATGPT_OAUTH_ORIGINATOR: &str = "codex_cli_rs";
+const CHATGPT_CODEX_RESPONSES_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
+const CHATGPT_OAUTH_CALLBACK_PORT: u16 = 1455;
+
+#[derive(Clone, Serialize, Deserialize)]
+struct ChatgptAuthV1 {
+  id_token: String,
+  access_token: String,
+  refresh_token: String,
+  account_id: Option<String>,
+  email: Option<String>,
+  access_token_expires_at: Option<i64>,
+}
+
+#[derive(Clone, Serialize)]
+struct ChatgptAuthSummary {
+  email: Option<String>,
+  account_id: Option<String>,
+  access_token_expires_at: Option<i64>,
+}
+
+fn decode_jwt_claims(token: &str) -> Option<serde_json::Value> {
+  let mut parts = token.split('.');
+  let _ = parts.next()?;
+  let payload_b64 = parts.next()?;
+  if payload_b64.trim().is_empty() {
+    return None;
+  }
+  use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+  let bytes = URL_SAFE_NO_PAD.decode(payload_b64.as_bytes()).ok()?;
+  serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+}
+
+fn jwt_string_claim(token: &str, key: &str) -> Option<String> {
+  decode_jwt_claims(token)?
+    .get(key)
+    .and_then(|v| v.as_str())
+    .map(|v| v.to_string())
+}
+
+fn jwt_i64_claim(token: &str, key: &str) -> Option<i64> {
+  decode_jwt_claims(token)?
+    .get(key)
+    .and_then(|v| v.as_i64())
+}
+
+fn extract_chatgpt_account_id_from_claims(claims: &serde_json::Value) -> Option<String> {
+  if let Some(v) = claims.get("chatgpt_account_id").and_then(|v| v.as_str()) {
+    let trimmed = v.trim();
+    if !trimmed.is_empty() {
+      return Some(trimmed.to_string());
+    }
+  }
+
+  if let Some(v) = claims
+    .get("https://api.openai.com/auth")
+    .and_then(|v| v.get("chatgpt_account_id"))
+    .and_then(|v| v.as_str())
+  {
+    let trimmed = v.trim();
+    if !trimmed.is_empty() {
+      return Some(trimmed.to_string());
+    }
+  }
+
+  if let Some(v) = claims
+    .get("organizations")
+    .and_then(|v| v.as_array())
+    .and_then(|arr| arr.first())
+    .and_then(|v| v.get("id"))
+    .and_then(|v| v.as_str())
+  {
+    let trimmed = v.trim();
+    if !trimmed.is_empty() {
+      return Some(trimmed.to_string());
+    }
+  }
+
+  None
+}
+
+fn extract_chatgpt_account_id_from_token(token: &str) -> Option<String> {
+  let claims = decode_jwt_claims(token)?;
+  extract_chatgpt_account_id_from_claims(&claims)
+}
+
+fn load_chatgpt_auth_v1() -> Result<Option<ChatgptAuthV1>, String> {
+  let entry = Entry::new("com.arx.app", KEYCHAIN_CHATGPT_AUTH_V1).map_err(|e| e.to_string())?;
+  match entry.get_password() {
+    Ok(raw) => {
+      let parsed: ChatgptAuthV1 = serde_json::from_str(raw.trim()).map_err(|e| e.to_string())?;
+      Ok(Some(parsed))
+    }
+    Err(keyring::Error::NoEntry) => Ok(None),
+    Err(err) => Err(err.to_string()),
+  }
+}
+
+fn save_chatgpt_auth_v1(value: &ChatgptAuthV1) -> Result<(), String> {
+  let entry = Entry::new("com.arx.app", KEYCHAIN_CHATGPT_AUTH_V1).map_err(|e| e.to_string())?;
+  let serialized = serde_json::to_string(value).map_err(|e| e.to_string())?;
+  entry.set_password(&serialized).map_err(|e| e.to_string())
+}
+
+fn clear_chatgpt_auth_v1() -> Result<(), String> {
+  let entry = Entry::new("com.arx.app", KEYCHAIN_CHATGPT_AUTH_V1).map_err(|e| e.to_string())?;
+  match entry.delete_password() {
+    Ok(()) => Ok(()),
+    Err(keyring::Error::NoEntry) => Ok(()),
+    Err(err) => Err(err.to_string()),
+  }
+}
+
+fn summarize_chatgpt_auth(value: &ChatgptAuthV1) -> ChatgptAuthSummary {
+  ChatgptAuthSummary {
+    email: value.email.clone(),
+    account_id: value.account_id.clone(),
+    access_token_expires_at: value.access_token_expires_at,
+  }
+}
+
+fn generate_chatgpt_pkce() -> (String, String) {
+  use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+  let mut raw = [0u8; 32];
+  raw[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+  raw[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+  let code_verifier = URL_SAFE_NO_PAD.encode(raw);
+  let digest = Sha256::digest(code_verifier.as_bytes());
+  let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+  (code_verifier, code_challenge)
+}
+
+fn generate_chatgpt_state() -> String {
+  use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+  let mut raw = [0u8; 32];
+  raw[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+  raw[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
+  URL_SAFE_NO_PAD.encode(raw)
+}
+
+fn build_chatgpt_authorize_url(
+  redirect_uri: &str,
+  code_challenge: &str,
+  state: &str,
+) -> Result<String, String> {
+  let base = format!("{}/oauth/authorize", CHATGPT_OAUTH_ISSUER);
+  let url = reqwest::Url::parse_with_params(
+    &base,
+    [
+      ("response_type", "code"),
+      ("client_id", CHATGPT_OAUTH_CLIENT_ID),
+      ("redirect_uri", redirect_uri),
+      ("scope", CHATGPT_OAUTH_SCOPE),
+      ("code_challenge", code_challenge),
+      ("code_challenge_method", "S256"),
+      ("id_token_add_organizations", "true"),
+      ("codex_cli_simplified_flow", "true"),
+      ("state", state),
+      ("originator", CHATGPT_OAUTH_ORIGINATOR),
+    ],
+  )
+  .map_err(|e| e.to_string())?;
+  Ok(url.to_string())
+}
+
+async fn exchange_chatgpt_code_for_tokens(
+  code: &str,
+  redirect_uri: &str,
+  code_verifier: &str,
+) -> Result<(String, String, String), String> {
+  #[derive(Deserialize)]
+  struct TokenResponse {
+    id_token: String,
+    access_token: String,
+    refresh_token: String,
+  }
+
+  let url = format!("{}/oauth/token", CHATGPT_OAUTH_ISSUER);
+  let client = reqwest::Client::new();
+  let res = client
+    .post(url)
+    .form(&[
+      ("grant_type", "authorization_code"),
+      ("code", code),
+      ("redirect_uri", redirect_uri),
+      ("client_id", CHATGPT_OAUTH_CLIENT_ID),
+      ("code_verifier", code_verifier),
+    ])
+    .send()
+    .await
+    .map_err(|e| e.to_string())?;
+  if !res.status().is_success() {
+    let body = res.text().await.unwrap_or_default();
+    return Err(format!("ChatGPT login failed: {}", body.trim()));
+  }
+  let parsed: TokenResponse = res.json().await.map_err(|e| e.to_string())?;
+  Ok((parsed.id_token, parsed.access_token, parsed.refresh_token))
+}
+
+async fn refresh_chatgpt_tokens(refresh_token: &str) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+  #[derive(Serialize)]
+  struct RefreshRequest<'a> {
+    client_id: &'a str,
+    grant_type: &'a str,
+    refresh_token: &'a str,
+    scope: &'a str,
+  }
+
+  #[derive(Deserialize)]
+  struct RefreshResponse {
+    id_token: Option<String>,
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+  }
+
+  let url = format!("{}/oauth/token", CHATGPT_OAUTH_ISSUER);
+  let client = reqwest::Client::new();
+  let req = RefreshRequest {
+    client_id: CHATGPT_OAUTH_CLIENT_ID,
+    grant_type: "refresh_token",
+    refresh_token,
+    scope: "openid profile email",
+  };
+
+  let res = client
+    .post(url)
+    .header("Content-Type", "application/json")
+    .json(&req)
+    .send()
+    .await
+    .map_err(|e| e.to_string())?;
+
+  if !res.status().is_success() {
+    let body = res.text().await.unwrap_or_default();
+    return Err(format!("ChatGPT refresh failed: {}", body.trim()));
+  }
+
+  let parsed: RefreshResponse = res.json().await.map_err(|e| e.to_string())?;
+  Ok((parsed.id_token, parsed.access_token, parsed.refresh_token))
+}
+
+async fn get_chatgpt_auth_for_inference() -> Result<Option<ChatgptAuthV1>, String> {
+  let Some(mut current) = load_chatgpt_auth_v1()? else {
+    return Ok(None);
+  };
+  if current.account_id.is_none() {
+    current.account_id = extract_chatgpt_account_id_from_token(&current.id_token)
+      .or_else(|| extract_chatgpt_account_id_from_token(&current.access_token));
+    let _ = save_chatgpt_auth_v1(&current);
+  }
+
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .ok()
+    .map(|d| d.as_secs() as i64)
+    .unwrap_or(0);
+
+  if let Some(exp) = current.access_token_expires_at {
+    if exp > 0 && now + 60 < exp {
+      return Ok(Some(current));
+    }
+  }
+
+  let refresh = current.refresh_token.trim();
+  if refresh.is_empty() {
+    return Ok(Some(current));
+  }
+
+  match refresh_chatgpt_tokens(refresh).await {
+    Ok((maybe_id, maybe_access, maybe_refresh)) => {
+      let id_token = maybe_id.unwrap_or_else(|| current.id_token.clone());
+      let access_token = maybe_access.unwrap_or_else(|| current.access_token.clone());
+      let refresh_token = maybe_refresh.unwrap_or_else(|| current.refresh_token.clone());
+      let updated = ChatgptAuthV1 {
+        account_id: extract_chatgpt_account_id_from_token(&id_token)
+          .or_else(|| extract_chatgpt_account_id_from_token(&access_token))
+          .or_else(|| current.account_id.clone()),
+        email: jwt_string_claim(&id_token, "email"),
+        access_token_expires_at: jwt_i64_claim(&access_token, "exp"),
+        id_token,
+        access_token,
+        refresh_token,
+      };
+      save_chatgpt_auth_v1(&updated)?;
+      Ok(Some(updated))
+    }
+    Err(_) => {
+      let _ = clear_chatgpt_auth_v1();
+      Ok(None)
+    }
+  }
+}
+
+async fn wait_for_chatgpt_oauth_callback(
+  listener: TcpListener,
+  expected_state: &str,
+) -> Result<String, String> {
+  let deadline = tokio::time::sleep(std::time::Duration::from_secs(300));
+  tokio::pin!(deadline);
+
+  loop {
+    tokio::select! {
+      _ = &mut deadline => {
+        return Err("ChatGPT login timed out.".to_string());
+      }
+      accepted = listener.accept() => {
+        let (mut stream, _) = accepted.map_err(|e| e.to_string())?;
+        let mut buf = Vec::new();
+        let mut tmp = [0u8; 1024];
+        loop {
+          let n = stream.read(&mut tmp).await.map_err(|e| e.to_string())?;
+          if n == 0 {
+            break;
+          }
+          buf.extend_from_slice(&tmp[..n]);
+          if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+            break;
+          }
+          if buf.len() > 16 * 1024 {
+            break;
+          }
+        }
+        let req = String::from_utf8_lossy(&buf).to_string();
+        let first_line = req.lines().next().unwrap_or("");
+        let path = first_line
+          .strip_prefix("GET ")
+          .and_then(|rest| rest.split_whitespace().next())
+          .unwrap_or("/");
+
+        let parsed = reqwest::Url::parse(&format!("http://localhost{}", path)).ok();
+        let params: std::collections::HashMap<String, String> = parsed
+          .as_ref()
+          .map(|u| u.query_pairs().into_owned().collect())
+          .unwrap_or_default();
+
+        let ok = parsed
+          .as_ref()
+          .map(|u| u.path() == "/auth/callback")
+          .unwrap_or(false)
+          && params.get("state").map(|v| v.as_str()) == Some(expected_state)
+          && params.get("code").map(|v| !v.trim().is_empty()).unwrap_or(false);
+
+        if ok {
+          let body = "<!doctype html><html><body style=\"font-family: system-ui; padding: 24px;\"><h2>Signed in</h2><p>You can close this window and return to Arx.</p></body></html>";
+          let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+            body.as_bytes().len(),
+            body
+          );
+          let _ = stream.write_all(resp.as_bytes()).await;
+          let _ = stream.flush().await;
+          let code = params.get("code").cloned().unwrap_or_default();
+          return Ok(code);
+        }
+
+        if parsed.as_ref().map(|u| u.path() == "/cancel").unwrap_or(false) {
+          let body = "ok";
+          let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+            body.as_bytes().len(),
+            body
+          );
+          let _ = stream.write_all(resp.as_bytes()).await;
+          let _ = stream.flush().await;
+          return Err("ChatGPT login was cancelled.".to_string());
+        }
+
+        let body = "Not found";
+        let resp = format!(
+          "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+          body.as_bytes().len(),
+          body
+        );
+        let _ = stream.write_all(resp.as_bytes()).await;
+        let _ = stream.flush().await;
+      }
+    }
+  }
+}
+
+async fn send_chatgpt_cancel_request() -> Result<(), String> {
+  let addr = format!("127.0.0.1:{}", CHATGPT_OAUTH_CALLBACK_PORT);
+  let mut stream = TcpStream::connect(addr).await.map_err(|e| e.to_string())?;
+  let req = format!(
+    "GET /cancel HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+    CHATGPT_OAUTH_CALLBACK_PORT
+  );
+  stream.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
+  let mut buf = [0u8; 64];
+  let _ = stream.read(&mut buf).await;
+  Ok(())
+}
+
+async fn bind_chatgpt_callback_listener() -> Result<TcpListener, String> {
+  let bind_addr = format!("127.0.0.1:{}", CHATGPT_OAUTH_CALLBACK_PORT);
+  let mut cancel_attempted = false;
+  let mut attempts: u32 = 0;
+  const MAX_ATTEMPTS: u32 = 10;
+
+  loop {
+    match TcpListener::bind(&bind_addr).await {
+      Ok(listener) => return Ok(listener),
+      Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+        attempts += 1;
+        if !cancel_attempted {
+          cancel_attempted = true;
+          let _ = send_chatgpt_cancel_request().await;
+        }
+        if attempts >= MAX_ATTEMPTS {
+          return Err(format!("ChatGPT login port {} is already in use.", CHATGPT_OAUTH_CALLBACK_PORT));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        continue;
+      }
+      Err(err) => return Err(err.to_string()),
+    }
+  }
+}
+
+#[tauri::command]
+fn get_chatgpt_auth_summary_cmd() -> Result<Option<ChatgptAuthSummary>, String> {
+  Ok(load_chatgpt_auth_v1()?.map(|value| summarize_chatgpt_auth(&value)))
+}
+
+#[tauri::command]
+fn clear_chatgpt_auth_cmd() -> Result<(), String> {
+  clear_chatgpt_auth_v1()
+}
+
+#[tauri::command]
+async fn chatgpt_login_cmd() -> Result<ChatgptAuthSummary, String> {
+  // Use Codex's fixed localhost callback port. The OAuth client is typically
+  // registered with a single redirect URI, so random ports can fail.
+  let listener = bind_chatgpt_callback_listener().await?;
+  let redirect_uri = format!("http://localhost:{}/auth/callback", CHATGPT_OAUTH_CALLBACK_PORT);
+
+  let (code_verifier, code_challenge) = generate_chatgpt_pkce();
+  let state = generate_chatgpt_state();
+  let auth_url = build_chatgpt_authorize_url(&redirect_uri, &code_challenge, &state)?;
+
+  // Launch browser for the OAuth consent/login flow.
+  open::that(&auth_url).map_err(|e| e.to_string())?;
+
+  let code = wait_for_chatgpt_oauth_callback(listener, &state).await?;
+  let (id_token, access_token, refresh_token) =
+    exchange_chatgpt_code_for_tokens(&code, &redirect_uri, &code_verifier).await?;
+
+  let account_id = extract_chatgpt_account_id_from_token(&id_token)
+    .or_else(|| extract_chatgpt_account_id_from_token(&access_token));
+  let email = jwt_string_claim(&id_token, "email");
+  let access_token_expires_at = jwt_i64_claim(&access_token, "exp");
+
+  let stored = ChatgptAuthV1 {
+    id_token,
+    access_token,
+    refresh_token,
+    account_id,
+    email,
+    access_token_expires_at,
+  };
+  save_chatgpt_auth_v1(&stored)?;
+  Ok(summarize_chatgpt_auth(&stored))
+}
 
 #[tauri::command]
 fn get_supabase_session_cmd() -> Result<Option<String>, String> {
@@ -7043,11 +7974,14 @@ fn main() {
       cancel_run_cmd,
       send_turn_cmd,
       engine_send_turn_cmd,
-	      get_supabase_session_cmd,
-	      set_supabase_session_cmd,
-	      clear_supabase_session_cmd,
-	      open_external_url_cmd,
-	      list_pending_invites_cmd,
+		      get_supabase_session_cmd,
+		      set_supabase_session_cmd,
+		      clear_supabase_session_cmd,
+		      get_chatgpt_auth_summary_cmd,
+		      clear_chatgpt_auth_cmd,
+		      chatgpt_login_cmd,
+		      open_external_url_cmd,
+		      list_pending_invites_cmd,
 	      upsert_pending_invite_cmd,
 	      dismiss_pending_invite_cmd,
 	      request_join_pending_invite_cmd,

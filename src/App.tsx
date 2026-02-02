@@ -223,6 +223,12 @@ type ProviderKey = {
   error?: string | null;
 };
 
+type ChatgptAuthSummary = {
+  email?: string | null;
+  account_id?: string | null;
+  access_token_expires_at?: number | null;
+};
+
 type SupabaseUser = {
   id: string;
   email?: string;
@@ -287,6 +293,7 @@ type OpenRouterStreamPayload = {
   run_id: string;
   engine_id: string;
   model_id: string;
+  inference_source?: string | null;
   chunk: string;
   full_content: string;
   seq: number;
@@ -726,7 +733,7 @@ function App() {
     completion_tokens?: number;
     max_tokens?: number;
   } | null>(null);
-  const [streamingMeta, setStreamingMeta] = useState<{ engine_id: string; model_id: string } | null>(null);
+  const [streamingMeta, setStreamingMeta] = useState<{ engine_id: string; model_id: string; inference_source?: string | null } | null>(null);
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
@@ -750,6 +757,9 @@ function App() {
     { id: "google", label: "Google (Gemini)", hasKey: false, inputValue: "", error: null },
     { id: "x-ai", label: "xAI", hasKey: false, inputValue: "", error: null },
   ]);
+  const [chatgptAuthSummary, setChatgptAuthSummary] = useState<ChatgptAuthSummary | null>(null);
+  const [isChatgptLoggingIn, setIsChatgptLoggingIn] = useState(false);
+  const [chatgptAuthError, setChatgptAuthError] = useState<string | null>(null);
   const [systemPromptDraft, setSystemPromptDraft] = useState("");
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(false);
   const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false);
@@ -1080,7 +1090,7 @@ function App() {
   // Throttled streaming: accumulate content in ref, update state via RAF
   const streamingContentRef = useRef<string | null>(null);
   const streamingTokensRef = useRef<{prompt_tokens?: number; completion_tokens?: number; max_tokens?: number} | null>(null);
-  const streamingMetaRef = useRef<{ engine_id: string; model_id: string } | null>(null);
+  const streamingMetaRef = useRef<{ engine_id: string; model_id: string; inference_source?: string | null } | null>(null);
   const streamingRafRef = useRef<number | null>(null);
 
   // Throttled streaming update: accumulate in refs, flush to state on next animation frame
@@ -1128,6 +1138,7 @@ function App() {
 	    void loadModelToggles();
 	    void loadActiveModel();
 	    void loadProviderKeys();
+	    void loadChatgptAuthSummary();
 	    void loadExecPolicyRules();
 	    void loadPendingInvites();
 	    void consumeInviteQueryParam();
@@ -2934,7 +2945,8 @@ function App() {
         };
         streamingMetaRef.current = {
           engine_id: event.payload.engine_id,
-          model_id: event.payload.model_id
+          model_id: event.payload.model_id,
+          inference_source: event.payload.inference_source ?? null
         };
         scheduleStreamingUpdate();
       }
@@ -2980,10 +2992,28 @@ function App() {
 	      (event) => {
 	        if (event.payload.session_id !== activeThreadId) return;
 	        const reason = (event.payload.reason ?? "").trim();
+          const from = (event.payload.from ?? "").trim().toLowerCase();
+          const to = (event.payload.to ?? "").trim().toLowerCase();
 	        const message =
-	          reason === "platform_quota_exceeded"
-	            ? "Arx AI quota reached — switching to your API key."
-	            : "Arx AI unavailable — switching to your API key.";
+            from === "chatgpt" && to === "platform"
+              ? (() => {
+                  const match = reason.match(/chatgpt_http_(\d+)/i);
+                  const code = match?.[1] ?? null;
+                  const detail = (() => {
+                    const idx = reason.indexOf(":");
+                    if (idx === -1) return null;
+                    const msg = reason.slice(idx + 1).trim();
+                    return msg.length ? msg : null;
+                  })();
+                  return code
+                    ? detail
+                      ? `ChatGPT unavailable (HTTP ${code}) — ${detail.slice(0, 140)}`
+                      : `ChatGPT unavailable (HTTP ${code}) — using Arx.`
+                    : "ChatGPT unavailable — using Arx.";
+                })()
+              : reason === "platform_quota_exceeded"
+	              ? "Arx AI quota reached — switching to your API key."
+	              : "Arx AI unavailable — switching to your API key.";
 	        setMemoryToast(message);
 	        if (memoryToastTimeoutRef.current) {
 	          window.clearTimeout(memoryToastTimeoutRef.current);
@@ -3760,6 +3790,51 @@ function App() {
     setProviderKeys(updated);
   }
 
+  async function loadChatgptAuthSummary() {
+    try {
+      const summary = await invoke<ChatgptAuthSummary | null>("get_chatgpt_auth_summary_cmd");
+      setChatgptAuthSummary(summary);
+    } catch {
+      setChatgptAuthSummary(null);
+    }
+  }
+
+  async function handleChatgptLogin() {
+    if (isChatgptLoggingIn) return;
+    setIsChatgptLoggingIn(true);
+    setChatgptAuthError(null);
+    try {
+      const summary = await invoke<ChatgptAuthSummary>("chatgpt_login_cmd");
+      setChatgptAuthSummary(summary);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "ChatGPT sign-in failed";
+      setChatgptAuthError(message);
+    } finally {
+      setIsChatgptLoggingIn(false);
+    }
+  }
+
+  async function handleChatgptLogout() {
+    setChatgptAuthError(null);
+    try {
+      await invoke("clear_chatgpt_auth_cmd");
+      setChatgptAuthSummary(null);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to sign out";
+      setChatgptAuthError(message);
+    }
+  }
+
   function normalizeProviderKeyId(value: string): ProviderKey["id"] | null {
     const v = (value ?? "").trim().toLowerCase();
     if (v === "openai") return "openai";
@@ -3826,6 +3901,7 @@ function App() {
   }
 
   function hasKeyForProvider(providerId: ProviderKey["id"]): boolean {
+    if (providerId === "openai" && chatgptAuthSummary) return true;
     return providerKeys.find((p) => p.id === providerId)?.hasKey === true;
   }
 
@@ -8126,10 +8202,6 @@ function App() {
   const workspaceLensWaitersRef = useRef<
     Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }>
   >([]);
-  const [workspaceLensUi, setWorkspaceLensUi] = useState<{
-    inFlight: boolean;
-    targetName: string | null;
-  }>({ inFlight: false, targetName: null });
 
   const settleWorkspaceLensWaiters = (upToEpoch: number, error: unknown | null) => {
     const remaining: Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }> = [];
@@ -8198,7 +8270,6 @@ function App() {
       }
     } finally {
       workspaceLensInFlightRef.current = false;
-      setWorkspaceLensUi((prev) => (prev.inFlight ? { inFlight: false, targetName: null } : prev));
     }
   };
 
@@ -8210,7 +8281,6 @@ function App() {
 
     const epoch = (workspaceLensEpochRef.current += 1);
     workspaceLensDesiredRef.current = target;
-    setWorkspaceLensUi({ inFlight: true, targetName: target.communityId ? target.communityName : "none" });
     void runWorkspaceLensWorker();
     return new Promise<void>((resolve, reject) => {
       workspaceLensWaitersRef.current.push({ epoch, resolve, reject });
@@ -8648,6 +8718,8 @@ function App() {
     const startedInDraft = !activeThreadId;
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
+    let sessionId: string | null = null;
+    let session: SupabaseSession | null = null;
 
     // Capture inputs at click time, but don't clear until we've ensured the lens/context.
     const userText = commandInput.trim();
@@ -8656,10 +8728,10 @@ function App() {
     setIsSending(true);
     autoScrollEnabledRef.current = true;
     try {
-      const sessionId = await ensureThreadId();
+      sessionId = await ensureThreadId();
       if (!sessionId) return;
       if (startedInDraft) createdThreadId = sessionId;
-      const session = supabaseSessionRef.current;
+      session = supabaseSessionRef.current;
 
       if (session) {
         await ensureWorkspaceThreadLensBeforeSend(sessionId, session);
@@ -8733,28 +8805,48 @@ function App() {
             setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
             return null;
           }
-          let hasKey = hasKeyForProvider(providerId);
-          if (!hasKey) {
-            try {
-              hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: providerId });
-            } catch {
-              hasKey = false;
-            }
-            if (hasKey) {
-              setProviderKeys((prev) =>
-                prev.map((item) =>
-                  item.id === providerId ? { ...item, hasKey: true, error: null } : item
-                )
-              );
-            }
-          }
-          if (!hasKey) {
-            const label = providerKeys.find((p) => p.id === providerId)?.label ?? providerId;
-            setMemoryToast(`Missing ${label} API key. Add it in Settings → Models.`);
-            setActiveView("settings");
-            setSettingsPage("models");
-            return null;
-          }
+	          let hasKey = hasKeyForProvider(providerId);
+	          if (!hasKey) {
+	            try {
+	              hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: providerId });
+	            } catch {
+	              hasKey = false;
+	            }
+	            if (hasKey) {
+	              setProviderKeys((prev) =>
+	                prev.map((item) =>
+	                  item.id === providerId ? { ...item, hasKey: true, error: null } : item
+	                )
+	              );
+	            }
+	          }
+
+	          let canUseArxPlatform = false;
+	          if (!hasKey && session) {
+	            const url = getSupabaseUrl();
+	            const anon = getSupabaseAnonKey();
+	            if (url && anon) {
+	              let status = builderBillingStatus;
+	              if (!status) {
+	                try {
+	                  status = await loadBuilderBillingStatus(session);
+	                } catch {
+	                  status = null;
+	                }
+	              }
+	              const tier = (status?.builder_tier ?? "").toLowerCase();
+	              // If we can’t determine tier, allow the server to decide (it will fail closed).
+	              canUseArxPlatform = !tier || tier !== "free";
+	            }
+	          }
+
+	          if (!hasKey && !canUseArxPlatform) {
+	            const label = providerKeys.find((p) => p.id === providerId)?.label ?? providerId;
+	            setMemoryToast(`Missing ${label} API key. Add it in Settings → Models.`);
+	            setActiveView("settings");
+	            setSettingsPage("models");
+	            return null;
+	          }
           if (
             fromDb &&
             (fromDb.engine_id === "messages_agent" || fromDb.engine_id === "openrouter_messages_agent") &&
@@ -8941,25 +9033,30 @@ function App() {
         setMemoryToast(`Failed to send message: ${message}`);
         return;
       }
-	      await invoke("add_message_cmd", {
-	        sessionId,
-	        role: "assistant",
-	        contentJson: JSON.stringify({ text: `Engine error: ${message}` })
-	      });
-	      if (session) {
-	        try {
-	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-	        } catch (error) {
-	          const message =
-	            typeof error === "string" ? error : error instanceof Error ? error.message : "";
-	          if (message.toLowerCase().includes("cloud history limit reached")) {
-	            setBuilderUpgradeContext("builder");
-	            setBuilderBillingError(message);
-	            setIsBuilderUpgradeOpen(true);
-	          }
+      const targetSessionId = sessionId ?? activeThreadId;
+      if (!targetSessionId) {
+        setMemoryToast(`Failed to send message: ${message}`);
+        return;
+      }
+	    await invoke("add_message_cmd", {
+	      sessionId: targetSessionId,
+	      role: "assistant",
+	      contentJson: JSON.stringify({ text: `Engine error: ${message}` })
+	    });
+	    if (session) {
+	      try {
+	        await syncRecentLocalMessagesToCloud(targetSessionId, session, 1);
+	      } catch (error) {
+	        const message =
+	          typeof error === "string" ? error : error instanceof Error ? error.message : "";
+	        if (message.toLowerCase().includes("cloud history limit reached")) {
+	          setBuilderUpgradeContext("builder");
+	          setBuilderBillingError(message);
+	          setIsBuilderUpgradeOpen(true);
 	        }
 	      }
-	      await loadMessages(sessionId);
+	    }
+	    await loadMessages(targetSessionId);
 	    } finally {
       setIsSending(false);
       setAgentStatus(null);
@@ -9953,15 +10050,18 @@ function App() {
 	          })()}
 		        {pendingInferenceFallback && (() => {
 		          const isQuota = pendingInferenceFallback.reason === "platform_quota_exceeded";
+		          const isChatgpt = pendingInferenceFallback.reason === "chatgpt_error";
 		          const providerLabel =
 		            (pendingInferenceFallback.provider_label ?? "").trim() ||
 		            (pendingInferenceFallback.provider_id ?? "").trim() ||
 		            "your";
 		          const modelId = (pendingInferenceFallback.model_id ?? "").trim();
-		          const title = isQuota ? "Arx AI quota reached" : "Arx AI unavailable";
+		          const title = isQuota ? "Arx AI quota reached" : isChatgpt ? "ChatGPT unavailable" : "Arx AI unavailable";
 		          const note = isQuota
 		            ? "You’ve used your Arx AI quota for this month."
-		            : "Arx platform inference is unavailable right now.";
+		            : isChatgpt
+		              ? "ChatGPT sign-in is unavailable right now."
+		              : "Arx platform inference is unavailable right now.";
 		          const modelNote = modelId ? `Model: ${modelId}` : null;
 		          return (
 		            <div className="modal-overlay" onClick={() => void resolvePendingInferenceFallback(false)}>
@@ -10875,6 +10975,30 @@ function App() {
 	            {settingsPage === "models" && (
               <>
 	                <div className="settings-section">
+	                  <div className="settings-section-title">ChatGPT</div>
+	                  <div className="settings-section-desc">
+	                    Sign in to use your ChatGPT account for OpenAI models. This does not consume your Arx quota.
+	                  </div>
+	                  {chatgptAuthSummary && (
+	                    <div className="auth-status">
+	                      Connected{chatgptAuthSummary.email ? ` as ${chatgptAuthSummary.email}` : ""}
+	                    </div>
+	                  )}
+		                  <div className="auth-actions">
+		                    {!chatgptAuthSummary ? (
+		                      <button type="button" onClick={() => void handleChatgptLogin()} disabled={isChatgptLoggingIn}>
+		                        {isChatgptLoggingIn ? "Signing in..." : "Sign in with ChatGPT"}
+		                      </button>
+		                    ) : (
+		                      <button type="button" className="secondary" onClick={() => void handleChatgptLogout()}>
+		                        Sign out
+		                      </button>
+		                    )}
+		                  </div>
+		                  {chatgptAuthError && <div className="auth-error">{chatgptAuthError}</div>}
+		                </div>
+
+	                <div className="settings-section">
 	                  <div className="settings-section-title">API Keys</div>
 	                  <div className="settings-section-desc">
 	                    Add your provider keys to enable models. Keys are stored in your OS keychain and synced to your Arx account.
@@ -11265,8 +11389,11 @@ function App() {
                 const parsedContent = parseMessageContent(message.content_json);
                 const textContent = parsedContent.text;
                 const isTerminal = parsedContent.format === "terminal";
+                const messageInferenceSource = !isUser
+                  ? extractInferenceSourceFromContentJson(message.content_json)
+                  : null;
                 const messageSignature = !isUser
-                  ? formatExecutionLabel(message.engine_id, message.model_id, modelToggles)
+                  ? formatExecutionLabel(message.engine_id, message.model_id, modelToggles, messageInferenceSource)
                   : null;
 
                 // Check if this is the end of an agent turn:
@@ -11849,7 +11976,8 @@ function App() {
 		              const streamingSignature = formatExecutionLabel(
 		                streamingMeta?.engine_id,
 		                streamingMeta?.model_id,
-		                modelToggles
+		                modelToggles,
+                    streamingMeta?.inference_source
 		              );
 	              return (
 	                <div className="message-item streaming">
@@ -11879,11 +12007,12 @@ function App() {
             {isSending && !pendingToolApproval && (() => {
               const activeThread = threads.find((t) => t.id === activeThreadId);
               const indicatorSignature = streamingMeta
-                ? formatExecutionLabel(streamingMeta.engine_id, streamingMeta.model_id, modelToggles)
+                ? formatExecutionLabel(streamingMeta.engine_id, streamingMeta.model_id, modelToggles, streamingMeta.inference_source)
                 : formatExecutionLabel(
                     activeThread?.engine_id ?? "messages_agent",
                     activeModelId,
-                    modelToggles
+                    modelToggles,
+                    null
                   );
               const isWorking = agentStatus?.status === "working";
               const timeLabel = sendElapsedSec > 0 ? ` (${sendElapsedSec}s)` : "";
@@ -14546,7 +14675,8 @@ function formatToolLabel(
 function formatExecutionLabel(
   engineIdInput: string | null | undefined,
   modelIdInput: string | null | undefined,
-  modelToggles: ModelToggle[]
+  modelToggles: ModelToggle[],
+  inferenceSourceInput?: string | null
 ): string | null {
   const engineId = (engineIdInput ?? "").trim();
   if (!engineId) return null;
@@ -14559,9 +14689,33 @@ function formatExecutionLabel(
     const modelId = (modelIdInput ?? "").trim();
     if (!modelId) return null;
     const modelLabel = modelToggles.find((toggle) => toggle.id === modelId)?.label;
-    return modelLabel ?? modelId;
+    const base = modelLabel ?? modelId;
+    const source = (inferenceSourceInput ?? "").trim().toLowerCase();
+    const sourceLabel =
+      source === "chatgpt"
+        ? "ChatGPT"
+        : source === "platform"
+          ? "Arx"
+          : source === "user"
+            ? "BYOK"
+            : "";
+    return sourceLabel ? `${base} · ${sourceLabel}` : base;
   }
   return engineId.replace(/_/g, " ");
+}
+
+function extractInferenceSourceFromContentJson(contentJson: string): string | null {
+  try {
+    const parsed = JSON.parse(contentJson) as { meta?: unknown };
+    const meta = parsed?.meta;
+    if (!meta || typeof meta !== "object") return null;
+    const value = (meta as { inference_source?: unknown }).inference_source;
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseMessageContent(contentJson: string): { text: string; format: string | null } {
