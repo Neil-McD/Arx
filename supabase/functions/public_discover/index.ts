@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, withCors } from "../_shared/http.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 
@@ -52,7 +52,8 @@ type PublicDiscoverCommunity = {
 
 function clampLimit(raw: string | null): number {
   const parsed = raw ? Number(raw) : NaN;
-  if (!Number.isFinite(parsed)) return 200;
+  // MVP default: keep the first paint snappy by not returning a huge list.
+  if (!Number.isFinite(parsed)) return 60;
   return Math.min(200, Math.max(1, Math.trunc(parsed)));
 }
 
@@ -115,7 +116,15 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
+  const headers = withCors(
+    {
+      // Discover is public data; allow short caching for fast loads.
+      "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
+      "Referrer-Policy": "no-referrer",
+      "Vary": "Origin",
+    },
+    req,
+  );
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
   if (req.method !== "GET") {
     return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });

@@ -2609,7 +2609,7 @@ function App() {
   useEffect(() => {
     if (activePage !== "discover") return;
     void loadDiscoverCommunities();
-  }, [activePage, supabaseSession]);
+  }, [activePage]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
@@ -5425,9 +5425,8 @@ function App() {
 	    setIsLoadingDiscover(true);
 	    setDiscoverError(null);
 	    try {
-	      const response = supabaseSession
-	        ? await fetchWithSupabaseAuth(`${url}/functions/v1/public_discover`, { method: "GET" }, supabaseSession)
-	        : await fetchWithSupabasePublic(`${url}/functions/v1/public_discover`, { method: "GET" });
+	      // Discover is public; use the anon path for better caching and to avoid extra refetches on auth changes.
+	      const response = await fetchWithSupabasePublic(`${url}/functions/v1/public_discover?limit=60`, { method: "GET" });
 	      if (!response.ok) {
 	        const message = await readSupabaseError(response);
 	        throw new Error(message);
@@ -13301,14 +13300,17 @@ function App() {
 	                                void openCommunityLandingExternal(community);
 	                              }}
 	                            >
-	                              <div
-	                                className={`discover-card-banner${community.banner_url ? " has-image" : ""}`}
-	                                style={
-	                                  community.banner_url
-	                                    ? { backgroundImage: `url(${community.banner_url})` }
-	                                    : undefined
-	                                }
-	                              />
+	                              <div className="discover-card-banner">
+	                                {community.banner_url ? (
+	                                  <img
+	                                    className="discover-card-banner-img"
+	                                    src={community.banner_url}
+	                                    alt=""
+	                                    loading="lazy"
+	                                    decoding="async"
+	                                  />
+	                                ) : null}
+	                              </div>
 	                              <div className="discover-card-body">
 	                                <div className="discover-card-header">
 	                                  {community.avatar_url ? (
