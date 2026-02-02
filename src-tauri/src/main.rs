@@ -31,9 +31,10 @@ use tokio::process::Command as TokioCommand;
 use tokio::sync::{oneshot, watch, Mutex};
 use sha2::{Digest as _, Sha256};
 
-const ENGINE_OPENROUTER_CHAT: &str = "openrouter_chat";
-const ENGINE_OPENROUTER_MESSAGES_AGENT: &str = "openrouter_messages_agent";
-const OPENROUTER_MAX_TOKENS: u32 = 1024;
+const ENGINE_MESSAGES_AGENT: &str = "messages_agent";
+const ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT: &str = "openrouter_messages_agent";
+const ENGINE_LEGACY_OPENROUTER_CHAT: &str = "openrouter_chat";
+const DEFAULT_MAX_TOKENS: u32 = 1024;
 const IO_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
 const RIPGREP_VERSION: &str = "14.1.1";
 
@@ -290,7 +291,7 @@ struct ToolApprovalDecision {
   allow_write_edit_for_session: bool,
 }
 
-fn parse_openrouter_affordable_max_tokens(message: &str) -> Option<u32> {
+fn parse_affordable_max_tokens(message: &str) -> Option<u32> {
   let lower = message.to_lowercase();
   let needle = "can only afford";
   let idx = lower.find(needle)?;
@@ -301,7 +302,7 @@ fn parse_openrouter_affordable_max_tokens(message: &str) -> Option<u32> {
   digits.trim().parse::<u32>().ok().filter(|v| *v > 0)
 }
 
-fn format_openrouter_error(resp_bytes: &[u8]) -> String {
+fn format_provider_error(resp_bytes: &[u8]) -> String {
   let fallback = String::from_utf8_lossy(resp_bytes).trim().to_string();
   let value = match serde_json::from_slice::<serde_json::Value>(resp_bytes) {
     Ok(v) => v,
@@ -447,7 +448,7 @@ fn append_run_finished(
   let _ = db::append_event(conn, db_path, thread_id, "run_finished", None, Some(&payload.to_string()), None);
 }
 
-fn finish_cancelled_openrouter_messages_agent(
+fn finish_cancelled_messages_agent(
   window: &tauri::Window,
   conn: &rusqlite::Connection,
   db_path: &Path,
@@ -474,7 +475,7 @@ fn finish_cancelled_openrouter_messages_agent(
   );
   SendTurnResult {
     thread_id: thread_id.to_string(),
-    engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
     engine_input_event_id,
     engine_input_seq,
     run_id: Some(run_id.to_string()),
@@ -3054,7 +3055,7 @@ struct SendTurnResult {
   run_id: Option<String>,
 }
 
-fn append_openrouter_messages_assistant_message(
+fn append_messages_agent_assistant_message(
   conn: &rusqlite::Connection,
   db_path: &Path,
   thread_id: &str,
@@ -3073,7 +3074,7 @@ fn append_openrouter_messages_assistant_message(
     "role": "assistant",
     "content": { "text": content_text },
     "meta": {
-      "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+      "engine_id": ENGINE_MESSAGES_AGENT,
       "model_id": model_id,
       "provider_id": provider_id,
       "provider_model_ref": provider_model_ref,
@@ -3232,7 +3233,7 @@ fn write_blob_and_record(
   }
 }
 
-async fn send_turn_openrouter_messages_agent(
+async fn send_turn_messages_agent(
   window: &tauri::Window,
   mut conn: rusqlite::Connection,
   db_path: &Path,
@@ -3262,14 +3263,14 @@ async fn send_turn_openrouter_messages_agent(
 	    &run_id,
 	    &workspace_scope_id,
 	    mode,
-	    ENGINE_OPENROUTER_MESSAGES_AGENT,
+	    ENGINE_MESSAGES_AGENT,
 	    Some(selected_model_id),
 	  );
 
   let model_ref = match resolve_platform_model_for_alias_with_registry(selected_model_id, platform_proxy.as_ref()).await {
     Ok(v) => v,
     Err(err) => {
-      append_openrouter_messages_assistant_message(
+      append_messages_agent_assistant_message(
         &conn,
         db_path,
         thread_id,
@@ -3279,7 +3280,7 @@ async fn send_turn_openrouter_messages_agent(
         &[],
         "unknown",
         None,
-        OPENROUTER_MAX_TOKENS,
+        DEFAULT_MAX_TOKENS,
         None,
         context_community_id,
       );
@@ -3292,7 +3293,7 @@ async fn send_turn_openrouter_messages_agent(
       );
       return Ok(SendTurnResult {
         thread_id: thread_id.to_string(),
-        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
         engine_input_event_id: None,
         engine_input_seq: None,
         run_id: Some(run_id),
@@ -3307,7 +3308,7 @@ async fn send_turn_openrouter_messages_agent(
   let input_trim = input.trim();
   let (input_redacted, input_report) = context::redact_secrets(input_trim);
 		  if input_report.blocked {
-		    append_openrouter_messages_assistant_message(
+		    append_messages_agent_assistant_message(
 		      &conn,
 		      db_path,
 		      thread_id,
@@ -3317,7 +3318,7 @@ async fn send_turn_openrouter_messages_agent(
 		      &[],
 		      provider_id,
 		      provider_model_ref,
-		      OPENROUTER_MAX_TOKENS,
+		      DEFAULT_MAX_TOKENS,
 		      None,
 		      context_community_id,
 		    );
@@ -3330,7 +3331,7 @@ async fn send_turn_openrouter_messages_agent(
     );
     return Ok(SendTurnResult {
       thread_id: thread_id.to_string(),
-      engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+      engine_id: ENGINE_MESSAGES_AGENT.to_string(),
       engine_input_event_id: None,
       engine_input_seq: None,
       run_id: Some(run_id),
@@ -3440,7 +3441,7 @@ async fn send_turn_openrouter_messages_agent(
 
 		    let content = loop {
 		      if *cancel_rx.borrow() {
-		        return Ok(finish_cancelled_openrouter_messages_agent(
+		        return Ok(finish_cancelled_messages_agent(
 		          window,
 		          &conn,
 	          db_path,
@@ -3452,7 +3453,7 @@ async fn send_turn_openrouter_messages_agent(
 	      }
 
 	      call_seq += 1;
-	      let mut request_max_tokens = OPENROUTER_MAX_TOKENS;
+	      let mut request_max_tokens = DEFAULT_MAX_TOKENS;
 	      let mut request_attempt: u32 = 1;
 	      let mut use_platform_for_call = platform_available_for_run;
 
@@ -3488,7 +3489,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let engine_input_payload = serde_json::json!({
 	          "v": 1,
-	          "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	          "engine_id": ENGINE_MESSAGES_AGENT,
 	          "provider_id": provider_id,
 	          "model_id": selected_model_id,
 	          "provider_model_ref": provider_model_ref_str.as_str(),
@@ -3526,7 +3527,7 @@ async fn send_turn_openrouter_messages_agent(
 	            evt
 	          }
 		          Err(err) => {
-		            append_openrouter_messages_assistant_message(
+		            append_messages_agent_assistant_message(
 		              &conn,
 		              db_path,
 		              thread_id,
@@ -3549,7 +3550,7 @@ async fn send_turn_openrouter_messages_agent(
 	            );
 	            return Ok(SendTurnResult {
 	              thread_id: thread_id.to_string(),
-	              engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	              engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	              engine_input_event_id: first_engine_input_event_id.clone(),
 	              engine_input_seq: first_engine_input_seq,
 	              run_id: Some(run_id),
@@ -3569,7 +3570,7 @@ async fn send_turn_openrouter_messages_agent(
 	        );
 
 	        if *cancel_rx.borrow() {
-	          return Ok(finish_cancelled_openrouter_messages_agent(
+	          return Ok(finish_cancelled_messages_agent(
 	            window,
 	            &conn,
 	            db_path,
@@ -3595,7 +3596,7 @@ async fn send_turn_openrouter_messages_agent(
 	          let provider_key = match get_byok_provider_key() {
 	            Ok(value) => value,
 	            Err(message) => {
-	              append_openrouter_messages_assistant_message(
+	              append_messages_agent_assistant_message(
 	                &conn,
 	                db_path,
 	                thread_id,
@@ -3618,7 +3619,7 @@ async fn send_turn_openrouter_messages_agent(
 	              );
 	              return Ok(SendTurnResult {
 	                thread_id: thread_id.to_string(),
-	                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                engine_input_event_id: Some(engine_input_event.id),
 	                engine_input_seq: Some(engine_input_event.seq),
 	                run_id: Some(run_id),
@@ -3636,7 +3637,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let res = tokio::select! {
 	          _ = cancel_rx.changed() => {
-	            return Ok(finish_cancelled_openrouter_messages_agent(
+	            return Ok(finish_cancelled_messages_agent(
 	              window,
 	              &conn,
 	              db_path,
@@ -3652,7 +3653,7 @@ async fn send_turn_openrouter_messages_agent(
 	        let res = match res {
 	          Ok(r) => r,
 		          Err(err) => {
-		            append_openrouter_messages_assistant_message(
+		            append_messages_agent_assistant_message(
 		              &conn,
 		              db_path,
 		              thread_id,
@@ -3675,7 +3676,7 @@ async fn send_turn_openrouter_messages_agent(
 	            );
 	            return Ok(SendTurnResult {
 	              thread_id: thread_id.to_string(),
-	              engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	              engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	              engine_input_event_id: Some(engine_input_event.id),
 	              engine_input_seq: Some(engine_input_event.seq),
 	              run_id: Some(run_id),
@@ -3697,7 +3698,7 @@ async fn send_turn_openrouter_messages_agent(
 	        if !status.is_success() || !content_type.contains("text/event-stream") {
 	          resp_bytes = tokio::select! {
 	            _ = cancel_rx.changed() => {
-	              return Ok(finish_cancelled_openrouter_messages_agent(
+	              return Ok(finish_cancelled_messages_agent(
 	                window,
 	                &conn,
 	                db_path,
@@ -3716,7 +3717,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	          let engine_io_payload = serde_json::json!({
 	            "v": 1,
-	            "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	            "engine_id": ENGINE_MESSAGES_AGENT,
 	            "provider_id": provider_id,
 	            "model_id": selected_model_id,
 	            "provider_model_ref": provider_model_ref_str.as_str(),
@@ -3748,7 +3749,7 @@ async fn send_turn_openrouter_messages_agent(
 		          if is_platform_inference_quota_exceeded(&resp_bytes) {
 		            let provider_key_ok = get_byok_provider_key().is_ok();
 		            if !provider_key_ok {
-	                append_openrouter_messages_assistant_message(
+	                append_messages_agent_assistant_message(
 	                  &conn,
 	                  db_path,
 	                  thread_id,
@@ -3774,7 +3775,7 @@ async fn send_turn_openrouter_messages_agent(
 	                );
 		                return Ok(SendTurnResult {
 		                  thread_id: thread_id.to_string(),
-		                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 		                  engine_input_event_id: Some(engine_input_event.id),
 		                  engine_input_seq: Some(engine_input_event.seq),
 		                  run_id: Some(run_id),
@@ -3791,7 +3792,7 @@ async fn send_turn_openrouter_messages_agent(
 		              )
 		              .await;
 		              if !approved {
-		                append_openrouter_messages_assistant_message(
+		                append_messages_agent_assistant_message(
 		                  &conn,
 		                  db_path,
 		                  thread_id,
@@ -3817,7 +3818,7 @@ async fn send_turn_openrouter_messages_agent(
 		                );
 		              return Ok(SendTurnResult {
 		                thread_id: thread_id.to_string(),
-		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 		                engine_input_event_id: Some(engine_input_event.id),
 		                engine_input_seq: Some(engine_input_event.seq),
 		                run_id: Some(run_id),
@@ -3834,7 +3835,7 @@ async fn send_turn_openrouter_messages_agent(
 		            )
 		            .await;
 		            if !approved {
-		              append_openrouter_messages_assistant_message(
+		              append_messages_agent_assistant_message(
 		                &conn,
 		                db_path,
 		                thread_id,
@@ -3860,7 +3861,7 @@ async fn send_turn_openrouter_messages_agent(
 		              );
 		              return Ok(SendTurnResult {
 		                thread_id: thread_id.to_string(),
-		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 		                engine_input_event_id: Some(engine_input_event.id),
 		                engine_input_seq: Some(engine_input_event.seq),
 		                run_id: Some(run_id),
@@ -3900,7 +3901,7 @@ async fn send_turn_openrouter_messages_agent(
 		              )
 		              .await;
 		              if !approved {
-		                append_openrouter_messages_assistant_message(
+		                append_messages_agent_assistant_message(
 		                  &conn,
 		                  db_path,
 		                  thread_id,
@@ -3926,7 +3927,7 @@ async fn send_turn_openrouter_messages_agent(
 		                );
 		                return Ok(SendTurnResult {
 		                  thread_id: thread_id.to_string(),
-		                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 		                  engine_input_event_id: Some(engine_input_event.id),
 		                  engine_input_seq: Some(engine_input_event.seq),
 		                  run_id: Some(run_id),
@@ -3950,9 +3951,9 @@ async fn send_turn_openrouter_messages_agent(
 		            }
 		          }
 
-	          let friendly = format_openrouter_error(&resp_bytes);
+	          let friendly = format_provider_error(&resp_bytes);
 	          if status.as_u16() == 402 && request_attempt == 1 {
-	            if let Some(afford) = parse_openrouter_affordable_max_tokens(&friendly) {
+	            if let Some(afford) = parse_affordable_max_tokens(&friendly) {
 	              if afford < request_max_tokens {
 	                request_max_tokens = afford;
 	                request_attempt = 2;
@@ -4020,7 +4021,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	        loop {
 	          if *cancel_rx.borrow() {
-	            return Ok(finish_cancelled_openrouter_messages_agent(
+	            return Ok(finish_cancelled_messages_agent(
 	              window,
 	              &conn,
 	              db_path,
@@ -4033,7 +4034,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	          let next = tokio::select! {
 	            _ = cancel_rx.changed() => {
-	              return Ok(finish_cancelled_openrouter_messages_agent(
+	              return Ok(finish_cancelled_messages_agent(
 	                window,
 	                &conn,
 	                db_path,
@@ -4050,7 +4051,7 @@ async fn send_turn_openrouter_messages_agent(
 	          let bytes = match next {
 		            Ok(bytes) => bytes,
 		            Err(err) => {
-		              append_openrouter_messages_assistant_message(
+		              append_messages_agent_assistant_message(
 		                &conn,
 		                db_path,
 		                thread_id,
@@ -4073,7 +4074,7 @@ async fn send_turn_openrouter_messages_agent(
 	              );
 	              return Ok(SendTurnResult {
 	                thread_id: thread_id.to_string(),
-	                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                engine_input_event_id: Some(engine_input_event.id),
 	                engine_input_seq: Some(engine_input_event.seq),
 	                run_id: Some(run_id),
@@ -4094,7 +4095,7 @@ async fn send_turn_openrouter_messages_agent(
 	              chunk_blob_ref = Some(blob.rel_path.clone());
 	              serde_json::json!({
 	                "v": 1,
-	                "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	                "engine_id": ENGINE_MESSAGES_AGENT,
 	                "provider_id": provider_id,
 	                "model_id": selected_model_id,
 	                "provider_model_ref": provider_model_ref_str.as_str(),
@@ -4109,7 +4110,7 @@ async fn send_turn_openrouter_messages_agent(
 	            } else {
 	              serde_json::json!({
 	                "v": 1,
-	                "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	                "engine_id": ENGINE_MESSAGES_AGENT,
 	                "provider_id": provider_id,
 	                "model_id": selected_model_id,
 	                "provider_model_ref": provider_model_ref_str.as_str(),
@@ -4123,7 +4124,7 @@ async fn send_turn_openrouter_messages_agent(
 	          } else {
 	            serde_json::json!({
 	              "v": 1,
-	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "engine_id": ENGINE_MESSAGES_AGENT,
 	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
 	              "provider_model_ref": provider_model_ref_str.as_str(),
@@ -4192,7 +4193,7 @@ async fn send_turn_openrouter_messages_agent(
 	                  OpenRouterStreamPayload {
 	                    session_id: thread_id.to_string(),
 	                    run_id: run_id.clone(),
-	                    engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                    model_id: selected_model_id.to_string(),
 	                    chunk: delta.to_string(),
 	                    full_content: assistant.clone(),
@@ -4253,8 +4254,8 @@ async fn send_turn_openrouter_messages_agent(
 	      };
 
 		      if !status.is_success() {
-		        let friendly = format_openrouter_error(&resp_bytes);
-		        append_openrouter_messages_assistant_message(
+		        let friendly = format_provider_error(&resp_bytes);
+		        append_messages_agent_assistant_message(
 		          &conn,
 		          db_path,
 		          thread_id,
@@ -4277,7 +4278,7 @@ async fn send_turn_openrouter_messages_agent(
 	        );
 	        return Ok(SendTurnResult {
 	          thread_id: thread_id.to_string(),
-	          engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	          engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	          engine_input_event_id: Some(engine_input_event.id),
 	          engine_input_seq: Some(engine_input_event.seq),
 	          run_id: Some(run_id),
@@ -4346,7 +4347,7 @@ async fn send_turn_openrouter_messages_agent(
 	        )
 	        .await;
 	        if outcome.cancelled {
-	          return Ok(finish_cancelled_openrouter_messages_agent(
+	          return Ok(finish_cancelled_messages_agent(
 	            window,
 	            &conn,
 	            db_path,
@@ -4365,7 +4366,7 @@ async fn send_turn_openrouter_messages_agent(
 	        }));
 
 	        if *cancel_rx.borrow() {
-	          return Ok(finish_cancelled_openrouter_messages_agent(
+	          return Ok(finish_cancelled_messages_agent(
 	            window,
 	            &conn,
 	            db_path,
@@ -4381,7 +4382,7 @@ async fn send_turn_openrouter_messages_agent(
 		    };
 
 				    if content.trim().is_empty() {
-			      append_openrouter_messages_assistant_message(
+			      append_messages_agent_assistant_message(
 			        &conn,
 			        db_path,
 		        thread_id,
@@ -4391,7 +4392,7 @@ async fn send_turn_openrouter_messages_agent(
 		        &evidence_event_ids,
 		        provider_id,
 		        provider_model_ref,
-		        OPENROUTER_MAX_TOKENS,
+		        DEFAULT_MAX_TOKENS,
 		        None,
 		        context_community_id,
 		      );
@@ -4404,14 +4405,14 @@ async fn send_turn_openrouter_messages_agent(
 	      );
 	      return Ok(SendTurnResult {
 	        thread_id: thread_id.to_string(),
-	        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	        engine_input_event_id: first_engine_input_event_id.clone(),
 	        engine_input_seq: first_engine_input_seq,
 	        run_id: Some(run_id),
 	      });
 	    }
 
-		    append_openrouter_messages_assistant_message(
+		    append_messages_agent_assistant_message(
 		      &conn,
 		      db_path,
 		      thread_id,
@@ -4421,7 +4422,7 @@ async fn send_turn_openrouter_messages_agent(
 		      &evidence_event_ids,
 		      provider_id,
 		      provider_model_ref,
-		      OPENROUTER_MAX_TOKENS,
+		      DEFAULT_MAX_TOKENS,
 		      Some(used_personal_memory),
 		      context_community_id,
 		    );
@@ -4445,7 +4446,7 @@ async fn send_turn_openrouter_messages_agent(
 	    );
 	    return Ok(SendTurnResult {
 	      thread_id: thread_id.to_string(),
-	      engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	      engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	      engine_input_event_id: first_engine_input_event_id,
 	      engine_input_seq: first_engine_input_seq,
 	      run_id: Some(run_id),
@@ -4506,7 +4507,7 @@ async fn send_turn_openrouter_messages_agent(
 
 		  let content = loop {
 		    if *cancel_rx.borrow() {
-		      return Ok(finish_cancelled_openrouter_messages_agent(
+		      return Ok(finish_cancelled_messages_agent(
 		        window,
 	        &conn,
 	        db_path,
@@ -4518,7 +4519,7 @@ async fn send_turn_openrouter_messages_agent(
 	    }
 
 	    call_seq += 1;
-	    let mut request_max_tokens = OPENROUTER_MAX_TOKENS;
+	    let mut request_max_tokens = DEFAULT_MAX_TOKENS;
 	    let mut request_attempt: u32 = 1;
 	    let mut use_platform_for_call = platform_available_for_run;
 	
@@ -4555,7 +4556,7 @@ async fn send_turn_openrouter_messages_agent(
 	
 	      let engine_input_payload = serde_json::json!({
 	        "v": 1,
-	        "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	        "engine_id": ENGINE_MESSAGES_AGENT,
 	        "provider_id": provider_id,
 	        "model_id": selected_model_id,
 	        "provider_model_ref": provider_model_ref_str.as_str(),
@@ -4593,7 +4594,7 @@ async fn send_turn_openrouter_messages_agent(
 	          evt
 	        }
 		        Err(err) => {
-		          append_openrouter_messages_assistant_message(
+		          append_messages_agent_assistant_message(
 		            &conn,
 		            db_path,
 		            thread_id,
@@ -4616,7 +4617,7 @@ async fn send_turn_openrouter_messages_agent(
 	          );
 	          return Ok(SendTurnResult {
 	            thread_id: thread_id.to_string(),
-	            engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	            engine_input_event_id: first_engine_input_event_id.clone(),
 	            engine_input_seq: first_engine_input_seq,
 	            run_id: Some(run_id),
@@ -4636,7 +4637,7 @@ async fn send_turn_openrouter_messages_agent(
 	      );
 
 	      if *cancel_rx.borrow() {
-	        return Ok(finish_cancelled_openrouter_messages_agent(
+	        return Ok(finish_cancelled_messages_agent(
 	          window,
 	          &conn,
 	          db_path,
@@ -4662,7 +4663,7 @@ async fn send_turn_openrouter_messages_agent(
 	        let provider_key = match get_byok_provider_key() {
 	          Ok(value) => value,
 	          Err(message) => {
-	            append_openrouter_messages_assistant_message(
+	            append_messages_agent_assistant_message(
 	              &conn,
 	              db_path,
 	              thread_id,
@@ -4685,7 +4686,7 @@ async fn send_turn_openrouter_messages_agent(
 	            );
 	            return Ok(SendTurnResult {
 	              thread_id: thread_id.to_string(),
-	              engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	              engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	              engine_input_event_id: Some(engine_input_event.id),
 	              engine_input_seq: Some(engine_input_event.seq),
 	              run_id: Some(run_id),
@@ -4704,7 +4705,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	      let res = tokio::select! {
 	        _ = cancel_rx.changed() => {
-	          return Ok(finish_cancelled_openrouter_messages_agent(
+	          return Ok(finish_cancelled_messages_agent(
 	            window,
 	            &conn,
 	            db_path,
@@ -4720,7 +4721,7 @@ async fn send_turn_openrouter_messages_agent(
 	      let res = match res {
 	        Ok(res) => res,
 		        Err(err) => {
-		          append_openrouter_messages_assistant_message(
+		          append_messages_agent_assistant_message(
 		            &conn,
 		            db_path,
 		            thread_id,
@@ -4743,7 +4744,7 @@ async fn send_turn_openrouter_messages_agent(
 	          );
 	          return Ok(SendTurnResult {
 	            thread_id: thread_id.to_string(),
-	            engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	            engine_input_event_id: Some(engine_input_event.id),
 	            engine_input_seq: Some(engine_input_event.seq),
 	            run_id: Some(run_id),
@@ -4763,7 +4764,7 @@ async fn send_turn_openrouter_messages_agent(
 	      if !status.is_success() || !content_type.contains("text/event-stream") {
 	        let resp_bytes = tokio::select! {
 	          _ = cancel_rx.changed() => {
-	            return Ok(finish_cancelled_openrouter_messages_agent(
+	            return Ok(finish_cancelled_messages_agent(
 	              window,
 	              &conn,
 	              db_path,
@@ -4782,7 +4783,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let engine_io_payload = serde_json::json!({
 	          "v": 1,
-	          "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	          "engine_id": ENGINE_MESSAGES_AGENT,
 	          "provider_id": provider_id,
 	          "model_id": selected_model_id,
 	          "provider_model_ref": provider_model_ref_str.as_str(),
@@ -4814,7 +4815,7 @@ async fn send_turn_openrouter_messages_agent(
 	          if is_platform_inference_quota_exceeded(&resp_bytes) {
 	            let provider_key_ok = get_byok_provider_key().is_ok();
 	            if !provider_key_ok {
-	              append_openrouter_messages_assistant_message(
+	              append_messages_agent_assistant_message(
 	                &conn,
 	                db_path,
 	                thread_id,
@@ -4840,7 +4841,7 @@ async fn send_turn_openrouter_messages_agent(
 	              );
 	              return Ok(SendTurnResult {
 	                thread_id: thread_id.to_string(),
-	                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                engine_input_event_id: Some(engine_input_event.id),
 	                engine_input_seq: Some(engine_input_event.seq),
 	                run_id: Some(run_id),
@@ -4879,7 +4880,7 @@ async fn send_turn_openrouter_messages_agent(
 		            )
 		            .await;
 		            if !approved {
-		              append_openrouter_messages_assistant_message(
+		              append_messages_agent_assistant_message(
 		                &conn,
 		                db_path,
 		                thread_id,
@@ -4905,7 +4906,7 @@ async fn send_turn_openrouter_messages_agent(
 		              );
 		              return Ok(SendTurnResult {
 		                thread_id: thread_id.to_string(),
-		                engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+		                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 		                engine_input_event_id: Some(engine_input_event.id),
 		                engine_input_seq: Some(engine_input_event.seq),
 		                run_id: Some(run_id),
@@ -4935,7 +4936,7 @@ async fn send_turn_openrouter_messages_agent(
 	            .and_then(|v| v.get("error").cloned())
 	            .and_then(|e| e.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
 	            .unwrap_or_else(|| String::from_utf8_lossy(&resp_bytes).to_string());
-	          if let Some(afford) = parse_openrouter_affordable_max_tokens(&friendly) {
+	          if let Some(afford) = parse_affordable_max_tokens(&friendly) {
 	            if afford < request_max_tokens {
 	              request_max_tokens = afford;
 	              request_attempt = 2;
@@ -4964,7 +4965,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	      while !saw_message_stop {
 	        if *cancel_rx.borrow() {
-	          return Ok(finish_cancelled_openrouter_messages_agent(
+	          return Ok(finish_cancelled_messages_agent(
 	            window,
 	            &conn,
 	            db_path,
@@ -4977,7 +4978,7 @@ async fn send_turn_openrouter_messages_agent(
 
 	        let next = tokio::select! {
 	          _ = cancel_rx.changed() => {
-	            return Ok(finish_cancelled_openrouter_messages_agent(
+	            return Ok(finish_cancelled_messages_agent(
 	              window,
 	              &conn,
 	              db_path,
@@ -4994,7 +4995,7 @@ async fn send_turn_openrouter_messages_agent(
 	        let bytes = match next {
 	          Ok(bytes) => bytes,
 		          Err(err) => {
-		            append_openrouter_messages_assistant_message(
+		            append_messages_agent_assistant_message(
 		              &conn,
 		              db_path,
 		              thread_id,
@@ -5017,7 +5018,7 @@ async fn send_turn_openrouter_messages_agent(
 	            );
 	            return Ok(SendTurnResult {
 	              thread_id: thread_id.to_string(),
-	              engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	              engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	              engine_input_event_id: Some(engine_input_event.id),
 	              engine_input_seq: Some(engine_input_event.seq),
 	              run_id: Some(run_id),
@@ -5038,7 +5039,7 @@ async fn send_turn_openrouter_messages_agent(
 	            chunk_blob_ref = Some(blob.rel_path.clone());
 	            serde_json::json!({
 	              "v": 1,
-	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "engine_id": ENGINE_MESSAGES_AGENT,
 	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
 	              "provider_model_ref": provider_model_ref_str.as_str(),
@@ -5053,7 +5054,7 @@ async fn send_turn_openrouter_messages_agent(
 	          } else {
 	            serde_json::json!({
 	              "v": 1,
-	              "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	              "engine_id": ENGINE_MESSAGES_AGENT,
 	              "provider_id": provider_id,
 	              "model_id": selected_model_id,
 	              "provider_model_ref": provider_model_ref_str.as_str(),
@@ -5067,7 +5068,7 @@ async fn send_turn_openrouter_messages_agent(
 	        } else {
 	          serde_json::json!({
 	            "v": 1,
-	            "engine_id": ENGINE_OPENROUTER_MESSAGES_AGENT,
+	            "engine_id": ENGINE_MESSAGES_AGENT,
 	            "provider_id": provider_id,
 	            "model_id": selected_model_id,
 	            "provider_model_ref": provider_model_ref_str.as_str(),
@@ -5184,7 +5185,7 @@ async fn send_turn_openrouter_messages_agent(
 	                OpenRouterStreamPayload {
 	                  session_id: thread_id.to_string(),
 	                  run_id: run_id.clone(),
-	                  engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	                  engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	                  model_id: selected_model_id.to_string(),
 	                  chunk: delta_text.to_string(),
 	                  full_content: assistant.clone(),
@@ -5242,8 +5243,8 @@ async fn send_turn_openrouter_messages_agent(
 	    };
 	
 		    if !status.is_success() {
-		      let friendly = format_openrouter_error(&resp_bytes);
-		      append_openrouter_messages_assistant_message(
+		      let friendly = format_provider_error(&resp_bytes);
+		      append_messages_agent_assistant_message(
 		        &conn,
 		        db_path,
 		        thread_id,
@@ -5266,7 +5267,7 @@ async fn send_turn_openrouter_messages_agent(
 	      );
 	      return Ok(SendTurnResult {
 	        thread_id: thread_id.to_string(),
-	        engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+	        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
 	        engine_input_event_id: Some(engine_input_event.id),
 	        engine_input_seq: Some(engine_input_event.seq),
 	        run_id: Some(run_id),
@@ -5274,7 +5275,7 @@ async fn send_turn_openrouter_messages_agent(
 	  };
 
 		  if *cancel_rx.borrow() {
-	      return Ok(finish_cancelled_openrouter_messages_agent(
+	      return Ok(finish_cancelled_messages_agent(
 	        window,
 	        &conn,
 	        db_path,
@@ -5336,7 +5337,7 @@ async fn send_turn_openrouter_messages_agent(
 		      )
 		      .await;
 		      if outcome.cancelled {
-		        return Ok(finish_cancelled_openrouter_messages_agent(
+		        return Ok(finish_cancelled_messages_agent(
 		          window,
 		          &conn,
 		          db_path,
@@ -5354,7 +5355,7 @@ async fn send_turn_openrouter_messages_agent(
 		      }));
 
 	      if *cancel_rx.borrow() {
-	        return Ok(finish_cancelled_openrouter_messages_agent(
+	        return Ok(finish_cancelled_messages_agent(
 	          window,
           &conn,
           db_path,
@@ -5377,7 +5378,7 @@ async fn send_turn_openrouter_messages_agent(
 	  };
 
 		  if *cancel_rx.borrow() {
-	    return Ok(finish_cancelled_openrouter_messages_agent(
+	    return Ok(finish_cancelled_messages_agent(
 	      window,
       &conn,
       db_path,
@@ -5388,7 +5389,7 @@ async fn send_turn_openrouter_messages_agent(
     ));
   }
 		  if content.trim().is_empty() {
-		    append_openrouter_messages_assistant_message(
+		    append_messages_agent_assistant_message(
 		      &conn,
 		      db_path,
 		      thread_id,
@@ -5398,7 +5399,7 @@ async fn send_turn_openrouter_messages_agent(
 		      &evidence_event_ids,
 		      provider_id,
 		      provider_model_ref,
-		      OPENROUTER_MAX_TOKENS,
+		      DEFAULT_MAX_TOKENS,
 		      None,
 		      context_community_id,
 		    );
@@ -5411,14 +5412,14 @@ async fn send_turn_openrouter_messages_agent(
     );
     return Ok(SendTurnResult {
       thread_id: thread_id.to_string(),
-      engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+      engine_id: ENGINE_MESSAGES_AGENT.to_string(),
       engine_input_event_id: first_engine_input_event_id.clone(),
       engine_input_seq: first_engine_input_seq,
       run_id: Some(run_id),
     });
 	  }
 
-		  append_openrouter_messages_assistant_message(
+		  append_messages_agent_assistant_message(
 		    &conn,
 		    db_path,
 		    thread_id,
@@ -5428,7 +5429,7 @@ async fn send_turn_openrouter_messages_agent(
 		    &evidence_event_ids,
 		    provider_id,
 		    provider_model_ref,
-		    OPENROUTER_MAX_TOKENS,
+		    DEFAULT_MAX_TOKENS,
 		    Some(used_personal_memory),
 		    context_community_id,
 		  );
@@ -5453,7 +5454,7 @@ async fn send_turn_openrouter_messages_agent(
   );
   Ok(SendTurnResult {
     thread_id: thread_id.to_string(),
-    engine_id: ENGINE_OPENROUTER_MESSAGES_AGENT.to_string(),
+    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
     engine_input_event_id: first_engine_input_event_id,
     engine_input_seq: first_engine_input_seq,
     run_id: Some(run_id),
@@ -5481,16 +5482,16 @@ async fn send_turn_cmd(
     .ok_or_else(|| "thread not found".to_string())?;
 
   // Legacy compatibility: migrate old threads to the current engine on first use.
-  if thread.engine_id == ENGINE_OPENROUTER_CHAT {
+  if thread.engine_id == ENGINE_LEGACY_OPENROUTER_CHAT || thread.engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT {
     let model_id = thread.model_id.clone();
     set_thread_engine_model(
       &conn,
       &thread_id,
-      ENGINE_OPENROUTER_MESSAGES_AGENT,
+      ENGINE_MESSAGES_AGENT,
       model_id.as_deref(),
     )
     .map_err(|e| e.to_string())?;
-    thread.engine_id = ENGINE_OPENROUTER_MESSAGES_AGENT.to_string();
+    thread.engine_id = ENGINE_MESSAGES_AGENT.to_string();
   }
 
   let platform_proxy = match (supabase_url.as_deref(), supabase_anon_key.as_deref(), supabase_access_token.as_deref()) {
@@ -5579,8 +5580,8 @@ async fn send_turn_cmd(
     .filter(|v| !v.is_empty())
     .ok_or_else(|| "model_id is required".to_string())?;
 
-		  if thread.engine_id == ENGINE_OPENROUTER_MESSAGES_AGENT {
-		    return send_turn_openrouter_messages_agent(
+		  if thread.engine_id == ENGINE_MESSAGES_AGENT {
+		    return send_turn_messages_agent(
 		      &window,
 		      conn,
 		      &state.db_path,
@@ -5692,9 +5693,9 @@ fn create_thread_cmd(
     .as_deref()
     .map(|v| v.trim())
     .filter(|v| !v.is_empty())
-    .unwrap_or(ENGINE_OPENROUTER_MESSAGES_AGENT);
-  let engine_id = if engine_id == ENGINE_OPENROUTER_CHAT {
-    ENGINE_OPENROUTER_MESSAGES_AGENT
+    .unwrap_or(ENGINE_MESSAGES_AGENT);
+  let engine_id = if engine_id == ENGINE_LEGACY_OPENROUTER_CHAT || engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT {
+    ENGINE_MESSAGES_AGENT
   } else {
     engine_id
   };
@@ -5704,9 +5705,7 @@ fn create_thread_cmd(
     .map(|v| v.trim())
     .filter(|v| !v.is_empty());
 
-  if (engine_id == ENGINE_OPENROUTER_CHAT || engine_id == ENGINE_OPENROUTER_MESSAGES_AGENT)
-    && model_id.is_none()
-  {
+  if engine_id == ENGINE_MESSAGES_AGENT && model_id.is_none() {
     return Err("Model is required".to_string());
   }
 
@@ -5735,9 +5734,11 @@ fn upsert_thread_cmd(
     .as_deref()
     .map(|v| v.trim())
     .filter(|v| !v.is_empty())
-    .unwrap_or(ENGINE_OPENROUTER_MESSAGES_AGENT);
-  let cleaned_engine_id = if cleaned_engine_id == ENGINE_OPENROUTER_CHAT {
-    ENGINE_OPENROUTER_MESSAGES_AGENT
+    .unwrap_or(ENGINE_MESSAGES_AGENT);
+  let cleaned_engine_id = if cleaned_engine_id == ENGINE_LEGACY_OPENROUTER_CHAT
+    || cleaned_engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
+  {
+    ENGINE_MESSAGES_AGENT
   } else {
     cleaned_engine_id
   };
@@ -5923,13 +5924,15 @@ fn set_thread_engine_cmd(
   if cleaned_engine.is_empty() {
     return Err("engine_id is required".to_string());
   }
-  let cleaned_engine = if cleaned_engine == ENGINE_OPENROUTER_CHAT {
-    ENGINE_OPENROUTER_MESSAGES_AGENT
+  let cleaned_engine = if cleaned_engine == ENGINE_LEGACY_OPENROUTER_CHAT
+    || cleaned_engine == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
+  {
+    ENGINE_MESSAGES_AGENT
   } else {
     cleaned_engine
   };
   let cleaned_model = model_id.as_deref().map(|v| v.trim()).filter(|v| !v.is_empty());
-  let requires_model = cleaned_engine == ENGINE_OPENROUTER_MESSAGES_AGENT;
+  let requires_model = cleaned_engine == ENGINE_MESSAGES_AGENT;
   let final_model = if requires_model {
     cleaned_model.ok_or_else(|| "model_id is required".to_string())?
   } else {
@@ -6221,11 +6224,6 @@ struct ModelToggle {
 
 fn default_model_toggles() -> Vec<ModelToggle> {
   vec![
-    ModelToggle {
-      id: "gpt-5.1".to_string(),
-      label: "GPT 5.1".to_string(),
-      enabled: true,
-    },
     ModelToggle {
       id: "gpt-5.2".to_string(),
       label: "GPT 5.2".to_string(),

@@ -455,7 +455,6 @@ const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
-  { id: "gpt-5.1", label: "GPT 5.1", enabled: true },
   { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
   { id: "opus-4.5", label: "Opus 4.5", enabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
@@ -3733,7 +3732,11 @@ function App() {
   async function loadModelToggles() {
     try {
       const data = await invoke<ModelToggle[]>("get_model_toggles_cmd");
-      setModelToggles(data);
+      const cleaned = (data ?? []).filter((toggle) => toggle.id !== "gpt-5.1");
+      if (cleaned.length !== (data ?? []).length) {
+        await invoke("set_model_toggles_cmd", { toggles: cleaned }).catch(() => null);
+      }
+      setModelToggles(cleaned.length ? cleaned : DEFAULT_MODEL_TOGGLES);
     } catch (error) {
       console.error(error);
       setModelToggles(DEFAULT_MODEL_TOGGLES);
@@ -8571,7 +8574,7 @@ function App() {
     const thread: ThreadRecord = {
       id: threadId,
       title: newThreadTitle || null,
-      engine_id: "openrouter_messages_agent",
+      engine_id: "messages_agent",
       model_id: activeModelId,
       community_id: null,
       workspace_path: null,
@@ -8754,15 +8757,15 @@ function App() {
           }
           if (
             fromDb &&
-            fromDb.engine_id === "openrouter_messages_agent" &&
+            (fromDb.engine_id === "messages_agent" || fromDb.engine_id === "openrouter_messages_agent") &&
             (fromDb.model_id ?? "").trim() === modelToUse
-	          ) {
+          ) {
 	            return fromDb;
 	          }
 	          try {
 	            const updated = await invoke<ThreadRecord>("set_thread_engine_cmd", {
 	              threadId: sessionId,
-	              engineId: "openrouter_messages_agent",
+	              engineId: "messages_agent",
 	              modelId: modelToUse
 	            });
             setThreads((prev) => {
@@ -11878,7 +11881,7 @@ function App() {
               const indicatorSignature = streamingMeta
                 ? formatExecutionLabel(streamingMeta.engine_id, streamingMeta.model_id, modelToggles)
                 : formatExecutionLabel(
-                    activeThread?.engine_id ?? "openrouter_messages_agent",
+                    activeThread?.engine_id ?? "messages_agent",
                     activeModelId,
                     modelToggles
                   );
@@ -12146,7 +12149,7 @@ function App() {
 		                    try {
 		                      await invoke<ThreadRecord>("set_thread_engine_cmd", {
 		                        threadId: activeThreadId,
-		                        engineId: "openrouter_messages_agent",
+		                        engineId: "messages_agent",
 		                        modelId
 		                      });
 		                    } catch {
@@ -14548,7 +14551,11 @@ function formatExecutionLabel(
   const engineId = (engineIdInput ?? "").trim();
   if (!engineId) return null;
   const normalizedEngineId = engineId.replace(/\s+/g, "_");
-  if (normalizedEngineId === "openrouter_chat" || normalizedEngineId === "openrouter_messages_agent") {
+  if (
+    normalizedEngineId === "messages_agent" ||
+    normalizedEngineId === "openrouter_messages_agent" ||
+    normalizedEngineId === "openrouter_chat"
+  ) {
     const modelId = (modelIdInput ?? "").trim();
     if (!modelId) return null;
     const modelLabel = modelToggles.find((toggle) => toggle.id === modelId)?.label;
