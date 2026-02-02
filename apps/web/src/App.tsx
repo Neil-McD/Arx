@@ -2277,6 +2277,11 @@ export default function App() {
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
+  const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
+  const [deleteCommunityNameInput, setDeleteCommunityNameInput] = useState("");
+  const [deleteCommunityConfirmInput, setDeleteCommunityConfirmInput] = useState("");
+  const [deleteCommunityError, setDeleteCommunityError] = useState<string | null>(null);
+  const [isDeletingCommunity, setIsDeletingCommunity] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
@@ -8864,7 +8869,7 @@ export default function App() {
     }
   }
 
-	  async function handleSaveCommunitySettings() {
+  async function handleSaveCommunitySettings() {
 	    if (!supabaseSession || !activeCommunityId) return;
 	    setCommunitySettingsError(null);
 	    setIsSavingCommunitySettings(true);
@@ -8982,6 +8987,60 @@ export default function App() {
       setCommunitySettingsError(message);
     } finally {
       setIsSavingCommunitySettings(false);
+    }
+  }
+
+  function openDeleteCommunityModal() {
+    setDeleteCommunityError(null);
+    setDeleteCommunityNameInput("");
+    setDeleteCommunityConfirmInput("");
+    setShowDeleteCommunityModal(true);
+  }
+
+  function closeDeleteCommunityModal() {
+    setShowDeleteCommunityModal(false);
+    setDeleteCommunityError(null);
+    setDeleteCommunityNameInput("");
+    setDeleteCommunityConfirmInput("");
+    setIsDeletingCommunity(false);
+  }
+
+  async function handleConfirmDeleteCommunity() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setDeleteCommunityError(null);
+    setIsDeletingCommunity(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/communities?id=eq.${activeCommunityId}`,
+        { method: "DELETE" },
+        supabaseSession
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const deletedId = activeCommunityId;
+      setShowDeleteCommunityModal(false);
+      setActiveCommunityId(null);
+      setActivePage("workspace");
+      setActiveView("home");
+      setCommunityTab("chat");
+      setCommunities((prev) => prev.filter((c) => c.id !== deletedId));
+      setCommunityRoleById((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        return next;
+      });
+      await loadCommunities(supabaseSession);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to delete community.";
+      setDeleteCommunityError(message);
+    } finally {
+      setIsDeletingCommunity(false);
     }
   }
 
@@ -12335,6 +12394,22 @@ export default function App() {
 				                                    : "Save changes"}
 				                              </button>
 				                            </div>
+                                    {isActiveCommunityOwner && (
+                                      <div className="settings-section" style={{ marginTop: 18 }}>
+                                        <div className="settings-section-title">Danger zone</div>
+                                        <div className="settings-section-desc">
+                                          Permanently delete this community and all associated data.
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="danger"
+                                          onClick={openDeleteCommunityModal}
+                                          disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
+                                        >
+                                          Delete community
+                                        </button>
+                                      </div>
+                                    )}
 			                          </div>
 			                        </>
 			                      ) : (
@@ -14731,10 +14806,10 @@ export default function App() {
         </div>
       )}
 
-      {showCreateCommunityModal && (
-        <div className="modal-overlay" onClick={closeCreateCommunityModal}>
-          <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-            {(() => {
+	      {showCreateCommunityModal && (
+	        <div className="modal-overlay" onClick={closeCreateCommunityModal}>
+	          <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+	            {(() => {
               const ownedCount = communities.reduce(
                 (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
                 0,
@@ -14907,6 +14982,68 @@ export default function App() {
 	          </div>
 	        </div>
 	      )}
+
+        {showDeleteCommunityModal && activeCommunity && (
+          <div className="modal-overlay" onClick={closeDeleteCommunityModal}>
+            <div className="modal delete-community-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title">Delete community</div>
+                <button className="modal-close" onClick={closeDeleteCommunityModal} title="Close">
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="model-note">
+                  This permanently deletes <strong>{activeCommunity.name}</strong> and all associated data. This cannot be
+                  undone.
+                </div>
+                <label className="create-community-field">
+                  <span>Type the community name to confirm</span>
+                  <input
+                    type="text"
+                    placeholder={activeCommunity.name}
+                    value={deleteCommunityNameInput}
+                    onChange={(event) => setDeleteCommunityNameInput(event.target.value)}
+                    disabled={isDeletingCommunity}
+                  />
+                </label>
+                <label className="create-community-field">
+                  <span>Type delete to confirm</span>
+                  <input
+                    type="text"
+                    placeholder="delete"
+                    value={deleteCommunityConfirmInput}
+                    onChange={(event) => setDeleteCommunityConfirmInput(event.target.value)}
+                    disabled={isDeletingCommunity}
+                  />
+                </label>
+                {deleteCommunityError && <div className="auth-error">{deleteCommunityError}</div>}
+              </div>
+              <div className="modal-footer">
+                <div className="create-community-actions">
+                  <button className="create-community-secondary" type="button" onClick={closeDeleteCommunityModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="create-community-secondary danger"
+                    onClick={() => void handleConfirmDeleteCommunity()}
+                    disabled={(() => {
+                      if (isDeletingCommunity) return true;
+                      const expected = activeCommunity.name.trim().toLowerCase();
+                      const nameOk =
+                        expected.length > 0 && deleteCommunityNameInput.trim().toLowerCase() === expected;
+                      const keywordOk = deleteCommunityConfirmInput.trim().toLowerCase() === "delete";
+                      return !(nameOk && keywordOk);
+                    })()}
+                  >
+                    {isDeletingCommunity ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       {authError && (
         <div className="toast error" role="status">

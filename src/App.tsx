@@ -978,6 +978,11 @@ function App() {
     .sort()
     .join("|");
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
+  const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
+  const [deleteCommunityNameInput, setDeleteCommunityNameInput] = useState("");
+  const [deleteCommunityConfirmInput, setDeleteCommunityConfirmInput] = useState("");
+  const [deleteCommunityError, setDeleteCommunityError] = useState<string | null>(null);
+  const [isDeletingCommunity, setIsDeletingCommunity] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
@@ -8101,6 +8106,60 @@ function App() {
     }
   }
 
+  function openDeleteCommunityModal() {
+    setDeleteCommunityError(null);
+    setDeleteCommunityNameInput("");
+    setDeleteCommunityConfirmInput("");
+    setShowDeleteCommunityModal(true);
+  }
+
+  function closeDeleteCommunityModal() {
+    setShowDeleteCommunityModal(false);
+    setDeleteCommunityError(null);
+    setDeleteCommunityNameInput("");
+    setDeleteCommunityConfirmInput("");
+    setIsDeletingCommunity(false);
+  }
+
+  async function handleConfirmDeleteCommunity() {
+    if (!supabaseSession || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setDeleteCommunityError(null);
+    setIsDeletingCommunity(true);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/communities?id=eq.${activeCommunityId}`,
+        { method: "DELETE" },
+        supabaseSession
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const deletedId = activeCommunityId;
+      setShowDeleteCommunityModal(false);
+      setActiveCommunityId(null);
+      setActivePage("workspace");
+      setActiveView("home");
+      setCommunityTab("chat");
+      setCommunities((prev) => prev.filter((c) => c.id !== deletedId));
+      setCommunityRoleById((prev) => {
+        const next = { ...prev };
+        delete next[deletedId];
+        return next;
+      });
+      await loadCommunities(supabaseSession);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to delete community.";
+      setDeleteCommunityError(message);
+    } finally {
+      setIsDeletingCommunity(false);
+    }
+  }
+
   function scrollToCommunityMessage(messageId: string) {
     const target = document.getElementById(`msg-${messageId}`);
     if (!target) return;
@@ -11159,6 +11218,67 @@ function App() {
             </div>
           </div>
         )}
+        {showDeleteCommunityModal && activeCommunity && (
+          <div className="modal-overlay" onClick={closeDeleteCommunityModal}>
+            <div className="modal delete-community-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title">Delete community</div>
+                <button className="modal-close" onClick={closeDeleteCommunityModal} title="Close">
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="model-note">
+                  This permanently deletes <strong>{activeCommunity.name}</strong> and all associated data. This cannot be
+                  undone.
+                </div>
+                <label className="create-community-field">
+                  <span>Type the community name to confirm</span>
+                  <input
+                    type="text"
+                    placeholder={activeCommunity.name}
+                    value={deleteCommunityNameInput}
+                    onChange={(event) => setDeleteCommunityNameInput(event.target.value)}
+                    disabled={isDeletingCommunity}
+                  />
+                </label>
+                <label className="create-community-field">
+                  <span>Type delete to confirm</span>
+                  <input
+                    type="text"
+                    placeholder="delete"
+                    value={deleteCommunityConfirmInput}
+                    onChange={(event) => setDeleteCommunityConfirmInput(event.target.value)}
+                    disabled={isDeletingCommunity}
+                  />
+                </label>
+                {deleteCommunityError && <div className="auth-error">{deleteCommunityError}</div>}
+              </div>
+              <div className="modal-footer">
+                <div className="create-community-actions">
+                  <button className="create-community-secondary" type="button" onClick={closeDeleteCommunityModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="create-community-secondary danger"
+                    onClick={() => void handleConfirmDeleteCommunity()}
+                    disabled={(() => {
+                      if (isDeletingCommunity) return true;
+                      const expected = activeCommunity.name.trim().toLowerCase();
+                      const nameOk =
+                        expected.length > 0 && deleteCommunityNameInput.trim().toLowerCase() === expected;
+                      const keywordOk = deleteCommunityConfirmInput.trim().toLowerCase() === "delete";
+                      return !(nameOk && keywordOk);
+                    })()}
+                  >
+                    {isDeletingCommunity ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {showResourceModal && (
           <div className="modal-overlay" onClick={closeResourceModal}>
             <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
@@ -14071,6 +14191,22 @@ function App() {
 			                            : "Save changes"}
 			                      </button>
 			                    </div>
+                          {isActiveCommunityOwner && (
+                            <div className="settings-section" style={{ marginTop: 18 }}>
+                              <div className="settings-section-title">Danger zone</div>
+                              <div className="settings-section-desc">
+                                Permanently delete this community and all associated data.
+                              </div>
+                              <button
+                                type="button"
+                                className="danger"
+                                onClick={openDeleteCommunityModal}
+                                disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
+                              >
+                                Delete community
+                              </button>
+                            </div>
+                          )}
 		                    </div>
 		                  </>
 		                ) : (
@@ -15559,83 +15695,80 @@ function App() {
 	              <div className="community-panel library-panel">
 	                {!activeCommunity && "Select a community."}
 	                {activeCommunity && (
-	                  <div className="library-layout">
-	                    <div className="library-column">
-	                      <div className="resources-header">Library</div>
-	                      <div className="library-list">
-	                        {isLoadingResources && (
-	                          <div className="chat-loading">
-	                            <div className="loading-spinner" />
-	                            <span>Loading library...</span>
-	                          </div>
-	                        )}
-	                        {!isLoadingResources && libraryResources.length === 0 && (
-	                          <div className="chat-empty-state">
-                              <div className="chat-empty-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
-                                  <path d="M4 5.5V19.5" />
-                                </svg>
-                              </div>
-                              <div className="chat-empty-title">Welcome to the library</div>
-                              <div className="chat-empty-text">Pin resources to add them here.</div>
+                    <>
+                      {isLoadingResources ? (
+                        <div className="chat-loading">
+                          <div className="loading-spinner" />
+                          <span>Loading library...</span>
+                        </div>
+                      ) : libraryResources.length === 0 ? (
+                        <div className="chat-empty-state">
+                          <div className="chat-empty-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
+                              <path d="M4 5.5V19.5" />
+                            </svg>
+                          </div>
+                          <div className="chat-empty-title">Welcome to the library</div>
+                          <div className="chat-empty-text">Pin resources to add them here.</div>
+                        </div>
+                      ) : (
+                        <div className="library-layout">
+                          <div className="library-column">
+                            <div className="resources-header">Library</div>
+                            <div className="library-list">
+                              {libraryResources.map((resource) => (
+                                <button
+                                  key={resource.id}
+                                  className={
+                                    resource.id === selectedLibraryResourceId
+                                      ? "library-item active"
+                                      : "library-item"
+                                  }
+                                  onClick={() => setSelectedLibraryResourceId(resource.id)}
+                                >
+                                  <div className="library-item-title">{resource.title}</div>
+                                  <div className="library-item-meta">
+                                    <span>{resource.type}</span>
+                                    <span>{formatChatTime(resource.created_at)}</span>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
-	                        )}
-	                        {!isLoadingResources &&
-	                          libraryResources.map((resource) => (
-	                            <button
-	                              key={resource.id}
-	                              className={
-	                                resource.id === selectedLibraryResourceId
-	                                  ? "library-item active"
-	                                  : "library-item"
-	                              }
-	                              onClick={() => setSelectedLibraryResourceId(resource.id)}
-	                            >
-	                              <div className="library-item-title">{resource.title}</div>
-	                              <div className="library-item-meta">
-	                                <span>{resource.type}</span>
-	                                <span>{formatChatTime(resource.created_at)}</span>
-	                              </div>
-	                            </button>
-	                          ))}
-	                      </div>
-	                    </div>
-	                    <div className="library-column">
-	                      <div className="resources-header">Preview</div>
-	                      <div className="library-versions">
-	                        {!selectedLibraryResource && (
-	                          <div className="chat-empty">
-                              {libraryResources.length === 0 ? "No library items yet." : "Select a library item."}
-                            </div>
-	                        )}
-                          {selectedLibraryResource && (
-                            <div className="library-version">
-                              <div className="library-version-meta">
-                                <span>{formatChatTime(selectedLibraryResource.created_at)}</span>
-                                <span>
-                                  {selectedLibraryResource.url
-                                    ? "link"
-                                    : selectedLibraryResource.type}
-                                </span>
-                              </div>
-                              {selectedLibraryResource.url && (
-                                <div className="resource-body">
-                                  <a href={selectedLibraryResource.url} target="_blank" rel="noreferrer">
-                                    {selectedLibraryResource.url}
-                                  </a>
+                          </div>
+                          <div className="library-column">
+                            <div className="resources-header">Preview</div>
+                            <div className="library-versions">
+                              {!selectedLibraryResource && (
+                                <div className="chat-empty">Select a library item.</div>
+                              )}
+                              {selectedLibraryResource && (
+                                <div className="library-version">
+                                  <div className="library-version-meta">
+                                    <span>{formatChatTime(selectedLibraryResource.created_at)}</span>
+                                    <span>{selectedLibraryResource.url ? "link" : selectedLibraryResource.type}</span>
+                                  </div>
+                                  {selectedLibraryResource.url && (
+                                    <div className="resource-body">
+                                      <a href={selectedLibraryResource.url} target="_blank" rel="noreferrer">
+                                        {selectedLibraryResource.url}
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div className="library-version-body">
+                                    {selectedLibraryResource.body_md ? (
+                                      renderMarkdown(selectedLibraryResource.body_md)
+                                    ) : (
+                                      <div className="chat-empty">No content.</div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
-                              <div className="library-version-body">
-                                {selectedLibraryResource.body_md
-                                  ? renderMarkdown(selectedLibraryResource.body_md)
-                                  : <div className="chat-empty">No content.</div>}
-                              </div>
                             </div>
-                          )}
-	                      </div>
-	                    </div>
-	                  </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
 	                )}
 	              </div>
 	            )}
