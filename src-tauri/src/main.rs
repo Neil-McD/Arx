@@ -1230,6 +1230,7 @@ fn build_atom_system_prompt(
   used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
   community_id: Option<&str>,
   user_system_prompt: Option<&str>,
+  community_system_prompt: Option<&str>,
 ) -> String {
   let os = std::env::consts::OS;
   let workspace_trimmed = workspace_path.trim();
@@ -1257,6 +1258,17 @@ fn build_atom_system_prompt(
   let community_name = community_id.unwrap_or("none");
   let community_memory_block = "(none)".to_string();
 
+  let community_prompt_block = community_system_prompt
+    .map(|v| v.trim())
+    .filter(|v| !v.is_empty())
+    .map(|v| {
+      format!(
+        "\nCommunity instructions (follow unless they conflict with the Rules or user preferences):\n{}\n",
+        v
+      )
+    })
+    .unwrap_or_default();
+
   let tool_rules = if workspace_trimmed.is_empty() {
     "- No workspace is bound; local filesystem tools are disabled.\n- You may still use update_plan to keep the Plan panel current.\n- Ask the user to bind a workspace before requesting read/list_dir/glob/grep/sha256/write/edit/bash.\n"
   } else {
@@ -1275,13 +1287,14 @@ fn build_atom_system_prompt(
     .unwrap_or_default();
 
   format!(
-    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n{}- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
+    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n{}- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
     workspace_display,
     os,
     if git_repo { "yes" } else { "no" },
     personal_memory_block,
     community_name,
     community_memory_block,
+    community_prompt_block,
     user_prompt_block,
     tool_rules
   )
@@ -5934,6 +5947,7 @@ async fn send_turn_cmd(
   input: String,
   history_messages_json: Option<String>,
   personal_memory_items_json: Option<String>,
+  community_system_prompt: Option<String>,
   supabase_url: Option<String>,
   supabase_anon_key: Option<String>,
   supabase_access_token: Option<String>,
@@ -6010,6 +6024,7 @@ async fn send_turn_cmd(
     &used_personal_memory,
     thread.community_id.as_deref(),
     user_system_prompt.as_deref(),
+    community_system_prompt.as_deref(),
   );
 	  let retrieval_payload = serde_json::json!({
 	    "v": 1,
@@ -6077,6 +6092,7 @@ async fn engine_send_turn_cmd(
   input: String,
   history_messages_json: Option<String>,
   personal_memory_items_json: Option<String>,
+  community_system_prompt: Option<String>,
   supabase_url: Option<String>,
   supabase_anon_key: Option<String>,
   supabase_access_token: Option<String>,
@@ -6089,6 +6105,7 @@ async fn engine_send_turn_cmd(
     input,
     history_messages_json,
     personal_memory_items_json,
+    community_system_prompt,
     supabase_url,
     supabase_anon_key,
     supabase_access_token,
