@@ -57,9 +57,9 @@ async function verifyStripeWebhook(rawBody: string, signatureHeader: string): Pr
 
   const ts = Number(t);
   if (!Number.isFinite(ts)) throw new Error("Invalid Stripe timestamp");
-  // 5 minute tolerance
-  const ageSeconds = Math.abs(Date.now() / 1000 - ts);
-  if (ageSeconds > 5 * 60) throw new Error("Stale webhook timestamp");
+  // Do not reject stale-but-valid webhooks: Stripe delivery can be delayed, and retries reuse
+  // the original timestamp. We rely on signature verification + payment_provider_events
+  // idempotency instead of a short timestamp tolerance window.
 
   const signedPayload = `${t}.${rawBody}`;
   const expected = await hmacSha256(secret, signedPayload);

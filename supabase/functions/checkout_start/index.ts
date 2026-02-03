@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
 
 type CheckoutStartInput = {
@@ -322,8 +323,8 @@ Deno.serve(async (req: Request) => {
     if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
 
     const input = await readJson<CheckoutStartInput>(req);
-    if (!input.success_url?.trim()) throw new Error("success_url is required");
-    if (!input.cancel_url?.trim()) throw new Error("cancel_url is required");
+    const successUrl = requireAllowedRedirectUrl(input.success_url, "success_url");
+    const cancelUrl = requireAllowedRedirectUrl(input.cancel_url, "cancel_url");
     const brandosAid = sanitizeOptionalUuid(input.tracking?.brandos_aid ?? null);
 
     const rawPlanId = String(input.plan_id ?? "").trim();
@@ -358,7 +359,11 @@ Deno.serve(async (req: Request) => {
     const tracking = brandosAid ? { brandos_aid: brandosAid } : {};
     const userId = await getAuthUserId(req);
     const intent = await createPaymentIntent(plan, platformFeeBps, tracking, userId);
-    const session = await createStripeCheckoutSession(intent.id, plan, platformFeeBps, destinationAccountId, input);
+    const session = await createStripeCheckoutSession(intent.id, plan, platformFeeBps, destinationAccountId, {
+      ...input,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
 
     await updatePaymentIntent(intent.id, {
       status: "pending",

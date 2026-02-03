@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
+import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
@@ -53,8 +54,7 @@ Deno.serve(async (req: Request) => {
     const userId = await requireVerifiedUserId(req);
 
     const input = await readJson<BillingPortalStartInput>(req);
-    const returnUrl = String(input.return_url ?? "").trim();
-    if (!returnUrl) throw new Error("return_url is required");
+    const returnUrl = requireAllowedRedirectUrl(input.return_url, "return_url");
 
     const customerId = await loadStripeCustomerId(userId);
     if (!customerId) throw new Error("No billing customer found. Start a subscription first.");

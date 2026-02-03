@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
+import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
@@ -105,10 +106,8 @@ Deno.serve(async (req: Request) => {
 
     const input = await readJson<BuilderCheckoutStartInput>(req);
     const tier = normalizeTier(String((input as { tier?: unknown }).tier ?? ""));
-    const successUrl = String(input.success_url ?? "").trim();
-    const cancelUrl = String(input.cancel_url ?? "").trim();
-    if (!successUrl) throw new Error("success_url is required");
-    if (!cancelUrl) throw new Error("cancel_url is required");
+    const successUrl = requireAllowedRedirectUrl(input.success_url, "success_url");
+    const cancelUrl = requireAllowedRedirectUrl(input.cancel_url, "cancel_url");
 
     const account = await loadBuilderAccount(userId);
     const email = await loadUserEmail(userId);
