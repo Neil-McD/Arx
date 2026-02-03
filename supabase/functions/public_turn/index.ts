@@ -1,0 +1,281 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { getEnv } from "../_shared/env.ts";
+import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+
+type PublicRole = "user" | "assistant" | "system";
+type PublicChatMessage = { role: PublicRole; content: string };
+
+type PublicTurnInput = {
+  model_id?: string;
+  messages?: PublicChatMessage[];
+  stream?: boolean;
+};
+
+type OpenRouterStreamChunk = {
+  choices?: Array<{
+    delta?: { content?: string | null } | null;
+    message?: { content?: string | null } | null;
+    text?: string | null;
+    finish_reason?: string | null;
+  }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+};
+
+function isTruthyEnv(value: string): boolean {
+  const v = (value ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+function encodeSse(event: string, data: unknown): Uint8Array {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  return new TextEncoder().encode(payload);
+}
+
+async function readJsonBounded<T>(req: Request, maxChars = 256_000): Promise<T> {
+  const text = await req.text();
+  if (!text) throw new Error("Missing JSON body");
+  if (text.length > maxChars) throw new Error("request_too_large");
+  return JSON.parse(text) as T;
+}
+
+function extractStreamDelta(chunk: OpenRouterStreamChunk): string {
+  const choice = chunk.choices?.[0];
+  const fromDelta = choice?.delta && typeof choice.delta.content === "string" ? choice.delta.content : null;
+  const fromText = typeof choice?.text === "string" ? choice.text : null;
+  const fromMessage = choice?.message && typeof choice.message.content === "string" ? choice.message.content : null;
+  return (fromDelta ?? fromText ?? fromMessage ?? "").toString();
+}
+
+async function consumeSseEvents(params: {
+  reader: ReadableStreamDefaultReader<Uint8Array>;
+  onData: (data: string) => boolean | void;
+}): Promise<void> {
+  const decoder = new TextDecoder();
+  let lineBuffer = "";
+  let dataBuffer = "";
+
+  const flush = (): boolean => {
+    const raw = dataBuffer.trim();
+    dataBuffer = "";
+    if (!raw) return false;
+    return Boolean(params.onData(raw));
+  };
+
+  while (true) {
+    const { value, done } = await params.reader.read();
+    if (done) break;
+    lineBuffer += decoder.decode(value, { stream: true });
+    while (true) {
+      const idx = lineBuffer.indexOf("\n");
+      if (idx < 0) break;
+      let line = lineBuffer.slice(0, idx);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      lineBuffer = lineBuffer.slice(idx + 1);
+      if (line === "") {
+        if (flush()) return;
+        continue;
+      }
+      if (line.startsWith("data:")) {
+        dataBuffer += line.slice(5).trim();
+      }
+    }
+  }
+  flush();
+}
+
+function normalizePublicModelMap(): Record<string, string> {
+  const raw = getEnv("ARX_PUBLIC_MODEL_MAP_JSON");
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof value !== "string") continue;
+        const id = String(key ?? "").trim();
+        const ref = value.trim();
+        if (!id || !ref) continue;
+        out[id] = ref;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  // Safe default: two free OpenRouter models (override with ARX_PUBLIC_MODEL_MAP_JSON).
+  return {
+    "gpt-oss-120b-free": "openai/gpt-oss-120b:free",
+    "deepseek-r1-free": "deepseek/r1-0528:free",
+  };
+}
+
+function sanitizeMessages(raw: unknown): PublicChatMessage[] {
+  const input = Array.isArray(raw) ? (raw as unknown[]) : [];
+  const out: PublicChatMessage[] = [];
+  for (const msg of input) {
+    if (!msg || typeof msg !== "object") continue;
+    const roleRaw = (msg as { role?: unknown }).role;
+    const role = (typeof roleRaw === "string" ? roleRaw.trim().toLowerCase() : "") as PublicRole;
+    if (role !== "user" && role !== "assistant" && role !== "system") continue;
+    const contentRaw = (msg as { content?: unknown }).content;
+    const content = typeof contentRaw === "string" ? contentRaw : "";
+    const trimmed = content.trim();
+    if (!trimmed) continue;
+    out.push({ role, content: trimmed });
+  }
+  // Keep the tail of the conversation.
+  return out.slice(-40);
+}
+
+function clampMaxTokens(input: unknown, cap: number): number {
+  const raw = Number(input);
+  const requested = Number.isFinite(raw) ? Math.floor(raw) : cap;
+  return Math.max(64, Math.min(cap, requested));
+}
+
+function openrouterHeaders(req: Request, apiKey: string): Record<string, string> {
+  const origin = (req.headers.get("origin") ?? "").trim();
+  const referer = origin || getEnv("ARX_OPENROUTER_REFERER") || "https://arx.app";
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": referer,
+    "X-Title": "Arx",
+  };
+}
+
+Deno.serve(async (req: Request) => {
+  const headers = withCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
+
+  try {
+    const allowed = await edgeRateLimitAllow({ req, key: "public_turn", windowSeconds: 60, limit: 20 });
+    if (!allowed) {
+      return jsonResponse({ ok: false, error: "rate_limited", code: "rate_limited" }, { status: 429, headers });
+    }
+
+    const input = await readJsonBounded<PublicTurnInput>(req);
+    const wantsStream = input.stream !== false;
+    const modelMap = normalizePublicModelMap();
+    const allowedIds = Object.keys(modelMap);
+    if (allowedIds.length === 0) throw new Error("public_models_not_configured");
+
+    const aliasModelId = String(input.model_id ?? "").trim() || allowedIds[0]!;
+    const resolvedModelId = modelMap[aliasModelId];
+    if (!resolvedModelId) {
+      return jsonResponse(
+        { ok: false, error: "model_not_allowed", code: "model_not_allowed", model_id: aliasModelId },
+        { status: 403, headers },
+      );
+    }
+
+    const messages = sanitizeMessages(input.messages);
+    if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
+      return jsonResponse({ ok: false, error: "no_user_message", code: "no_user_message" }, { status: 400, headers });
+    }
+
+    const apiKey = getEnv("OPENROUTER_API_KEY");
+    if (!apiKey) {
+      return jsonResponse(
+        { ok: false, error: "platform_inference_misconfigured", code: "platform_inference_misconfigured" },
+        { status: 503, headers },
+      );
+    }
+
+    const maxTokensCap = 512;
+    const maxTokens = clampMaxTokens((input as any)?.max_tokens, maxTokensCap);
+
+    const openrouterUrl = "https://openrouter.ai/api/v1/chat/completions";
+    if (!wantsStream) {
+      const res = await fetch(openrouterUrl, {
+        method: "POST",
+        headers: openrouterHeaders(req, apiKey),
+        body: JSON.stringify({ model: resolvedModelId, messages, max_tokens: maxTokens, stream: false }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`OpenRouter error ${res.status}: ${text}`);
+      const parsed = JSON.parse(text) as any;
+      const content = String(parsed?.choices?.[0]?.message?.content ?? "").trim();
+      return jsonResponse(
+        {
+          ok: true,
+          model_id: aliasModelId,
+          resolved_model_id: resolvedModelId,
+          engine_id: "public_openrouter",
+          content,
+        },
+        { status: 200, headers },
+      );
+    }
+
+    const streamHeaders = {
+      ...headers,
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive",
+    };
+
+    const runId = `public:${crypto.randomUUID()}`;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const emit = (event: string, data: unknown) => controller.enqueue(encodeSse(event, data));
+        try {
+          emit("start", {
+            ok: true,
+            run_id: runId,
+            engine_id: "public_openrouter",
+            model_id: aliasModelId,
+            resolved_model_id: resolvedModelId,
+          });
+
+          const res = await fetch(openrouterUrl, {
+            method: "POST",
+            headers: openrouterHeaders(req, apiKey),
+            body: JSON.stringify({ model: resolvedModelId, messages, max_tokens: maxTokens, stream: true }),
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            throw new Error(`OpenRouter error ${res.status}: ${body}`);
+          }
+          const reader = res.body?.getReader();
+          if (!reader) throw new Error("Missing model stream");
+
+          let fullContent = "";
+          await consumeSseEvents({
+            reader,
+            onData: (raw) => {
+              if (raw === "[DONE]") return true;
+              let parsed: OpenRouterStreamChunk | null = null;
+              try {
+                parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+              } catch {
+                return;
+              }
+              const delta = extractStreamDelta(parsed);
+              if (!delta) return;
+              fullContent += delta;
+              emit("delta", { delta, full_content: fullContent });
+            },
+          });
+
+          emit("done", { ok: true, run_id: runId, full_content: fullContent });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          emit("error", { ok: false, error: message });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, { status: 200, headers: streamHeaders });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return jsonResponse({ ok: false, error: message }, { status: 400, headers });
+  }
+});
+
