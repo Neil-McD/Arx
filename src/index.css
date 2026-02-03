@@ -2490,61 +2490,6 @@ button.chat-reply-quote:hover {
   }
 }
 
-.plan-panel {
-  position: absolute;
-  top: 12px;
-  left: 16px;
-  z-index: 5;
-  width: 320px;
-  max-height: 40vh;
-  overflow: auto;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
-}
-
-.plan-panel-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.plan-panel-explanation {
-  font-size: 12px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  opacity: 0.9;
-}
-
-.plan-panel-items {
-  display: grid;
-  gap: 6px;
-}
-
-.plan-panel-item {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 10px;
-  align-items: baseline;
-}
-
-.plan-panel-status {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-muted);
-}
-
-.plan-panel-step {
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -3223,8 +3168,18 @@ button.chat-reply-quote:hover {
   color: var(--bg-button-text);
 }
 
+.desktop-root .ask-toolbar .chat-send.ask-send-btn {
+  /* Match the web send button's "snappy" feel in the desktop AI composer. */
+  transition: transform 0.12s ease, opacity 0.15s ease;
+  will-change: transform;
+}
+
 .chat-send.ask-send-btn:hover:not(:disabled) {
   opacity: 0.95;
+}
+
+.desktop-root .ask-toolbar .chat-send.ask-send-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
 }
 
 .chat-send.ask-send-btn:disabled {
@@ -3516,6 +3471,21 @@ button.chat-reply-quote:hover {
 
 .ask-toolbar-right {
   margin-left: auto;
+}
+
+.ask-toolbar-right .ask-mic {
+  /* Keep a bit of breathing room between mic and send. */
+  margin-right: 6px;
+}
+
+.ask-toolbar .ask-icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.ask-toolbar .chat-send.ask-send-btn {
+  width: 32px;
+  height: 32px;
 }
 
 .ask-toolbar-left .model-select {

@@ -186,16 +186,6 @@ type PersonalMemoryItemRecord = {
   updated_at: number;
 };
 
-type TaskPlanItem = {
-  step: string;
-  status: string;
-};
-
-type TaskPlanPayload = {
-  explanation?: string;
-  plan: TaskPlanItem[];
-};
-
 type ToolDebug = {
   id: string;
   text: string;
@@ -1275,7 +1265,6 @@ function App() {
   const [resourceSuccess, setResourceSuccess] = useState(false);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
-  const [taskPlan, setTaskPlan] = useState<TaskPlanPayload | null>(null);
 	  const [unreadCount, setUnreadCount] = useState(0);
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
 	  const isUserAtBottomRef = useRef(true);
@@ -1473,7 +1462,6 @@ function App() {
       setSessionResume(null);
       setAgentStatus(null);
       setRunningTools([]);
-      setTaskPlan(null);
       setSlashPanel(null);
       setPendingToolApproval(null);
       setIsToolApprovalSubmitting(false);
@@ -3413,14 +3401,6 @@ function App() {
 	      }
 	    );
 
-    const unlistenPlan = listen<{ session_id: string; args: TaskPlanPayload }>(
-      "plan-updated",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        setTaskPlan(event.payload.args);
-      }
-    );
-
     const unlistenToolCallsUpdated = listen<{ session_id: string }>(
       "tool-calls-updated",
       async (event) => {
@@ -3594,14 +3574,13 @@ function App() {
       void unlistenStream.then((fn) => fn());
       void unlistenOpenRouterStream.then((fn) => fn());
       void unlistenOpenRouterDone.then((fn) => fn());
-	      void unlistenMemory.then((fn) => fn());
-	      void unlistenInferenceFallback.then((fn) => fn());
-	      void unlistenInferenceActionRequired.then((fn) => fn());
-	      void unlistenPlan.then((fn) => fn());
-      void unlistenToolCallsUpdated.then((fn) => fn());
-      void unlistenToolApproval.then((fn) => fn());
-      void unlistenAgentStatus.then((fn) => fn());
-      void unlistenToolProgress.then((fn) => fn());
+		      void unlistenMemory.then((fn) => fn());
+		      void unlistenInferenceFallback.then((fn) => fn());
+		      void unlistenInferenceActionRequired.then((fn) => fn());
+	      void unlistenToolCallsUpdated.then((fn) => fn());
+	      void unlistenToolApproval.then((fn) => fn());
+	      void unlistenAgentStatus.then((fn) => fn());
+	      void unlistenToolProgress.then((fn) => fn());
       void unlistenOpenedUrls.then((fn) => fn());
       if (memoryToastTimeoutRef.current) {
         window.clearTimeout(memoryToastTimeoutRef.current);
@@ -9356,7 +9335,6 @@ function App() {
     setSessionResume(null);
     setAgentStatus(null);
     setRunningTools([]);
-    setTaskPlan(null);
     setSlashPanel(null);
     setPendingToolApproval(null);
     setIsToolApprovalSubmitting(false);
@@ -10298,8 +10276,7 @@ function App() {
     }
     if (snapshot.page === "workspace") {
       if (snapshot.view === "settings") {
-        const label = settingsPageLabel(snapshot.settingsPage).toLowerCase();
-        return label ? `settings / ${label}` : "settings";
+        return "settings";
       }
       const root = workspaceRoot ? workspaceRoot.split("/").pop() : null;
       return root ? `workspace / ${root}` : "workspace";
@@ -10504,20 +10481,19 @@ function App() {
                 )}
               </button>
             ))}
-            {communities.length === 0 && (
-              <div className="community-rail-empty">
-                {actionablePendingInvites.length > 0
-                  ? `Invite waiting: ${formatInviteLabel(
-                      actionablePendingInvites[0].invite_key,
-                      actionablePendingInvites[0].community_name
-                    )}`
-                  : supabaseSession
-                    ? communitiesLoadError
-                      ? "Couldn't load communities. Open Settings → Community."
-                      : "No communities yet."
-                    : "Sign in to access communities."}
-              </div>
-            )}
+            {communities.length === 0 &&
+              (actionablePendingInvites.length > 0 || !supabaseSession || !communitiesLoadError) && (
+                <div className="community-rail-empty">
+                  {actionablePendingInvites.length > 0
+                    ? `Invite waiting: ${formatInviteLabel(
+                        actionablePendingInvites[0].invite_key,
+                        actionablePendingInvites[0].community_name
+                      )}`
+                    : supabaseSession
+                      ? "No communities yet."
+                      : "Sign in to access communities."}
+                </div>
+              )}
             <div className="community-rail-divider" />
             <button
               type="button"
@@ -12325,27 +12301,11 @@ function App() {
           </div>
         ) : activePage === "workspace" ? (
           <>
-        <div className="workspace-body">
-          {taskPlan && (
-            <div className="plan-panel">
-              <div className="plan-panel-title">Plan</div>
-              {taskPlan.explanation && (
-                <div className="plan-panel-explanation">{taskPlan.explanation}</div>
-              )}
-              <div className="plan-panel-items">
-                {taskPlan.plan.map((item, idx) => (
-                  <div key={`${item.status}-${idx}`} className="plan-panel-item">
-                    <span className="plan-panel-status">{item.status}</span>
-                    <span className="plan-panel-step">{item.step}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {memoryToast && (
-            <div className="memory-toast success-toast">{memoryToast}</div>
-          )}
-          <div
+	        <div className="workspace-body">
+	          {memoryToast && (
+	            <div className="memory-toast success-toast">{memoryToast}</div>
+	          )}
+	          <div
             className="message-list"
             ref={workspaceMessageListRef}
             onScroll={handleWorkspaceScroll}
@@ -13356,13 +13316,54 @@ function App() {
             </div>
             <div className="ask-toolbar-right">
               <button
-                className="toolbar-send"
-                onClick={handleSendMessage}
-                disabled={isSending}
-                title="Send"
+                className="ask-icon-btn ask-mic"
+                type="button"
+                disabled
+                aria-label="Voice input"
+                title="Voice input (coming soon)"
               >
-                <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+                  <path d="M19 11a7 7 0 0 1-14 0" />
+                  <path d="M12 18v4" />
+                  <path d="M8 22h8" />
+                </svg>
               </button>
+              {(() => {
+                const isTurnRunning = isSending || Boolean(streamingContent);
+                return (
+              <button
+                className="chat-send ask-send-btn"
+                onClick={() => {
+                  if (isTurnRunning) {
+                    if (!activeThreadId) return;
+                    setPendingToolApproval(null);
+                    setPendingInferenceFallback(null);
+                    void invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId }).catch(() => {
+                      // best-effort
+                    });
+                    return;
+                  }
+                  handleSendMessage();
+                }}
+                disabled={
+                  isTurnRunning
+                    ? !activeThreadId
+                    : isSending || (commandInput.trim().length === 0 && attachments.length === 0)
+                }
+                title={isTurnRunning ? "Stop" : "Send"}
+                aria-label={isTurnRunning ? "Stop" : "Send"}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {isTurnRunning ? (
+                    <rect x="7" y="7" width="10" height="10" rx="2" />
+                  ) : (
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  )}
+                </svg>
+              </button>
+                );
+              })()}
             </div>
           </div>
         </div>

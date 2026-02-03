@@ -14,9 +14,6 @@
   --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
-
-  /* Match the desktop rail tint even though the web topbar is transparent. */
-  --web-rail-bg: #ffffff;
 }
 
 /* Web-only: remove the "bar" treatment so the header blends into the page.
@@ -26,7 +23,6 @@
 :root[data-theme="dark"],
 :root[data-theme="light-warm"],
 :root[data-theme="dark-warm"] {
-  --bg-header: var(--bg-workspace, var(--bg-app));
   --header-border: none;
 }
 
@@ -36,17 +32,6 @@
   --web-floating-chrome-border: rgba(255, 255, 255, 0.08);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.12);
-
-  /* Dark: match the sessions panel so the rail + sessions read as one sidebar. */
-  --web-rail-bg: var(--bg-panel, rgba(18, 18, 18, 0.95));
-}
-
-:root[data-theme="light-warm"] {
-  --web-rail-bg: #f0ede5;
-}
-
-:root[data-theme="dark-warm"] {
-  --web-rail-bg: rgba(20, 18, 15, 0.95);
 }
 
 /* Prefer deriving the "glass" tint from the current theme's background so it matches. */
@@ -62,9 +47,13 @@
   }
 }
 
-/* Web-only: keep the left rail tint consistent with desktop (the web topbar is transparent). */
-.rail {
-  background: var(--web-rail-bg);
+/* Web: the rail should match desktop's (opaque) header/rail shade. */
+:root[data-theme="dark"] .rail {
+  background: #121212;
+}
+
+:root[data-theme="dark-warm"] .rail {
+  background: #14120f;
 }
 
 /* Web light themes: add enough contrast so the selection lip + buttons read on white rails. */
@@ -308,9 +297,7 @@
   gap: 32px;
 }
 
-.message-text {
-  font-size: 16px;
-}
+/* Web: inherit DT typography for LLM output (font-size/line-height/markdown rhythm). */
 
 .web-empty-thread {
   width: 100%;
@@ -1353,8 +1340,8 @@
 
 .ask-bar {
   width: calc(100% - 2 * var(--web-chat-gutter));
-  /* Align the composer outer edge with the message text column (message-list-inner adds gutter padding). */
-  max-width: calc(var(--web-chat-max-width) - 2 * var(--web-chat-gutter));
+  /* Web: match the full chat column width (a bit wider than the message text). */
+  max-width: var(--web-chat-max-width);
   margin-left: auto;
   margin-right: auto;
   margin-bottom: 12px;
@@ -1453,6 +1440,16 @@
 .ask-bar.ask-bar-v2 .ask-icon-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.ask-bar.ask-bar-v2 .ask-mic {
+  width: 32px;
+  height: 32px;
+}
+
+.ask-bar.ask-bar-v2 .ask-mic svg {
+  width: 20px;
+  height: 20px;
 }
 
 .ask-actions {
@@ -1903,6 +1900,20 @@
 }
 
 .community-chat .chat-send.ask-send-btn:disabled {
+  opacity: 0.35;
+}
+
+/* AI workspace composer: match the community chat send button style. */
+.ask-bar.ask-bar-v2 .chat-send.ask-send-btn {
+  background: #fff;
+  color: #111;
+}
+
+.ask-bar.ask-bar-v2 .chat-send.ask-send-btn:hover:not(:disabled) {
+  opacity: 0.95;
+}
+
+.ask-bar.ask-bar-v2 .chat-send.ask-send-btn:disabled {
   opacity: 0.35;
 }
 

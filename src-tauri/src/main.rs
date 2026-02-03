@@ -878,7 +878,7 @@ async fn execute_agent_tool_call(
     if !msg.ends_with('\n') {
       msg.push('\n');
     }
-    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -895,7 +895,7 @@ async fn execute_agent_tool_call(
     if !msg.ends_with('\n') {
       msg.push('\n');
     }
-    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -907,7 +907,7 @@ async fn execute_agent_tool_call(
   } else if !is_known_agent_tool_name(tool_name.as_str()) {
     let mut msg = String::new();
     msg.push_str(&format!("unknown tool: {}\n", tool_name));
-    msg.push_str("available_tools: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash\n");
+    msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
     msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
 
     tool_args_for_events = serde_json::json!({
@@ -1270,9 +1270,9 @@ fn build_atom_system_prompt(
     .unwrap_or_default();
 
   let tool_rules = if workspace_trimmed.is_empty() {
-    "- No workspace is bound; local filesystem tools are disabled.\n- You may still use update_plan to keep the Plan panel current.\n- Ask the user to bind a workspace before requesting read/list_dir/glob/grep/sha256/write/edit/bash.\n"
+    "- No workspace is bound; local filesystem tools are disabled.\n- Ask the user to bind a workspace before requesting read/list_dir/glob/grep/sha256/write/edit/bash.\n"
   } else {
-    "- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: update_plan, read, list_dir, glob, grep, sha256, write, edit, bash.\n  - update_plan is safe and updates the visible Plan panel.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{path, content}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n- At the start of work, call update_plan with 3–6 short steps; keep exactly one in_progress; update as you go.\n"
+    "- Stay within the workspace root; prefer relative paths; never access outside it.\n- Tools you can use: read, list_dir, glob, grep, sha256, write, edit, bash.\n  - read/list_dir/glob/grep/sha256 are safe.\n  - write/edit/bash may require approval. Do not ask “is it ok”; request the tool and proceed when allowed.\n  - For creating new files or rewriting full files: use write (it creates parent directories; no mkdir needed). You can also pass writes: [{path, content}, ...] for multiple files.\n  - For small targeted replacements inside a file: use edit.\n  - Use bash only for real shell tasks.\n"
   };
 
   let user_prompt_block = user_system_prompt

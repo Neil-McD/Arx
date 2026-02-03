@@ -2611,8 +2611,7 @@ export default function App() {
       return tab && tab !== "chat" ? `community / ${tab}` : "community";
     }
     if (snapshot.view === "settings") {
-      const label = settingsPageLabel(snapshot.settingsPage).toLowerCase();
-      return label ? `settings / ${label}` : "settings";
+      return "settings";
     }
     return "workspace";
   };
@@ -9988,10 +9987,38 @@ export default function App() {
                           </div>
                         </div>
                       </div>
+                    ))
+                  )
+                ) : (
+                  <>
+                    {groupThreadsByDate(visibleThreads).map((group) => (
+                      <div key={group.label} className="session-group">
+                        <div className="session-group-label">{group.label}</div>
+                        {group.threads.map((thread) => (
+                          <div
+                            key={thread.id}
+                            className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                            onClick={() => {
+                              setWorkspaceWantsNewChatMode(false);
+                              setActiveCommunityId(thread.community_id ?? null);
+                              setActiveThreadId(thread.id);
+                            }}
+                          >
+                            <div className="session-content">
+                              <div className="session-title">{(thread.title ?? "").trim() || "Untitled thread"}</div>
+                              <div className="session-preview">
+                                {thread.id === activeThreadId && activeThread ? "Open" : ""}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ))}
-                  </div>
-                ))}
-                {visibleThreads.length === 0 && <div className="empty-state">No chats yet. Send a message to start.</div>}
+                    {visibleThreads.length === 0 && (
+                      <div className="empty-state">No chats yet. Send a message to start.</div>
+                    )}
+                  </>
+                )}
               </div>
             </aside>
           </>
@@ -11516,27 +11543,43 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <button
-                    className="ask-send-btn ask-send-btn-v2"
-                    type="button"
-                    onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
-                    disabled={
-                      !supabaseSession ||
-                      (isStreamingWorkspaceTurn
-                        ? false
-                        : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
-                    }
-                    aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
-                    title={isStreamingWorkspaceTurn ? "Stop" : "Send"}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      {isStreamingWorkspaceTurn ? (
-                        <rect x="7" y="7" width="10" height="10" rx="2" />
-                      ) : (
-                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                      )}
-                    </svg>
-                  </button>
+                  <div className="ask-actions">
+                    <button
+                      className="ask-icon-btn ask-mic"
+                      type="button"
+                      disabled
+                      aria-label="Voice input"
+                      title="Voice input (coming soon)"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+                        <path d="M19 11a7 7 0 0 1-14 0" />
+                        <path d="M12 18v4" />
+                        <path d="M8 22h8" />
+                      </svg>
+                    </button>
+                    <button
+                      className="chat-send ask-send-btn ask-send-btn-v2"
+                      type="button"
+                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+                      disabled={
+                        !supabaseSession ||
+                        (isStreamingWorkspaceTurn
+                          ? false
+                          : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
+                      }
+                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+                      title={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        {isStreamingWorkspaceTurn ? (
+                          <rect x="7" y="7" width="10" height="10" rx="2" />
+                        ) : (
+                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
