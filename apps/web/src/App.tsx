@@ -2551,6 +2551,7 @@ export default function App() {
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const initialWorkspaceWantsNewChat = Boolean(
     initialAppRoute && initialAppRoute.threadIsExplicit && initialAppRoute.threadId === null,
   );
@@ -9298,6 +9299,18 @@ export default function App() {
   }, [communityAgentDraftLanding]);
 
   const visibleThreads = useMemo(() => threads.filter((thread) => thread.last_seq > 0), [threads]);
+  const normalizedThreadSearch = threadSearchQuery.trim().toLowerCase();
+  const threadSearchResults = useMemo(() => {
+    if (!normalizedThreadSearch) return visibleThreads;
+    return visibleThreads.filter((thread) => {
+      const title = (thread.title ?? "").trim() || "Untitled thread";
+      const communityName = thread.community_id
+        ? (communities.find((c) => c.id === thread.community_id)?.name ?? "")
+        : "";
+      const haystack = `${title} ${communityName}`.toLowerCase();
+      return haystack.includes(normalizedThreadSearch);
+    });
+  }, [communities, normalizedThreadSearch, visibleThreads]);
 
   const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
 
@@ -9927,20 +9940,47 @@ export default function App() {
               aria-hidden={!isSessionsDrawerOpen}
             >
               {threadError && <div className="auth-error">{threadError}</div>}
+              <div className="session-search" role="search" aria-label="Search threads">
+                <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+                <input
+                  value={threadSearchQuery}
+                  onChange={(event) => setThreadSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setThreadSearchQuery("");
+                  }}
+                  placeholder="Search threads…"
+                  aria-label="Search threads"
+                />
+                {threadSearchQuery.trim() && (
+                  <button
+                    type="button"
+                    className="session-search-clear"
+                    onClick={() => setThreadSearchQuery("")}
+                    aria-label="Clear search"
+                    title="Clear"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <div className="session-list">
-                {groupThreadsByDate(visibleThreads).map((group) => (
-                  <div key={group.label} className="session-group">
-                    <div className="session-group-label">{group.label}</div>
-	                    {group.threads.map((thread) => (
-	                      <div
-	                        key={thread.id}
-	                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-	                        onClick={() => {
-	                          setWorkspaceWantsNewChatMode(false);
-	                          setActiveCommunityId(thread.community_id ?? null);
-	                          setActiveThreadId(thread.id);
-	                        }}
-	                      >
+                {normalizedThreadSearch ? (
+                  threadSearchResults.length === 0 ? (
+                    <div className="empty-state">No matching threads.</div>
+                  ) : (
+                    threadSearchResults.map((thread) => (
+                      <div
+                        key={thread.id}
+                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                        onClick={() => {
+                          setWorkspaceWantsNewChatMode(false);
+                          setActiveCommunityId(thread.community_id ?? null);
+                          setActiveThreadId(thread.id);
+                        }}
+                      >
                         <div className="session-content">
                           <div className="session-title">{(thread.title ?? "").trim() || "Untitled thread"}</div>
                           <div className="session-preview">

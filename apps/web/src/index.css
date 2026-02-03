@@ -265,6 +265,8 @@
   bottom: 0;
   left: var(--web-rail-width);
   width: min(var(--web-sessions-drawer-width), calc(100vw - var(--web-rail-width)));
+  /* Keep drawer content below the floating header controls. */
+  padding-top: calc(12px + var(--web-topbar-height));
   z-index: 4;
   transform: translateX(-100%);
   opacity: 0;
@@ -272,10 +274,6 @@
   overflow: hidden;
   will-change: transform;
   transition: transform 200ms cubic-bezier(0.2, 0, 0, 1), opacity 150ms ease;
-}
-
-.app-root.web-header-islands .web-sessions-drawer .session-list {
-  padding-top: calc(4px + var(--web-topbar-height));
 }
 
 .web-sessions-drawer.open {
