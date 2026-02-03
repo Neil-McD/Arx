@@ -57,7 +57,7 @@ begin
     raise exception 'project url is required';
   end if;
 
-  if v_url !~ '^https://[a-z0-9-]+\\.supabase\\.co$' then
+  if v_url !~ '^https://[a-z0-9-]+\.supabase\.co$' then
     raise exception 'invalid project url: %', v_url;
   end if;
 
