@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { getEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
@@ -65,33 +66,6 @@ async function readJson<T>(req: Request): Promise<T> {
   const text = await req.text();
   if (!text) throw new Error("Missing JSON body");
   return JSON.parse(text) as T;
-}
-
-function base64UrlToBytes(input: string): Uint8Array {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "===".slice((normalized.length + 3) % 4);
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function getBearerToken(req: Request): string {
-  const header = (req.headers.get("Authorization") ?? "").trim();
-  const [kind, token] = header.split(/\s+/);
-  if (!kind || kind.toLowerCase() !== "bearer" || !token) throw new Error("Missing bearer token");
-  return token;
-}
-
-function getVerifiedJwtSub(token: string): string {
-  // `verify_jwt=true` means only verified JWTs reach this function.
-  const parts = token.split(".");
-  if (parts.length < 2) throw new Error("Invalid JWT");
-  const payloadJson = new TextDecoder().decode(base64UrlToBytes(parts[1]));
-  const payload = JSON.parse(payloadJson) as Record<string, unknown>;
-  const sub = String(payload.sub ?? "").trim();
-  if (!/^[0-9a-fA-F-]{36}$/.test(sub)) throw new Error("Invalid JWT subject");
-  return sub;
 }
 
 type ThreadRow = {
@@ -1476,8 +1450,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {
-    const token = getBearerToken(req);
-    const userId = getVerifiedJwtSub(token);
+    const userId = await requireVerifiedUserId(req);
     const input = await readJson<AgentTurnInput>(req);
     const threadId = sanitizeUuid(input.thread_id);
     const maxTokens = Number.isFinite(input.max_tokens) ? Math.max(1, Math.min(2048, Number(input.max_tokens))) : 1024;

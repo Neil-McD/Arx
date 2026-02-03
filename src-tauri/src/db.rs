@@ -372,7 +372,11 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
     );
 
     -- ============================================================
-    -- Contract-aligned schema (MVP ground truth)
+    -- Contract-aligned schema (device-local evidence store)
+    --
+    -- Cloud is canonical for cognition (threads/messages) when signed in.
+    -- This DB exists for device-local bindings, runtime evidence, and
+    -- projections that support safe local execution + crash recovery.
     -- ============================================================
 
     CREATE TABLE IF NOT EXISTS threads (
@@ -1467,7 +1471,7 @@ pub fn add_message(
   let id = Uuid::new_v4().to_string();
   let ts = now_ts();
 
-  // Ground truth: events. Update projections transactionally.
+  // Projection source: device-local events. Update projections transactionally.
   let event_type = match role.trim().to_ascii_lowercase().as_str() {
     "user" => "user_message",
     "assistant" => "assistant_message",
@@ -2184,7 +2188,7 @@ pub fn set_thread_community_id(
 }
 
 pub fn get_session_resume(conn: &Connection, session_id: &str) -> anyhow::Result<SessionResume> {
-  // Ground truth: events. session_state is legacy and is not updated in MVP.
+  // Projection source: device-local events. session_state is legacy and is not updated in MVP.
   let (last_message_id, last_message_at) = conn
     .query_row(
       "SELECT id, created_at

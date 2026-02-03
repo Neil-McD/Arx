@@ -30,10 +30,10 @@
   --accent-gold: #171717;
 
   /* Text - neutral grays */
-  --text-primary: #171717;
-  --text-secondary: #6b6b6b;
-  --text-muted: #8e8e8e;
-  --text-faint: #ababab;
+  --text-primary: #0f0f0f;
+  --text-secondary: #2f2f2f;
+  --text-muted: #4d4d4d;
+  --text-faint: #6a6a6a;
   --text-terminal: #f5f5f5;
 
   /* Borders - subtle */
@@ -43,8 +43,8 @@
   --border-active: #171717;
 
   /* Icons */
-  --icon-default: #6b6b6b;
-  --icon-hover: #404040;
+  --icon-default: #2f2f2f;
+  --icon-hover: #1c1c1c;
   --icon-active: #171717;
 
   /* Overlays */
@@ -83,11 +83,11 @@
   /* Accent colors (dark mode uses light tones) */
   --accent-gold: #f1ede5;
 
-  --text-primary: #f1ede5;
-  --text-secondary: #b5b0a6;
-  --text-muted: #8a857a;
-  --text-faint: #7a756b;
-  --text-terminal: #f1ede5;
+  --text-primary: #fcf8f0;
+  --text-secondary: #d6d0c6;
+  --text-muted: #b3ad9f;
+  --text-faint: #9c968a;
+  --text-terminal: #fcf8f0;
 
   --border-default: #3a3a3a;
   --border-strong: #4a4a4a;
@@ -96,9 +96,9 @@
 
   --header-border: none;
 
-  --icon-default: #8a857a;
-  --icon-hover: #b5b0a6;
-  --icon-active: #f1ede5;
+  --icon-default: #b3ad9f;
+  --icon-hover: #d6d0c6;
+  --icon-active: #fcf8f0;
 
   --hover-overlay: rgba(255, 255, 255, 0.06);
   --active-overlay: rgba(255, 255, 255, 0.1);
@@ -147,9 +147,9 @@
   /* === LAYER 3: TYPOGRAPHY (Charcoal, not black) === */
   /* Ink on paper. Grounded. Human. */
   --text-primary: #2d2a24;
-  --text-secondary: #5c5850;
-  --text-muted: #7a756b;
-  --text-faint: #9a958b;
+  --text-secondary: #4f4a43;
+  --text-muted: #676157;
+  --text-faint: #7f7a70;
   --text-terminal: #f5f0e6;
 
   /* === LAYER 4: BORDERS (Stone edges) === */
@@ -221,11 +221,11 @@
 
   /* === TYPOGRAPHY: Ivory + Ash === */
   /* Warm off-white for primary, cool ash for secondary. Never pure white. */
-  --text-primary: #f5f0e6;
-  --text-secondary: #b5aea1;
-  --text-muted: #8a847a;
-  --text-faint: #7a756b;
-  --text-terminal: #f5f0e6;
+  --text-primary: #fffaf2;
+  --text-secondary: #d8d0c2;
+  --text-muted: #b7af9f;
+  --text-faint: #9c958a;
+  --text-terminal: #fffaf2;
 
   /* === BORDERS: Warm grays === */
   --border-default: #3a3632;
@@ -288,16 +288,27 @@ html, body {
 }
 
 .app-topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px 0 86px;
   background: var(--bg-header);
-  border-bottom: var(--header-border, 1px solid var(--divider-accent, var(--border-muted)));
+  border-bottom: none;
   -webkit-app-region: drag;
   app-region: drag;
   z-index: 10;
   transition: none;
+}
+
+.app-topbar::after {
+  content: "";
+  position: absolute;
+  left: 72px;
+  right: 0;
+  bottom: 0;
+  border-bottom: var(--header-border, 1px solid var(--divider-accent, var(--border-muted)));
+  pointer-events: none;
 }
 
 .topbar-left,
@@ -630,6 +641,13 @@ html, body {
 :root[data-theme="dark"] .community-rail-button,
 :root[data-theme="dark-warm"] .community-rail-button {
   border: 0;
+}
+
+/* Dark themes: treat rail + sessions as one sidebar (no vertical divider between them). */
+:root[data-theme="dark"] .rail,
+:root[data-theme="dark-warm"] .rail {
+  border-right: 0;
+  background: var(--bg-panel, var(--bg-header));
 }
 
 /* Discord-style selection/hover indicator "lip" */
@@ -3225,7 +3243,8 @@ button.chat-reply-quote:hover {
 .workspace {
   display: grid;
   grid-template-rows: 1fr auto;
-  padding: 0 0 12px 12px;
+  /* Keep a left gutter for the content column, but let the bottom edge hit the window. */
+  padding: 0 0 0 12px;
   gap: 0;
   min-height: 0;
   min-width: 0;
@@ -3236,7 +3255,8 @@ button.chat-reply-quote:hover {
 
 .ask-bar {
   padding: 14px 16px 12px;
-  margin: 0 12px 0 0;
+  /* Match the community chat composer spacing (leave a small bottom gutter). */
+  margin: 0 12px 12px 0;
   background: var(--bg-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -3622,7 +3642,7 @@ button.chat-reply-quote:hover {
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 32px;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -3667,7 +3687,7 @@ button.chat-reply-quote:hover {
   width: fit-content;
   max-width: 75%;
   align-self: flex-end;
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .message-item.debug {
@@ -4238,6 +4258,49 @@ h3.md-header {
   border: 1px solid var(--border-muted);
 }
 
+.tool-command-full {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  max-height: 200px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-muted);
+}
+
+.tool-policy {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
+}
+
+/* Light modes: make tool traces readable (avoid dark gray slabs on white). */
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .tool-inline,
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .tool-group {
+  background: var(--bg-card-alt);
+  border-color: var(--border-default);
+}
+
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .tool-command-full {
+  background: var(--bg-workspace);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .tool-policy {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
 .tool-group-summary {
   display: flex;
   align-items: center;
@@ -4334,15 +4397,6 @@ h3.md-header {
   flex-wrap: wrap;
 }
 
-.tool-policy {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-muted);
-  color: var(--text-muted);
-}
-
 .tool-policy.allow {
   color: #7bd88f;
   border-color: rgba(123, 216, 143, 0.4);
@@ -4372,21 +4426,6 @@ h3.md-header {
   font-size: 11px;
   margin-left: 8px;
   opacity: 0.7;
-}
-
-.tool-command-full {
-  margin-top: 8px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-y: auto;
-  max-height: 200px;
-  color: var(--text-muted);
-  border: 1px solid var(--border-muted);
 }
 
 .tool-status {
@@ -4880,6 +4919,31 @@ h3.md-header {
   overflow-y: auto;
   overflow-x: hidden;
   padding-top: 4px;
+  /* Extend into the sessions panel padding so the list can scroll flush to the bottom edge. */
+  margin-bottom: -12px;
+  padding-bottom: 12px;
+  /* Pull the scroll container into the sessions panel padding so the scrollbar hugs the panel edge. */
+  margin-right: -12px;
+  padding-right: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.session-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.session-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-list::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.session-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-muted);
 }
 
 .session-item {
@@ -5970,6 +6034,16 @@ h3.md-header {
 
 .memory-block.read-only {
   border-color: rgba(120, 120, 120, 0.4);
+}
+
+/* Light modes: avoid dark gray slabs inside the modal. */
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .memory-block {
+  background: var(--bg-card-alt);
+  border-color: var(--border-default);
+}
+
+:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .memory-block.read-only {
+  border-color: var(--border-default);
 }
 
 .memory-block-header {

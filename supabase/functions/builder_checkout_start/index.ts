@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
@@ -13,33 +14,6 @@ type BuilderCheckoutStartInput = {
   success_url: string;
   cancel_url: string;
 };
-
-function base64UrlToBytes(input: string): Uint8Array {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "===".slice((normalized.length + 3) % 4);
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function getBearerToken(req: Request): string {
-  const header = (req.headers.get("Authorization") ?? "").trim();
-  const [kind, token] = header.split(/\s+/);
-  if (!kind || kind.toLowerCase() !== "bearer" || !token) throw new Error("Missing bearer token");
-  return token;
-}
-
-function getVerifiedJwtSub(token: string): string {
-  // `verify_jwt=true` means only verified JWTs reach this function.
-  const parts = token.split(".");
-  if (parts.length < 2) throw new Error("Invalid JWT");
-  const payloadJson = new TextDecoder().decode(base64UrlToBytes(parts[1]));
-  const payload = JSON.parse(payloadJson) as Record<string, unknown>;
-  const sub = String(payload.sub ?? "").trim();
-  if (!/^[0-9a-fA-F-]{36}$/.test(sub)) throw new Error("Invalid JWT subject");
-  return sub;
-}
 
 async function readJson<T>(req: Request): Promise<T> {
   const text = await req.text();
@@ -127,8 +101,7 @@ Deno.serve(async (req: Request) => {
     const allowed = await edgeRateLimitAllow({ req, key: "builder_checkout_start", windowSeconds: 60, limit: 10 });
     if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
 
-    const token = getBearerToken(req);
-    const userId = getVerifiedJwtSub(token);
+    const userId = await requireVerifiedUserId(req);
 
     const input = await readJson<BuilderCheckoutStartInput>(req);
     const tier = normalizeTier(String((input as { tier?: unknown }).tier ?? ""));
@@ -157,4 +130,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
-

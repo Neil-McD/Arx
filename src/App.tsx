@@ -848,6 +848,29 @@ type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance"
 
 type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
 
+type AppPage = "workspace" | "community" | "discover";
+
+type AppView = "home" | "settings";
+
+type CommunityTab =
+  | "chat"
+  | "library"
+  | "resources"
+  | "members"
+  | "settings"
+  | "ai_agent"
+  | "analytics"
+  | "automations";
+
+type NavSnapshot = {
+  page: AppPage;
+  view: AppView;
+  settingsPage: SettingsPage;
+  communityId: string | null;
+  communityTab: CommunityTab;
+  threadId: string | null;
+};
+
 function App() {
   const ARX_OWNER_EMAIL = "neilmcdevittd@gmail.com";
 
@@ -1004,6 +1027,44 @@ function App() {
 		  const [communitiesLoadError, setCommunitiesLoadError] = useState<string | null>(null);
 		  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
 		  const activeCommunityIdRef = useRef<string | null>(null);
+      const navStackRef = useRef<NavSnapshot[]>([]);
+      const takeNavSnapshot = (): NavSnapshot => ({
+        page: activePage,
+        view: activeView,
+        settingsPage,
+        communityId: activeCommunityId,
+        communityTab,
+        threadId: activeThreadId,
+      });
+      const navSnapshotsEqual = (a: NavSnapshot, b: NavSnapshot): boolean =>
+        a.page === b.page &&
+        a.view === b.view &&
+        a.settingsPage === b.settingsPage &&
+        a.communityId === b.communityId &&
+        a.communityTab === b.communityTab &&
+        a.threadId === b.threadId;
+      const pushNavSnapshot = () => {
+        const snapshot = takeNavSnapshot();
+        const stack = navStackRef.current;
+        const last = stack[stack.length - 1] ?? null;
+        if (last && navSnapshotsEqual(last, snapshot)) return;
+        stack.push(snapshot);
+      };
+      const restoreNavSnapshot = (snapshot: NavSnapshot) => {
+        setActivePage(snapshot.page);
+        setActiveView(snapshot.page === "workspace" ? snapshot.view : "home");
+        setSettingsPage(snapshot.settingsPage);
+        setActiveCommunityId(snapshot.communityId);
+        setCommunityTab(snapshot.communityTab);
+        setActiveThreadId(snapshot.threadId);
+      };
+      const goBack = (): boolean => {
+        const stack = navStackRef.current;
+        const snapshot = stack.pop() ?? null;
+        if (!snapshot) return false;
+        restoreNavSnapshot(snapshot);
+        return true;
+      };
 		  const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
 		  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
 		  const [, setIsLoadingCommunityAccess] = useState(false);
@@ -5335,6 +5396,7 @@ function App() {
     setSupabaseSession(null);
     setCommunities([]);
     setActiveCommunityId(null);
+    navStackRef.current = [];
   }
 
 	  async function loadCommunities(session: SupabaseSession) {
@@ -10216,6 +10278,26 @@ function App() {
     });
   }
 
+  const formatBackTargetLabel = (snapshot: NavSnapshot): string => {
+    if (snapshot.page === "discover") return "discover";
+    if (snapshot.page === "community") {
+      const tab = snapshot.communityTab.replace(/_/g, " ").trim().toLowerCase();
+      return tab && tab !== "chat" ? `community / ${tab}` : "community";
+    }
+    if (snapshot.page === "workspace") {
+      if (snapshot.view === "settings") {
+        const label = settingsPageLabel(snapshot.settingsPage).toLowerCase();
+        return label ? `settings / ${label}` : "settings";
+      }
+      const root = workspaceRoot ? workspaceRoot.split("/").pop() : null;
+      return root ? `workspace / ${root}` : "workspace";
+    }
+    return "workspace";
+  };
+  const defaultBackLabel = workspaceRoot ? `workspace / ${workspaceRoot.split("/").pop()}` : "workspace";
+  const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
+  const backTargetLabel = backTargetSnapshot ? formatBackTargetLabel(backTargetSnapshot) : null;
+
   return (
     <div className="app-root desktop-root">
       <header className="app-topbar" data-tauri-drag-region>
@@ -10225,14 +10307,17 @@ function App() {
               <button
                 className="back-to-workspace"
                 data-tauri-drag-region="false"
-                onClick={() => setActiveView("home")}
+                onClick={() => {
+                  if (goBack()) return;
+                  setActiveView("home");
+                }}
                 title="Back"
               >
                 <svg viewBox="0 0 24 24" className="back-icon">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
                 <span className="back-path">
-                  settings / {settingsPageLabel(settingsPage)}
+                  {backTargetLabel ?? defaultBackLabel}
                 </span>
               </button>
             ) : (
@@ -10285,14 +10370,17 @@ function App() {
             <button
               className="back-to-workspace"
               data-tauri-drag-region="false"
-              onClick={() => setActivePage("workspace")}
-              title="Back to workspace"
+              onClick={() => {
+                if (goBack()) return;
+                setActivePage("workspace");
+              }}
+              title="Back"
             >
               <svg viewBox="0 0 24 24" className="back-icon">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
               <span className="back-path">
-                workspace{workspaceRoot ? ` / ${workspaceRoot.split("/").pop()}` : ""}
+                {backTargetLabel ?? defaultBackLabel}
               </span>
             </button>
           )}
@@ -10302,6 +10390,15 @@ function App() {
             className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
             data-tauri-drag-region="false"
             onClick={() => {
+              const nextPage: AppPage = communities.length === 0 ? "discover" : "community";
+              const nextCommunityId = nextPage === "community" ? activeCommunityId ?? communities[0]?.id ?? null : activeCommunityId;
+              const willChange =
+                activeView !== "home" ||
+                activePage !== nextPage ||
+                (nextPage === "community" &&
+                  (communityTab !== "chat" || (activeCommunityId ?? null) !== nextCommunityId));
+              if (willChange) pushNavSnapshot();
+
               if (activeView === "settings") {
                 setActiveView("home");
               }
@@ -10361,6 +10458,7 @@ function App() {
               type="button"
               className={`community-rail-button${activePage === "discover" ? " active" : ""}`}
               onClick={() => {
+                if (activePage !== "discover") pushNavSnapshot();
                 setActiveView("home");
                 setActivePage("discover");
               }}
@@ -10424,8 +10522,10 @@ function App() {
               type="button"
               className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
               onClick={() => {
+                const nextView: AppView = activePage === "workspace" && activeView === "settings" ? "home" : "settings";
+                if (nextView === "settings") pushNavSnapshot();
                 setActivePage("workspace");
-                setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
+                setActiveView(nextView);
               }}
               title="Settings"
               aria-label="Settings"
@@ -13273,6 +13373,7 @@ function App() {
 		                                if (alreadyMember) {
 		                                  if (!memberCommunity) return;
 		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+                                      pushNavSnapshot();
 		                                  setActiveCommunityId(memberCommunity.id);
 		                                  setActivePage("community");
 		                                  setCommunityTab("chat");
@@ -13291,6 +13392,7 @@ function App() {
 		                                if (alreadyMember) {
 		                                  if (!memberCommunity) return;
 		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+                                      pushNavSnapshot();
 		                                  setActiveCommunityId(memberCommunity.id);
 		                                  setActivePage("community");
 		                                  setCommunityTab("chat");

@@ -2,7 +2,7 @@
 @import "../../../src/index.css";
 
 :root {
-  --web-chat-max-width: 760px;
+  --web-chat-max-width: 800px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
@@ -37,7 +37,8 @@
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.12);
 
-  --web-rail-bg: rgba(18, 18, 18, 0.95);
+  /* Dark: match the sessions panel so the rail + sessions read as one sidebar. */
+  --web-rail-bg: var(--bg-panel, rgba(18, 18, 18, 0.95));
 }
 
 :root[data-theme="light-warm"] {
@@ -306,7 +307,11 @@
   padding-inline: var(--web-chat-gutter);
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 32px;
+}
+
+.message-text {
+  font-size: 16px;
 }
 
 .web-empty-thread {
@@ -1350,7 +1355,8 @@
 
 .ask-bar {
   width: calc(100% - 2 * var(--web-chat-gutter));
-  max-width: var(--web-chat-max-width);
+  /* Align the composer outer edge with the message text column (message-list-inner adds gutter padding). */
+  max-width: calc(var(--web-chat-max-width) - 2 * var(--web-chat-gutter));
   margin-left: auto;
   margin-right: auto;
   margin-bottom: 12px;
@@ -1391,7 +1397,7 @@
   flex: 0 0 auto;
   width: 100%;
   padding: 0 10px 0 9px;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
   min-height: 24px;
   max-height: 220px;

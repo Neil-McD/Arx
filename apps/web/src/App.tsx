@@ -534,6 +534,16 @@ type AppRouteState = {
   threadIsExplicit: boolean;
 };
 
+type NavSnapshot = {
+  page: AppPage;
+  view: AppView;
+  settingsPage: SettingsPage;
+  communityId: string | null;
+  communityTab: CommunityTab;
+  threadId: string | null;
+  workspaceWantsNewChat: boolean;
+};
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
@@ -1549,6 +1559,33 @@ function formatModelLabel(modelId: string | null | undefined): string | null {
   return raw.replace(/[_-]+/g, " ");
 }
 
+function extractInferenceSourceFromContent(content: unknown): string | null {
+  if (!content || typeof content !== "object") return null;
+  const record = content as Record<string, unknown>;
+  const meta = record.meta;
+  if (!meta || typeof meta !== "object") return null;
+  const value = (meta as Record<string, unknown>).inference_source;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatInferenceSourceLabel(value: string | null | undefined): string | null {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "platform") return "Arx";
+  if (raw === "user") return "BYOK";
+  if (raw === "chatgpt") return "ChatGPT";
+  return null;
+}
+
+function formatModelSignature(modelId: string | null | undefined, inferenceSource: string | null | undefined): string | null {
+  const base = formatModelLabel(modelId);
+  if (!base) return null;
+  const source = formatInferenceSourceLabel(inferenceSource);
+  return source ? `${base} · ${source}` : base;
+}
+
 function hashCode(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -2523,6 +2560,64 @@ export default function App() {
     workspaceWantsNewChatRef.current = next;
     setWorkspaceWantsNewChat(next);
   };
+
+  const navStackRef = useRef<NavSnapshot[]>([]);
+  const takeNavSnapshot = (): NavSnapshot => ({
+    page: activePage,
+    view: activeView,
+    settingsPage,
+    communityId: activeCommunityId,
+    communityTab,
+    threadId: activeThreadId,
+    workspaceWantsNewChat,
+  });
+  const navSnapshotsEqual = (a: NavSnapshot, b: NavSnapshot): boolean =>
+    a.page === b.page &&
+    a.view === b.view &&
+    a.settingsPage === b.settingsPage &&
+    a.communityId === b.communityId &&
+    a.communityTab === b.communityTab &&
+    a.threadId === b.threadId &&
+    a.workspaceWantsNewChat === b.workspaceWantsNewChat;
+  const pushNavSnapshot = () => {
+    const snapshot = takeNavSnapshot();
+    const stack = navStackRef.current;
+    const last = stack[stack.length - 1] ?? null;
+    if (last && navSnapshotsEqual(last, snapshot)) return;
+    stack.push(snapshot);
+  };
+  const restoreNavSnapshot = (snapshot: NavSnapshot) => {
+    setActivePage(snapshot.page);
+    setActiveView(snapshot.page === "workspace" ? snapshot.view : "home");
+    setSettingsPage(snapshot.settingsPage);
+    setActiveCommunityId(snapshot.communityId);
+    setCommunityTab(snapshot.communityTab);
+    setActiveThreadId(snapshot.threadId);
+    setWorkspaceWantsNewChatMode(snapshot.workspaceWantsNewChat);
+  };
+  const goBack = (): boolean => {
+    const stack = navStackRef.current;
+    const snapshot = stack.pop() ?? null;
+    if (!snapshot) return false;
+    restoreNavSnapshot(snapshot);
+    return true;
+  };
+
+  const formatBackTargetLabel = (snapshot: NavSnapshot): string => {
+    if (snapshot.page === "discover") return "discover";
+    if (snapshot.page === "community") {
+      const tab = snapshot.communityTab.replace(/_/g, " ").trim().toLowerCase();
+      return tab && tab !== "chat" ? `community / ${tab}` : "community";
+    }
+    if (snapshot.view === "settings") {
+      const label = settingsPageLabel(snapshot.settingsPage).toLowerCase();
+      return label ? `settings / ${label}` : "settings";
+    }
+    return "workspace";
+  };
+  const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
+  const backTargetLabel = backTargetSnapshot ? formatBackTargetLabel(backTargetSnapshot) : null;
+
   const threadsHydratedRef = useRef(false);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
@@ -2562,6 +2657,7 @@ export default function App() {
   const [streamingMeta, setStreamingMeta] = useState<{
     engine_id: string;
     model_id: string | null;
+    inference_source?: string | null;
     memory_used?: MemoryUsedItem[];
     history_used?: HistoryUsedItem[];
   } | null>(null);
@@ -2720,6 +2816,7 @@ export default function App() {
   useEffect(() => {
     const session = supabaseSession;
     if (!session) {
+      navStackRef.current = [];
       setUserMemorySettings({ memory_mode: "off", remember_intent_enabled: true });
       setUserModelSettings({ system_prompt: "" });
       setSystemPromptDraft("");
@@ -5703,7 +5800,13 @@ export default function App() {
     setStreamingContent("");
     setStreamingThreadId(threadId);
     setStreamingRunId(params.runIdHint);
-    setStreamingMeta({ engine_id: "agent_web", model_id: params.preferredModelId, memory_used: [], history_used: [] });
+    setStreamingMeta({
+      engine_id: "agent_web",
+      model_id: params.preferredModelId,
+      inference_source: params.inferenceSource ?? null,
+      memory_used: [],
+      history_used: [],
+    });
 
     const scheduleStreamingFlush = () => {
       if (streamingRafRef.current) return;
@@ -5814,6 +5917,7 @@ export default function App() {
             setStreamingMeta({
               engine_id: parsed.engine_id,
               model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null,
+              inference_source: typeof parsed?.inference_source === "string" ? parsed.inference_source : null,
               memory_used: memoryUsed,
               history_used: historyUsed,
             });
@@ -9677,6 +9781,14 @@ export default function App() {
     <button
       className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
       onClick={() => {
+        const nextPage: AppPage = communities.length === 0 ? "discover" : "community";
+        const nextCommunityId = nextPage === "community" ? activeCommunityId ?? communities[0]?.id ?? null : activeCommunityId;
+        const willChange =
+          activeView !== "home" ||
+          activePage !== nextPage ||
+          (nextPage === "community" &&
+            (communityTab !== "chat" || (activeCommunityId ?? null) !== nextCommunityId));
+        if (willChange) pushNavSnapshot();
         setActiveView("home");
         if (communities.length === 0) {
           setActivePage("discover");
@@ -9724,11 +9836,19 @@ export default function App() {
         <div className="topbar-left">
           {activePage === "workspace" ? (
             activeView === "settings" ? (
-              <button className="back-to-workspace" onClick={() => setActiveView("home")} title="Back" type="button">
+              <button
+                className="back-to-workspace"
+                onClick={() => {
+                  if (goBack()) return;
+                  setActiveView("home");
+                }}
+                title="Back"
+                type="button"
+              >
                 <svg viewBox="0 0 24 24" className="back-icon">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
-                <span className="back-path">settings</span>
+                <span className="back-path">{backTargetLabel ?? "workspace"}</span>
               </button>
             ) : (
               <>
@@ -9776,16 +9896,17 @@ export default function App() {
             <button
               className="back-to-workspace"
               onClick={() => {
+                if (goBack()) return;
                 setActiveView("home");
                 setActivePage("workspace");
               }}
-              title="Back to workspace"
+              title="Back"
               type="button"
             >
               <svg viewBox="0 0 24 24" className="back-icon">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              <span className="back-path">workspace</span>
+              <span className="back-path">{backTargetLabel ?? "workspace"}</span>
             </button>
           )}
         </div>
@@ -9846,6 +9967,7 @@ export default function App() {
                 type="button"
                 className={`community-rail-button${activePage === "discover" ? " active" : ""}`}
                 onClick={() => {
+                  if (activePage !== "discover") pushNavSnapshot();
                   setActiveView("home");
                   setActivePage("discover");
                 }}
@@ -9917,8 +10039,11 @@ export default function App() {
 	                type="button"
 	                className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
 	                onClick={() => {
+                    const nextView: AppView =
+                      activePage === "workspace" && activeView === "settings" ? "home" : "settings";
+                    if (nextView === "settings") pushNavSnapshot();
 	                  setActivePage("workspace");
-	                  setActiveView((prev) => (prev === "settings" ? "home" : "settings"));
+	                  setActiveView(nextView);
 	                }}
 	                title="Settings"
 	                aria-label="Settings"
@@ -11014,8 +11139,9 @@ export default function App() {
 	                        const memoryAdded = !isUser ? parseMessageMemoryAdded(message.content_json) : [];
                         const hasContext =
                           memoryUsed.length > 0 || historyUsed.length > 0 || memorySuggestions.length > 0 || memoryAdded.length > 0;
+                        const inferenceSource = !isUser ? extractInferenceSourceFromContent(message.content_json) : null;
 	                      const modelLabel = !isUser
-	                        ? formatModelLabel(message.model_id ?? activeThread?.model_id ?? null)
+	                        ? formatModelSignature(message.model_id ?? activeThread?.model_id ?? null, inferenceSource)
 	                        : null;
 	                      return (
 	                        <div
@@ -11200,7 +11326,10 @@ export default function App() {
                                   </svg>
                                 </button>
                                 <span className="message-meta">
-                                  {formatModelLabel(streamingMeta.model_id ?? activeThread?.model_id ?? null)}
+                                  {formatModelSignature(
+                                    streamingMeta.model_id ?? activeThread?.model_id ?? null,
+                                    streamingMeta.inference_source ?? null,
+                                  )}
                                 </span>
                               </div>
                             )}
@@ -11451,6 +11580,7 @@ export default function App() {
 		                                  if (alreadyMember) {
 		                                    if (!memberCommunity) return;
 		                                    if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+                                    pushNavSnapshot();
 		                                    setActiveView("home");
 		                                    setActiveCommunityId(memberCommunity.id);
 		                                    setActivePage("community");
@@ -11467,6 +11597,7 @@ export default function App() {
 		                                  if (alreadyMember) {
 		                                    if (!memberCommunity) return;
 		                                    if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
+                                    pushNavSnapshot();
 		                                    setActiveView("home");
 		                                    setActiveCommunityId(memberCommunity.id);
 		                                    setActivePage("community");
