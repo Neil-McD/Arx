@@ -1,12 +1,15 @@
 -- Purchase claim helpers (pay-first join).
 -- These functions are used by Edge Functions and the client claim redemption flow.
 
+-- Required for extensions.digest(...).
+create extension if not exists pgcrypto with schema extensions;
+
 create or replace function public.hash_purchase_claim_token(token text)
 returns bytea
 language sql
 immutable
 as $$
-  select digest(token, 'sha256');
+  select extensions.digest(token, 'sha256');
 $$;
 
 create or replace function public.redeem_purchase_claim(p_token text)
@@ -183,4 +186,3 @@ begin
   where c.id = v_intent.community_id;
 end;
 $$;
-
