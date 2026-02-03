@@ -4121,7 +4121,8 @@ function App() {
   async function loadModelToggles() {
     try {
       const data = await invoke<ModelToggle[]>("get_model_toggles_cmd");
-      const cleaned = (data ?? []).filter((toggle) => toggle.id !== "gpt-5.1");
+      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
+      const cleaned = (data ?? []).filter((toggle) => allowedIds.has(toggle.id));
       if (cleaned.length !== (data ?? []).length) {
         await invoke("set_model_toggles_cmd", { toggles: cleaned }).catch(() => null);
       }

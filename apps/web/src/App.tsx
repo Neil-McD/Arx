@@ -2287,7 +2287,8 @@ export default function App() {
           return { id, label, enabled } satisfies ModelToggle;
         })
         .filter(Boolean) as ModelToggle[];
-      const pruned = normalized.filter((toggle) => toggle.id !== "gpt-5.1");
+      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
+      const pruned = normalized.filter((toggle) => allowedIds.has(toggle.id));
       return pruned.length ? pruned : DEFAULT_MODEL_TOGGLES;
     } catch {
       return DEFAULT_MODEL_TOGGLES;
@@ -2296,7 +2297,8 @@ export default function App() {
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
-      return stored === "gpt-5.1" ? null : stored;
+      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
+      return stored && allowedIds.has(stored) ? stored : null;
     } catch {
       return null;
     }
