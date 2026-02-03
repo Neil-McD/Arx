@@ -2,7 +2,6 @@
 -- (Kept as DROP IF EXISTS so fresh DBs remain reproducible.)
 
 -- Legacy community chat (replaced by threads/messages)
-drop trigger if exists trg_community_chat_messages_mirror_to_messages on public.community_chat_messages;
 drop function if exists public.community_chat_messages_mirror_to_messages();
 drop table if exists public.community_chat_messages;
 
