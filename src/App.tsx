@@ -876,6 +876,7 @@ function App() {
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [emptyThreadSection, setEmptyThreadSection] = useState<string>("community");
   const threadsHydratedRef = useRef(false);
   const [newThreadTitle] = useState("Untitled thread");
@@ -8881,6 +8882,17 @@ function App() {
 	    if (!supabaseSession) return threads;
 	    return threads.filter((t) => (t.last_seq ?? 0) > 0);
 	  }, [threads, supabaseSession]);
+    const normalizedThreadSearch = threadSearchQuery.trim().toLowerCase();
+    const threadSearchResults = useMemo(() => {
+      if (!normalizedThreadSearch) return visibleThreads;
+      return visibleThreads.filter((thread) => {
+        const title = (thread.title ?? "").trim() || "Untitled thread";
+        const workspaceHint = (thread.workspace_path ?? "").trim();
+        const workspaceLabel = workspaceHint ? (workspaceHint.split("/").pop() ?? workspaceHint) : "";
+        const haystack = `${title} ${workspaceLabel}`.toLowerCase();
+        return haystack.includes(normalizedThreadSearch);
+      });
+    }, [normalizedThreadSearch, visibleThreads]);
 
   function communityInitials(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -10569,48 +10581,116 @@ function App() {
             </>
           ) : (
             <>
-	              <div className="panel-title">Threads</div>
+	              <div className="session-search" role="search" aria-label="Search threads">
+                  <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
+                  <input
+                    value={threadSearchQuery}
+                    onChange={(event) => setThreadSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setThreadSearchQuery("");
+                      }
+                    }}
+                    placeholder="Search threads…"
+                    aria-label="Search threads"
+                  />
+                  {threadSearchQuery.trim() && (
+                    <button
+                      type="button"
+                      className="session-search-clear"
+                      onClick={() => setThreadSearchQuery("")}
+                      aria-label="Clear search"
+                      title="Clear"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
 	              <div className="session-list">
-	                {groupThreadsByDate(visibleThreads).map((group) => (
-	                  <div key={group.label} className="session-group">
-	                    <div className="session-group-label">{group.label}</div>
-	                    {group.threads.map((thread) => (
-	                      <div
-	                        key={thread.id}
-	                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-	                        onClick={() => setActiveThreadId(thread.id)}
-	                      >
-	                        <div className="session-content">
-	                          <div className="session-title">
-	                            {(thread.title ?? "").trim() || "Untitled thread"}
-	                          </div>
-	                          <div className="session-preview">
-	                            {getThreadPreview(thread.id)}
-	                          </div>
-	                        </div>
-                        <div className="session-meta">
-                          <div className="session-actions">
-                            <button
-                              className="session-action"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteThread(thread.id);
-                              }}
-                              title="Delete thread"
-                            >
-                              <svg viewBox="0 0 24 24">
-                                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                              </svg>
-                            </button>
+                  {normalizedThreadSearch ? (
+                    threadSearchResults.length === 0 ? (
+                      <div className="empty-state">No matching threads.</div>
+                    ) : (
+                      threadSearchResults.map((thread) => (
+                        <div
+                          key={thread.id}
+                          className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                          onClick={() => setActiveThreadId(thread.id)}
+                        >
+                          <div className="session-content">
+                            <div className="session-title">
+                              {(thread.title ?? "").trim() || "Untitled thread"}
+                            </div>
+                            <div className="session-preview">
+                              {getThreadPreview(thread.id)}
+                            </div>
+                          </div>
+                          <div className="session-meta">
+                            <div className="session-actions">
+                              <button
+                                className="session-action"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteThread(thread.id);
+                                }}
+                                title="Delete thread"
+                              >
+                                <svg viewBox="0 0 24 24">
+                                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-	                  </div>
-	                ))}
-                {visibleThreads.length === 0 && (
-                  <div className="empty-state">No chats yet. Send a message to start.</div>
-                )}
+                      ))
+                    )
+                  ) : (
+                    <>
+                      {groupThreadsByDate(visibleThreads).map((group) => (
+                        <div key={group.label} className="session-group">
+                          <div className="session-group-label">{group.label}</div>
+                          {group.threads.map((thread) => (
+                            <div
+                              key={thread.id}
+                              className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                              onClick={() => setActiveThreadId(thread.id)}
+                            >
+                              <div className="session-content">
+                                <div className="session-title">
+                                  {(thread.title ?? "").trim() || "Untitled thread"}
+                                </div>
+                                <div className="session-preview">
+                                  {getThreadPreview(thread.id)}
+                                </div>
+                              </div>
+                              <div className="session-meta">
+                                <div className="session-actions">
+                                  <button
+                                    className="session-action"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteThread(thread.id);
+                                    }}
+                                    title="Delete thread"
+                                  >
+                                    <svg viewBox="0 0 24 24">
+                                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      {visibleThreads.length === 0 && (
+                        <div className="empty-state">No chats yet. Send a message to start.</div>
+                      )}
+                    </>
+                  )}
 	              </div>
             </>
           )}

@@ -618,7 +618,8 @@ html, body {
   overflow: hidden;
   padding: 12px 0;
   background: var(--bg-header);
-  box-shadow: 1px 0 4px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+  border-right: 1px solid var(--divider-accent, var(--border-muted));
   z-index: 5;
 }
 
@@ -643,11 +644,11 @@ html, body {
   border: 0;
 }
 
-/* Dark themes: treat rail + sessions as one sidebar (no vertical divider between them). */
+/* Dark themes: keep the rail shade aligned with the topbar. */
 :root[data-theme="dark"] .rail,
 :root[data-theme="dark-warm"] .rail {
   border-right: 0;
-  background: var(--bg-panel, var(--bg-header));
+  background: var(--bg-header);
 }
 
 /* Discord-style selection/hover indicator "lip" */
@@ -4886,6 +4887,69 @@ h3.md-header {
 /* Session Groups */
 .session-group {
   margin-bottom: 12px;
+}
+
+.session-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+/* Fallback when color-mix isn't supported */
+@supports not (background: color-mix(in srgb, #000 50%, transparent)) {
+  .session-search {
+    background: var(--bg-card);
+  }
+}
+
+.session-search-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--icon-default);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.session-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.session-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.session-search-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.session-search-clear:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
 }
 
 .session-group-label {
