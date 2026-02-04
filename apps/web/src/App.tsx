@@ -13011,18 +13011,40 @@ export default function App() {
 	                  </div>
 	                  <div className="workspace-body chat-feed">
 	                    <div className="chat-messages discover-scroll">
-	                      <div className="discover-grid">
-	                        {isLoadingDiscover && discoverCommunities.length === 0 && (
-	                          <div className="chat-loading">
-	                            <div className="loading-spinner" />
-	                            <span>Loading communities…</span>
-	                          </div>
-	                        )}
-	                        {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
-	                        {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
-	                          <div className="discover-empty">
-	                            <div className="discover-empty-title">No communities yet.</div>
-	                            <div className="discover-empty-text">
+		                      <div className="discover-grid">
+		                        {isLoadingDiscover && discoverCommunities.length === 0 && (
+		                          <>
+		                            {Array.from({ length: 6 }).map((_, idx) => (
+		                              <div
+		                                key={`discover-skeleton-${idx}`}
+		                                className="discover-card discover-card-skeleton"
+		                                aria-hidden="true"
+		                              >
+		                                <div className="discover-card-banner web-skeleton-block" />
+		                                <div className="discover-card-body">
+		                                  <div className="discover-card-header">
+		                                    <div className="discover-card-avatar web-skeleton-block" />
+		                                    <div className="discover-card-meta">
+		                                      <div className="web-skeleton-row discover-skeleton-name" />
+		                                      <div className="web-skeleton-row discover-skeleton-slug" />
+		                                    </div>
+		                                  </div>
+		                                  <div className="web-skeleton-row discover-skeleton-desc" />
+		                                  <div className="web-skeleton-row discover-skeleton-desc discover-skeleton-desc-short" />
+		                                  <div className="discover-skeleton-stats">
+		                                    <div className="web-skeleton-pill discover-skeleton-pill" />
+		                                    <div className="web-skeleton-pill discover-skeleton-pill" />
+		                                  </div>
+		                                </div>
+		                              </div>
+		                            ))}
+		                          </>
+		                        )}
+		                        {!isLoadingDiscover && discoverError && <div className="auth-error">{discoverError}</div>}
+		                        {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
+		                          <div className="discover-empty">
+		                            <div className="discover-empty-title">No communities yet.</div>
+		                            <div className="discover-empty-text">
 	                              Create one on desktop to make discovery meaningful.
 	                            </div>
 	                          </div>

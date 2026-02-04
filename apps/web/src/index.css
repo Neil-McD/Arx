@@ -365,6 +365,14 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .web-skeleton-block::after,
+  .web-skeleton-pill::after,
+  .web-skeleton-row::after {
+    animation: none;
+  }
+}
+
 .web-skeleton-title {
   width: min(320px, 70%);
   height: 34px;
@@ -413,6 +421,71 @@
 
 .web-starter-list-skeleton .web-skeleton-row:nth-child(4) {
   width: 78%;
+}
+
+/* Web: discovery page skeleton cards (nicer than the generic spinner). */
+.discover-card.discover-card-skeleton {
+  pointer-events: none;
+  border-color: var(--border-muted);
+  background: var(--bg-card);
+  box-shadow: none;
+  transform: none;
+  transition: none;
+}
+
+.discover-card.discover-card-skeleton:hover,
+.discover-card.discover-card-skeleton:active {
+  border-color: var(--border-muted);
+  background: var(--bg-card);
+  box-shadow: none;
+  transform: none;
+}
+
+.discover-card.discover-card-skeleton .discover-card-banner::after {
+  content: none;
+}
+
+.discover-card.discover-card-skeleton .discover-card-avatar {
+  box-shadow: none;
+}
+
+.discover-skeleton-name {
+  width: min(260px, 80%);
+  height: 14px;
+  border-radius: 999px;
+}
+
+.discover-skeleton-slug {
+  width: 42%;
+  height: 12px;
+  border-radius: 999px;
+  opacity: 0.85;
+}
+
+.discover-skeleton-desc {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.discover-skeleton-desc.discover-skeleton-desc-short {
+  width: 82%;
+}
+
+.discover-skeleton-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.discover-skeleton-pill {
+  width: 84px;
+  height: 12px;
+  border-radius: 999px;
+  opacity: 0.65;
 }
 
 @media (max-width: 820px) {
