@@ -161,6 +161,100 @@ type CommunityAgentDraft = {
   updated_at: string;
 };
 
+const GUEST_THREAD_ID = "__guest__";
+const GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
+const GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
+const DEFAULT_GUEST_MODEL_ID = "gpt-oss-120b-free";
+const GUEST_MODEL_ALLOWLIST = new Set<string>([DEFAULT_GUEST_MODEL_ID, "deepseek-r1-free"]);
+
+type GuestStoredMessageV1 = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  run_id?: string | null;
+};
+
+type GuestThreadStorageV1 = {
+  v: 1;
+  model_id: string;
+  messages: GuestStoredMessageV1[];
+};
+
+function loadGuestModelId(): string {
+  try {
+    const raw = (localStorage.getItem(GUEST_MODEL_STORAGE_KEY) ?? "").trim();
+    return raw && GUEST_MODEL_ALLOWLIST.has(raw) ? raw : DEFAULT_GUEST_MODEL_ID;
+  } catch {
+    return DEFAULT_GUEST_MODEL_ID;
+  }
+}
+
+function storeGuestModelId(modelId: string): void {
+  try {
+    localStorage.setItem(GUEST_MODEL_STORAGE_KEY, modelId);
+  } catch {
+    // ignore
+  }
+}
+
+function loadGuestThreadStorage(): GuestThreadStorageV1 {
+  try {
+    const raw = localStorage.getItem(GUEST_THREAD_STORAGE_KEY);
+    if (!raw) return { v: 1, model_id: loadGuestModelId(), messages: [] };
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return { v: 1, model_id: loadGuestModelId(), messages: [] };
+    const asAny = parsed as any;
+    const model_id_raw = typeof asAny.model_id === "string" ? asAny.model_id.trim() : "";
+    const model_id = model_id_raw && GUEST_MODEL_ALLOWLIST.has(model_id_raw) ? model_id_raw : loadGuestModelId();
+    const messages_raw = Array.isArray(asAny.messages) ? (asAny.messages as unknown[]) : [];
+    const messages: GuestStoredMessageV1[] = [];
+    for (const item of messages_raw) {
+      if (!item || typeof item !== "object") continue;
+      const id = typeof (item as any).id === "string" ? (item as any).id.trim() : "";
+      const role = typeof (item as any).role === "string" ? (item as any).role.trim() : "";
+      const content = typeof (item as any).content === "string" ? (item as any).content : "";
+      const created_at = typeof (item as any).created_at === "string" ? (item as any).created_at : "";
+      const run_id = typeof (item as any).run_id === "string" ? (item as any).run_id : null;
+      if (!id || !created_at) continue;
+      if (role !== "user" && role !== "assistant") continue;
+      const trimmed = content.trim();
+      if (!trimmed) continue;
+      messages.push({ id, role: role as any, content: trimmed, created_at, run_id });
+    }
+    return { v: 1, model_id, messages };
+  } catch {
+    return { v: 1, model_id: loadGuestModelId(), messages: [] };
+  }
+}
+
+function storeGuestThreadStorage(storage: GuestThreadStorageV1): void {
+  try {
+    localStorage.setItem(GUEST_THREAD_STORAGE_KEY, JSON.stringify(storage));
+  } catch {
+    // ignore
+  }
+}
+
+function guestStoredToThreadMessages(storage: GuestThreadStorageV1): ThreadMessage[] {
+  const out: ThreadMessage[] = [];
+  for (let i = 0; i < storage.messages.length; i++) {
+    const msg = storage.messages[i]!;
+    out.push({
+      id: msg.id,
+      thread_id: GUEST_THREAD_ID,
+      seq: i + 1,
+      role: msg.role,
+      content_json: { text: msg.content },
+      created_at: msg.created_at,
+      engine_id: msg.role === "assistant" ? "public_openrouter" : null,
+      model_id: msg.role === "assistant" ? storage.model_id : null,
+      run_id: msg.run_id ?? null,
+    });
+  }
+  return out;
+}
+
 const DEFAULT_EMPTY_THREAD_LANDING: CommunityAgentLanding = {
   title: "How can I help?",
   subtitle: "Start with a prompt, or ask anything.",
@@ -2622,6 +2716,7 @@ export default function App() {
 
   const threadsHydratedRef = useRef(false);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
+  const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
   const [messageInput, setMessageInput] = useState("");
   const DESKTOP_INSTALLED_KEY = "arx-desktop-installed";
   const DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY = "arx-desktop-download-dismissed-until";
@@ -2988,6 +3083,10 @@ export default function App() {
     }
   }, [activeModelId]);
 
+  useEffect(() => {
+    storeGuestModelId(guestModelId);
+  }, [guestModelId]);
+
   // Supabase session is bootstrapped from localStorage in useState(), so refresh keeps app state stable.
 
   useLayoutEffect(() => {
@@ -3153,7 +3252,8 @@ export default function App() {
   }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
 
   useEffect(() => {
-    if (!supabaseSession || !activeThreadId) {
+    if (!supabaseSession) return;
+    if (!activeThreadId || activeThreadId === GUEST_THREAD_ID) {
       setThreadMessages([]);
       return;
     }
@@ -3162,6 +3262,22 @@ export default function App() {
     setIsWorkspaceAtBottom(true);
     lastWorkspaceScrollTopRef.current = 0;
     void loadThreadMessages(activeThreadId, supabaseSession);
+  }, [supabaseSession, activeThreadId]);
+
+  useEffect(() => {
+    if (supabaseSession) return;
+    if (publicRoute.kind !== "app") return;
+    const storage = loadGuestThreadStorage();
+    setGuestModelId(storage.model_id);
+    if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
+    setThreadMessages(guestStoredToThreadMessages(storage));
+  }, [supabaseSession, publicRoute.kind]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    if (activeThreadId !== GUEST_THREAD_ID) return;
+    setActiveThreadId(null);
+    setThreadMessages([]);
   }, [supabaseSession, activeThreadId]);
 
   useEffect(() => {
@@ -5781,6 +5897,179 @@ export default function App() {
     streamingAbortRef.current.abort();
   }
 
+  async function runPublicTurn(params: {
+    modelId: string;
+    threadId: string;
+    runIdHint: string;
+    messages: ThreadMessage[];
+  }): Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }> {
+    const url = getSupabaseUrl();
+    if (!url) return { cancelled: false, error: "Missing Supabase URL.", content: "", runId: null };
+
+    streamingAbortRef.current?.abort();
+    const abort = new AbortController();
+    streamingAbortRef.current = abort;
+    streamingUserCancelledRef.current = false;
+    streamingContentRef.current = "";
+    setStreamingContent("");
+    setStreamingThreadId(params.threadId);
+    setStreamingRunId(params.runIdHint);
+    setStreamingMeta({
+      engine_id: "public_web",
+      model_id: params.modelId,
+      inference_source: "platform",
+      memory_used: [],
+      history_used: [],
+    });
+
+    const scheduleStreamingFlush = () => {
+      if (streamingRafRef.current) return;
+      streamingRafRef.current = window.requestAnimationFrame(() => {
+        streamingRafRef.current = null;
+        setStreamingContent(streamingContentRef.current);
+      });
+    };
+
+    const toPublicMessages = (items: ThreadMessage[]): Array<{ role: "user" | "assistant" | "system"; content: string }> => {
+      const out: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
+      for (const msg of items) {
+        if (!msg) continue;
+        const role = msg.role;
+        if (role !== "user" && role !== "assistant" && role !== "system") continue;
+        const content = extractTextFromContentJson(msg.content_json).trim();
+        if (!content) continue;
+        out.push({ role, content });
+      }
+      return out;
+    };
+
+    let finalContent = "";
+    let runIdFromServer: string | null = null;
+    try {
+      const turn = await fetchWithSupabasePublic(`${url}/functions/v1/public_turn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_id: params.modelId,
+          stream: true,
+          messages: toPublicMessages(params.messages),
+        }),
+        signal: abort.signal,
+      });
+      if (!turn.ok) {
+        let parsed: any = null;
+        try {
+          parsed = await turn.clone().json();
+        } catch {
+          parsed = null;
+        }
+        const code = typeof parsed?.code === "string" ? parsed.code.trim() : "";
+        if (code === "rate_limited") {
+          return { cancelled: false, error: "Too many requests. Try again soon.", content: "", runId: null };
+        }
+        if (code === "platform_inference_misconfigured") {
+          return { cancelled: false, error: "Guest chat is temporarily unavailable.", content: "", runId: null };
+        }
+        const message = await readSupabaseError(turn);
+        throw new Error(message || "Failed to run model.");
+      }
+      const reader = turn.body?.getReader();
+      if (!reader) throw new Error("Missing streaming response.");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let eventName = "message";
+      let dataBuffer = "";
+      let seenDone = false;
+
+      const flushEvent = () => {
+        const raw = dataBuffer.trim();
+        dataBuffer = "";
+        if (!raw) return;
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = { raw };
+        }
+        if (eventName === "start") {
+          if (typeof parsed?.run_id === "string") {
+            runIdFromServer = parsed.run_id;
+            setStreamingRunId(parsed.run_id);
+          }
+          if (typeof parsed?.engine_id === "string") {
+            setStreamingMeta({
+              engine_id: parsed.engine_id,
+              model_id: typeof parsed?.model_id === "string" ? parsed.model_id : params.modelId,
+              inference_source: "platform",
+              memory_used: [],
+              history_used: [],
+            });
+          }
+        } else if (eventName === "delta") {
+          const full = typeof parsed?.full_content === "string" ? parsed.full_content : "";
+          finalContent = full;
+          streamingContentRef.current = full;
+          scheduleStreamingFlush();
+        } else if (eventName === "done") {
+          seenDone = true;
+        } else if (eventName === "error") {
+          const msg =
+            (typeof parsed?.error === "string" && parsed.error.trim()) ||
+            (typeof parsed?.message === "string" && parsed.message.trim()) ||
+            (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
+            "Failed to run model.";
+          throw new Error(msg);
+        }
+        eventName = "message";
+      };
+
+      while (!seenDone) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        while (true) {
+          const idx = buffer.indexOf("\n");
+          if (idx < 0) break;
+          let line = buffer.slice(0, idx);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          buffer = buffer.slice(idx + 1);
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            dataBuffer += line.slice(5).trim();
+            continue;
+          }
+          if (line === "") {
+            flushEvent();
+            continue;
+          }
+        }
+      }
+      flushEvent();
+      return { cancelled: false, error: null, content: finalContent, runId: runIdFromServer };
+    } catch (error) {
+      const cancelled = streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
+      if (cancelled) return { cancelled: true, error: null, content: "", runId: null };
+      const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
+      return { cancelled: false, error: message, content: "", runId: null };
+    } finally {
+      if (streamingRafRef.current) {
+        window.cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingAbortRef.current = null;
+      streamingContentRef.current = null;
+      setStreamingContent(null);
+      setStreamingThreadId(null);
+      setStreamingRunId(null);
+      setStreamingMeta(null);
+      streamingUserCancelledRef.current = false;
+    }
+  }
+
   async function runAgentTurn(
     session: SupabaseSession,
     threadId: string,
@@ -6175,7 +6464,92 @@ export default function App() {
     if (!text && !hasAttachments) return;
 
     if (!supabaseSession) {
-      handleSignIn();
+      if (hasAttachments) {
+        setThreadError("Sign in to send files.");
+        handleSignIn();
+        return;
+      }
+      const now = new Date().toISOString();
+      const existing = threadMessages.filter((m) => m.thread_id === GUEST_THREAD_ID);
+      const userMsg: ThreadMessage = {
+        id: crypto.randomUUID(),
+        thread_id: GUEST_THREAD_ID,
+        seq: existing.length + 1,
+        role: "user",
+        content_json: { text },
+        created_at: now,
+        engine_id: null,
+        model_id: null,
+        run_id: null,
+      };
+      const baseMessages = [...existing, userMsg];
+      const persistGuestFromMessages = (messages: ThreadMessage[]) => {
+        const stored: GuestThreadStorageV1 = {
+          v: 1,
+          model_id: guestModelId,
+          messages: [],
+        };
+        for (const msg of messages) {
+          if (msg.role !== "user" && msg.role !== "assistant") continue;
+          const content = extractTextFromContentJson(msg.content_json).trim();
+          if (!content) continue;
+          stored.messages.push({
+            id: msg.id,
+            role: msg.role,
+            content,
+            created_at: msg.created_at,
+            run_id: msg.run_id,
+          });
+        }
+        storeGuestThreadStorage(stored);
+      };
+
+      setThreadError(null);
+      setIsSendingMessage(true);
+      autoScrollEnabledRef.current = true;
+      setIsWorkspaceAtBottom(true);
+      try {
+        if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
+        setThreadMessages(baseMessages);
+        setMessageInput("");
+        setWorkspaceAttachments([]);
+        persistGuestFromMessages(baseMessages);
+
+        const turnResult = await runPublicTurn({
+          modelId: guestModelId,
+          threadId: GUEST_THREAD_ID,
+          runIdHint: `public_web:${userMsg.id}`,
+          messages: baseMessages,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+        if (turnResult.cancelled) return;
+        const assistantContent = (turnResult.content ?? "").trim();
+        if (!assistantContent) return;
+        const assistantMsg: ThreadMessage = {
+          id: crypto.randomUUID(),
+          thread_id: GUEST_THREAD_ID,
+          seq: baseMessages.length + 1,
+          role: "assistant",
+          content_json: { text: assistantContent },
+          created_at: new Date().toISOString(),
+          engine_id: "public_openrouter",
+          model_id: guestModelId,
+          run_id: turnResult.runId ?? null,
+        };
+        const nextMessages = [...baseMessages, assistantMsg];
+        setThreadMessages(nextMessages);
+        persistGuestFromMessages(nextMessages);
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to send message.";
+        setThreadError(message);
+      } finally {
+        setIsSendingMessage(false);
+      }
       return;
     }
 
@@ -9346,12 +9720,12 @@ export default function App() {
     });
   }, [discoverCommunities, discoverQuery]);
 
-  const showCommunityRail = true;
-  const showCommunityNav = activePage === "community";
-  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
-  const sessionsDrawerEnabled = activePage === "workspace" && !isWorkspaceSettings;
-  const isSessionsDrawerOpen = sessionsDrawerEnabled && userWantsSessions;
-  const hasLeftPanel = isWorkspaceSettings || showCommunityNav;
+	  const showCommunityRail = true;
+	  const showCommunityNav = activePage === "community";
+	  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
+	  const sessionsDrawerEnabled = Boolean(supabaseSession) && activePage === "workspace" && !isWorkspaceSettings;
+	  const isSessionsDrawerOpen = sessionsDrawerEnabled && userWantsSessions;
+	  const hasLeftPanel = isWorkspaceSettings || showCommunityNav;
 
   useEffect(() => {
     if (!isSessionsDrawerOpen) return;
@@ -9372,8 +9746,8 @@ export default function App() {
 	    break;
 	  }
 	  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
-  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
-  const lastThreadAssistantMessageId = getLastThreadMessageId(threadMessages, "assistant");
+	  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
+	  const lastThreadAssistantMessageId = getLastThreadMessageId(threadMessages, "assistant");
   const canRetryLastThreadTurn = Boolean(
     threadError &&
       supabaseSession &&
@@ -9382,17 +9756,18 @@ export default function App() {
       lastThreadMessageRole === "user" &&
       lastThreadUserMessageId,
   );
-  const canRegenerateLastThreadTurn = Boolean(
-    supabaseSession &&
-      activeThreadId &&
-      !isSendingMessage &&
-      lastThreadMessageRole === "assistant" &&
-      lastThreadUserMessageId &&
-      lastThreadAssistantMessageId,
-  );
-  const isStreamingWorkspaceTurn = Boolean(
-    isSendingMessage && streamingThreadId === activeThreadId && streamingContent !== null,
-  );
+	  const canRegenerateLastThreadTurn = Boolean(
+	    supabaseSession &&
+	      activeThreadId &&
+	      !isSendingMessage &&
+	      lastThreadMessageRole === "assistant" &&
+	      lastThreadUserMessageId &&
+	      lastThreadAssistantMessageId,
+	  );
+	  const workspaceThreadKey = supabaseSession ? activeThreadId : GUEST_THREAD_ID;
+	  const isStreamingWorkspaceTurn = Boolean(
+	    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
+	  );
 
   if (publicRoute.kind !== "app") {
     const showSignIn = !supabaseSession;
@@ -9879,15 +10254,21 @@ export default function App() {
                   </svg>
                 </button>
                 <button
-                  className="new-session-header-btn"
-                  onClick={() => {
-                    if (!supabaseSession) {
-                      handleSignIn();
-                      return;
-                    }
-                    // ChatGPT-style: "New chat" is a draft state until the first message is sent.
-                    if (!activeThreadId) {
-                      setWorkspaceWantsNewChatMode(true);
+	                  className="new-session-header-btn"
+	                  onClick={() => {
+	                    if (!supabaseSession) {
+	                      setThreadError(null);
+	                      setMessageInput("");
+	                      setWorkspaceAttachments([]);
+	                      if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
+	                      storeGuestThreadStorage({ v: 1, model_id: guestModelId, messages: [] });
+	                      setThreadMessages([]);
+	                      workspaceAskInputRef.current?.focus();
+	                      return;
+	                    }
+	                    // ChatGPT-style: "New chat" is a draft state until the first message is sent.
+	                    if (!activeThreadId) {
+	                      setWorkspaceWantsNewChatMode(true);
                       workspaceAskInputRef.current?.focus();
                       return;
                     }
@@ -11326,7 +11707,7 @@ export default function App() {
 	                        </div>
 	                      );
 	                    })}
-                      {streamingThreadId === activeThreadId &&
+                      {streamingThreadId === workspaceThreadKey &&
                         streamingContent !== null &&
                         !(streamingRunId && threadMessages.some((m) => m.run_id === streamingRunId && m.role === "assistant")) && (
                           <div className="message-item assistant streaming">
@@ -11431,13 +11812,13 @@ export default function App() {
 	                <textarea
 	                  ref={workspaceAskInputRef}
                   className="ask-input ask-input-v2"
-                  placeholder={
-                    supabaseSession
-                      ? workspaceAttachments.length > 0
-                        ? "Add a message or send files..."
-                        : "Ask anything"
-                      : "Sign in to send messages"
-                  }
+	                  placeholder={
+	                    supabaseSession
+	                      ? workspaceAttachments.length > 0
+	                        ? "Add a message or send files..."
+	                        : "Ask anything"
+	                      : "Ask anything (guest chat)"
+	                  }
                   value={messageInput}
                   onChange={(event) => setMessageInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -11446,9 +11827,9 @@ export default function App() {
                       void sendUserMessage();
                     }
                   }}
-                  disabled={!supabaseSession || isSendingMessage}
-                  rows={1}
-                />
+	                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+	                  rows={1}
+	                />
                 {workspaceAttachments.length > 0 && (
                   <div className="attachments-preview workspace-attachments-preview">
                     {workspaceAttachments.map((att) => (
@@ -11486,14 +11867,14 @@ export default function App() {
                 )}
                 <div className="ask-footer">
                   <div className="ask-footer-left">
-                    <button
-                      className="ask-icon-btn ask-plus"
-                      type="button"
-                      onClick={() => workspaceFileInputRef.current?.click()}
-                      disabled={isSendingMessage || isStreamingWorkspaceTurn}
-                      aria-label="Attach files"
-                      title="Attach files"
-                    >
+	                    <button
+	                      className="ask-icon-btn ask-plus"
+	                      type="button"
+	                      onClick={() => workspaceFileInputRef.current?.click()}
+	                      disabled={!supabaseSession || isSendingMessage || isStreamingWorkspaceTurn}
+	                      aria-label="Attach files"
+	                      title="Attach files"
+	                    >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 5v14M5 12h14" />
                       </svg>
