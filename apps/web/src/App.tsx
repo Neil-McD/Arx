@@ -11293,15 +11293,21 @@ export default function App() {
                 </div>
               )}
               <div className="community-rail-divider" />
-	              <button
-	                type="button"
-	                className="community-rail-button community-rail-add"
-	                onClick={openCreateCommunityModal}
-	                title="Create community"
-	                aria-label="Create community"
-	              >
-	                +
-	              </button>
+		              <button
+		                type="button"
+		                className="community-rail-button community-rail-add"
+		                onClick={() => {
+		                  if (!supabaseSession) {
+		                    openAuthGate({ reason: "create_community", payload: { draft_id: null } });
+		                    return;
+		                  }
+		                  openCreateCommunityModal();
+		                }}
+		                title="Create community"
+		                aria-label="Create community"
+		              >
+		                +
+		              </button>
             </div>
             <div className="rail-footer">
 	              <button
