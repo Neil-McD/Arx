@@ -15685,34 +15685,34 @@ export default function App() {
           );
 		        })()}
 
-		      {!supabaseSession && isAuthGateOpen && (
-		        <div className="modal-overlay" onClick={() => setIsAuthGateOpen(false)}>
-		          <div className="modal" onClick={(event) => event.stopPropagation()}>
-		            <div className="modal-header">
-		              <div className="modal-title">Sign in</div>
-		              <button
-		                className="modal-close"
-		                type="button"
-		                onClick={() => setIsAuthGateOpen(false)}
-		                title="Close"
-		              >
-		                ×
-		              </button>
-		            </div>
-		            <div className="modal-body">
-		              <div className="model-note">Continue with Google to unlock more models and sync your chats.</div>
-		              {authError && <div className="auth-error">{authError}</div>}
-		            </div>
-		            <div className="modal-footer">
-		              <div className="auth-actions">
-		                <button type="button" onClick={handleSignIn}>
-		                  Continue with Google
-		                </button>
-		              </div>
-		            </div>
-		          </div>
-		        </div>
-		      )}
+			      {!supabaseSession && isAuthGateOpen && (
+			        <div className="modal-overlay" onClick={() => setIsAuthGateOpen(false)}>
+			          <div className="modal modal-auth-gate" onClick={(event) => event.stopPropagation()}>
+			            <div className="modal-header">
+			              <div className="modal-title">Sign in to unlock models</div>
+			              <button
+			                className="modal-close"
+			                type="button"
+			                onClick={() => setIsAuthGateOpen(false)}
+			                title="Close"
+			              >
+			                ×
+			              </button>
+			            </div>
+			            <div className="modal-body">
+			              <div className="model-note">Sync chats across devices and unlock more models.</div>
+			              {authError && <div className="auth-error">{authError}</div>}
+			            </div>
+			            <div className="modal-footer">
+			              <div className="auth-actions">
+			                <button className="auth-gate-google-button" type="button" onClick={handleSignIn}>
+			                  Continue with Google
+			                </button>
+			              </div>
+			            </div>
+			          </div>
+			        </div>
+			      )}
 
 		      {supabaseSession && onboardingStep === "signed_in" && (
 		        <div className="modal-overlay">
