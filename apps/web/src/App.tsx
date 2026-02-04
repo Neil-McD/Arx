@@ -3143,12 +3143,21 @@ export default function App() {
 
   useEffect(() => {
     if (!isModelPickerOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsModelPickerOpen(false);
+    const handlePointerDown = (event: MouseEvent) => {
+      const root = modelPickerRef.current;
+      if (!root) return;
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!root.contains(target)) closeModelPicker();
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeModelPicker();
+    };
+    document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     const raf = window.requestAnimationFrame(() => modelPickerSearchRef.current?.focus());
     return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
       window.cancelAnimationFrame(raf);
     };
@@ -12108,15 +12117,11 @@ export default function App() {
 	                      </button>
 	                      {isModelPickerOpen && (
 	                        <div
-	                          className="model-picker-overlay"
+	                          className="model-picker-popover"
 	                          role="dialog"
-	                          aria-modal="true"
 	                          aria-label="Choose a model"
-	                          onMouseDown={(event) => {
-	                            if (event.target === event.currentTarget) closeModelPicker();
-	                          }}
 	                        >
-	                          <div className="model-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+	                          <div className="model-picker-modal">
 	                            <div className="model-picker-top">
 	                              <div className="model-picker-cta">
 	                                <div className="model-picker-cta-title">

@@ -1587,21 +1587,28 @@
   border-color: var(--border-default);
 }
 
-.model-picker-overlay {
-  position: fixed;
-  inset: 0;
+.model-picker-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
   z-index: 80;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 72px 18px 24px;
-  background: rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(10px);
+  width: min(720px, calc(100vw - 32px));
+}
+
+@media (max-width: 760px) {
+  .model-picker-popover {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .model-picker-nav {
+    width: 120px;
+  }
 }
 
 .model-picker-modal {
-  width: min(720px, 100%);
-  max-height: calc(100vh - 120px);
+  width: 100%;
+  max-height: min(560px, calc(100vh - 180px));
   overflow: hidden;
   border-radius: 18px;
   border: 1px solid var(--border-default);
@@ -1692,7 +1699,7 @@
 .model-picker-body {
   display: flex;
   min-height: 320px;
-  max-height: calc(100vh - 280px);
+  max-height: min(420px, calc(100vh - 360px));
 }
 
 .model-picker-nav {
