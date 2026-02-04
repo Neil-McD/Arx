@@ -10376,40 +10376,33 @@ function App() {
           )}
         </div>
         <div className="topbar-right" data-tauri-drag-region>
-          <button
-            className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-            data-tauri-drag-region="false"
-            onClick={() => {
-              const nextPage: AppPage = communities.length === 0 ? "discover" : "community";
-              const nextCommunityId = nextPage === "community" ? activeCommunityId ?? communities[0]?.id ?? null : activeCommunityId;
-              const willChange =
-                activeView !== "home" ||
-                activePage !== nextPage ||
-                (nextPage === "community" &&
-                  (communityTab !== "chat" || (activeCommunityId ?? null) !== nextCommunityId));
-              if (willChange) pushNavSnapshot();
+          {activeCommunity && (
+            <button
+              className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
+              data-tauri-drag-region="false"
+              onClick={() => {
+                const nextCommunityId = activeCommunityId ?? activeCommunity.id;
+                const willChange =
+                  activeView !== "home" ||
+                  activePage !== "community" ||
+                  communityTab !== "chat" ||
+                  (activeCommunityId ?? null) !== nextCommunityId;
+                if (willChange) pushNavSnapshot();
 
-              if (activeView === "settings") {
+                if (activeView === "settings") {
+                  setActiveView("home");
+                }
+
                 setActiveView("home");
-              }
-
-              if (communities.length === 0) {
-                setActiveView("home");
-                setActivePage("discover");
-                return;
-              }
-
-              setActiveView("home");
-              setActivePage("community");
-              setCommunityTab("chat");
-              setUnreadCount(0); // Clear unread when opening community
-              setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
-            }}
-            aria-label="Community"
-            title={activeCommunity?.name ?? "Community"}
-          >
-            {activeCommunity ? (
-              activeCommunity.avatar_url ? (
+                setActivePage("community");
+                setCommunityTab("chat");
+                setUnreadCount(0); // Clear unread when opening community
+                setActiveCommunityId(nextCommunityId);
+              }}
+              aria-label="Open community"
+              title={activeCommunity.name}
+            >
+              {activeCommunity.avatar_url ? (
                 <img
                   className="community-btn-avatar"
                   src={activeCommunity.avatar_url}
@@ -10418,19 +10411,12 @@ function App() {
                 />
               ) : (
                 <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
-              )
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            )}
-            {unreadCount > 0 && activePage !== "community" && (
-              <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-            )}
-          </button>
+              )}
+              {unreadCount > 0 && activePage !== "community" && (
+                <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              )}
+            </button>
+          )}
         </div>
       </header>
       {appToast && (
@@ -10482,19 +10468,18 @@ function App() {
                 )}
               </button>
             ))}
-            {communities.length === 0 &&
-              (actionablePendingInvites.length > 0 || !supabaseSession || !communitiesLoadError) && (
-                <div className="community-rail-empty">
-                  {actionablePendingInvites.length > 0
-                    ? `Invite waiting: ${formatInviteLabel(
-                        actionablePendingInvites[0].invite_key,
-                        actionablePendingInvites[0].community_name
-                      )}`
-                    : supabaseSession
-                      ? "No communities yet."
-                      : "Sign in to access communities."}
-                </div>
-              )}
+            {communities.length === 0 && (actionablePendingInvites.length > 0 || supabaseSession) && (
+              <div className="community-rail-empty">
+                {actionablePendingInvites.length > 0
+                  ? `Invite waiting: ${formatInviteLabel(
+                      actionablePendingInvites[0].invite_key,
+                      actionablePendingInvites[0].community_name
+                    )}`
+                  : communitiesLoadError
+                    ? "Couldn't load communities. Open Settings → Community."
+                    : "No communities yet."}
+              </div>
+            )}
             <div className="community-rail-divider" />
             <button
               type="button"

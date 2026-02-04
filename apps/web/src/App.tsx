@@ -1,6 +1,11 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
+import openAiLogo from "./assets/provider-logos/openai.png";
+import anthropicLogo from "./assets/provider-logos/anthropic.png";
+import googleLogo from "./assets/provider-logos/google.png";
+import xAiLogo from "./assets/provider-logos/xai.png";
+import openRouterLogo from "./assets/provider-logos/openrouter.webp";
 import {
   clearPersistedSupabaseSession,
   fetchSupabaseUser,
@@ -171,6 +176,7 @@ const GUEST_MODEL_LABELS: Record<string, string> = {
   "gpt-oss-120b-free": "GPT OSS 120B (Free)",
   "deepseek-r1-free": "DeepSeek R1 (Free)",
 };
+const DEFAULT_MODEL_FAVORITES = ["gpt-5.2", "opus-4.5", "gemini-3-flash", "grok-4.1", "kimi-k2"];
 
 type ModelSectionId = "all" | "favorites" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 
@@ -208,9 +214,9 @@ function storeGuestModelId(modelId: string): void {
 function loadModelFavorites(): string[] {
   try {
     const raw = localStorage.getItem(MODEL_FAVORITES_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return [...DEFAULT_MODEL_FAVORITES];
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) return [...DEFAULT_MODEL_FAVORITES];
     const out: string[] = [];
     for (const item of parsed) {
       if (typeof item !== "string") continue;
@@ -220,7 +226,7 @@ function loadModelFavorites(): string[] {
     }
     return Array.from(new Set(out)).slice(0, 50);
   } catch {
-    return [];
+    return [...DEFAULT_MODEL_FAVORITES];
   }
 }
 
@@ -636,6 +642,7 @@ type AutomationDelivery = {
 
 type PublicRoute =
   | { kind: "app" }
+  | { kind: "auth" }
   | { kind: "community_landing"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -687,8 +694,95 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
 
 const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
+const PENDING_AUTH_INTENT_STORAGE_KEY = "arx_pending_auth_intent_v1";
+const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+const ONBOARDING_DONE_STORAGE_KEY = "arx_onboarding_done_v1";
 const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
 const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+type PendingAuthIntent =
+  | {
+      v: 1;
+      reason: "select_model";
+      return_to: string;
+      created_at_ms: number;
+      payload: { model_id: string };
+    }
+  | {
+      v: 1;
+      reason: "export";
+      return_to: string;
+      created_at_ms: number;
+      payload: { kind: "threads" | "messages" | "memory" };
+    };
+
+function readPendingAuthIntent(): PendingAuthIntent | null {
+  try {
+    const raw = localStorage.getItem(PENDING_AUTH_INTENT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const v = (parsed as { v?: unknown }).v;
+    const reason = (parsed as { reason?: unknown }).reason;
+    const returnTo = (parsed as { return_to?: unknown }).return_to;
+    const createdAtMs = (parsed as { created_at_ms?: unknown }).created_at_ms;
+    const payload = (parsed as { payload?: unknown }).payload;
+    if (v !== 1) return null;
+    if (typeof reason !== "string") return null;
+    if (typeof returnTo !== "string") return null;
+    if (typeof createdAtMs !== "number" || !Number.isFinite(createdAtMs)) return null;
+    if (!payload || typeof payload !== "object") return null;
+    if (Date.now() - createdAtMs > PENDING_AUTH_INTENT_TTL_MS) {
+      localStorage.removeItem(PENDING_AUTH_INTENT_STORAGE_KEY);
+      return null;
+    }
+    if (reason === "select_model") {
+      const modelId = (payload as { model_id?: unknown }).model_id;
+      if (typeof modelId !== "string" || !modelId.trim()) return null;
+      return { v: 1, reason: "select_model", return_to: returnTo, created_at_ms: createdAtMs, payload: { model_id: modelId } };
+    }
+    if (reason === "export") {
+      const kind = (payload as { kind?: unknown }).kind;
+      if (kind !== "threads" && kind !== "messages" && kind !== "memory") return null;
+      return { v: 1, reason: "export", return_to: returnTo, created_at_ms: createdAtMs, payload: { kind } };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function storePendingAuthIntent(intent: PendingAuthIntent): void {
+  try {
+    localStorage.setItem(PENDING_AUTH_INTENT_STORAGE_KEY, JSON.stringify(intent));
+  } catch {
+    // ignore
+  }
+}
+
+function clearPendingAuthIntent(): void {
+  try {
+    localStorage.removeItem(PENDING_AUTH_INTENT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function isOnboardingDone(): boolean {
+  try {
+    return localStorage.getItem(ONBOARDING_DONE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markOnboardingDone(): void {
+  try {
+    localStorage.setItem(ONBOARDING_DONE_STORAGE_KEY, "1");
+  } catch {
+    // ignore
+  }
+}
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
@@ -718,6 +812,9 @@ async function copyTextToClipboard(text: string): Promise<void> {
 
 function readPublicRouteFromLocation(): PublicRoute {
   const path = window.location.pathname || "/";
+  if (path === "/auth") {
+    return { kind: "auth" };
+  }
   if (path.startsWith("/c/")) {
     const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
     if (slug) return { kind: "community_landing", slug };
@@ -2270,6 +2367,7 @@ export default function App() {
   const refreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
   const lastCheckoutFinalizeSessionIdRef = useRef<string | null>(null);
+  const didJustSignInRef = useRef(false);
 
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
 
@@ -2358,6 +2456,7 @@ export default function App() {
   const [finalizeCreateCommunityError, setFinalizeCreateCommunityError] = useState<string | null>(null);
   const builderUpgradeModalBodyRef = useRef<HTMLDivElement | null>(null);
   const [showBuilderUpgradeScrollHint, setShowBuilderUpgradeScrollHint] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<null | "signed_in" | "plans">(null);
 
   const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">("idle");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -2842,7 +2941,6 @@ export default function App() {
   const [modelPickerQuery, setModelPickerQuery] = useState("");
   const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
   const [modelFavorites, setModelFavorites] = useState<string[]>(() => loadModelFavorites());
-  const [modelPickerNotice, setModelPickerNotice] = useState<string | null>(null);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
 
@@ -3221,12 +3319,46 @@ export default function App() {
       }
 
       const session: SupabaseSession = { ...parsed.session, user };
+      didJustSignInRef.current = true;
       persistSupabaseSession(session);
       setSupabaseSession(session);
+      const pendingIntent = readPendingAuthIntent();
+      if (window.location.pathname === "/auth") {
+        // Return to the app once authenticated; any gated action resumes after onboarding.
+        const nextPath = (pendingIntent?.return_to ?? "/").trim() || "/";
+        window.history.replaceState({}, document.title, nextPath);
+        setPublicRoute(readPublicRouteFromLocation());
+        return;
+      }
       // Preserve query params (e.g. invite codes) while clearing the OAuth hash.
       window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    if (!didJustSignInRef.current) return;
+    didJustSignInRef.current = false;
+
+    if (isOnboardingDone()) {
+      resumePendingAuthIntent();
+      return;
+    }
+    if (readPublicRouteFromLocation().kind !== "app") {
+      resumePendingAuthIntent();
+      return;
+    }
+    setOnboardingStep("signed_in");
+  }, [supabaseSession]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    if (onboardingStep !== "plans") return;
+    if (isBuilderUpgradeOpen) return;
+    setOnboardingStep(null);
+    markOnboardingDone();
+    resumePendingAuthIntent();
+  }, [supabaseSession, onboardingStep, isBuilderUpgradeOpen]);
 
   useEffect(() => {
     if (refreshTimeoutRef.current) {
@@ -4506,6 +4638,34 @@ export default function App() {
     const redirectTo = encodeURIComponent(getOAuthRedirectUrl());
     const authUrl = `${url}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
     window.location.assign(authUrl);
+  }
+
+  function resumePendingAuthIntent(): void {
+    if (!supabaseSession) return;
+    const intent = readPendingAuthIntent();
+    if (!intent) return;
+    clearPendingAuthIntent();
+
+    if (intent.reason === "select_model") {
+      const modelId = intent.payload.model_id.trim();
+      if (!modelId) return;
+      setActiveModelId(modelId);
+      setModelPickerQuery("");
+      setModelPickerSection(inferProviderSection(modelId));
+      setIsModelPickerOpen(true);
+      return;
+    }
+
+    if (intent.reason === "export") {
+      const kind = intent.payload.kind;
+      if (kind === "threads") {
+        void exportThreadsCsv();
+      } else if (kind === "messages") {
+        void exportMessagesCsv();
+      } else if (kind === "memory") {
+        void exportMemoryCsv();
+      }
+    }
   }
 
   async function handleSendMagicLink(email: string): Promise<void> {
@@ -6894,7 +7054,18 @@ export default function App() {
   }
 
   async function exportThreadsCsv() {
-    if (!supabaseSession) return;
+    if (!supabaseSession) {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      storePendingAuthIntent({
+        v: 1,
+        reason: "export",
+        return_to: returnTo,
+        created_at_ms: Date.now(),
+        payload: { kind: "threads" },
+      });
+      navigateTo("/auth");
+      return;
+    }
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -6917,7 +7088,18 @@ export default function App() {
   }
 
   async function exportMessagesCsv() {
-    if (!supabaseSession) return;
+    if (!supabaseSession) {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      storePendingAuthIntent({
+        v: 1,
+        reason: "export",
+        return_to: returnTo,
+        created_at_ms: Date.now(),
+        payload: { kind: "messages" },
+      });
+      navigateTo("/auth");
+      return;
+    }
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -6951,7 +7133,18 @@ export default function App() {
   }
 
   async function exportMemoryCsv() {
-    if (!supabaseSession) return;
+    if (!supabaseSession) {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      storePendingAuthIntent({
+        v: 1,
+        reason: "export",
+        return_to: returnTo,
+        created_at_ms: Date.now(),
+        payload: { kind: "memory" },
+      });
+      navigateTo("/auth");
+      return;
+    }
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -8114,8 +8307,8 @@ export default function App() {
     }
   }
 
-  async function persistCommunityAgentTemplateName(slot: number, nextName: string): Promise<boolean> {
-    if (!supabaseSession || !activeCommunityId) return;
+	  async function persistCommunityAgentTemplateName(slot: number, nextName: string): Promise<boolean> {
+	    if (!supabaseSession || !activeCommunityId) return false;
 
     const row = communityAgentDrafts.find((d) => d.slot === slot);
     if (!row) return false;
@@ -9860,66 +10053,74 @@ export default function App() {
 		    if (!modelToggles.some((toggle) => toggle.id === model.id)) return false;
 		    if (model.access === "paid") return hasPaidAccess;
 		    return true;
-		  };
+			  };
 
-		  const openModelPicker = () => {
-		    setModelPickerNotice(null);
-		    setModelPickerQuery("");
-		    if (!supabaseSession) {
-		      setModelPickerSection("free");
-		    } else if (favoriteSet.size > 0) {
+			  const openModelPicker = () => {
+			    setModelPickerQuery("");
+			    if (!supabaseSession) {
+			      setModelPickerSection("free");
+			    } else if (favoriteSet.size > 0) {
 		      setModelPickerSection("favorites");
 		    } else {
 		      setModelPickerSection(inferProviderSection(selectedModelId || DEFAULT_ACTIVE_MODEL_ID));
 		    }
-		    setIsModelPickerOpen(true);
-		  };
+			    setIsModelPickerOpen(true);
+			  };
 
-		  const closeModelPicker = () => {
-		    setIsModelPickerOpen(false);
-		    setModelPickerNotice(null);
-		    setModelPickerQuery("");
-		  };
+			  const closeModelPicker = () => {
+			    setIsModelPickerOpen(false);
+			    setModelPickerQuery("");
+			  };
 
-		  const handleSelectPickerModel = (model: CuratedPickerModel) => {
-		    if (!canSelectPickerModel(model)) {
-		      if (supabaseSession && !modelToggles.some((toggle) => toggle.id === model.id)) {
-		        setModelPickerNotice("These models are coming next (backend not wired yet).");
-		        return;
-		      }
-		      if (!supabaseSession && model.access !== "guest") {
-		        setModelPickerNotice("Sign in to unlock more models.");
-		      } else if (supabaseSession && model.access === "paid" && !hasPaidAccess) {
-		        setModelPickerNotice("Upgrade to unlock OpenRouter models (payments coming soon).");
-		      } else if (supabaseSession && model.access === "guest") {
-		        setModelPickerNotice("Guest demo models are available only when signed out.");
-		      } else {
-		        setModelPickerNotice("This model is not available yet.");
-		      }
-		      return;
-		    }
+			  const handleSelectPickerModel = (model: CuratedPickerModel) => {
+			    if (!canSelectPickerModel(model)) {
+			      if (supabaseSession && !modelToggles.some((toggle) => toggle.id === model.id)) {
+			        showAppToastMessage("This model is coming soon.");
+			        return;
+			      }
+			      if (!supabaseSession && model.access !== "guest") {
+			        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+			        storePendingAuthIntent({
+			          v: 1,
+			          reason: "select_model",
+			          return_to: returnTo,
+			          created_at_ms: Date.now(),
+			          payload: { model_id: model.id },
+			        });
+			        closeModelPicker();
+			        navigateTo("/auth");
+			        return;
+			      }
+			      if (supabaseSession && model.access === "paid" && !hasPaidAccess) {
+			        closeModelPicker();
+			        setBuilderUpgradeContext("builder");
+			        setIsBuilderUpgradeOpen(true);
+			        return;
+			      }
+			      if (supabaseSession && model.access === "guest") {
+			        showAppToastMessage("Guest demo models are available only when signed out.");
+			        return;
+			      }
+			      showAppToastMessage("This model is not available yet.");
+			      return;
+			    }
 
-		    setModelPickerNotice(null);
-		    if (!supabaseSession) {
-		      setGuestModelId(model.id);
-		      try {
-		        const storage = loadGuestThreadStorage();
-		        storeGuestThreadStorage({ ...storage, model_id: model.id });
-		      } catch {
-		        // ignore
-		      }
-		      closeModelPicker();
-		      workspaceAskInputRef.current?.focus();
-		      return;
-		    }
+			    if (!supabaseSession) {
+			      setGuestModelId(model.id);
+			      try {
+			        const storage = loadGuestThreadStorage();
+			        storeGuestThreadStorage({ ...storage, model_id: model.id });
+			      } catch {
+			        // ignore
+			      }
+			      return;
+			    }
 
-		    setActiveModelId(model.id);
-		    if (activeThreadId) {
-		      void updateThreadModel(activeThreadId, model.id, supabaseSession);
-		    }
-		    closeModelPicker();
-		    workspaceAskInputRef.current?.focus();
-		  };
+			    setActiveModelId(model.id);
+			    if (activeThreadId) {
+			      void updateThreadModel(activeThreadId, model.id, supabaseSession);
+			    }
+			  };
 
 	  const filteredDiscoverCommunities = useMemo(() => {
 	    const q = discoverQuery.trim().toLowerCase();
@@ -10004,9 +10205,9 @@ export default function App() {
       (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
       readPendingPurchaseClaimToken();
 
-    return (
-      <div className="app-root public-root">
-        <header className="app-topbar">
+	    return (
+	      <div className="app-root public-root">
+	        <header className="app-topbar">
           <div className="topbar-left">
             <button className="back-to-workspace" type="button" onClick={() => navigateTo("/")}>
               <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
@@ -10028,10 +10229,88 @@ export default function App() {
           </div>
         </header>
 
-        <main className="workspace community-mode">
-	          {publicRoute.kind === "community_landing" && (
+	        <main className="workspace community-mode">
+	          {publicRoute.kind === "auth" && (
 	            <div className="community-panel discover-panel">
 	              <div className="discover-hero">
+	                <div className="discover-hero-copy">
+	                  <div className="discover-title">{supabaseSession ? "You're signed in" : "Sign in"}</div>
+	                  <div className="discover-subtitle">
+	                    {(() => {
+	                      const intent = readPendingAuthIntent();
+	                      if (!intent) return "Continue to unlock more of Arx.";
+	                      if (intent.reason === "select_model") return "Continue to select this model and sync your chats.";
+	                      if (intent.reason === "export") return "Continue to export your data.";
+	                      return "Continue to unlock more of Arx.";
+	                    })()}
+	                  </div>
+	                </div>
+	                <div className="discover-controls">
+	                  {!supabaseSession ? (
+	                    <button className="discover-refresh" type="button" onClick={handleSignIn}>
+	                      Continue with Google
+	                    </button>
+	                  ) : (
+	                    <button
+	                      className="discover-refresh"
+	                      type="button"
+	                      onClick={() => {
+	                        const intent = readPendingAuthIntent();
+	                        const target = (intent?.return_to ?? "/").trim() || "/";
+	                        clearPendingAuthIntent();
+	                        navigateTo(target, { replace: true });
+	                      }}
+	                    >
+	                      Continue
+	                    </button>
+	                  )}
+	                  <button
+	                    className="secondary"
+	                    type="button"
+	                    onClick={() => {
+	                      const intent = readPendingAuthIntent();
+	                      const target = (intent?.return_to ?? "/").trim() || "/";
+	                      clearPendingAuthIntent();
+	                      navigateTo(target, { replace: true });
+	                    }}
+	                  >
+	                    Continue as guest
+	                  </button>
+	                </div>
+	              </div>
+	              {!supabaseSession && (
+	                <div className="chat-empty">
+	                  <div className="discover-empty-text">Or get a magic link:</div>
+	                  <div className="discover-controls">
+	                    <input
+	                      className="discover-search"
+	                      type="email"
+	                      inputMode="email"
+	                      placeholder="you@example.com"
+	                      value={magicLinkEmail}
+	                      onChange={(event) => setMagicLinkEmail(event.target.value)}
+	                    />
+	                    <button
+	                      className="discover-refresh"
+	                      type="button"
+	                      disabled={magicLinkStatus === "sending"}
+	                      onClick={() => void handleSendMagicLink(magicLinkEmail)}
+	                    >
+	                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+	                    </button>
+	                  </div>
+	                  {magicLinkStatus === "sent" && (
+	                    <div className="chat-empty">Check your email for a sign-in link.</div>
+	                  )}
+	                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+	                </div>
+	              )}
+	              {authError && <div className="auth-error">{authError}</div>}
+	            </div>
+	          )}
+		          {publicRoute.kind === "community_landing" && (
+		            <div className="community-panel discover-panel">
+		              <div className="discover-hero">
 	                <div className="discover-hero-copy">
 	                  <div className="discover-title">{publicCommunity?.name ?? publicRoute.slug}</div>
 	                  <div className="discover-subtitle">
@@ -12155,9 +12434,7 @@ export default function App() {
 	                              />
 	                            </div>
 
-	                            {modelPickerNotice && <div className="model-picker-notice">{modelPickerNotice}</div>}
-
-	                            <div className="model-picker-body">
+		                            <div className="model-picker-body">
 	                              <nav className="model-picker-nav" aria-label="Model sections">
 	                                {(
 	                                  [
@@ -12192,16 +12469,56 @@ export default function App() {
 	                                          <path d="M12 7c2.2 0 4-1.8 4-4-2.2 0-4 1.8-4 4z" />
 	                                        </svg>
 	                                      ),
-	                                    },
-	                                    { id: "openai", label: "OpenAI", icon: <span className="model-picker-nav-logo">O</span> },
-	                                    { id: "anthropic", label: "Anthropic", icon: <span className="model-picker-nav-logo">A</span> },
-	                                    { id: "google", label: "Google", icon: <span className="model-picker-nav-logo">G</span> },
-	                                    { id: "x-ai", label: "xAI", icon: <span className="model-picker-nav-logo">x</span> },
-	                                    { id: "openrouter", label: "OpenRouter", icon: <span className="model-picker-nav-logo">R</span> },
-	                                  ] as Array<{ id: ModelSectionId; label: string; icon: ReactNode; filled?: boolean }>
-	                                ).map((section) => (
-	                                  <button
-	                                    key={section.id}
+		                                    },
+		                                    {
+		                                      id: "openai",
+		                                      label: "OpenAI",
+		                                      icon: (
+		                                        <span className="model-picker-nav-logo">
+		                                          <img className="model-picker-nav-logo-img monochrome" src={openAiLogo} alt="" />
+		                                        </span>
+		                                      ),
+		                                    },
+		                                    {
+		                                      id: "anthropic",
+		                                      label: "Anthropic",
+		                                      icon: (
+		                                        <span className="model-picker-nav-logo">
+		                                          <img className="model-picker-nav-logo-img monochrome" src={anthropicLogo} alt="" />
+		                                        </span>
+		                                      ),
+		                                    },
+		                                    {
+		                                      id: "google",
+		                                      label: "Google",
+		                                      icon: (
+		                                        <span className="model-picker-nav-logo">
+		                                          <img className="model-picker-nav-logo-img" src={googleLogo} alt="" />
+		                                        </span>
+		                                      ),
+		                                    },
+		                                    {
+		                                      id: "x-ai",
+		                                      label: "xAI",
+		                                      icon: (
+		                                        <span className="model-picker-nav-logo">
+		                                          <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" />
+		                                        </span>
+		                                      ),
+		                                    },
+		                                    {
+		                                      id: "openrouter",
+		                                      label: "OpenRouter",
+		                                      icon: (
+		                                        <span className="model-picker-nav-logo">
+		                                          <img className="model-picker-nav-logo-img monochrome" src={openRouterLogo} alt="" />
+		                                        </span>
+		                                      ),
+		                                    },
+		                                  ] as Array<{ id: ModelSectionId; label: string; icon: ReactNode; filled?: boolean }>
+		                                ).map((section) => (
+		                                  <button
+		                                    key={section.id}
 	                                    className={
 	                                      modelPickerSection === section.id
 	                                        ? `model-picker-nav-btn${section.filled ? " filled" : ""} active`
@@ -15444,13 +15761,40 @@ export default function App() {
               </div>
             </div>
           );
-        })()}
+	        })()}
 
-	      {supabaseSession && platformQuotaModal && (
-	        <div
-	          className="modal-overlay"
-	          onClick={() => {
-	            if (isPlatformQuotaModalRunning) return;
+		      {supabaseSession && onboardingStep === "signed_in" && (
+		        <div className="modal-overlay">
+		          <div className="modal modal-onboarding" onClick={(event) => event.stopPropagation()}>
+		            <div className="modal-header">
+		              <div className="modal-title">Signed in successfully</div>
+		            </div>
+		            <div className="modal-body">
+		              <div className="model-note">Your chats will now sync across devices.</div>
+		            </div>
+		            <div className="modal-footer">
+		              <div className="auth-actions">
+		                <button
+		                  type="button"
+		                  onClick={() => {
+		                    setOnboardingStep("plans");
+		                    setBuilderUpgradeContext("builder");
+		                    setIsBuilderUpgradeOpen(true);
+		                  }}
+		                >
+		                  Next
+		                </button>
+		              </div>
+		            </div>
+		          </div>
+		        </div>
+		      )}
+
+		      {supabaseSession && platformQuotaModal && (
+		        <div
+		          className="modal-overlay"
+		          onClick={() => {
+		            if (isPlatformQuotaModalRunning) return;
 	            setPlatformQuotaModal(null);
 	          }}
 	        >
