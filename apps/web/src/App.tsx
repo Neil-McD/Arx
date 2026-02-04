@@ -707,13 +707,6 @@ type PendingAuthIntent =
       return_to: string;
       created_at_ms: number;
       payload: { model_id: string };
-    }
-  | {
-      v: 1;
-      reason: "export";
-      return_to: string;
-      created_at_ms: number;
-      payload: { kind: "threads" | "messages" | "memory" };
     };
 
 function readPendingAuthIntent(): PendingAuthIntent | null {
@@ -740,11 +733,6 @@ function readPendingAuthIntent(): PendingAuthIntent | null {
       const modelId = (payload as { model_id?: unknown }).model_id;
       if (typeof modelId !== "string" || !modelId.trim()) return null;
       return { v: 1, reason: "select_model", return_to: returnTo, created_at_ms: createdAtMs, payload: { model_id: modelId } };
-    }
-    if (reason === "export") {
-      const kind = (payload as { kind?: unknown }).kind;
-      if (kind !== "threads" && kind !== "messages" && kind !== "memory") return null;
-      return { v: 1, reason: "export", return_to: returnTo, created_at_ms: createdAtMs, payload: { kind } };
     }
     return null;
   } catch {
@@ -3340,12 +3328,13 @@ export default function App() {
     if (!didJustSignInRef.current) return;
     didJustSignInRef.current = false;
 
+    // If the user arrived via an auth gate (e.g. locked model selection), apply it immediately.
+    resumePendingAuthIntent();
+
     if (isOnboardingDone()) {
-      resumePendingAuthIntent();
       return;
     }
     if (readPublicRouteFromLocation().kind !== "app") {
-      resumePendingAuthIntent();
       return;
     }
     setOnboardingStep("signed_in");
@@ -3357,7 +3346,6 @@ export default function App() {
     if (isBuilderUpgradeOpen) return;
     setOnboardingStep(null);
     markOnboardingDone();
-    resumePendingAuthIntent();
   }, [supabaseSession, onboardingStep, isBuilderUpgradeOpen]);
 
   useEffect(() => {
@@ -4650,21 +4638,7 @@ export default function App() {
       const modelId = intent.payload.model_id.trim();
       if (!modelId) return;
       setActiveModelId(modelId);
-      setModelPickerQuery("");
-      setModelPickerSection(inferProviderSection(modelId));
-      setIsModelPickerOpen(true);
       return;
-    }
-
-    if (intent.reason === "export") {
-      const kind = intent.payload.kind;
-      if (kind === "threads") {
-        void exportThreadsCsv();
-      } else if (kind === "messages") {
-        void exportMessagesCsv();
-      } else if (kind === "memory") {
-        void exportMemoryCsv();
-      }
     }
   }
 
@@ -7054,18 +7028,7 @@ export default function App() {
   }
 
   async function exportThreadsCsv() {
-    if (!supabaseSession) {
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      storePendingAuthIntent({
-        v: 1,
-        reason: "export",
-        return_to: returnTo,
-        created_at_ms: Date.now(),
-        payload: { kind: "threads" },
-      });
-      navigateTo("/auth");
-      return;
-    }
+    if (!supabaseSession) return;
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -7088,18 +7051,7 @@ export default function App() {
   }
 
   async function exportMessagesCsv() {
-    if (!supabaseSession) {
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      storePendingAuthIntent({
-        v: 1,
-        reason: "export",
-        return_to: returnTo,
-        created_at_ms: Date.now(),
-        payload: { kind: "messages" },
-      });
-      navigateTo("/auth");
-      return;
-    }
+    if (!supabaseSession) return;
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -7133,18 +7085,7 @@ export default function App() {
   }
 
   async function exportMemoryCsv() {
-    if (!supabaseSession) {
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      storePendingAuthIntent({
-        v: 1,
-        reason: "export",
-        return_to: returnTo,
-        created_at_ms: Date.now(),
-        payload: { kind: "memory" },
-      });
-      navigateTo("/auth");
-      return;
-    }
+    if (!supabaseSession) return;
     const url = getSupabaseUrl();
     if (!url) return;
     setExportError(null);
@@ -10240,7 +10181,6 @@ export default function App() {
 	                      const intent = readPendingAuthIntent();
 	                      if (!intent) return "Continue to unlock more of Arx.";
 	                      if (intent.reason === "select_model") return "Continue to select this model and sync your chats.";
-	                      if (intent.reason === "export") return "Continue to export your data.";
 	                      return "Continue to unlock more of Arx.";
 	                    })()}
 	                  </div>
@@ -10656,57 +10596,43 @@ export default function App() {
     );
   }
 
-  const showHeaderIslands = activePage === "workspace" && activeView === "home";
-  const communityHomeButton = (
-    <button
-      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-      onClick={() => {
-        const nextPage: AppPage = communities.length === 0 ? "discover" : "community";
-        const nextCommunityId = nextPage === "community" ? activeCommunityId ?? communities[0]?.id ?? null : activeCommunityId;
-        const willChange =
-          activeView !== "home" ||
-          activePage !== nextPage ||
-          (nextPage === "community" &&
-            (communityTab !== "chat" || (activeCommunityId ?? null) !== nextCommunityId));
-        if (willChange) pushNavSnapshot();
-        setActiveView("home");
-        if (communities.length === 0) {
-          setActivePage("discover");
-          return;
-        }
-        setActivePage("community");
-        setCommunityTab("chat");
-        setUnreadCount(0);
-        setActiveCommunityId((prev) => prev ?? communities[0]?.id ?? null);
-      }}
-      aria-label="Community"
-      title={activeCommunity?.name ?? "Community"}
-      type="button"
-    >
-      {activeCommunity ? (
-        activeCommunity.avatar_url ? (
-          <img
-            className="community-btn-avatar"
-            src={activeCommunity.avatar_url}
-            alt={activeCommunity.name}
-            loading="lazy"
-          />
-        ) : (
-          <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
-        )
-      ) : (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      )}
-      {unreadCount > 0 && activePage !== "community" && (
-        <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-      )}
-    </button>
-  );
+	  const showHeaderIslands = activePage === "workspace" && activeView === "home";
+	  const communityHomeButton = activeCommunity ? (
+	    <button
+	      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
+	      onClick={() => {
+	        const nextCommunityId = activeCommunityId ?? activeCommunity.id;
+	        const willChange =
+	          activeView !== "home" ||
+	          activePage !== "community" ||
+	          communityTab !== "chat" ||
+	          (activeCommunityId ?? null) !== nextCommunityId;
+	        if (willChange) pushNavSnapshot();
+	        setActiveView("home");
+	        setActivePage("community");
+	        setCommunityTab("chat");
+	        setUnreadCount(0);
+	        setActiveCommunityId(nextCommunityId);
+	      }}
+	      aria-label="Open community"
+	      title={activeCommunity.name}
+	      type="button"
+	    >
+	      {activeCommunity.avatar_url ? (
+	        <img
+	          className="community-btn-avatar"
+	          src={activeCommunity.avatar_url}
+	          alt={activeCommunity.name}
+	          loading="lazy"
+	        />
+	      ) : (
+	        <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
+	      )}
+	      {unreadCount > 0 && activePage !== "community" && (
+	        <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+	      )}
+	    </button>
+	  ) : null;
 
   return (
     <div
@@ -11941,14 +11867,14 @@ export default function App() {
 		              <div className="workspace-body">
                     {inferenceToast && <div className="memory-toast success-toast">{inferenceToast}</div>}
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
-		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
-	                    <div className="message-list-inner">
-	                    {!activeThreadId && (
-	                      <>
-	                        {showEmptyThreadLandingSkeleton ? (
-	                          <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
-	                            <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
-	                            <div className="web-skeleton-block web-skeleton-subtitle" aria-hidden="true" />
+			                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
+		                    <div className="message-list-inner">
+		                    {!threadMessages.some((m) => m.role !== "system") && (
+		                      <>
+		                        {showEmptyThreadLandingSkeleton ? (
+		                          <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
+		                            <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
+		                            <div className="web-skeleton-block web-skeleton-subtitle" aria-hidden="true" />
 	                            <div className="web-starter-tabs web-starter-tabs-skeleton" aria-hidden="true">
 	                              <div className="web-skeleton-pill" />
 	                              <div className="web-skeleton-pill" />
@@ -11961,13 +11887,13 @@ export default function App() {
 	                              <div className="web-skeleton-row" />
 	                            </div>
 	                          </div>
-	                        ) : (
-	                          <div className="web-empty-thread" role="region" aria-label="Start a new thread">
-	                            <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
-	                            <div className="web-empty-thread-subtitle">{emptyThreadLanding.subtitle}</div>
-	                            {(() => {
-	                              const activeTab =
-	                                emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
+		                        ) : (
+		                          <div className="web-empty-thread" role="region" aria-label="Start a new thread">
+		                            <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
+		                            <div className="web-empty-thread-subtitle">{emptyThreadLanding.subtitle}</div>
+		                            {(() => {
+		                              const activeTab =
+		                                emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
 	                                emptyThreadLanding.tabs[0];
 	                              const prompts = activeTab?.prompts ?? [];
 	                              return (
@@ -12009,11 +11935,11 @@ export default function App() {
 	                                    ))}
 	                                  </div>
 	                                </>
-	                              );
-	                            })()}
-	                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
-	                              <div className="web-download-card" role="note" aria-label="Desktop app">
-	                                <button
+		                              );
+		                            })()}
+		                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
+		                              <div className="web-download-card" role="note" aria-label="Desktop app">
+		                                <button
 	                                  className="web-download-close"
 	                                  type="button"
 	                                  onClick={dismissDesktopDownload}
@@ -15774,6 +15700,16 @@ export default function App() {
 		            </div>
 		            <div className="modal-footer">
 		              <div className="auth-actions">
+		                <button
+		                  className="secondary"
+		                  type="button"
+		                  onClick={() => {
+		                    setOnboardingStep(null);
+		                    markOnboardingDone();
+		                  }}
+		                >
+		                  Skip
+		                </button>
 		                <button
 		                  type="button"
 		                  onClick={() => {
