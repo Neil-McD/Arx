@@ -1592,7 +1592,7 @@
   left: 0;
   bottom: calc(100% + 10px);
   z-index: 80;
-  width: min(720px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
 }
 
 @media (max-width: 760px) {
