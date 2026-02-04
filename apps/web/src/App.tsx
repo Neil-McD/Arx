@@ -2976,6 +2976,11 @@ export default function App() {
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
   const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
 
+  const openAuthGate = () => {
+    setAuthError(null);
+    setIsAuthGateOpen(true);
+  };
+
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -4047,7 +4052,7 @@ export default function App() {
   async function handleCreateCommunityPrimaryAction(): Promise<void> {
     setFinalizeCreateCommunityError(null);
     if (!supabaseSession) {
-      handleSignIn();
+      openAuthGate();
       return;
     }
     const status = builderBillingStatus ?? (await loadBuilderBillingStatus(supabaseSession));
@@ -4086,7 +4091,7 @@ export default function App() {
   async function handleCreateCommunity() {
     setCreateCommunityError(null);
     if (!supabaseSession) {
-      setCreateCommunityError("Sign in to create a community.");
+      openAuthGate();
       return;
     }
 
@@ -4906,7 +4911,7 @@ export default function App() {
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       storePendingPurchaseClaimToken(token);
-      handleSignIn();
+      openAuthGate();
       return;
     }
 
@@ -4955,7 +4960,7 @@ export default function App() {
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
-      handleSignIn();
+      openAuthGate();
       return;
     }
 
@@ -5175,8 +5180,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      setAuthError("Sign in to upgrade.");
-      handleSignIn();
+      openAuthGate();
       return;
     }
     setBuilderBillingError(null);
@@ -5217,8 +5221,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      setAuthError("Sign in to manage billing.");
-      handleSignIn();
+      openAuthGate();
       return;
     }
 	    setBuilderBillingError(null);
@@ -5257,8 +5260,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      setAuthError("Sign in to set up payouts.");
-      handleSignIn();
+      openAuthGate();
       return;
     }
     setBuilderBillingError(null);
@@ -5402,8 +5404,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      setAuthError("Sign in to claim access.");
-      handleSignIn();
+      openAuthGate();
       return 0;
     }
 
@@ -6553,7 +6554,7 @@ export default function App() {
     if (!modal) return;
     if (!supabaseSession) {
       setPlatformQuotaModal(null);
-      handleSignIn();
+      openAuthGate();
       return;
     }
     if (isPlatformQuotaModalRunning) return;
@@ -6725,8 +6726,8 @@ export default function App() {
 
     if (!supabaseSession) {
       if (hasAttachments) {
-        setThreadError("Sign in to send files.");
-        handleSignIn();
+        setThreadError(null);
+        openAuthGate();
         return;
       }
       const now = new Date().toISOString();
@@ -6935,7 +6936,7 @@ export default function App() {
   async function retryLastTurn() {
     if (isSendingMessage) return;
     if (!supabaseSession) {
-      handleSignIn();
+      openAuthGate();
       return;
     }
     const threadId = activeThreadId;
@@ -6987,7 +6988,7 @@ export default function App() {
   async function regenerateLastTurn() {
     if (isSendingMessage) return;
     if (!supabaseSession) {
-      handleSignIn();
+      openAuthGate();
       return;
     }
     const threadId = activeThreadId;
@@ -7044,7 +7045,7 @@ export default function App() {
     const value = provider?.inputValue.trim() ?? "";
     if (!value) return;
     if (!supabaseSession) {
-      handleSignIn();
+      openAuthGate();
       return;
     }
     const url = getSupabaseUrl();
@@ -7462,8 +7463,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        setAuthError("Sign in to save memory.");
-        handleSignIn();
+        openAuthGate();
         return;
       }
       const scope = newPersonalMemoryScope === "workspace" ? "global" : newPersonalMemoryScope;
@@ -7499,8 +7499,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        setAuthError("Sign in to update memory.");
-        handleSignIn();
+        openAuthGate();
         return;
       }
       const response = await fetchWithSupabaseAuth(
@@ -7530,8 +7529,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        setAuthError("Sign in to delete memory.");
-        handleSignIn();
+        openAuthGate();
         return;
       }
       const response = await fetchWithSupabaseAuth(
@@ -8659,7 +8657,8 @@ export default function App() {
     const session = sessionRef.current ?? supabaseSession;
     const url = getSupabaseUrl();
     if (!session || !url) {
-      setProfileSaveError("Sign in to save your profile.");
+      setProfileSaveError(null);
+      openAuthGate();
       return;
     }
 
@@ -10232,7 +10231,7 @@ export default function App() {
           </div>
           <div className="topbar-right">
             {showSignIn ? (
-              <button className="secondary" type="button" onClick={handleSignIn}>
+              <button className="secondary" type="button" onClick={openAuthGate}>
                 Sign in
               </button>
             ) : (
@@ -10452,7 +10451,7 @@ export default function App() {
                     onClick={() => {
                       if (!pendingToken) return;
                       if (showSignIn) {
-                        handleSignIn();
+                        openAuthGate();
                         return;
                       }
                       void redeemPurchaseClaim(pendingToken);
@@ -11277,7 +11276,7 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="account-row">
-                        <button type="button" onClick={handleSignIn}>
+                        <button type="button" onClick={openAuthGate}>
                           Sign in
                         </button>
                       </div>
@@ -12738,11 +12737,21 @@ export default function App() {
                 <>
                   {communityTab === "chat" && (
                     <div className="community-chat">
-                      <div className="workspace-body chat-feed">
-                        <div className="chat-messages" ref={communityChatListRef} onScroll={handleChatScroll}>
-                          {!supabaseSession && (
-                            <div className="chat-empty">Sign in to access community chat.</div>
-                          )}
+	                      <div className="workspace-body chat-feed">
+	                        <div className="chat-messages" ref={communityChatListRef} onScroll={handleChatScroll}>
+	                          {!supabaseSession && (
+	                            <div className="chat-empty">
+	                              <div>Sign in to access community chat.</div>
+	                              <button
+	                                className="secondary"
+	                                type="button"
+	                                onClick={openAuthGate}
+	                                style={{ marginTop: 12 }}
+	                              >
+	                                Sign in
+	                              </button>
+	                            </div>
+	                          )}
                           {supabaseSession && !activeCommunity && (
                             <div className="chat-empty">Select a community to start chatting.</div>
                           )}
@@ -13304,15 +13313,25 @@ export default function App() {
                     </div>
                   )}
 
-		                  {communityTab === "settings" && (
-		                    <div className="settings-panel community-settings-panel">
-			                      {!activeCommunity ? (
-			                        <div className="chat-empty">Select a community to view settings.</div>
-			                      ) : !supabaseSession ? (
-			                        <div className="chat-empty">Sign in to view community settings.</div>
-			                      ) : !canViewActiveCommunitySettings ? (
-			                        <div className="chat-empty">Join this community to view settings.</div>
-			                      ) : canManageMembersActiveCommunity ? (
+			                  {communityTab === "settings" && (
+			                    <div className="settings-panel community-settings-panel">
+				                      {!activeCommunity ? (
+				                        <div className="chat-empty">Select a community to view settings.</div>
+				                      ) : !supabaseSession ? (
+				                        <div className="chat-empty">
+				                          <div>Sign in to view community settings.</div>
+				                          <button
+				                            className="secondary"
+				                            type="button"
+				                            onClick={openAuthGate}
+				                            style={{ marginTop: 12 }}
+				                          >
+				                            Sign in
+				                          </button>
+				                        </div>
+				                      ) : !canViewActiveCommunitySettings ? (
+				                        <div className="chat-empty">Join this community to view settings.</div>
+				                      ) : canManageMembersActiveCommunity ? (
 			                        <>
 			                          <div className="create-community-form community-settings-form">
 			                            <div className="settings-section">
@@ -13713,7 +13732,17 @@ export default function App() {
                       {!activeCommunity ? (
                         <div className="chat-empty">Select a community to configure the AI agent.</div>
                       ) : !supabaseSession ? (
-                        <div className="chat-empty">Sign in to configure the AI agent.</div>
+                        <div className="chat-empty">
+                          <div>Sign in to configure the AI agent.</div>
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={openAuthGate}
+                            style={{ marginTop: 12 }}
+                          >
+                            Sign in
+                          </button>
+                        </div>
                       ) : !canManageMembersActiveCommunity ? (
                         <div className="chat-empty">Only owners and admins can configure the AI agent.</div>
                       ) : isLoadingCommunityAgentDrafts ? (
@@ -14564,15 +14593,25 @@ export default function App() {
                     </div>
                   )}
 
-	                  {communityTab === "analytics" && (
-	                    <div className="settings-panel community-settings-panel">
-	                      {!activeCommunity ? (
-	                        <div className="chat-empty">Select a community to view analytics.</div>
-	                      ) : !supabaseSession ? (
-	                        <div className="chat-empty">Sign in to view community analytics.</div>
-	                      ) : !canViewActiveCommunityAnalytics ? (
-	                        <div className="chat-empty">Only owners and admins can view community analytics.</div>
-		                      ) : (
+		                  {communityTab === "analytics" && (
+		                    <div className="settings-panel community-settings-panel">
+		                      {!activeCommunity ? (
+		                        <div className="chat-empty">Select a community to view analytics.</div>
+		                      ) : !supabaseSession ? (
+		                        <div className="chat-empty">
+		                          <div>Sign in to view community analytics.</div>
+		                          <button
+		                            className="secondary"
+		                            type="button"
+		                            onClick={openAuthGate}
+		                            style={{ marginTop: 12 }}
+		                          >
+		                            Sign in
+		                          </button>
+		                        </div>
+		                      ) : !canViewActiveCommunityAnalytics ? (
+		                        <div className="chat-empty">Only owners and admins can view community analytics.</div>
+			                      ) : (
 		                        <>
 		                          <div className="analytics-header-row">
 		                            <div className="panel-title">Community Analytics</div>
@@ -14817,15 +14856,25 @@ export default function App() {
                     </div>
                   )}
 
-	                  {communityTab === "automations" && (
-	                    <div className="settings-panel community-settings-panel">
-	                      {!activeCommunity ? (
-	                        <div className="chat-empty">Select a community to view automations.</div>
-	                      ) : !supabaseSession ? (
-	                        <div className="chat-empty">Sign in to view community automations.</div>
-	                      ) : !canViewActiveCommunityAutomations ? (
-	                        <div className="chat-empty">Only owners and admins can manage automations.</div>
-	                      ) : (
+		                  {communityTab === "automations" && (
+		                    <div className="settings-panel community-settings-panel">
+		                      {!activeCommunity ? (
+		                        <div className="chat-empty">Select a community to view automations.</div>
+		                      ) : !supabaseSession ? (
+		                        <div className="chat-empty">
+		                          <div>Sign in to view community automations.</div>
+		                          <button
+		                            className="secondary"
+		                            type="button"
+		                            onClick={openAuthGate}
+		                            style={{ marginTop: 12 }}
+		                          >
+		                            Sign in
+		                          </button>
+		                        </div>
+		                      ) : !canViewActiveCommunityAutomations ? (
+		                        <div className="chat-empty">Only owners and admins can manage automations.</div>
+		                      ) : (
 	                        <>
 	                          {automationNotice && (
 	                            <div className="success-toast" style={{ marginBottom: 12 }}>
@@ -15595,7 +15644,7 @@ export default function App() {
                                   disabled={!supabaseSession}
                                   onClick={() => {
                                     if (!supabaseSession) {
-                                      handleSignIn();
+                                      openAuthGate();
                                       return;
                                     }
                                     const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
@@ -16061,13 +16110,21 @@ export default function App() {
 	                </div>
 	              )}
 
-              {!supabaseSession ? (
-                <div className="model-note" style={{ marginTop: 10 }}>
-                  Sign in to confirm your plan status.
-                </div>
-              ) : (
-                <div className="model-note" style={{ marginTop: 10 }}>
-                  {(() => {
+	              {!supabaseSession ? (
+	                <div className="model-note" style={{ marginTop: 10 }}>
+	                  <div>Sign in to confirm your plan status.</div>
+	                  <button
+	                    type="button"
+	                    className="secondary"
+	                    onClick={openAuthGate}
+	                    style={{ marginTop: 12 }}
+	                  >
+	                    Sign in
+	                  </button>
+	                </div>
+	              ) : (
+	                <div className="model-note" style={{ marginTop: 10 }}>
+	                  {(() => {
                     const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
                     const max = builderBillingStatus?.max_communities ?? 0;
                     const feeBps = builderBillingStatus?.platform_fee_bps ?? 1000;
@@ -16252,11 +16309,11 @@ export default function App() {
                   </div>
                   <div className="modal-footer">
                     <div className="create-community-actions">
-	                {!supabaseSession ? (
-	                  <button className="create-community-primary" onClick={() => void handleSignIn()}>
-	                    Sign in to create
-	                  </button>
-	                ) : (
+		                {!supabaseSession ? (
+		                  <button className="create-community-primary" type="button" onClick={openAuthGate}>
+		                    Sign in to create
+		                  </button>
+		                ) : (
 	                  <button
 	                    className="create-community-primary"
 	                    type="button"
