@@ -708,7 +708,97 @@ type PendingAuthIntent =
       return_to: string;
       created_at_ms: number;
       payload: { model_id: string };
+    }
+  | {
+      v: 1;
+      reason: "create_community";
+      return_to: string;
+      created_at_ms: number;
+      payload: { draft_id: string | null };
+    }
+  | {
+      v: 1;
+      reason: "redeem_purchase_claim";
+      return_to: string;
+      created_at_ms: number;
+      payload: { token: string };
+    }
+  | {
+      v: 1;
+      reason: "join_public_community";
+      return_to: string;
+      created_at_ms: number;
+      payload: { community_id: string | null; community_slug: string | null; brandos_aid: string | null };
+    }
+  | {
+      v: 1;
+      reason: "start_builder_checkout";
+      return_to: string;
+      created_at_ms: number;
+      payload: { tier: "builder" | "pro"; context: BuilderUpgradeContext };
+    }
+  | {
+      v: 1;
+      reason: "open_builder_billing_portal";
+      return_to: string;
+      created_at_ms: number;
+      payload: { context: BuilderUpgradeContext };
+    }
+  | {
+      v: 1;
+      reason: "start_payouts_onboarding";
+      return_to: string;
+      created_at_ms: number;
+      payload: Record<string, never>;
+    }
+  | {
+      v: 1;
+      reason: "redeem_pending_purchases";
+      return_to: string;
+      created_at_ms: number;
+      payload: { navigate: boolean; silent_noop: boolean };
+    }
+  | {
+      v: 1;
+      reason: "save_provider_key";
+      return_to: string;
+      created_at_ms: number;
+      payload: { provider_id: ProviderId };
+    }
+  | {
+      v: 1;
+      reason: "save_profile";
+      return_to: string;
+      created_at_ms: number;
+      payload: Record<string, never>;
+    }
+  | {
+      v: 1;
+      reason: "create_memory";
+      return_to: string;
+      created_at_ms: number;
+      payload: { content: string; pinned: boolean };
+    }
+  | {
+      v: 1;
+      reason: "toggle_memory_pinned";
+      return_to: string;
+      created_at_ms: number;
+      payload: { id: string; pinned: boolean };
+    }
+  | {
+      v: 1;
+      reason: "delete_memory";
+      return_to: string;
+      created_at_ms: number;
+      payload: { id: string };
     };
+
+type PendingAuthIntentInput = PendingAuthIntent extends infer T
+  ? T extends { v: 1; return_to: string; created_at_ms: number }
+    ? Omit<T, "v" | "return_to" | "created_at_ms">
+    : never
+  : never;
 
 function readPendingAuthIntent(): PendingAuthIntent | null {
   try {
@@ -733,7 +823,137 @@ function readPendingAuthIntent(): PendingAuthIntent | null {
     if (reason === "select_model") {
       const modelId = (payload as { model_id?: unknown }).model_id;
       if (typeof modelId !== "string" || !modelId.trim()) return null;
-      return { v: 1, reason: "select_model", return_to: returnTo, created_at_ms: createdAtMs, payload: { model_id: modelId } };
+      return {
+        v: 1,
+        reason: "select_model",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { model_id: modelId },
+      };
+    }
+    if (reason === "create_community") {
+      const draftId = (payload as { draft_id?: unknown }).draft_id;
+      const cleaned =
+        typeof draftId === "string"
+          ? draftId.trim() || null
+          : draftId === null || draftId === undefined
+            ? null
+            : null;
+      return { v: 1, reason: "create_community", return_to: returnTo, created_at_ms: createdAtMs, payload: { draft_id: cleaned } };
+    }
+    if (reason === "redeem_purchase_claim") {
+      const token = (payload as { token?: unknown }).token;
+      if (typeof token !== "string" || !token.trim()) return null;
+      return {
+        v: 1,
+        reason: "redeem_purchase_claim",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { token },
+      };
+    }
+    if (reason === "join_public_community") {
+      const communityIdRaw = (payload as { community_id?: unknown }).community_id;
+      const communitySlugRaw = (payload as { community_slug?: unknown }).community_slug;
+      const brandosAidRaw = (payload as { brandos_aid?: unknown }).brandos_aid;
+      const communityId = typeof communityIdRaw === "string" ? communityIdRaw.trim() || null : null;
+      const communitySlug = typeof communitySlugRaw === "string" ? communitySlugRaw.trim() || null : null;
+      const brandosAid = typeof brandosAidRaw === "string" ? brandosAidRaw.trim() || null : null;
+      if (!communityId && !communitySlug) return null;
+      return {
+        v: 1,
+        reason: "join_public_community",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { community_id: communityId, community_slug: communitySlug, brandos_aid: brandosAid },
+      };
+    }
+    if (reason === "start_builder_checkout") {
+      const tier = (payload as { tier?: unknown }).tier;
+      const context = (payload as { context?: unknown }).context;
+      if (tier !== "builder" && tier !== "pro") return null;
+      if (context !== "builder" && context !== "create_community") return null;
+      return {
+        v: 1,
+        reason: "start_builder_checkout",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { tier, context },
+      };
+    }
+    if (reason === "open_builder_billing_portal") {
+      const context = (payload as { context?: unknown }).context;
+      if (context !== "builder" && context !== "create_community") return null;
+      return {
+        v: 1,
+        reason: "open_builder_billing_portal",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { context },
+      };
+    }
+    if (reason === "start_payouts_onboarding") {
+      return { v: 1, reason: "start_payouts_onboarding", return_to: returnTo, created_at_ms: createdAtMs, payload: {} };
+    }
+    if (reason === "redeem_pending_purchases") {
+      const navigate = (payload as { navigate?: unknown }).navigate;
+      const silentNoop = (payload as { silent_noop?: unknown }).silent_noop;
+      if (typeof navigate !== "boolean") return null;
+      if (typeof silentNoop !== "boolean") return null;
+      return {
+        v: 1,
+        reason: "redeem_pending_purchases",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { navigate, silent_noop: silentNoop },
+      };
+    }
+    if (reason === "save_provider_key") {
+      const providerId = (payload as { provider_id?: unknown }).provider_id;
+      if (providerId !== "openai" && providerId !== "anthropic" && providerId !== "google" && providerId !== "x-ai") {
+        return null;
+      }
+      return {
+        v: 1,
+        reason: "save_provider_key",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { provider_id: providerId },
+      };
+    }
+    if (reason === "save_profile") {
+      return { v: 1, reason: "save_profile", return_to: returnTo, created_at_ms: createdAtMs, payload: {} };
+    }
+    if (reason === "create_memory") {
+      const content = (payload as { content?: unknown }).content;
+      const pinned = (payload as { pinned?: unknown }).pinned;
+      if (typeof content !== "string" || !content.trim()) return null;
+      if (typeof pinned !== "boolean") return null;
+      return {
+        v: 1,
+        reason: "create_memory",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { content, pinned },
+      };
+    }
+    if (reason === "toggle_memory_pinned") {
+      const id = (payload as { id?: unknown }).id;
+      const pinned = (payload as { pinned?: unknown }).pinned;
+      if (typeof id !== "string" || !id.trim()) return null;
+      if (typeof pinned !== "boolean") return null;
+      return {
+        v: 1,
+        reason: "toggle_memory_pinned",
+        return_to: returnTo,
+        created_at_ms: createdAtMs,
+        payload: { id, pinned },
+      };
+    }
+    if (reason === "delete_memory") {
+      const id = (payload as { id?: unknown }).id;
+      if (typeof id !== "string" || !id.trim()) return null;
+      return { v: 1, reason: "delete_memory", return_to: returnTo, created_at_ms: createdAtMs, payload: { id } };
     }
     return null;
   } catch {
@@ -1221,9 +1441,20 @@ function parseMessageAttachments(contentJson: unknown): MessageAttachment[] {
   return out;
 }
 
-function buildCommunityInviteLink(communityId: string, inviteCode: string): string {
-  const origin = window.location.origin;
-  return `${origin}/c/${communityId}?invite=${encodeURIComponent(inviteCode)}`;
+function buildCommunityShareLink(communitySlug: string): string {
+  const slug = (communitySlug ?? "").trim().toLowerCase();
+  const origin = window.location.origin.replace(/\/+$/, "");
+  if (!slug) return origin;
+  return `${origin}/c/${encodeURIComponent(slug)}`;
+}
+
+function buildCommunityInstantAccessLink(communitySlug: string, inviteCode: string): string {
+  const base = buildCommunityShareLink(communitySlug);
+  const code = (inviteCode ?? "").trim();
+  if (!code) return base;
+  const url = new URL(base, window.location.origin);
+  url.searchParams.set("invite", code);
+  return url.toString();
 }
 
 function communityInitials(name: string): string {
@@ -2976,8 +3207,12 @@ export default function App() {
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
   const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
 
-  const openAuthGate = () => {
+  const openAuthGate = (intent?: PendingAuthIntentInput) => {
     setAuthError(null);
+    if (intent && !supabaseSession) {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      storePendingAuthIntent({ v: 1, return_to: returnTo, created_at_ms: Date.now(), ...intent });
+    }
     setIsAuthGateOpen(true);
   };
 
@@ -4052,7 +4287,8 @@ export default function App() {
   async function handleCreateCommunityPrimaryAction(): Promise<void> {
     setFinalizeCreateCommunityError(null);
     if (!supabaseSession) {
-      openAuthGate();
+      const draft = buildCreateCommunityDraftFromState();
+      openAuthGate({ reason: "create_community", payload: { draft_id: draft?.id ?? null } });
       return;
     }
     const status = builderBillingStatus ?? (await loadBuilderBillingStatus(supabaseSession));
@@ -4091,7 +4327,8 @@ export default function App() {
   async function handleCreateCommunity() {
     setCreateCommunityError(null);
     if (!supabaseSession) {
-      openAuthGate();
+      const draft = buildCreateCommunityDraftFromState();
+      openAuthGate({ reason: "create_community", payload: { draft_id: draft?.id ?? null } });
       return;
     }
 
@@ -4717,6 +4954,109 @@ export default function App() {
       setActiveModelId(modelId);
       return;
     }
+
+    if (intent.reason === "create_community") {
+      openCreateCommunityModal();
+      return;
+    }
+
+    if (intent.reason === "redeem_purchase_claim") {
+      void redeemPurchaseClaim(intent.payload.token);
+      return;
+    }
+
+    if (intent.reason === "join_public_community") {
+      void joinPublicCommunity({
+        communityId: intent.payload.community_id ?? undefined,
+        communitySlug: intent.payload.community_slug ?? undefined,
+      });
+      return;
+    }
+
+    if (intent.reason === "start_builder_checkout") {
+      void startBuilderPlanCheckout(intent.payload.tier, { context: intent.payload.context });
+      return;
+    }
+
+    if (intent.reason === "open_builder_billing_portal") {
+      void openBuilderBillingPortal(intent.payload.context);
+      return;
+    }
+
+    if (intent.reason === "start_payouts_onboarding") {
+      void startConnectOnboarding();
+      return;
+    }
+
+    if (intent.reason === "redeem_pending_purchases") {
+      void redeemPendingPurchases({ navigate: intent.payload.navigate, silentNoop: intent.payload.silent_noop });
+      return;
+    }
+
+    if (intent.reason === "save_provider_key") {
+      setActiveView("settings");
+      setSettingsPage("models");
+      return;
+    }
+
+    if (intent.reason === "save_profile") {
+      void saveProfileToCloud();
+      return;
+    }
+
+    if (intent.reason === "create_memory") {
+      void createPersonalMemoryItemDirect({ content: intent.payload.content, pinned: intent.payload.pinned })
+        .then(() => loadPersonalMemoryItems())
+        .then(() => showMemoryToastMessage("Memory updated"))
+        .catch((error) => console.warn("Failed to create memory:", error));
+      return;
+    }
+
+    if (intent.reason === "toggle_memory_pinned") {
+      void (async () => {
+        try {
+          const session = sessionRef.current ?? supabaseSession;
+          const url = getSupabaseUrl();
+          if (!session || !url) return;
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(intent.payload.id)}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+              body: JSON.stringify({ pinned: intent.payload.pinned, updated_at: new Date().toISOString() }),
+            },
+            session,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          await loadPersonalMemoryItems();
+          showMemoryToastMessage("Memory updated");
+        } catch (error) {
+          console.warn("Failed to toggle memory pin:", error);
+        }
+      })();
+      return;
+    }
+
+    if (intent.reason === "delete_memory") {
+      void (async () => {
+        try {
+          const session = sessionRef.current ?? supabaseSession;
+          const url = getSupabaseUrl();
+          if (!session || !url) return;
+          const response = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(intent.payload.id)}`,
+            { method: "DELETE", headers: { Prefer: "return=minimal" } },
+            session,
+          );
+          if (!response.ok) throw new Error(await readSupabaseError(response));
+          await loadPersonalMemoryItems();
+          showMemoryToastMessage("Memory deleted");
+        } catch (error) {
+          console.warn("Failed to delete memory:", error);
+        }
+      })();
+      return;
+    }
   }
 
   async function handleSendMagicLink(email: string): Promise<void> {
@@ -4911,7 +5251,7 @@ export default function App() {
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       storePendingPurchaseClaimToken(token);
-      openAuthGate();
+      openAuthGate({ reason: "redeem_purchase_claim", payload: { token } });
       return;
     }
 
@@ -4960,7 +5300,14 @@ export default function App() {
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
       storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
-      openAuthGate();
+      openAuthGate({
+        reason: "join_public_community",
+        payload: {
+          community_id: trimmedId || null,
+          community_slug: trimmedSlug || null,
+          brandos_aid: brandosAid,
+        },
+      });
       return;
     }
 
@@ -5177,17 +5524,17 @@ export default function App() {
     tier: "builder" | "pro",
     opts?: { context?: BuilderUpgradeContext },
   ): Promise<void> {
+    const context: BuilderUpgradeContext = opts?.context ?? "builder";
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      openAuthGate();
+      openAuthGate({ reason: "start_builder_checkout", payload: { tier, context } });
       return;
     }
     setBuilderBillingError(null);
     setIsStartingBuilderCheckout(true);
     try {
       const origin = window.location.origin.replace(/\/+$/, "");
-      const context: BuilderUpgradeContext = opts?.context ?? "builder";
       const successUrl = `${origin}/?billing=success&billing_source=web&billing_context=${encodeURIComponent(context)}`;
       const cancelUrl = `${origin}/?billing=cancel&billing_source=web&billing_context=${encodeURIComponent(context)}`;
       const response = await fetchWithSupabaseAuth(
@@ -5221,12 +5568,12 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      openAuthGate();
+      openAuthGate({ reason: "open_builder_billing_portal", payload: { context } });
       return;
     }
-	    setBuilderBillingError(null);
-	    setIsStartingBuilderPortal(true);
-	    try {
+		    setBuilderBillingError(null);
+		    setIsStartingBuilderPortal(true);
+		    try {
 	      const origin = window.location.origin.replace(/\/+$/, "");
 	      const returnUrl = `${origin}/?billing=return&billing_source=web&billing_context=${encodeURIComponent(context)}`;
 	      const response = await fetchWithSupabaseAuth(
@@ -5260,7 +5607,7 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      openAuthGate();
+      openAuthGate({ reason: "start_payouts_onboarding", payload: {} });
       return;
     }
     setBuilderBillingError(null);
@@ -5404,7 +5751,10 @@ export default function App() {
     const session = sessionRef.current;
     const url = session ? getSupabaseUrl() : null;
     if (!session || !url) {
-      openAuthGate();
+      openAuthGate({
+        reason: "redeem_pending_purchases",
+        payload: { navigate: opts?.navigate !== false, silent_noop: Boolean(opts?.silentNoop) },
+      });
       return 0;
     }
 
@@ -6554,7 +6904,7 @@ export default function App() {
     if (!modal) return;
     if (!supabaseSession) {
       setPlatformQuotaModal(null);
-      openAuthGate();
+      openAuthGate({ reason: "save_provider_key", payload: { provider_id: modal.providerId } });
       return;
     }
     if (isPlatformQuotaModalRunning) return;
@@ -7045,7 +7395,7 @@ export default function App() {
     const value = provider?.inputValue.trim() ?? "";
     if (!value) return;
     if (!supabaseSession) {
-      openAuthGate();
+      openAuthGate({ reason: "save_provider_key", payload: { provider_id: id as ProviderId } });
       return;
     }
     const url = getSupabaseUrl();
@@ -7463,7 +7813,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        openAuthGate();
+        openAuthGate({ reason: "create_memory", payload: { content, pinned: Boolean(newPersonalMemoryPinned) } });
         return;
       }
       const scope = newPersonalMemoryScope === "workspace" ? "global" : newPersonalMemoryScope;
@@ -7499,7 +7849,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        openAuthGate();
+        openAuthGate({ reason: "toggle_memory_pinned", payload: { id: item.id, pinned: !item.pinned } });
         return;
       }
       const response = await fetchWithSupabaseAuth(
@@ -7529,7 +7879,7 @@ export default function App() {
       const session = sessionRef.current;
       const url = session ? getSupabaseUrl() : null;
       if (!session || !url) {
-        openAuthGate();
+        openAuthGate({ reason: "delete_memory", payload: { id } });
         return;
       }
       const response = await fetchWithSupabaseAuth(
@@ -8658,7 +9008,7 @@ export default function App() {
     const url = getSupabaseUrl();
     if (!session || !url) {
       setProfileSaveError(null);
-      openAuthGate();
+      openAuthGate({ reason: "save_profile", payload: {} });
       return;
     }
 
@@ -9536,7 +9886,11 @@ export default function App() {
           setInviteExpiryPreset("7d");
           setInviteExpiryCustom("");
           try {
-            await copyTextToClipboard(buildCommunityInviteLink(activeCommunityId, invite.code));
+            const communitySlug =
+              communities.find((community) => community.id === activeCommunityId)?.slug ??
+              activeCommunity?.slug ??
+              "";
+            await copyTextToClipboard(buildCommunityInstantAccessLink(communitySlug, invite.code));
           } catch {
             // ignore
           }
@@ -10092,16 +10446,8 @@ export default function App() {
 			        return;
 			      }
 				      if (!supabaseSession && model.access !== "guest") {
-				        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-				        storePendingAuthIntent({
-				          v: 1,
-				          reason: "select_model",
-				          return_to: returnTo,
-				          created_at_ms: Date.now(),
-				          payload: { model_id: model.id },
-				        });
 				        closeModelPicker();
-				        setIsAuthGateOpen(true);
+				        openAuthGate({ reason: "select_model", payload: { model_id: model.id } });
 				        return;
 				      }
 			      if (supabaseSession && model.access === "paid" && !hasPaidAccess) {
@@ -10190,16 +10536,75 @@ export default function App() {
 	      lastThreadUserMessageId &&
 	      lastThreadAssistantMessageId,
 	  );
-	  const workspaceThreadKey = supabaseSession ? activeThreadId : GUEST_THREAD_ID;
-	  const isStreamingWorkspaceTurn = Boolean(
-	    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
-	  );
+		  const workspaceThreadKey = supabaseSession ? activeThreadId : GUEST_THREAD_ID;
+		  const isStreamingWorkspaceTurn = Boolean(
+		    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
+		  );
 
-  if (publicRoute.kind !== "app") {
-    const showSignIn = !supabaseSession;
-    const selectedPublicCommunityPlan =
-      publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
-      publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
+		  const authGateModal =
+		    !supabaseSession && isAuthGateOpen ? (
+		      <div className="modal-overlay" onClick={() => setIsAuthGateOpen(false)}>
+		        <div className="modal modal-auth-gate" onClick={(event) => event.stopPropagation()}>
+		          <div className="modal-header">
+		            <div className="modal-title">Sign in</div>
+		            <button
+		              className="modal-close"
+		              type="button"
+		              onClick={() => setIsAuthGateOpen(false)}
+		              title="Close"
+		            >
+		              ×
+		            </button>
+		          </div>
+		          <div className="modal-body">
+		            <ul className="auth-gate-bullets">
+		              <li>Sync chats across devices</li>
+		              <li>Unlock more models</li>
+		              <li>Access gated communities</li>
+		            </ul>
+		            {authError && <div className="auth-error">{authError}</div>}
+		          </div>
+		          <div className="modal-footer">
+		            <div className="auth-actions">
+		              <button className="auth-gate-google-button" type="button" onClick={handleSignIn}>
+		                <svg
+		                  className="auth-gate-google-icon"
+		                  width="18"
+		                  height="18"
+		                  viewBox="0 0 46 46"
+		                  aria-hidden="true"
+		                >
+		                  <path
+		                    fill="#EA4335"
+		                    d="M24 9.5c3.54 0 6.72 1.22 9.22 3.22l6.84-6.84C35.82 2.12 30.22 0 24 0 14.62 0 6.4 5.38 2.44 13.22l7.94 6.16C12.22 13.22 17.62 9.5 24 9.5z"
+		                  />
+		                  <path
+		                    fill="#4285F4"
+		                    d="M46 24.5c0-1.64-.14-2.86-.42-4.08H24v7.72h12.52c-.26 2.08-1.64 5.22-4.68 7.32l7.2 5.6C43.74 36.5 46 30.96 46 24.5z"
+		                  />
+		                  <path
+		                    fill="#FBBC05"
+		                    d="M10.38 27.38c-.5-1.5-.8-3.1-.8-4.76s.3-3.26.78-4.76l-7.94-6.16C.88 14.9 0 19.34 0 23.62c0 4.28.88 8.72 2.44 12.92l7.94-6.16z"
+		                  />
+		                  <path
+		                    fill="#34A853"
+		                    d="M24 46c6.22 0 11.46-2.04 15.28-5.58l-7.2-5.6c-1.92 1.34-4.5 2.28-8.08 2.28-6.38 0-11.78-3.72-13.62-8.88l-7.94 6.16C6.4 40.62 14.62 46 24 46z"
+		                  />
+		                  <path fill="none" d="M0 0h46v46H0z" />
+		                </svg>
+		                Continue with Google
+		              </button>
+		            </div>
+		          </div>
+		        </div>
+		      </div>
+		    ) : null;
+
+	  if (publicRoute.kind !== "app") {
+	    const showSignIn = !supabaseSession;
+	    const selectedPublicCommunityPlan =
+	      publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
+	      publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
       publicCommunityPlans.find((plan) => plan.billing_period === "yearly") ??
       publicCommunityPlans[0] ??
       null;
@@ -10444,20 +10849,20 @@ export default function App() {
                   </div>
                 </div>
                 <div className="discover-controls">
-                  <button
-                    className="discover-refresh"
-                    type="button"
-                    disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
-                    onClick={() => {
-                      if (!pendingToken) return;
-                      if (showSignIn) {
-                        openAuthGate();
-                        return;
-                      }
-                      void redeemPurchaseClaim(pendingToken);
-                    }}
-                  >
-                    Continue
+	                  <button
+	                    className="discover-refresh"
+	                    type="button"
+	                    disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
+	                    onClick={() => {
+	                      if (!pendingToken) return;
+	                      if (showSignIn) {
+	                        openAuthGate({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
+	                        return;
+	                      }
+	                      void redeemPurchaseClaim(pendingToken);
+	                    }}
+	                  >
+	                    Continue
                   </button>
 	                  {(checkoutStatus === "pending" || checkoutStatus === "error") && (
 	                    <button
@@ -10585,11 +10990,12 @@ export default function App() {
                 </div>
               )}
             </div>
-          )}
-        </main>
-      </div>
-    );
-  }
+	          )}
+	        </main>
+	        {authGateModal}
+	      </div>
+	    );
+	  }
 
 	  const showHeaderIslands = activePage === "workspace" && activeView === "home";
 	  const communityHomeButton = activeCommunity ? (
@@ -15398,7 +15804,7 @@ export default function App() {
                                     const revoked = Boolean(invite.revoked_at);
                                     const expired = Boolean(invite.expires_at && new Date(invite.expires_at).getTime() < Date.now());
                                     const status = revoked ? "revoked" : expired ? "expired" : "active";
-                                    const inviteLink = buildCommunityInviteLink(activeCommunity.id, invite.code);
+                                    const inviteLink = buildCommunityInstantAccessLink(activeCommunity.slug, invite.code);
                                     return (
                                       <div key={invite.id} className="invite-row">
                                         <div className="invite-main">
@@ -15413,7 +15819,7 @@ export default function App() {
                                           <button
                                             className="secondary"
                                             onClick={() => void copyTextToClipboard(inviteLink)}
-                                            title="Copy web join link"
+                                            title="Copy instant access link"
                                           >
                                             Copy link
                                           </button>
@@ -15734,68 +16140,12 @@ export default function App() {
           );
 		        })()}
 
-			      {!supabaseSession && isAuthGateOpen && (
-			        <div className="modal-overlay" onClick={() => setIsAuthGateOpen(false)}>
-			          <div className="modal modal-auth-gate" onClick={(event) => event.stopPropagation()}>
-			            <div className="modal-header">
-			              <div className="modal-title">Sign in</div>
-			              <button
-			                className="modal-close"
-			                type="button"
-			                onClick={() => setIsAuthGateOpen(false)}
-			                title="Close"
-			              >
-			                ×
-			              </button>
-			            </div>
-			            <div className="modal-body">
-			              <ul className="auth-gate-bullets">
-			                <li>Sync chats across devices</li>
-			                <li>Unlock more models</li>
-			                <li>Access gated communities</li>
-			              </ul>
-			              {authError && <div className="auth-error">{authError}</div>}
-			            </div>
-			            <div className="modal-footer">
-			              <div className="auth-actions">
-			                <button className="auth-gate-google-button" type="button" onClick={handleSignIn}>
-			                  <svg
-			                    className="auth-gate-google-icon"
-			                    width="18"
-			                    height="18"
-			                    viewBox="0 0 46 46"
-			                    aria-hidden="true"
-			                  >
-			                    <path
-			                      fill="#EA4335"
-			                      d="M24 9.5c3.54 0 6.72 1.22 9.22 3.22l6.84-6.84C35.82 2.12 30.22 0 24 0 14.62 0 6.4 5.38 2.44 13.22l7.94 6.16C12.22 13.22 17.62 9.5 24 9.5z"
-			                    />
-			                    <path
-			                      fill="#4285F4"
-			                      d="M46 24.5c0-1.64-.14-2.86-.42-4.08H24v7.72h12.52c-.26 2.08-1.64 5.22-4.68 7.32l7.2 5.6C43.74 36.5 46 30.96 46 24.5z"
-			                    />
-			                    <path
-			                      fill="#FBBC05"
-			                      d="M10.38 27.38c-.5-1.5-.8-3.1-.8-4.76s.3-3.26.78-4.76l-7.94-6.16C.88 14.9 0 19.34 0 23.62c0 4.28.88 8.72 2.44 12.92l7.94-6.16z"
-			                    />
-			                    <path
-			                      fill="#34A853"
-			                      d="M24 46c6.22 0 11.46-2.04 15.28-5.58l-7.2-5.6c-1.92 1.34-4.5 2.28-8.08 2.28-6.38 0-11.78-3.72-13.62-8.88l-7.94 6.16C6.4 40.62 14.62 46 24 46z"
-			                    />
-			                    <path fill="none" d="M0 0h46v46H0z" />
-			                  </svg>
-			                  Continue with Google
-			                </button>
-			              </div>
-			            </div>
-			          </div>
-			        </div>
-			      )}
+				      {authGateModal}
 
-		      {supabaseSession && onboardingStep === "signed_in" && (
-		        <div className="modal-overlay">
-		          <div className="modal modal-onboarding" onClick={(event) => event.stopPropagation()}>
-		            <div className="modal-header">
+			      {supabaseSession && onboardingStep === "signed_in" && (
+			        <div className="modal-overlay">
+			          <div className="modal modal-onboarding" onClick={(event) => event.stopPropagation()}>
+			            <div className="modal-header">
 		              <div className="modal-title">Signed in successfully</div>
 		            </div>
 		            <div className="modal-body">
