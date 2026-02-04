@@ -2285,6 +2285,12 @@
   gap: 10px;
 }
 
+.auth-gate-google-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 :root[data-theme="dark"] .auth-gate-google-button,
 :root[data-theme="dark-warm"] .auth-gate-google-button {
   border-color: rgba(255, 255, 255, 0.18);

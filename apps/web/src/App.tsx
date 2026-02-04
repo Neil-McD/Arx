@@ -15700,12 +15700,13 @@ export default function App() {
 			              </button>
 			            </div>
 			            <div className="modal-body">
-			              <div className="model-note">Sync chats across devices and unlock more models.</div>
+			              <div className="model-note">Sync chats across devices, unlock more models, and access gated communities.</div>
 			              {authError && <div className="auth-error">{authError}</div>}
 			            </div>
 			            <div className="modal-footer">
 			              <div className="auth-actions">
 			                <button className="auth-gate-google-button" type="button" onClick={handleSignIn}>
+			                  <img className="auth-gate-google-icon" src={googleLogo} alt="" aria-hidden="true" />
 			                  Continue with Google
 			                </button>
 			              </div>
