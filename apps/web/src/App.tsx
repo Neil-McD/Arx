@@ -642,7 +642,6 @@ type AutomationDelivery = {
 
 type PublicRoute =
   | { kind: "app" }
-  | { kind: "auth" }
   | { kind: "community_landing"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -696,6 +695,8 @@ const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 const PENDING_AUTH_INTENT_STORAGE_KEY = "arx_pending_auth_intent_v1";
 const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+const AUTH_RETURN_TO_STORAGE_KEY = "arx_auth_return_to_v1";
+const AUTH_RETURN_TO_TTL_MS = 24 * 60 * 60 * 1000;
 const ONBOARDING_DONE_STORAGE_KEY = "arx_onboarding_done_v1";
 const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
 const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -756,6 +757,51 @@ function clearPendingAuthIntent(): void {
   }
 }
 
+function readAuthReturnTo(): string | null {
+  try {
+    const raw = localStorage.getItem(AUTH_RETURN_TO_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const v = (parsed as { v?: unknown }).v;
+    const returnTo = (parsed as { return_to?: unknown }).return_to;
+    const createdAtMs = (parsed as { created_at_ms?: unknown }).created_at_ms;
+    if (v !== 1) return null;
+    if (typeof returnTo !== "string") return null;
+    if (typeof createdAtMs !== "number" || !Number.isFinite(createdAtMs)) return null;
+    if (Date.now() - createdAtMs > AUTH_RETURN_TO_TTL_MS) {
+      localStorage.removeItem(AUTH_RETURN_TO_STORAGE_KEY);
+      return null;
+    }
+    const trimmed = returnTo.trim();
+    if (!trimmed) return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function storeAuthReturnTo(returnTo: string): void {
+  const trimmed = returnTo.trim();
+  if (!trimmed) return;
+  try {
+    localStorage.setItem(
+      AUTH_RETURN_TO_STORAGE_KEY,
+      JSON.stringify({ v: 1, return_to: trimmed, created_at_ms: Date.now() }),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function clearAuthReturnTo(): void {
+  try {
+    localStorage.removeItem(AUTH_RETURN_TO_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function isOnboardingDone(): boolean {
   try {
     return localStorage.getItem(ONBOARDING_DONE_STORAGE_KEY) === "1";
@@ -800,9 +846,6 @@ async function copyTextToClipboard(text: string): Promise<void> {
 
 function readPublicRouteFromLocation(): PublicRoute {
   const path = window.location.pathname || "/";
-  if (path === "/auth") {
-    return { kind: "auth" };
-  }
   if (path.startsWith("/c/")) {
     const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
     if (slug) return { kind: "community_landing", slug };
@@ -2931,6 +2974,7 @@ export default function App() {
   const [modelFavorites, setModelFavorites] = useState<string[]>(() => loadModelFavorites());
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
+  const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
 
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -3250,6 +3294,21 @@ export default function App() {
   }, [isModelPickerOpen]);
 
   useEffect(() => {
+    if (!isAuthGateOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsAuthGateOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAuthGateOpen]);
+
+  useEffect(() => {
+    if (!supabaseSession) return;
+    if (!isAuthGateOpen) return;
+    setIsAuthGateOpen(false);
+  }, [supabaseSession, isAuthGateOpen]);
+
+  useEffect(() => {
     if (!isCommunityAgentTemplateMenuOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       const root = communityAgentTemplatePickerRef.current;
@@ -3311,15 +3370,27 @@ export default function App() {
       persistSupabaseSession(session);
       setSupabaseSession(session);
       const pendingIntent = readPendingAuthIntent();
-      if (window.location.pathname === "/auth") {
-        // Return to the app once authenticated; any gated action resumes after onboarding.
-        const nextPath = (pendingIntent?.return_to ?? "/").trim() || "/";
-        window.history.replaceState({}, document.title, nextPath);
-        setPublicRoute(readPublicRouteFromLocation());
-        return;
+      const pendingReturnTo = (pendingIntent?.return_to ?? "").trim();
+      const authReturnTo = readAuthReturnTo();
+      const fallbackPath = `${window.location.pathname}${window.location.search}`;
+      const rawNextPath = (pendingReturnTo || authReturnTo || fallbackPath).trim() || "/";
+      clearAuthReturnTo();
+
+      const nextPath = rawNextPath.startsWith("/") || rawNextPath.startsWith("#") ? rawNextPath : "/";
+      window.history.replaceState({}, document.title, nextPath);
+
+      const nextPublicRoute = readPublicRouteFromLocation();
+      setPublicRoute(nextPublicRoute);
+      if (nextPublicRoute.kind === "app") {
+        const nextAppRoute = readAppRouteFromLocation();
+        setActivePage(nextAppRoute.page);
+        setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
+        setSettingsPage(nextAppRoute.settingsPage);
+        setActiveCommunityId(nextAppRoute.communityId);
+        setCommunityTab(nextAppRoute.communityTab);
+        setActiveThreadId(nextAppRoute.threadId);
+        setWorkspaceWantsNewChatMode(Boolean(nextAppRoute.threadIsExplicit && nextAppRoute.threadId === null));
       }
-      // Preserve query params (e.g. invite codes) while clearing the OAuth hash.
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
     })();
   }, []);
 
@@ -4617,6 +4688,7 @@ export default function App() {
 
   function handleSignIn() {
     setAuthError(null);
+    storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
     const url = getSupabaseUrl();
     const apiKey = getSupabaseAnonKey();
     if (!url || !apiKey) {
@@ -4663,6 +4735,7 @@ export default function App() {
       return;
     }
 
+    storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
     setMagicLinkStatus("sending");
     setMagicLinkError(null);
     try {
@@ -10019,19 +10092,19 @@ export default function App() {
 			        showAppToastMessage("This model is coming soon.");
 			        return;
 			      }
-			      if (!supabaseSession && model.access !== "guest") {
-			        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-			        storePendingAuthIntent({
-			          v: 1,
-			          reason: "select_model",
-			          return_to: returnTo,
-			          created_at_ms: Date.now(),
-			          payload: { model_id: model.id },
-			        });
-			        closeModelPicker();
-			        navigateTo("/auth");
-			        return;
-			      }
+				      if (!supabaseSession && model.access !== "guest") {
+				        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+				        storePendingAuthIntent({
+				          v: 1,
+				          reason: "select_model",
+				          return_to: returnTo,
+				          created_at_ms: Date.now(),
+				          payload: { model_id: model.id },
+				        });
+				        closeModelPicker();
+				        setIsAuthGateOpen(true);
+				        return;
+				      }
 			      if (supabaseSession && model.access === "paid" && !hasPaidAccess) {
 			        closeModelPicker();
 			        setBuilderUpgradeContext("builder");
@@ -10168,90 +10241,13 @@ export default function App() {
               </button>
             )}
           </div>
-        </header>
+		        </header>
 
-	        <main className="workspace community-mode">
-	          {publicRoute.kind === "auth" && (
-	            <div className="community-panel discover-panel">
-	              <div className="discover-hero">
-	                <div className="discover-hero-copy">
-	                  <div className="discover-title">{supabaseSession ? "You're signed in" : "Sign in"}</div>
-	                  <div className="discover-subtitle">
-	                    {(() => {
-	                      const intent = readPendingAuthIntent();
-	                      if (!intent) return "Continue to unlock more of Arx.";
-	                      if (intent.reason === "select_model") return "Continue to select this model and sync your chats.";
-	                      return "Continue to unlock more of Arx.";
-	                    })()}
-	                  </div>
-	                </div>
-	                <div className="discover-controls">
-	                  {!supabaseSession ? (
-	                    <button className="discover-refresh" type="button" onClick={handleSignIn}>
-	                      Continue with Google
-	                    </button>
-	                  ) : (
-	                    <button
-	                      className="discover-refresh"
-	                      type="button"
-	                      onClick={() => {
-	                        const intent = readPendingAuthIntent();
-	                        const target = (intent?.return_to ?? "/").trim() || "/";
-	                        clearPendingAuthIntent();
-	                        navigateTo(target, { replace: true });
-	                      }}
-	                    >
-	                      Continue
-	                    </button>
-	                  )}
-	                  <button
-	                    className="secondary"
-	                    type="button"
-	                    onClick={() => {
-	                      const intent = readPendingAuthIntent();
-	                      const target = (intent?.return_to ?? "/").trim() || "/";
-	                      clearPendingAuthIntent();
-	                      navigateTo(target, { replace: true });
-	                    }}
-	                  >
-	                    Continue as guest
-	                  </button>
-	                </div>
-	              </div>
-	              {!supabaseSession && (
-	                <div className="chat-empty">
-	                  <div className="discover-empty-text">Or get a magic link:</div>
-	                  <div className="discover-controls">
-	                    <input
-	                      className="discover-search"
-	                      type="email"
-	                      inputMode="email"
-	                      placeholder="you@example.com"
-	                      value={magicLinkEmail}
-	                      onChange={(event) => setMagicLinkEmail(event.target.value)}
-	                    />
-	                    <button
-	                      className="discover-refresh"
-	                      type="button"
-	                      disabled={magicLinkStatus === "sending"}
-	                      onClick={() => void handleSendMagicLink(magicLinkEmail)}
-	                    >
-	                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-	                    </button>
-	                  </div>
-	                  {magicLinkStatus === "sent" && (
-	                    <div className="chat-empty">Check your email for a sign-in link.</div>
-	                  )}
-	                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-	                </div>
-	              )}
-	              {authError && <div className="auth-error">{authError}</div>}
-	            </div>
-	          )}
-		          {publicRoute.kind === "community_landing" && (
-		            <div className="community-panel discover-panel">
-		              <div className="discover-hero">
-	                <div className="discover-hero-copy">
+		        <main className="workspace community-mode">
+			          {publicRoute.kind === "community_landing" && (
+			            <div className="community-panel discover-panel">
+			              <div className="discover-hero">
+		                <div className="discover-hero-copy">
 	                  <div className="discover-title">{publicCommunity?.name ?? publicRoute.slug}</div>
 	                  <div className="discover-subtitle">
 	                    {publicCommunity?.description ?? "Join this community on Arx."}
@@ -15687,7 +15683,36 @@ export default function App() {
               </div>
             </div>
           );
-	        })()}
+		        })()}
+
+		      {!supabaseSession && isAuthGateOpen && (
+		        <div className="modal-overlay" onClick={() => setIsAuthGateOpen(false)}>
+		          <div className="modal" onClick={(event) => event.stopPropagation()}>
+		            <div className="modal-header">
+		              <div className="modal-title">Sign in</div>
+		              <button
+		                className="modal-close"
+		                type="button"
+		                onClick={() => setIsAuthGateOpen(false)}
+		                title="Close"
+		              >
+		                ×
+		              </button>
+		            </div>
+		            <div className="modal-body">
+		              <div className="model-note">Continue with Google to unlock more models and sync your chats.</div>
+		              {authError && <div className="auth-error">{authError}</div>}
+		            </div>
+		            <div className="modal-footer">
+		              <div className="auth-actions">
+		                <button type="button" onClick={handleSignIn}>
+		                  Continue with Google
+		                </button>
+		              </div>
+		            </div>
+		          </div>
+		        </div>
+		      )}
 
 		      {supabaseSession && onboardingStep === "signed_in" && (
 		        <div className="modal-overlay">
