@@ -12161,28 +12161,61 @@ export default function App() {
 	                              <nav className="model-picker-nav" aria-label="Model sections">
 	                                {(
 	                                  [
-	                                    { id: "favorites", label: "★" },
-	                                    { id: "all", label: "All" },
-	                                    { id: "free", label: "Free" },
-	                                    { id: "openai", label: "OpenAI" },
-	                                    { id: "anthropic", label: "Anthropic" },
-	                                    { id: "google", label: "Google" },
-	                                    { id: "x-ai", label: "xAI" },
-	                                    { id: "openrouter", label: "OpenRouter" },
-	                                  ] as Array<{ id: ModelSectionId; label: string }>
+	                                    {
+	                                      id: "favorites",
+	                                      label: "Favorites",
+	                                      filled: true,
+	                                      icon: (
+	                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+	                                        </svg>
+	                                      ),
+	                                    },
+	                                    {
+	                                      id: "all",
+	                                      label: "All",
+	                                      icon: (
+	                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                          <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+	                                        </svg>
+	                                      ),
+	                                    },
+	                                    {
+	                                      id: "free",
+	                                      label: "Free",
+	                                      icon: (
+	                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                          <path d="M20 12v10H4V12" />
+	                                          <path d="M2 7h20v5H2z" />
+	                                          <path d="M12 22V7" />
+	                                          <path d="M12 7c-2.2 0-4-1.8-4-4 2.2 0 4 1.8 4 4z" />
+	                                          <path d="M12 7c2.2 0 4-1.8 4-4-2.2 0-4 1.8-4 4z" />
+	                                        </svg>
+	                                      ),
+	                                    },
+	                                    { id: "openai", label: "OpenAI", icon: <span className="model-picker-nav-logo">O</span> },
+	                                    { id: "anthropic", label: "Anthropic", icon: <span className="model-picker-nav-logo">A</span> },
+	                                    { id: "google", label: "Google", icon: <span className="model-picker-nav-logo">G</span> },
+	                                    { id: "x-ai", label: "xAI", icon: <span className="model-picker-nav-logo">x</span> },
+	                                    { id: "openrouter", label: "OpenRouter", icon: <span className="model-picker-nav-logo">R</span> },
+	                                  ] as Array<{ id: ModelSectionId; label: string; icon: ReactNode; filled?: boolean }>
 	                                ).map((section) => (
 	                                  <button
 	                                    key={section.id}
 	                                    className={
 	                                      modelPickerSection === section.id
-	                                        ? "model-picker-nav-btn active"
-	                                        : "model-picker-nav-btn"
+	                                        ? `model-picker-nav-btn${section.filled ? " filled" : ""} active`
+	                                        : `model-picker-nav-btn${section.filled ? " filled" : ""}`
 	                                    }
 	                                    type="button"
 	                                    aria-pressed={modelPickerSection === section.id}
+	                                    aria-label={section.label}
+	                                    title={section.label}
 	                                    onClick={() => setModelPickerSection(section.id)}
 	                                  >
-	                                    {section.label}
+	                                    <span className="model-picker-nav-icon" aria-hidden="true">
+	                                      {section.icon}
+	                                    </span>
 	                                  </button>
 	                                ))}
 	                              </nav>
