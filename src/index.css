@@ -3890,6 +3890,117 @@ button.chat-reply-quote:hover {
   width: min(980px, calc(100vw - 32px));
 }
 
+/* Auth gate: minimal + on-brand sign-in modal. */
+.modal.modal-auth-gate {
+  width: min(420px, calc(100vw - 32px));
+  border-radius: 18px;
+}
+
+.modal.modal-auth-gate .modal-header {
+  border-bottom: none;
+  padding: 18px 18px 8px;
+}
+
+.modal.modal-auth-gate .modal-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-primary);
+}
+
+.modal.modal-auth-gate .modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+}
+
+.modal.modal-auth-gate .modal-close:hover {
+  background: var(--hover-overlay);
+}
+
+.modal.modal-auth-gate .modal-body {
+  padding: 0 18px 14px;
+}
+
+.auth-gate-bullets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.auth-gate-bullets li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.auth-gate-bullets li::before {
+  content: "•";
+  color: var(--text-faint);
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
+.modal.modal-auth-gate .modal-footer {
+  border-top: none;
+  background: transparent;
+  padding: 0 18px 18px;
+}
+
+.modal.modal-auth-gate .auth-actions {
+  width: 100%;
+}
+
+.auth-gate-google-button {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #ffffff;
+  color: #111111;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.auth-gate-google-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
+:root[data-theme="dark"] .auth-gate-google-button,
+:root[data-theme="dark-warm"] .auth-gate-google-button {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.auth-gate-google-button:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.auth-gate-google-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.auth-gate-google-button:focus-visible {
+  outline: 2px solid rgba(201, 169, 98, 0.55);
+  outline-offset: 2px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
