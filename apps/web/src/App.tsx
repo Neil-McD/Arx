@@ -164,8 +164,15 @@ type CommunityAgentDraft = {
 const GUEST_THREAD_ID = "__guest__";
 const GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
 const GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
+const MODEL_FAVORITES_STORAGE_KEY = "arx_model_favorites_v1";
 const DEFAULT_GUEST_MODEL_ID = "gpt-oss-120b-free";
 const GUEST_MODEL_ALLOWLIST = new Set<string>([DEFAULT_GUEST_MODEL_ID, "deepseek-r1-free"]);
+const GUEST_MODEL_LABELS: Record<string, string> = {
+  "gpt-oss-120b-free": "GPT OSS 120B (Free)",
+  "deepseek-r1-free": "DeepSeek R1 (Free)",
+};
+
+type ModelSectionId = "all" | "favorites" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 
 type GuestStoredMessageV1 = {
   id: string;
@@ -193,6 +200,33 @@ function loadGuestModelId(): string {
 function storeGuestModelId(modelId: string): void {
   try {
     localStorage.setItem(GUEST_MODEL_STORAGE_KEY, modelId);
+  } catch {
+    // ignore
+  }
+}
+
+function loadModelFavorites(): string[] {
+  try {
+    const raw = localStorage.getItem(MODEL_FAVORITES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: string[] = [];
+    for (const item of parsed) {
+      if (typeof item !== "string") continue;
+      const id = item.trim();
+      if (!id) continue;
+      out.push(id);
+    }
+    return Array.from(new Set(out)).slice(0, 50);
+  } catch {
+    return [];
+  }
+}
+
+function storeModelFavorites(ids: string[]): void {
+  try {
+    localStorage.setItem(MODEL_FAVORITES_STORAGE_KEY, JSON.stringify(ids));
   } catch {
     // ignore
   }
@@ -2805,7 +2839,12 @@ export default function App() {
   const workspaceAskInputRef = useRef<HTMLTextAreaElement | null>(null);
   const workspaceFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const [modelPickerQuery, setModelPickerQuery] = useState("");
+  const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
+  const [modelFavorites, setModelFavorites] = useState<string[]>(() => loadModelFavorites());
+  const [modelPickerNotice, setModelPickerNotice] = useState<string | null>(null);
   const modelPickerRef = useRef<HTMLDivElement | null>(null);
+  const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
 
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -3087,6 +3126,10 @@ export default function App() {
     storeGuestModelId(guestModelId);
   }, [guestModelId]);
 
+  useEffect(() => {
+    storeModelFavorites(modelFavorites);
+  }, [modelFavorites]);
+
   // Supabase session is bootstrapped from localStorage in useState(), so refresh keeps app state stable.
 
   useLayoutEffect(() => {
@@ -3100,21 +3143,14 @@ export default function App() {
 
   useEffect(() => {
     if (!isModelPickerOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      const root = modelPickerRef.current;
-      if (!root) return;
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (!root.contains(target)) setIsModelPickerOpen(false);
-    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setIsModelPickerOpen(false);
     };
-    document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    const raf = window.requestAnimationFrame(() => modelPickerSearchRef.current?.focus());
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.cancelAnimationFrame(raf);
     };
   }, [isModelPickerOpen]);
 
@@ -3269,8 +3305,16 @@ export default function App() {
     if (publicRoute.kind !== "app") return;
     const storage = loadGuestThreadStorage();
     setGuestModelId(storage.model_id);
+    const guestMessages = guestStoredToThreadMessages(storage);
+    if (guestMessages.length === 0) {
+      if (activeThreadId !== null) setActiveThreadId(null);
+      setWorkspaceWantsNewChatMode(true);
+      setThreadMessages([]);
+      return;
+    }
     if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
-    setThreadMessages(guestStoredToThreadMessages(storage));
+    setWorkspaceWantsNewChatMode(false);
+    setThreadMessages(guestMessages);
   }, [supabaseSession, publicRoute.kind]);
 
   useEffect(() => {
@@ -6509,6 +6553,7 @@ export default function App() {
       autoScrollEnabledRef.current = true;
       setIsWorkspaceAtBottom(true);
       try {
+        setWorkspaceWantsNewChatMode(false);
         if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
         setThreadMessages(baseMessages);
         setMessageInput("");
@@ -9687,11 +9732,16 @@ export default function App() {
     });
   }, [communities, normalizedThreadSearch, visibleThreads]);
 
-  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
+	  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
 
-  const selectedModelId = useMemo(() => {
-    const threadModel = (activeThread?.model_id ?? "").trim();
-    if (threadModel && modelToggles.some((toggle) => toggle.id === threadModel)) return threadModel;
+	  const guestModelLabel = useMemo(() => {
+	    const label = (GUEST_MODEL_LABELS[guestModelId] ?? "").trim();
+	    return label || guestModelId || "Model";
+	  }, [guestModelId]);
+
+	  const selectedModelId = useMemo(() => {
+	    const threadModel = (activeThread?.model_id ?? "").trim();
+	    if (threadModel && modelToggles.some((toggle) => toggle.id === threadModel)) return threadModel;
 
     const stored = (activeModelId ?? "").trim();
     if (stored && modelToggles.some((toggle) => toggle.id === stored)) return stored;
@@ -9704,15 +9754,168 @@ export default function App() {
     );
   }, [activeThread?.model_id, activeModelId, enabledModels, modelToggles]);
 
-  const selectedModelLabel = useMemo(() => {
-    if (!selectedModelId) return "Model";
-    return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
-  }, [enabledModels, selectedModelId]);
+	  const selectedModelLabel = useMemo(() => {
+	    if (!selectedModelId) return "Model";
+	    return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
+	  }, [enabledModels, selectedModelId]);
 
-  const filteredDiscoverCommunities = useMemo(() => {
-    const q = discoverQuery.trim().toLowerCase();
-    if (!q) return discoverCommunities;
-    return discoverCommunities.filter((community) => {
+	  const activeModelLabel = supabaseSession ? selectedModelLabel : guestModelLabel;
+
+	  const favoriteSet = useMemo(() => new Set(modelFavorites), [modelFavorites]);
+
+	  const toggleFavoriteModel = (modelId: string) => {
+	    const id = modelId.trim();
+	    if (!id) return;
+	    setModelFavorites((prev) => {
+	      const set = new Set(prev);
+	      if (set.has(id)) set.delete(id);
+	      else set.add(id);
+	      return Array.from(set).slice(0, 50);
+	    });
+	  };
+
+	  const inferProviderSection = (modelId: string): ModelSectionId => {
+	    const id = (modelId ?? "").trim().toLowerCase();
+	    if (id.startsWith("gpt-")) return "openai";
+	    if (id.startsWith("sonnet-") || id.startsWith("opus-")) return "anthropic";
+	    if (id.startsWith("gemini-")) return "google";
+	    if (id.startsWith("grok-")) return "x-ai";
+	    return "openrouter";
+	  };
+
+		  type CuratedPickerModel = {
+		    id: string;
+		    label: string;
+		    section: ModelSectionId;
+		    access: "guest" | "authed" | "paid";
+		    description?: string | null;
+		  };
+
+		  const effectiveTier = ((builderBillingStatus?.builder_tier ?? "free") as string).toLowerCase();
+		  const hasPaidAccess = Boolean(supabaseSession) && (effectiveTier === "builder" || effectiveTier === "pro");
+		  const selectedPickerModelId = supabaseSession ? selectedModelId : guestModelId;
+
+		  const curatedPickerModels = useMemo(() => {
+		    const out: CuratedPickerModel[] = [];
+		    out.push(
+		      { id: "gpt-oss-120b-free", label: GUEST_MODEL_LABELS["gpt-oss-120b-free"]!, section: "free", access: "guest", description: "OpenRouter free tier" },
+		      { id: "deepseek-r1-free", label: GUEST_MODEL_LABELS["deepseek-r1-free"]!, section: "free", access: "guest", description: "OpenRouter free tier" },
+		    );
+		    for (const toggle of enabledModels) {
+		      out.push({ id: toggle.id, label: toggle.label, section: inferProviderSection(toggle.id), access: "authed" });
+		    }
+		    out.push(
+		      { id: "kimi-k2", label: "Kimi K2", section: "openrouter", access: "paid", description: "Moonshot via OpenRouter" },
+		      { id: "glm-4.7", label: "GLM 4.7", section: "openrouter", access: "paid", description: "Zhipu via OpenRouter" },
+		      { id: "gpt-oss-20b", label: "GPT OSS 20B", section: "openrouter", access: "paid", description: "OpenAI OSS via OpenRouter" },
+		      { id: "deepseek-v3.2", label: "DeepSeek V3.2", section: "openrouter", access: "paid", description: "DeepSeek via OpenRouter" },
+		    );
+		    return out;
+		  }, [enabledModels]);
+
+		  const visiblePickerModels = useMemo(() => {
+		    const q = modelPickerQuery.trim().toLowerCase();
+		    const wantsFavorites = modelPickerSection === "favorites";
+		    const filtered = curatedPickerModels.filter((m) => {
+		      if (wantsFavorites && !favoriteSet.has(m.id)) return false;
+		      if (!wantsFavorites && modelPickerSection !== "all" && m.section !== modelPickerSection) return false;
+		      if (!q) return true;
+		      return m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
+		    });
+
+		    const sectionOrder: Record<ModelSectionId, number> = {
+		      favorites: 0,
+		      all: 1,
+		      free: 2,
+		      openai: 3,
+		      anthropic: 4,
+		      google: 5,
+		      "x-ai": 6,
+		      openrouter: 7,
+		    };
+
+		    return filtered.slice().sort((a, b) => {
+		      const af = favoriteSet.has(a.id) ? 0 : 1;
+		      const bf = favoriteSet.has(b.id) ? 0 : 1;
+		      if (af !== bf) return af - bf;
+		      const as = sectionOrder[a.section] ?? 99;
+		      const bs = sectionOrder[b.section] ?? 99;
+		      if (as !== bs) return as - bs;
+		      return a.label.localeCompare(b.label);
+		    });
+		  }, [curatedPickerModels, favoriteSet, modelPickerQuery, modelPickerSection]);
+
+		  const canSelectPickerModel = (model: CuratedPickerModel): boolean => {
+		    if (!supabaseSession) return model.access === "guest";
+		    if (model.access === "guest") return false;
+		    if (!modelToggles.some((toggle) => toggle.id === model.id)) return false;
+		    if (model.access === "paid") return hasPaidAccess;
+		    return true;
+		  };
+
+		  const openModelPicker = () => {
+		    setModelPickerNotice(null);
+		    setModelPickerQuery("");
+		    if (!supabaseSession) {
+		      setModelPickerSection("free");
+		    } else if (favoriteSet.size > 0) {
+		      setModelPickerSection("favorites");
+		    } else {
+		      setModelPickerSection(inferProviderSection(selectedModelId || DEFAULT_ACTIVE_MODEL_ID));
+		    }
+		    setIsModelPickerOpen(true);
+		  };
+
+		  const closeModelPicker = () => {
+		    setIsModelPickerOpen(false);
+		    setModelPickerNotice(null);
+		    setModelPickerQuery("");
+		  };
+
+		  const handleSelectPickerModel = (model: CuratedPickerModel) => {
+		    if (!canSelectPickerModel(model)) {
+		      if (supabaseSession && !modelToggles.some((toggle) => toggle.id === model.id)) {
+		        setModelPickerNotice("These models are coming next (backend not wired yet).");
+		        return;
+		      }
+		      if (!supabaseSession && model.access !== "guest") {
+		        setModelPickerNotice("Sign in to unlock more models.");
+		      } else if (supabaseSession && model.access === "paid" && !hasPaidAccess) {
+		        setModelPickerNotice("Upgrade to unlock OpenRouter models (payments coming soon).");
+		      } else if (supabaseSession && model.access === "guest") {
+		        setModelPickerNotice("Guest demo models are available only when signed out.");
+		      } else {
+		        setModelPickerNotice("This model is not available yet.");
+		      }
+		      return;
+		    }
+
+		    setModelPickerNotice(null);
+		    if (!supabaseSession) {
+		      setGuestModelId(model.id);
+		      try {
+		        const storage = loadGuestThreadStorage();
+		        storeGuestThreadStorage({ ...storage, model_id: model.id });
+		      } catch {
+		        // ignore
+		      }
+		      closeModelPicker();
+		      workspaceAskInputRef.current?.focus();
+		      return;
+		    }
+
+		    setActiveModelId(model.id);
+		    if (activeThreadId) {
+		      void updateThreadModel(activeThreadId, model.id, supabaseSession);
+		    }
+		    closeModelPicker();
+		    workspaceAskInputRef.current?.focus();
+		  };
+
+	  const filteredDiscoverCommunities = useMemo(() => {
+	    const q = discoverQuery.trim().toLowerCase();
+	    if (!q) return discoverCommunities;
+	    return discoverCommunities.filter((community) => {
       const name = (community.name ?? "").toLowerCase();
       const slug = (community.slug ?? "").toLowerCase();
       const desc = (community.description ?? "").toLowerCase();
@@ -10255,17 +10458,18 @@ export default function App() {
                 </button>
                 <button
 	                  className="new-session-header-btn"
-	                  onClick={() => {
-	                    if (!supabaseSession) {
-	                      setThreadError(null);
-	                      setMessageInput("");
-	                      setWorkspaceAttachments([]);
-	                      if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
-	                      storeGuestThreadStorage({ v: 1, model_id: guestModelId, messages: [] });
-	                      setThreadMessages([]);
-	                      workspaceAskInputRef.current?.focus();
-	                      return;
-	                    }
+		                  onClick={() => {
+			                    if (!supabaseSession) {
+			                      setThreadError(null);
+			                      setMessageInput("");
+			                      setWorkspaceAttachments([]);
+			                      if (activeThreadId !== null) setActiveThreadId(null);
+			                      setWorkspaceWantsNewChatMode(true);
+			                      storeGuestThreadStorage({ v: 1, model_id: guestModelId, messages: [] });
+			                      setThreadMessages([]);
+			                      workspaceAskInputRef.current?.focus();
+			                      return;
+			                    }
 	                    // ChatGPT-style: "New chat" is a draft state until the first message is sent.
 	                    if (!activeThreadId) {
 	                      setWorkspaceWantsNewChatMode(true);
@@ -11887,44 +12091,167 @@ export default function App() {
                       style={{ display: "none" }}
                       onChange={handleWorkspaceFileInputChange}
                     />
-                    <div className="ask-model" ref={modelPickerRef}>
-                      <button
-                        className="ask-model-btn"
-                        type="button"
-                        aria-haspopup="listbox"
-                        aria-expanded={isModelPickerOpen}
-                        onClick={() => setIsModelPickerOpen((prev) => !prev)}
-                        disabled={enabledModels.length === 0}
-                        title="Model"
-                      >
-                        <span className="ask-model-label">{selectedModelLabel}</span>
-                        <svg className="ask-model-chevron" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M6 9l6 6 6-6" />
-                        </svg>
-                      </button>
-                      {isModelPickerOpen && (
-                        <div className="ask-model-menu" role="listbox" aria-label="Models">
-                          {enabledModels.map((toggle) => (
-                            <button
-                              key={toggle.id}
-                              type="button"
-                              role="option"
-                              aria-selected={toggle.id === selectedModelId}
-                              className={toggle.id === selectedModelId ? "ask-model-option active" : "ask-model-option"}
-                              onClick={() => {
-                                setActiveModelId(toggle.id);
-                                if (supabaseSession && activeThreadId) {
-                                  void updateThreadModel(activeThreadId, toggle.id, supabaseSession);
-                                }
-                                setIsModelPickerOpen(false);
-                              }}
-                            >
-                              {toggle.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+	                    <div className="ask-model" ref={modelPickerRef}>
+	                      <button
+	                        className="ask-model-btn"
+	                        type="button"
+	                        aria-haspopup="dialog"
+	                        aria-expanded={isModelPickerOpen}
+	                        onClick={() => (isModelPickerOpen ? closeModelPicker() : openModelPicker())}
+	                        disabled={curatedPickerModels.length === 0}
+	                        title="Model"
+	                      >
+	                        <span className="ask-model-label">{activeModelLabel}</span>
+	                        <svg className="ask-model-chevron" viewBox="0 0 24 24" aria-hidden="true">
+	                          <path d="M6 9l6 6 6-6" />
+	                        </svg>
+	                      </button>
+	                      {isModelPickerOpen && (
+	                        <div
+	                          className="model-picker-overlay"
+	                          role="dialog"
+	                          aria-modal="true"
+	                          aria-label="Choose a model"
+	                          onMouseDown={(event) => {
+	                            if (event.target === event.currentTarget) closeModelPicker();
+	                          }}
+	                        >
+	                          <div className="model-picker-modal" onMouseDown={(event) => event.stopPropagation()}>
+	                            <div className="model-picker-top">
+	                              <div className="model-picker-cta">
+	                                <div className="model-picker-cta-title">
+	                                  {hasPaidAccess ? "All models unlocked" : "Unlock all models"}
+	                                </div>
+	                                <div className="model-picker-cta-subtitle">
+	                                  {hasPaidAccess ? "Thanks for supporting Arx." : "Upgrade (payments coming soon)"}
+	                                </div>
+	                              </div>
+	                              <button
+	                                className="model-picker-close"
+	                                type="button"
+	                                onClick={closeModelPicker}
+	                                aria-label="Close model picker"
+	                                title="Close"
+	                              >
+	                                <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                  <path d="M18 6L6 18M6 6l12 12" />
+	                                </svg>
+	                              </button>
+	                            </div>
+
+	                            <div className="model-picker-search-row">
+	                              <input
+	                                ref={modelPickerSearchRef}
+	                                className="model-picker-search"
+	                                type="text"
+	                                placeholder="Search models…"
+	                                value={modelPickerQuery}
+	                                onChange={(event) => setModelPickerQuery(event.target.value)}
+	                              />
+	                            </div>
+
+	                            {modelPickerNotice && <div className="model-picker-notice">{modelPickerNotice}</div>}
+
+	                            <div className="model-picker-body">
+	                              <nav className="model-picker-nav" aria-label="Model sections">
+	                                {(
+	                                  [
+	                                    { id: "favorites", label: "★" },
+	                                    { id: "all", label: "All" },
+	                                    { id: "free", label: "Free" },
+	                                    { id: "openai", label: "OpenAI" },
+	                                    { id: "anthropic", label: "Anthropic" },
+	                                    { id: "google", label: "Google" },
+	                                    { id: "x-ai", label: "xAI" },
+	                                    { id: "openrouter", label: "OpenRouter" },
+	                                  ] as Array<{ id: ModelSectionId; label: string }>
+	                                ).map((section) => (
+	                                  <button
+	                                    key={section.id}
+	                                    className={
+	                                      modelPickerSection === section.id
+	                                        ? "model-picker-nav-btn active"
+	                                        : "model-picker-nav-btn"
+	                                    }
+	                                    type="button"
+	                                    aria-pressed={modelPickerSection === section.id}
+	                                    onClick={() => setModelPickerSection(section.id)}
+	                                  >
+	                                    {section.label}
+	                                  </button>
+	                                ))}
+	                              </nav>
+	                              <div className="model-picker-list" role="list">
+	                                {visiblePickerModels.map((model) => {
+	                                  const isSelected = model.id === selectedPickerModelId;
+	                                  const selectable = canSelectPickerModel(model);
+	                                  const canFavorite = model.access !== "guest";
+	                                  const isFavorited = favoriteSet.has(model.id);
+
+	                                  const lockedLabel = !supabaseSession
+	                                    ? model.access === "guest"
+	                                      ? "Free"
+	                                      : "Sign in"
+	                                    : !modelToggles.some((toggle) => toggle.id === model.id)
+	                                      ? "Soon"
+	                                      : model.access === "paid" && !hasPaidAccess
+	                                        ? "Locked"
+	                                      : model.access === "guest"
+	                                        ? "Guest only"
+	                                        : null;
+
+	                                  return (
+	                                    <div
+	                                      key={model.id}
+	                                      className={
+	                                        "model-picker-row" +
+	                                        (isSelected ? " selected" : "") +
+	                                        (!selectable ? " locked" : "")
+	                                      }
+	                                    >
+	                                      <button
+	                                        className="model-picker-row-main"
+	                                        type="button"
+	                                        onClick={() => handleSelectPickerModel(model)}
+	                                        aria-current={isSelected ? "true" : undefined}
+	                                      >
+	                                        <div className="model-picker-row-title">
+	                                          {model.label}
+	                                          {lockedLabel && (
+	                                            <span className="model-picker-row-pill">{lockedLabel}</span>
+	                                          )}
+	                                        </div>
+	                                        {model.description && (
+	                                          <div className="model-picker-row-subtitle">{model.description}</div>
+	                                        )}
+	                                      </button>
+	                                      <div className="model-picker-row-actions">
+	                                        <button
+	                                          className={
+	                                            isFavorited ? "model-picker-star active" : "model-picker-star"
+	                                          }
+	                                          type="button"
+	                                          disabled={!canFavorite}
+	                                          aria-label={isFavorited ? "Unfavorite model" : "Favorite model"}
+	                                          title={
+	                                            canFavorite ? (isFavorited ? "Unfavorite" : "Favorite") : "Guest-only"
+	                                          }
+	                                          onClick={() => toggleFavoriteModel(model.id)}
+	                                        >
+	                                          <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+	                                          </svg>
+	                                        </button>
+	                                      </div>
+	                                    </div>
+	                                  );
+	                                })}
+	                              </div>
+	                            </div>
+	                          </div>
+	                        </div>
+	                      )}
+	                    </div>
                   </div>
                   <div className="ask-actions">
                     <button
@@ -11941,17 +12268,16 @@ export default function App() {
                         <path d="M8 22h8" />
                       </svg>
                     </button>
-                    <button
-                      className="chat-send ask-send-btn ask-send-btn-v2"
-                      type="button"
-                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
-                      disabled={
-                        !supabaseSession ||
-                        (isStreamingWorkspaceTurn
-                          ? false
-                          : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
-                      }
-                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+	                    <button
+	                      className="chat-send ask-send-btn ask-send-btn-v2"
+	                      type="button"
+	                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+	                      disabled={
+	                        (isStreamingWorkspaceTurn
+	                          ? false
+	                          : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
+	                      }
+	                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
                       title={isStreamingWorkspaceTurn ? "Stop" : "Send"}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
