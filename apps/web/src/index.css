@@ -2259,6 +2259,30 @@
   padding: 0 18px 14px;
 }
 
+.auth-gate-bullets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.auth-gate-bullets li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.auth-gate-bullets li::before {
+  content: "•";
+  color: var(--text-faint);
+  line-height: 1.2;
+  margin-top: 3px;
+}
+
 .modal.modal-auth-gate .modal-footer {
   border-top: none;
   background: transparent;
@@ -2289,6 +2313,7 @@
   width: 18px;
   height: 18px;
   display: block;
+  flex-shrink: 0;
 }
 
 :root[data-theme="dark"] .auth-gate-google-button,
