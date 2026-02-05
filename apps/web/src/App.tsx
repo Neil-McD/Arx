@@ -12344,46 +12344,56 @@ export default function App() {
 	                                </>
 		                              );
 		                            })()}
-		                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
-		                              <div className="web-download-card" role="note" aria-label="Desktop app">
-		                                <button
-	                                  className="web-download-close"
-	                                  type="button"
-	                                  onClick={dismissDesktopDownload}
-	                                  title="Dismiss"
-	                                  aria-label="Dismiss"
-	                                >
-	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-	                                    <path d="M18 6L6 18M6 6l12 12" />
-	                                  </svg>
-	                                </button>
-	                                <div className="web-download-title">Download desktop app</div>
-	                                <div className="web-download-subtitle">Get access to full agents on desktop.</div>
-	                                <div className="web-download-actions">
-	                                  <button
-	                                    className="secondary web-download-button"
-	                                    type="button"
-	                                    disabled={!desktopDownloadUrl}
-	                                    title={
-	                                      desktopDownloadUrl
-	                                        ? "Download desktop app"
-	                                        : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
-	                                    }
-	                                    onClick={() => {
-	                                      if (!desktopDownloadUrl) return;
-	                                      window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
-	                                    }}
-	                                  >
-	                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-	                                      <path d="M12 3v10" />
-	                                      <path d="M7 10l5 5 5-5" />
-	                                      <path d="M5 21h14" />
-	                                    </svg>
-	                                    Download
-	                                  </button>
-	                                </div>
-	                              </div>
-	                            )}
+			                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
+			                              <div className="web-download-card" role="note" aria-label="Desktop app">
+			                                <button
+		                                  className="web-download-close"
+		                                  type="button"
+		                                  onClick={dismissDesktopDownload}
+		                                  title="Dismiss"
+		                                  aria-label="Dismiss"
+		                                >
+		                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+		                                    <path d="M18 6L6 18M6 6l12 12" />
+		                                  </svg>
+		                                </button>
+		                                <div className="web-download-body">
+		                                  <div className="web-download-icon" aria-hidden="true">
+		                                    <svg viewBox="0 0 24 24">
+		                                      <path d="M4 6h16v10H4z" />
+		                                      <path d="M2 18h20" />
+		                                    </svg>
+		                                  </div>
+		                                  <div className="web-download-copy">
+		                                    <div className="web-download-title">Download desktop app</div>
+		                                    <div className="web-download-subtitle">Get access to full agents on desktop.</div>
+		                                  </div>
+		                                </div>
+		                                <div className="web-download-actions">
+		                                  <button
+		                                    className="web-download-button"
+		                                    type="button"
+		                                    disabled={!desktopDownloadUrl}
+		                                    title={
+		                                      desktopDownloadUrl
+		                                        ? "Download desktop app"
+		                                        : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
+		                                    }
+		                                    onClick={() => {
+		                                      if (!desktopDownloadUrl) return;
+		                                      window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
+		                                    }}
+		                                  >
+		                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+		                                      <path d="M12 3v10" />
+		                                      <path d="M7 10l5 5 5-5" />
+		                                      <path d="M5 21h14" />
+		                                    </svg>
+		                                    Download
+		                                  </button>
+		                                </div>
+		                              </div>
+		                            )}
 	                          </div>
 	                        )}
 	                      </>

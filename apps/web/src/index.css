@@ -591,16 +591,54 @@
 }
 
 .web-download-card {
-  margin-top: 10px;
+  margin-top: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  padding: 14px 16px;
+  padding-right: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  width: min(100%, 680px);
+}
+
+.web-download-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.web-download-icon {
+  width: 40px;
+  height: 40px;
   border-radius: 14px;
   border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
-  padding: 14px 14px;
+  background: var(--bg-card-alt);
   display: grid;
-  gap: 10px;
-  position: relative;
-  width: min(100%, 640px);
-  text-align: left;
+  place-items: center;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.web-download-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.web-download-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .web-download-close {
@@ -640,7 +678,7 @@
 }
 
 .web-download-subtitle {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.35;
 }
@@ -648,8 +686,59 @@
 .web-download-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.web-download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.web-download-button:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.web-download-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.web-download-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.web-download-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 540px) {
+  .web-download-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .web-download-actions {
+    justify-content: flex-start;
+  }
 }
 
 .agent-drafts-row {
@@ -1329,22 +1418,6 @@
 
 .web-starter-row.is-preview:not(.web-starter-row-editable):not(.web-starter-row-add):hover {
   background: transparent;
-}
-
-.web-download-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.web-download-button svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .message-item.user {
