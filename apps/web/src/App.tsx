@@ -13025,16 +13025,16 @@ export default function App() {
 		                                  <div className="discover-card-header">
 		                                    <div className="discover-card-avatar web-skeleton-block" />
 		                                    <div className="discover-card-meta">
-		                                      <div className="web-skeleton-row discover-skeleton-name" />
+		                                      <div className="discover-card-name-row">
+		                                        <div className="web-skeleton-row discover-skeleton-name" />
+		                                        <div className="web-skeleton-pill discover-skeleton-price" />
+		                                        <div className="discover-visibility-icon discover-skeleton-visibility web-skeleton-block" />
+		                                      </div>
 		                                      <div className="web-skeleton-row discover-skeleton-slug" />
 		                                    </div>
 		                                  </div>
 		                                  <div className="web-skeleton-row discover-skeleton-desc" />
 		                                  <div className="web-skeleton-row discover-skeleton-desc discover-skeleton-desc-short" />
-		                                  <div className="discover-skeleton-stats">
-		                                    <div className="web-skeleton-pill discover-skeleton-pill" />
-		                                    <div className="web-skeleton-pill discover-skeleton-pill" />
-		                                  </div>
 		                                </div>
 		                              </div>
 		                            ))}

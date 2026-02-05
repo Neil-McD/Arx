@@ -474,17 +474,17 @@
   width: 82%;
 }
 
-.discover-skeleton-stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.discover-skeleton-pill {
-  width: 84px;
+.discover-skeleton-price {
+  width: 56px;
   height: 12px;
   border-radius: 999px;
+  opacity: 0.65;
+}
+
+.discover-skeleton-visibility {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
   opacity: 0.65;
 }
 
