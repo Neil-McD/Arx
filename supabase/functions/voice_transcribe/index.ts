@@ -10,6 +10,7 @@ type VoiceTranscribeInput = {
   language?: unknown;
   prompt?: unknown;
   surface?: unknown;
+  prefer_primary?: unknown;
 };
 
 type ProviderTranscribeResult = {
@@ -23,6 +24,8 @@ type ProviderTranscribeResult = {
 const DEFAULT_PRIMARY_MODEL = "gpt-4o-mini-transcribe";
 const DEFAULT_FALLBACK_MODEL = "whisper-large-v3-turbo";
 const DEFAULT_FALLBACK_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions";
+const DEFAULT_TRANSCRIBE_PROMPT =
+  "Transcribe spoken words verbatim. If speech is unclear or absent, return an empty transcript.";
 
 function isTruthyEnv(value: string): boolean {
   const v = (value ?? "").trim().toLowerCase();
@@ -36,6 +39,11 @@ function looksLikeApiKey(value: string): boolean {
   if (/^(?:sk|gsk|xai|rk|or)_/i.test(v)) return true;
   if (v.length >= 40 && !v.includes("/") && !v.includes(" ") && /^[A-Za-z0-9._-]+$/.test(v)) return true;
   return false;
+}
+
+function looksLikeXaiApiKey(value: string): boolean {
+  const v = value.trim();
+  return /^(?:xai[-_])/i.test(v);
 }
 
 function resolvePrimaryConfig(): { apiKey: string; model: string } {
@@ -87,7 +95,7 @@ function sanitizeMimeType(input: unknown): string {
 
 function extensionForMime(mimeType: string): string {
   if (mimeType.includes("ogg")) return ".ogg";
-  if (mimeType.includes("mp4")) return ".mp4";
+  if (mimeType.includes("mp4")) return ".m4a";
   if (mimeType.includes("mpeg")) return ".mp3";
   if (mimeType.includes("wav")) return ".wav";
   return ".webm";
@@ -153,6 +161,8 @@ async function transcribeWithOpenAi(params: {
   form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
   if (params.language) form.append("language", params.language);
   if (params.prompt) form.append("prompt", params.prompt);
+  form.append("temperature", "0");
+  form.append("response_format", "json");
 
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -201,11 +211,23 @@ async function transcribeWithGroqFallback(params: {
     };
   }
 
+  if (endpoint.includes("api.groq.com") && looksLikeXaiApiKey(apiKey)) {
+    return {
+      ok: false,
+      text: "",
+      provider: "groq",
+      model,
+      message:
+        "Fallback key appears to be an xAI key, but fallback endpoint is Groq. Use GROQ_API_KEY or ARX_VOICE_FALLBACK_API_KEY with a Groq key.",
+    };
+  }
+
   const form = new FormData();
   form.append("model", model);
   form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
   if (params.language) form.append("language", params.language);
   if (params.prompt) form.append("prompt", params.prompt);
+  form.append("temperature", "0");
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -276,8 +298,10 @@ Deno.serve(async (req: Request) => {
 
     const mimeType = sanitizeMimeType(input.mime_type);
     const language = typeof input.language === "string" ? input.language.trim().slice(0, 12) : "";
-    const prompt = typeof input.prompt === "string" ? input.prompt.trim().slice(0, 320) : "";
+    const promptRaw = typeof input.prompt === "string" ? input.prompt.trim().slice(0, 320) : "";
+    const prompt = promptRaw || DEFAULT_TRANSCRIBE_PROMPT;
     const surface = typeof input.surface === "string" ? input.surface.trim().toLowerCase() : "";
+    const preferPrimary = input.prefer_primary === true || input.prefer_primary === "true";
     if (surface && surface !== "workspace" && surface !== "community") {
       return jsonResponse({ ok: false, error: "invalid_surface", code: "invalid_surface" }, { status: 400, headers });
     }
@@ -298,6 +322,20 @@ Deno.serve(async (req: Request) => {
           fallback_used: false,
         },
         { status: 200, headers },
+      );
+    }
+
+    if (preferPrimary) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "voice_transcription_failed",
+          code: "voice_transcription_failed",
+          message: primary.message || "Primary transcription failed.",
+          primary_error: primary.message ?? null,
+          fallback_error: "skipped_by_prefer_primary",
+        },
+        { status: 502, headers },
       );
     }
 
