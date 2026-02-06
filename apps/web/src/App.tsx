@@ -756,6 +756,7 @@ type CommunityTab =
   | "analytics"
   | "automations";
 type VoiceSurface = "workspace" | "community";
+type VoiceUiState = "idle" | "recording" | "transcribing";
 
 type AppRouteState = {
   page: AppPage;
@@ -11586,6 +11587,33 @@ export default function App() {
     };
   }
 
+  function resolveVoiceUiState(surface: VoiceSurface): VoiceUiState {
+    if (activeVoiceSurface !== surface) return "idle";
+    return isVoiceTranscribing ? "transcribing" : "recording";
+  }
+
+  function renderVoiceButtonVisual(state: VoiceUiState) {
+    return (
+      <>
+        <span className="ask-mic-ripple" aria-hidden="true" />
+        {state === "transcribing" ? (
+          <span className="ask-mic-loader" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : (
+          <svg className="ask-mic-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+            <path d="M19 11a7 7 0 0 1-14 0" />
+            <path d="M12 18v4" />
+            <path d="M8 22h8" />
+          </svg>
+        )}
+      </>
+    );
+  }
+
   function releaseVoiceCaptureResources() {
     const cleanupCapture = voiceCaptureCleanupRef.current;
     if (cleanupCapture) {
@@ -11830,6 +11858,11 @@ export default function App() {
     }
     await startVoiceCapture(surface);
   }
+
+  const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
+  const communityVoiceIntent = resolveVoiceInputIntent("community");
+  const workspaceVoiceUiState = resolveVoiceUiState("workspace");
+  const communityVoiceUiState = resolveVoiceUiState("community");
 
   const communityMemberPlanCohorts = useMemo(() => {
     const map = new Map<
@@ -15033,25 +15066,18 @@ export default function App() {
 	                      )}
 	                    </div>
                   </div>
-		                  <div className="ask-actions">
-		                    <button
-		                      className={
-		                        "ask-icon-btn ask-mic" +
-		                        (activeVoiceSurface === "workspace" && !isVoiceTranscribing ? " recording" : "") +
-		                        (activeVoiceSurface === "workspace" && isVoiceTranscribing ? " transcribing" : "")
-		                      }
-		                      type="button"
-		                      onClick={() => void handleVoiceInputClick("workspace")}
-		                      aria-label="Voice input"
-		                      title={resolveVoiceInputIntent("workspace").title}
-		                    >
-	                      <svg viewBox="0 0 24 24" aria-hidden="true">
-	                        <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-	                        <path d="M19 11a7 7 0 0 1-14 0" />
-	                        <path d="M12 18v4" />
-                        <path d="M8 22h8" />
-                      </svg>
-                    </button>
+			                  <div className="ask-actions">
+			                    <button
+			                      className={`ask-icon-btn ask-mic ${workspaceVoiceUiState}`}
+			                      type="button"
+			                      onClick={() => void handleVoiceInputClick("workspace")}
+			                      aria-label={workspaceVoiceIntent.title}
+                            aria-pressed={workspaceVoiceUiState === "recording"}
+                            aria-busy={workspaceVoiceUiState === "transcribing"}
+			                      title={workspaceVoiceIntent.title}
+			                    >
+                        {renderVoiceButtonVisual(workspaceVoiceUiState)}
+	                    </button>
 	                    <button
 	                      className="chat-send ask-send-btn ask-send-btn-v2"
 	                      type="button"
@@ -15805,24 +15831,17 @@ export default function App() {
 	                          disabled={!supabaseSession || !activeCommunity || !canPostMessagesActiveCommunity}
 	                          rows={1}
 	                        />
-	                        <button
-	                          className={
-	                            "ask-icon-btn ask-mic" +
-	                            (activeVoiceSurface === "community" && !isVoiceTranscribing ? " recording" : "") +
-	                            (activeVoiceSurface === "community" && isVoiceTranscribing ? " transcribing" : "")
-	                          }
-	                          type="button"
-	                          onClick={() => void handleVoiceInputClick("community")}
-	                          aria-label="Voice input"
-	                          title={resolveVoiceInputIntent("community").title}
-	                        >
-	                          <svg viewBox="0 0 24 24" aria-hidden="true">
-	                            <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-	                            <path d="M19 11a7 7 0 0 1-14 0" />
-	                            <path d="M12 18v4" />
-                            <path d="M8 22h8" />
-                          </svg>
-                        </button>
+		                        <button
+		                          className={`ask-icon-btn ask-mic ${communityVoiceUiState}`}
+		                          type="button"
+		                          onClick={() => void handleVoiceInputClick("community")}
+		                          aria-label={communityVoiceIntent.title}
+                              aria-pressed={communityVoiceUiState === "recording"}
+                              aria-busy={communityVoiceUiState === "transcribing"}
+		                          title={communityVoiceIntent.title}
+		                        >
+                              {renderVoiceButtonVisual(communityVoiceUiState)}
+		                        </button>
                         <button
 	                          className="chat-send ask-send-btn"
 	                          onClick={() => void handleSendCommunityMessage()}
