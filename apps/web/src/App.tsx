@@ -1494,6 +1494,13 @@ const VOICE_CAPTURE_MIME_TYPES = [
   "audio/mpeg",
   "audio/wav",
 ];
+type VoiceAudioContextCtor = new () => AudioContext;
+type VoiceUserMediaFn = (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+type VoiceLegacyGetUserMediaFn = (
+  constraints: MediaStreamConstraints,
+  onSuccess: (stream: MediaStream) => void,
+  onError: (error: unknown) => void,
+) => void;
 
 function selectVoiceCaptureMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return undefined;
@@ -1507,11 +1514,91 @@ function selectVoiceCaptureMimeType(): string | undefined {
   return undefined;
 }
 
+function getVoiceAudioContextConstructor(): VoiceAudioContextCtor | null {
+  const scope = globalThis as typeof globalThis & { webkitAudioContext?: VoiceAudioContextCtor };
+  const ctor = scope.AudioContext ?? scope.webkitAudioContext;
+  return typeof ctor === "function" ? ctor : null;
+}
+
+function getVoiceUserMedia(): VoiceUserMediaFn | null {
+  const modern = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+  if (modern) return modern;
+  const legacyNavigator = navigator as Navigator & {
+    getUserMedia?: VoiceLegacyGetUserMediaFn;
+    webkitGetUserMedia?: VoiceLegacyGetUserMediaFn;
+    mozGetUserMedia?: VoiceLegacyGetUserMediaFn;
+    msGetUserMedia?: VoiceLegacyGetUserMediaFn;
+  };
+  const legacy =
+    legacyNavigator.getUserMedia ??
+    legacyNavigator.webkitGetUserMedia ??
+    legacyNavigator.mozGetUserMedia ??
+    legacyNavigator.msGetUserMedia;
+  if (!legacy) return null;
+  return (constraints) =>
+    new Promise<MediaStream>((resolve, reject) => {
+      try {
+        legacy.call(legacyNavigator, constraints, resolve, reject);
+      } catch (error) {
+        reject(error);
+      }
+    });
+}
+
+function floatToInt16Pcm(input: Float32Array): Int16Array {
+  const out = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i]));
+    out[i] = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
+  }
+  return out;
+}
+
+function createWavBlobFromInt16Chunks(chunks: Int16Array[], sampleRate: number): Blob {
+  let totalSamples = 0;
+  for (const chunk of chunks) totalSamples += chunk.length;
+  const dataSize = totalSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM header size.
+  view.setUint16(20, 1, true); // PCM format.
+  view.setUint16(22, 1, true); // Mono channel.
+  view.setUint32(24, Math.max(8000, Math.floor(sampleRate || 16000)), true);
+  view.setUint32(28, Math.max(8000, Math.floor(sampleRate || 16000)) * 2, true); // sample_rate * channels * bytes_per_sample.
+  view.setUint16(32, 2, true); // block_align.
+  view.setUint16(34, 16, true); // bits_per_sample.
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i += 1) {
+      view.setInt16(offset, chunk[i], true);
+      offset += 2;
+    }
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
 function mergeVoiceTranscript(existing: string, transcript: string): string {
   const next = transcript.trim();
   if (!next) return existing;
   if (!existing.trim()) return next;
   return /\s$/.test(existing) ? `${existing}${next}` : `${existing} ${next}`;
+}
+
+function getVoiceLanguageHint(): string {
+  const locale = typeof navigator !== "undefined" ? (navigator.language || "").trim().toLowerCase() : "";
+  const twoLetter = locale.slice(0, 2);
+  return /^[a-z]{2}$/.test(twoLetter) ? twoLetter : "";
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -3115,6 +3202,8 @@ export default function App() {
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceStopCaptureRef = useRef<(() => Promise<Blob>) | null>(null);
+  const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
   const [isCommunityChatLightboxOpen, setIsCommunityChatLightboxOpen] = useState(false);
   const [communityChatLightboxImages, setCommunityChatLightboxImages] = useState<ChatLightboxImage[]>([]);
@@ -3830,19 +3919,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      try {
-        const recorder = voiceRecorderRef.current;
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-      } catch {
-        // ignore cleanup race
-      }
-      const stream = voiceStreamRef.current;
-      if (stream) {
-        for (const track of stream.getTracks()) track.stop();
-      }
-      voiceRecorderRef.current = null;
-      voiceStreamRef.current = null;
-      voiceChunksRef.current = [];
+      releaseVoiceCaptureResources();
     };
   }, []);
 
@@ -11510,6 +11587,16 @@ export default function App() {
   }
 
   function releaseVoiceCaptureResources() {
+    const cleanupCapture = voiceCaptureCleanupRef.current;
+    if (cleanupCapture) {
+      try {
+        cleanupCapture();
+      } catch {
+        // ignore cleanup race
+      }
+    }
+    voiceCaptureCleanupRef.current = null;
+    voiceStopCaptureRef.current = null;
     const stream = voiceStreamRef.current;
     if (stream) {
       for (const track of stream.getTracks()) track.stop();
@@ -11544,6 +11631,7 @@ export default function App() {
     const payload = JSON.stringify({
       audio_base64: await blobToBase64(blob),
       mime_type: blob.type || "audio/webm",
+      language: getVoiceLanguageHint(),
       surface,
     });
     const session = sessionRef.current ?? supabaseSession;
@@ -11568,12 +11656,65 @@ export default function App() {
   }
 
   async function startVoiceCapture(surface: VoiceSurface): Promise<void> {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    const requestUserMedia = getVoiceUserMedia();
+    if (!requestUserMedia) {
       showAppToastMessage("Voice input is not supported on this device.");
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await requestUserMedia({ audio: true });
+      if (typeof MediaRecorder === "undefined") {
+        const AudioContextCtor = getVoiceAudioContextConstructor();
+        if (!AudioContextCtor) throw new Error("voice_unsupported");
+        const audioContext = new AudioContextCtor();
+        await audioContext.resume().catch(() => undefined);
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        const silentSink = audioContext.createGain();
+        silentSink.gain.value = 0;
+        const pcmChunks: Int16Array[] = [];
+        let cleanedUp = false;
+        const cleanupCapture = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
+          processor.onaudioprocess = null;
+          try {
+            source.disconnect();
+          } catch {
+            // ignore disconnect race
+          }
+          try {
+            processor.disconnect();
+          } catch {
+            // ignore disconnect race
+          }
+          try {
+            silentSink.disconnect();
+          } catch {
+            // ignore disconnect race
+          }
+          void audioContext.close().catch(() => undefined);
+        };
+        processor.onaudioprocess = (event) => {
+          const samples = event.inputBuffer.getChannelData(0);
+          if (!samples || samples.length === 0) return;
+          pcmChunks.push(floatToInt16Pcm(samples));
+        };
+        source.connect(processor);
+        processor.connect(silentSink);
+        silentSink.connect(audioContext.destination);
+        voiceCaptureCleanupRef.current = cleanupCapture;
+        voiceStopCaptureRef.current = async () => {
+          cleanupCapture();
+          return createWavBlobFromInt16Chunks(pcmChunks, audioContext.sampleRate);
+        };
+        voiceStreamRef.current = stream;
+        voiceRecorderRef.current = null;
+        voiceChunksRef.current = [];
+        setActiveVoiceSurface(surface);
+        showAppToastMessage("Listening... tap mic again to stop.");
+        return;
+      }
       const mimeType = selectVoiceCaptureMimeType();
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       voiceChunksRef.current = [];
@@ -11588,6 +11729,38 @@ export default function App() {
         setIsVoiceTranscribing(false);
         showAppToastMessage("Microphone recording failed.");
       };
+      voiceCaptureCleanupRef.current = () => {
+        try {
+          recorder.ondataavailable = null;
+          recorder.onerror = null;
+          if (recorder.state !== "inactive") recorder.stop();
+        } catch {
+          // ignore cleanup race
+        }
+      };
+      voiceStopCaptureRef.current = () =>
+        new Promise<Blob>((resolve, reject) => {
+          const handleStop = () => {
+            recorder.removeEventListener("stop", handleStop);
+            recorder.removeEventListener("error", handleError);
+            const blob = new Blob(voiceChunksRef.current, {
+              type: recorder.mimeType || "audio/webm",
+            });
+            resolve(blob);
+          };
+          const handleError = () => {
+            recorder.removeEventListener("stop", handleStop);
+            recorder.removeEventListener("error", handleError);
+            reject(new Error("recording_failed"));
+          };
+          recorder.addEventListener("stop", handleStop, { once: true });
+          recorder.addEventListener("error", handleError, { once: true });
+          if (recorder.state === "inactive") {
+            handleStop();
+            return;
+          }
+          recorder.stop();
+        });
       voiceStreamRef.current = stream;
       voiceRecorderRef.current = recorder;
       setActiveVoiceSurface(surface);
@@ -11599,6 +11772,8 @@ export default function App() {
           ? "Microphone access was denied."
           : error instanceof DOMException && error.name === "NotFoundError"
             ? "No microphone was found."
+            : error instanceof Error && error.message === "voice_unsupported"
+              ? "Voice input is not supported on this device."
             : "Could not start microphone capture.";
       showAppToastMessage(message);
       releaseVoiceCaptureResources();
@@ -11608,32 +11783,11 @@ export default function App() {
   }
 
   async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
-    const recorder = voiceRecorderRef.current;
-    if (!recorder || activeVoiceSurface !== surface) return;
+    const stopCapture = voiceStopCaptureRef.current;
+    if (!stopCapture || activeVoiceSurface !== surface) return;
     setIsVoiceTranscribing(true);
     try {
-      const audioBlob = await new Promise<Blob>((resolve, reject) => {
-        const handleStop = () => {
-          recorder.removeEventListener("stop", handleStop);
-          recorder.removeEventListener("error", handleError);
-          const blob = new Blob(voiceChunksRef.current, {
-            type: recorder.mimeType || "audio/webm",
-          });
-          resolve(blob);
-        };
-        const handleError = () => {
-          recorder.removeEventListener("stop", handleStop);
-          recorder.removeEventListener("error", handleError);
-          reject(new Error("recording_failed"));
-        };
-        recorder.addEventListener("stop", handleStop, { once: true });
-        recorder.addEventListener("error", handleError, { once: true });
-        if (recorder.state === "inactive") {
-          handleStop();
-          return;
-        }
-        recorder.stop();
-      });
+      const audioBlob = await stopCapture();
       releaseVoiceCaptureResources();
       if (audioBlob.size === 0) {
         showAppToastMessage("No audio captured.");
