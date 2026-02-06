@@ -271,6 +271,65 @@
   pointer-events: auto;
 }
 
+.web-sessions-drawer .guest-thread-signin {
+  margin-top: 12px;
+  padding: 0 2px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.web-sessions-drawer .guest-thread-signin-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.web-sessions-drawer .guest-thread-signin-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.web-sessions-drawer .guest-thread-reset-button {
+  width: auto;
+  min-width: 128px;
+  min-height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: center;
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.web-sessions-drawer .guest-thread-reset-button:hover:not(:disabled) {
+  background: var(--bg-card-hover, var(--bg-card));
+  border-color: var(--border-muted);
+  color: var(--text-primary);
+}
+
+.web-sessions-drawer .guest-thread-reset-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.web-sessions-drawer .guest-thread-google-button:disabled,
+.web-sessions-drawer .guest-thread-reset-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace {
     transition: none;
@@ -1629,6 +1688,27 @@
   cursor: not-allowed;
 }
 
+.ask-icon-btn.ask-mic.recording {
+  background: color-mix(in srgb, #ef4444 22%, transparent);
+  color: #ffd2d2;
+}
+
+.ask-icon-btn.ask-mic.transcribing {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+  animation: voice-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .ask-icon-btn svg {
   width: 18px;
   height: 18px;
@@ -2413,7 +2493,7 @@
   gap: 6px;
   font-size: 13px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .auth-gate-bullets li {
@@ -2424,7 +2504,7 @@
 
 .auth-gate-bullets li::before {
   content: "•";
-  color: var(--text-faint);
+  color: var(--text-muted);
   line-height: 1.2;
   margin-top: 3px;
 }
