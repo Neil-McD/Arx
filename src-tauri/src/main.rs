@@ -9,7 +9,8 @@ use db::{
   add_message, create_thread, delete_thread, delete_ui_state,
   create_personal_memory_item, delete_personal_memory_item, list_personal_memory_items,
   search_personal_memory_items, set_personal_memory_item_pinned,
-  get_project_by_id, get_session_resume, get_ui_state, list_events,
+  get_project_by_id, get_session_resume, get_ui_state, list_events, list_events_since,
+  list_tool_calls,
   list_messages, list_threads, open_conn, set_ui_state,
   get_thread_by_id,
   upsert_project, set_thread_community_id, set_thread_engine_model, set_thread_workspace_path, upsert_workspace_binding, DbState,
@@ -35,6 +36,7 @@ use sha2::{Digest as _, Sha256};
 const ENGINE_MESSAGES_AGENT: &str = "messages_agent";
 const ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT: &str = "openrouter_messages_agent";
 const ENGINE_LEGACY_OPENROUTER_CHAT: &str = "openrouter_chat";
+const ARP_PROTOCOL_VERSION: i64 = 1;
 const DEFAULT_MAX_TOKENS: u32 = 1024;
 const IO_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
 const RIPGREP_VERSION: &str = "14.1.1";
@@ -123,6 +125,53 @@ fn load_platform_model_map() -> Result<std::collections::HashMap<String, String>
   Ok(out)
 }
 
+fn model_alias_looks_openai(alias_model_id: &str) -> bool {
+  let cleaned = alias_model_id.trim().to_lowercase();
+  if cleaned.is_empty() || cleaned.contains('/') {
+    return false;
+  }
+  cleaned.starts_with("gpt-")
+    || cleaned.starts_with("o1")
+    || cleaned.starts_with("o3")
+    || cleaned.starts_with("o4")
+    || cleaned.starts_with("chatgpt-")
+}
+
+fn infer_openai_model_ref_from_alias(alias_model_id: &str) -> Option<PlatformModelRef> {
+  if !model_alias_looks_openai(alias_model_id) {
+    return None;
+  }
+  let cleaned = alias_model_id.trim();
+  Some(PlatformModelRef {
+    provider: PlatformProvider::OpenAi,
+    model: cleaned.to_string(),
+    ref_str: format!("openai/{}", cleaned),
+  })
+}
+
+#[cfg(test)]
+mod model_resolution_tests {
+  use super::*;
+
+  #[test]
+  fn openai_alias_detection_matches_expected_prefixes() {
+    assert!(model_alias_looks_openai("gpt-5.2"));
+    assert!(model_alias_looks_openai("gpt-5.2-codex"));
+    assert!(model_alias_looks_openai("o3-mini"));
+    assert!(model_alias_looks_openai("chatgpt-4o-latest"));
+    assert!(!model_alias_looks_openai("claude-sonnet-4.5"));
+    assert!(!model_alias_looks_openai("anthropic/claude-sonnet-4.5"));
+  }
+
+  #[test]
+  fn infer_openai_alias_model_ref_builds_openai_ref() {
+    let inferred = infer_openai_model_ref_from_alias("gpt-5.2").expect("expected inference");
+    assert_eq!(inferred.provider, PlatformProvider::OpenAi);
+    assert_eq!(inferred.model, "gpt-5.2");
+    assert_eq!(inferred.ref_str, "openai/gpt-5.2");
+  }
+}
+
 fn resolve_platform_model_for_alias(alias_model_id: &str) -> Result<PlatformModelRef, String> {
   let cleaned = alias_model_id.trim();
   if cleaned.is_empty() {
@@ -185,6 +234,7 @@ async fn fetch_model_registry_row(
 async fn resolve_platform_model_for_alias_with_registry(
   alias_model_id: &str,
   platform_proxy: Option<&PlatformProxyConfig>,
+  allow_openai_alias_inference: bool,
 ) -> Result<PlatformModelRef, String> {
   let cleaned = alias_model_id.trim();
   if cleaned.is_empty() {
@@ -213,7 +263,20 @@ async fn resolve_platform_model_for_alias_with_registry(
   }
 
   // Transition fallback: allow legacy env mapping until provider_model is populated in model_registry.
-  resolve_platform_model_for_alias(cleaned)
+  match resolve_platform_model_for_alias(cleaned) {
+    Ok(value) => Ok(value),
+    Err(err) => {
+      if allow_openai_alias_inference
+        && (err == "Missing PLATFORM_MODEL_MAP_JSON"
+          || err.starts_with("Platform model not configured for"))
+      {
+        if let Some(inferred) = infer_openai_model_ref_from_alias(cleaned) {
+          return Ok(inferred);
+        }
+      }
+      Err(err)
+    }
+  }
 }
 
 fn platform_provider_key_name(provider: PlatformProvider) -> &'static str {
@@ -514,6 +577,37 @@ fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
 fn list_tools_cmd() -> Result<Vec<ToolUiSpec>, String> {
   // MVP: engines own execution. Arx does not expose an internal tool registry.
   Ok(Vec::new())
+}
+
+#[derive(Serialize)]
+struct RuntimeCapabilities {
+  transport: String,
+  cursor_resume: bool,
+  tool_approvals: bool,
+  local_db_events: bool,
+  streaming_tokens: bool,
+}
+
+#[derive(Serialize)]
+struct InitializeResponse {
+  protocol_version: i64,
+  runtime_id: String,
+  capabilities: RuntimeCapabilities,
+}
+
+#[tauri::command]
+fn initialize_cmd() -> Result<InitializeResponse, String> {
+  Ok(InitializeResponse {
+    protocol_version: ARP_PROTOCOL_VERSION,
+    runtime_id: "arx_harness_tauri".to_string(),
+    capabilities: RuntimeCapabilities {
+      transport: "tauri".to_string(),
+      cursor_resume: true,
+      tool_approvals: true,
+      local_db_events: true,
+      streaming_tokens: true,
+    },
+  })
 }
 
 fn normalize_agent_mode(mode: &str) -> Option<&'static str> {
@@ -3321,7 +3415,22 @@ async fn send_turn_messages_agent(
 	    Some(selected_model_id),
 	  );
 
-  let model_ref = match resolve_platform_model_for_alias_with_registry(selected_model_id, platform_proxy.as_ref()).await {
+  let prefetched_chatgpt_auth: Option<ChatgptAuthV1> = if model_alias_looks_openai(selected_model_id) {
+    match get_chatgpt_auth_for_inference().await {
+      Ok(value) => value,
+      Err(_) => None,
+    }
+  } else {
+    None
+  };
+
+  let model_ref = match resolve_platform_model_for_alias_with_registry(
+    selected_model_id,
+    platform_proxy.as_ref(),
+    model_alias_looks_openai(selected_model_id),
+  )
+  .await
+  {
     Ok(v) => v,
     Err(err) => {
       append_messages_agent_assistant_message(
@@ -3483,11 +3592,8 @@ async fn send_turn_messages_agent(
 	      .unwrap_or("https://api.openai.com/v1")
 	      .trim_end_matches('/');
 	    let chat_url = format!("{}/chat/completions", base_url);
-		    let mut chatgpt_auth: Option<ChatgptAuthV1> = if model_ref.provider == PlatformProvider::OpenAi {
-		      match get_chatgpt_auth_for_inference().await {
-		        Ok(value) => value,
-		        Err(_) => None,
-		      }
+	    let mut chatgpt_auth: Option<ChatgptAuthV1> = if model_ref.provider == PlatformProvider::OpenAi {
+		      prefetched_chatgpt_auth.clone()
 		    } else {
 		      None
 		    };
@@ -6275,6 +6381,35 @@ fn list_events_cmd(
 }
 
 #[tauri::command]
+fn list_events_since_cmd(
+  state: tauri::State<DbState>,
+  thread_id: String,
+  after_seq: i64,
+  limit: usize,
+  include_engine_io_chunk: Option<bool>,
+) -> Result<Vec<db::EventRecord>, String> {
+  let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
+  list_events_since(
+    &conn,
+    &thread_id,
+    after_seq,
+    limit,
+    include_engine_io_chunk.unwrap_or(false),
+  )
+  .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_tool_calls_cmd(
+  state: tauri::State<DbState>,
+  thread_id: String,
+  limit: usize,
+) -> Result<Vec<db::ToolCallRecord>, String> {
+  let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
+  list_tool_calls(&conn, &thread_id, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_event_cmd(
   state: tauri::State<DbState>,
   thread_id: String,
@@ -7969,12 +8104,15 @@ fn main() {
     .plugin(tauri_plugin_decorum::init())
     .plugin(tauri_plugin_dialog::init())
       .invoke_handler(tauri::generate_handler![
+      initialize_cmd,
       create_thread_cmd,
       upsert_thread_cmd,
       delete_thread_cmd,
       list_threads_cmd,
       get_thread_cmd,
       list_events_cmd,
+      list_events_since_cmd,
+      list_tool_calls_cmd,
       get_event_cmd,
       list_turns_cmd,
       gc_blobs_cmd,

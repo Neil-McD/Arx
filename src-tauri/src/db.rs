@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection};
 use anyhow::Context as _;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -70,6 +70,22 @@ pub struct MessageRecord {
   pub engine_id: Option<String>,
   pub model_id: Option<String>,
   pub run_id: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ToolCallRecord {
+  pub id: String,
+  pub session_id: String,
+  pub run_id: Option<String>,
+  pub tool_name: String,
+  pub args_json: String,
+  pub status: String,
+  pub output_summary_json: Option<String>,
+  pub stdout_excerpt: Option<String>,
+  pub stderr_excerpt: Option<String>,
+  pub exit_code: Option<i64>,
+  pub created_at: i64,
+  pub updated_at: i64,
 }
 
 #[derive(serde::Serialize)]
@@ -2038,6 +2054,43 @@ pub fn list_events(conn: &Connection, thread_id: &str, limit: usize) -> anyhow::
   Ok(out)
 }
 
+pub fn list_events_since(
+  conn: &Connection,
+  thread_id: &str,
+  after_seq: i64,
+  limit: usize,
+  include_engine_io_chunk: bool,
+) -> anyhow::Result<Vec<EventRecord>> {
+  let clamped = std::cmp::min(std::cmp::max(limit, 1), 2000);
+  let mut stmt = conn.prepare(
+    "SELECT id, thread_id, seq, type, created_at, text, payload_json, blob_ref
+     FROM events
+     WHERE thread_id = ?1
+       AND seq > ?2
+       AND (?3 = 1 OR type != 'engine_io_chunk')
+     ORDER BY seq ASC
+     LIMIT ?4",
+  )?;
+  let include = if include_engine_io_chunk { 1_i64 } else { 0_i64 };
+  let rows = stmt.query_map(params![thread_id, after_seq, include, clamped as i64], |row| {
+    Ok(EventRecord {
+      id: row.get(0)?,
+      thread_id: row.get(1)?,
+      seq: row.get(2)?,
+      r#type: row.get(3)?,
+      created_at: row.get(4)?,
+      text: row.get(5)?,
+      payload_json: row.get(6)?,
+      blob_ref: row.get(7)?,
+    })
+  })?;
+  let mut out = Vec::new();
+  for row in rows {
+    out.push(row?);
+  }
+  Ok(out)
+}
+
 pub fn get_event_by_id(
   conn: &Connection,
   thread_id: &str,
@@ -2250,6 +2303,210 @@ pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<
   Ok(out)
 }
 
+pub fn list_tool_calls(
+  conn: &Connection,
+  thread_id: &str,
+  limit: usize,
+) -> anyhow::Result<Vec<ToolCallRecord>> {
+  let clamped = std::cmp::min(std::cmp::max(limit, 1), 2000);
+
+  struct ToolCallState {
+    id: String,
+    session_id: String,
+    run_id: Option<String>,
+    tool_name: String,
+    args_json: String,
+    status: String,
+    approved_by: Option<String>,
+    note: Option<String>,
+    exec_status: Option<String>,
+    reason: Option<String>,
+    artifacts: Option<serde_json::Value>,
+    stdout_excerpt: Option<String>,
+    stderr_excerpt: Option<String>,
+    exit_code: Option<i64>,
+    created_at: i64,
+    updated_at: i64,
+  }
+
+  let mut stmt = conn.prepare(
+    "SELECT type, created_at, payload_json
+     FROM events
+     WHERE thread_id = ?1
+       AND type IN (
+         'tool_call_requested',
+         'tool_call_approved',
+         'tool_call_denied',
+         'tool_call_started',
+         'tool_call_finished'
+       )
+       AND payload_json IS NOT NULL
+     ORDER BY seq ASC",
+  )?;
+  let rows = stmt.query_map(params![thread_id], |row| {
+    Ok((
+      row.get::<_, String>(0)?,
+      row.get::<_, i64>(1)?,
+      row.get::<_, String>(2)?,
+    ))
+  })?;
+
+  let mut states: HashMap<String, ToolCallState> = HashMap::new();
+
+  for row in rows {
+    let (event_type, created_at, payload_json) = row?;
+    let Ok(payload) = serde_json::from_str::<serde_json::Value>(&payload_json) else {
+      continue;
+    };
+    let Some(tool_call_id) = payload.get("tool_call_id").and_then(|v| v.as_str()) else {
+      continue;
+    };
+    if tool_call_id.trim().is_empty() {
+      continue;
+    }
+    let run_id = payload
+      .get("run_id")
+      .and_then(|v| v.as_str())
+      .map(|v| v.to_string());
+
+    let state = states.entry(tool_call_id.to_string()).or_insert_with(|| ToolCallState {
+      id: tool_call_id.to_string(),
+      session_id: thread_id.to_string(),
+      run_id: run_id.clone(),
+      tool_name: "tool".to_string(),
+      args_json: "{}".to_string(),
+      status: "requested".to_string(),
+      approved_by: None,
+      note: None,
+      exec_status: None,
+      reason: None,
+      artifacts: None,
+      stdout_excerpt: None,
+      stderr_excerpt: None,
+      exit_code: None,
+      created_at,
+      updated_at: created_at,
+    });
+
+    state.updated_at = created_at;
+    if state.run_id.is_none() && run_id.is_some() {
+      state.run_id = run_id;
+    }
+
+    match event_type.as_str() {
+      "tool_call_requested" => {
+        state.status = "requested".to_string();
+        if let Some(name) = payload.get("tool_name").and_then(|v| v.as_str()) {
+          let cleaned = name.trim();
+          if !cleaned.is_empty() {
+            state.tool_name = cleaned.to_string();
+          }
+        }
+        if let Some(args) = payload.get("args") {
+          state.args_json = serde_json::to_string(args).unwrap_or_else(|_| "{}".to_string());
+        }
+      }
+      "tool_call_approved" => {
+        state.status = "approved".to_string();
+        state.approved_by = payload
+          .get("approved_by")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+        state.note = payload
+          .get("note")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+      }
+      "tool_call_denied" => {
+        state.status = "denied".to_string();
+        state.approved_by = payload
+          .get("approved_by")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+        state.note = payload
+          .get("note")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+      }
+      "tool_call_started" => {
+        state.status = "started".to_string();
+      }
+      "tool_call_finished" => {
+        state.status = "finished".to_string();
+        state.exec_status = payload
+          .get("status")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+        state.reason = payload
+          .get("reason")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+        state.exit_code = payload.get("exit_code").and_then(|v| v.as_i64());
+        state.stdout_excerpt = payload
+          .get("result_preview")
+          .and_then(|v| v.as_str())
+          .map(|v| v.to_string());
+        state.stderr_excerpt = match state.exec_status.as_deref() {
+          Some("error") => state.reason.clone(),
+          _ => None,
+        };
+        state.artifacts = payload.get("artifacts").cloned();
+      }
+      _ => {}
+    }
+  }
+
+  let mut out = Vec::with_capacity(states.len());
+  for state in states.into_values() {
+    let mut summary = serde_json::Map::new();
+    if let Some(value) = state.approved_by.as_deref() {
+      summary.insert("approved_by".to_string(), serde_json::Value::String(value.to_string()));
+    }
+    if let Some(value) = state.note.as_deref() {
+      summary.insert("note".to_string(), serde_json::Value::String(value.to_string()));
+    }
+    if let Some(value) = state.exec_status.as_deref() {
+      summary.insert("exec_status".to_string(), serde_json::Value::String(value.to_string()));
+    }
+    if let Some(value) = state.reason.as_deref() {
+      summary.insert("reason".to_string(), serde_json::Value::String(value.to_string()));
+    }
+    if let Some(value) = state.artifacts {
+      summary.insert("artifacts".to_string(), value);
+    }
+
+    out.push(ToolCallRecord {
+      id: state.id,
+      session_id: state.session_id,
+      run_id: state.run_id,
+      tool_name: state.tool_name,
+      args_json: state.args_json,
+      status: state.status,
+      output_summary_json: if summary.is_empty() {
+        None
+      } else {
+        Some(serde_json::to_string(&serde_json::Value::Object(summary)).unwrap_or_else(|_| "{}".to_string()))
+      },
+      stdout_excerpt: state.stdout_excerpt,
+      stderr_excerpt: state.stderr_excerpt,
+      exit_code: state.exit_code,
+      created_at: state.created_at,
+      updated_at: state.updated_at,
+    });
+  }
+
+  out.sort_by(|a, b| {
+    a.created_at
+      .cmp(&b.created_at)
+      .then_with(|| a.updated_at.cmp(&b.updated_at))
+      .then_with(|| a.id.cmp(&b.id))
+  });
+  if out.len() > clamped {
+    out.drain(0..(out.len() - clamped));
+  }
+  Ok(out)
+}
+
 pub fn db_path(base_dir: &Path) -> PathBuf {
   base_dir.join("arx")
 }
@@ -2265,4 +2522,184 @@ pub fn open_conn(db_path: &Path, key: &str) -> anyhow::Result<Connection> {
   Ok(conn)
 }
 
-// (tests removed) legacy internal harness validation no longer applies in MVP.
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn setup_conn() -> Connection {
+    let conn = Connection::open_in_memory().expect("open in-memory sqlite");
+    run_migrations(&conn).expect("run migrations");
+    conn
+  }
+
+  #[test]
+  fn list_events_since_respects_engine_chunk_filter() {
+    let conn = setup_conn();
+    let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
+      .expect("create thread");
+
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread.id,
+      "user_message",
+      Some("u"),
+      Some(r#"{"v":1}"#),
+      None,
+    )
+    .expect("append user");
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread.id,
+      "engine_io_chunk",
+      Some("chunk"),
+      Some(r#"{"v":1}"#),
+      None,
+    )
+    .expect("append chunk");
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread.id,
+      "assistant_message",
+      Some("a"),
+      Some(r#"{"v":1}"#),
+      None,
+    )
+    .expect("append assistant");
+
+    let without_chunks =
+      list_events_since(&conn, &thread.id, 0, 20, false).expect("list events (filtered)");
+    assert_eq!(without_chunks.len(), 2);
+    assert_eq!(without_chunks[0].r#type, "user_message");
+    assert_eq!(without_chunks[1].r#type, "assistant_message");
+
+    let with_chunks =
+      list_events_since(&conn, &thread.id, 0, 20, true).expect("list events (with chunks)");
+    assert_eq!(with_chunks.len(), 3);
+    assert_eq!(with_chunks[1].r#type, "engine_io_chunk");
+  }
+
+  #[test]
+  fn list_tool_calls_reconstructs_lifecycle_from_events() {
+    let conn = setup_conn();
+    let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
+      .expect("create thread");
+    let thread_id = thread.id.clone();
+
+    let requested = serde_json::json!({
+      "v": 1,
+      "run_id": "run-1",
+      "tool_call_id": "call-1",
+      "tool_name": "read",
+      "args": { "path": "README.md" }
+    });
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread_id,
+      "tool_call_requested",
+      None,
+      Some(&requested.to_string()),
+      None,
+    )
+    .expect("append requested");
+
+    let approved = serde_json::json!({
+      "v": 1,
+      "run_id": "run-1",
+      "tool_call_id": "call-1",
+      "approved": true,
+      "approved_by": "user"
+    });
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread_id,
+      "tool_call_approved",
+      None,
+      Some(&approved.to_string()),
+      None,
+    )
+    .expect("append approved");
+
+    let started = serde_json::json!({
+      "v": 1,
+      "run_id": "run-1",
+      "tool_call_id": "call-1",
+      "attempt": 1
+    });
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread_id,
+      "tool_call_started",
+      None,
+      Some(&started.to_string()),
+      None,
+    )
+    .expect("append started");
+
+    let finished = serde_json::json!({
+      "v": 1,
+      "run_id": "run-1",
+      "tool_call_id": "call-1",
+      "attempt": 1,
+      "status": "ok",
+      "result_preview": "done"
+    });
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread_id,
+      "tool_call_finished",
+      None,
+      Some(&finished.to_string()),
+      None,
+    )
+    .expect("append finished");
+
+    // No requested event for call-2: projection should still surface this call.
+    let finished_orphan = serde_json::json!({
+      "v": 1,
+      "run_id": "run-1",
+      "tool_call_id": "call-2",
+      "attempt": 1,
+      "status": "error",
+      "reason": "boom",
+      "exit_code": 1
+    });
+    append_event(
+      &conn,
+      Path::new("/tmp/arx-tests"),
+      &thread_id,
+      "tool_call_finished",
+      None,
+      Some(&finished_orphan.to_string()),
+      None,
+    )
+    .expect("append orphan finished");
+
+    let tool_calls = list_tool_calls(&conn, &thread_id, 20).expect("list tool calls");
+    assert_eq!(tool_calls.len(), 2);
+
+    let call_1 = tool_calls
+      .iter()
+      .find(|tc| tc.id == "call-1")
+      .expect("call-1 exists");
+    assert_eq!(call_1.status, "finished");
+    assert_eq!(call_1.tool_name, "read");
+    assert!(call_1.args_json.contains("README.md"));
+    assert_eq!(call_1.stdout_excerpt.as_deref(), Some("done"));
+
+    let call_2 = tool_calls
+      .iter()
+      .find(|tc| tc.id == "call-2")
+      .expect("call-2 exists");
+    assert_eq!(call_2.status, "finished");
+    assert_eq!(call_2.tool_name, "tool");
+    assert_eq!(call_2.exit_code, Some(1));
+    assert_eq!(call_2.stderr_excerpt.as_deref(), Some("boom"));
+  }
+}

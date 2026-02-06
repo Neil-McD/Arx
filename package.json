@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:arp-degrade": "bash scripts/arp_degrade_regression_check.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
