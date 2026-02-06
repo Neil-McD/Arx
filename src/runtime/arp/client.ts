@@ -58,9 +58,7 @@ export interface RuntimeClient {
     thread_id: ThreadId;
     cwd: string;
     input: string;
-    history_messages_json?: string | null;
-    personal_memory_items_json?: string | null;
-    community_system_prompt?: string | null;
+    user_content_json: string;
     supabase_url?: string | null;
     supabase_anon_key?: string | null;
     supabase_access_token?: string | null;

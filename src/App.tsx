@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -26,6 +26,7 @@ import {
   storePendingPurchaseClaimToken,
   type PendingPurchaseClaim
 } from "../shared/pay_first";
+import { resolveUserAccessPolicy } from "../shared/capabilities";
 
 const USE_RUNTIME_CLIENT = (import.meta.env.VITE_ARP_CLIENT ?? "").trim() === "1";
 
@@ -134,6 +135,51 @@ type ToolUiSpec = {
 type AgentMode = "build" | "plan" | "explore";
 type VoiceSurface = "workspace" | "community";
 type VoiceUiState = "idle" | "recording" | "transcribing";
+type RunPhase =
+  | "idle"
+  | "preparing"
+  | "thinking"
+  | "awaiting_approval"
+  | "running_tool"
+  | "streaming"
+  | "cancelling";
+
+type RunPhaseAction =
+  | { type: "send_start" }
+  | { type: "agent_thinking" }
+  | { type: "agent_working" }
+  | { type: "approval_requested" }
+  | { type: "approval_resolved" }
+  | { type: "tool_started" }
+  | { type: "stream_chunk" }
+  | { type: "cancel_requested" }
+  | { type: "turn_finished" }
+  | { type: "reset" };
+
+function runPhaseReducer(state: RunPhase, action: RunPhaseAction): RunPhase {
+  switch (action.type) {
+    case "send_start":
+      return "preparing";
+    case "agent_thinking":
+      return state === "cancelling" ? "cancelling" : "thinking";
+    case "agent_working":
+    case "tool_started":
+      return state === "cancelling" ? "cancelling" : "running_tool";
+    case "approval_requested":
+      return state === "cancelling" ? "cancelling" : "awaiting_approval";
+    case "approval_resolved":
+      return state === "cancelling" ? "cancelling" : "thinking";
+    case "stream_chunk":
+      return state === "cancelling" ? "cancelling" : "streaming";
+    case "cancel_requested":
+      return "cancelling";
+    case "turn_finished":
+    case "reset":
+      return "idle";
+    default:
+      return state;
+  }
+}
 type NativeVoiceCaptureStopped = {
   audio_base64: string;
   mime_type: string;
@@ -608,11 +654,12 @@ const MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 	  };
 	}
 
-	const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
+const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
   { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
   { id: "opus-4.5", label: "Opus 4.5", enabled: true },
+  { id: "opus-4.6", label: "Opus 4.6", enabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
   { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
   { id: "grok-4.1", label: "Grok 4.1", enabled: true },
@@ -1109,7 +1156,17 @@ function App() {
   const [runningTools, setRunningTools] = useState<RunningTool[]>([]);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [turnsByAssistantEventId, setTurnsByAssistantEventId] = useState<Record<string, TurnRecord>>({});
-  const [isSending, setIsSending] = useState(false);
+  const [runPhase, dispatchRunPhase] = useReducer(runPhaseReducer, "idle");
+  const isSending = useMemo(
+    () =>
+      runPhase === "preparing" ||
+      runPhase === "thinking" ||
+      runPhase === "awaiting_approval" ||
+      runPhase === "running_tool" ||
+      runPhase === "streaming" ||
+      runPhase === "cancelling",
+    [runPhase],
+  );
   const sendStartedAtRef = useRef<number | null>(null);
   const [sendElapsedSec, setSendElapsedSec] = useState(0);
   const [streamingTokens, setStreamingTokens] = useState<{
@@ -1576,6 +1633,7 @@ function App() {
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [streamingRenderedContent, setStreamingRenderedContent] = useState<string | null>(null);
   const autoScrollEnabledRef = useRef(true);
   const lastWorkspaceScrollTopRef = useRef(0);
   const isLoadingThreadRef = useRef(false); // Suppresses scroll handler during thread transitions
@@ -1585,6 +1643,8 @@ function App() {
   const streamingTokensRef = useRef<{prompt_tokens?: number; completion_tokens?: number; max_tokens?: number} | null>(null);
   const streamingMetaRef = useRef<{ engine_id: string; model_id: string; inference_source?: string | null } | null>(null);
   const streamingRafRef = useRef<number | null>(null);
+  const streamingRenderTimeoutRef = useRef<number | null>(null);
+  const streamingRenderLastFlushAtRef = useRef<number>(0);
 
   // Throttled streaming update: accumulate in refs, flush to state on next animation frame
   const scheduleStreamingUpdate = useCallback(() => {
@@ -1599,6 +1659,52 @@ function App() {
         setStreamingMeta(streamingMetaRef.current);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const THROTTLE_MS = 140;
+
+    if (!streamingContent) {
+      if (streamingRenderTimeoutRef.current !== null) {
+        window.clearTimeout(streamingRenderTimeoutRef.current);
+        streamingRenderTimeoutRef.current = null;
+      }
+      streamingRenderLastFlushAtRef.current = 0;
+      setStreamingRenderedContent(null);
+      return;
+    }
+
+    const flush = (value: string) => {
+      streamingRenderLastFlushAtRef.current = Date.now();
+      setStreamingRenderedContent(value);
+    };
+
+    const now = Date.now();
+    const elapsed = now - streamingRenderLastFlushAtRef.current;
+    if (elapsed >= THROTTLE_MS) {
+      if (streamingRenderTimeoutRef.current !== null) {
+        window.clearTimeout(streamingRenderTimeoutRef.current);
+        streamingRenderTimeoutRef.current = null;
+      }
+      flush(streamingContent);
+      return;
+    }
+
+    if (streamingRenderTimeoutRef.current !== null) {
+      window.clearTimeout(streamingRenderTimeoutRef.current);
+    }
+    streamingRenderTimeoutRef.current = window.setTimeout(() => {
+      streamingRenderTimeoutRef.current = null;
+      flush(streamingContentRef.current ?? streamingContent);
+    }, THROTTLE_MS - elapsed);
+  }, [streamingContent]);
+
+  useEffect(() => {
+    return () => {
+      if (streamingRenderTimeoutRef.current !== null) {
+        window.clearTimeout(streamingRenderTimeoutRef.current);
+      }
+    };
   }, []);
 
   const slashState = useMemo(() => {
@@ -1718,6 +1824,7 @@ function App() {
     autoScrollEnabledRef.current = true;
     setIsWorkspaceAtBottom(true);
     lastWorkspaceScrollTopRef.current = 0;
+    dispatchRunPhase({ type: "reset" });
 
     if (!activeThreadId) {
       // Draft state: clear thread-scoped UI while preserving the composer.
@@ -3702,6 +3809,7 @@ function App() {
         if (n.type === "turn_finished") {
           if (n.session_id !== activeThreadId) return;
           void (async () => {
+            dispatchRunPhase({ type: "turn_finished" });
             clearStreamingRefs();
             await loadMessages(n.session_id);
             setStreamingContent(null);
@@ -3713,6 +3821,7 @@ function App() {
 
         if (n.type === "openrouter_stream") {
           if (n.session_id !== activeThreadId) return;
+          dispatchRunPhase({ type: "stream_chunk" });
           streamingContentRef.current = n.full_content;
           streamingTokensRef.current = {
             prompt_tokens: n.prompt_tokens ?? undefined,
@@ -3800,6 +3909,7 @@ function App() {
 
         if (n.type === "tool_approval_requested") {
           if (n.session_id !== activeThreadId) return;
+          dispatchRunPhase({ type: "approval_requested" });
           setIsToolApprovalSubmitting(false);
           setPendingToolApproval({
             session_id: n.session_id,
@@ -3813,9 +3923,11 @@ function App() {
         if (n.type === "agent_status") {
           if (n.session_id !== activeThreadId) return;
           if (n.status === "idle") {
+            dispatchRunPhase({ type: "turn_finished" });
             setAgentStatus(null);
             setRunningTools([]);
           } else {
+            dispatchRunPhase({ type: n.status === "working" ? "agent_working" : "agent_thinking" });
             setAgentStatus({
               session_id: n.session_id,
               status: n.status,
@@ -3828,7 +3940,9 @@ function App() {
 
         if (n.type === "tool_call_progress") {
           if (n.session_id !== activeThreadId) return;
+          if (shouldHideToolNameFromUi(n.tool_name)) return;
           if (n.status === "started") {
+            dispatchRunPhase({ type: "tool_started" });
             setRunningTools((prev) => [
               ...prev,
               {
@@ -3891,6 +4005,7 @@ function App() {
       "agent-turn-finished",
       async (event) => {
         if (!event.payload.session_id) return;
+        dispatchRunPhase({ type: "turn_finished" });
         // Cancel any pending RAF and clear refs
         if (streamingRafRef.current !== null) {
           cancelAnimationFrame(streamingRafRef.current);
@@ -3910,6 +4025,7 @@ function App() {
       "agent-stream",
       (event) => {
         if (event.payload.session_id !== activeThreadId) return;
+        dispatchRunPhase({ type: "stream_chunk" });
         // Use throttled updates to avoid React batching all updates together
         streamingContentRef.current = event.payload.full_content;
         scheduleStreamingUpdate();
@@ -3920,6 +4036,7 @@ function App() {
       "openrouter-stream",
       (event) => {
         if (event.payload.session_id !== activeThreadId) return;
+        dispatchRunPhase({ type: "stream_chunk" });
         // Use throttled updates to ensure smooth token-by-token streaming
         streamingContentRef.current = event.payload.full_content;
         streamingTokensRef.current = {
@@ -3940,6 +4057,7 @@ function App() {
       "openrouter-turn-finished",
       async (event) => {
         if (event.payload.session_id !== activeThreadId) return;
+        dispatchRunPhase({ type: "turn_finished" });
         // Cancel any pending RAF and clear refs
         if (streamingRafRef.current !== null) {
           cancelAnimationFrame(streamingRafRef.current);
@@ -4029,6 +4147,7 @@ function App() {
       "tool-approval-requested",
       (event) => {
         if (event.payload.session_id !== activeThreadId) return;
+        dispatchRunPhase({ type: "approval_requested" });
         setIsToolApprovalSubmitting(false);
         setPendingToolApproval(event.payload);
       }
@@ -4039,9 +4158,13 @@ function App() {
       (event) => {
         if (event.payload.session_id !== activeThreadId) return;
         if (event.payload.status === "idle") {
+          dispatchRunPhase({ type: "turn_finished" });
           setAgentStatus(null);
           setRunningTools([]);
         } else {
+          dispatchRunPhase({
+            type: event.payload.status === "working" ? "agent_working" : "agent_thinking",
+          });
           setAgentStatus(event.payload);
         }
       }
@@ -4051,7 +4174,9 @@ function App() {
       "tool-call-progress",
       (event) => {
         if (event.payload.session_id !== activeThreadId) return;
+        if (shouldHideToolNameFromUi(event.payload.tool_name)) return;
         if (event.payload.status === "started") {
+          dispatchRunPhase({ type: "tool_started" });
           setRunningTools((prev) => [
             ...prev,
             {
@@ -4120,6 +4245,7 @@ function App() {
 		      const cancelActiveRun = () => {
 		        setPendingToolApproval(null);
 		        setPendingInferenceFallback(null);
+            dispatchRunPhase({ type: "cancel_requested" });
 		        void (USE_RUNTIME_CLIENT
               ? runtimeClient.cancelRun(activeThreadId)
               : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
@@ -4619,10 +4745,15 @@ function App() {
       const data = await invoke<ModelToggle[]>("get_model_toggles_cmd");
       const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
       const cleaned = (data ?? []).filter((toggle) => allowedIds.has(toggle.id));
-      if (cleaned.length !== (data ?? []).length) {
-        await invoke("set_model_toggles_cmd", { toggles: cleaned }).catch(() => null);
+      const merged = DEFAULT_MODEL_TOGGLES.map((toggle) => ({ ...toggle, enabled: true }));
+      const needsPersist =
+        cleaned.length !== (data ?? []).length ||
+        cleaned.length !== merged.length ||
+        cleaned.some((toggle) => toggle.enabled !== true);
+      if (needsPersist) {
+        await invoke("set_model_toggles_cmd", { toggles: merged }).catch(() => null);
       }
-      setModelToggles(cleaned.length ? cleaned : DEFAULT_MODEL_TOGGLES);
+      setModelToggles(merged);
     } catch (error) {
       console.error(error);
       setModelToggles(DEFAULT_MODEL_TOGGLES);
@@ -4757,14 +4888,15 @@ function App() {
   }
 
   function hasKeyForProvider(providerId: ProviderKey["id"]): boolean {
-    if (providerId === "openai" && chatgptAuthSummary) return true;
-    return providerKeys.find((p) => p.id === providerId)?.hasKey === true;
+    return providerId === "openai" && Boolean(chatgptAuthSummary);
   }
 
   function isModelReady(modelId: string): boolean {
     const providerId = providerIdForModelId(modelId);
     if (!providerId) return false;
-    return hasKeyForProvider(providerId);
+    if (hasKeyForProvider(providerId)) return true;
+    if (!userAccessPolicy.allowPlatformInference || !supabaseSession) return false;
+    return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
   }
 
   async function loadExecPolicyRules() {
@@ -9098,6 +9230,10 @@ function App() {
   }
 
   async function handleSaveProviderKey(id: string) {
+    if (!userAccessPolicy.allowByokLocalStore) {
+      setMemoryToast("BYOK is disabled. Use ChatGPT sign-in on desktop or upgrade for Arx AI.");
+      return;
+    }
     const provider = providerKeys.find((item) => item.id === id);
     const value = provider?.inputValue.trim() ?? "";
     if (!provider || !value) return;
@@ -9136,6 +9272,7 @@ function App() {
   }
 
   async function handleClearProviderKey(id: string) {
+    if (!userAccessPolicy.allowByokLocalStore) return;
     try {
       await invoke("clear_provider_key_cmd", { provider: id });
       setProviderKeys((prev) =>
@@ -9190,15 +9327,6 @@ function App() {
     await invoke("set_active_model_cmd", { modelId: fallback });
   }
 
-  async function handleToggleModel(id: string) {
-    const next = modelToggles.map((toggle) =>
-      toggle.id === id ? { ...toggle, enabled: !toggle.enabled } : toggle
-    );
-    setModelToggles(next);
-    await invoke("set_model_toggles_cmd", { toggles: next });
-    await syncActiveModel(next);
-  }
-
   useEffect(() => {
     void syncActiveModel(modelToggles);
   }, [modelToggles, activeModelId, providerKeys]);
@@ -9236,6 +9364,15 @@ function App() {
 			    if (raw === "builder" || raw === "pro") return raw;
 			    return "free";
 			  }, [builderBillingStatus?.builder_tier]);
+			  const userAccessPolicy = useMemo(
+			    () =>
+			      resolveUserAccessPolicy({
+			        surface: "desktop",
+			        authState: supabaseSession ? "authenticated" : "anonymous",
+			        builderTier: builderBillingStatus?.builder_tier ?? null,
+			      }),
+			    [supabaseSession, builderBillingStatus?.builder_tier],
+			  );
 
 				  function resolveVoiceInputIntent(surface: "workspace" | "community"): {
 			    mode:
@@ -10393,9 +10530,6 @@ function App() {
     const hasAttachments = attachments.length > 0;
     if (!hasText && !hasAttachments) return;
 
-    const startedInDraft = !activeThreadId;
-    let createdThreadId: string | null = null;
-    let postedUserMessage = false;
     let sessionId: string | null = null;
     let session: SupabaseSession | null = null;
 
@@ -10403,12 +10537,11 @@ function App() {
     const userText = inputText.trim();
     const currentAttachments = [...attachments];
 
-    setIsSending(true);
+    dispatchRunPhase({ type: "send_start" });
     autoScrollEnabledRef.current = true;
     try {
       sessionId = await ensureThreadId();
       if (!sessionId) return;
-      if (startedInDraft) createdThreadId = sessionId;
       session = supabaseSessionRef.current;
 
       await ensureWorkspaceThreadLensBeforeSend(sessionId);
@@ -10428,18 +10561,49 @@ function App() {
           size: a.size
         }));
       }
-		      await (USE_RUNTIME_CLIENT
-            ? runtimeClient.addMessage({
-                thread_id: sessionId,
-                role: "user",
-                content_json: JSON.stringify(contentPayload),
-              })
-            : invoke("add_message_cmd", {
-                sessionId,
-                role: "user",
-                contentJson: JSON.stringify(contentPayload)
-              }));
-	      postedUserMessage = true;
+      const contentJson = JSON.stringify(contentPayload);
+      const handledSlash = await handleSlashCommand(userText, sessionId);
+      if (handledSlash) {
+        return;
+      }
+      if (userText.length === 0) {
+        await (USE_RUNTIME_CLIENT
+          ? runtimeClient.addMessage({
+              thread_id: sessionId,
+              role: "user",
+              content_json: contentJson,
+            })
+          : invoke("add_message_cmd", {
+              sessionId,
+              role: "user",
+              contentJson,
+            }));
+        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
+          try {
+            await syncRecentLocalMessagesToCloud(sessionId, session, 1);
+          } catch (error) {
+            const message =
+              typeof error === "string" ? error : error instanceof Error ? error.message : "";
+            if (message.toLowerCase().includes("cloud history limit reached")) {
+              setBuilderUpgradeContext("builder");
+              setBuilderBillingError(message);
+              setIsBuilderUpgradeOpen(true);
+            }
+          }
+        }
+        await loadMessages(sessionId);
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `optimistic-user-${crypto.randomUUID()}`,
+          session_id: sessionId,
+          role: "user",
+          content_json: contentJson,
+          created_at: Math.floor(Date.now() / 1000),
+        },
+      ]);
 	      setThreads((prev) =>
 	        prev.map((t) => {
 	          if (t.id !== sessionId) return t;
@@ -10451,28 +10615,9 @@ function App() {
 	          };
 	        }),
 	      );
-      if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
-        try {
-          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-        } catch (error) {
-	          const message =
-	            typeof error === "string" ? error : error instanceof Error ? error.message : "";
-	          if (message.toLowerCase().includes("cloud history limit reached")) {
-	            setBuilderUpgradeContext("builder");
-	            setBuilderBillingError(message);
-	            setIsBuilderUpgradeOpen(true);
-	          }
-	        }
-	      }
-	      await loadMessages(sessionId);
-	      const handledSlash = await handleSlashCommand(userText, sessionId);
-	      if (handledSlash) {
-	        return;
-      }
 
-      if (userText.length > 0) {
-        // Ensure the active thread has an engine/model selected (legacy threads may be missing model_id).
-        const ensured = await (async () => {
+      // Ensure the active thread has an engine/model selected (legacy threads may be missing model_id).
+      const ensured = await (async () => {
 	          const fromState = threads.find((t) => t.id === sessionId) ?? null;
 	          const fromDb =
               fromState ??
@@ -10492,23 +10637,10 @@ function App() {
             return null;
           }
 	          let hasKey = hasKeyForProvider(providerId);
-	          if (!hasKey) {
-	            try {
-	              hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: providerId });
-	            } catch {
-	              hasKey = false;
-	            }
-	            if (hasKey) {
-	              setProviderKeys((prev) =>
-	                prev.map((item) =>
-	                  item.id === providerId ? { ...item, hasKey: true, error: null } : item
-	                )
-	              );
-	            }
-	          }
 
-	          let canUseArxPlatform = false;
-	          if (!hasKey && session) {
+	          let canUseArxPlatform = userAccessPolicy.allowPlatformInference;
+	          let planStateResolved = userAccessPolicy.tier !== "unknown";
+	          if (!hasKey && session && !planStateResolved) {
 	            const url = getSupabaseUrl();
 	            const anon = getSupabaseAnonKey();
 	            if (url && anon) {
@@ -10520,15 +10652,26 @@ function App() {
 	                  status = null;
 	                }
 	              }
-	              const tier = (status?.builder_tier ?? "").toLowerCase();
-	              // If we can’t determine tier, allow the server to decide (it will fail closed).
-	              canUseArxPlatform = !tier || tier !== "free";
+	              if (status) {
+	                const resolvedPolicy = resolveUserAccessPolicy({
+	                  surface: "desktop",
+	                  authState: "authenticated",
+	                  builderTier: status.builder_tier,
+	                });
+	                canUseArxPlatform = resolvedPolicy.allowPlatformInference;
+	                planStateResolved = true;
+	              }
 	            }
 	          }
 
 	          if (!hasKey && !canUseArxPlatform) {
-	            const label = providerKeys.find((p) => p.id === providerId)?.label ?? providerId;
-	            setMemoryToast(`Missing ${label} API key. Add it in Settings → Models.`);
+	            if (session && !planStateResolved) {
+	              setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
+	            } else if (providerId === "openai") {
+	              setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
+	            } else {
+	              setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
+	            }
 	            setActiveView("settings");
 	            setSettingsPage("models");
 	            return null;
@@ -10564,10 +10707,10 @@ function App() {
             console.error("Failed to set thread model:", error);
             return null;
           }
-        })();
-        if (!ensured) return;
+      })();
+      if (!ensured) return;
 
-        // Clear any prior streaming state before issuing a new turn.
+	        // Clear any prior streaming state before issuing a new turn.
         streamingContentRef.current = null;
         streamingTokensRef.current = null;
         streamingMetaRef.current = null;
@@ -10575,160 +10718,40 @@ function App() {
 
 	        const cwd = effectiveCwd || "";
 
-	        // Prefer local history (fast, always present during a run). Fall back to cloud if the local DB was reset.
-	        let historyMessagesJson: string | null = null;
-		        try {
-		          const localHistory = USE_RUNTIME_CLIENT
-                ? await runtimeClient.listMessages(sessionId)
-                : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
-		          if (localHistory.length > 0) {
-            const payload = localHistory
-              .filter((m) => m.role === "user" || m.role === "assistant")
-              .slice(-50)
-              .map((m) => {
-                let content: unknown = null;
-                try {
-                  content = JSON.parse(m.content_json);
-                } catch {
-                  content = { text: m.content_json };
-                }
-                return { role: m.role, content_json: content };
-              });
-            historyMessagesJson = JSON.stringify(payload);
-          }
-        } catch {
-          // ignore
-        }
-
-	        if (!historyMessagesJson && session) {
-	          try {
-	            const url = getSupabaseUrl();
-	            if (url) {
-              const response = await fetchWithSupabaseAuth(
-                `${url}/rest/v1/messages?select=role,content_json,seq&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.desc&limit=50`,
-                { method: "GET" },
-                session,
-              );
-              if (response.ok) {
-                const rows = (await response.json()) as Array<{ role: string; content_json: unknown; seq: number }>;
-                rows.sort((a, b) => a.seq - b.seq);
-                historyMessagesJson = JSON.stringify(
-                  rows
-                    .filter((r) => r.role === "user" || r.role === "assistant")
-                    .map((r) => ({ role: r.role, content_json: r.content_json })),
-                );
-              }
-            }
-          } catch {
-            // ignore
+      await (USE_RUNTIME_CLIENT
+        ? runtimeClient.sendTurn({
+            thread_id: sessionId,
+            cwd,
+            input: userText,
+            user_content_json: contentJson,
+            supabase_url: session ? (getSupabaseUrl() ?? "") : "",
+            supabase_anon_key: session ? (getSupabaseAnonKey() ?? "") : "",
+            supabase_access_token: session ? (session.access_token ?? "") : "",
+          })
+        : invoke<SendTurnResult>("submit_turn_cmd", {
+            threadId: sessionId,
+            cwd,
+            input: userText,
+            userContentJson: contentJson,
+            supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
+            supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
+            supabaseAccessToken: session ? (session.access_token ?? "") : "",
+          }));
+      if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
+        try {
+          // Sync the newest assistant message + any trailing system content.
+          await syncRecentLocalMessagesToCloud(sessionId, session, 3);
+        } catch (error) {
+          const message =
+            typeof error === "string" ? error : error instanceof Error ? error.message : "";
+          if (message.toLowerCase().includes("cloud history limit reached")) {
+            setBuilderUpgradeContext("builder");
+            setBuilderBillingError(message);
+            setIsBuilderUpgradeOpen(true);
           }
         }
-
-        let personalMemoryItemsJson: string | null = null;
-        if (session) {
-          try {
-            const url = getSupabaseUrl();
-            if (url) {
-              const userId = getSupabaseAuthUid(session);
-              const response = await fetchWithSupabaseAuth(
-                `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,updated_at&user_id=eq.${encodeURIComponent(
-                  userId,
-                )}&order=pinned.desc,updated_at.desc&limit=200`,
-                { method: "GET" },
-                session,
-              );
-              if (response.ok) {
-                const rows = (await response.json()) as Array<{
-                  id: string;
-                  content: string;
-                  scope: string;
-                  scope_id: string | null;
-                  pinned: boolean;
-                  updated_at: string;
-                }>;
-                const items = rows.map((row) => ({
-                  id: row.id,
-                  content: row.content,
-                  scope: row.scope,
-                  scope_id: row.scope_id,
-                  pinned: row.pinned ? 1 : 0,
-                  updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
-                }));
-                personalMemoryItemsJson = JSON.stringify(items);
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        // Community-wide system prompt (Pro custom communities only).
-        // Best-effort: if it fails, we still proceed with the user's message.
-        let communitySystemPrompt: string | null = null;
-        if (session && activeCommunityId) {
-          try {
-            const url = getSupabaseUrl();
-            if (url) {
-              const userId = getSupabaseAuthUid(session);
-              const response = await fetchWithSupabaseAuth(
-                `${url}/rest/v1/rpc/get_active_community_agent_system_prompt`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ p_user_id: userId, p_community_id: activeCommunityId }),
-                },
-                session,
-              );
-              if (response.ok) {
-                const rows = (await response.json()) as Array<{ system_prompt?: unknown }>;
-                const prompt = typeof rows?.[0]?.system_prompt === "string" ? rows[0].system_prompt.trim() : "";
-                if (prompt) communitySystemPrompt = prompt;
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-		        await (USE_RUNTIME_CLIENT
-            ? runtimeClient.sendTurn({
-                thread_id: sessionId,
-                cwd,
-                input: userText,
-                history_messages_json: historyMessagesJson,
-                personal_memory_items_json: personalMemoryItemsJson,
-                community_system_prompt: communitySystemPrompt,
-                supabase_url: session ? (getSupabaseUrl() ?? "") : "",
-                supabase_anon_key: session ? (getSupabaseAnonKey() ?? "") : "",
-                supabase_access_token: session ? (session.access_token ?? "") : "",
-              })
-            : invoke<SendTurnResult>("engine_send_turn_cmd", {
-                threadId: sessionId,
-                cwd,
-                input: userText,
-                historyMessagesJson,
-                personalMemoryItemsJson,
-                communitySystemPrompt,
-                supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
-                supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
-                supabaseAccessToken: session ? (session.access_token ?? "") : "",
-              }));
-        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
-          try {
-            // Sync the newest assistant message + any trailing system content.
-            await syncRecentLocalMessagesToCloud(sessionId, session, 3);
-	          } catch (error) {
-	            const message =
-	              typeof error === "string" ? error : error instanceof Error ? error.message : "";
-	            if (message.toLowerCase().includes("cloud history limit reached")) {
-	              setBuilderUpgradeContext("builder");
-	              setBuilderBillingError(message);
-	              setIsBuilderUpgradeOpen(true);
-	            }
-	          }
-	        }
-	        await loadMessages(sessionId);
-	      }
+      }
+      await loadMessages(sessionId);
 	    } catch (error) {
       const message =
         typeof error === "string"
@@ -10737,55 +10760,22 @@ function App() {
             ? error.message
             : "Unknown error";
 
-      if (createdThreadId && !postedUserMessage) {
-        // We created a thread for this send but didn't persist the user message.
-        // Delete the empty thread and return to the draft state.
-        const latestSession = supabaseSessionRef.current;
-        const url = latestSession ? getSupabaseUrl() : null;
-        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && latestSession && url) {
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/threads?id=eq.${encodeURIComponent(createdThreadId)}`,
-              { method: "DELETE", headers: { Prefer: "return=minimal" } },
-              latestSession,
-            );
-            if (!response.ok) throw new Error(await readSupabaseError(response));
-          } catch {
-            // best-effort
-          }
-        }
-	        try {
-	          await (USE_RUNTIME_CLIENT
-              ? runtimeClient.deleteThread(createdThreadId)
-              : invoke("delete_thread_cmd", { threadId: createdThreadId }));
-	        } catch {
-	          // best-effort
-	        }
-        setThreads((prev) => prev.filter((t) => t.id !== createdThreadId));
-        setActiveThreadId(null);
-        setMessages([]);
-        setToolCalls([]);
-        setTurnsByAssistantEventId({});
-        setSessionResume(null);
-        setMemoryToast(`Failed to send message: ${message}`);
-        return;
-      }
       const targetSessionId = sessionId ?? activeThreadId;
       if (!targetSessionId) {
         setMemoryToast(`Failed to send message: ${message}`);
         return;
       }
-		    await (USE_RUNTIME_CLIENT
-          ? runtimeClient.addMessage({
-              thread_id: targetSessionId,
-              role: "assistant",
-              content_json: JSON.stringify({ text: `Engine error: ${message}` }),
-            })
-          : invoke("add_message_cmd", {
-              sessionId: targetSessionId,
-              role: "assistant",
-              contentJson: JSON.stringify({ text: `Engine error: ${message}` })
-            }));
+      await (USE_RUNTIME_CLIENT
+        ? runtimeClient.addMessage({
+            thread_id: targetSessionId,
+            role: "assistant",
+            content_json: JSON.stringify({ text: `Engine error: ${message}` }),
+          })
+        : invoke("add_message_cmd", {
+            sessionId: targetSessionId,
+            role: "assistant",
+            contentJson: JSON.stringify({ text: `Engine error: ${message}` })
+          }));
     if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
       try {
         await syncRecentLocalMessagesToCloud(targetSessionId, session, 1);
@@ -10800,8 +10790,8 @@ function App() {
 	      }
 	    }
 	    await loadMessages(targetSessionId);
-	    } finally {
-      setIsSending(false);
+    } finally {
+      dispatchRunPhase({ type: "reset" });
       setAgentStatus(null);
       setRunningTools([]);
     }
@@ -10982,11 +10972,11 @@ function App() {
 	    const sessionId = await ensureThreadId();
 	    if (!sessionId) return;
 	    setCommandInput("");
-	    setIsSending(true);
+	    dispatchRunPhase({ type: "send_start" });
 	    try {
 	      await handleSlashCommand(command, sessionId);
 	    } finally {
-	      setIsSending(false);
+	      dispatchRunPhase({ type: "reset" });
 	      setAgentStatus(null);
 	      setRunningTools([]);
 	    }
@@ -11050,6 +11040,11 @@ function App() {
     tool_calls: ToolCallRecord[];
   };
 
+  const shouldHideToolCallFromFeed = (call: ToolCallRecord): boolean =>
+    call.tool_name === "update_plan";
+  const shouldHideToolNameFromUi = (toolName: string | null | undefined): boolean =>
+    (toolName ?? "").trim() === "update_plan";
+
   const isAgentToolCallRecord = (call: ToolCallRecord): boolean =>
     ([
       "read",
@@ -11066,6 +11061,7 @@ function App() {
   const activeToolGroups = useMemo((): ToolGroupRecord[] => {
     const groups = new Map<string, ToolGroupRecord>();
     for (const call of activeToolCalls) {
+      if (shouldHideToolCallFromFeed(call)) continue;
       if (!isAgentToolCallRecord(call)) continue;
 
       const runId = (call.run_id ?? "").trim();
@@ -11098,7 +11094,9 @@ function App() {
   }, [activeToolCalls]);
 
   const activeUngroupedToolCalls = useMemo(() => {
-    return activeToolCalls.filter((call) => !isAgentToolCallRecord(call));
+    return activeToolCalls.filter(
+      (call) => !shouldHideToolCallFromFeed(call) && !isAgentToolCallRecord(call)
+    );
   }, [activeToolCalls]);
 
   // Combined feed: messages + tool groups sorted by created_at
@@ -11121,8 +11119,22 @@ function App() {
   }, [messages, activeToolGroups, activeUngroupedToolCalls]);
 
   const [expandedOutputIds, setExpandedOutputIds] = useState<Set<string>>(new Set());
+  const [expandedToolGroupIds, setExpandedToolGroupIds] = useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sourcesUsed, setSourcesUsed] = useState<SourcesUsedState>({ open: false });
+
+  const toggleToolGroupExpanded = useCallback((groupId: string) => {
+    setExpandedToolGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setExpandedToolGroupIds(new Set());
+  }, [activeThreadId]);
 
 	  async function resolvePendingToolApproval(
 	    approved: boolean,
@@ -11143,6 +11155,7 @@ function App() {
               allowWriteEditForSession: opts?.allow_write_edit_for_session ?? null,
             }));
 	      setPendingToolApproval(null);
+      dispatchRunPhase({ type: "approval_resolved" });
     } catch (error) {
       console.error("Failed to resolve tool approval:", error);
       setMemoryToast("Failed to send tool approval decision.");
@@ -12031,7 +12044,7 @@ function App() {
 		                        <div className="plan-subtitle">0 communities</div>
 		                        <ul className="plan-features plan-features-checks">
 		                          {feature(true, "AI chats (250MB cloud history)")}
-		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Access all included models")}
 		                          {feature(true, "Desktop app & local tools")}
 		                          {feature(true, "Cloud sync")}
 		                          {feature(false, "Agent memory")}
@@ -12058,7 +12071,7 @@ function App() {
 		                        <div className="plan-subtitle">10% take · 1 community</div>
 		                        <ul className="plan-features plan-features-checks">
 		                          {feature(true, "AI chats (5GB cloud history)")}
-		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Access all included models")}
 		                          {feature(true, "Desktop app & local tools")}
 		                          {feature(true, "Cloud sync")}
 		                          {feature(true, "Agent memory")}
@@ -12096,7 +12109,7 @@ function App() {
 		                        <div className="plan-subtitle">3% take · 3 communities</div>
 		                        <ul className="plan-features plan-features-checks">
 		                          {feature(true, "AI chats (25GB cloud history)")}
-		                          {feature(true, "Use any AI model (BYOK)")}
+		                          {feature(true, "Access all included models")}
 		                          {feature(true, "Desktop app & local tools")}
 		                          {feature(true, "Cloud sync")}
 		                          {feature(true, "Agent memory")}
@@ -12933,43 +12946,45 @@ function App() {
 		                  {chatgptAuthError && <div className="auth-error">{chatgptAuthError}</div>}
 		                </div>
 
-	                <div className="settings-section">
-	                  <div className="settings-section-title">API Keys</div>
-	                  <div className="settings-section-desc">
-	                    Add your provider keys to enable models. Keys are stored in your OS keychain and synced to your Arx account.
-	                  </div>
-	                  {providerKeys.map((provider) => (
-                      <div key={provider.id}>
-                        <div className="settings-section-desc">{provider.label}</div>
-                        <div className="key-row">
-                          <input
-                            type="password"
-                            value={provider.inputValue ?? ""}
-                            placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
-                            onChange={(event) =>
-                              setProviderKeys((prev) =>
-                                prev.map((item) =>
-                                  item.id === provider.id
-                                    ? { ...item, inputValue: event.target.value }
-                                    : item
+	                {userAccessPolicy.allowByokLocalStore && (
+	                  <div className="settings-section">
+	                    <div className="settings-section-title">API Keys</div>
+	                    <div className="settings-section-desc">
+	                      Add your provider keys to enable models. Keys are stored in your OS keychain and synced to your Arx account.
+	                    </div>
+	                    {providerKeys.map((provider) => (
+                        <div key={provider.id}>
+                          <div className="settings-section-desc">{provider.label}</div>
+                          <div className="key-row">
+                            <input
+                              type="password"
+                              value={provider.inputValue ?? ""}
+                              placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
+                              onChange={(event) =>
+                                setProviderKeys((prev) =>
+                                  prev.map((item) =>
+                                    item.id === provider.id
+                                      ? { ...item, inputValue: event.target.value }
+                                      : item
+                                  )
                                 )
-                              )
-                            }
-                          />
-                          <button onClick={() => void handleSaveProviderKey(provider.id)}>
-                            Save
-                          </button>
-                          <button
-                            className="secondary"
-                            onClick={() => void handleClearProviderKey(provider.id)}
-                          >
-                            Clear
-                          </button>
+                              }
+                            />
+                            <button onClick={() => void handleSaveProviderKey(provider.id)}>
+                              Save
+                            </button>
+                            <button
+                              className="secondary"
+                              onClick={() => void handleClearProviderKey(provider.id)}
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          {provider.error && <div className="key-error">{provider.error}</div>}
                         </div>
-                        {provider.error && <div className="key-error">{provider.error}</div>}
-                      </div>
-                    ))}
-	                </div>
+                      ))}
+	                  </div>
+	                )}
 
 	                <div className="settings-section">
 	                  <div className="settings-section-title">System prompt</div>
@@ -13006,32 +13021,6 @@ function App() {
 	                  </div>
 	                </div>
 
-	                <div className="settings-section">
-	                  <div className="settings-section-title">Available Models</div>
-	                  <div className="settings-section-desc">Select which models to enable</div>
-	                  <div className="model-list">
-	                    {modelToggles.map((toggle) => {
-                        const providerId = providerIdForModelId(toggle.id);
-                        const providerLabel = providerId
-                          ? providerKeys.find((p) => p.id === providerId)?.label ?? providerId
-                          : "provider";
-                        const missingKey = providerId ? !hasKeyForProvider(providerId) : true;
-                        return (
-                          <label key={toggle.id} className="model-toggle">
-                            <input
-                              type="checkbox"
-                              checked={toggle.enabled}
-                              onChange={() => void handleToggleModel(toggle.id)}
-                            />
-                            <span>
-                              {toggle.label}
-                              {missingKey && ` (missing ${providerLabel} key)`}
-                            </span>
-                          </label>
-                        );
-                      })}
-                  </div>
-                </div>
               </>
             )}
 	            {settingsPage === "execution" && (
@@ -13497,41 +13486,59 @@ function App() {
                   return { ok, error, denied };
                 })();
 
-                const latest = calls[calls.length - 1] ?? null;
-                const latestLabel = (() => {
-                  if (!latest) return null;
-                  try {
-                    const args = JSON.parse(latest.args_json) as any;
-                    const path = typeof args?.path === "string" ? args.path : null;
-                    const cmd = typeof args?.cmd === "string" ? args.cmd : null;
-                    const pat = typeof args?.pat === "string" ? args.pat : null;
-                    if (latest.tool_name === "bash") return cmd ? `bash ${cmd}` : "bash";
-                    if (latest.tool_name === "grep") return pat ? `grep ${pat}` : "grep";
-                    if (latest.tool_name === "glob") return pat ? `glob ${pat}` : "glob";
-                    if (latest.tool_name === "list_dir") return path ? `ls ${path}` : "ls";
-                    if (latest.tool_name === "sha256") return path ? `sha256 ${path}` : "sha256";
-                    if (latest.tool_name === "read") return path ? `read ${path}` : "read";
-                    if (latest.tool_name === "write") return path ? `write ${path}` : "write";
-                    if (latest.tool_name === "edit") return path ? `edit ${path}` : "edit";
-                    return latest.tool_name;
-                  } catch {
-                    return latest.tool_name;
-                  }
+                const isGroupExpanded = expandedToolGroupIds.has(group.id);
+
+                // Derive activity verb from latest tool
+                const isGroupRunning = calls.some(
+                  (c) => c.status === "requested" || c.status === "approved" || c.status === "started"
+                );
+                const activityVerb = (() => {
+                  if (!isGroupRunning) return null;
+                  // Find the latest non-terminal tool
+                  const active = [...calls].reverse().find(
+                    (c) => c.status === "requested" || c.status === "approved" || c.status === "started"
+                  );
+                  if (!active) return "working";
+                  const name = active.tool_name;
+                  if (name === "read" || name === "list_dir" || name === "glob" || name === "grep") return "exploring";
+                  if (name === "write") return "writing";
+                  if (name === "edit" || name === "apply_patch") return "editing";
+                  if (name === "bash") return "running";
+                  if (name === "sha256") return "checking";
+                  if (name === "task") return "thinking";
+                  return "working";
                 })();
 
                 return (
-                  <details className="tool-group" key={group.id}>
-                    <summary className="tool-group-summary">
-                      <span className="tool-group-title">Tools ({calls.length})</span>
-                      <span className="tool-group-counts">
-                        {counts.ok > 0 && <span className="tool-group-count ok">✓ {counts.ok}</span>}
-                        {counts.error > 0 && <span className="tool-group-count error">✗ {counts.error}</span>}
-                        {counts.denied > 0 && <span className="tool-group-count denied">⛔ {counts.denied}</span>}
-                      </span>
-                      {latestLabel && <span className="tool-group-latest">{latestLabel}</span>}
-                    </summary>
-                    <div className="tool-group-items">
-                      {calls.map((toolCall) => {
+                  <div className={`tool-group${isGroupExpanded ? " expanded" : ""}`} key={group.id}>
+                    <button
+                      type="button"
+                      className="tool-group-summary"
+                      onClick={() => toggleToolGroupExpanded(group.id)}
+                      aria-expanded={isGroupExpanded}
+                    >
+                      {isGroupRunning && activityVerb ? (
+                        <span className="tool-group-title">
+                          <span className="tool-activity-verb shimmer">{activityVerb}</span>
+                        </span>
+                      ) : (
+                        <>
+                          <span className="tool-group-title">
+                            tools
+                            <span className="tool-group-total">{calls.length}</span>
+                          </span>
+                          <span className="tool-group-counts">
+                            {counts.ok > 0 && <span className="tool-group-count ok">✓ {counts.ok}</span>}
+                            {counts.error > 0 && <span className="tool-group-count error">✗ {counts.error}</span>}
+                            {counts.denied > 0 && <span className="tool-group-count denied">⛔ {counts.denied}</span>}
+                          </span>
+                        </>
+                      )}
+                      <span className="tool-group-toggle-label">{isGroupExpanded ? "HIDE" : "SHOW"}</span>
+                    </button>
+                    {isGroupExpanded && (
+                      <div className="tool-group-items">
+                        {calls.map((toolCall) => {
                         let args: any = {};
                         try {
                           args = JSON.parse(toolCall.args_json) as any;
@@ -13545,36 +13552,40 @@ function App() {
                           summary = null;
                         }
 
-                        const path = typeof args.path === "string" ? args.path : null;
+                        const wp = activeThread?.workspace_path ?? null;
+                        const rawPath = typeof args.path === "string" ? args.path : null;
+                        const p = rawPath ? trimWorkspacePath(rawPath, wp) : null;
                         const cmd = typeof args.cmd === "string" ? args.cmd : null;
                         const pat = typeof args.pat === "string" ? args.pat : null;
 
                         const label = (() => {
                           if (toolCall.tool_name === "bash") return cmd ? `bash ${cmd}` : "bash";
                           if (toolCall.tool_name === "grep") {
-                            const base = typeof args.path === "string" ? args.path : ".";
+                            const base = rawPath ? trimWorkspacePath(rawPath, wp) : ".";
                             return pat ? `grep ${pat} in ${base}` : `grep in ${base}`;
                           }
                           if (toolCall.tool_name === "glob") {
-                            const base = typeof args.path === "string" ? args.path : ".";
+                            const base = rawPath ? trimWorkspacePath(rawPath, wp) : ".";
                             return pat ? `glob ${pat} in ${base}` : `glob in ${base}`;
                           }
-                          if (toolCall.tool_name === "list_dir") return path ? `ls ${path}` : "ls";
-                          if (toolCall.tool_name === "sha256") return path ? `sha256 ${path}` : "sha256";
-                          if (toolCall.tool_name === "read") return path ? `read ${path}` : "read";
-                          if (toolCall.tool_name === "write") return path ? `write ${path}` : "write";
-                          if (toolCall.tool_name === "edit") return path ? `edit ${path}` : "edit";
+                          if (toolCall.tool_name === "list_dir") return p ? `ls ${p}` : "ls";
+                          if (toolCall.tool_name === "sha256") return p ? `sha256 ${p}` : "sha256";
+                          if (toolCall.tool_name === "read") return p ? `read ${p}` : "read";
+                          if (toolCall.tool_name === "write") return p ? `write ${p}` : "write";
+                          if (toolCall.tool_name === "edit") return p ? `edit ${p}` : "edit";
                           return toolCall.tool_name;
                         })();
 
                         const execStatus = typeof summary?.exec_status === "string" ? summary.exec_status : null;
                         const note = typeof summary?.note === "string" ? summary.note : null;
+                        const isOk = toolCall.status === "finished" && execStatus === "ok";
                         const statusText = (() => {
+                          if (isOk) return "";
                           if (toolCall.status === "requested") return "requested";
                           if (toolCall.status === "approved") return "approved";
                           if (toolCall.status === "denied") return "denied";
                           if (toolCall.status === "started") return "running";
-                          if (toolCall.status === "finished") return execStatus === "ok" ? "ok" : "error";
+                          if (toolCall.status === "finished") return "error";
                           return toolCall.status;
                         })();
                         const statusIcon = (() => {
@@ -13584,7 +13595,6 @@ function App() {
                           if (toolCall.status === "started" || toolCall.status === "requested") return "⏳";
                           return "•";
                         })();
-
                         const artifacts: any[] = Array.isArray(summary?.artifacts) ? summary.artifacts : [];
                         const artifactLines = artifacts
                           .map((artifact) => {
@@ -13610,36 +13620,39 @@ function App() {
                         const output = [toolCall.stdout_excerpt, toolCall.stderr_excerpt].filter(Boolean).join("\n");
                         const isExpanded = expandedOutputIds.has(toolCall.id);
 
-                        return (
-                          <div key={toolCall.id} className="tool-inline">
-                            <div className="tool-command">
-                              <span className="tool-prompt">↳</span>
-                              <code>{label}</code>
-                            </div>
-                            <div className="tool-status-row">
-                              <span className={`tool-status ${statusText}`}>
-                                {statusIcon} {statusText}
-                              </span>
-                              {(output || artifactLines.length > 0 || note) && (
-                                <button className="tool-toggle" onClick={() => toggleOutputExpanded(toolCall.id)}>
-                                  {isExpanded ? "▼ details" : "▶ details"}
-                                </button>
+                          return (
+                            <div key={toolCall.id} className="tool-inline">
+                              <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                                <div className="tool-command">
+                                  <span className="tool-prompt">›</span>
+                                  <code>{label}</code>
+                                </div>
+                                <div className="tool-status-row">
+                                  <span className={`tool-status ${statusText}`}>
+                                    {statusIcon} {statusText}
+                                  </span>
+                                  {(output || artifactLines.length > 0 || note) && (
+                                    <button className="tool-toggle" onClick={() => toggleOutputExpanded(toolCall.id)}>
+                                      {isExpanded ? "▼" : "▶"}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {isExpanded && (
+                                <>
+                                  {note && <div className="tool-output-meta">note: {note}</div>}
+                                  {artifactLines.length > 0 && (
+                                    <pre className="tool-output">{artifactLines.join("\n\n")}</pre>
+                                  )}
+                                  {output && <pre className="tool-output">{output}</pre>}
+                                </>
                               )}
                             </div>
-                            {isExpanded && (
-                              <>
-                                {note && <div className="tool-output-meta">note: {note}</div>}
-                                {artifactLines.length > 0 && (
-                                  <pre className="tool-output">{artifactLines.join("\n\n")}</pre>
-                                )}
-                                {output && <pre className="tool-output">{output}</pre>}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </details>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               } else {
                 const toolCall = item.data;
@@ -13672,35 +13685,39 @@ function App() {
                     summary = null;
                   }
 
-                  const path = typeof args.path === "string" ? args.path : null;
+                  const wp = activeThread?.workspace_path ?? null;
+                  const rawPath = typeof args.path === "string" ? args.path : null;
+                  const p = rawPath ? trimWorkspacePath(rawPath, wp) : null;
                   const cmd = typeof args.cmd === "string" ? args.cmd : null;
                   const pat = typeof args.pat === "string" ? args.pat : null;
 
                   const label = (() => {
                     if (toolCall.tool_name === "bash") return cmd ? `bash ${cmd}` : "bash";
                     if (toolCall.tool_name === "grep") {
-                      const base = typeof args.path === "string" ? args.path : ".";
+                      const base = rawPath ? trimWorkspacePath(rawPath, wp) : ".";
                       return pat ? `grep ${pat} in ${base}` : `grep in ${base}`;
                     }
                     if (toolCall.tool_name === "glob") {
-                      const base = typeof args.path === "string" ? args.path : ".";
+                      const base = rawPath ? trimWorkspacePath(rawPath, wp) : ".";
                       return pat ? `glob ${pat} in ${base}` : `glob in ${base}`;
                     }
-                    if (toolCall.tool_name === "sha256") return path ? `sha256 ${path}` : "sha256";
-                    if (toolCall.tool_name === "read") return path ? `read ${path}` : "read";
-                    if (toolCall.tool_name === "write") return path ? `write ${path}` : "write";
-                    if (toolCall.tool_name === "edit") return path ? `edit ${path}` : "edit";
+                    if (toolCall.tool_name === "sha256") return p ? `sha256 ${p}` : "sha256";
+                    if (toolCall.tool_name === "read") return p ? `read ${p}` : "read";
+                    if (toolCall.tool_name === "write") return p ? `write ${p}` : "write";
+                    if (toolCall.tool_name === "edit") return p ? `edit ${p}` : "edit";
                     return toolCall.tool_name;
                   })();
 
                   const execStatus = typeof summary?.exec_status === "string" ? summary.exec_status : null;
                   const note = typeof summary?.note === "string" ? summary.note : null;
+                  const isOk = toolCall.status === "finished" && execStatus === "ok";
                   const statusText = (() => {
+                    if (isOk) return "";
                     if (toolCall.status === "requested") return "requested";
                     if (toolCall.status === "approved") return "approved";
                     if (toolCall.status === "denied") return "denied";
                     if (toolCall.status === "started") return "running";
-                    if (toolCall.status === "finished") return execStatus === "ok" ? "ok" : "error";
+                    if (toolCall.status === "finished") return "error";
                     return toolCall.status;
                   })();
                   const statusIcon = (() => {
@@ -13736,19 +13753,21 @@ function App() {
 
                   return (
                     <div key={toolCall.id} className="tool-inline">
-                      <div className="tool-command">
-                        <span className="tool-prompt">↳</span>
-                        <code>{label}</code>
-                      </div>
-                      <div className="tool-status-row">
-                        <span className={`tool-status ${statusText}`}>
-                          {statusIcon} {statusText}
-                        </span>
-                        {(output || artifactLines.length > 0 || note) && (
-                          <button className="tool-toggle" onClick={() => toggleOutputExpanded(toolCall.id)}>
-                            {isExpanded ? "▼ details" : "▶ details"}
-                          </button>
-                        )}
+                      <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                        <div className="tool-command">
+                          <span className="tool-prompt">›</span>
+                          <code>{label}</code>
+                        </div>
+                        <div className="tool-status-row">
+                          <span className={`tool-status ${statusText}`}>
+                            {statusIcon} {statusText}
+                          </span>
+                          {(output || artifactLines.length > 0 || note) && (
+                            <button className="tool-toggle" onClick={() => toggleOutputExpanded(toolCall.id)}>
+                              {isExpanded ? "▼" : "▶"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {isExpanded && (
                         <>
@@ -13791,18 +13810,16 @@ function App() {
 
                 return (
                   <div key={toolCall.id} className="tool-inline">
-                    <div className="tool-command">
-                      <span className="tool-prompt">$</span>
-                      <code>{toolLabel}</code>
-                      {toolSpec?.description && (
-                        <span className="tool-command-meta">{toolSpec.description}</span>
-                      )}
-                      {cmdPreview?.truncated && cmdPreview.cmdCount > 1 && (
-                        <span className="tool-cmd-count">[+{cmdPreview.cmdCount - 1} cmds]</span>
-                      )}
-                    </div>
-                    <div className="tool-status-row">
-                      <span className={`tool-status ${toolCall.exit_code === 0 ? "executed" : toolCall.status}`}>
+                    <div style={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+                      <div className="tool-command">
+                        <span className="tool-prompt">›</span>
+                        <code>{toolLabel}</code>
+                        {cmdPreview?.truncated && cmdPreview.cmdCount > 1 && (
+                          <span className="tool-cmd-count">[+{cmdPreview.cmdCount - 1} cmds]</span>
+                        )}
+                      </div>
+                      <div className="tool-status-row">
+                        <span className={`tool-status ${toolCall.exit_code === 0 ? "executed" : toolCall.status}`}>
                         {toolCall.status === "proposed" && "⏳"}
                         {toolCall.status === "approved" && "✓"}
                         {(toolCall.status === "executed" || toolCall.exit_code === 0) && "✓"}
@@ -13820,7 +13837,7 @@ function App() {
                           className="tool-toggle"
                           onClick={() => toggleOutputExpanded(toolCall.id)}
                         >
-                          {isOutputExpanded ? "▼ output" : "▶ output"}
+                          {isOutputExpanded ? "▼" : "▶"}
                         </button>
                       )}
                       {cmdPreview?.truncated && (
@@ -13936,6 +13953,7 @@ function App() {
                         </button>
                       )}
                     </div>
+                    </div>
                     {isCommandExpanded && cmdPreview?.truncated && (
                       <pre className="tool-command-full">{formatCommandForDisplay(details.command)}</pre>
                     )}
@@ -13964,6 +13982,8 @@ function App() {
             })}
 		            {streamingContent && (() => {
 		              const { cleaned } = cleanStreamingContent(streamingContent);
+                  const rendered = streamingRenderedContent ?? cleaned;
+                  const usePlainTextFallback = rendered.length > 24000;
 		              const streamingSignature = formatExecutionLabel(
 		                streamingMeta?.engine_id,
 		                streamingMeta?.model_id,
@@ -13986,7 +14006,12 @@ function App() {
                         )}
                       </div>
 		                    )}
-		                    {cleaned && renderMarkdown(cleaned)}
+                      {rendered &&
+                        (usePlainTextFallback ? (
+                          <pre className="streaming-plain-text">{rendered}</pre>
+                        ) : (
+                          renderMarkdown(rendered)
+                        ))}
 	                  </div>
 	                  {streamingSignature && (
 	                    <div className="message-meta block">{streamingSignature}</div>
@@ -14005,54 +14030,35 @@ function App() {
                     modelToggles,
                     null
                   );
-              const isWorking = agentStatus?.status === "working";
+              const isWorking = runPhase === "running_tool" || agentStatus?.status === "working";
               const timeLabel = sendElapsedSec > 0 ? ` (${sendElapsedSec}s)` : "";
               const hasRunningTools = runningTools.length > 0;
               const hasStreamingStarted = Boolean((streamingContent ?? "").trim());
+              const statusLabel =
+                runPhase === "preparing"
+                  ? "Preparing"
+                  : runPhase === "awaiting_approval"
+                    ? "Awaiting approval"
+                    : runPhase === "running_tool"
+                      ? "Working"
+                      : runPhase === "cancelling"
+                        ? "Cancelling"
+                        : "Thinking";
 
               // Hide the "thinking" indicator once token streaming begins.
-              // Keep showing the tool stack while tools are running.
-              if (hasStreamingStarted && !hasRunningTools) {
+              if (hasStreamingStarted) {
                 return null;
               }
 
               return (
                 <div className="run-activity-container">
-                  {/* Running tools stack */}
-                  {hasRunningTools && (
-                    <div className="running-tools-stack">
-                      {runningTools.map((tool) => (
-                        <div key={tool.id} className={`running-tool-row ${tool.status}`}>
-                          <span className="running-tool-icon">↳</span>
-                          <span className="running-tool-name">{tool.name}</span>
-                          {tool.preview && (
-                            <span className="running-tool-preview">{tool.preview}</span>
-                          )}
-                          <span className={`running-tool-status ${tool.status}`}>
-                            {tool.status === "running" ? (
-                              <span className="running-dots">
-                                <span></span><span></span><span></span>
-                              </span>
-                            ) : tool.status === "ok" ? (
-                              "✓ ok"
-                            ) : (
-                              "✗ error"
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Status line (only before streaming starts) */}
-                  {!hasStreamingStarted && (
-                    <div className={`run-status-line${isWorking ? " working" : ""}`}>
-                      <span className="run-status-label">
-                        {isWorking ? "Working" : "Thinking"}
-                        {timeLabel}
-                      </span>
-                      {indicatorSignature && <span className="run-status-model">{indicatorSignature}</span>}
-                    </div>
-                  )}
+                  <div className={`run-status-line${isWorking ? " working" : ""}`}>
+                    <span className="run-status-label">
+                      {statusLabel}
+                      {timeLabel}
+                    </span>
+                    {indicatorSignature && <span className="run-status-model">{indicatorSignature}</span>}
+                  </div>
                 </div>
               );
             })()}
@@ -14348,6 +14354,7 @@ function App() {
 	                    if (!activeThreadId) return;
 	                    setPendingToolApproval(null);
 	                    setPendingInferenceFallback(null);
+                      dispatchRunPhase({ type: "cancel_requested" });
 	                    void (USE_RUNTIME_CLIENT
                         ? runtimeClient.cancelRun(activeThreadId)
                         : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
@@ -17588,6 +17595,15 @@ function parseToolCall(toolCall: ToolCallRecord): {
   } catch {
     return { toolName: toolCall.tool_name || "run_shell_command", command: "", shell: "zsh", cwd: "." };
   }
+}
+
+/** Strip workspace root prefix from a path for compact display. */
+function trimWorkspacePath(fullPath: string, workspacePath: string | null | undefined): string {
+  if (!workspacePath) return fullPath;
+  const prefix = workspacePath.endsWith("/") ? workspacePath : workspacePath + "/";
+  if (fullPath.startsWith(prefix)) return fullPath.slice(prefix.length);
+  if (fullPath === workspacePath) return ".";
+  return fullPath;
 }
 
 function formatCommandPreview(command: string): { preview: string; truncated: boolean; cmdCount: number } {

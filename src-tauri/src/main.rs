@@ -39,6 +39,7 @@ const ARP_PROTOCOL_VERSION: i64 = 1;
 const DEFAULT_MAX_TOKENS: u32 = 1024;
 const IO_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
 const RIPGREP_VERSION: &str = "14.1.1";
+const BYOK_ENABLED: bool = false;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PlatformProvider {
@@ -231,6 +232,175 @@ async fn fetch_model_registry_row(
 
     let rows: Vec<ModelRegistryApiRow> = res.json().await.ok()?;
     rows.into_iter().next()
+}
+
+fn parse_boolish_i64(value: Option<&serde_json::Value>) -> i64 {
+    match value {
+        Some(serde_json::Value::Bool(flag)) => {
+            if *flag {
+                1
+            } else {
+                0
+            }
+        }
+        Some(serde_json::Value::Number(num)) => num.as_i64().unwrap_or(0),
+        Some(serde_json::Value::String(raw)) => {
+            let trimmed = raw.trim().to_lowercase();
+            if trimmed == "true" || trimmed == "yes" || trimmed == "on" {
+                1
+            } else if trimmed == "false" || trimmed == "no" || trimmed == "off" {
+                0
+            } else {
+                trimmed.parse::<i64>().unwrap_or(0)
+            }
+        }
+        _ => 0,
+    }
+}
+
+fn parse_epoch_i64(value: Option<&serde_json::Value>) -> Option<i64> {
+    match value {
+        Some(serde_json::Value::Number(num)) => num.as_i64(),
+        Some(serde_json::Value::String(raw)) => raw
+            .trim()
+            .parse::<i64>()
+            .ok(),
+        _ => None,
+    }
+}
+
+async fn fetch_cloud_personal_memory_items_json(
+    proxy: &PlatformProxyConfig,
+    user_id: &str,
+) -> Option<String> {
+    let cleaned = user_id.trim();
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    let base = format!(
+        "{}/rest/v1/personal_memory_items",
+        proxy.supabase_url.trim_end_matches('/')
+    );
+    let user_filter = format!("eq.{}", cleaned);
+    let url = reqwest::Url::parse_with_params(
+        &base,
+        [
+            ("select", "id,content,scope,scope_id,pinned,updated_at"),
+            ("user_id", user_filter.as_str()),
+            ("order", "pinned.desc,updated_at.desc"),
+            ("limit", "200"),
+        ],
+    )
+    .ok()?;
+
+    let response = reqwest::Client::new()
+        .get(url)
+        .header("apikey", proxy.supabase_anon_key.clone())
+        .bearer_auth(proxy.access_token.clone())
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let rows: Vec<serde_json::Value> = response.json().await.ok()?;
+    let now_ts = db::now_ts();
+    let normalized = rows
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, row)| {
+            let id = row.get("id").and_then(|v| v.as_str())?.trim().to_string();
+            let content = row
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let scope = row
+                .get("scope")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if id.is_empty() || content.trim().is_empty() || scope.trim().is_empty() {
+                return None;
+            }
+            let scope_id = row
+                .get("scope_id")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string());
+            let pinned = parse_boolish_i64(row.get("pinned"));
+            let updated_at = parse_epoch_i64(row.get("updated_at"))
+                .unwrap_or_else(|| now_ts.saturating_sub(idx as i64));
+            Some(serde_json::json!({
+                "id": id,
+                "content": content,
+                "scope": scope,
+                "scope_id": scope_id,
+                "pinned": pinned,
+                "updated_at": updated_at
+            }))
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::to_string(&normalized).ok()
+}
+
+async fn fetch_active_community_system_prompt(
+    proxy: &PlatformProxyConfig,
+    user_id: &str,
+    community_id: &str,
+) -> Option<String> {
+    let cleaned_user = user_id.trim();
+    let cleaned_community = community_id.trim();
+    if cleaned_user.is_empty() || cleaned_community.is_empty() {
+        return None;
+    }
+
+    let url = format!(
+        "{}/rest/v1/rpc/get_active_community_agent_system_prompt",
+        proxy.supabase_url.trim_end_matches('/')
+    );
+    let body = serde_json::json!({
+        "p_user_id": cleaned_user,
+        "p_community_id": cleaned_community,
+    });
+    let response = reqwest::Client::new()
+        .post(url)
+        .header("apikey", proxy.supabase_anon_key.clone())
+        .bearer_auth(proxy.access_token.clone())
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let payload: serde_json::Value = response.json().await.ok()?;
+    let prompt = match payload {
+        serde_json::Value::Array(rows) => rows
+            .first()
+            .and_then(|row| row.get("system_prompt"))
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_string())
+            .unwrap_or_default(),
+        serde_json::Value::Object(map) => map
+            .get("system_prompt")
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim().to_string())
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+
+    if prompt.is_empty() {
+        None
+    } else {
+        Some(prompt)
+    }
 }
 
 async fn resolve_platform_model_for_alias_with_registry(
@@ -4681,6 +4851,12 @@ async fn send_turn_messages_agent(
 
     let mut byok_provider_key: Option<String> = None;
     let mut get_byok_provider_key = || -> Result<String, String> {
+        if !BYOK_ENABLED {
+            return Err(
+                "BYOK is disabled. Use Arx AI quota, ChatGPT sign-in for OpenAI on desktop, or upgrade."
+                    .to_string(),
+            );
+        }
         if let Some(value) = byok_provider_key.clone() {
             return Ok(value);
         }
@@ -5476,9 +5652,8 @@ async fn send_turn_messages_agent(
 	                  db_path,
 	                  thread_id,
 	                  &format!(
-	                    "You've used your Arx AI quota for this month. Add your {} API key in Settings → Models to continue.",
-	                    platform_provider_display_name(model_ref.provider)
-	                  ),
+		                    "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
+		                  ),
 	                  selected_model_id,
 	                  &run_id,
 	                  &evidence_event_ids,
@@ -5527,9 +5702,8 @@ async fn send_turn_messages_agent(
                                     db_path,
                                     thread_id,
                                     &format!(
-		                    "Arx AI quota reached. Cancelled — I didn’t switch to your {} API key.",
-		                    platform_provider_display_name(model_ref.provider)
-		                  ),
+	                  "Arx AI quota reached. Cancelled — upgrade to continue.",
+	                ),
                                     selected_model_id,
                                     &run_id,
                                     &evidence_event_ids,
@@ -5578,8 +5752,7 @@ async fn send_turn_messages_agent(
                                     db_path,
                                     thread_id,
                                     &format!(
-		                  "Arx AI quota reached. Cancelled — I didn’t switch to your {} API key.",
-		                  platform_provider_display_name(model_ref.provider)
+		                  "Arx AI quota reached. Cancelled — upgrade to continue.",
 		                ),
                                     selected_model_id,
                                     &run_id,
@@ -5635,7 +5808,7 @@ async fn send_turn_messages_agent(
                             continue;
                         }
 
-                        // Best-effort: if platform is misconfigured/unavailable but the user has a BYOK key, fall back.
+                        // Best-effort: if platform is misconfigured/unavailable and BYOK is enabled, fall back.
                         if get_byok_provider_key().is_ok() {
                             let approved = await_inference_fallback_approval(
                                 window,
@@ -5652,8 +5825,7 @@ async fn send_turn_messages_agent(
                                     db_path,
                                     thread_id,
                                     &format!(
-		                    "Arx AI unavailable. Cancelled — I didn’t switch to your {} API key.",
-		                    platform_provider_display_name(model_ref.provider)
+		                    "Arx AI is temporarily unavailable. Please try again.",
 		                  ),
                                     selected_model_id,
                                     &run_id,
@@ -5742,7 +5914,7 @@ async fn send_turn_messages_agent(
                             continue;
                         }
 
-                        // Otherwise, require explicit approval before switching to BYOK.
+                        // Otherwise, require explicit approval before switching to BYOK (when enabled).
                         if !chatgpt_fallback_approved_for_run {
                             let provider_key_ok = get_byok_provider_key().is_ok();
                             if !provider_key_ok {
@@ -5750,7 +5922,7 @@ async fn send_turn_messages_agent(
 	                  &conn,
 	                  db_path,
 	                  thread_id,
-	                  "ChatGPT sign-in failed. Add your OpenAI API key in Settings → Models to continue.",
+	                  "ChatGPT sign-in failed. Reconnect ChatGPT or upgrade to continue.",
 	                  selected_model_id,
 	                  &run_id,
 	                  &evidence_event_ids,
@@ -5798,7 +5970,7 @@ async fn send_turn_messages_agent(
 	                  &conn,
 	                  db_path,
 	                  thread_id,
-	                  "ChatGPT sign-in failed. Cancelled — I didn’t switch to your OpenAI API key.",
+	                  "ChatGPT sign-in failed. Cancelled — reconnect ChatGPT or upgrade.",
 	                  selected_model_id,
 	                  &run_id,
 	                  &evidence_event_ids,
@@ -7269,8 +7441,7 @@ async fn send_turn_messages_agent(
 	                db_path,
 	                thread_id,
 	                &format!(
-	                  "You've used your Arx AI quota for this month. Add your {} API key in Settings → Models to continue.",
-	                  platform_provider_display_name(model_ref.provider)
+	                  "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
 	                ),
 	                selected_model_id,
 	                &run_id,
@@ -7342,8 +7513,7 @@ async fn send_turn_messages_agent(
                                 db_path,
                                 thread_id,
                                 &format!(
-		                  "Arx AI unavailable. Cancelled — I didn’t switch to your {} API key.",
-		                  platform_provider_display_name(model_ref.provider)
+		                  "Arx AI is temporarily unavailable. Please try again.",
 		                ),
                                 selected_model_id,
                                 &run_id,
@@ -8196,9 +8366,6 @@ async fn send_turn_cmd(
     thread_id: String,
     _cwd: String,
     input: String,
-    history_messages_json: Option<String>,
-    personal_memory_items_json: Option<String>,
-    community_system_prompt: Option<String>,
     supabase_url: Option<String>,
     supabase_anon_key: Option<String>,
     supabase_access_token: Option<String>,
@@ -8271,13 +8438,36 @@ async fn send_turn_cmd(
         })
         .unwrap_or("build");
 
+    let cloud_user_id = platform_proxy
+        .as_ref()
+        .and_then(|cfg| jwt_string_claim(&cfg.access_token, "sub"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let cloud_personal_memory_items_json =
+        if let (Some(proxy), Some(user_id)) = (platform_proxy.as_ref(), cloud_user_id.as_deref())
+        {
+            fetch_cloud_personal_memory_items_json(proxy, user_id).await
+        } else {
+            None
+        };
+
     // Shared memory injection. Prefer cloud-canonical items if provided.
-    let used_personal_memory = if let Some(json) = personal_memory_items_json.as_deref() {
+    let used_personal_memory = if let Some(json) = cloud_personal_memory_items_json.as_deref() {
         context_builder::build_used_personal_memory_from_cloud_json(workspace, json)
             .or_else(|_| context_builder::build_turn_handoff_prefix(&conn, workspace))
             .map_err(|e| e.to_string())?
     } else {
         context_builder::build_turn_handoff_prefix(&conn, workspace).map_err(|e| e.to_string())?
+    };
+
+    let cloud_community_system_prompt = if let (Some(proxy), Some(user_id), Some(community_id)) = (
+        platform_proxy.as_ref(),
+        cloud_user_id.as_deref(),
+        thread.community_id.as_deref(),
+    ) {
+        fetch_active_community_system_prompt(proxy, user_id, community_id).await
+    } else {
+        None
     };
 
     let user_system_prompt = get_ui_state(&conn, "system_prompt").ok().flatten();
@@ -8286,7 +8476,7 @@ async fn send_turn_cmd(
         &used_personal_memory,
         thread.community_id.as_deref(),
         user_system_prompt.as_deref(),
-        community_system_prompt.as_deref(),
+        cloud_community_system_prompt.as_deref(),
     );
     let retrieval_payload = serde_json::json!({
           "v": 1,
@@ -8333,7 +8523,7 @@ async fn send_turn_cmd(
             &input,
             &atom_system_prompt,
             &used_personal_memory,
-            history_messages_json.clone(),
+            None,
             platform_proxy,
             cancel_rx.clone(),
             thread.community_id.clone(),
@@ -8344,6 +8534,75 @@ async fn send_turn_cmd(
     return Err(format!("Unsupported engine_id: {}", thread.engine_id));
 }
 
+#[tauri::command]
+async fn submit_turn_cmd(
+    window: tauri::Window,
+    state: tauri::State<'_, DbState>,
+    thread_id: String,
+    cwd: String,
+    input: String,
+    user_content_json: String,
+    supabase_url: Option<String>,
+    supabase_anon_key: Option<String>,
+    supabase_access_token: Option<String>,
+) -> Result<SendTurnResult, String> {
+    let db_path = state.db_path.clone();
+    let db_key = state.key.clone();
+
+    {
+        let conn = open_conn(&db_path, &db_key).map_err(|e| e.to_string())?;
+        add_message(&conn, &thread_id, "user", &user_content_json).map_err(|e| e.to_string())?;
+    }
+
+    match send_turn_cmd(
+        window.clone(),
+        state,
+        thread_id.clone(),
+        cwd,
+        input,
+        supabase_url,
+        supabase_anon_key,
+        supabase_access_token,
+    )
+    .await
+    {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            let fallback_content = serde_json::json!({
+                "text": format!("Engine error: {}", err),
+            })
+            .to_string();
+            if let Ok(conn) = open_conn(&db_path, &db_key) {
+                let _ = add_message(&conn, &thread_id, "assistant", &fallback_content);
+            }
+
+            let _ = window.emit(
+                "agent-status",
+                AgentStatusPayload {
+                    session_id: thread_id.clone(),
+                    status: "idle".to_string(),
+                    tool_name: None,
+                    tool_args_preview: None,
+                },
+            );
+            let _ = window.emit(
+                "openrouter-turn-finished",
+                SessionIdPayload {
+                    session_id: thread_id.clone(),
+                },
+            );
+
+            Ok(SendTurnResult {
+                thread_id,
+                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                engine_input_event_id: None,
+                engine_input_seq: None,
+                run_id: None,
+            })
+        }
+    }
+}
+
 /// Legacy alias for backward compatibility
 #[tauri::command]
 async fn engine_send_turn_cmd(
@@ -8352,9 +8611,6 @@ async fn engine_send_turn_cmd(
     thread_id: String,
     cwd: String,
     input: String,
-    history_messages_json: Option<String>,
-    personal_memory_items_json: Option<String>,
-    community_system_prompt: Option<String>,
     supabase_url: Option<String>,
     supabase_anon_key: Option<String>,
     supabase_access_token: Option<String>,
@@ -8365,9 +8621,6 @@ async fn engine_send_turn_cmd(
         thread_id,
         cwd,
         input,
-        history_messages_json,
-        personal_memory_items_json,
-        community_system_prompt,
         supabase_url,
         supabase_anon_key,
         supabase_access_token,
@@ -9022,6 +9275,11 @@ fn default_model_toggles() -> Vec<ModelToggle> {
         ModelToggle {
             id: "opus-4.5".to_string(),
             label: "Opus 4.5".to_string(),
+            enabled: true,
+        },
+        ModelToggle {
+            id: "opus-4.6".to_string(),
+            label: "Opus 4.6".to_string(),
             enabled: true,
         },
         ModelToggle {
@@ -10776,6 +11034,7 @@ fn main() {
             set_auto_approve_write_edit_cmd,
             cancel_run_cmd,
             send_turn_cmd,
+            submit_turn_cmd,
             engine_send_turn_cmd,
             get_supabase_session_cmd,
             set_supabase_session_cmd,

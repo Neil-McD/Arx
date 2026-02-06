@@ -201,9 +201,7 @@ export class TauriRuntimeClient implements RuntimeClient {
     thread_id: ThreadId;
     cwd: string;
     input: string;
-    history_messages_json?: string | null;
-    personal_memory_items_json?: string | null;
-    community_system_prompt?: string | null;
+    user_content_json: string;
     supabase_url?: string | null;
     supabase_anon_key?: string | null;
     supabase_access_token?: string | null;
@@ -214,13 +212,11 @@ export class TauriRuntimeClient implements RuntimeClient {
       engine_input_event_id?: string | null;
       engine_input_seq?: number | null;
       run_id?: string | null;
-    }>("engine_send_turn_cmd", {
+    }>("submit_turn_cmd", {
       threadId: args.thread_id,
       cwd: args.cwd,
       input: args.input,
-      historyMessagesJson: args.history_messages_json ?? null,
-      personalMemoryItemsJson: args.personal_memory_items_json ?? null,
-      communitySystemPrompt: args.community_system_prompt ?? null,
+      userContentJson: args.user_content_json,
       supabaseUrl: args.supabase_url ?? null,
       supabaseAnonKey: args.supabase_anon_key ?? null,
       supabaseAccessToken: args.supabase_access_token ?? null,

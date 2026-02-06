@@ -40,6 +40,7 @@ import {
   storePendingPurchaseClaimToken,
   type PendingPurchaseClaim
 } from "../../../shared/pay_first";
+import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import { isCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
 import {
   buildCommunityFunnelDraft,
@@ -190,7 +191,7 @@ const GUEST_MODEL_LABELS: Record<string, string> = {
   "gpt-oss-120b-free": "GPT OSS 120B (Free)",
   "deepseek-r1-free": "DeepSeek R1 (Free)",
 };
-const DEFAULT_MODEL_FAVORITES = ["gpt-5.2", "opus-4.5", "gemini-3-flash", "grok-4.1", "kimi-k2"];
+const DEFAULT_MODEL_FAVORITES = ["gpt-5.2", "opus-4.6", "gemini-3-flash", "grok-4.1", "kimi-k2"];
 
 type ModelSectionId = "all" | "favorites" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 
@@ -786,6 +787,7 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
   { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
   { id: "opus-4.5", label: "Opus 4.5", enabled: true },
+  { id: "opus-4.6", label: "Opus 4.6", enabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
   { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
   { id: "grok-4.1", label: "Grok 4.1", enabled: true }
@@ -3110,29 +3112,7 @@ export default function App() {
     updateBuilderUpgradeScrollHint();
   }, [builderBillingStatus?.builder_tier, builderUpgradeContext, isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
 
-  const [modelToggles, setModelToggles] = useState<ModelToggle[]>(() => {
-    try {
-      const raw = localStorage.getItem(MODEL_TOGGLES_STORAGE_KEY);
-      if (!raw) return DEFAULT_MODEL_TOGGLES;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return DEFAULT_MODEL_TOGGLES;
-      const normalized = parsed
-        .map((item) => {
-          if (!item || typeof item !== "object") return null;
-          const id = (item as { id?: unknown }).id;
-          const label = (item as { label?: unknown }).label;
-          const enabled = (item as { enabled?: unknown }).enabled;
-          if (typeof id !== "string" || typeof label !== "string" || typeof enabled !== "boolean") return null;
-          return { id, label, enabled } satisfies ModelToggle;
-        })
-        .filter(Boolean) as ModelToggle[];
-      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
-      const pruned = normalized.filter((toggle) => allowedIds.has(toggle.id));
-      return pruned.length ? pruned : DEFAULT_MODEL_TOGGLES;
-    } catch {
-      return DEFAULT_MODEL_TOGGLES;
-    }
-  });
+  const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
@@ -7234,13 +7214,7 @@ export default function App() {
         .filter(Boolean) as ModelToggle[];
 
       if (!catalog.length) return;
-      setModelToggles((prev) => {
-        const prevById = new Map(prev.map((t) => [t.id, t]));
-        return catalog.map((toggle) => {
-          const existing = prevById.get(toggle.id);
-          return existing ? { ...toggle, enabled: existing.enabled } : toggle;
-        });
-      });
+      setModelToggles(catalog);
     } catch {
       // ignore
     }
@@ -7758,7 +7732,8 @@ export default function App() {
             const providerLabel = DEFAULT_PROVIDER_KEYS.find((p) => p.id === providerId)?.label ?? providerId;
             const hasKeyFromServer = typeof parsed?.has_byok_key === "boolean" ? parsed.has_byok_key : null;
             const hasKeyFromState = Boolean(providerKeys.find((p) => p.id === providerId)?.hasKey);
-            const byokAllowedFromServer = typeof parsed?.byok_allowed === "boolean" ? parsed.byok_allowed : true;
+            const byokAllowedFromServer =
+              typeof parsed?.byok_allowed === "boolean" ? parsed.byok_allowed : false;
             const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : null;
             setPlatformQuotaModal({
               reason: code === "platform_inference_quota_exceeded" ? "quota" : "unavailable",
@@ -7767,7 +7742,7 @@ export default function App() {
               providerId,
               providerLabel,
               hasKey: hasKeyFromServer ?? hasKeyFromState,
-              byokAllowed: byokAllowedFromServer,
+              byokAllowed: userAccessPolicy.allowByokCloudStore && byokAllowedFromServer,
               message: messageFromServer,
             });
             return { cancelled: false, error: null };
@@ -8186,11 +8161,18 @@ export default function App() {
 
       const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
       const enabled = modelToggles.filter((toggle) => toggle.enabled);
-      const preferredModelId =
+      const preferredModelIdRaw =
         (activeModelId ?? "").trim() ||
         enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
         enabled[0]?.id ||
         DEFAULT_ACTIVE_MODEL_ID;
+      const preferredModelId =
+        hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(preferredModelIdRaw)
+          ? preferredModelIdRaw
+          : DEFAULT_GUEST_MODEL_ID;
+      if (preferredModelId !== preferredModelIdRaw) {
+        setActiveModelId(preferredModelId);
+      }
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         await updateThreadModel(threadId, preferredModelId, session);
       }
@@ -8213,6 +8195,10 @@ export default function App() {
 
       const messageId = crypto.randomUUID();
       const attachmentsToSend = [...workspaceAttachmentsRef.current];
+      const usePublicModel = GUEST_MODEL_ALLOWLIST.has(preferredModelId);
+      if (usePublicModel && attachmentsToSend.length > 0) {
+        throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
+      }
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/messages`,
         {
@@ -8246,14 +8232,64 @@ export default function App() {
       }
       setMessageInput("");
       setWorkspaceAttachments([]);
-      await loadThreadMessages(threadId, session);
+      const priorThreadMessages = threadMessages.filter((m) => m.thread_id === threadId);
+      const syntheticUserMessage: ThreadMessage = {
+        id: messageId,
+        thread_id: threadId,
+        seq: priorThreadMessages.length + 1,
+        role: "user",
+        content_json: {
+          text,
+          ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {}),
+        },
+        created_at: new Date().toISOString(),
+        engine_id: null,
+        model_id: null,
+        run_id: null,
+      };
 
-      const turnResult = await runAgentTurn(session, threadId, {
-        preferredModelId,
-        mode: "respond",
-        runIdHint: `agent_web:${messageId}`,
-      });
-      if (turnResult.error) throw new Error(turnResult.error);
+      if (usePublicModel) {
+        const turnResult = await runPublicTurn({
+          modelId: preferredModelId,
+          threadId,
+          runIdHint: `public_web:${messageId}`,
+          messages: [...priorThreadMessages, syntheticUserMessage],
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+        if (!turnResult.cancelled) {
+          const assistantContent = (turnResult.content ?? "").trim();
+          if (assistantContent) {
+            const assistantResponse = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/messages`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: crypto.randomUUID(),
+                  thread_id: threadId,
+                  seq: 0,
+                  role: "assistant",
+                  content_json: { text: assistantContent },
+                }),
+              },
+              session,
+            );
+            if (!assistantResponse.ok) {
+              const insertMessage = await readSupabaseError(assistantResponse);
+              throw new Error(insertMessage || "Failed to save assistant response.");
+            }
+          }
+        }
+      } else {
+        const turnResult = await runAgentTurn(session, threadId, {
+          preferredModelId,
+          mode: "respond",
+          runIdHint: `agent_web:${messageId}`,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+      }
+
+      await loadThreadMessages(threadId, session);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -8298,23 +8334,66 @@ export default function App() {
     setIsWorkspaceAtBottom(true);
     try {
       const session = supabaseSession;
+      const url = getSupabaseUrl();
+      if (!url) throw new Error("Missing Supabase URL.");
       const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
       const enabled = modelToggles.filter((toggle) => toggle.enabled);
-      const preferredModelId =
+      const preferredModelIdRaw =
         (activeModelId ?? "").trim() ||
         enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
         enabled[0]?.id ||
         DEFAULT_ACTIVE_MODEL_ID;
+      const preferredModelId =
+        hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(preferredModelIdRaw)
+          ? preferredModelIdRaw
+          : DEFAULT_GUEST_MODEL_ID;
+      const usePublicModel = GUEST_MODEL_ALLOWLIST.has(preferredModelId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         await updateThreadModel(threadId, preferredModelId, session);
       }
 
-      const turnResult = await runAgentTurn(session, threadId, {
-        preferredModelId,
-        mode: "respond",
-        runIdHint: `agent_web:${lastUserMessageId}`,
-      });
-      if (turnResult.error) throw new Error(turnResult.error);
+      if (usePublicModel) {
+        const currentThreadMessages = threadMessages.filter((message) => message.thread_id === threadId);
+        const turnResult = await runPublicTurn({
+          modelId: preferredModelId,
+          threadId,
+          runIdHint: `public_web_retry:${lastUserMessageId}:${Date.now()}`,
+          messages: currentThreadMessages,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+        if (!turnResult.cancelled) {
+          const assistantContent = (turnResult.content ?? "").trim();
+          if (assistantContent) {
+            const assistantResponse = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/messages`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: crypto.randomUUID(),
+                  thread_id: threadId,
+                  seq: 0,
+                  role: "assistant",
+                  content_json: { text: assistantContent },
+                }),
+              },
+              session,
+            );
+            if (!assistantResponse.ok) {
+              const insertMessage = await readSupabaseError(assistantResponse);
+              throw new Error(insertMessage || "Failed to save assistant response.");
+            }
+          }
+        }
+      } else {
+        const turnResult = await runAgentTurn(session, threadId, {
+          preferredModelId,
+          mode: "respond",
+          runIdHint: `agent_web:${lastUserMessageId}`,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+      }
+      await loadThreadMessages(threadId, session);
     } catch (error) {
       const message =
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
@@ -8347,23 +8426,92 @@ export default function App() {
     setIsWorkspaceAtBottom(true);
     try {
       const session = supabaseSession;
+      const url = getSupabaseUrl();
+      if (!url) throw new Error("Missing Supabase URL.");
       const currentThreadModel = threads.find((t) => t.id === threadId)?.model_id;
       const enabled = modelToggles.filter((toggle) => toggle.enabled);
-      const preferredModelId =
+      const preferredModelIdRaw =
         (activeModelId ?? "").trim() ||
         enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ||
         enabled[0]?.id ||
         DEFAULT_ACTIVE_MODEL_ID;
+      const preferredModelId =
+        hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(preferredModelIdRaw)
+          ? preferredModelIdRaw
+          : DEFAULT_GUEST_MODEL_ID;
+      const usePublicModel = GUEST_MODEL_ALLOWLIST.has(preferredModelId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         await updateThreadModel(threadId, preferredModelId, session);
       }
 
-      const turnResult = await runAgentTurn(session, threadId, {
-        preferredModelId,
-        mode: "regenerate",
-        runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
-      });
-      if (turnResult.error) throw new Error(turnResult.error);
+      if (usePublicModel) {
+        const currentThreadMessages = threadMessages.filter((message) => message.thread_id === threadId);
+        let lastUserIndex = -1;
+        for (let i = currentThreadMessages.length - 1; i >= 0; i--) {
+          if (currentThreadMessages[i]?.role === "user") {
+            lastUserIndex = i;
+            break;
+          }
+        }
+        if (lastUserIndex < 0) throw new Error("No user message available to regenerate.");
+
+        const messagesForTurn = currentThreadMessages.slice(0, lastUserIndex + 1);
+        const trailingMessageIds = currentThreadMessages
+          .slice(lastUserIndex + 1)
+          .map((message) => message.id)
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+        for (const messageId of trailingMessageIds) {
+          const deleteResponse = await fetchWithSupabaseAuth(
+            `${url}/rest/v1/messages?id=eq.${encodeURIComponent(messageId)}`,
+            { method: "DELETE" },
+            session,
+          );
+          if (!deleteResponse.ok) {
+            const deleteError = await readSupabaseError(deleteResponse);
+            throw new Error(deleteError || "Failed to prepare message history for regenerate.");
+          }
+        }
+
+        const turnResult = await runPublicTurn({
+          modelId: preferredModelId,
+          threadId,
+          runIdHint: `public_web_regen:${lastUserMessageId}:${Date.now()}`,
+          messages: messagesForTurn,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+        if (!turnResult.cancelled) {
+          const assistantContent = (turnResult.content ?? "").trim();
+          if (assistantContent) {
+            const assistantResponse = await fetchWithSupabaseAuth(
+              `${url}/rest/v1/messages`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: crypto.randomUUID(),
+                  thread_id: threadId,
+                  seq: 0,
+                  role: "assistant",
+                  content_json: { text: assistantContent },
+                }),
+              },
+              session,
+            );
+            if (!assistantResponse.ok) {
+              const insertMessage = await readSupabaseError(assistantResponse);
+              throw new Error(insertMessage || "Failed to save assistant response.");
+            }
+          }
+        }
+      } else {
+        const turnResult = await runAgentTurn(session, threadId, {
+          preferredModelId,
+          mode: "regenerate",
+          runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
+        });
+        if (turnResult.error) throw new Error(turnResult.error);
+      }
+      await loadThreadMessages(threadId, session);
     } catch (error) {
       const message =
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
@@ -8389,6 +8537,10 @@ export default function App() {
     const provider = providerKeys.find((item) => item.id === id);
     const value = provider?.inputValue.trim() ?? "";
     if (!value) return;
+    if (!userAccessPolicy.allowByokCloudStore) {
+      showAppToastMessage("BYOK is disabled. Use free models or upgrade for Arx AI.");
+      return;
+    }
     if (!supabaseSession) {
       openAuthGate({ reason: "save_provider_key", payload: { provider_id: id as ProviderId } });
       return;
@@ -8440,10 +8592,6 @@ export default function App() {
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to clear key";
       setProviderKeys((prev) => prev.map((item) => (item.id === id ? { ...item, error: message } : item)));
     }
-  }
-
-  async function handleToggleModel(id: string) {
-    setModelToggles((prev) => prev.map((toggle) => (toggle.id === id ? { ...toggle, enabled: !toggle.enabled } : toggle)));
   }
 
   async function exportThreadsCsv() {
@@ -11508,6 +11656,15 @@ export default function App() {
     if (raw === "builder" || raw === "pro") return raw;
     return "free";
   }, [builderBillingStatus?.builder_tier]);
+  const userAccessPolicy = useMemo(
+    () =>
+      resolveUserAccessPolicy({
+        surface: "web",
+        authState: supabaseSession ? "authenticated" : "anonymous",
+        builderTier: builderBillingStatus?.builder_tier ?? null,
+      }),
+    [supabaseSession, builderBillingStatus?.builder_tier],
+  );
 
 		  const activeCommunityJoinMode = useMemo<CommunityJoinMode | null>(() => {
 		    if (!activeCommunity) return null;
@@ -12044,6 +12201,8 @@ export default function App() {
   }, [communities, normalizedThreadSearch, visibleThreads]);
 
 	  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
+	  const effectiveTier = ((builderBillingStatus?.builder_tier ?? "free") as string).toLowerCase();
+	  const hasPaidAccess = Boolean(supabaseSession) && (effectiveTier === "builder" || effectiveTier === "pro");
 
 	  const guestModelLabel = useMemo(() => {
 	    const label = (GUEST_MODEL_LABELS[guestModelId] ?? "").trim();
@@ -12052,18 +12211,31 @@ export default function App() {
 
 	  const selectedModelId = useMemo(() => {
 	    const threadModel = (activeThread?.model_id ?? "").trim();
-	    if (threadModel && modelToggles.some((toggle) => toggle.id === threadModel)) return threadModel;
+	    if (
+	      threadModel &&
+	      modelToggles.some((toggle) => toggle.id === threadModel) &&
+	      (!supabaseSession || hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(threadModel))
+	    ) {
+	      return threadModel;
+	    }
 
-    const stored = (activeModelId ?? "").trim();
-    if (stored && modelToggles.some((toggle) => toggle.id === stored)) return stored;
+	    const stored = (activeModelId ?? "").trim();
+	    if (
+	      stored &&
+	      modelToggles.some((toggle) => toggle.id === stored) &&
+	      (!supabaseSession || hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(stored))
+	    ) {
+	      return stored;
+	    }
 
-    return (
-      enabledModels.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ??
-      enabledModels[0]?.id ??
-      modelToggles[0]?.id ??
-      ""
-    );
-  }, [activeThread?.model_id, activeModelId, enabledModels, modelToggles]);
+	    const fallbackModelId =
+	      enabledModels.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id ??
+	      enabledModels[0]?.id ??
+	      modelToggles[0]?.id ??
+	      "";
+	    if (!supabaseSession || hasPaidAccess) return fallbackModelId;
+	    return GUEST_MODEL_ALLOWLIST.has(fallbackModelId) ? fallbackModelId : DEFAULT_GUEST_MODEL_ID;
+	  }, [activeThread?.model_id, activeModelId, enabledModels, hasPaidAccess, modelToggles, supabaseSession]);
 
 	  const selectedModelLabel = useMemo(() => {
 	    if (!selectedModelId) return "Model";
@@ -12102,8 +12274,6 @@ export default function App() {
 		    description?: string | null;
 		  };
 
-		  const effectiveTier = ((builderBillingStatus?.builder_tier ?? "free") as string).toLowerCase();
-		  const hasPaidAccess = Boolean(supabaseSession) && (effectiveTier === "builder" || effectiveTier === "pro");
 		  const selectedPickerModelId = supabaseSession ? selectedModelId : guestModelId;
 
 		  const curatedPickerModels = useMemo(() => {
@@ -12158,10 +12328,10 @@ export default function App() {
 
 		  const canSelectPickerModel = (model: CuratedPickerModel): boolean => {
 		    if (!supabaseSession) return model.access === "guest";
-		    if (model.access === "guest") return false;
+		    if (model.access === "guest") return true;
 		    if (!modelToggles.some((toggle) => toggle.id === model.id)) return false;
 		    if (model.access === "paid") return hasPaidAccess;
-		    return true;
+		    return hasPaidAccess;
 			  };
 
 			  const openModelPicker = () => {
@@ -12199,7 +12369,11 @@ export default function App() {
 			        return;
 			      }
 			      if (supabaseSession && model.access === "guest") {
-			        showAppToastMessage("Guest demo models are available only when signed out.");
+			        setActiveModelId(model.id);
+			        if (activeThreadId) {
+			          void updateThreadModel(activeThreadId, model.id, supabaseSession);
+			        }
+			        closeModelPicker();
 			        return;
 			      }
 			      showAppToastMessage("This model is not available yet.");
@@ -12957,8 +13131,8 @@ export default function App() {
                 </button>
 	                <button
 		                  className="new-session-header-btn"
-			                  onClick={() => {
-				                    if (!supabaseSession) {
+		                  onClick={() => {
+				                    if (!userAccessPolicy.allowMultipleThreads) {
 				                      setThreadError(null);
 				                      openAuthGate();
 				                      return;
@@ -14019,43 +14193,45 @@ export default function App() {
 
               {settingsPage === "models" && (
                 <>
-		                  <div className="settings-section">
-		                    <div className="settings-section-title">API Keys</div>
-		                    <div className="settings-section-desc">
-		                      Optional: add provider API keys for BYOK. When your Arx AI quota runs out, you&apos;ll be prompted before using your keys.
-		                    </div>
-                      {providerKeys.map((provider) => (
-                        <div key={provider.id} style={{ marginTop: 12 }}>
-                          <div className="model-note" style={{ marginBottom: 8 }}>
-                            {provider.label}
+		                  {userAccessPolicy.allowByokCloudStore && (
+		                    <div className="settings-section">
+		                      <div className="settings-section-title">API Keys</div>
+		                      <div className="settings-section-desc">
+		                        Optional: add provider API keys for BYOK. When your Arx AI quota runs out, you&apos;ll be prompted before using your keys.
+		                      </div>
+                        {providerKeys.map((provider) => (
+                          <div key={provider.id} style={{ marginTop: 12 }}>
+                            <div className="model-note" style={{ marginBottom: 8 }}>
+                              {provider.label}
+                            </div>
+                            <div className="key-row">
+                              <input
+                                type="password"
+                                value={provider.inputValue}
+                                placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setProviderKeys((prev) =>
+                                    prev.map((item) => (item.id === provider.id ? { ...item, inputValue: value } : item)),
+                                  );
+                                }}
+                              />
+                              <button type="button" onClick={() => void handleSaveProviderKey(provider.id)}>
+                                Save
+                              </button>
+                              <button
+                                className="secondary"
+                                type="button"
+                                onClick={() => void handleClearProviderKey(provider.id)}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            {provider.error && <div className="key-error">{provider.error}</div>}
                           </div>
-                          <div className="key-row">
-                            <input
-                              type="password"
-                              value={provider.inputValue}
-                              placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setProviderKeys((prev) =>
-                                  prev.map((item) => (item.id === provider.id ? { ...item, inputValue: value } : item)),
-                                );
-                              }}
-                            />
-                            <button type="button" onClick={() => void handleSaveProviderKey(provider.id)}>
-                              Save
-                            </button>
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => void handleClearProviderKey(provider.id)}
-                            >
-                              Clear
-                            </button>
-                          </div>
-                          {provider.error && <div className="key-error">{provider.error}</div>}
-                        </div>
-                      ))}
-	                  </div>
+                        ))}
+	                    </div>
+	                  )}
 
 	                  <div className="settings-section">
 	                    <div className="settings-section-title">System prompt</div>
@@ -14092,26 +14268,8 @@ export default function App() {
 	                    </div>
 	                  </div>
 
-	                  <div className="settings-section">
-	                    <div className="settings-section-title">Available Models</div>
-	                    <div className="settings-section-desc">Select which models to enable</div>
-	                    <div className="model-list">
-	                      {modelToggles.map((toggle) => (
-	                        <label key={toggle.id} className="model-toggle">
-                          <input
-                            type="checkbox"
-                            checked={toggle.enabled}
-                            onChange={() => void handleToggleModel(toggle.id)}
-                          />
-                          <span>
-                            {toggle.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+	                </>
+	              )}
 
               {settingsPage === "execution" && (
                 <>
@@ -18706,14 +18864,14 @@ export default function App() {
 	                  ? "You've used your included Arx AI quota for this month."
 	                  : platformQuotaModal.message || "Arx AI is temporarily unavailable."}
 	              </div>
-	              <div className="model-note" style={{ marginBottom: 12 }}>
-	                To continue with {platformQuotaModal.providerLabel}, you can use your own API key.
-	              </div>
-                {!platformQuotaModal.byokAllowed && (
-                  <div className="auth-error" style={{ marginBottom: 12 }}>
-                    This model can&apos;t be used with BYOK. Choose a different model.
-                  </div>
-                )}
+		              <div className="model-note" style={{ marginBottom: 12 }}>
+		                To continue, choose another available model or upgrade for more included quota.
+		              </div>
+	                {!platformQuotaModal.byokAllowed && (
+	                  <div className="auth-error" style={{ marginBottom: 12 }}>
+	                    This model isn&apos;t available on your current plan.
+	                  </div>
+	                )}
 	              {platformQuotaModal.byokAllowed && !platformQuotaModal.hasKey && (
 	                <div className="auth-error">
 	                  No {platformQuotaModal.providerLabel} API key is saved yet. Add one in Settings → Models.
@@ -18836,7 +18994,7 @@ export default function App() {
 		                      <div className="plan-subtitle">0 communities</div>
 		                      <ul className="plan-features plan-features-checks">
 		                        {feature(true, "AI chats (250MB cloud history)")}
-		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Access all included models")}
 		                        {feature(true, "Desktop app & local tools")}
 		                        {feature(true, "Cloud sync")}
 		                        {feature(false, "Agent memory")}
@@ -18863,7 +19021,7 @@ export default function App() {
 		                      <div className="plan-subtitle">10% take · 1 community</div>
 		                      <ul className="plan-features plan-features-checks">
 		                        {feature(true, "AI chats (5GB cloud history)")}
-		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Access all included models")}
 		                        {feature(true, "Desktop app & local tools")}
 		                        {feature(true, "Cloud sync")}
 		                        {feature(true, "Agent memory")}
@@ -18897,7 +19055,7 @@ export default function App() {
 		                      <div className="plan-subtitle">3% take · 3 communities</div>
 		                      <ul className="plan-features plan-features-checks">
 		                        {feature(true, "AI chats (25GB cloud history)")}
-		                        {feature(true, "Use any AI model (BYOK)")}
+		                        {feature(true, "Access all included models")}
 		                        {feature(true, "Desktop app & local tools")}
 		                        {feature(true, "Cloud sync")}
 		                        {feature(true, "Agent memory")}
