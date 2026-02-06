@@ -5,10 +5,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
+import { TauriRuntimeClient } from "./runtime/arp/tauriClient";
+import type { RuntimeClient } from "./runtime/arp/client";
+import { ARP_PROTOCOL_VERSION, type RuntimeNotification } from "./runtime/arp/types";
 import {
+  classifyPublicCommunityJoinError,
   captureBrandosAidFromLocation,
   clearPendingPublicJoin,
   clearPendingPurchaseClaimToken,
+  getErrorMessage,
   getBrandosAidForCommunitySlug,
   joinPublicCommunityRpc,
   listPendingPurchaseClaimsRpc,
@@ -21,6 +26,8 @@ import {
   storePendingPurchaseClaimToken,
   type PendingPurchaseClaim
 } from "../shared/pay_first";
+
+const USE_RUNTIME_CLIENT = (import.meta.env.VITE_ARP_CLIENT ?? "").trim() === "1";
 
 type ThreadRecord = {
   id: string;
@@ -863,6 +870,9 @@ type NavSnapshot = {
 
 function App() {
   const ARX_OWNER_EMAIL = "neilmcdevittd@gmail.com";
+  const runtimeClient = useMemo<RuntimeClient>(() => new TauriRuntimeClient(), []);
+  const [runtimeSupportsCursorResume, setRuntimeSupportsCursorResume] = useState(false);
+  const eventCursorByThreadRef = useRef<Record<string, number>>({});
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -1403,12 +1413,57 @@ function App() {
 	    void loadExecPolicyRules();
 	    void loadPendingInvites();
 	    void consumeInviteQueryParam();
-	    void consumeOAuthHash();
-	    void loadSupabaseSession();
-	  }, []);
+		    void consumeOAuthHash();
+		    void loadSupabaseSession();
+		  }, []);
 
-	  useEffect(() => {
-	    if (activeInviteGateKey) return;
+  useEffect(() => {
+    return () => {
+      try {
+        const recorder = voiceRecorderRef.current;
+        if (recorder && recorder.state !== "inactive") recorder.stop();
+      } catch {
+        // ignore cleanup race
+      }
+      const stream = voiceStreamRef.current;
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+      voiceRecorderRef.current = null;
+      voiceStreamRef.current = null;
+      voiceChunksRef.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!USE_RUNTIME_CLIENT) return;
+    let cancelled = false;
+    void runtimeClient
+      .initialize()
+      .then((init) => {
+        if (cancelled) return;
+        if (init.protocol_version !== ARP_PROTOCOL_VERSION) {
+          console.warn(
+            `[ARP] Protocol mismatch (ui=${ARP_PROTOCOL_VERSION}, runtime=${init.protocol_version}); disabling cursor resume.`
+          );
+          setRuntimeSupportsCursorResume(false);
+          return;
+        }
+        setRuntimeSupportsCursorResume(
+          Boolean(init.capabilities.cursor_resume && init.capabilities.local_db_events)
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRuntimeSupportsCursorResume(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtimeClient]);
+
+		  useEffect(() => {
+		    if (activeInviteGateKey) return;
 	    if (activePage !== "workspace" || activeView === "settings") return;
 	    if (showCreateCommunityModal || showResourceModal) return;
 
@@ -1482,7 +1537,9 @@ function App() {
 
   useEffect(() => {
     if (!activeThreadId) return;
-    void invoke<ThreadRecord | null>("get_thread_cmd", { threadId: activeThreadId })
+    void (USE_RUNTIME_CLIENT
+      ? runtimeClient.getThread(activeThreadId)
+      : invoke<ThreadRecord | null>("get_thread_cmd", { threadId: activeThreadId }))
       .then((thread) => {
         if (!thread) return;
         setThreads((prev) => {
@@ -1502,7 +1559,7 @@ function App() {
       .catch(() => {
         // Non-fatal; keep current selection.
       });
-  }, [activeThreadId]);
+  }, [activeThreadId, runtimeClient]);
 
   useEffect(() => {
     if (activeView !== "settings" || settingsPage !== "memory") return;
@@ -1750,19 +1807,34 @@ function App() {
   async function exportThreadsCsv() {
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to export.");
-      await handleSignIn();
-      return;
-    }
+    const useCloudExport = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=2000`,
-        { method: "GET" },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      let rows: Array<Record<string, unknown>> = [];
+      if (useCloudExport && session && url) {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=2000`,
+          { method: "GET" },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+        rows = (await response.json()) as Array<Record<string, unknown>>;
+      } else {
+        const localThreads = USE_RUNTIME_CLIENT
+          ? await runtimeClient.listThreads()
+          : await invoke<ThreadRecord[]>("list_threads_cmd");
+        rows = localThreads
+          .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
+          .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0))
+          .map((thread) => ({
+            id: thread.id,
+            title: thread.title ?? "",
+            engine_id: thread.engine_id ?? "",
+            model_id: thread.model_id ?? "",
+            community_id: thread.community_id ?? "",
+            created_at: new Date((thread.created_at ?? 0) * 1000).toISOString(),
+            updated_at: new Date((thread.updated_at ?? 0) * 1000).toISOString(),
+          }));
+      }
       const csv = buildCsv(
         ["id", "title", "engine_id", "model_id", "community_id", "created_at", "updated_at"],
         rows,
@@ -1777,40 +1849,68 @@ function App() {
   async function exportMessagesCsv() {
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to export.");
-      await handleSignIn();
-      return;
-    }
+    const useCloudExport = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=20000`,
-        { method: "GET" },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rawRows = (await response.json()) as Array<{
-        id: string;
-        thread_id: string;
-        seq: number;
-        role: string;
-        content_json: unknown;
-        engine_id: string | null;
-        model_id: string | null;
-        run_id: string | null;
-        created_at: string;
-      }>;
-      const rows = rawRows.map((row) => ({
-        id: row.id,
-        thread_id: row.thread_id,
-        seq: row.seq,
-        role: row.role,
-        content: parseMessageText(JSON.stringify(row.content_json ?? { text: "" })),
-        engine_id: row.engine_id ?? "",
-        model_id: row.model_id ?? "",
-        run_id: row.run_id ?? "",
-        created_at: row.created_at,
-      }));
+      let rows: Array<Record<string, unknown>> = [];
+      if (useCloudExport && session && url) {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=20000`,
+          { method: "GET" },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+        const rawRows = (await response.json()) as Array<{
+          id: string;
+          thread_id: string;
+          seq: number;
+          role: string;
+          content_json: unknown;
+          engine_id: string | null;
+          model_id: string | null;
+          run_id: string | null;
+          created_at: string;
+        }>;
+        rows = rawRows.map((row) => ({
+          id: row.id,
+          thread_id: row.thread_id,
+          seq: row.seq,
+          role: row.role,
+          content: parseMessageText(JSON.stringify(row.content_json ?? { text: "" })),
+          engine_id: row.engine_id ?? "",
+          model_id: row.model_id ?? "",
+          run_id: row.run_id ?? "",
+          created_at: row.created_at,
+        }));
+      } else {
+        const localThreads = USE_RUNTIME_CLIENT
+          ? await runtimeClient.listThreads()
+          : await invoke<ThreadRecord[]>("list_threads_cmd");
+        const personalThreadIds = localThreads
+          .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
+          .map((thread) => thread.id)
+          .sort((a, b) => a.localeCompare(b));
+        const localRows: Array<Record<string, unknown>> = [];
+        for (const threadId of personalThreadIds) {
+          const localMessages = USE_RUNTIME_CLIENT
+            ? await runtimeClient.listMessages(threadId)
+            : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
+          for (let index = 0; index < localMessages.length; index += 1) {
+            const message = localMessages[index];
+            localRows.push({
+              id: message.id,
+              thread_id: threadId,
+              seq: index + 1,
+              role: message.role,
+              content: parseMessageText(message.content_json),
+              engine_id: message.engine_id ?? "",
+              model_id: message.model_id ?? "",
+              run_id: message.run_id ?? "",
+              created_at: new Date((message.created_at ?? 0) * 1000).toISOString(),
+            });
+          }
+        }
+        rows = localRows;
+      }
       const csv = buildCsv(
         ["id", "thread_id", "seq", "role", "content", "engine_id", "model_id", "run_id", "created_at"],
         rows,
@@ -3271,6 +3371,310 @@ function App() {
 
   useEffect(() => {
     // Stream model output updates into the chat UI.
+    const clearStreamingRefs = () => {
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      streamingContentRef.current = null;
+      streamingTokensRef.current = null;
+      streamingMetaRef.current = null;
+    };
+
+    const handleOpenedUrls = async (urls: string[]) => {
+      if (urls.length === 0) return;
+
+      let newestInvite: string | null = null;
+      let newestClaimToken: string | null = null;
+      let newestSettingsPage: string | null = null;
+      let newestBillingReturn: BuilderBillingReturn | null = null;
+      for (const raw of urls) {
+        let parsed: URL;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          continue;
+        }
+
+        if (parsed.protocol === "arx:") {
+          const host = (parsed.hostname ?? "").toLowerCase();
+          const pathname = (parsed.pathname ?? "").toLowerCase();
+          const token = (parsed.searchParams.get("token") ?? parsed.searchParams.get("claim") ?? "").trim();
+          if ((host === "claim" || pathname === "/claim") && token) {
+            newestClaimToken = token;
+            storePendingPurchaseClaimToken(token);
+          }
+          if (host === "settings" || pathname === "/settings") {
+            const page = (parsed.searchParams.get("page") ?? parsed.searchParams.get("tab") ?? "").trim().toLowerCase();
+            const fromPath = (pathname.startsWith("/") ? pathname.slice(1) : pathname).split("/")[0] ?? "";
+            const next = (page || fromPath).trim();
+            if (next) newestSettingsPage = next;
+          }
+          if (host === "billing" || pathname === "/billing") {
+            const status = (parsed.searchParams.get("status") ?? parsed.searchParams.get("billing") ?? "")
+              .trim()
+              .toLowerCase();
+            if (status === "success" || status === "cancel" || status === "return") {
+              const rawContext = (parsed.searchParams.get("context") ?? parsed.searchParams.get("billing_context") ?? "")
+                .trim()
+                .toLowerCase();
+              const context =
+                rawContext === "create_community"
+                  ? "create_community"
+                  : rawContext === "builder"
+                    ? "builder"
+                    : "unknown";
+              newestBillingReturn = {
+                status: status as BuilderBillingReturn["status"],
+                source: "desktop",
+                context,
+              };
+            }
+          }
+        }
+        const inviteKey = parsed.searchParams.get("invite") ?? parsed.searchParams.get("join");
+        if (!inviteKey) continue;
+
+        const normalized = normalizeInviteCode(inviteKey);
+        if (!normalized) continue;
+
+        newestInvite = normalized;
+        try {
+          await invoke("upsert_pending_invite_cmd", { inviteKey: normalized, source: "url" });
+        } catch {
+          // ignore
+        }
+      }
+
+      if (newestClaimToken) {
+        const session = supabaseSessionRef.current;
+        if (session) {
+          void redeemPurchaseClaim(newestClaimToken);
+        } else {
+          setAuthError("Sign in to claim access.");
+          void handleSignIn();
+        }
+      }
+
+      if (newestBillingReturn) {
+        setFinalizeCreateCommunityError(null);
+        setBuilderBillingReturn(newestBillingReturn);
+      }
+
+      if (newestSettingsPage) {
+        setActiveView("settings");
+        if (
+          newestSettingsPage === "account" ||
+          newestSettingsPage === "models" ||
+          newestSettingsPage === "execution" ||
+          newestSettingsPage === "memory" ||
+          newestSettingsPage === "appearance"
+        ) {
+          setSettingsPage(newestSettingsPage);
+        }
+      }
+
+      if (newestInvite) {
+        await loadPendingInvites();
+        setActivePage("workspace");
+        setActiveView("home");
+        setActiveInviteGateKey(newestInvite);
+      }
+    };
+
+    if (USE_RUNTIME_CLIENT) {
+      let cancelled = false;
+      let runtimeUnsubscribe: (() => void) | null = null;
+
+      const onNotification = (n: RuntimeNotification) => {
+        if (n.type === "turn_finished") {
+          if (n.session_id !== activeThreadId) return;
+          void (async () => {
+            clearStreamingRefs();
+            await loadMessages(n.session_id);
+            setStreamingContent(null);
+            setStreamingTokens(null);
+            setStreamingMeta(null);
+          })();
+          return;
+        }
+
+        if (n.type === "openrouter_stream") {
+          if (n.session_id !== activeThreadId) return;
+          streamingContentRef.current = n.full_content;
+          streamingTokensRef.current = {
+            prompt_tokens: n.prompt_tokens ?? undefined,
+            completion_tokens: n.completion_tokens ?? undefined,
+            max_tokens: n.max_tokens
+          };
+          streamingMetaRef.current = {
+            engine_id: n.engine_id,
+            model_id: n.model_id,
+            inference_source: n.inference_source ?? null
+          };
+          scheduleStreamingUpdate();
+          return;
+        }
+
+        if (n.type === "memory_updated") {
+          if (n.session_id !== activeThreadId) return;
+          const label = n.label?.trim() || "memory";
+          const scope = n.scope?.trim();
+          const message = scope ? `Memory updated: ${label} (${scope})` : `Memory updated: ${label}`;
+          setMemoryToast(message);
+          if (memoryToastTimeoutRef.current) {
+            window.clearTimeout(memoryToastTimeoutRef.current);
+          }
+          memoryToastTimeoutRef.current = window.setTimeout(() => {
+            setMemoryToast(null);
+          }, 2000);
+          return;
+        }
+
+        if (n.type === "inference_fallback") {
+          if (n.session_id !== activeThreadId) return;
+          const reason = (n.reason ?? "").trim();
+          const from = (n.from ?? "").trim().toLowerCase();
+          const to = (n.to ?? "").trim().toLowerCase();
+          const message =
+            from === "chatgpt" && to === "platform"
+              ? (() => {
+                  const match = reason.match(/chatgpt_http_(\d+)/i);
+                  const code = match?.[1] ?? null;
+                  const detail = (() => {
+                    const idx = reason.indexOf(":");
+                    if (idx === -1) return null;
+                    const msg = reason.slice(idx + 1).trim();
+                    return msg.length ? msg : null;
+                  })();
+                  return code
+                    ? detail
+                      ? `ChatGPT unavailable (HTTP ${code}) — ${detail.slice(0, 140)}`
+                      : `ChatGPT unavailable (HTTP ${code}) — using Arx.`
+                    : "ChatGPT unavailable — using Arx.";
+                })()
+              : reason === "platform_quota_exceeded"
+                ? "Arx AI quota reached — switching to your API key."
+                : "Arx AI unavailable — switching to your API key.";
+          setMemoryToast(message);
+          if (memoryToastTimeoutRef.current) {
+            window.clearTimeout(memoryToastTimeoutRef.current);
+          }
+          memoryToastTimeoutRef.current = window.setTimeout(() => {
+            setMemoryToast(null);
+          }, 2500);
+          return;
+        }
+
+        if (n.type === "platform_inference_action_required") {
+          if (n.session_id !== activeThreadId) return;
+          setIsInferenceFallbackSubmitting(false);
+          setPendingInferenceFallback({
+            session_id: n.session_id,
+            approval_id: n.approval_id,
+            provider_id: n.provider_id,
+            provider_label: n.provider_label,
+            model_id: n.model_id,
+            reason: n.reason,
+          });
+          return;
+        }
+
+        if (n.type === "tool_calls_updated") {
+          if (n.session_id !== activeThreadId) return;
+          void loadToolCalls(n.session_id);
+          return;
+        }
+
+        if (n.type === "tool_approval_requested") {
+          if (n.session_id !== activeThreadId) return;
+          setIsToolApprovalSubmitting(false);
+          setPendingToolApproval({
+            session_id: n.session_id,
+            tool_call_id: n.tool_call_id,
+            tool_name: n.tool_name,
+            args_json: n.args_json,
+          });
+          return;
+        }
+
+        if (n.type === "agent_status") {
+          if (n.session_id !== activeThreadId) return;
+          if (n.status === "idle") {
+            setAgentStatus(null);
+            setRunningTools([]);
+          } else {
+            setAgentStatus({
+              session_id: n.session_id,
+              status: n.status,
+              tool_name: n.tool_name,
+              tool_args_preview: n.tool_args_preview,
+            });
+          }
+          return;
+        }
+
+        if (n.type === "tool_call_progress") {
+          if (n.session_id !== activeThreadId) return;
+          if (n.status === "started") {
+            setRunningTools((prev) => [
+              ...prev,
+              {
+                id: n.tool_call_id,
+                name: n.tool_name,
+                preview: n.tool_args_preview,
+                status: "running",
+              },
+            ]);
+          } else if (n.status === "finished") {
+            setRunningTools((prev) =>
+              prev.map((tool) =>
+                tool.id === n.tool_call_id
+                  ? { ...tool, status: n.result === "ok" ? "ok" : "error" }
+                  : tool
+              )
+            );
+          }
+          return;
+        }
+
+        if (n.type === "opened_urls") {
+          void handleOpenedUrls(n.urls ?? []);
+        }
+      };
+
+      void runtimeClient
+        .subscribeNotifications(onNotification, {
+          thread_id: activeThreadId ?? undefined,
+        })
+        .then(({ unsubscribe }) => {
+          if (cancelled) {
+            unsubscribe();
+            return;
+          }
+          runtimeUnsubscribe = unsubscribe;
+        })
+        .catch(() => {
+          // Fall back to legacy direct listeners on next render if needed.
+        });
+
+      return () => {
+        clearStreamingRefs();
+        if (runtimeUnsubscribe) {
+          try {
+            runtimeUnsubscribe();
+          } catch {
+            // ignore
+          }
+        }
+        cancelled = true;
+        if (memoryToastTimeoutRef.current) {
+          window.clearTimeout(memoryToastTimeoutRef.current);
+          memoryToastTimeoutRef.current = null;
+        }
+      };
+    }
+
     const unlistenAgent = listen<{ session_id: string }>(
       "agent-turn-finished",
       async (event) => {
@@ -3587,7 +3991,7 @@ function App() {
         memoryToastTimeoutRef.current = null;
       }
     };
-  }, [activeThreadId, scheduleStreamingUpdate]);
+  }, [activeThreadId, scheduleStreamingUpdate, runtimeClient]);
 
   useEffect(() => {
     const handleGlobalEscape = (event: KeyboardEvent) => {
@@ -3599,13 +4003,15 @@ function App() {
       // If the slash menu is active, let the input handler consume Escape.
       if (slashState.query !== null) return;
 
-	      const cancelActiveRun = () => {
-	        setPendingToolApproval(null);
-	        setPendingInferenceFallback(null);
-	        void invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId }).catch(() => {
-	          // best-effort
-	        });
-	      };
+		      const cancelActiveRun = () => {
+		        setPendingToolApproval(null);
+		        setPendingInferenceFallback(null);
+		        void (USE_RUNTIME_CLIENT
+              ? runtimeClient.cancelRun(activeThreadId)
+              : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
+		          // best-effort
+		        });
+		      };
 
       // Cancel a running tool call if present, otherwise cancel the agent turn.
       if (runningToolCallId) {
@@ -3634,10 +4040,11 @@ function App() {
     activeThreadId,
     isSending,
     pendingToolApproval,
-    runningToolCallId,
-    slashState.query,
-    streamingContent,
-  ]);
+	    runningToolCallId,
+	    slashState.query,
+	    streamingContent,
+      runtimeClient,
+	  ]);
 
   function toUnixSecondsFromIso(value: string | null | undefined): number | null {
     if (!value) return null;
@@ -3694,13 +4101,15 @@ function App() {
         });
     };
 
-    try {
-      if (!session || !url) {
-        // Signed-out: show device-local threads (no cloud sync).
-        const localThreads = await invoke<ThreadRecord[]>("list_threads_cmd");
-        const visible = localThreads.filter(
-          (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
-        );
+	    try {
+	      if (!session || !url || !DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED) {
+	        // Local-first thread domain: desktop personal threads come from local DB.
+	        const localThreads = USE_RUNTIME_CLIENT
+            ? await runtimeClient.listThreads()
+            : await invoke<ThreadRecord[]>("list_threads_cmd");
+	        const visible = localThreads.filter(
+	          (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
+	        );
         setThreads(visible);
 
         if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
@@ -3796,7 +4205,9 @@ function App() {
 
 	    let localMessages: MessageRecord[] = [];
 	    try {
-	      localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
+	      localMessages = USE_RUNTIME_CLIENT
+          ? await runtimeClient.listMessages(threadId)
+          : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
 	    } catch {
 	      return;
 	    }
@@ -3877,153 +4288,20 @@ function App() {
 	    }
 	  }
 
-  async function loadToolCalls(_sessionId: string) {
-    setToolCalls([]);
-  }
+	  async function loadToolCalls(sessionId: string) {
+      try {
+        const data = USE_RUNTIME_CLIENT
+          ? await runtimeClient.listToolCalls(sessionId, 500)
+          : await invoke<ToolCallRecord[]>("list_tool_calls_cmd", { threadId: sessionId, limit: 500 });
+        setToolCalls(data);
+      } catch {
+        setToolCalls([]);
+      }
+	  }
 
 		  async function loadMessages(sessionId: string) {
 	      const session = supabaseSessionRef.current;
 	      const url = session ? getSupabaseUrl() : null;
-
-		    const buildAgentToolCallsFromEvents = (events: EventRecord[]): ToolCallRecord[] => {
-	      type AgentToolCallState = {
-	        id: string;
-	        session_id: string;
-	        run_id: string | null;
-	        tool_name: string;
-	        args: unknown;
-	        status: "requested" | "approved" | "denied" | "started" | "finished";
-	        created_at: number;
-	        updated_at: number;
-        approved_by?: string | null;
-        note?: string | null;
-        exec_status?: string | null;
-        reason?: string | null;
-        exit_code?: number | null;
-        result_preview?: string | null;
-        artifacts?: unknown[] | null;
-      };
-
-      const states = new Map<string, AgentToolCallState>();
-	      const ensure = (
-	        toolCallId: string,
-	        init: Omit<AgentToolCallState, "status" | "updated_at"> & {
-	          status?: AgentToolCallState["status"];
-	          updated_at?: number;
-	        }
-	      ): AgentToolCallState => {
-	        const existing = states.get(toolCallId);
-	        if (existing) return existing;
-	        const state: AgentToolCallState = {
-	          id: init.id,
-	          session_id: init.session_id,
-	          run_id: init.run_id,
-	          tool_name: init.tool_name,
-	          args: init.args,
-	          status: init.status ?? "requested",
-	          created_at: init.created_at,
-          updated_at: init.updated_at ?? init.created_at,
-          approved_by: null,
-          note: null,
-          exec_status: null,
-          reason: null,
-          exit_code: null,
-          result_preview: null,
-          artifacts: null,
-        };
-        states.set(toolCallId, state);
-        return state;
-      };
-
-	      for (const evt of events) {
-	        const evtType = (evt.type ?? "").trim();
-	        if (!evtType.startsWith("tool_call_")) continue;
-	        if (!evt.payload_json) continue;
-	        let payload: any = null;
-	        try {
-	          payload = JSON.parse(evt.payload_json);
-	        } catch {
-	          continue;
-	        }
-	        const toolCallId: string | null = typeof payload?.tool_call_id === "string" ? payload.tool_call_id : null;
-	        if (!toolCallId) continue;
-	        const runId: string | null = typeof payload?.run_id === "string" ? payload.run_id : null;
-
-	        if (evtType === "tool_call_requested") {
-	          const toolName = typeof payload?.tool_name === "string" ? payload.tool_name : "tool";
-	          const args = payload?.args ?? {};
-	          ensure(toolCallId, {
-	            id: toolCallId,
-	            session_id: evt.thread_id,
-	            run_id: runId,
-	            tool_name: toolName,
-	            args,
-	            status: "requested",
-	            created_at: evt.created_at,
-            updated_at: evt.created_at,
-          });
-          continue;
-        }
-
-	        const state = ensure(toolCallId, {
-	          id: toolCallId,
-	          session_id: evt.thread_id,
-	          run_id: runId,
-	          tool_name: "tool",
-	          args: {},
-	          status: "requested",
-	          created_at: evt.created_at,
-	        });
-	        state.updated_at = evt.created_at;
-	        if (!state.run_id && runId) state.run_id = runId;
-
-        if (evtType === "tool_call_approved") {
-          state.status = "approved";
-          state.approved_by = typeof payload?.approved_by === "string" ? payload.approved_by : null;
-          state.note = typeof payload?.note === "string" ? payload.note : null;
-        } else if (evtType === "tool_call_denied") {
-          state.status = "denied";
-          state.approved_by = typeof payload?.approved_by === "string" ? payload.approved_by : null;
-          state.note = typeof payload?.note === "string" ? payload.note : null;
-        } else if (evtType === "tool_call_started") {
-          state.status = "started";
-        } else if (evtType === "tool_call_finished") {
-          state.status = "finished";
-          state.exec_status = typeof payload?.status === "string" ? payload.status : null;
-          state.reason = typeof payload?.reason === "string" ? payload.reason : null;
-          state.exit_code = typeof payload?.exit_code === "number" ? payload.exit_code : null;
-          state.result_preview = typeof payload?.result_preview === "string" ? payload.result_preview : null;
-          state.artifacts = Array.isArray(payload?.artifacts) ? payload.artifacts : null;
-        }
-      }
-
-	      const out: ToolCallRecord[] = [];
-	      for (const state of states.values()) {
-	        const summary = {
-	          approved_by: state.approved_by,
-	          note: state.note,
-	          exec_status: state.exec_status,
-	          reason: state.reason,
-	          artifacts: state.artifacts,
-	        };
-	        out.push({
-	          id: state.id,
-	          session_id: state.session_id,
-	          run_id: state.run_id,
-	          tool_name: state.tool_name,
-	          args_json: JSON.stringify(state.args ?? {}),
-	          status: state.status,
-	          stdout_excerpt: state.result_preview,
-          stderr_excerpt: state.exec_status === "error" ? state.reason : null,
-          exit_code: state.exit_code,
-          output_summary_json: JSON.stringify(summary),
-          created_at: state.created_at,
-          updated_at: state.updated_at,
-        });
-      }
-	      out.sort((a, b) => a.created_at - b.created_at);
-	      return out;
-	    };
 
 	    type CloudMessageRow = {
 	      id: string;
@@ -4055,46 +4333,148 @@ function App() {
         engine_id: row.engine_id,
         model_id: row.model_id,
         run_id: row.run_id,
-	      }));
-	    };
+		      }));
+		    };
 
-	    let toolCalls: ToolCallRecord[] = [];
-	    try {
-	      const events = await invoke<EventRecord[]>("list_events_cmd", {
-	        threadId: sessionId,
-	        limit: 2000,
-	      });
-	      toolCalls = buildAgentToolCallsFromEvents(events);
-	    } catch {
-	      toolCalls = [];
-	    }
-	    setToolCalls(toolCalls);
+    const eventToMessage = (evt: EventRecord): MessageRecord | null => {
+      const evtType = (evt.type ?? "").trim();
+      const role =
+        evtType === "user_message" ? "user" : evtType === "assistant_message" ? "assistant" : null;
+      if (!role) return null;
 
-	    if (session && url) {
-	      try {
-	        const cloudMessages = await loadCloudMessages(session);
-	        setMessages(cloudMessages);
+      let contentJson: string | null = null;
+      let engineId: string | null = null;
+      let modelId: string | null = null;
+      let runId: string | null = null;
+      if (evt.payload_json) {
+        try {
+          const parsed = JSON.parse(evt.payload_json) as { content?: unknown; meta?: unknown };
+          if (parsed && typeof parsed === "object" && "content" in parsed) {
+            contentJson = JSON.stringify((parsed as { content: unknown }).content ?? { text: evt.text ?? "" });
+          }
+          const meta = (parsed as { meta?: unknown }).meta;
+          if (meta && typeof meta === "object") {
+            const metaObj = meta as { engine_id?: unknown; model_id?: unknown; run_id?: unknown };
+            engineId = typeof metaObj.engine_id === "string" ? metaObj.engine_id : null;
+            modelId = typeof metaObj.model_id === "string" ? metaObj.model_id : null;
+            runId = typeof metaObj.run_id === "string" ? metaObj.run_id : null;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (!contentJson) {
+        contentJson = JSON.stringify({ text: evt.text ?? "" });
+      }
+
+      return {
+        id: evt.id,
+        session_id: evt.thread_id,
+        role,
+        content_json: contentJson,
+        created_at: evt.created_at,
+        engine_id: engineId,
+        model_id: modelId,
+        run_id: runId,
+      };
+    };
+
+    const shouldPreferCloudMessages = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
+    if (USE_RUNTIME_CLIENT && runtimeSupportsCursorResume && !shouldPreferCloudMessages) {
+      const currentCursor = eventCursorByThreadRef.current[sessionId];
+      const hasLoadedCurrentThread = messages.length > 0 && messages[0]?.session_id === sessionId;
+      if (typeof currentCursor === "number" && hasLoadedCurrentThread) {
+        try {
+          const deltaPageSize = 500;
+          let nextCursor = currentCursor;
+          const deltaEvents: EventRecord[] = [];
+
+          while (true) {
+            const page = await runtimeClient.listEventsSince(sessionId, nextCursor, deltaPageSize);
+            if (page.length === 0) break;
+            const lastEvent = page[page.length - 1];
+            if (!lastEvent || lastEvent.seq <= nextCursor) {
+              throw new Error("listEventsSince returned a non-advancing cursor");
+            }
+            deltaEvents.push(...page);
+            nextCursor = lastEvent.seq;
+            if (page.length < deltaPageSize) break;
+          }
+
+          if (deltaEvents.length === 0) return;
+          eventCursorByThreadRef.current[sessionId] = nextCursor;
+
+          const mappedDelta = deltaEvents.map(eventToMessage).filter(Boolean) as MessageRecord[];
+          if (mappedDelta.length > 0) {
+            setMessages((prev) => {
+              if (prev.length === 0 || prev[0]?.session_id !== sessionId) {
+                return mappedDelta;
+              }
+              const seen = new Set(prev.map((message) => message.id));
+              const next = [...prev];
+              for (const message of mappedDelta) {
+                if (seen.has(message.id)) continue;
+                next.push(message);
+                seen.add(message.id);
+              }
+              return next;
+            });
+          }
+
+          const hasToolCallEvents = deltaEvents.some((evt) => (evt.type ?? "").trim().startsWith("tool_call_"));
+          if (hasToolCallEvents) {
+            await loadToolCalls(sessionId);
+          }
+          return;
+        } catch (error) {
+          // Trip a one-way circuit breaker for this session if incremental sync fails.
+          setRuntimeSupportsCursorResume(false);
+          console.warn("[ARP] Incremental sync failed; disabling cursor resume for this session.", error);
+          // Fall through to full refresh for compatibility.
+        }
+      }
+    }
+
+    if (USE_RUNTIME_CLIENT) {
+      try {
+        const events = await runtimeClient.listEvents(sessionId, 2000);
+        const lastEvent = events[events.length - 1];
+        eventCursorByThreadRef.current[sessionId] = lastEvent ? lastEvent.seq : 0;
+      } catch {
+        // Best-effort cursor sync; UI still loads full message history below.
+      }
+    }
+    await loadToolCalls(sessionId);
+
+    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
+      try {
+        const cloudMessages = await loadCloudMessages(session);
+        setMessages(cloudMessages);
 	        return;
 	      } catch {
 	        // Fall through to local projection as a best-effort fallback.
 	      }
 	    }
 
-	    try {
-	      const localMessages = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
-	      setMessages(localMessages);
-	    } catch {
-	      setMessages([]);
-	    }
-	  }
+		    try {
+		      const localMessages = USE_RUNTIME_CLIENT
+            ? await runtimeClient.listMessages(sessionId)
+            : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
+		      setMessages(localMessages);
+		    } catch {
+		      setMessages([]);
+		    }
+		  }
 
-  async function loadTurns(sessionId: string) {
-    try {
-      const turns = await invoke<TurnRecord[]>("list_turns_cmd", {
-        threadId: sessionId,
-        limit: 500
-      });
-      const map: Record<string, TurnRecord> = {};
+	  async function loadTurns(sessionId: string) {
+	    try {
+	      const turns = USE_RUNTIME_CLIENT
+          ? await runtimeClient.listTurns(sessionId, 500)
+          : await invoke<TurnRecord[]>("list_turns_cmd", {
+              threadId: sessionId,
+              limit: 500
+            });
+	      const map: Record<string, TurnRecord> = {};
       for (const turn of turns) {
         if (turn.assistant_event_id) {
           map[turn.assistant_event_id] = turn;
@@ -4107,12 +4487,14 @@ function App() {
     }
   }
 
-  async function loadSessionResume(sessionId: string) {
-    try {
-      const data = await invoke<SessionResume>("get_session_resume_cmd", {
-        sessionId
-      });
-      setSessionResume(data);
+	  async function loadSessionResume(sessionId: string) {
+	    try {
+	      const data = USE_RUNTIME_CLIENT
+          ? await runtimeClient.getSessionResume(sessionId)
+          : await invoke<SessionResume>("get_session_resume_cmd", {
+              sessionId
+            });
+	      setSessionResume(data);
     } catch (error) {
       console.error(error);
     }
@@ -8951,15 +9333,20 @@ function App() {
         }
 
         try {
-          await setThreadCommunityLensInCloud({
-            threadId: desired.threadId,
-            communityId: desired.communityId,
-            session: desired.session,
-          });
-          const updated = await invoke<ThreadRecord>("set_thread_community_cmd", {
-            threadId: desired.threadId,
-            communityId: desired.communityId,
-          });
+          if (desired.syncToCloud) {
+            if (!desired.session) throw new Error("Missing session for cloud thread lens update.");
+            await setThreadCommunityLensInCloud({
+              threadId: desired.threadId,
+              communityId: desired.communityId,
+              session: desired.session,
+            });
+          }
+	          const updated = await (USE_RUNTIME_CLIENT
+              ? runtimeClient.setThreadCommunity(desired.threadId, desired.communityId)
+              : invoke<ThreadRecord>("set_thread_community_cmd", {
+                  threadId: desired.threadId,
+                  communityId: desired.communityId,
+                }));
           setThreads((prev) => {
             const idx = prev.findIndex((t) => t.id === updated.id);
             if (idx === -1) return prev;
@@ -9161,15 +9548,17 @@ function App() {
       title: "Select Arx Workspace Root"
     });
     if (!selected || Array.isArray(selected)) return;
-    await invoke("set_workspace_root_cmd", { path: selected });
-    setWorkspaceRoot(selected);
-    setActiveProject(null);
-    await invoke("set_active_project_cmd", { projectId: null });
-    if (activeThreadId) {
-      await invoke("set_thread_workspace_cmd", { threadId: activeThreadId, workspacePath: selected });
-      lastThreadWorkspaceRef.current = selected;
-    }
-  }
+	    await invoke("set_workspace_root_cmd", { path: selected });
+	    setWorkspaceRoot(selected);
+	    setActiveProject(null);
+	    await invoke("set_active_project_cmd", { projectId: null });
+	    if (activeThreadId) {
+	      await (USE_RUNTIME_CLIENT
+          ? runtimeClient.setThreadWorkspace(activeThreadId, selected)
+          : invoke("set_thread_workspace_cmd", { threadId: activeThreadId, workspacePath: selected }));
+	      lastThreadWorkspaceRef.current = selected;
+	    }
+	  }
 
   async function handleAddAttachment() {
     const selected = await open({
@@ -9268,24 +9657,26 @@ function App() {
     event.preventDefault();
   }
 
-  useEffect(() => {
-    if (!activeThreadId) return;
+	  useEffect(() => {
+	    if (!activeThreadId) return;
     const nextWorkspace = effectiveCwd;
-    if (!nextWorkspace) return;
-    if (lastThreadWorkspaceRef.current === nextWorkspace) return;
-    lastThreadWorkspaceRef.current = nextWorkspace;
-    void invoke("set_thread_workspace_cmd", {
-      threadId: activeThreadId,
-      workspacePath: nextWorkspace
-    }).catch(() => {
-      // Non-fatal; workspace is best-effort metadata.
-    });
-  }, [activeThreadId, effectiveCwd]);
+	    if (!nextWorkspace) return;
+	    if (lastThreadWorkspaceRef.current === nextWorkspace) return;
+	    lastThreadWorkspaceRef.current = nextWorkspace;
+	    void (USE_RUNTIME_CLIENT
+        ? runtimeClient.setThreadWorkspace(activeThreadId, nextWorkspace)
+        : invoke("set_thread_workspace_cmd", {
+            threadId: activeThreadId,
+            workspacePath: nextWorkspace
+          })).catch(() => {
+	      // Non-fatal; workspace is best-effort metadata.
+	    });
+	  }, [activeThreadId, effectiveCwd, runtimeClient]);
 
   async function handleDeleteThread(threadId: string) {
     const session = supabaseSessionRef.current;
     const url = session ? getSupabaseUrl() : null;
-    if (session && url) {
+    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
       try {
         const response = await fetchWithSupabaseAuth(
           `${url}/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}`,
@@ -9298,13 +9689,13 @@ function App() {
       }
     }
 
-    await invoke("delete_thread_cmd", { threadId });
+	    await (USE_RUNTIME_CLIENT
+        ? runtimeClient.deleteThread(threadId)
+        : invoke("delete_thread_cmd", { threadId }));
     setThreads((prev) => prev.filter((t) => t.id !== threadId));
     if (activeThreadId === threadId) {
       const remaining = threads.filter((t) => t.id !== threadId);
-      const selectable = supabaseSession
-        ? remaining.filter((t) => (t.last_seq ?? 0) > 0)
-        : remaining;
+      const selectable = useCloudPersonalThreadMode ? remaining.filter((t) => (t.last_seq ?? 0) > 0) : remaining;
       setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
       setMessages([]);
     }
@@ -9416,12 +9807,14 @@ function App() {
 
     setThreads((prev) => [thread, ...prev]);
     setActiveThreadId(thread.id);
-    const nextWorkspace = effectiveCwd;
-    if (nextWorkspace) {
-      try {
-        await invoke("set_thread_workspace_cmd", { threadId: thread.id, workspacePath: nextWorkspace });
-        lastThreadWorkspaceRef.current = nextWorkspace;
-      } catch {
+	    const nextWorkspace = effectiveCwd;
+	    if (nextWorkspace) {
+	      try {
+	        await (USE_RUNTIME_CLIENT
+            ? runtimeClient.setThreadWorkspace(thread.id, nextWorkspace)
+            : invoke("set_thread_workspace_cmd", { threadId: thread.id, workspacePath: nextWorkspace }));
+	        lastThreadWorkspaceRef.current = nextWorkspace;
+	      } catch {
         // best-effort
       }
     } else {
@@ -9473,11 +9866,17 @@ function App() {
           size: a.size
         }));
       }
-	      await invoke("add_message_cmd", {
-	        sessionId,
-	        role: "user",
-	        contentJson: JSON.stringify(contentPayload)
-	      });
+		      await (USE_RUNTIME_CLIENT
+            ? runtimeClient.addMessage({
+                thread_id: sessionId,
+                role: "user",
+                content_json: JSON.stringify(contentPayload),
+              })
+            : invoke("add_message_cmd", {
+                sessionId,
+                role: "user",
+                contentJson: JSON.stringify(contentPayload)
+              }));
 	      postedUserMessage = true;
 	      setThreads((prev) =>
 	        prev.map((t) => {
@@ -9512,8 +9911,12 @@ function App() {
       if (userText.length > 0) {
         // Ensure the active thread has an engine/model selected (legacy threads may be missing model_id).
         const ensured = await (async () => {
-          const fromState = threads.find((t) => t.id === sessionId) ?? null;
-          const fromDb = fromState ?? (await invoke<ThreadRecord | null>("get_thread_cmd", { threadId: sessionId }));
+	          const fromState = threads.find((t) => t.id === sessionId) ?? null;
+	          const fromDb =
+              fromState ??
+              (USE_RUNTIME_CLIENT
+                ? await runtimeClient.getThread(sessionId)
+                : await invoke<ThreadRecord | null>("get_thread_cmd", { threadId: sessionId }));
           const currentModel = (fromDb?.model_id ?? "").trim();
           const desiredModel = (activeModelId ?? "").trim();
           const modelToUse = desiredModel || currentModel;
@@ -9575,12 +9978,18 @@ function App() {
           ) {
 	            return fromDb;
 	          }
-	          try {
-	            const updated = await invoke<ThreadRecord>("set_thread_engine_cmd", {
-	              threadId: sessionId,
-	              engineId: "messages_agent",
-	              modelId: modelToUse
-	            });
+		          try {
+		            const updated = await (USE_RUNTIME_CLIENT
+                  ? runtimeClient.setThreadEngine({
+                      thread_id: sessionId,
+                      engine_id: "messages_agent",
+                      model_id: modelToUse,
+                    })
+                  : invoke<ThreadRecord>("set_thread_engine_cmd", {
+                      threadId: sessionId,
+                      engineId: "messages_agent",
+                      modelId: modelToUse
+                    }));
             setThreads((prev) => {
               const existingIndex = prev.findIndex((t) => t.id === updated.id);
               if (existingIndex === -1) return [updated, ...prev];
@@ -9606,9 +10015,11 @@ function App() {
 
 	        // Prefer local history (fast, always present during a run). Fall back to cloud if the local DB was reset.
 	        let historyMessagesJson: string | null = null;
-	        try {
-	          const localHistory = await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
-	          if (localHistory.length > 0) {
+		        try {
+		          const localHistory = USE_RUNTIME_CLIENT
+                ? await runtimeClient.listMessages(sessionId)
+                : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
+		          if (localHistory.length > 0) {
             const payload = localHistory
               .filter((m) => m.role === "user" || m.role === "assistant")
               .slice(-50)
@@ -9717,21 +10128,33 @@ function App() {
           }
         }
 
-	        await invoke<SendTurnResult>("engine_send_turn_cmd", {
-	          threadId: sessionId,
-	          cwd,
-	          input: userText,
-	          historyMessagesJson,
-	          personalMemoryItemsJson,
-            communitySystemPrompt,
-	          supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
-	          supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
-	          supabaseAccessToken: session ? (session.access_token ?? "") : "",
-	        });
-	        if (session) {
-	          try {
-	            // Sync the newest assistant message + any trailing system content.
-	            await syncRecentLocalMessagesToCloud(sessionId, session, 3);
+		        await (USE_RUNTIME_CLIENT
+            ? runtimeClient.sendTurn({
+                thread_id: sessionId,
+                cwd,
+                input: userText,
+                history_messages_json: historyMessagesJson,
+                personal_memory_items_json: personalMemoryItemsJson,
+                community_system_prompt: communitySystemPrompt,
+                supabase_url: session ? (getSupabaseUrl() ?? "") : "",
+                supabase_anon_key: session ? (getSupabaseAnonKey() ?? "") : "",
+                supabase_access_token: session ? (session.access_token ?? "") : "",
+              })
+            : invoke<SendTurnResult>("engine_send_turn_cmd", {
+                threadId: sessionId,
+                cwd,
+                input: userText,
+                historyMessagesJson,
+                personalMemoryItemsJson,
+                communitySystemPrompt,
+                supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
+                supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
+                supabaseAccessToken: session ? (session.access_token ?? "") : "",
+              }));
+        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
+          try {
+            // Sync the newest assistant message + any trailing system content.
+            await syncRecentLocalMessagesToCloud(sessionId, session, 3);
 	          } catch (error) {
 	            const message =
 	              typeof error === "string" ? error : error instanceof Error ? error.message : "";
@@ -9769,11 +10192,13 @@ function App() {
             // best-effort
           }
         }
-        try {
-          await invoke("delete_thread_cmd", { threadId: createdThreadId });
-        } catch {
-          // best-effort
-        }
+	        try {
+	          await (USE_RUNTIME_CLIENT
+              ? runtimeClient.deleteThread(createdThreadId)
+              : invoke("delete_thread_cmd", { threadId: createdThreadId }));
+	        } catch {
+	          // best-effort
+	        }
         setThreads((prev) => prev.filter((t) => t.id !== createdThreadId));
         setActiveThreadId(null);
         setMessages([]);
@@ -9788,15 +10213,21 @@ function App() {
         setMemoryToast(`Failed to send message: ${message}`);
         return;
       }
-	    await invoke("add_message_cmd", {
-	      sessionId: targetSessionId,
-	      role: "assistant",
-	      contentJson: JSON.stringify({ text: `Engine error: ${message}` })
-	    });
-	    if (session) {
-	      try {
-	        await syncRecentLocalMessagesToCloud(targetSessionId, session, 1);
-	      } catch (error) {
+		    await (USE_RUNTIME_CLIENT
+          ? runtimeClient.addMessage({
+              thread_id: targetSessionId,
+              role: "assistant",
+              content_json: JSON.stringify({ text: `Engine error: ${message}` }),
+            })
+          : invoke("add_message_cmd", {
+              sessionId: targetSessionId,
+              role: "assistant",
+              contentJson: JSON.stringify({ text: `Engine error: ${message}` })
+            }));
+    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
+      try {
+        await syncRecentLocalMessagesToCloud(targetSessionId, session, 1);
+      } catch (error) {
 	        const message =
 	          typeof error === "string" ? error : error instanceof Error ? error.message : "";
 	        if (message.toLowerCase().includes("cloud history limit reached")) {
@@ -10131,18 +10562,20 @@ function App() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sourcesUsed, setSourcesUsed] = useState<SourcesUsedState>({ open: false });
 
-  async function resolvePendingToolApproval(
-    approved: boolean
-  ) {
+	  async function resolvePendingToolApproval(
+	    approved: boolean
+	  ) {
     const pending = pendingToolApproval;
     if (!pending) return;
-    setIsToolApprovalSubmitting(true);
-    try {
-      await invoke("decide_tool_call_cmd", {
-        toolCallId: pending.tool_call_id,
-        approved,
-      });
-      setPendingToolApproval(null);
+	    setIsToolApprovalSubmitting(true);
+	    try {
+	      await (USE_RUNTIME_CLIENT
+          ? runtimeClient.decideToolCall(pending.tool_call_id, { approved })
+          : invoke("decide_tool_call_cmd", {
+              toolCallId: pending.tool_call_id,
+              approved,
+            }));
+	      setPendingToolApproval(null);
     } catch (error) {
       console.error("Failed to resolve tool approval:", error);
       setMemoryToast("Failed to send tool approval decision.");
@@ -13266,15 +13699,21 @@ function App() {
 	                    setActiveModelId(modelId);
 	                    await invoke("set_active_model_cmd", { modelId });
 	                    if (!activeThreadId) return;
-		                    try {
-		                      await invoke<ThreadRecord>("set_thread_engine_cmd", {
-		                        threadId: activeThreadId,
-		                        engineId: "messages_agent",
-		                        modelId
-		                      });
-		                    } catch {
-		                      // Non-fatal; keep local selection.
-		                    }
+			                    try {
+			                      await (USE_RUNTIME_CLIENT
+                            ? runtimeClient.setThreadEngine({
+                                thread_id: activeThreadId,
+                                engine_id: "messages_agent",
+                                model_id: modelId,
+                              })
+                            : invoke<ThreadRecord>("set_thread_engine_cmd", {
+                                threadId: activeThreadId,
+                                engineId: "messages_agent",
+                                modelId
+                              }));
+			                    } catch {
+			                      // Non-fatal; keep local selection.
+			                    }
 	                  }}
 	                >
 	                  <optgroup label="Models">
@@ -13321,14 +13760,16 @@ function App() {
               <button
                 className="chat-send ask-send-btn"
                 onClick={() => {
-                  if (isTurnRunning) {
-                    if (!activeThreadId) return;
-                    setPendingToolApproval(null);
-                    setPendingInferenceFallback(null);
-                    void invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId }).catch(() => {
-                      // best-effort
-                    });
-                    return;
+	                  if (isTurnRunning) {
+	                    if (!activeThreadId) return;
+	                    setPendingToolApproval(null);
+	                    setPendingInferenceFallback(null);
+	                    void (USE_RUNTIME_CLIENT
+                        ? runtimeClient.cancelRun(activeThreadId)
+                        : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
+	                      // best-effort
+	                    });
+	                    return;
                   }
                   handleSendMessage();
                 }}
