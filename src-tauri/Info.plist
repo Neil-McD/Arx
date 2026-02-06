@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Arx uses the microphone to capture voice notes for transcription.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Arx may access the camera for future media features.</string>
     <key>CFBundleURLTypes</key>
     <array>
       <dict>

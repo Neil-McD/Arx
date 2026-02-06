@@ -133,6 +133,16 @@ type ToolUiSpec = {
 
 type AgentMode = "build" | "plan" | "explore";
 type VoiceSurface = "workspace" | "community";
+type NativeVoiceCaptureStopped = {
+  audio_base64: string;
+  mime_type: string;
+  sample_rate_hz: number;
+  duration_ms: number;
+  rms: number;
+  peak: number;
+  speech_ratio: number;
+  speech_detected: boolean;
+};
 
 type MessageRecord = {
   id: string;
@@ -615,6 +625,32 @@ const VOICE_CAPTURE_MIME_TYPES = [
   "audio/mpeg",
   "audio/wav",
 ];
+type VoiceAudioContextCtor = new (contextOptions?: AudioContextOptions) => AudioContext;
+type VoiceUserMediaFn = (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+type VoiceLegacyGetUserMediaFn = (
+  constraints: MediaStreamConstraints,
+  onSuccess: (stream: MediaStream) => void,
+  onError: (error: unknown) => void,
+) => void;
+type VoiceSupportState = {
+  hasGetUserMedia: boolean;
+  hasMediaRecorder: boolean;
+  hasAudioContext: boolean;
+  isSecureContext: boolean;
+  canRecord: boolean;
+};
+const VOICE_CAPTURE_SAMPLE_RATE = 16_000;
+const VOICE_CAPTURE_CONSTRAINTS: MediaStreamConstraints = {
+  audio: {
+    channelCount: 1,
+    sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
+    sampleSize: 16,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+  video: false,
+};
 // Alpha default: desktop personal threads are local-only. Set to "1" to re-enable
 // legacy cloud sync for personal threads during staged rollouts.
 const DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED =
@@ -645,11 +681,113 @@ function selectVoiceCaptureMimeType(): string | undefined {
   return undefined;
 }
 
+function getVoiceAudioContextConstructor(): VoiceAudioContextCtor | null {
+  const scope = globalThis as typeof globalThis & { webkitAudioContext?: VoiceAudioContextCtor };
+  const ctor = scope.AudioContext ?? scope.webkitAudioContext;
+  return typeof ctor === "function" ? ctor : null;
+}
+
+function getVoiceUserMedia(): VoiceUserMediaFn | null {
+  const modern = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+  if (modern) return modern;
+  const legacyNavigator = navigator as Navigator & {
+    getUserMedia?: VoiceLegacyGetUserMediaFn;
+    webkitGetUserMedia?: VoiceLegacyGetUserMediaFn;
+    mozGetUserMedia?: VoiceLegacyGetUserMediaFn;
+    msGetUserMedia?: VoiceLegacyGetUserMediaFn;
+  };
+  const legacy =
+    legacyNavigator.getUserMedia ??
+    legacyNavigator.webkitGetUserMedia ??
+    legacyNavigator.mozGetUserMedia ??
+    legacyNavigator.msGetUserMedia;
+  if (!legacy) return null;
+  return (constraints) =>
+    new Promise<MediaStream>((resolve, reject) => {
+      try {
+        legacy.call(legacyNavigator, constraints, resolve, reject);
+      } catch (error) {
+        reject(error);
+      }
+    });
+}
+
+function getVoiceSupportState(): VoiceSupportState {
+  const hasGetUserMedia = Boolean(getVoiceUserMedia());
+  const hasMediaRecorder = typeof MediaRecorder !== "undefined";
+  const hasAudioContext = Boolean(getVoiceAudioContextConstructor());
+  const isSecure = typeof window !== "undefined" ? Boolean(window.isSecureContext) : false;
+  return {
+    hasGetUserMedia,
+    hasMediaRecorder,
+    hasAudioContext,
+    isSecureContext: isSecure,
+    canRecord: hasGetUserMedia && (hasMediaRecorder || hasAudioContext),
+  };
+}
+
+async function requestVoiceCaptureStream(requestUserMedia: VoiceUserMediaFn): Promise<MediaStream> {
+  try {
+    return await requestUserMedia(VOICE_CAPTURE_CONSTRAINTS);
+  } catch {
+    return await requestUserMedia({ audio: true, video: false });
+  }
+}
+
+function floatToInt16Pcm(input: Float32Array): Int16Array {
+  const out = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i]));
+    out[i] = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
+  }
+  return out;
+}
+
+function createWavBlobFromInt16Chunks(chunks: Int16Array[], sampleRate: number): Blob {
+  let totalSamples = 0;
+  for (const chunk of chunks) totalSamples += chunk.length;
+  const dataSize = totalSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM header size.
+  view.setUint16(20, 1, true); // PCM format.
+  view.setUint16(22, 1, true); // Mono channel.
+  view.setUint32(24, Math.max(8000, Math.floor(sampleRate || 16000)), true);
+  view.setUint32(28, Math.max(8000, Math.floor(sampleRate || 16000)) * 2, true); // sample_rate * channels * bytes_per_sample.
+  view.setUint16(32, 2, true); // block_align.
+  view.setUint16(34, 16, true); // bits_per_sample.
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (let i = 0; i < chunk.length; i += 1) {
+      view.setInt16(offset, chunk[i], true);
+      offset += 2;
+    }
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
 function mergeVoiceTranscript(existing: string, transcript: string): string {
   const next = transcript.trim();
   if (!next) return existing;
   if (!existing.trim()) return next;
   return /\s$/.test(existing) ? `${existing}${next}` : `${existing} ${next}`;
+}
+
+function getVoiceLanguageHint(): string {
+  const locale = typeof navigator !== "undefined" ? (navigator.language || "").trim().toLowerCase() : "";
+  const twoLetter = locale.slice(0, 2);
+  return /^[a-z]{2}$/.test(twoLetter) ? twoLetter : "";
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -665,6 +803,15 @@ function bytesToBase64(bytes: Uint8Array): string {
 async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer();
   return bytesToBase64(new Uint8Array(buffer));
+}
+
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType });
 }
 
 function isValidCommunitySlug(value: string): boolean {
@@ -1356,6 +1503,8 @@ function App() {
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceStopCaptureRef = useRef<(() => Promise<Blob>) | null>(null);
+  const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
   const [slashHover, setSlashHover] = useState<string | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   // User preference for panels (what they toggled)
@@ -1491,19 +1640,7 @@ function App() {
 
   useEffect(() => {
     return () => {
-      try {
-        const recorder = voiceRecorderRef.current;
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-      } catch {
-        // ignore cleanup race
-      }
-      const stream = voiceStreamRef.current;
-      if (stream) {
-        for (const track of stream.getTracks()) track.stop();
-      }
-      voiceRecorderRef.current = null;
-      voiceStreamRef.current = null;
-      voiceChunksRef.current = [];
+      releaseVoiceCaptureResources();
     };
   }, []);
 
@@ -9160,6 +9297,16 @@ function App() {
 			  }
 
 			  function releaseVoiceCaptureResources() {
+			    const cleanupCapture = voiceCaptureCleanupRef.current;
+			    if (cleanupCapture) {
+			      try {
+			        cleanupCapture();
+			      } catch {
+			        // ignore cleanup race
+			      }
+			    }
+			    voiceCaptureCleanupRef.current = null;
+			    voiceStopCaptureRef.current = null;
 			    const stream = voiceStreamRef.current;
 			    if (stream) {
 			      for (const track of stream.getTracks()) track.stop();
@@ -9192,6 +9339,9 @@ function App() {
 			    const payload = JSON.stringify({
 			      audio_base64: await blobToBase64(blob),
 			      mime_type: blob.type || "audio/webm",
+            language: getVoiceLanguageHint(),
+            // Allow server-side fallback if primary transcription returns empty/errors.
+            prefer_primary: false,
 			      surface,
 			    });
 			    const session = supabaseSessionRef.current ?? supabaseSession;
@@ -9216,28 +9366,184 @@ function App() {
 			  }
 
 			  async function startVoiceCapture(surface: VoiceSurface): Promise<void> {
-			    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-			      showAppToastMessage("Voice input is not supported on this device.");
-			      return;
-			    }
-			    try {
-			      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-			      const mimeType = selectVoiceCaptureMimeType();
-			      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-			      voiceChunksRef.current = [];
-			      recorder.ondataavailable = (event: BlobEvent) => {
-			        if (event.data && event.data.size > 0) voiceChunksRef.current.push(event.data);
+          let nativeStartError: string | null = null;
+				    try {
+				      await invoke("start_native_voice_capture_cmd");
+				      voiceCaptureCleanupRef.current = () => {
+				        void invoke("cancel_native_voice_capture_cmd").catch(() => undefined);
 			      };
-			      recorder.onerror = () => {
-			        releaseVoiceCaptureResources();
-			        setActiveVoiceSurface(null);
-			        setIsVoiceTranscribing(false);
-			        showAppToastMessage("Microphone recording failed.");
+				      voiceStopCaptureRef.current = async () => {
+				        const nativeResult = await invoke<NativeVoiceCaptureStopped>("stop_native_voice_capture_cmd");
+                console.info("[voice] native capture metrics", {
+                  sample_rate_hz: nativeResult?.sample_rate_hz,
+                  duration_ms: nativeResult?.duration_ms,
+                  rms: nativeResult?.rms,
+                  peak: nativeResult?.peak,
+                  speech_ratio: nativeResult?.speech_ratio,
+                  speech_detected: nativeResult?.speech_detected,
+                });
+				        if (!nativeResult?.audio_base64) {
+				          throw new Error("No audio captured.");
+				        }
+			        if (!nativeResult.speech_detected) {
+			          throw new Error("No speech detected.");
+			        }
+			        return base64ToBlob(nativeResult.audio_base64, nativeResult.mime_type || "audio/wav");
+			      };
+			      voiceStreamRef.current = null;
+			      voiceRecorderRef.current = null;
+			      voiceChunksRef.current = [];
+			      setActiveVoiceSurface(surface);
+				      showAppToastMessage("Listening... tap mic again to stop.");
+				      return;
+				    } catch (nativeError) {
+              nativeStartError = nativeError instanceof Error ? nativeError.message : String(nativeError);
+				      console.warn("[voice] native capture unavailable, falling back to web capture", nativeError);
+				    }
+
+				    const voiceSupport = getVoiceSupportState();
+				    const requestUserMedia = getVoiceUserMedia();
+				    if (!voiceSupport.canRecord) {
+              if (nativeStartError) {
+                showAppToastMessage(`Voice input unavailable: ${nativeStartError}`);
+                return;
+              }
+				      console.warn("[voice] unsupported desktop runtime", voiceSupport);
+				      if (!voiceSupport.hasGetUserMedia) {
+				        showAppToastMessage(
+			          voiceSupport.isSecureContext
+			            ? "Voice input unavailable: microphone API missing in this desktop runtime."
+			            : "Voice input unavailable: app is not running in a secure context.",
+			        );
+			      } else {
+			        showAppToastMessage("Voice input unavailable: recording APIs are missing in this desktop runtime.");
+				      }
+				      return;
+				    }
+				    if (!requestUserMedia) {
+              if (nativeStartError) {
+                showAppToastMessage(`Voice input unavailable: ${nativeStartError}`);
+                return;
+              }
+				      showAppToastMessage("Voice input unavailable: microphone API missing in this desktop runtime.");
+				      return;
+				    }
+			    try {
+			      const stream = await requestVoiceCaptureStream(requestUserMedia);
+			      const AudioContextCtor = getVoiceAudioContextConstructor();
+			      if (typeof MediaRecorder !== "undefined") {
+			        try {
+			          const mimeType = selectVoiceCaptureMimeType();
+			          const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+			          voiceChunksRef.current = [];
+			          recorder.ondataavailable = (event: BlobEvent) => {
+			            if (event.data && event.data.size > 0) voiceChunksRef.current.push(event.data);
+			          };
+			          recorder.onerror = () => {
+			            releaseVoiceCaptureResources();
+			            setActiveVoiceSurface(null);
+			            setIsVoiceTranscribing(false);
+			            showAppToastMessage("Microphone recording failed.");
+			          };
+			          voiceCaptureCleanupRef.current = () => {
+			            try {
+			              recorder.ondataavailable = null;
+			              recorder.onerror = null;
+			              if (recorder.state !== "inactive") recorder.stop();
+			            } catch {
+			              // ignore cleanup race
+			            }
+			          };
+			          voiceStopCaptureRef.current = () =>
+			            new Promise<Blob>((resolve, reject) => {
+			              const handleStop = () => {
+			                recorder.removeEventListener("stop", handleStop);
+			                recorder.removeEventListener("error", handleError);
+			                const blob = new Blob(voiceChunksRef.current, {
+			                  type: recorder.mimeType || "audio/webm",
+			                });
+			                resolve(blob);
+			              };
+			              const handleError = () => {
+			                recorder.removeEventListener("stop", handleStop);
+			                recorder.removeEventListener("error", handleError);
+			                reject(new Error("recording_failed"));
+			              };
+			              recorder.addEventListener("stop", handleStop, { once: true });
+			              recorder.addEventListener("error", handleError, { once: true });
+			              if (recorder.state === "inactive") {
+			                handleStop();
+			                return;
+			              }
+			              recorder.stop();
+			            });
+			          voiceStreamRef.current = stream;
+			          voiceRecorderRef.current = recorder;
+			          setActiveVoiceSurface(surface);
+			          recorder.start(250);
+			          showAppToastMessage("Listening... tap mic again to stop.");
+			          return;
+			        } catch (mediaRecorderError) {
+			          console.warn(
+			            "[voice] MediaRecorder unavailable in desktop runtime, attempting PCM fallback",
+			            mediaRecorderError,
+			          );
+			          if (!AudioContextCtor) throw new Error("voice_unsupported");
+			        }
+			      }
+			      if (!AudioContextCtor) throw new Error("voice_unsupported");
+			      let audioContext: AudioContext;
+			      try {
+			        audioContext = new AudioContextCtor({ sampleRate: VOICE_CAPTURE_SAMPLE_RATE });
+			      } catch {
+			        audioContext = new AudioContextCtor();
+			      }
+			      await audioContext.resume().catch(() => undefined);
+			      if (audioContext.state !== "running") throw new Error("voice_context_unavailable");
+			      const source = audioContext.createMediaStreamSource(stream);
+			      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+			      const silentSink = audioContext.createGain();
+			      silentSink.gain.value = 0;
+			      const pcmChunks: Int16Array[] = [];
+			      let cleanedUp = false;
+			      const cleanupCapture = () => {
+			        if (cleanedUp) return;
+			        cleanedUp = true;
+			        processor.onaudioprocess = null;
+			        try {
+			          source.disconnect();
+			        } catch {
+			          // ignore disconnect race
+			        }
+			        try {
+			          processor.disconnect();
+			        } catch {
+			          // ignore disconnect race
+			        }
+			        try {
+			          silentSink.disconnect();
+			        } catch {
+			          // ignore disconnect race
+			        }
+			        void audioContext.close().catch(() => undefined);
+			      };
+			      processor.onaudioprocess = (event) => {
+			        const samples = event.inputBuffer.getChannelData(0);
+			        if (!samples || samples.length === 0) return;
+			        pcmChunks.push(floatToInt16Pcm(samples));
+			      };
+			      source.connect(processor);
+			      processor.connect(silentSink);
+			      silentSink.connect(audioContext.destination);
+			      voiceCaptureCleanupRef.current = cleanupCapture;
+			      voiceStopCaptureRef.current = async () => {
+			        cleanupCapture();
+			        return createWavBlobFromInt16Chunks(pcmChunks, audioContext.sampleRate || VOICE_CAPTURE_SAMPLE_RATE);
 			      };
 			      voiceStreamRef.current = stream;
-			      voiceRecorderRef.current = recorder;
+			      voiceRecorderRef.current = null;
+			      voiceChunksRef.current = [];
 			      setActiveVoiceSurface(surface);
-			      recorder.start(250);
 			      showAppToastMessage("Listening... tap mic again to stop.");
 			    } catch (error) {
 			      const message =
@@ -9245,8 +9551,16 @@ function App() {
 			          ? "Microphone access was denied."
 			          : error instanceof DOMException && error.name === "NotFoundError"
 			            ? "No microphone was found."
+			            : error instanceof Error && error.message === "voice_unsupported"
+			              ? "Voice input unavailable: missing desktop audio runtime support."
+                  : error instanceof Error && error.message === "voice_context_unavailable"
+                    ? "Voice input unavailable: could not initialize desktop audio context."
 			            : "Could not start microphone capture.";
 			      showAppToastMessage(message);
+			      console.warn("[voice] failed to start capture", {
+			        error,
+			        support: getVoiceSupportState(),
+			      });
 			      releaseVoiceCaptureResources();
 			      setActiveVoiceSurface(null);
 			      setIsVoiceTranscribing(false);
@@ -9254,32 +9568,11 @@ function App() {
 			  }
 
 			  async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
-			    const recorder = voiceRecorderRef.current;
-			    if (!recorder || activeVoiceSurface !== surface) return;
+			    const stopCapture = voiceStopCaptureRef.current;
+			    if (!stopCapture || activeVoiceSurface !== surface) return;
 			    setIsVoiceTranscribing(true);
 			    try {
-			      const audioBlob = await new Promise<Blob>((resolve, reject) => {
-			        const handleStop = () => {
-			          recorder.removeEventListener("stop", handleStop);
-			          recorder.removeEventListener("error", handleError);
-			          const blob = new Blob(voiceChunksRef.current, {
-			            type: recorder.mimeType || "audio/webm",
-			          });
-			          resolve(blob);
-			        };
-			        const handleError = () => {
-			          recorder.removeEventListener("stop", handleStop);
-			          recorder.removeEventListener("error", handleError);
-			          reject(new Error("recording_failed"));
-			        };
-			        recorder.addEventListener("stop", handleStop, { once: true });
-			        recorder.addEventListener("error", handleError, { once: true });
-			        if (recorder.state === "inactive") {
-			          handleStop();
-			          return;
-			        }
-			        recorder.stop();
-			      });
+			      const audioBlob = await stopCapture();
 			      releaseVoiceCaptureResources();
 			      if (audioBlob.size === 0) {
 			        showAppToastMessage("No audio captured.");
