@@ -132,6 +132,7 @@ type ToolUiSpec = {
 };
 
 type AgentMode = "build" | "plan" | "explore";
+type VoiceSurface = "workspace" | "community";
 
 type MessageRecord = {
   id: string;
@@ -261,6 +262,25 @@ type BuilderBillingStatus = {
   subscription_status: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean | null;
+};
+
+type ProductState = {
+  user_id: string;
+  auth_state: string;
+  builder_tier: string;
+  builder_plan_code: string;
+  builder_plan_price_usd: number;
+  is_builder_paid: boolean;
+  max_communities: number;
+  platform_fee_bps: number;
+  has_payouts: boolean;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+  ai_history_bytes_used: number | string;
+  ai_history_bytes_cap: number | string;
+  platform_inference_standard_used: number | string;
+  platform_inference_standard_cap: number;
 };
 
 type BuilderBillingReturn = {
@@ -578,14 +598,27 @@ const MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 	}
 
 	const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
-	const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
-	  { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
-	  { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
+const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
+  { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
+  { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
   { id: "opus-4.5", label: "Opus 4.5", enabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
   { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
   { id: "grok-4.1", label: "Grok 4.1", enabled: true },
 ];
+const VOICE_CAPTURE_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/wav",
+];
+// Alpha default: desktop personal threads are local-only. Set to "1" to re-enable
+// legacy cloud sync for personal threads during staged rollouts.
+const DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED =
+  ((import.meta.env.VITE_DESKTOP_PERSONAL_THREADS_CLOUD_SYNC as string | undefined) ?? "").trim() === "1";
 const SLASH_COMMAND_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape"]);
 const SLASH_COMMANDS = [
   { name: "/status", description: "Show session, model, and tool-call status." },
@@ -598,6 +631,40 @@ const SLASH_COMMANDS = [
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
+}
+
+function selectVoiceCaptureMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return undefined;
+  for (const candidate of VOICE_CAPTURE_MIME_TYPES) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidate)) return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+}
+
+function mergeVoiceTranscript(existing: string, transcript: string): string {
+  const next = transcript.trim();
+  if (!next) return existing;
+  if (!existing.trim()) return next;
+  return /\s$/.test(existing) ? `${existing}${next}` : `${existing} ${next}`;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  return bytesToBase64(new Uint8Array(buffer));
 }
 
 function isValidCommunitySlug(value: string): boolean {
@@ -1284,6 +1351,11 @@ function App() {
 		  const communityMessageIdsRef = useRef<Set<string>>(new Set());
 	  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
+  const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
   const [slashHover, setSlashHover] = useState<string | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   // User preference for panels (what they toggled)
@@ -1401,9 +1473,9 @@ function App() {
     return { query, filtered, active };
   }, [commandInput, slashIndex]);
 
-	  useEffect(() => {
-	    captureBrandosAidFromLocation();
-	    void loadThreads();
+		  useEffect(() => {
+		    captureBrandosAidFromLocation();
+		    void loadThreads();
 	    void loadWorkspaceRoot();
 	    void loadActiveProject();
 	    void loadModelToggles();
@@ -1951,7 +2023,9 @@ function App() {
   async function resetLocalCache() {
     if (isSending) return;
     const ok = window.confirm(
-      "Reset local cache? This deletes local tool evidence and UI state. Your cloud threads/messages/memory remain.",
+      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED
+        ? "Reset local cache? This deletes local tool evidence and UI state. Your cloud threads/messages/memory remain."
+        : "Reset local cache? This deletes local desktop threads/messages, tool evidence, and UI state on this device.",
     );
     if (!ok) return;
     try {
@@ -3864,105 +3938,7 @@ function App() {
 	    const unlistenOpenedUrls = listen<OpenedUrlsPayload>(
 	      "app-opened-urls",
 	      async (event) => {
-	        const urls = event.payload.urls ?? [];
-	        if (urls.length === 0) return;
-
-		        let newestInvite: string | null = null;
-		        let newestClaimToken: string | null = null;
-		        let newestSettingsPage: string | null = null;
-		        let newestBillingReturn: BuilderBillingReturn | null = null;
-		        for (const raw of urls) {
-		          let parsed: URL;
-		          try {
-		            parsed = new URL(raw);
-		          } catch {
-	            continue;
-	          }
-
-		          if (parsed.protocol === "arx:") {
-		            const host = (parsed.hostname ?? "").toLowerCase();
-		            const pathname = (parsed.pathname ?? "").toLowerCase();
-		            const token = (parsed.searchParams.get("token") ?? parsed.searchParams.get("claim") ?? "").trim();
-		            if ((host === "claim" || pathname === "/claim") && token) {
-		              newestClaimToken = token;
-		              storePendingPurchaseClaimToken(token);
-		            }
-		            if (host === "settings" || pathname === "/settings") {
-		              const page = (parsed.searchParams.get("page") ?? parsed.searchParams.get("tab") ?? "").trim().toLowerCase();
-		              const fromPath = (pathname.startsWith("/") ? pathname.slice(1) : pathname).split("/")[0] ?? "";
-		              const next = (page || fromPath).trim();
-		              if (next) newestSettingsPage = next;
-		            }
-		            if (host === "billing" || pathname === "/billing") {
-		              const status = (parsed.searchParams.get("status") ?? parsed.searchParams.get("billing") ?? "")
-		                .trim()
-		                .toLowerCase();
-		              if (status === "success" || status === "cancel" || status === "return") {
-		                const rawContext = (parsed.searchParams.get("context") ?? parsed.searchParams.get("billing_context") ?? "")
-		                  .trim()
-		                  .toLowerCase();
-		                const context =
-		                  rawContext === "create_community"
-		                    ? "create_community"
-		                    : rawContext === "builder"
-		                      ? "builder"
-		                      : "unknown";
-		                newestBillingReturn = {
-		                  status: status as BuilderBillingReturn["status"],
-		                  source: "desktop",
-		                  context,
-		                };
-		              }
-		            }
-		          }
-		          const inviteKey = parsed.searchParams.get("invite") ?? parsed.searchParams.get("join");
-		          if (!inviteKey) continue;
-
-          const normalized = normalizeInviteCode(inviteKey);
-          if (!normalized) continue;
-
-          newestInvite = normalized;
-          try {
-            await invoke("upsert_pending_invite_cmd", { inviteKey: normalized, source: "url" });
-          } catch {
-            // ignore
-          }
-        }
-
-		        if (newestClaimToken) {
-		          const session = supabaseSessionRef.current;
-		          if (session) {
-		            void redeemPurchaseClaim(newestClaimToken);
-	          } else {
-	            setAuthError("Sign in to claim access.");
-	            void handleSignIn();
-	          }
-		        }
-
-		        if (newestBillingReturn) {
-		          setFinalizeCreateCommunityError(null);
-		          setBuilderBillingReturn(newestBillingReturn);
-		        }
-
-		        if (newestSettingsPage) {
-		          setActiveView("settings");
-		          if (
-	            newestSettingsPage === "account" ||
-	            newestSettingsPage === "models" ||
-	            newestSettingsPage === "execution" ||
-	            newestSettingsPage === "memory" ||
-	            newestSettingsPage === "appearance"
-	          ) {
-	            setSettingsPage(newestSettingsPage);
-	          }
-	        }
-
-	        if (newestInvite) {
-	          await loadPendingInvites();
-	          setActivePage("workspace");
-	          setActiveView("home");
-          setActiveInviteGateKey(newestInvite);
-        }
+	        await handleOpenedUrls(event.payload.urls ?? []);
       }
     );
 
@@ -4142,7 +4118,7 @@ function App() {
       }
       threadsHydratedRef.current = true;
 
-      // Ensure cloud threads are hydrated into the local DB so the desktop runtime can operate on them.
+      // Legacy cloud-sync mode: hydrate cloud threads into local DB for runtime execution.
       for (const thread of cloudThreads) {
         void invoke("upsert_thread_cmd", {
           threadId: thread.id,
@@ -4315,8 +4291,8 @@ function App() {
       created_at: string;
     };
 
-	    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
-	      if (!url) return [];
+		    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
+		      if (!url) return [];
 	      const response = await fetchWithSupabaseAuth(
 	        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.asc`,
 	        { method: "GET" },
@@ -5143,12 +5119,18 @@ function App() {
       setActivePage("community");
       setCommunityTab("chat");
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to join community.";
+      const kind = classifyPublicCommunityJoinError(error);
+      const message = getErrorMessage(error, "Failed to join community.");
+      if (
+        slug &&
+        (kind === "paid_plan_required" ||
+          kind === "approval_required" ||
+          kind === "paid_communities_do_not_use_request_access")
+      ) {
+        clearPendingPublicJoin();
+        await openCommunityLandingExternal({ slug });
+        return;
+      }
       setDiscoverError(message);
     } finally {
       setJoiningDiscoverCommunityId(null);
@@ -5421,7 +5403,7 @@ function App() {
 	    setBuilderBillingError(null);
 	    try {
 	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/rpc/get_builder_billing_status`,
+	        `${url}/rest/v1/rpc/get_my_product_state`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -5430,8 +5412,23 @@ function App() {
         session,
 	      );
 	      if (!response.ok) throw new Error(await readSupabaseError(response));
-	      const rows = (await response.json()) as BuilderBillingStatus[];
-	      const row = rows[0] ?? null;
+	      const rows = (await response.json()) as ProductState[];
+	      const product = rows[0] ?? null;
+	      const row: BuilderBillingStatus | null = product
+	        ? {
+	            user_id: product.user_id,
+	            builder_tier: product.builder_tier,
+	            max_communities: Number(product.max_communities ?? 0),
+	            platform_fee_bps: Number(product.platform_fee_bps ?? 0),
+	            has_payouts: Boolean(product.has_payouts),
+	            subscription_status: product.subscription_status ?? null,
+	            current_period_end: product.current_period_end ?? null,
+	            cancel_at_period_end:
+	              product.cancel_at_period_end === null || product.cancel_at_period_end === undefined
+	                ? null
+	                : Boolean(product.cancel_at_period_end),
+	          }
+	        : null;
 	      setBuilderBillingStatus(row);
 	      return row;
 	    } catch (error) {
@@ -5903,13 +5900,14 @@ function App() {
 	      setActivePage("community");
 	      setCommunityTab("chat");
 	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-	          : error instanceof Error
-	            ? error.message
-	            : "Failed to join community.";
-	      if (message.toLowerCase().includes("payment required")) {
+	      const kind = classifyPublicCommunityJoinError(error);
+	      const message = getErrorMessage(error, "Failed to join community.");
+	      if (
+	        kind === "paid_plan_required" ||
+	        kind === "approval_required" ||
+	        kind === "paid_communities_do_not_use_request_access"
+	      ) {
+	        clearPendingPublicJoin();
 	        await openCommunityLandingExternal(community);
 	        return;
 	      }
@@ -9088,11 +9086,242 @@ function App() {
 		  const isActiveCommunityOwner = Boolean(activeCommunityAccess?.is_owner);
 			  const canViewActiveCommunitySettings = Boolean(activeCommunityAccess?.can_view);
 			  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
-				  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
+			  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
 				  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
 				  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
 				  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
 				  const canViewActiveCommunityAutomations = canManageMembersActiveCommunity;
+			  const normalizedBuilderTier = useMemo<"free" | "builder" | "pro">(() => {
+			    const raw = String(builderBillingStatus?.builder_tier ?? "free")
+			      .trim()
+			      .toLowerCase();
+			    if (raw === "builder" || raw === "pro") return raw;
+			    return "free";
+			  }, [builderBillingStatus?.builder_tier]);
+
+			  function resolveVoiceInputIntent(surface: "workspace" | "community"): {
+			    mode:
+			      | "sign_in"
+			      | "select_community"
+			      | "join_community"
+			      | "start_recording"
+			      | "stop_recording"
+			      | "transcribing"
+			      | "busy";
+			    title: string;
+			  } {
+			    if (surface === "community") {
+			      if (!supabaseSession) {
+			        return {
+			          mode: "sign_in",
+		          title: "Sign in to use voice input in community chat.",
+		        };
+		      }
+		      if (!activeCommunity) {
+		        return {
+		          mode: "select_community",
+		          title: "Select a community first.",
+		        };
+		      }
+		      if (!canPostMessagesActiveCommunity) {
+		        return {
+		          mode: "join_community",
+			          title: "Join this community to use voice input.",
+			        };
+			      }
+			    }
+			    if (isVoiceTranscribing) {
+			      return {
+			        mode: "transcribing",
+			        title: "Transcribing voice input...",
+			      };
+			    }
+			    if (activeVoiceSurface && activeVoiceSurface !== surface) {
+			      return {
+			        mode: "busy",
+			        title: "Finish the current voice capture first.",
+			      };
+			    }
+			    if (activeVoiceSurface === surface) {
+			      return {
+			        mode: "stop_recording",
+			        title: "Stop recording and transcribe.",
+			      };
+			    }
+			    return {
+			      mode: "start_recording",
+			      title:
+			        normalizedBuilderTier === "pro"
+			          ? "Start voice input ($100 plan)."
+			          : normalizedBuilderTier === "builder"
+			            ? "Start voice input ($20 plan)."
+			            : "Start voice input.",
+			    };
+			  }
+
+			  function releaseVoiceCaptureResources() {
+			    const stream = voiceStreamRef.current;
+			    if (stream) {
+			      for (const track of stream.getTracks()) track.stop();
+			    }
+			    voiceStreamRef.current = null;
+			    voiceRecorderRef.current = null;
+			    voiceChunksRef.current = [];
+			  }
+
+			  function applyVoiceTranscript(surface: VoiceSurface, transcript: string) {
+			    if (!transcript) return;
+			    if (surface === "workspace") {
+			      setCommandInput((prev) => mergeVoiceTranscript(prev, transcript));
+			      window.setTimeout(() => askInputRef.current?.focus(), 0);
+			      return;
+			    }
+			    setCommunityMessageInput((prev) => mergeVoiceTranscript(prev, transcript));
+			    window.setTimeout(() => {
+			      const input = chatInputRef.current;
+			      if (!input) return;
+			      input.style.height = "auto";
+			      input.style.height = Math.min(input.scrollHeight, 120) + "px";
+			      input.focus();
+			    }, 0);
+			  }
+
+			  async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
+			    const url = getSupabaseUrl();
+			    if (!url) throw new Error("Missing Supabase URL.");
+			    const payload = JSON.stringify({
+			      audio_base64: await blobToBase64(blob),
+			      mime_type: blob.type || "audio/webm",
+			      surface,
+			    });
+			    const session = supabaseSessionRef.current ?? supabaseSession;
+			    const response = session
+			      ? await fetchWithSupabaseAuth(
+			          `${url}/functions/v1/voice_transcribe`,
+			          {
+			            method: "POST",
+			            headers: { "Content-Type": "application/json" },
+			            body: payload,
+			          },
+			          session,
+			        )
+			      : await fetchWithSupabasePublic(`${url}/functions/v1/voice_transcribe`, {
+			          method: "POST",
+			          headers: { "Content-Type": "application/json" },
+			          body: payload,
+			        });
+			    if (!response.ok) throw new Error(await readSupabaseError(response));
+			    const data = (await response.json()) as { text?: unknown };
+			    return typeof data?.text === "string" ? data.text.trim() : "";
+			  }
+
+			  async function startVoiceCapture(surface: VoiceSurface): Promise<void> {
+			    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+			      showAppToastMessage("Voice input is not supported on this device.");
+			      return;
+			    }
+			    try {
+			      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			      const mimeType = selectVoiceCaptureMimeType();
+			      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+			      voiceChunksRef.current = [];
+			      recorder.ondataavailable = (event: BlobEvent) => {
+			        if (event.data && event.data.size > 0) voiceChunksRef.current.push(event.data);
+			      };
+			      recorder.onerror = () => {
+			        releaseVoiceCaptureResources();
+			        setActiveVoiceSurface(null);
+			        setIsVoiceTranscribing(false);
+			        showAppToastMessage("Microphone recording failed.");
+			      };
+			      voiceStreamRef.current = stream;
+			      voiceRecorderRef.current = recorder;
+			      setActiveVoiceSurface(surface);
+			      recorder.start(250);
+			      showAppToastMessage("Listening... tap mic again to stop.");
+			    } catch (error) {
+			      const message =
+			        error instanceof DOMException && error.name === "NotAllowedError"
+			          ? "Microphone access was denied."
+			          : error instanceof DOMException && error.name === "NotFoundError"
+			            ? "No microphone was found."
+			            : "Could not start microphone capture.";
+			      showAppToastMessage(message);
+			      releaseVoiceCaptureResources();
+			      setActiveVoiceSurface(null);
+			      setIsVoiceTranscribing(false);
+			    }
+			  }
+
+			  async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
+			    const recorder = voiceRecorderRef.current;
+			    if (!recorder || activeVoiceSurface !== surface) return;
+			    setIsVoiceTranscribing(true);
+			    try {
+			      const audioBlob = await new Promise<Blob>((resolve, reject) => {
+			        const handleStop = () => {
+			          recorder.removeEventListener("stop", handleStop);
+			          recorder.removeEventListener("error", handleError);
+			          const blob = new Blob(voiceChunksRef.current, {
+			            type: recorder.mimeType || "audio/webm",
+			          });
+			          resolve(blob);
+			        };
+			        const handleError = () => {
+			          recorder.removeEventListener("stop", handleStop);
+			          recorder.removeEventListener("error", handleError);
+			          reject(new Error("recording_failed"));
+			        };
+			        recorder.addEventListener("stop", handleStop, { once: true });
+			        recorder.addEventListener("error", handleError, { once: true });
+			        if (recorder.state === "inactive") {
+			          handleStop();
+			          return;
+			        }
+			        recorder.stop();
+			      });
+			      releaseVoiceCaptureResources();
+			      if (audioBlob.size === 0) {
+			        showAppToastMessage("No audio captured.");
+			        return;
+			      }
+			      const transcript = await transcribeVoiceBlob(surface, audioBlob);
+			      if (!transcript) {
+			        showAppToastMessage("No speech detected.");
+			        return;
+			      }
+			      applyVoiceTranscript(surface, transcript);
+			      showAppToastMessage("Transcript inserted.");
+			    } catch (error) {
+			      const message = error instanceof Error ? error.message : String(error);
+			      showAppToastMessage(message || "Voice transcription failed.");
+			    } finally {
+			      releaseVoiceCaptureResources();
+			      setIsVoiceTranscribing(false);
+			      setActiveVoiceSurface(null);
+			    }
+			  }
+
+			  async function handleVoiceInputClick(surface: "workspace" | "community") {
+			    const intent = resolveVoiceInputIntent(surface);
+			    if (intent.mode === "sign_in") {
+			      void handleSignIn();
+			      return;
+			    }
+			    if (intent.mode === "select_community" || intent.mode === "join_community" || intent.mode === "busy") {
+			      showAppToastMessage(intent.title);
+			      return;
+			    }
+			    if (intent.mode === "transcribing") {
+			      showAppToastMessage(intent.title);
+			      return;
+			    }
+			    if (intent.mode === "stop_recording") {
+			      await stopVoiceCaptureAndTranscribe(surface);
+			      return;
+			    }
+			    await startVoiceCapture(surface);
+			  }
 
         const showEmptyThreadLandingSkeleton = Boolean(
           !activeThreadId &&
@@ -9240,10 +9469,13 @@ function App() {
 	  const showCommunityRail = true;
 	  const effectiveCwd = (activeProject?.root_path ?? workspaceRoot ?? "").trim();
 	  const lastThreadWorkspaceRef = useRef<string | null>(null);
-	  const visibleThreads = useMemo(() => {
-	    if (!supabaseSession) return threads;
-	    return threads.filter((t) => (t.last_seq ?? 0) > 0);
-	  }, [threads, supabaseSession]);
+  const useCloudPersonalThreadMode = Boolean(
+    DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && supabaseSession && getSupabaseUrl(),
+  );
+  const visibleThreads = useMemo(() => {
+    if (!useCloudPersonalThreadMode) return threads;
+    return threads.filter((t) => (t.last_seq ?? 0) > 0);
+  }, [threads, useCloudPersonalThreadMode]);
     const normalizedThreadSearch = threadSearchQuery.trim().toLowerCase();
     const threadSearchResults = useMemo(() => {
       if (!normalizedThreadSearch) return visibleThreads;
@@ -9293,7 +9525,8 @@ function App() {
     threadId: string;
     communityId: string | null;
     communityName: string;
-    session: SupabaseSession;
+    session: SupabaseSession | null;
+    syncToCloud: boolean;
   };
 
   // Desktop "last click wins" lens switching: serialize lens updates and coalesce
@@ -9395,15 +9628,30 @@ function App() {
     });
   };
 
-  const ensureWorkspaceThreadLensBeforeSend = async (threadId: string, session: SupabaseSession): Promise<void> => {
+  const ensureWorkspaceThreadLensBeforeSend = async (threadId: string): Promise<void> => {
     if (activePage !== "workspace") return;
     const desiredCommunityId = activeCommunityId ?? null;
-    const currentLens = threads.find((t) => t.id === threadId)?.community_id ?? null;
+    const thread = threads.find((t) => t.id === threadId) ?? null;
+    const currentLens = thread?.community_id ?? null;
     if (currentLens === desiredCommunityId) return;
     const desiredName = desiredCommunityId
       ? (communities.find((c) => c.id === desiredCommunityId)?.name ?? desiredCommunityId)
       : "none";
-    await requestWorkspaceThreadLens({ threadId, communityId: desiredCommunityId, communityName: desiredName, session });
+    const session = supabaseSessionRef.current;
+    const syncToCloud = Boolean(
+      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED &&
+      session &&
+      getSupabaseUrl() &&
+      thread &&
+      thread.engine_id !== "community_chat",
+    );
+    await requestWorkspaceThreadLens({
+      threadId,
+      communityId: desiredCommunityId,
+      communityName: desiredName,
+      session: session ?? null,
+      syncToCloud,
+    });
   };
 
   function handleSelectActiveCommunity(next: string) {
@@ -9418,31 +9666,21 @@ function App() {
 
     const thread = activeThread;
     const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    if (thread && thread.engine_id !== "community_chat" && session && url) {
-      const toCommunityName = communities.find((c) => c.id === next)?.name ?? next;
-      void requestWorkspaceThreadLens({
-        threadId: activeThreadId,
-        communityId: next,
-        communityName: toCommunityName,
-        session,
-      });
-      return;
-    }
-
-    void invoke<ThreadRecord>("set_thread_community_cmd", { threadId: activeThreadId, communityId: next })
-      .then((updated) => {
-        setThreads((prev) => {
-          const idx = prev.findIndex((t) => t.id === updated.id);
-          if (idx === -1) return prev;
-          const copy = [...prev];
-          copy[idx] = updated;
-          return copy;
-        });
-      })
-      .catch((error) => {
-        console.error("Failed to sync thread community:", error);
-      });
+    const syncToCloud = Boolean(
+      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED &&
+      thread &&
+      thread.engine_id !== "community_chat" &&
+      session &&
+      getSupabaseUrl(),
+    );
+    const toCommunityName = communities.find((c) => c.id === next)?.name ?? next;
+    void requestWorkspaceThreadLens({
+      threadId: activeThreadId,
+      communityId: next,
+      communityName: toCommunityName,
+      session: session ?? null,
+      syncToCloud,
+    });
   }
 
   // Helper to display user names with session context
@@ -9765,7 +10003,7 @@ function App() {
       last_seq: 0,
     };
 
-    if (session && url) {
+    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
       try {
         const response = await fetchWithSupabaseAuth(
           `${url}/rest/v1/threads`,
@@ -9847,9 +10085,7 @@ function App() {
       if (startedInDraft) createdThreadId = sessionId;
       session = supabaseSessionRef.current;
 
-      if (session) {
-        await ensureWorkspaceThreadLensBeforeSend(sessionId, session);
-      }
+      await ensureWorkspaceThreadLensBeforeSend(sessionId);
 
       setCommandInput("");
       setAttachments([]);
@@ -9889,10 +10125,10 @@ function App() {
 	          };
 	        }),
 	      );
-	      if (session) {
-	        try {
-	          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-	        } catch (error) {
+      if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
+        try {
+          await syncRecentLocalMessagesToCloud(sessionId, session, 1);
+        } catch (error) {
 	          const message =
 	            typeof error === "string" ? error : error instanceof Error ? error.message : "";
 	          if (message.toLowerCase().includes("cloud history limit reached")) {
@@ -10180,7 +10416,7 @@ function App() {
         // Delete the empty thread and return to the draft state.
         const latestSession = supabaseSessionRef.current;
         const url = latestSession ? getSupabaseUrl() : null;
-        if (latestSession && url) {
+        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && latestSession && url) {
           try {
             const response = await fetchWithSupabaseAuth(
               `${url}/rest/v1/threads?id=eq.${encodeURIComponent(createdThreadId)}`,
@@ -13739,18 +13975,22 @@ function App() {
                 </select>
               </div>
             </div>
-            <div className="ask-toolbar-right">
-              <button
-                className="ask-icon-btn ask-mic"
-                type="button"
-                disabled
-                aria-label="Voice input"
-                title="Voice input (coming soon)"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-                  <path d="M19 11a7 7 0 0 1-14 0" />
-                  <path d="M12 18v4" />
+	            <div className="ask-toolbar-right">
+	              <button
+	                className={
+	                  "ask-icon-btn ask-mic" +
+	                  (activeVoiceSurface === "workspace" && !isVoiceTranscribing ? " recording" : "") +
+	                  (activeVoiceSurface === "workspace" && isVoiceTranscribing ? " transcribing" : "")
+	                }
+	                type="button"
+	                onClick={() => void handleVoiceInputClick("workspace")}
+	                aria-label="Voice input"
+	                title={resolveVoiceInputIntent("workspace").title}
+	              >
+	                <svg viewBox="0 0 24 24" aria-hidden="true">
+	                  <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+	                  <path d="M19 11a7 7 0 0 1-14 0" />
+	                  <path d="M12 18v4" />
                   <path d="M8 22h8" />
                 </svg>
               </button>
@@ -14483,17 +14723,21 @@ function App() {
 	                    disabled={!activeCommunity || !canPostMessagesActiveCommunity}
 	                    rows={1}
 	                  />
-                  <button
-                    className="ask-icon-btn ask-mic"
-                    type="button"
-                    disabled
-                    aria-label="Voice input"
-                    title="Voice input (coming soon)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-                      <path d="M19 11a7 7 0 0 1-14 0" />
-                      <path d="M12 18v4" />
+	                  <button
+	                    className={
+	                      "ask-icon-btn ask-mic" +
+	                      (activeVoiceSurface === "community" && !isVoiceTranscribing ? " recording" : "") +
+	                      (activeVoiceSurface === "community" && isVoiceTranscribing ? " transcribing" : "")
+	                    }
+	                    type="button"
+	                    onClick={() => void handleVoiceInputClick("community")}
+	                    aria-label="Voice input"
+	                    title={resolveVoiceInputIntent("community").title}
+	                  >
+	                    <svg viewBox="0 0 24 24" aria-hidden="true">
+	                      <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+	                      <path d="M19 11a7 7 0 0 1-14 0" />
+	                      <path d="M12 18v4" />
                       <path d="M8 22h8" />
                     </svg>
                   </button>

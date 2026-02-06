@@ -3105,6 +3105,27 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
+.ask-icon-btn.ask-mic.recording {
+  background: color-mix(in srgb, #ef4444 22%, transparent);
+  color: #ffd2d2;
+}
+
+.ask-icon-btn.ask-mic.transcribing {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+  animation: voice-mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .ask-icon-btn svg {
   width: 18px;
   height: 18px;
@@ -3933,7 +3954,7 @@ button.chat-reply-quote:hover {
   gap: 6px;
   font-size: 13px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .auth-gate-bullets li {
@@ -3944,7 +3965,7 @@ button.chat-reply-quote:hover {
 
 .auth-gate-bullets li::before {
   content: "•";
-  color: var(--text-faint);
+  color: var(--text-muted);
   line-height: 1.2;
   margin-top: 3px;
 }
