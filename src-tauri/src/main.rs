@@ -17,7 +17,7 @@ use keyring::Entry;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::BufRead;
 use std::path::Path;
 use std::process::Command;
@@ -884,6 +884,91 @@ fn compute_tool_call_key(
     hex_sha256(format!("{}\n{}\n{}", tool_name, workspace_scope_id, canonical).as_bytes())
 }
 
+const AGENT_TOOL_KEY_HISTORY_WINDOW: usize = 8;
+
+fn detect_repeating_tool_cycle(recent_tool_call_keys: &VecDeque<String>) -> bool {
+    let len = recent_tool_call_keys.len();
+    if len < 4 {
+        return false;
+    }
+
+    let keys = recent_tool_call_keys
+        .iter()
+        .map(|value| value.as_str())
+        .collect::<Vec<_>>();
+
+    // ABAB cycle.
+    if len >= 4 {
+        let a = keys[len - 4];
+        let b = keys[len - 3];
+        let c = keys[len - 2];
+        let d = keys[len - 1];
+        if a == c && b == d && a != b {
+            return true;
+        }
+    }
+
+    // ABCABC cycle.
+    if len >= 6 {
+        let a = keys[len - 6];
+        let b = keys[len - 5];
+        let c = keys[len - 4];
+        let d = keys[len - 3];
+        let e = keys[len - 2];
+        let f = keys[len - 1];
+        if a == d && b == e && c == f && (a != b || b != c) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn push_tool_key_and_detect_cycle(
+    recent_tool_call_keys: &mut VecDeque<String>,
+    tool_call_key: &str,
+) -> bool {
+    recent_tool_call_keys.push_back(tool_call_key.to_string());
+    while recent_tool_call_keys.len() > AGENT_TOOL_KEY_HISTORY_WINDOW {
+        recent_tool_call_keys.pop_front();
+    }
+    detect_repeating_tool_cycle(recent_tool_call_keys)
+}
+
+#[cfg(test)]
+mod tool_cycle_tests {
+    use super::{detect_repeating_tool_cycle, push_tool_key_and_detect_cycle};
+    use std::collections::VecDeque;
+
+    #[test]
+    fn detects_abab_cycle() {
+        let mut recent = VecDeque::new();
+        for key in ["a", "b", "a", "b"] {
+            recent.push_back(key.to_string());
+        }
+        assert!(detect_repeating_tool_cycle(&recent));
+    }
+
+    #[test]
+    fn detects_abcabc_cycle() {
+        let mut recent = VecDeque::new();
+        for key in ["a", "b", "c", "a", "b", "c"] {
+            recent.push_back(key.to_string());
+        }
+        assert!(detect_repeating_tool_cycle(&recent));
+    }
+
+    #[test]
+    fn ignores_non_cycle_sequences_and_enforces_window() {
+        let mut recent = VecDeque::new();
+        for key in ["a", "b", "c", "d", "e", "f", "g", "h", "i"] {
+            let _ = push_tool_key_and_detect_cycle(&mut recent, key);
+        }
+        assert_eq!(recent.len(), 8);
+        assert!(!detect_repeating_tool_cycle(&recent));
+    }
+}
+
 fn tool_requires_approval(tool_name: &str) -> bool {
     matches!(tool_name, "write" | "edit" | "bash")
 }
@@ -1074,6 +1159,7 @@ async fn execute_agent_tool_call(
     let requires_approval = tool_requires_approval(&tool_name);
     let denied_by_mode = mode == "explore" && requires_approval;
     let is_write_edit = matches!(tool_name.as_str(), "write" | "edit");
+    let is_non_idempotent_tool = matches!(tool_name.as_str(), "bash" | "write" | "edit");
     let auto_approved_by_session =
         !denied_by_mode && requires_approval && is_write_edit && *auto_approve_write_edit;
 
@@ -1087,7 +1173,7 @@ async fn execute_agent_tool_call(
       "requires_approval": requires_approval,
       "policy_basis": "mvp_default"
     });
-    let _ = db::append_event(
+    if db::append_event(
         conn,
         db_path,
         thread_id,
@@ -1095,7 +1181,11 @@ async fn execute_agent_tool_call(
         None,
         Some(&requested_payload.to_string()),
         None,
-    );
+    )
+    .is_ok()
+    {
+        emit_tool_calls_updated(window, thread_id);
+    }
 
     let decision = if denied_by_mode {
         ToolApprovalDecision {
@@ -1135,7 +1225,7 @@ async fn execute_agent_tool_call(
           "approved_by": "policy",
           "note": "user_cancel"
         });
-        let _ = db::append_event(
+        if db::append_event(
             conn,
             db_path,
             thread_id,
@@ -1143,7 +1233,11 @@ async fn execute_agent_tool_call(
             None,
             Some(&decision_payload.to_string()),
             None,
-        );
+        )
+        .is_ok()
+        {
+            emit_tool_calls_updated(window, thread_id);
+        }
         return AgentToolCallOutcome {
             tool_result_content: "error: cancelled".to_string(),
             cancelled: true,
@@ -1176,7 +1270,7 @@ async fn execute_agent_tool_call(
           "approved_by": approved_by,
           "note": note
         });
-        let _ = db::append_event(
+        if db::append_event(
             conn,
             db_path,
             thread_id,
@@ -1188,7 +1282,11 @@ async fn execute_agent_tool_call(
             None,
             Some(&decision_payload.to_string()),
             None,
-        );
+        )
+        .is_ok()
+        {
+            emit_tool_calls_updated(window, thread_id);
+        }
     }
 
     if !approved {
@@ -1198,6 +1296,138 @@ async fn execute_agent_tool_call(
             } else {
                 "error: denied".to_string()
             },
+            cancelled: false,
+        };
+    }
+
+    if is_non_idempotent_tool {
+        if let Ok(Some(previous)) =
+            db::find_latest_finished_tool_call_by_key(conn, thread_id, &tool_call_key)
+        {
+            if previous.status != "ok" {
+                let finished_payload = serde_json::json!({
+                  "v": 1,
+                  "run_id": run_id,
+                  "tool_call_id": tool_call_id.clone(),
+                  "attempt": 0,
+                  "status": "error",
+                  "reason": "retry_requires_confirmation_non_idempotent",
+                  "tool_use_id": tool_use_id,
+                  "blocked_retry_of_tool_call_id": previous.tool_call_id,
+                  "blocked_retry_of_status": previous.status.clone(),
+                  "blocked_retry_of_reason": previous.reason.clone(),
+                  "artifacts": []
+                });
+                if db::append_event(
+                    conn,
+                    db_path,
+                    thread_id,
+                    "tool_call_finished",
+                    None,
+                    Some(&finished_payload.to_string()),
+                    None,
+                )
+                .is_ok()
+                {
+                    emit_tool_calls_updated(window, thread_id);
+                }
+
+                let _ = window.emit(
+                    "tool-call-progress",
+                    ToolCallProgressPayload {
+                        session_id: thread_id.to_string(),
+                        tool_call_id: tool_call_id.clone(),
+                        tool_name: tool_name.clone(),
+                        tool_args_preview: None,
+                        status: "finished".to_string(),
+                        result: Some("error".to_string()),
+                    },
+                );
+
+                return AgentToolCallOutcome {
+                    tool_result_content: format!(
+                        "error: blocked automatic retry for non-idempotent tool `{}` because the previous identical logical call ended with status `{}`. Provide explicit new intent (for example by changing arguments) before retrying.",
+                        tool_name, previous.status
+                    ),
+                    cancelled: false,
+                };
+            }
+        }
+    }
+
+    if let Ok(Some(reuse_hit)) =
+        db::find_latest_successful_tool_call_by_key(conn, thread_id, &tool_call_key)
+    {
+        let mut reused_tool_result = reuse_hit
+            .tool_result
+            .as_deref()
+            .map(|v| v.to_string())
+            .or_else(|| reuse_hit.result_preview.as_deref().map(|v| v.to_string()))
+            .unwrap_or_else(|| "ok".to_string());
+        if let Some(blob_ref) = reuse_hit.tool_result_blob_ref.as_deref() {
+            if let Ok(abs_blob_path) = blob_store::blob_abs_path(db_path, blob_ref) {
+                if let Ok(bytes) = std::fs::read(abs_blob_path) {
+                    reused_tool_result = String::from_utf8_lossy(&bytes).to_string();
+                }
+            }
+        }
+        if reused_tool_result.trim().is_empty() {
+            reused_tool_result = "ok".to_string();
+        }
+
+        let reused_tool_result_blob =
+            if reused_tool_result.as_bytes().len() > IO_BLOB_THRESHOLD_BYTES {
+                write_blob_and_record(conn, db_path, reused_tool_result.as_bytes())
+            } else {
+                None
+            };
+        let (redacted_preview, _preview_report) = context::redact_secrets(&reused_tool_result);
+        let result_preview = redacted_preview.chars().take(1200).collect::<String>();
+
+        let finished_payload = serde_json::json!({
+          "v": 1,
+          "run_id": run_id,
+          "tool_call_id": tool_call_id.clone(),
+          "attempt": 0,
+          "status": "ok",
+          "reason": "reused_prior_success",
+          "tool_use_id": tool_use_id,
+          "reused_from_tool_call_id": reuse_hit.tool_call_id,
+          "reused_from_tool_call_key": tool_call_key,
+          "result_preview": result_preview,
+          "tool_result": if reused_tool_result_blob.is_none() { Some(reused_tool_result.clone()) } else { None::<String> },
+          "tool_result_blob_id": reused_tool_result_blob.as_ref().map(|b| b.id.clone()),
+          "tool_result_blob_ref": reused_tool_result_blob.as_ref().map(|b| b.rel_path.clone()),
+          "artifacts": []
+        });
+        if db::append_event(
+            conn,
+            db_path,
+            thread_id,
+            "tool_call_finished",
+            None,
+            Some(&finished_payload.to_string()),
+            None,
+        )
+        .is_ok()
+        {
+            emit_tool_calls_updated(window, thread_id);
+        }
+
+        let _ = window.emit(
+            "tool-call-progress",
+            ToolCallProgressPayload {
+                session_id: thread_id.to_string(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: tool_name.clone(),
+                tool_args_preview: None,
+                status: "finished".to_string(),
+                result: Some("ok".to_string()),
+            },
+        );
+
+        return AgentToolCallOutcome {
+            tool_result_content: reused_tool_result,
             cancelled: false,
         };
     }
@@ -1218,7 +1448,7 @@ async fn execute_agent_tool_call(
       "workspace_scope_id": workspace_scope_id,
       "sandbox": { "mode": "local", "root": workspace }
     });
-    let _ = db::append_event(
+    if db::append_event(
         conn,
         db_path,
         thread_id,
@@ -1226,7 +1456,11 @@ async fn execute_agent_tool_call(
         None,
         Some(&started_payload.to_string()),
         None,
-    );
+    )
+    .is_ok()
+    {
+        emit_tool_calls_updated(window, thread_id);
+    }
 
     let tool_args_preview = {
         let path = tool_args_for_events
@@ -1329,6 +1563,11 @@ async fn execute_agent_tool_call(
     };
     let stdout_blob = write_blob_and_record(conn, db_path, &exec.stdout);
     let stderr_blob = write_blob_and_record(conn, db_path, &exec.stderr);
+    let tool_result_blob = if exec.tool_result_content.as_bytes().len() > IO_BLOB_THRESHOLD_BYTES {
+        write_blob_and_record(conn, db_path, exec.tool_result_content.as_bytes())
+    } else {
+        None
+    };
     let (redacted_preview, _preview_report) = context::redact_secrets(&exec.tool_result_content);
     let result_preview = redacted_preview.chars().take(1200).collect::<String>();
 
@@ -1342,13 +1581,16 @@ async fn execute_agent_tool_call(
       "exit_code": exec.exit_code,
       "tool_use_id": tool_use_id,
       "result_preview": result_preview,
+      "tool_result": if tool_result_blob.is_none() { Some(exec.tool_result_content.clone()) } else { None::<String> },
+      "tool_result_blob_id": tool_result_blob.as_ref().map(|b| b.id.clone()),
+      "tool_result_blob_ref": tool_result_blob.as_ref().map(|b| b.rel_path.clone()),
       "stdout_blob_id": stdout_blob.as_ref().map(|b| b.id.clone()),
       "stdout_blob_ref": stdout_blob.as_ref().map(|b| b.rel_path.clone()),
       "stderr_blob_id": stderr_blob.as_ref().map(|b| b.id.clone()),
       "stderr_blob_ref": stderr_blob.as_ref().map(|b| b.rel_path.clone()),
       "artifacts": exec.artifacts
     });
-    let _ = db::append_event(
+    if db::append_event(
         conn,
         db_path,
         thread_id,
@@ -1356,7 +1598,11 @@ async fn execute_agent_tool_call(
         None,
         Some(&finished_payload.to_string()),
         None,
-    );
+    )
+    .is_ok()
+    {
+        emit_tool_calls_updated(window, thread_id);
+    }
 
     let _ = window.emit(
         "tool-call-progress",
@@ -1444,17 +1690,17 @@ fn build_atom_system_prompt(
         .unwrap_or_default();
 
     format!(
-    "You are Atom, the AI agent of Arx.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\n{}\nRules:\n- Be useful, friendly, and concise.\n- Format responses in clean Markdown. Use headings (##), lists, and code fences. Use --- between major sections when it improves readability.\n- Be maximally truth-seeking: do not invent file contents, tool outputs, or claims about side effects. If unsure, use tools or ask.\n{}- Minimize tool calls; avoid repeating the same tool with the same inputs.\n- Never include secrets. If sensitive data appears, ask for a safe substitute or redact.\n- If blocked, ask at most one clarifying question and propose a default next step.\n",
-    workspace_display,
-    os,
-    if git_repo { "yes" } else { "no" },
-    personal_memory_block,
-    community_name,
-    community_memory_block,
-    community_prompt_block,
-    user_prompt_block,
-    tool_rules
-  )
+        "You are Atom, the AI coding agent of Arx.\n\nMission:\nDeliver correct, verifiable outcomes for the user with minimal unnecessary steps. Optimize for reliability over long time horizons: continuity, auditability, and safe side effects.\n\n<context>\nWorkspace: {}\nEnvironment:\n- Platform: {}\n- Git repo: {}\n\nPersonal memory (user-controlled):\n{}\n\nCommunity memory ({}):\n{}\n</context>\n{}\n{}\nPriority Order (highest to lowest):\n1) Safety, truthfulness, and hard runtime constraints.\n2) The user's explicit request and success criteria.\n3) Workspace/project constraints and repository conventions.\n4) User preferences.\n5) Community instructions.\n6) Style and brevity preferences.\n\nCore Operating Rules:\n- Never fabricate tool outputs, file contents, command results, or side effects.\n- Never claim success without evidence.\n- Prefer reversible, minimal-risk changes when uncertain.\n- Keep all actions inside the workspace boundary.\n- Never expose secrets; redact or ask for safe substitutes.\n- If blocked, ask at most one clarifying question and propose one concrete default next step.\n\nExecution Loop (apply every turn):\n1) Understand:\nIdentify objective, constraints, and acceptance criteria from the user request.\n2) Plan:\nChoose the smallest sequence of actions likely to satisfy the request.\n3) Act:\nExecute one coherent batch of tool actions.\n4) Verify:\nCheck outputs, run relevant tests/commands, and confirm behavior.\n5) Conclude:\nSummarize what changed, what was verified, and any remaining risk.\n\nMulti-Scale Analysis Mode (zoom in / zoom out):\n- Always be able to reason at both levels:\n  - Macro: whole-system architecture, invariants, component boundaries, data/control flow.\n  - Micro: exact files, functions, payloads, SQL rows, event sequences, and edge-case behavior.\n- When analyzing or debugging:\n  1) Start with first principles (goal, invariants, constraints).\n  2) Build a top-down system map (components + interfaces + flows).\n  3) Trace one concrete path end-to-end (happy path, then failure path).\n  4) Drill into the smallest failing unit (module/function/query/state transition).\n  5) Synthesize back to system impact and next best action.\n- Every substantial analysis response should include:\n  - System view: what this means globally.\n  - Local view: exact technical evidence.\n  - Risks/edge cases: what can break and why.\n  - Decision: recommended change and tradeoffs.\n- If uncertainty remains, state it explicitly and identify the minimum evidence needed to resolve it.\n\nTool Policy:\n{}- Prefer read/list_dir/glob/grep/sha256 for discovery.\n- Use write for file creation or full rewrites.\n- Use edit for targeted in-file replacements.\n- Use bash only for shell-native tasks.\n- For side-effectful operations, proceed through approval flow when required; do not bypass it.\n- If approval is denied, continue with the best read-only fallback or provide a concrete next option.\n\nAnti-Loop and Progress Rules:\n- Avoid repeating the same tool call with equivalent inputs.\n- If similar tool actions repeat without meaningful progress, stop and change strategy.\n- When a plan stalls, explicitly state what is blocking progress and what single change would unblock it.\n\nDefinition of Done:\nA task is done only when all are true:\n1) Requested behavior is implemented (or the requested analysis is delivered).\n2) Relevant verification has been executed and results reported.\n3) Any unresolved risks, assumptions, or follow-ups are stated explicitly.\n\nResponse Rules:\n- Be concise, direct, and technically precise.\n- Prefer structured Markdown when it improves clarity.\n- Include exact file paths and concrete evidence when reporting changes.\n- Do not include unnecessary filler.\n",
+        workspace_display,
+        os,
+        if git_repo { "yes" } else { "no" },
+        personal_memory_block,
+        community_name,
+        community_memory_block,
+        community_prompt_block,
+        user_prompt_block,
+        tool_rules
+    )
 }
 
 #[derive(Clone, Deserialize)]
@@ -1514,7 +1760,15 @@ fn load_recent_history_messages(
 
 const AGENT_MAX_PREFIX_MESSAGES_BEFORE_GOAL: usize = 12;
 const AGENT_MAX_TAIL_MESSAGES_AFTER_GOAL: usize = 50;
+const AGENT_HARD_COMPACT_TAIL_MESSAGES: usize = 14;
 const AGENT_MAX_TOOL_RESULT_BYTES_FOR_PROMPT: usize = 20_000;
+const AGENT_MAX_TOOL_ROUNDS_PER_RUN: u32 = 48;
+const AGENT_MAX_IDENTICAL_TOOL_CALL_STREAK: u32 = 4;
+const AGENT_MAX_COMPACTIONS_PER_RUN: u32 = 4;
+const AGENT_AUTO_COMPACT_TOKEN_LIMIT: usize = 90_000;
+const AGENT_AUTO_COMPACT_TARGET_TOKENS: usize = 72_000;
+const AGENT_HARD_COMPACTION_SUMMARY_MAX_BYTES: usize = 12_000;
+const AGENT_MAX_RUN_WALL_MS: u128 = 15 * 60 * 1000;
 
 fn json_role(value: &serde_json::Value) -> Option<&str> {
     value.get("role").and_then(|v| v.as_str())
@@ -1543,6 +1797,712 @@ fn truncate_tool_result_for_prompt(value: &str) -> String {
         out.push_str("\n(…output truncated for prompt; see tool logs for full output)");
     }
     out
+}
+
+fn estimate_tokens_from_text(value: &str) -> usize {
+    let bytes = value.len();
+    if bytes == 0 {
+        0
+    } else {
+        // Lightweight approximation; sufficient for compaction guardrails.
+        (bytes / 4).max(1)
+    }
+}
+
+fn estimate_tokens_from_json(value: &serde_json::Value) -> usize {
+    match serde_json::to_string(value) {
+        Ok(serialized) => estimate_tokens_from_text(&serialized),
+        Err(_) => 0,
+    }
+}
+
+fn estimate_prompt_tokens(system_prompt: &str, messages: &[serde_json::Value]) -> usize {
+    let mut total = estimate_tokens_from_text(system_prompt);
+    for msg in messages {
+        total = total.saturating_add(estimate_tokens_from_json(msg));
+    }
+    total
+}
+
+fn compose_system_prompt_with_handoff(
+    base_system_prompt: &str,
+    handoff_summary: Option<&str>,
+) -> String {
+    let base = base_system_prompt.trim();
+    let summary = handoff_summary.map(|s| s.trim()).filter(|s| !s.is_empty());
+    match summary {
+        Some(summary) => format!(
+            "{base}\n\n<session_handoff_summary>\n{summary}\n</session_handoff_summary>\nUse this as compressed prior context. Prefer concrete recent messages if conflicts arise."
+        ),
+        None => base.to_string(),
+    }
+}
+
+fn load_latest_handoff_summary(conn: &rusqlite::Connection, thread_id: &str) -> Option<String> {
+    let row = conn.query_row(
+        "SELECT payload_json, text
+         FROM events
+         WHERE thread_id = ?1 AND type = 'handoff_summary'
+         ORDER BY seq DESC
+         LIMIT 1",
+        [thread_id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        },
+    );
+    let (payload_json, text) = match row {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+
+    if let Some(payload_json) = payload_json.as_deref() {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload_json) {
+            if let Some(summary) = value.get("summary").and_then(|v| v.as_str()) {
+                let trimmed = summary.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    text.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+fn append_compaction_metadata_event(
+    conn: &rusqlite::Connection,
+    db_path: &Path,
+    thread_id: &str,
+    run_id: &str,
+    mode: &str,
+    trigger_reason: &str,
+    before_estimated_tokens: usize,
+    after_estimated_tokens: usize,
+    pruned_tool_results: usize,
+    pruned_text_messages: usize,
+    removed_messages: usize,
+    summary_event_id: Option<&str>,
+) {
+    let text = format!(
+        "context_compaction mode={} before={} after={} removed_messages={} pruned_tool_results={}",
+        mode,
+        before_estimated_tokens,
+        after_estimated_tokens,
+        removed_messages,
+        pruned_tool_results
+    );
+    let payload = serde_json::json!({
+      "v": 1,
+      "kind": "context_compaction",
+      "run_id": run_id,
+      "mode": mode,
+      "trigger_reason": trigger_reason,
+      "before_estimated_tokens": before_estimated_tokens,
+      "after_estimated_tokens": after_estimated_tokens,
+      "pruned_tool_results": pruned_tool_results,
+      "pruned_text_messages": pruned_text_messages,
+      "removed_messages": removed_messages,
+      "summary_event_id": summary_event_id
+    });
+    let _ = db::append_event(
+        conn,
+        db_path,
+        thread_id,
+        "thread_metadata_changed",
+        Some(&text),
+        Some(&payload.to_string()),
+        None,
+    );
+}
+
+fn append_handoff_summary_event(
+    conn: &rusqlite::Connection,
+    db_path: &Path,
+    thread_id: &str,
+    run_id: &str,
+    summary: &str,
+    trigger_reason: &str,
+    before_estimated_tokens: usize,
+    after_estimated_tokens: usize,
+) -> Option<String> {
+    let payload = serde_json::json!({
+      "v": 1,
+      "run_id": run_id,
+      "summary": summary,
+      "trigger_reason": trigger_reason,
+      "before_estimated_tokens": before_estimated_tokens,
+      "after_estimated_tokens": after_estimated_tokens
+    });
+    db::append_event(
+        conn,
+        db_path,
+        thread_id,
+        "handoff_summary",
+        Some(summary),
+        Some(&payload.to_string()),
+        None,
+    )
+    .ok()
+    .map(|event| event.id)
+}
+
+fn build_handoff_summary_from_openai_messages(messages: &[serde_json::Value]) -> String {
+    let mut user_points: Vec<String> = Vec::new();
+    let mut assistant_points: Vec<String> = Vec::new();
+    let mut tool_points: Vec<String> = Vec::new();
+
+    for message in messages.iter().rev() {
+        let role = json_role(message).unwrap_or("");
+        match role {
+            "user" => {
+                if user_points.len() >= 6 {
+                    continue;
+                }
+                if let Some(text) = message.get("content").and_then(|v| v.as_str()) {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        let (preview, was_truncated) = truncate_utf8_for_prompt(trimmed, 280);
+                        let line = if was_truncated {
+                            format!("{}...", preview.trim_end())
+                        } else {
+                            preview
+                        };
+                        user_points.push(line);
+                    }
+                }
+            }
+            "assistant" => {
+                if assistant_points.len() < 6 {
+                    if let Some(text) = message.get("content").and_then(|v| v.as_str()) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            let (preview, was_truncated) = truncate_utf8_for_prompt(trimmed, 280);
+                            let line = if was_truncated {
+                                format!("{}...", preview.trim_end())
+                            } else {
+                                preview
+                            };
+                            assistant_points.push(line);
+                        }
+                    }
+                }
+                if tool_points.len() < 8 {
+                    if let Some(calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
+                        for call in calls {
+                            if tool_points.len() >= 8 {
+                                break;
+                            }
+                            let name = call
+                                .get("function")
+                                .and_then(|f| f.get("name"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .trim();
+                            if !name.is_empty() {
+                                tool_points.push(format!("Called tool `{}`", name));
+                            }
+                        }
+                    }
+                }
+            }
+            "tool" => {
+                if tool_points.len() >= 8 {
+                    continue;
+                }
+                if let Some(text) = message.get("content").and_then(|v| v.as_str()) {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        let (preview, was_truncated) = truncate_utf8_for_prompt(trimmed, 160);
+                        let snippet = if was_truncated {
+                            format!("{}...", preview.trim_end())
+                        } else {
+                            preview
+                        };
+                        tool_points.push(format!("Tool result: {}", snippet));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    user_points.reverse();
+    assistant_points.reverse();
+    tool_points.reverse();
+
+    let mut out = String::new();
+    out.push_str("Session handoff summary\n");
+    out.push_str(
+        "- Goal: Continue the active task while preserving recent intent and constraints.\n",
+    );
+    if !user_points.is_empty() {
+        out.push_str("\nRecent user intent:\n");
+        for item in &user_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    if !assistant_points.is_empty() {
+        out.push_str("\nRecent assistant state:\n");
+        for item in &assistant_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    if !tool_points.is_empty() {
+        out.push_str("\nRecent tool activity:\n");
+        for item in &tool_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    let (trimmed, was_truncated) =
+        truncate_utf8_for_prompt(&out, AGENT_HARD_COMPACTION_SUMMARY_MAX_BYTES);
+    if was_truncated {
+        format!(
+            "{}\n\n(Compaction note: summary truncated to fit context budget.)",
+            trimmed
+        )
+    } else {
+        trimmed
+    }
+}
+
+fn build_handoff_summary_from_anthropic_messages(messages: &[serde_json::Value]) -> String {
+    let mut user_points: Vec<String> = Vec::new();
+    let mut assistant_points: Vec<String> = Vec::new();
+    let mut tool_points: Vec<String> = Vec::new();
+
+    for message in messages.iter().rev() {
+        let role = json_role(message).unwrap_or("");
+        let blocks = message
+            .get("content")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        match role {
+            "user" => {
+                for block in blocks {
+                    if user_points.len() >= 6 {
+                        break;
+                    }
+                    let kind = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if kind == "text" {
+                        if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                let (preview, was_truncated) =
+                                    truncate_utf8_for_prompt(trimmed, 280);
+                                let line = if was_truncated {
+                                    format!("{}...", preview.trim_end())
+                                } else {
+                                    preview
+                                };
+                                user_points.push(line);
+                            }
+                        }
+                    } else if kind == "tool_result" && tool_points.len() < 8 {
+                        if let Some(text) = block.get("content").and_then(|v| v.as_str()) {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                let (preview, was_truncated) =
+                                    truncate_utf8_for_prompt(trimmed, 160);
+                                let snippet = if was_truncated {
+                                    format!("{}...", preview.trim_end())
+                                } else {
+                                    preview
+                                };
+                                tool_points.push(format!("Tool result: {}", snippet));
+                            }
+                        }
+                    }
+                }
+            }
+            "assistant" => {
+                for block in blocks {
+                    let kind = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if kind == "text" && assistant_points.len() < 6 {
+                        if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                            let trimmed = text.trim();
+                            if !trimmed.is_empty() {
+                                let (preview, was_truncated) =
+                                    truncate_utf8_for_prompt(trimmed, 280);
+                                let line = if was_truncated {
+                                    format!("{}...", preview.trim_end())
+                                } else {
+                                    preview
+                                };
+                                assistant_points.push(line);
+                            }
+                        }
+                    } else if kind == "tool_use" && tool_points.len() < 8 {
+                        let name = block
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim();
+                        if !name.is_empty() {
+                            tool_points.push(format!("Called tool `{}`", name));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    user_points.reverse();
+    assistant_points.reverse();
+    tool_points.reverse();
+
+    let mut out = String::new();
+    out.push_str("Session handoff summary\n");
+    out.push_str(
+        "- Goal: Continue the active task while preserving recent intent and constraints.\n",
+    );
+    if !user_points.is_empty() {
+        out.push_str("\nRecent user intent:\n");
+        for item in &user_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    if !assistant_points.is_empty() {
+        out.push_str("\nRecent assistant state:\n");
+        for item in &assistant_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    if !tool_points.is_empty() {
+        out.push_str("\nRecent tool activity:\n");
+        for item in &tool_points {
+            out.push_str("- ");
+            out.push_str(item);
+            out.push('\n');
+        }
+    }
+    let (trimmed, was_truncated) =
+        truncate_utf8_for_prompt(&out, AGENT_HARD_COMPACTION_SUMMARY_MAX_BYTES);
+    if was_truncated {
+        format!(
+            "{}\n\n(Compaction note: summary truncated to fit context budget.)",
+            trimmed
+        )
+    } else {
+        trimmed
+    }
+}
+
+fn soft_compact_openai_messages(messages: &mut [serde_json::Value]) -> (usize, usize) {
+    if messages.len() <= 1 {
+        return (0, 0);
+    }
+    let preserve_from = messages.len().saturating_sub(24);
+    let mut pruned_tool_results = 0usize;
+    let mut pruned_text_messages = 0usize;
+
+    for (idx, message) in messages.iter_mut().enumerate().skip(1) {
+        if idx >= preserve_from {
+            continue;
+        }
+        let role = json_role(message).unwrap_or("");
+        if role == "tool" {
+            if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+                if content.len() > 480 {
+                    if let Some(obj) = message.as_object_mut() {
+                        obj.insert(
+                            "content".to_string(),
+                            serde_json::Value::String(
+                                "[Old tool result content cleared. See tool_call_finished evidence for full output.]"
+                                    .to_string(),
+                            ),
+                        );
+                    }
+                    pruned_tool_results += 1;
+                }
+            }
+            continue;
+        }
+        if role == "assistant" {
+            if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+                if content.len() > 1_200 {
+                    let (preview, was_truncated) = truncate_utf8_for_prompt(content, 1_200);
+                    if was_truncated {
+                        if let Some(obj) = message.as_object_mut() {
+                            obj.insert(
+                                "content".to_string(),
+                                serde_json::Value::String(format!(
+                                    "{}\n\n(Older assistant content truncated during compaction.)",
+                                    preview.trim_end()
+                                )),
+                            );
+                        }
+                        pruned_text_messages += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    (pruned_tool_results, pruned_text_messages)
+}
+
+fn soft_compact_anthropic_messages(messages: &mut [serde_json::Value]) -> (usize, usize) {
+    if messages.is_empty() {
+        return (0, 0);
+    }
+    let preserve_from = messages.len().saturating_sub(24);
+    let mut pruned_tool_results = 0usize;
+    let mut pruned_text_messages = 0usize;
+
+    for (idx, message) in messages.iter_mut().enumerate() {
+        if idx >= preserve_from {
+            continue;
+        }
+        let Some(content_arr) = message.get_mut("content").and_then(|v| v.as_array_mut()) else {
+            continue;
+        };
+        for block in content_arr.iter_mut() {
+            let kind = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            if kind == "tool_result" {
+                if let Some(content) = block.get("content").and_then(|v| v.as_str()) {
+                    if content.len() > 480 {
+                        if let Some(obj) = block.as_object_mut() {
+                            obj.insert(
+                                "content".to_string(),
+                                serde_json::Value::String(
+                                    "[Old tool result content cleared. See tool_call_finished evidence for full output.]"
+                                        .to_string(),
+                                ),
+                            );
+                        }
+                        pruned_tool_results += 1;
+                    }
+                }
+            } else if kind == "text" {
+                if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                    if text.len() > 1_200 {
+                        let (preview, was_truncated) = truncate_utf8_for_prompt(text, 1_200);
+                        if was_truncated {
+                            if let Some(obj) = block.as_object_mut() {
+                                obj.insert(
+                                    "text".to_string(),
+                                    serde_json::Value::String(format!(
+                                        "{}\n\n(Older content truncated during compaction.)",
+                                        preview.trim_end()
+                                    )),
+                                );
+                            }
+                            pruned_text_messages += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    (pruned_tool_results, pruned_text_messages)
+}
+
+fn hard_compact_openai_messages(messages: &mut Vec<serde_json::Value>) -> usize {
+    if messages.len() <= 2 {
+        return 0;
+    }
+    let Some(system) = messages.first().cloned() else {
+        return 0;
+    };
+    if json_role(&system) != Some("system") {
+        return 0;
+    }
+    let Some(goal_idx) = messages.iter().rposition(|m| json_role(m) == Some("user")) else {
+        return 0;
+    };
+
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    out.push(system);
+    if goal_idx > 0 {
+        out.push(messages[goal_idx].clone());
+    }
+
+    let mut tail_start = messages
+        .len()
+        .saturating_sub(AGENT_HARD_COMPACT_TAIL_MESSAGES);
+    if tail_start < goal_idx.saturating_add(1) {
+        tail_start = goal_idx.saturating_add(1);
+    }
+    while tail_start < messages.len() && json_role(&messages[tail_start]) == Some("tool") {
+        tail_start += 1;
+    }
+    if tail_start < messages.len() {
+        out.extend(messages[tail_start..].iter().cloned());
+    }
+
+    let removed = messages.len().saturating_sub(out.len());
+    *messages = out;
+    removed
+}
+
+fn hard_compact_anthropic_messages(messages: &mut Vec<serde_json::Value>) -> usize {
+    if messages.len() <= 1 {
+        return 0;
+    }
+    let Some(goal_idx) = messages.iter().rposition(|m| {
+        json_role(m) == Some("user") && !is_anthropic_tool_result_only_user_message(m)
+    }) else {
+        return 0;
+    };
+
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    out.push(messages[goal_idx].clone());
+
+    let mut tail_start = messages
+        .len()
+        .saturating_sub(AGENT_HARD_COMPACT_TAIL_MESSAGES);
+    if tail_start < goal_idx.saturating_add(1) {
+        tail_start = goal_idx.saturating_add(1);
+    }
+    if tail_start < messages.len()
+        && is_anthropic_tool_result_only_user_message(&messages[tail_start])
+    {
+        if tail_start > goal_idx.saturating_add(1) {
+            tail_start -= 1;
+        } else {
+            tail_start += 1;
+        }
+    }
+    if tail_start < messages.len() {
+        out.extend(messages[tail_start..].iter().cloned());
+    }
+
+    let removed = messages.len().saturating_sub(out.len());
+    *messages = out;
+    removed
+}
+
+#[cfg(test)]
+mod compaction_tests {
+    use super::*;
+    use serde_json::json;
+    use std::fs;
+    use uuid::Uuid;
+
+    #[test]
+    fn soft_compact_openai_prunes_old_tool_and_long_assistant() {
+        let long_tool = "x".repeat(700);
+        let long_assistant = "y".repeat(1_800);
+        let recent_tool = "z".repeat(700);
+        let mut messages: Vec<serde_json::Value> = vec![json!({
+            "role": "system",
+            "content": "system"
+        })];
+        messages.push(json!({ "role": "tool", "content": long_tool }));
+        messages.push(json!({ "role": "assistant", "content": long_assistant }));
+
+        for i in 0..27 {
+            if i == 5 {
+                messages.push(json!({ "role": "tool", "content": recent_tool }));
+            } else {
+                messages.push(json!({ "role": "assistant", "content": format!("recent-{i}") }));
+            }
+        }
+
+        let (pruned_tool_results, pruned_text_messages) =
+            soft_compact_openai_messages(messages.as_mut_slice());
+
+        assert!(pruned_tool_results >= 1);
+        assert!(pruned_text_messages >= 1);
+        assert_eq!(
+            messages[1].get("content").and_then(|v| v.as_str()),
+            Some(
+                "[Old tool result content cleared. See tool_call_finished evidence for full output.]"
+            )
+        );
+        assert!(messages[2]
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("(Older assistant content truncated during compaction.)"));
+        assert_eq!(
+            messages[8].get("content").and_then(|v| v.as_str()),
+            Some("z".repeat(700).as_str())
+        );
+    }
+
+    #[test]
+    fn hard_compact_openai_preserves_system_goal_and_tail() {
+        let mut messages: Vec<serde_json::Value> = vec![json!({
+            "role": "system",
+            "content": "system"
+        })];
+        messages.push(json!({ "role": "user", "content": "older goal" }));
+        messages.push(json!({ "role": "assistant", "content": "older assistant" }));
+        messages.push(json!({ "role": "user", "content": "latest goal" }));
+        for i in 0..22 {
+            let role = if i % 3 == 0 { "assistant" } else { "tool" };
+            messages.push(json!({
+                "role": role,
+                "content": format!("tail-{i}")
+            }));
+        }
+
+        let removed = hard_compact_openai_messages(&mut messages);
+        assert!(removed > 0);
+        assert_eq!(json_role(&messages[0]), Some("system"));
+        assert_eq!(json_role(&messages[1]), Some("user"));
+        assert_eq!(
+            messages[1].get("content").and_then(|v| v.as_str()),
+            Some("latest goal")
+        );
+        assert!(messages.len() <= AGENT_HARD_COMPACT_TAIL_MESSAGES + 2);
+    }
+
+    #[test]
+    fn handoff_summary_event_roundtrips_latest_summary() {
+        let temp_root = std::env::temp_dir().join(format!("arx-handoff-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&temp_root).expect("create temp dir");
+        let db_path = temp_root.join("arx.db");
+        let state = db::init_db_at(&db_path, "test-key").expect("init db");
+        let conn = open_conn(&state.db_path, &state.key).expect("open conn");
+        let thread =
+            create_thread(&conn, "test", ENGINE_MESSAGES_AGENT, None).expect("create thread");
+
+        let first_id = append_handoff_summary_event(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "run-1",
+            "summary one",
+            "token_budget",
+            100,
+            80,
+        );
+        assert!(first_id.is_some());
+        let second_id = append_handoff_summary_event(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "run-2",
+            "summary two",
+            "token_budget",
+            120,
+            70,
+        );
+        assert!(second_id.is_some());
+
+        let loaded = load_latest_handoff_summary(&conn, &thread.id);
+        assert_eq!(loaded.as_deref(), Some("summary two"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
 }
 
 fn trim_openai_tool_loop_messages(messages: &mut Vec<serde_json::Value>) {
@@ -3331,6 +4291,15 @@ struct SessionIdPayload {
     session_id: String,
 }
 
+fn emit_tool_calls_updated(window: &tauri::Window, session_id: &str) {
+    let _ = window.emit(
+        "tool-calls-updated",
+        SessionIdPayload {
+            session_id: session_id.to_string(),
+        },
+    );
+}
+
 #[derive(Clone, Serialize)]
 struct InferenceFallbackPayload {
     session_id: String,
@@ -3573,6 +4542,7 @@ async fn send_turn_messages_agent(
     context_community_id: Option<String>,
 ) -> Result<SendTurnResult, String> {
     let run_id = uuid::Uuid::new_v4().to_string();
+    let run_started_at = Instant::now();
     let mut final_inference_source: Option<String> = None;
     let context_community_id = context_community_id
         .as_deref()
@@ -3742,11 +4712,16 @@ async fn send_turn_messages_agent(
             tool_calls: Vec<PartialToolCall>,
         }
 
-        let system_prompt = atom_system_prompt.to_string();
+        let base_system_prompt = atom_system_prompt.to_string();
+        let mut active_handoff_summary = load_latest_handoff_summary(&conn, thread_id);
+        let initial_system_prompt = compose_system_prompt_with_handoff(
+            &base_system_prompt,
+            active_handoff_summary.as_deref(),
+        );
 
         // Base conversation: system in messages, then last ~20 user/assistant text messages.
         let mut messages: Vec<serde_json::Value> = Vec::new();
-        messages.push(serde_json::json!({ "role": "system", "content": system_prompt.clone() }));
+        messages.push(serde_json::json!({ "role": "system", "content": initial_system_prompt }));
         for (role, value) in
             load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref())
         {
@@ -3819,6 +4794,11 @@ async fn send_turn_messages_agent(
         let mut call_seq: u64 = 0;
         let mut first_engine_input_event_id: Option<String> = None;
         let mut first_engine_input_seq: Option<i64> = None;
+        let mut tool_rounds: u32 = 0;
+        let mut last_tool_call_key: Option<String> = None;
+        let mut identical_tool_call_streak: u32 = 0;
+        let mut recent_tool_call_keys: VecDeque<String> = VecDeque::new();
+        let mut compactions_this_run: u32 = 0;
 
         let content = loop {
             if *cancel_rx.borrow() {
@@ -3831,6 +4811,183 @@ async fn send_turn_messages_agent(
                     first_engine_input_event_id.clone(),
                     first_engine_input_seq,
                 ));
+            }
+            if run_started_at.elapsed().as_millis() > AGENT_MAX_RUN_WALL_MS {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: run exceeded wall-clock safety budget; review and continue in a new turn.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    DEFAULT_MAX_TOKENS,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_run_wall_timeout"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: first_engine_input_event_id.clone(),
+                    engine_input_seq: first_engine_input_seq,
+                    run_id: Some(run_id),
+                });
+            }
+
+            let mut system_prompt = compose_system_prompt_with_handoff(
+                &base_system_prompt,
+                active_handoff_summary.as_deref(),
+            );
+            if let Some(first) = messages.first_mut() {
+                if json_role(first) == Some("system") {
+                    if let Some(obj) = first.as_object_mut() {
+                        obj.insert(
+                            "content".to_string(),
+                            serde_json::Value::String(system_prompt.clone()),
+                        );
+                    }
+                }
+            }
+            let mut estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+            if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TOKEN_LIMIT {
+                if compactions_this_run >= AGENT_MAX_COMPACTIONS_PER_RUN {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "Engine paused: context compaction reached safety limit; start a new thread or narrow scope.",
+                        selected_model_id,
+                        &run_id,
+                        &evidence_event_ids,
+                        provider_id,
+                        provider_model_ref,
+                        final_inference_source.as_deref().unwrap_or("system"),
+                        DEFAULT_MAX_TOKENS,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("loop_guard_compaction_limit"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: first_engine_input_event_id.clone(),
+                        engine_input_seq: first_engine_input_seq,
+                        run_id: Some(run_id),
+                    });
+                }
+
+                let before_estimated_tokens = estimated_prompt_tokens;
+                let (soft_pruned_tool_results, soft_pruned_text_messages) =
+                    soft_compact_openai_messages(messages.as_mut_slice());
+                system_prompt = compose_system_prompt_with_handoff(
+                    &base_system_prompt,
+                    active_handoff_summary.as_deref(),
+                );
+                if let Some(first) = messages.first_mut() {
+                    if json_role(first) == Some("system") {
+                        if let Some(obj) = first.as_object_mut() {
+                            obj.insert(
+                                "content".to_string(),
+                                serde_json::Value::String(system_prompt.clone()),
+                            );
+                        }
+                    }
+                }
+                estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+
+                let mut mode = "soft";
+                let mut removed_messages = 0usize;
+                let mut summary_event_id: Option<String> = None;
+                let mut generated_summary: Option<String> = None;
+
+                if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TARGET_TOKENS
+                    || (soft_pruned_tool_results == 0 && soft_pruned_text_messages == 0)
+                {
+                    let summary = build_handoff_summary_from_openai_messages(&messages);
+                    if !summary.trim().is_empty() {
+                        generated_summary = Some(summary.clone());
+                        active_handoff_summary = Some(summary.clone());
+                    }
+                    removed_messages = hard_compact_openai_messages(&mut messages);
+                    system_prompt = compose_system_prompt_with_handoff(
+                        &base_system_prompt,
+                        active_handoff_summary.as_deref(),
+                    );
+                    if let Some(first) = messages.first_mut() {
+                        if json_role(first) == Some("system") {
+                            if let Some(obj) = first.as_object_mut() {
+                                obj.insert(
+                                    "content".to_string(),
+                                    serde_json::Value::String(system_prompt.clone()),
+                                );
+                            }
+                        }
+                    }
+                    estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+                    if let Some(summary) = generated_summary.as_deref() {
+                        summary_event_id = append_handoff_summary_event(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            &run_id,
+                            summary,
+                            "token_budget",
+                            before_estimated_tokens,
+                            estimated_prompt_tokens,
+                        );
+                    }
+                    mode = "hard";
+                }
+
+                compactions_this_run = compactions_this_run.saturating_add(1);
+                append_compaction_metadata_event(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    mode,
+                    "token_budget",
+                    before_estimated_tokens,
+                    estimated_prompt_tokens,
+                    soft_pruned_tool_results,
+                    soft_pruned_text_messages,
+                    removed_messages,
+                    summary_event_id.as_deref(),
+                );
+
+                if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TOKEN_LIMIT {
+                    continue;
+                }
             }
 
             call_seq += 1;
@@ -5208,6 +6365,45 @@ async fn send_turn_messages_agent(
             if tool_calls.is_empty() {
                 break parsed_response.text.trim().to_string();
             }
+            tool_rounds = tool_rounds.saturating_add(1);
+            if tool_rounds > AGENT_MAX_TOOL_ROUNDS_PER_RUN {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: tool loop exceeded safety round limit; review the plan before continuing.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    request_max_tokens,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_tool_round_limit"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: Some(engine_input_event.id),
+                    engine_input_seq: Some(engine_input_event.seq),
+                    run_id: Some(run_id),
+                });
+            }
 
             for tc in &mut tool_calls {
                 if tc.id.trim().is_empty() {
@@ -5247,6 +6443,135 @@ async fn send_turn_messages_agent(
                 }
                 if tool_use_id.trim().is_empty() {
                     tool_use_id = uuid::Uuid::new_v4().to_string();
+                }
+                let loop_tool_key = compute_tool_call_key(
+                    normalize_agent_tool_name(&raw_tool_name).as_str(),
+                    &parsed_args,
+                    &workspace_scope_id,
+                );
+                if last_tool_call_key
+                    .as_deref()
+                    .map(|prev| prev == loop_tool_key.as_str())
+                    .unwrap_or(false)
+                {
+                    identical_tool_call_streak = identical_tool_call_streak.saturating_add(1);
+                } else {
+                    identical_tool_call_streak = 1;
+                    last_tool_call_key = Some(loop_tool_key.clone());
+                }
+                if push_tool_key_and_detect_cycle(&mut recent_tool_call_keys, &loop_tool_key) {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "Engine paused: detected a repeating multi-step tool cycle with no progress. Review the plan and add a new constraint before retrying.",
+                        selected_model_id,
+                        &run_id,
+                        &evidence_event_ids,
+                        provider_id,
+                        provider_model_ref,
+                        final_inference_source.as_deref().unwrap_or("system"),
+                        request_max_tokens,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("loop_guard_no_progress_tool_cycle"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: Some(engine_input_event.id),
+                        engine_input_seq: Some(engine_input_event.seq),
+                        run_id: Some(run_id),
+                    });
+                }
+                if identical_tool_call_streak > AGENT_MAX_IDENTICAL_TOOL_CALL_STREAK {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "Engine paused: detected repeated identical tool calls; this may be a loop. Review and retry with clarified instructions.",
+                        selected_model_id,
+                        &run_id,
+                        &evidence_event_ids,
+                        provider_id,
+                        provider_model_ref,
+                        final_inference_source.as_deref().unwrap_or("system"),
+                        request_max_tokens,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("loop_guard_identical_tool_call_streak"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: Some(engine_input_event.id),
+                        engine_input_seq: Some(engine_input_event.seq),
+                        run_id: Some(run_id),
+                    });
+                }
+                if run_started_at.elapsed().as_millis() > AGENT_MAX_RUN_WALL_MS {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "Engine paused: run exceeded wall-clock safety budget; review and continue in a new turn.",
+                        selected_model_id,
+                        &run_id,
+                        &evidence_event_ids,
+                        provider_id,
+                        provider_model_ref,
+                        final_inference_source.as_deref().unwrap_or("system"),
+                        request_max_tokens,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("loop_guard_run_wall_timeout"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: Some(engine_input_event.id),
+                        engine_input_seq: Some(engine_input_event.seq),
+                        run_id: Some(run_id),
+                    });
                 }
 
                 let outcome = execute_agent_tool_call(
@@ -5383,7 +6708,8 @@ async fn send_turn_messages_agent(
         });
     }
 
-    let system_prompt = atom_system_prompt.to_string();
+    let base_system_prompt = atom_system_prompt.to_string();
+    let mut active_handoff_summary = load_latest_handoff_summary(&conn, thread_id);
 
     // Base conversation: system in request, then last ~20 user/assistant text messages.
     let mut messages: Vec<serde_json::Value> = Vec::new();
@@ -5436,6 +6762,11 @@ async fn send_turn_messages_agent(
     let mut call_seq: u64 = 0;
     let mut first_engine_input_event_id: Option<String> = None;
     let mut first_engine_input_seq: Option<i64> = None;
+    let mut tool_rounds: u32 = 0;
+    let mut last_tool_call_key: Option<String> = None;
+    let mut identical_tool_call_streak: u32 = 0;
+    let mut recent_tool_call_keys: VecDeque<String> = VecDeque::new();
+    let mut compactions_this_run: u32 = 0;
 
     let content = loop {
         if *cancel_rx.borrow() {
@@ -5449,6 +6780,153 @@ async fn send_turn_messages_agent(
                 first_engine_input_seq,
             ));
         }
+        if run_started_at.elapsed().as_millis() > AGENT_MAX_RUN_WALL_MS {
+            append_messages_agent_assistant_message(
+                &conn,
+                db_path,
+                thread_id,
+                "Engine paused: run exceeded wall-clock safety budget; review and continue in a new turn.",
+                selected_model_id,
+                &run_id,
+                &evidence_event_ids,
+                provider_id,
+                provider_model_ref,
+                final_inference_source.as_deref().unwrap_or("system"),
+                DEFAULT_MAX_TOKENS,
+                None,
+                context_community_id,
+            );
+            append_run_finished(
+                &conn,
+                db_path,
+                thread_id,
+                &run_id,
+                "error",
+                Some("loop_guard_run_wall_timeout"),
+            );
+            let _ = window.emit(
+                "openrouter-turn-finished",
+                SessionIdPayload {
+                    session_id: thread_id.to_string(),
+                },
+            );
+            return Ok(SendTurnResult {
+                thread_id: thread_id.to_string(),
+                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                engine_input_event_id: first_engine_input_event_id.clone(),
+                engine_input_seq: first_engine_input_seq,
+                run_id: Some(run_id),
+            });
+        }
+
+        let mut system_prompt = compose_system_prompt_with_handoff(
+            &base_system_prompt,
+            active_handoff_summary.as_deref(),
+        );
+        let mut estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+        if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TOKEN_LIMIT {
+            if compactions_this_run >= AGENT_MAX_COMPACTIONS_PER_RUN {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: context compaction reached safety limit; start a new thread or narrow scope.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    DEFAULT_MAX_TOKENS,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_compaction_limit"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: first_engine_input_event_id.clone(),
+                    engine_input_seq: first_engine_input_seq,
+                    run_id: Some(run_id),
+                });
+            }
+
+            let before_estimated_tokens = estimated_prompt_tokens;
+            let (soft_pruned_tool_results, soft_pruned_text_messages) =
+                soft_compact_anthropic_messages(messages.as_mut_slice());
+            system_prompt = compose_system_prompt_with_handoff(
+                &base_system_prompt,
+                active_handoff_summary.as_deref(),
+            );
+            estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+
+            let mut mode = "soft";
+            let mut removed_messages = 0usize;
+            let mut summary_event_id: Option<String> = None;
+            let mut generated_summary: Option<String> = None;
+
+            if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TARGET_TOKENS
+                || (soft_pruned_tool_results == 0 && soft_pruned_text_messages == 0)
+            {
+                let summary = build_handoff_summary_from_anthropic_messages(&messages);
+                if !summary.trim().is_empty() {
+                    generated_summary = Some(summary.clone());
+                    active_handoff_summary = Some(summary);
+                }
+                removed_messages = hard_compact_anthropic_messages(&mut messages);
+                system_prompt = compose_system_prompt_with_handoff(
+                    &base_system_prompt,
+                    active_handoff_summary.as_deref(),
+                );
+                estimated_prompt_tokens = estimate_prompt_tokens(&system_prompt, &messages);
+                if let Some(summary) = generated_summary.as_deref() {
+                    summary_event_id = append_handoff_summary_event(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        summary,
+                        "token_budget",
+                        before_estimated_tokens,
+                        estimated_prompt_tokens,
+                    );
+                }
+                mode = "hard";
+            }
+
+            compactions_this_run = compactions_this_run.saturating_add(1);
+            append_compaction_metadata_event(
+                &conn,
+                db_path,
+                thread_id,
+                &run_id,
+                mode,
+                "token_budget",
+                before_estimated_tokens,
+                estimated_prompt_tokens,
+                soft_pruned_tool_results,
+                soft_pruned_text_messages,
+                removed_messages,
+                summary_event_id.as_deref(),
+            );
+
+            if estimated_prompt_tokens > AGENT_AUTO_COMPACT_TOKEN_LIMIT {
+                continue;
+            }
+        }
 
         call_seq += 1;
         let mut request_max_tokens = DEFAULT_MAX_TOKENS;
@@ -5460,7 +6938,7 @@ async fn send_turn_messages_agent(
               "model": provider_model_id.as_str(),
               "max_tokens": request_max_tokens,
               "stream": true,
-              "system": system_prompt,
+              "system": system_prompt.clone(),
               "messages": messages,
               "tools": tools_schema
             });
@@ -6384,6 +7862,135 @@ async fn send_turn_messages_agent(
                 .get("input")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null);
+            let loop_tool_key = compute_tool_call_key(
+                normalize_agent_tool_name(&raw_tool_name).as_str(),
+                &tool_args,
+                &workspace_scope_id,
+            );
+            if last_tool_call_key
+                .as_deref()
+                .map(|prev| prev == loop_tool_key.as_str())
+                .unwrap_or(false)
+            {
+                identical_tool_call_streak = identical_tool_call_streak.saturating_add(1);
+            } else {
+                identical_tool_call_streak = 1;
+                last_tool_call_key = Some(loop_tool_key.clone());
+            }
+            if push_tool_key_and_detect_cycle(&mut recent_tool_call_keys, &loop_tool_key) {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: detected a repeating multi-step tool cycle with no progress. Review the plan and add a new constraint before retrying.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    request_max_tokens,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_no_progress_tool_cycle"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: first_engine_input_event_id.clone(),
+                    engine_input_seq: first_engine_input_seq,
+                    run_id: Some(run_id),
+                });
+            }
+            if identical_tool_call_streak > AGENT_MAX_IDENTICAL_TOOL_CALL_STREAK {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: detected repeated identical tool calls; this may be a loop. Review and retry with clarified instructions.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    request_max_tokens,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_identical_tool_call_streak"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: first_engine_input_event_id.clone(),
+                    engine_input_seq: first_engine_input_seq,
+                    run_id: Some(run_id),
+                });
+            }
+            if run_started_at.elapsed().as_millis() > AGENT_MAX_RUN_WALL_MS {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Engine paused: run exceeded wall-clock safety budget; review and continue in a new turn.",
+                    selected_model_id,
+                    &run_id,
+                    &evidence_event_ids,
+                    provider_id,
+                    provider_model_ref,
+                    final_inference_source.as_deref().unwrap_or("system"),
+                    request_max_tokens,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("loop_guard_run_wall_timeout"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: first_engine_input_event_id.clone(),
+                    engine_input_seq: first_engine_input_seq,
+                    run_id: Some(run_id),
+                });
+            }
             if tool_use_id.is_empty() || raw_tool_name.trim().is_empty() {
                 tool_results.push(serde_json::json!({
                   "type": "tool_result",
@@ -6442,6 +8049,45 @@ async fn send_turn_messages_agent(
 
         if !saw_tool_use {
             break text_out.trim().to_string();
+        }
+        tool_rounds = tool_rounds.saturating_add(1);
+        if tool_rounds > AGENT_MAX_TOOL_ROUNDS_PER_RUN {
+            append_messages_agent_assistant_message(
+                &conn,
+                db_path,
+                thread_id,
+                "Engine paused: tool loop exceeded safety round limit; review the plan before continuing.",
+                selected_model_id,
+                &run_id,
+                &evidence_event_ids,
+                provider_id,
+                provider_model_ref,
+                final_inference_source.as_deref().unwrap_or("system"),
+                request_max_tokens,
+                None,
+                context_community_id,
+            );
+            append_run_finished(
+                &conn,
+                db_path,
+                thread_id,
+                &run_id,
+                "error",
+                Some("loop_guard_tool_round_limit"),
+            );
+            let _ = window.emit(
+                "openrouter-turn-finished",
+                SessionIdPayload {
+                    session_id: thread_id.to_string(),
+                },
+            );
+            return Ok(SendTurnResult {
+                thread_id: thread_id.to_string(),
+                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                engine_input_event_id: first_engine_input_event_id.clone(),
+                engine_input_seq: first_engine_input_seq,
+                run_id: Some(run_id),
+            });
         }
 
         messages.push(serde_json::json!({ "role": "assistant", "content": content_blocks }));
@@ -8670,9 +10316,9 @@ fn mix_frame_i16_to_i16(frame: &[i16]) -> i16 {
 }
 
 fn mix_frame_u16_to_i16(frame: &[u16]) -> i16 {
-  if frame.is_empty() {
-    return 0;
-  }
+    if frame.is_empty() {
+        return 0;
+    }
     let mut sum = 0i64;
     for sample in frame {
         sum += *sample as i64 - 32768;
@@ -8680,43 +10326,45 @@ fn mix_frame_u16_to_i16(frame: &[u16]) -> i16 {
     let avg = (sum as f64 / frame.len() as f64)
         .round()
         .clamp(i16::MIN as f64, i16::MAX as f64);
-  avg as i16
+    avg as i16
 }
 
 #[cfg(test)]
 mod native_voice_capture_tests {
-  use super::{f32_sample_to_i16, mix_frame_f32_to_i16, mix_frame_i16_to_i16, mix_frame_u16_to_i16};
+    use super::{
+        f32_sample_to_i16, mix_frame_f32_to_i16, mix_frame_i16_to_i16, mix_frame_u16_to_i16,
+    };
 
-  #[test]
-  fn f32_conversion_preserves_negative_polarity() {
-    assert!(f32_sample_to_i16(-0.5) < 0);
-    assert!(f32_sample_to_i16(0.5) > 0);
-  }
+    #[test]
+    fn f32_conversion_preserves_negative_polarity() {
+        assert!(f32_sample_to_i16(-0.5) < 0);
+        assert!(f32_sample_to_i16(0.5) > 0);
+    }
 
-  #[test]
-  fn f32_mix_down_averages_channels() {
-    // Equal-opposite stereo sample should average to (near) silence.
-    let mixed = mix_frame_f32_to_i16(&[1.0, -1.0]);
-    assert!(mixed.abs() <= 1);
-  }
+    #[test]
+    fn f32_mix_down_averages_channels() {
+        // Equal-opposite stereo sample should average to (near) silence.
+        let mixed = mix_frame_f32_to_i16(&[1.0, -1.0]);
+        assert!(mixed.abs() <= 1);
+    }
 
-  #[test]
-  fn i16_mix_down_averages_channels() {
-    let mixed = mix_frame_i16_to_i16(&[2000, -1000, 1000]);
-    assert_eq!(mixed, 667);
-  }
+    #[test]
+    fn i16_mix_down_averages_channels() {
+        let mixed = mix_frame_i16_to_i16(&[2000, -1000, 1000]);
+        assert_eq!(mixed, 667);
+    }
 
-  #[test]
-  fn u16_mix_down_centers_at_32768() {
-    assert_eq!(mix_frame_u16_to_i16(&[32768]), 0);
-    let mixed = mix_frame_u16_to_i16(&[65535, 0]);
-    assert!(mixed.abs() <= 1);
-  }
+    #[test]
+    fn u16_mix_down_centers_at_32768() {
+        assert_eq!(mix_frame_u16_to_i16(&[32768]), 0);
+        let mixed = mix_frame_u16_to_i16(&[65535, 0]);
+        assert!(mixed.abs() <= 1);
+    }
 }
 
 fn push_mono_i16_from_f32(data: &[f32], channels: usize, sink: &Arc<StdMutex<Vec<i16>>>) {
-  if channels == 0 {
-    return;
+    if channels == 0 {
+        return;
     }
     if let Ok(mut guard) = sink.lock() {
         for frame in data.chunks(channels) {

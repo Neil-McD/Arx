@@ -69,10 +69,12 @@ export type ThreadRecord = {
   engine_id: string;
   model_id: string | null;
   workspace_path: string | null;
+  workspace_fingerprint?: string | null;
   community_id: string | null;
   created_at: number;
   updated_at: number;
   last_event_at: number | null;
+  last_seq?: number;
 };
 
 export type ToolCallRecord = {
