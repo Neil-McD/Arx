@@ -30,11 +30,16 @@ export async function stripeRequest<T>(
   method: string,
   path: string,
   body?: Record<string, unknown>,
+  options?: { idempotencyKey?: string; headers?: Record<string, string> },
 ): Promise<T> {
   const { secretKey } = getStripeConfig();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${secretKey}`,
+    ...(options?.headers ?? {}),
   };
+  if (options?.idempotencyKey) {
+    headers["Idempotency-Key"] = options.idempotencyKey;
+  }
   let payload: BodyInit | undefined;
   if (body) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";

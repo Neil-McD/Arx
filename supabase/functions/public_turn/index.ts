@@ -23,6 +23,17 @@ type OpenRouterStreamChunk = {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 };
 
+type OpenRouterErrorEnvelope = {
+  error?:
+    | {
+        message?: string;
+        code?: string | number;
+      }
+    | string;
+  message?: string;
+  code?: string | number;
+};
+
 function isTruthyEnv(value: string): boolean {
   const v = (value ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes" || v === "on";
@@ -147,6 +158,60 @@ function openrouterHeaders(req: Request, apiKey: string): Record<string, string>
   };
 }
 
+function parseOpenRouterError(rawBody: string): { message: string; code: string } {
+  const raw = (rawBody ?? "").trim();
+  if (!raw) return { message: "", code: "" };
+  try {
+    const parsed = JSON.parse(raw) as OpenRouterErrorEnvelope;
+    const err = parsed?.error;
+    const nestedMessage =
+      err && typeof err === "object" && typeof err.message === "string" ? err.message.trim() : "";
+    const nestedCode =
+      err && typeof err === "object" && (typeof err.code === "string" || typeof err.code === "number")
+        ? String(err.code)
+        : "";
+    const inlineMessage = typeof err === "string" ? err.trim() : "";
+    const topMessage = typeof parsed?.message === "string" ? parsed.message.trim() : "";
+    const topCode = typeof parsed?.code === "string" || typeof parsed?.code === "number" ? String(parsed.code) : "";
+    return {
+      message: nestedMessage || topMessage || inlineMessage || raw,
+      code: nestedCode || topCode,
+    };
+  } catch {
+    return { message: raw, code: "" };
+  }
+}
+
+function isOpenRouterFreeModelPolicyError(message: string): boolean {
+  const lower = (message ?? "").toLowerCase();
+  if (!lower) return false;
+  if (lower.includes("no endpoints found matching your data policy")) return true;
+  return lower.includes("free model publication") && lower.includes("privacy");
+}
+
+function openRouterFreeModelPolicyHint(): string {
+  return "OpenRouter is connected, but privacy settings block free guest models. In OpenRouter Settings -> Privacy, enable Free model publication, or configure ARX_PUBLIC_MODEL_MAP_JSON to non-free models.";
+}
+
+function buildOpenRouterBody(params: {
+  resolvedModelId: string;
+  messages: PublicChatMessage[];
+  maxTokens: number;
+  stream: boolean;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: params.resolvedModelId,
+    messages: params.messages,
+    max_tokens: params.maxTokens,
+    stream: params.stream,
+  };
+  // Free models require permissive data policy on OpenRouter.
+  if (params.resolvedModelId.toLowerCase().includes(":free")) {
+    body.provider = { data_collection: "allow" };
+  }
+  return body;
+}
+
 Deno.serve(async (req: Request) => {
   const headers = withCors(noStoreHeaders(), req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
@@ -191,13 +256,36 @@ Deno.serve(async (req: Request) => {
 
     const openrouterUrl = "https://openrouter.ai/api/v1/chat/completions";
     if (!wantsStream) {
+      const requestBody = buildOpenRouterBody({
+        resolvedModelId,
+        messages,
+        maxTokens,
+        stream: false,
+      });
       const res = await fetch(openrouterUrl, {
         method: "POST",
         headers: openrouterHeaders(req, apiKey),
-        body: JSON.stringify({ model: resolvedModelId, messages, max_tokens: maxTokens, stream: false }),
+        body: JSON.stringify(requestBody),
       });
       const text = await res.text();
-      if (!res.ok) throw new Error(`OpenRouter error ${res.status}: ${text}`);
+      if (!res.ok) {
+        const parsed = parseOpenRouterError(text);
+        if (isOpenRouterFreeModelPolicyError(parsed.message)) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "platform_inference_misconfigured",
+              code: "platform_inference_misconfigured",
+              message: openRouterFreeModelPolicyHint(),
+              model_id: aliasModelId,
+              resolved_model_id: resolvedModelId,
+            },
+            { status: 503, headers },
+          );
+        }
+        const details = parsed.message || text;
+        throw new Error(`OpenRouter error ${res.status}: ${details}`);
+      }
       const parsed = JSON.parse(text) as any;
       const content = String(parsed?.choices?.[0]?.message?.content ?? "").trim();
       return jsonResponse(
@@ -224,6 +312,29 @@ Deno.serve(async (req: Request) => {
       async start(controller) {
         const emit = (event: string, data: unknown) => controller.enqueue(encodeSse(event, data));
         try {
+          const requestBody = buildOpenRouterBody({
+            resolvedModelId,
+            messages,
+            maxTokens,
+            stream: true,
+          });
+          const res = await fetch(openrouterUrl, {
+            method: "POST",
+            headers: openrouterHeaders(req, apiKey),
+            body: JSON.stringify(requestBody),
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            const parsed = parseOpenRouterError(body);
+            if (isOpenRouterFreeModelPolicyError(parsed.message)) {
+              throw new Error(openRouterFreeModelPolicyHint());
+            }
+            const details = parsed.message || body;
+            throw new Error(`OpenRouter error ${res.status}: ${details}`);
+          }
+          const reader = res.body?.getReader();
+          if (!reader) throw new Error("Missing model stream");
+
           emit("start", {
             ok: true,
             run_id: runId,
@@ -231,18 +342,6 @@ Deno.serve(async (req: Request) => {
             model_id: aliasModelId,
             resolved_model_id: resolvedModelId,
           });
-
-          const res = await fetch(openrouterUrl, {
-            method: "POST",
-            headers: openrouterHeaders(req, apiKey),
-            body: JSON.stringify({ model: resolvedModelId, messages, max_tokens: maxTokens, stream: true }),
-          });
-          if (!res.ok) {
-            const body = await res.text();
-            throw new Error(`OpenRouter error ${res.status}: ${body}`);
-          }
-          const reader = res.body?.getReader();
-          if (!reader) throw new Error("Missing model stream");
 
           let fullContent = "";
           await consumeSseEvents({
@@ -278,4 +377,3 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: false, error: message }, { status: 400, headers });
   }
 });
-
