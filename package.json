@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "check:arp-degrade": "bash scripts/arp_degrade_regression_check.sh"
+    "check:arp-degrade": "bash scripts/arp_degrade_regression_check.sh",
+    "check:harness-failure-matrix": "bash scripts/harness_failure_matrix_check.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

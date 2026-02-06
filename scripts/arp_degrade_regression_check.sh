@@ -37,6 +37,10 @@ if ! grep -q "Incremental sync failed; disabling cursor resume for this session.
   echo "FAIL: missing incremental sync failure warning in $APP_FILE"
   exit 1
 fi
+if ! grep -q "listEventsSince returned a non-advancing cursor" "$APP_FILE"; then
+  echo "FAIL: missing non-advancing listEventsSince cursor guard in $APP_FILE"
+  exit 1
+fi
 if ! grep -q "setRuntimeSupportsCursorResume(false);" "$APP_FILE"; then
   echo "FAIL: incremental sync catch is not disabling cursor resume in $APP_FILE"
   exit 1

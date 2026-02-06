@@ -8,7 +8,7 @@ echo "== ARP parity preflight =="
 echo "Running compile checks..."
 npm run build
 (cd src-tauri && cargo check -q)
-bash scripts/arp_degrade_regression_check.sh
+bash scripts/harness_failure_matrix_check.sh
 
 echo
 echo "== Manual parity checklist (run with VITE_ARP_CLIENT=1) =="
