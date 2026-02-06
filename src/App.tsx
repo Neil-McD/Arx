@@ -133,6 +133,7 @@ type ToolUiSpec = {
 
 type AgentMode = "build" | "plan" | "explore";
 type VoiceSurface = "workspace" | "community";
+type VoiceUiState = "idle" | "recording" | "transcribing";
 type NativeVoiceCaptureStopped = {
   audio_base64: string;
   mime_type: string;
@@ -9236,7 +9237,7 @@ function App() {
 			    return "free";
 			  }, [builderBillingStatus?.builder_tier]);
 
-			  function resolveVoiceInputIntent(surface: "workspace" | "community"): {
+				  function resolveVoiceInputIntent(surface: "workspace" | "community"): {
 			    mode:
 			      | "sign_in"
 			      | "select_community"
@@ -9247,16 +9248,16 @@ function App() {
 			      | "busy";
 			    title: string;
 			  } {
-			    if (surface === "community") {
-			      if (!supabaseSession) {
+				    if (surface === "community") {
+				      if (!supabaseSession) {
+				        return {
+				          mode: "sign_in",
+			          title: "Sign in to use voice input in community chat.",
+				    };
+				  }
+			      if (!activeCommunity) {
 			        return {
-			          mode: "sign_in",
-		          title: "Sign in to use voice input in community chat.",
-		        };
-		      }
-		      if (!activeCommunity) {
-		        return {
-		          mode: "select_community",
+			          mode: "select_community",
 		          title: "Select a community first.",
 		        };
 		      }
@@ -9293,10 +9294,37 @@ function App() {
 			          : normalizedBuilderTier === "builder"
 			            ? "Start voice input ($20 plan)."
 			            : "Start voice input.",
-			    };
-			  }
+				    };
+				  }
 
-			  function releaseVoiceCaptureResources() {
+          function resolveVoiceUiState(surface: VoiceSurface): VoiceUiState {
+            if (activeVoiceSurface !== surface) return "idle";
+            return isVoiceTranscribing ? "transcribing" : "recording";
+          }
+
+          function renderVoiceButtonVisual(state: VoiceUiState) {
+            return (
+              <>
+                <span className="ask-mic-ripple" aria-hidden="true" />
+                {state === "transcribing" ? (
+                  <span className="ask-mic-loader" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                ) : (
+                  <svg className="ask-mic-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
+                    <path d="M19 11a7 7 0 0 1-14 0" />
+                    <path d="M12 18v4" />
+                    <path d="M8 22h8" />
+                  </svg>
+                )}
+              </>
+            );
+          }
+
+				  function releaseVoiceCaptureResources() {
 			    const cleanupCapture = voiceCaptureCleanupRef.current;
 			    if (cleanupCapture) {
 			      try {
@@ -9595,7 +9623,7 @@ function App() {
 			    }
 			  }
 
-			  async function handleVoiceInputClick(surface: "workspace" | "community") {
+				  async function handleVoiceInputClick(surface: "workspace" | "community") {
 			    const intent = resolveVoiceInputIntent(surface);
 			    if (intent.mode === "sign_in") {
 			      void handleSignIn();
@@ -9613,8 +9641,13 @@ function App() {
 			      await stopVoiceCaptureAndTranscribe(surface);
 			      return;
 			    }
-			    await startVoiceCapture(surface);
-			  }
+				    await startVoiceCapture(surface);
+				  }
+
+          const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
+          const communityVoiceIntent = resolveVoiceInputIntent("community");
+          const workspaceVoiceUiState = resolveVoiceUiState("workspace");
+          const communityVoiceUiState = resolveVoiceUiState("community");
 
         const showEmptyThreadLandingSkeleton = Boolean(
           !activeThreadId &&
@@ -11092,17 +11125,22 @@ function App() {
   const [sourcesUsed, setSourcesUsed] = useState<SourcesUsedState>({ open: false });
 
 	  async function resolvePendingToolApproval(
-	    approved: boolean
+	    approved: boolean,
+      opts?: { allow_write_edit_for_session?: boolean }
 	  ) {
     const pending = pendingToolApproval;
     if (!pending) return;
 	    setIsToolApprovalSubmitting(true);
 	    try {
 	      await (USE_RUNTIME_CLIENT
-          ? runtimeClient.decideToolCall(pending.tool_call_id, { approved })
+          ? runtimeClient.decideToolCall(pending.tool_call_id, {
+              approved,
+              allow_write_edit_for_session: opts?.allow_write_edit_for_session ?? false,
+            })
           : invoke("decide_tool_call_cmd", {
               toolCallId: pending.tool_call_id,
               approved,
+              allowWriteEditForSession: opts?.allow_write_edit_for_session ?? null,
             }));
 	      setPendingToolApproval(null);
     } catch (error) {
@@ -14020,11 +14058,13 @@ function App() {
             })()}
 	            {pendingToolApproval && (() => {
 	              const formatted = formatToolApproval(pendingToolApproval.tool_name, pendingToolApproval.args_json);
+                const canApproveForSession = canEnableWriteEditSessionApproval(pendingToolApproval.tool_name);
 	              return (
 	                <div className="tool-approval-card">
                   <div className="tool-approval-header">
-                    <span className="tool-approval-icon">{formatted.icon}</span>
+                    <span className="tool-approval-badge">{formatted.badge}</span>
                     <div className="tool-approval-title">
+                      <span className="tool-approval-kicker">Permission Request</span>
                       <span className="tool-approval-name">{formatted.title}</span>
                       {formatted.subtitle && (
                         <span className="tool-approval-path">{formatted.subtitle}</span>
@@ -14038,20 +14078,38 @@ function App() {
                   )}
 	                  <div className="tool-approval-actions">
 	                    <button
-	                      className="tool-action danger"
+	                      className="tool-action tool-approval-button tool-approval-button-deny"
 	                      onClick={() => void resolvePendingToolApproval(false)}
 	                      disabled={isToolApprovalSubmitting}
 	                    >
 	                      Deny
 	                    </button>
 	                    <button
-	                      className="tool-action primary"
+	                      className="tool-action tool-approval-button tool-approval-button-once"
 	                      onClick={() => void resolvePendingToolApproval(true)}
 	                      disabled={isToolApprovalSubmitting}
 	                    >
 	                      Approve once
 	                    </button>
+                      {canApproveForSession && (
+                        <button
+                          className="tool-action tool-approval-button tool-approval-button-session"
+                          onClick={() =>
+                            void resolvePendingToolApproval(true, {
+                              allow_write_edit_for_session: true,
+                            })
+                          }
+                          disabled={isToolApprovalSubmitting}
+                        >
+                          Approve for session
+                        </button>
+                      )}
 	                  </div>
+                    {canApproveForSession && (
+                      <div className="tool-approval-note">
+                        Session approval keeps future <code>write/edit</code> actions moving without additional prompts.
+                      </div>
+                    )}
 	                </div>
 	              );
 	            })()}
@@ -14268,25 +14326,18 @@ function App() {
                 </select>
               </div>
             </div>
-	            <div className="ask-toolbar-right">
-	              <button
-	                className={
-	                  "ask-icon-btn ask-mic" +
-	                  (activeVoiceSurface === "workspace" && !isVoiceTranscribing ? " recording" : "") +
-	                  (activeVoiceSurface === "workspace" && isVoiceTranscribing ? " transcribing" : "")
-	                }
-	                type="button"
-	                onClick={() => void handleVoiceInputClick("workspace")}
-	                aria-label="Voice input"
-	                title={resolveVoiceInputIntent("workspace").title}
-	              >
-	                <svg viewBox="0 0 24 24" aria-hidden="true">
-	                  <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-	                  <path d="M19 11a7 7 0 0 1-14 0" />
-	                  <path d="M12 18v4" />
-                  <path d="M8 22h8" />
-                </svg>
-              </button>
+		            <div className="ask-toolbar-right">
+		              <button
+		                className={`ask-icon-btn ask-mic ${workspaceVoiceUiState}`}
+		                type="button"
+		                onClick={() => void handleVoiceInputClick("workspace")}
+		                aria-label={workspaceVoiceIntent.title}
+                    aria-pressed={workspaceVoiceUiState === "recording"}
+                    aria-busy={workspaceVoiceUiState === "transcribing"}
+		                title={workspaceVoiceIntent.title}
+		              >
+                    {renderVoiceButtonVisual(workspaceVoiceUiState)}
+		              </button>
               {(() => {
                 const isTurnRunning = isSending || Boolean(streamingContent);
                 return (
@@ -15016,24 +15067,17 @@ function App() {
 	                    disabled={!activeCommunity || !canPostMessagesActiveCommunity}
 	                    rows={1}
 	                  />
-	                  <button
-	                    className={
-	                      "ask-icon-btn ask-mic" +
-	                      (activeVoiceSurface === "community" && !isVoiceTranscribing ? " recording" : "") +
-	                      (activeVoiceSurface === "community" && isVoiceTranscribing ? " transcribing" : "")
-	                    }
-	                    type="button"
-	                    onClick={() => void handleVoiceInputClick("community")}
-	                    aria-label="Voice input"
-	                    title={resolveVoiceInputIntent("community").title}
-	                  >
-	                    <svg viewBox="0 0 24 24" aria-hidden="true">
-	                      <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-	                      <path d="M19 11a7 7 0 0 1-14 0" />
-	                      <path d="M12 18v4" />
-                      <path d="M8 22h8" />
-                    </svg>
-                  </button>
+		                  <button
+		                    className={`ask-icon-btn ask-mic ${communityVoiceUiState}`}
+		                    type="button"
+		                    onClick={() => void handleVoiceInputClick("community")}
+		                    aria-label={communityVoiceIntent.title}
+                        aria-pressed={communityVoiceUiState === "recording"}
+                        aria-busy={communityVoiceUiState === "transcribing"}
+		                    title={communityVoiceIntent.title}
+		                  >
+                        {renderVoiceButtonVisual(communityVoiceUiState)}
+		                  </button>
                   <button
 	                    className="chat-send ask-send-btn"
                       type="button"
@@ -17347,32 +17391,78 @@ function App() {
 export default App;
 
 // Format tool approval for inline display
+function canEnableWriteEditSessionApproval(toolName: string): boolean {
+  const normalized = toolName.trim().toLowerCase();
+  return normalized === "write" || normalized === "edit" || normalized === "write_file" || normalized === "edit_file";
+}
+
+function truncateApprovalPreview(value: string, limit = 1200): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit)}\n...`;
+}
+
 function formatToolApproval(toolName: string, argsJson: string): {
-  icon: string;
+  badge: string;
   title: string;
   subtitle: string | null;
   preview: string | null;
   previewType: "code" | "diff" | "text";
 } {
   let args: Record<string, unknown> = {};
+  let argsRawFallback: string | null = null;
   try {
-    args = JSON.parse(argsJson) as Record<string, unknown>;
+    const parsed = JSON.parse(argsJson) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      args = parsed as Record<string, unknown>;
+    } else {
+      argsRawFallback = argsJson;
+    }
   } catch {
-    // fallback to raw
+    argsRawFallback = argsJson;
   }
 
-  switch (toolName) {
+  const normalizedTool = toolName.trim().toLowerCase();
+
+  switch (normalizedTool) {
     case "write":
     case "write_file": {
-      const path = (args.path as string) || (args.file_path as string) || "file";
-      const content = (args.content as string) || "";
-      const isNew = args.expected_before_sha256 === null;
+      const writes = Array.isArray(args.writes) ? (args.writes as Array<Record<string, unknown>>) : [];
+      const primaryWrite = writes[0] ?? args;
+      const path =
+        (primaryWrite.path as string) ||
+        (primaryWrite.file_path as string) ||
+        (args.path as string) ||
+        (args.file_path as string) ||
+        "file";
+      const content = (primaryWrite.content as string) || (args.content as string) || "";
+      const isNew = primaryWrite.expected_before_sha256 === null || args.expected_before_sha256 === null;
+      const totalWrites = writes.length > 0 ? writes.length : 1;
       return {
-        icon: "✏️",
+        badge: "WRITE",
         title: isNew ? "Create File" : "Write File",
-        subtitle: path,
-        preview: content.length > 1000 ? content.slice(0, 1000) + "\n..." : content,
+        subtitle: totalWrites > 1 ? `${path} (+${totalWrites - 1} more)` : path,
+        preview: content ? truncateApprovalPreview(content) : null,
         previewType: "code",
+      };
+    }
+    case "edit":
+    case "edit_file": {
+      const path = (args.path as string) || (args.file_path as string) || "file";
+      const oldValue = typeof args.old === "string" ? args.old : "";
+      const newValue = typeof args.new === "string" ? args.new : "";
+      const allMatches = Boolean(args.all);
+      const preview = [
+        "--- before",
+        oldValue || "(empty)",
+        "+++ after",
+        newValue || "(empty)",
+      ].join("\n");
+      return {
+        badge: "EDIT",
+        title: allMatches ? "Replace in File (all matches)" : "Edit File",
+        subtitle: path,
+        preview: truncateApprovalPreview(preview),
+        previewType: "diff",
       };
     }
     case "bash":
@@ -17380,17 +17470,17 @@ function formatToolApproval(toolName: string, argsJson: string): {
       const command = (args.cmd as string) || (args.command as string) || "";
       const cwd = (args.cwd as string) || ".";
       return {
-        icon: "⚡",
+        badge: "SHELL",
         title: "Run Command",
         subtitle: cwd !== "." ? `in ${cwd}` : null,
-        preview: command,
+        preview: command ? truncateApprovalPreview(command, 900) : null,
         previewType: "code",
       };
     }
     case "read_file": {
       const path = (args.path as string) || (args.file_path as string) || "file";
       return {
-        icon: "📄",
+        badge: "READ",
         title: "Read File",
         subtitle: path,
         preview: null,
@@ -17401,7 +17491,7 @@ function formatToolApproval(toolName: string, argsJson: string): {
     case "glob": {
       const path = (args.path as string) || (args.pat as string) || (args.pattern as string) || ".";
       return {
-        icon: "📂",
+        badge: "LIST",
         title: toolName === "glob" ? "Search Files" : "List Directory",
         subtitle: path,
         preview: null,
@@ -17412,7 +17502,7 @@ function formatToolApproval(toolName: string, argsJson: string): {
       const query = (args.pat as string) || (args.query as string) || (args.pattern as string) || "";
       const path = (args.path as string) || ".";
       return {
-        icon: "🔍",
+        badge: "SEARCH",
         title: "Search Content",
         subtitle: `"${query}" in ${path}`,
         preview: null,
@@ -17421,10 +17511,10 @@ function formatToolApproval(toolName: string, argsJson: string): {
     }
     default:
       return {
-        icon: "🔧",
-        title: toolName,
+        badge: "TOOL",
+        title: normalizedTool || "Tool Call",
         subtitle: null,
-        preview: JSON.stringify(args, null, 2),
+        preview: argsRawFallback ?? JSON.stringify(args, null, 2),
         previewType: "code",
       };
   }
