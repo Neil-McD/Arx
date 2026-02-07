@@ -8359,21 +8359,19 @@ async fn send_turn_messages_agent(
     })
 }
 
-#[tauri::command]
-async fn send_turn_cmd(
-    window: tauri::Window,
-    state: tauri::State<'_, DbState>,
-    thread_id: String,
-    _cwd: String,
-    input: String,
+async fn send_turn_cmd_core(
+    window: &tauri::Window,
+    db_path: &std::path::Path,
+    db_key: &str,
+    thread_id: &str,
+    input: &str,
     supabase_url: Option<String>,
     supabase_anon_key: Option<String>,
     supabase_access_token: Option<String>,
+    cancel_rx: watch::Receiver<bool>,
 ) -> Result<SendTurnResult, String> {
-    let _thread_lock = lock_thread_run(&thread_id).await;
-    let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let mut thread = get_thread_by_id(&conn, &thread_id)
+    let conn = open_conn(db_path, db_key).map_err(|e| e.to_string())?;
+    let mut thread = get_thread_by_id(&conn, thread_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "thread not found".to_string())?;
 
@@ -8382,13 +8380,8 @@ async fn send_turn_cmd(
         || thread.engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
     {
         let model_id = thread.model_id.clone();
-        set_thread_engine_model(
-            &conn,
-            &thread_id,
-            ENGINE_MESSAGES_AGENT,
-            model_id.as_deref(),
-        )
-        .map_err(|e| e.to_string())?;
+        set_thread_engine_model(&conn, thread_id, ENGINE_MESSAGES_AGENT, model_id.as_deref())
+            .map_err(|e| e.to_string())?;
         thread.engine_id = ENGINE_MESSAGES_AGENT.to_string();
     }
 
@@ -8496,8 +8489,8 @@ async fn send_turn_cmd(
     });
     let _ = db::append_event(
         &conn,
-        &state.db_path,
-        &thread_id,
+        db_path,
+        thread_id,
         "memory_retrieval",
         Some("personal_memory"),
         Some(&retrieval_payload.to_string()),
@@ -8513,25 +8506,52 @@ async fn send_turn_cmd(
 
     if thread.engine_id == ENGINE_MESSAGES_AGENT {
         return send_turn_messages_agent(
-            &window,
+            window,
             conn,
-            &state.db_path,
-            &thread_id,
+            db_path,
+            thread_id,
             workspace,
             run_mode,
             selected_model_id,
-            &input,
+            input,
             &atom_system_prompt,
             &used_personal_memory,
             None,
             platform_proxy,
-            cancel_rx.clone(),
+            cancel_rx,
             thread.community_id.clone(),
         )
         .await;
     }
 
-    return Err(format!("Unsupported engine_id: {}", thread.engine_id));
+    Err(format!("Unsupported engine_id: {}", thread.engine_id))
+}
+
+#[tauri::command]
+async fn send_turn_cmd(
+    window: tauri::Window,
+    state: tauri::State<'_, DbState>,
+    thread_id: String,
+    _cwd: String,
+    input: String,
+    supabase_url: Option<String>,
+    supabase_anon_key: Option<String>,
+    supabase_access_token: Option<String>,
+) -> Result<SendTurnResult, String> {
+    let _thread_lock = lock_thread_run(&thread_id).await;
+    let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
+    send_turn_cmd_core(
+        &window,
+        &state.db_path,
+        &state.key,
+        &thread_id,
+        &input,
+        supabase_url,
+        supabase_anon_key,
+        supabase_access_token,
+        cancel_rx,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -8539,7 +8559,7 @@ async fn submit_turn_cmd(
     window: tauri::Window,
     state: tauri::State<'_, DbState>,
     thread_id: String,
-    cwd: String,
+    _cwd: String,
     input: String,
     user_content_json: String,
     supabase_url: Option<String>,
@@ -8548,21 +8568,24 @@ async fn submit_turn_cmd(
 ) -> Result<SendTurnResult, String> {
     let db_path = state.db_path.clone();
     let db_key = state.key.clone();
+    let _thread_lock = lock_thread_run(&thread_id).await;
+    let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
 
     {
         let conn = open_conn(&db_path, &db_key).map_err(|e| e.to_string())?;
         add_message(&conn, &thread_id, "user", &user_content_json).map_err(|e| e.to_string())?;
     }
 
-    match send_turn_cmd(
-        window.clone(),
-        state,
-        thread_id.clone(),
-        cwd,
-        input,
+    match send_turn_cmd_core(
+        &window,
+        &db_path,
+        &db_key,
+        &thread_id,
+        &input,
         supabase_url,
         supabase_anon_key,
         supabase_access_token,
+        cancel_rx,
     )
     .await
     {
