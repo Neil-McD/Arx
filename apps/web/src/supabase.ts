@@ -152,21 +152,41 @@ export async function fetchSupabaseUser(accessToken: string): Promise<SupabaseUs
   return (await response.json()) as SupabaseUser;
 }
 
-export function parseOAuthHash(): { session: SupabaseSession; rawHash: string } | null {
-  if (!window.location.hash) return null;
+export function parseOAuthHash():
+  | { session: SupabaseSession; rawHash: string }
+  | { error: string; rawHash: string }
+  | null {
   const rawHash = window.location.hash;
   const hash = new URLSearchParams(rawHash.replace(/^#/, ""));
-  const accessToken = hash.get("access_token");
-  const refreshToken = hash.get("refresh_token");
-  const expiresIn = hash.get("expires_in");
-  if (!accessToken || !refreshToken || !expiresIn) return null;
+  const query = new URLSearchParams(window.location.search);
 
-  const session: SupabaseSession = {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_at: Math.floor(Date.now() / 1000) + Number(expiresIn),
-    user: { id: "" }
-  };
-  return { session, rawHash };
+  const accessToken = hash.get("access_token") ?? query.get("access_token");
+  const refreshToken = hash.get("refresh_token") ?? query.get("refresh_token");
+  const expiresIn = hash.get("expires_in") ?? query.get("expires_in");
+  if (accessToken && refreshToken && expiresIn) {
+    const session: SupabaseSession = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Math.floor(Date.now() / 1000) + Number(expiresIn),
+      user: { id: "" }
+    };
+    return { session, rawHash };
+  }
+
+  const errorCode = hash.get("error_code") ?? query.get("error_code");
+  const errorDescription = hash.get("error_description") ?? query.get("error_description");
+  const error = hash.get("error") ?? query.get("error");
+  if (errorCode || errorDescription || error) {
+    const message = errorDescription || errorCode || error || "Unknown OAuth error";
+    return { error: message, rawHash };
+  }
+
+  if (query.get("code")) {
+    return {
+      error: "OAuth returned an auth code instead of session tokens. Check Supabase OAuth flow settings.",
+      rawHash
+    };
+  }
+
+  return null;
 }
-

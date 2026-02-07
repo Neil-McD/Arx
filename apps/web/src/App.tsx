@@ -209,6 +209,113 @@ type GuestThreadStorageV1 = {
   messages: GuestStoredMessageV1[];
 };
 
+type LocalProfileDraft = {
+  name: string;
+  username: string;
+  bio: string;
+  avatarUrl: string | null;
+};
+
+const LEGACY_PROFILE_STORAGE_KEYS = {
+  name: "arx_profile_name",
+  displayName: "arx_profile_display_name",
+  username: "arx_profile_username",
+  bio: "arx_profile_bio",
+  avatar: "arx_profile_avatar",
+} as const;
+
+function profileStorageKeysForUser(userId: string | null | undefined): {
+  name: string;
+  username: string;
+  bio: string;
+  avatar: string;
+} {
+  const raw = (userId ?? "").trim();
+  const suffix = raw ? `user_${raw}_` : "guest_";
+  return {
+    name: `arx_profile_${suffix}name`,
+    username: `arx_profile_${suffix}username`,
+    bio: `arx_profile_${suffix}bio`,
+    avatar: `arx_profile_${suffix}avatar`,
+  };
+}
+
+function readLegacyProfileDraft(): LocalProfileDraft {
+  try {
+    const name =
+      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.name) ??
+      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.displayName) ??
+      "";
+    const username = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.username) ?? "";
+    const bio = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.bio) ?? "";
+    const avatarRaw = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
+    return { name, username, bio, avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null };
+  } catch {
+    return { name: "", username: "", bio: "", avatarUrl: null };
+  }
+}
+
+function hasProfileDraftValue(draft: LocalProfileDraft): boolean {
+  return Boolean(draft.name.trim() || draft.username.trim() || draft.bio.trim() || (draft.avatarUrl ?? "").trim());
+}
+
+function readProfileDraftForUser(
+  userId: string | null | undefined,
+  opts?: { allowLegacyFallback?: boolean },
+): LocalProfileDraft {
+  const keys = profileStorageKeysForUser(userId);
+  try {
+    const name = localStorage.getItem(keys.name) ?? "";
+    const username = localStorage.getItem(keys.username) ?? "";
+    const bio = localStorage.getItem(keys.bio) ?? "";
+    const avatarRaw = localStorage.getItem(keys.avatar);
+    const scopedDraft: LocalProfileDraft = {
+      name,
+      username,
+      bio,
+      avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null,
+    };
+    if (!hasProfileDraftValue(scopedDraft) && opts?.allowLegacyFallback) {
+      return readLegacyProfileDraft();
+    }
+    return scopedDraft;
+  } catch {
+    return opts?.allowLegacyFallback ? readLegacyProfileDraft() : { name: "", username: "", bio: "", avatarUrl: null };
+  }
+}
+
+function writeProfileDraftForUser(userId: string | null | undefined, draft: LocalProfileDraft): void {
+  const keys = profileStorageKeysForUser(userId);
+  const name = draft.name.trim();
+  const username = draft.username.trim();
+  const bio = draft.bio.trim();
+  const avatar = (draft.avatarUrl ?? "").trim();
+  try {
+    if (name) localStorage.setItem(keys.name, name);
+    else localStorage.removeItem(keys.name);
+    if (username) localStorage.setItem(keys.username, username);
+    else localStorage.removeItem(keys.username);
+    if (bio) localStorage.setItem(keys.bio, bio);
+    else localStorage.removeItem(keys.bio);
+    if (avatar) localStorage.setItem(keys.avatar, avatar);
+    else localStorage.removeItem(keys.avatar);
+  } catch {
+    // ignore
+  }
+}
+
+function clearLegacyProfileDraftStorage(): void {
+  try {
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.name);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.displayName);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.username);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.bio);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
+  } catch {
+    // ignore
+  }
+}
+
 function loadGuestModelId(): string {
   try {
     const raw = (localStorage.getItem(GUEST_MODEL_STORAGE_KEY) ?? "").trim();
@@ -577,6 +684,7 @@ type MyCommunityJoinRequest = {
 };
 
 type SettingsPage = "account" | "affiliates" | "models" | "execution" | "memory" | "appearance";
+type SettingsGroup = "account" | "agent" | "appearance";
 
 type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
 
@@ -2928,18 +3036,18 @@ function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   return null;
 }
 
-function settingsPageLabel(page: SettingsPage): string {
-  switch (page) {
+function settingsGroupForPage(page: SettingsPage): SettingsGroup {
+  if (page === "appearance") return "appearance";
+  if (page === "account" || page === "affiliates") return "account";
+  return "agent";
+}
+
+function settingsGroupLabel(group: SettingsGroup): string {
+  switch (group) {
     case "account":
       return "Account";
-    case "affiliates":
-      return "Affiliates";
-    case "models":
-      return "Models";
-    case "execution":
-      return "Execution";
-    case "memory":
-      return "Memory";
+    case "agent":
+      return "Agent";
     case "appearance":
       return "Appearance";
   }
@@ -2951,6 +3059,11 @@ export default function App() {
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
 
   const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(() => loadPersistedSupabaseSession());
+  const profileStorageUserId = (supabaseSession?.user?.id ?? "").trim() || null;
+  const initialProfileDraft = useMemo(
+    () => readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId }),
+    [profileStorageUserId],
+  );
   const [authError, setAuthError] = useState<string | null>(null);
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -2967,6 +3080,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "models");
+  const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
@@ -2979,34 +3093,10 @@ export default function App() {
       return "dark";
     }
   });
-  const [profileName, setProfileName] = useState(() => {
-    try {
-      return localStorage.getItem("arx_profile_name") ?? localStorage.getItem("arx_profile_display_name") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [profileUsername, setProfileUsername] = useState(() => {
-    try {
-      return localStorage.getItem("arx_profile_username") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [profileBio, setProfileBio] = useState(() => {
-    try {
-      return localStorage.getItem("arx_profile_bio") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem("arx_profile_avatar");
-    } catch {
-      return null;
-    }
-  });
+  const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
+  const [profileUsername, setProfileUsername] = useState(() => initialProfileDraft.username);
+  const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => initialProfileDraft.avatarUrl);
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
@@ -3809,55 +3899,30 @@ export default function App() {
   }, [appTheme]);
 
   useEffect(() => {
-    const trimmed = profileName.trim();
-    try {
-      if (trimmed) {
-        localStorage.setItem("arx_profile_name", trimmed);
-      } else {
-        localStorage.removeItem("arx_profile_name");
-      }
-    } catch {
-      return;
+    const guestDraft = readProfileDraftForUser(null);
+    const legacyDraft = readLegacyProfileDraft();
+    if (hasProfileDraftValue(legacyDraft) && !hasProfileDraftValue(guestDraft)) {
+      writeProfileDraftForUser(null, legacyDraft);
     }
-  }, [profileName]);
+    clearLegacyProfileDraftStorage();
+  }, []);
+
+  useLayoutEffect(() => {
+    const nextDraft = readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId });
+    setProfileName(nextDraft.name);
+    setProfileUsername(nextDraft.username);
+    setProfileBio(nextDraft.bio);
+    setProfileAvatarUrl(nextDraft.avatarUrl);
+  }, [profileStorageUserId]);
 
   useEffect(() => {
-    const trimmed = profileUsername.trim();
-    try {
-      if (trimmed) {
-        localStorage.setItem("arx_profile_username", trimmed);
-      } else {
-        localStorage.removeItem("arx_profile_username");
-      }
-    } catch {
-      return;
-    }
-  }, [profileUsername]);
-
-  useEffect(() => {
-    const trimmed = profileBio.trim();
-    try {
-      if (trimmed) {
-        localStorage.setItem("arx_profile_bio", trimmed);
-      } else {
-        localStorage.removeItem("arx_profile_bio");
-      }
-    } catch {
-      return;
-    }
-  }, [profileBio]);
-
-  useEffect(() => {
-    try {
-      if (profileAvatarUrl) {
-        localStorage.setItem("arx_profile_avatar", profileAvatarUrl);
-      } else {
-        localStorage.removeItem("arx_profile_avatar");
-      }
-    } catch {
-      return;
-    }
-  }, [profileAvatarUrl]);
+    writeProfileDraftForUser(profileStorageUserId, {
+      name: profileName,
+      username: profileUsername,
+      bio: profileBio,
+      avatarUrl: profileAvatarUrl,
+    });
+  }, [profileStorageUserId, profileName, profileUsername, profileBio, profileAvatarUrl]);
 
   useEffect(() => {
     try {
@@ -3987,6 +4052,11 @@ export default function App() {
   useEffect(() => {
     const parsed = parseOAuthHash();
     if (!parsed) return;
+    if ("error" in parsed) {
+      setAuthError(`Google sign-in failed: ${parsed.error}`);
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+      return;
+    }
 
     void (async () => {
       setAuthError(null);
@@ -4076,6 +4146,16 @@ export default function App() {
       }
     };
   }, [supabaseSession]);
+
+  useEffect(() => {
+    setCloudProfile(null);
+    setProfileSaveError(null);
+    setProfileSaveSuccess(false);
+    if (profileSaveTimeoutRef.current) {
+      window.clearTimeout(profileSaveTimeoutRef.current);
+      profileSaveTimeoutRef.current = null;
+    }
+  }, [profileStorageUserId]);
 
   useEffect(() => {
     if (!supabaseSession) return;
@@ -13465,14 +13545,18 @@ export default function App() {
 	        {isWorkspaceSettings && (
 	          <aside className="sessions">
 	            <div className="session-list">
-              {(["account", "models", "execution", "memory", "affiliates", "appearance"] as const).map((page) => (
+                {([
+                  { id: "account", label: settingsGroupLabel("account"), page: "account" as const },
+                  { id: "agent", label: settingsGroupLabel("agent"), page: "models" as const },
+                  { id: "appearance", label: settingsGroupLabel("appearance"), page: "appearance" as const },
+                ] as const).map((group) => (
 	                <button
-	                  key={page}
-	                  className={settingsPage === page ? "nav-item active" : "nav-item"}
-	                  onClick={() => setSettingsPage(page)}
+	                  key={group.id}
+	                  className={settingsGroup === group.id ? "nav-item active" : "nav-item"}
+	                  onClick={() => setSettingsPage(group.page)}
 	                  type="button"
 	                >
-	                  {settingsPageLabel(page)}
+	                  {group.label}
 	                </button>
 	              ))}
 	            </div>
@@ -13705,7 +13789,7 @@ export default function App() {
           )}
 	          {activeView === "settings" ? (
 	            <div className="settings-panel">
-	              {settingsPage === "account" && (
+	              {settingsGroup === "account" && (
 	                <>
 	                  <div className="settings-section">
 	                    <div className="settings-section-title">Profile</div>
@@ -14023,7 +14107,7 @@ export default function App() {
                 </>
               )}
 
-              {settingsPage === "affiliates" && (
+              {settingsGroup === "account" && (
                 <>
                   <div className="settings-section">
                     <div className="settings-section-title">Affiliate program</div>
@@ -14191,7 +14275,7 @@ export default function App() {
                 </>
               )}
 
-              {settingsPage === "models" && (
+              {settingsGroup === "agent" && (
                 <>
 		                  {userAccessPolicy.allowByokCloudStore && (
 		                    <div className="settings-section">
@@ -14271,7 +14355,7 @@ export default function App() {
 	                </>
 	              )}
 
-              {settingsPage === "execution" && (
+              {settingsGroup === "agent" && (
                 <>
                   <div className="settings-section">
                     <div className="settings-section-title">Desktop execution</div>
@@ -14287,7 +14371,7 @@ export default function App() {
                 </>
               )}
 
-              {settingsPage === "memory" && (
+              {settingsGroup === "agent" && (
                 <>
                   <div className="panel-title">Memory</div>
                   <div className="memory-panel">
@@ -14500,7 +14584,7 @@ export default function App() {
                 </>
               )}
 
-              {settingsPage === "appearance" && (
+              {settingsGroup === "appearance" && (
                 <>
                   <div className="panel-title">Appearance</div>
                   <div className="appearance-panel">
