@@ -9,6 +9,15 @@ import { TauriRuntimeClient } from "./runtime/arp/tauriClient";
 import type { RuntimeClient } from "./runtime/arp/client";
 import { ARP_PROTOCOL_VERSION, type RuntimeNotification } from "./runtime/arp/types";
 import {
+  runPhaseReducer,
+  type AgentMode,
+  type RunPhase,
+  type VoiceSurface,
+  type VoiceUiState,
+} from "./features/harness/runPhase";
+import { useStreamingState } from "./features/harness/useStreamingState";
+import { executeSendMessageFlow } from "./features/harness/sendTurn";
+import {
   classifyPublicCommunityJoinError,
   captureBrandosAidFromLocation,
   clearPendingPublicJoin,
@@ -132,54 +141,6 @@ type ToolUiSpec = {
   parallel_safe: boolean;
 };
 
-type AgentMode = "build" | "plan" | "explore";
-type VoiceSurface = "workspace" | "community";
-type VoiceUiState = "idle" | "recording" | "transcribing";
-type RunPhase =
-  | "idle"
-  | "preparing"
-  | "thinking"
-  | "awaiting_approval"
-  | "running_tool"
-  | "streaming"
-  | "cancelling";
-
-type RunPhaseAction =
-  | { type: "send_start" }
-  | { type: "agent_thinking" }
-  | { type: "agent_working" }
-  | { type: "approval_requested" }
-  | { type: "approval_resolved" }
-  | { type: "tool_started" }
-  | { type: "stream_chunk" }
-  | { type: "cancel_requested" }
-  | { type: "turn_finished" }
-  | { type: "reset" };
-
-function runPhaseReducer(state: RunPhase, action: RunPhaseAction): RunPhase {
-  switch (action.type) {
-    case "send_start":
-      return "preparing";
-    case "agent_thinking":
-      return state === "cancelling" ? "cancelling" : "thinking";
-    case "agent_working":
-    case "tool_started":
-      return state === "cancelling" ? "cancelling" : "running_tool";
-    case "approval_requested":
-      return state === "cancelling" ? "cancelling" : "awaiting_approval";
-    case "approval_resolved":
-      return state === "cancelling" ? "cancelling" : "thinking";
-    case "stream_chunk":
-      return state === "cancelling" ? "cancelling" : "streaming";
-    case "cancel_requested":
-      return "cancelling";
-    case "turn_finished":
-    case "reset":
-      return "idle";
-    default:
-      return state;
-  }
-}
 type NativeVoiceCaptureStopped = {
   audio_base64: string;
   mime_type: string;
@@ -664,6 +625,114 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
   { id: "grok-4.1", label: "Grok 4.1", enabled: true },
 ];
+
+type LocalProfileDraft = {
+  name: string;
+  username: string;
+  bio: string;
+  avatarUrl: string | null;
+};
+
+const LEGACY_PROFILE_STORAGE_KEYS = {
+  name: "arx_profile_name",
+  displayName: "arx_profile_display_name",
+  username: "arx_profile_username",
+  bio: "arx_profile_bio",
+  avatar: "arx_profile_avatar",
+} as const;
+
+function profileStorageKeysForUser(userId: string | null | undefined): {
+  name: string;
+  username: string;
+  bio: string;
+  avatar: string;
+} {
+  const raw = (userId ?? "").trim();
+  const suffix = raw ? `user_${raw}_` : "guest_";
+  return {
+    name: `arx_profile_${suffix}name`,
+    username: `arx_profile_${suffix}username`,
+    bio: `arx_profile_${suffix}bio`,
+    avatar: `arx_profile_${suffix}avatar`,
+  };
+}
+
+function readLegacyProfileDraft(): LocalProfileDraft {
+  try {
+    const name =
+      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.name) ??
+      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.displayName) ??
+      "";
+    const username = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.username) ?? "";
+    const bio = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.bio) ?? "";
+    const avatarRaw = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
+    return { name, username, bio, avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null };
+  } catch {
+    return { name: "", username: "", bio: "", avatarUrl: null };
+  }
+}
+
+function hasProfileDraftValue(draft: LocalProfileDraft): boolean {
+  return Boolean(draft.name.trim() || draft.username.trim() || draft.bio.trim() || (draft.avatarUrl ?? "").trim());
+}
+
+function readProfileDraftForUser(
+  userId: string | null | undefined,
+  opts?: { allowLegacyFallback?: boolean },
+): LocalProfileDraft {
+  const keys = profileStorageKeysForUser(userId);
+  try {
+    const name = localStorage.getItem(keys.name) ?? "";
+    const username = localStorage.getItem(keys.username) ?? "";
+    const bio = localStorage.getItem(keys.bio) ?? "";
+    const avatarRaw = localStorage.getItem(keys.avatar);
+    const scopedDraft: LocalProfileDraft = {
+      name,
+      username,
+      bio,
+      avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null,
+    };
+    if (!hasProfileDraftValue(scopedDraft) && opts?.allowLegacyFallback) {
+      return readLegacyProfileDraft();
+    }
+    return scopedDraft;
+  } catch {
+    return opts?.allowLegacyFallback ? readLegacyProfileDraft() : { name: "", username: "", bio: "", avatarUrl: null };
+  }
+}
+
+function writeProfileDraftForUser(userId: string | null | undefined, draft: LocalProfileDraft): void {
+  const keys = profileStorageKeysForUser(userId);
+  const name = draft.name.trim();
+  const username = draft.username.trim();
+  const bio = draft.bio.trim();
+  const avatar = (draft.avatarUrl ?? "").trim();
+  try {
+    if (name) localStorage.setItem(keys.name, name);
+    else localStorage.removeItem(keys.name);
+    if (username) localStorage.setItem(keys.username, username);
+    else localStorage.removeItem(keys.username);
+    if (bio) localStorage.setItem(keys.bio, bio);
+    else localStorage.removeItem(keys.bio);
+    if (avatar) localStorage.setItem(keys.avatar, avatar);
+    else localStorage.removeItem(keys.avatar);
+  } catch {
+    // ignore
+  }
+}
+
+function clearLegacyProfileDraftStorage(): void {
+  try {
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.name);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.displayName);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.username);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.bio);
+    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
+  } catch {
+    // ignore
+  }
+}
+
 const VOICE_CAPTURE_MIME_TYPES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -1104,6 +1173,7 @@ type CommunityInviteRecord = {
 };
 
 type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
+type SettingsGroup = "account" | "agent" | "appearance";
 
 type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
 
@@ -1167,16 +1237,12 @@ function App() {
       runPhase === "cancelling",
     [runPhase],
   );
+  const sendInFlightRef = useRef(false);
   const sendStartedAtRef = useRef<number | null>(null);
   const [sendElapsedSec, setSendElapsedSec] = useState(0);
-  const [streamingTokens, setStreamingTokens] = useState<{
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    max_tokens?: number;
-  } | null>(null);
-  const [streamingMeta, setStreamingMeta] = useState<{ engine_id: string; model_id: string; inference_source?: string | null } | null>(null);
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
+  const settingsGroup = settingsGroupForPage(settingsPage);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     const stored = localStorage.getItem("arx-theme");
     if (stored && ["light", "dark", "light-warm", "dark-warm"].includes(stored)) {
@@ -1207,6 +1273,11 @@ function App() {
   const [systemPromptError, setSystemPromptError] = useState<string | null>(null);
   // Model availability is derived from provider keys for now (no remote "models list" fetch).
 			  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
+  const profileStorageUserId = (supabaseSession?.user?.id ?? "").trim() || null;
+  const initialProfileDraft = useMemo(
+    () => readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId }),
+    [profileStorageUserId],
+  );
 		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
       const providerKeySyncInFlightRef = useRef<Promise<void> | null>(null);
       const lastProviderKeySyncAtRef = useRef<number>(0);
@@ -1573,20 +1644,10 @@ function App() {
   const [showSidePanel, setShowSidePanel] = useState(true);
   const [showCommunityPanel, setShowCommunityPanel] = useState(false); // Right panel hidden - members moved to left nav
     const [sessionsCompact, setSessionsCompact] = useState(false);
-  const [profileName, setProfileName] = useState(() =>
-    localStorage.getItem("arx_profile_name") ??
-    localStorage.getItem("arx_profile_display_name") ??
-    ""
-  );
-  const [profileUsername, setProfileUsername] = useState(() =>
-    localStorage.getItem("arx_profile_username") ?? ""
-  );
-  const [profileBio, setProfileBio] = useState(() =>
-    localStorage.getItem("arx_profile_bio") ?? ""
-  );
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() =>
-    localStorage.getItem("arx_profile_avatar")
-  );
+  const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
+  const [profileUsername, setProfileUsername] = useState(() => initialProfileDraft.username);
+  const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => initialProfileDraft.avatarUrl);
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
@@ -1632,80 +1693,24 @@ function App() {
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
-  const [streamingContent, setStreamingContent] = useState<string | null>(null);
-  const [streamingRenderedContent, setStreamingRenderedContent] = useState<string | null>(null);
+  const {
+    streamingContent,
+    setStreamingContent,
+    streamingRenderedContent,
+    streamingTokens,
+    setStreamingTokens,
+    streamingMeta,
+    setStreamingMeta,
+    streamingContentRef,
+    streamingTokensRef,
+    streamingMetaRef,
+    scheduleStreamingUpdate,
+    clearStreamingRefs,
+    clearStreamingState,
+  } = useStreamingState();
   const autoScrollEnabledRef = useRef(true);
   const lastWorkspaceScrollTopRef = useRef(0);
   const isLoadingThreadRef = useRef(false); // Suppresses scroll handler during thread transitions
-
-  // Throttled streaming: accumulate content in ref, update state via RAF
-  const streamingContentRef = useRef<string | null>(null);
-  const streamingTokensRef = useRef<{prompt_tokens?: number; completion_tokens?: number; max_tokens?: number} | null>(null);
-  const streamingMetaRef = useRef<{ engine_id: string; model_id: string; inference_source?: string | null } | null>(null);
-  const streamingRafRef = useRef<number | null>(null);
-  const streamingRenderTimeoutRef = useRef<number | null>(null);
-  const streamingRenderLastFlushAtRef = useRef<number>(0);
-
-  // Throttled streaming update: accumulate in refs, flush to state on next animation frame
-  const scheduleStreamingUpdate = useCallback(() => {
-    if (streamingRafRef.current !== null) return; // Already scheduled
-    streamingRafRef.current = requestAnimationFrame(() => {
-      streamingRafRef.current = null;
-      setStreamingContent(streamingContentRef.current);
-      if (streamingTokensRef.current) {
-        setStreamingTokens(streamingTokensRef.current);
-      }
-      if (streamingMetaRef.current) {
-        setStreamingMeta(streamingMetaRef.current);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    const THROTTLE_MS = 140;
-
-    if (!streamingContent) {
-      if (streamingRenderTimeoutRef.current !== null) {
-        window.clearTimeout(streamingRenderTimeoutRef.current);
-        streamingRenderTimeoutRef.current = null;
-      }
-      streamingRenderLastFlushAtRef.current = 0;
-      setStreamingRenderedContent(null);
-      return;
-    }
-
-    const flush = (value: string) => {
-      streamingRenderLastFlushAtRef.current = Date.now();
-      setStreamingRenderedContent(value);
-    };
-
-    const now = Date.now();
-    const elapsed = now - streamingRenderLastFlushAtRef.current;
-    if (elapsed >= THROTTLE_MS) {
-      if (streamingRenderTimeoutRef.current !== null) {
-        window.clearTimeout(streamingRenderTimeoutRef.current);
-        streamingRenderTimeoutRef.current = null;
-      }
-      flush(streamingContent);
-      return;
-    }
-
-    if (streamingRenderTimeoutRef.current !== null) {
-      window.clearTimeout(streamingRenderTimeoutRef.current);
-    }
-    streamingRenderTimeoutRef.current = window.setTimeout(() => {
-      streamingRenderTimeoutRef.current = null;
-      flush(streamingContentRef.current ?? streamingContent);
-    }, THROTTLE_MS - elapsed);
-  }, [streamingContent]);
-
-  useEffect(() => {
-    return () => {
-      if (streamingRenderTimeoutRef.current !== null) {
-        window.clearTimeout(streamingRenderTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const slashState = useMemo(() => {
     const trimmed = commandInput.trim();
@@ -1837,12 +1842,7 @@ function App() {
       setSlashPanel(null);
       setPendingToolApproval(null);
       setIsToolApprovalSubmitting(false);
-      streamingContentRef.current = null;
-      streamingTokensRef.current = null;
-      streamingMetaRef.current = null;
-      setStreamingContent(null);
-      setStreamingTokens(null);
-      setStreamingMeta(null);
+      clearStreamingState();
 
       isLoadingThreadRef.current = false;
       return;
@@ -2511,9 +2511,19 @@ function App() {
     };
   }, [supabaseSession]);
 
-	  useEffect(() => {
-	    const onFocus = () => {
-	      const current = supabaseSessionRef.current;
+  useEffect(() => {
+    setCloudProfile(null);
+    setProfileSaveError(null);
+    setProfileSaveSuccess(false);
+    if (profileSaveTimeoutRef.current) {
+      window.clearTimeout(profileSaveTimeoutRef.current);
+      profileSaveTimeoutRef.current = null;
+    }
+  }, [profileStorageUserId]);
+
+		  useEffect(() => {
+		    const onFocus = () => {
+		      const current = supabaseSessionRef.current;
 	      if (!current) return;
 	      const now = Math.floor(Date.now() / 1000);
 	      if (current.expires_at <= now + 60) {
@@ -3690,16 +3700,6 @@ function App() {
 
   useEffect(() => {
     // Stream model output updates into the chat UI.
-    const clearStreamingRefs = () => {
-      if (streamingRafRef.current !== null) {
-        cancelAnimationFrame(streamingRafRef.current);
-        streamingRafRef.current = null;
-      }
-      streamingContentRef.current = null;
-      streamingTokensRef.current = null;
-      streamingMetaRef.current = null;
-    };
-
     const handleOpenedUrls = async (urls: string[]) => {
       if (urls.length === 0) return;
 
@@ -4006,14 +4006,8 @@ function App() {
       async (event) => {
         if (!event.payload.session_id) return;
         dispatchRunPhase({ type: "turn_finished" });
-        // Cancel any pending RAF and clear refs
-        if (streamingRafRef.current !== null) {
-          cancelAnimationFrame(streamingRafRef.current);
-          streamingRafRef.current = null;
-        }
-        streamingContentRef.current = null;
-        streamingTokensRef.current = null;
-        streamingMetaRef.current = null;
+        // Clear streaming refs before reloading persisted messages.
+        clearStreamingRefs();
         // Load messages first, then clear streaming to avoid flicker
         await loadMessages(event.payload.session_id);
         setStreamingContent(null);
@@ -4058,14 +4052,8 @@ function App() {
       async (event) => {
         if (event.payload.session_id !== activeThreadId) return;
         dispatchRunPhase({ type: "turn_finished" });
-        // Cancel any pending RAF and clear refs
-        if (streamingRafRef.current !== null) {
-          cancelAnimationFrame(streamingRafRef.current);
-          streamingRafRef.current = null;
-        }
-        streamingContentRef.current = null;
-        streamingTokensRef.current = null;
-        streamingMetaRef.current = null;
+        // Clear streaming refs before reloading persisted messages.
+        clearStreamingRefs();
         await loadMessages(event.payload.session_id);
         setStreamingContent(null);
         setStreamingTokens(null);
@@ -4206,13 +4194,7 @@ function App() {
     );
 
     return () => {
-      // Cancel any pending streaming RAF
-      if (streamingRafRef.current !== null) {
-        cancelAnimationFrame(streamingRafRef.current);
-        streamingRafRef.current = null;
-      }
-      streamingContentRef.current = null;
-      streamingTokensRef.current = null;
+      clearStreamingRefs();
       void unlistenAgent.then((fn) => fn());
       void unlistenStream.then((fn) => fn());
       void unlistenOpenRouterStream.then((fn) => fn());
@@ -4230,7 +4212,7 @@ function App() {
         memoryToastTimeoutRef.current = null;
       }
     };
-  }, [activeThreadId, scheduleStreamingUpdate, runtimeClient]);
+  }, [activeThreadId, clearStreamingRefs, scheduleStreamingUpdate, runtimeClient]);
 
   useEffect(() => {
     const handleGlobalEscape = (event: KeyboardEvent) => {
@@ -4619,6 +4601,14 @@ function App() {
       };
     };
 
+    const normalizeContentJson = (raw: string): string => {
+      try {
+        return JSON.stringify(JSON.parse(raw));
+      } catch {
+        return raw;
+      }
+    };
+
     const shouldPreferCloudMessages = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
     if (USE_RUNTIME_CLIENT && runtimeSupportsCursorResume && !shouldPreferCloudMessages) {
       const currentCursor = eventCursorByThreadRef.current[sessionId];
@@ -4646,12 +4636,25 @@ function App() {
 
           const mappedDelta = deltaEvents.map(eventToMessage).filter(Boolean) as MessageRecord[];
           if (mappedDelta.length > 0) {
+            const canonicalUserPayloads = new Set(
+              mappedDelta
+                .filter((message) => message.role === "user")
+                .map((message) => normalizeContentJson(message.content_json))
+            );
             setMessages((prev) => {
               if (prev.length === 0 || prev[0]?.session_id !== sessionId) {
                 return mappedDelta;
               }
-              const seen = new Set(prev.map((message) => message.id));
-              const next = [...prev];
+              let next = [...prev];
+              if (canonicalUserPayloads.size > 0) {
+                next = next.filter((message) => {
+                  if (message.role !== "user") return true;
+                  if (!message.id.startsWith("optimistic-user-")) return true;
+                  const payload = normalizeContentJson(message.content_json);
+                  return !canonicalUserPayloads.has(payload);
+                });
+              }
+              const seen = new Set(next.map((message) => message.id));
               for (const message of mappedDelta) {
                 if (seen.has(message.id)) continue;
                 next.push(message);
@@ -10175,50 +10178,43 @@ function App() {
   }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
 
   useEffect(() => {
-    const trimmed = profileName.trim();
-    if (trimmed) {
-      localStorage.setItem("arx_profile_name", trimmed);
-    } else {
-      localStorage.removeItem("arx_profile_name");
+    const guestDraft = readProfileDraftForUser(null);
+    const legacyDraft = readLegacyProfileDraft();
+    if (hasProfileDraftValue(legacyDraft) && !hasProfileDraftValue(guestDraft)) {
+      writeProfileDraftForUser(null, legacyDraft);
     }
-  }, [profileName]);
+    clearLegacyProfileDraftStorage();
+  }, []);
+
+  useLayoutEffect(() => {
+    const nextDraft = readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId });
+    setProfileName(nextDraft.name);
+    setProfileUsername(nextDraft.username);
+    setProfileBio(nextDraft.bio);
+    setProfileAvatarUrl(nextDraft.avatarUrl);
+  }, [profileStorageUserId]);
 
   useEffect(() => {
-    const trimmed = profileUsername.trim();
-    if (trimmed) {
-      localStorage.setItem("arx_profile_username", trimmed);
-    } else {
-      localStorage.removeItem("arx_profile_username");
-    }
-  }, [profileUsername]);
+    writeProfileDraftForUser(profileStorageUserId, {
+      name: profileName,
+      username: profileUsername,
+      bio: profileBio,
+      avatarUrl: profileAvatarUrl,
+    });
+  }, [profileStorageUserId, profileName, profileUsername, profileBio, profileAvatarUrl]);
 
-  useEffect(() => {
-    const trimmed = profileBio.trim();
-    if (trimmed) {
-      localStorage.setItem("arx_profile_bio", trimmed);
-    } else {
-      localStorage.removeItem("arx_profile_bio");
-    }
-  }, [profileBio]);
+  function settingsGroupForPage(page: SettingsPage): SettingsGroup {
+    if (page === "appearance") return "appearance";
+    if (page === "account") return "account";
+    return "agent";
+  }
 
-  useEffect(() => {
-    if (profileAvatarUrl) {
-      localStorage.setItem("arx_profile_avatar", profileAvatarUrl);
-    } else {
-      localStorage.removeItem("arx_profile_avatar");
-    }
-  }, [profileAvatarUrl]);
-
-  function settingsPageLabel(page: SettingsPage): string {
-    switch (page) {
+  function settingsGroupLabel(group: SettingsGroup): string {
+    switch (group) {
       case "account":
         return "Account";
-      case "models":
-        return "Models";
-      case "execution":
-        return "Execution";
-      case "memory":
-        return "Memory";
+      case "agent":
+        return "Agent";
       case "appearance":
         return "Appearance";
     }
@@ -10431,13 +10427,7 @@ function App() {
     setSlashPanel(null);
     setPendingToolApproval(null);
     setIsToolApprovalSubmitting(false);
-
-    streamingContentRef.current = null;
-    streamingTokensRef.current = null;
-    streamingMetaRef.current = null;
-    setStreamingContent(null);
-    setStreamingTokens(null);
-    setStreamingMeta(null);
+    clearStreamingState();
 
     focusChatInput();
   }
@@ -10524,277 +10514,204 @@ function App() {
     return thread.id;
   }
 
-	  async function handleSendMessage(opts?: { text?: string }) {
-    const inputText = typeof opts?.text === "string" ? opts.text : commandInput;
-    const hasText = inputText.trim().length > 0;
-    const hasAttachments = attachments.length > 0;
-    if (!hasText && !hasAttachments) return;
-
-    let sessionId: string | null = null;
-    let session: SupabaseSession | null = null;
-
-    // Capture inputs at click time, but don't clear until we've ensured the lens/context.
-    const userText = inputText.trim();
-    const currentAttachments = [...attachments];
-
-    dispatchRunPhase({ type: "send_start" });
-    autoScrollEnabledRef.current = true;
-    try {
-      sessionId = await ensureThreadId();
-      if (!sessionId) return;
-      session = supabaseSessionRef.current;
-
-      await ensureWorkspaceThreadLensBeforeSend(sessionId);
-
-      setCommandInput("");
-      setAttachments([]);
-      // Build content JSON with text and attachments
-      const contentPayload: {
-        text: string;
-        attachments?: Array<{ path: string; name: string; type: string; size: number }>;
-      } = { text: userText };
-      if (currentAttachments.length > 0) {
-        contentPayload.attachments = currentAttachments.map((a) => ({
-          path: a.path,
-          name: a.name,
-          type: a.type,
-          size: a.size
-        }));
-      }
-      const contentJson = JSON.stringify(contentPayload);
-      const handledSlash = await handleSlashCommand(userText, sessionId);
-      if (handledSlash) {
-        return;
-      }
-      if (userText.length === 0) {
-        await (USE_RUNTIME_CLIENT
-          ? runtimeClient.addMessage({
-              thread_id: sessionId,
-              role: "user",
-              content_json: contentJson,
-            })
-          : invoke("add_message_cmd", {
-              sessionId,
-              role: "user",
-              contentJson,
-            }));
-        if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
-          try {
-            await syncRecentLocalMessagesToCloud(sessionId, session, 1);
-          } catch (error) {
-            const message =
-              typeof error === "string" ? error : error instanceof Error ? error.message : "";
-            if (message.toLowerCase().includes("cloud history limit reached")) {
-              setBuilderUpgradeContext("builder");
-              setBuilderBillingError(message);
-              setIsBuilderUpgradeOpen(true);
-            }
-          }
-        }
-        await loadMessages(sessionId);
-        return;
-      }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `optimistic-user-${crypto.randomUUID()}`,
-          session_id: sessionId,
-          role: "user",
-          content_json: contentJson,
-          created_at: Math.floor(Date.now() / 1000),
-        },
-      ]);
-	      setThreads((prev) =>
-	        prev.map((t) => {
-	          if (t.id !== sessionId) return t;
-	          const nowSec = Math.floor(Date.now() / 1000);
-	          return {
-	            ...t,
-	            last_seq: Math.max(t.last_seq ?? 0, 1),
-	            updated_at: Math.max(t.updated_at ?? 0, nowSec),
-	          };
-	        }),
-	      );
-
-      // Ensure the active thread has an engine/model selected (legacy threads may be missing model_id).
-      const ensured = await (async () => {
-	          const fromState = threads.find((t) => t.id === sessionId) ?? null;
-	          const fromDb =
-              fromState ??
-              (USE_RUNTIME_CLIENT
-                ? await runtimeClient.getThread(sessionId)
-                : await invoke<ThreadRecord | null>("get_thread_cmd", { threadId: sessionId }));
-          const currentModel = (fromDb?.model_id ?? "").trim();
-          const desiredModel = (activeModelId ?? "").trim();
-          const modelToUse = desiredModel || currentModel;
-          if (!modelToUse) {
-            setMemoryToast("No model selected. Enable a model in Settings → Models.");
-            return null;
-          }
-          const providerId = providerIdForModelId(modelToUse);
-          if (!providerId) {
-            setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
-            return null;
-          }
-	          let hasKey = hasKeyForProvider(providerId);
-
-	          let canUseArxPlatform = userAccessPolicy.allowPlatformInference;
-	          let planStateResolved = userAccessPolicy.tier !== "unknown";
-	          if (!hasKey && session && !planStateResolved) {
-	            const url = getSupabaseUrl();
-	            const anon = getSupabaseAnonKey();
-	            if (url && anon) {
-	              let status = builderBillingStatus;
-	              if (!status) {
-	                try {
-	                  status = await loadBuilderBillingStatus(session);
-	                } catch {
-	                  status = null;
-	                }
-	              }
-	              if (status) {
-	                const resolvedPolicy = resolveUserAccessPolicy({
-	                  surface: "desktop",
-	                  authState: "authenticated",
-	                  builderTier: status.builder_tier,
-	                });
-	                canUseArxPlatform = resolvedPolicy.allowPlatformInference;
-	                planStateResolved = true;
-	              }
-	            }
-	          }
-
-	          if (!hasKey && !canUseArxPlatform) {
-	            if (session && !planStateResolved) {
-	              setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
-	            } else if (providerId === "openai") {
-	              setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
-	            } else {
-	              setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
-	            }
-	            setActiveView("settings");
-	            setSettingsPage("models");
-	            return null;
-	          }
-          if (
-            fromDb &&
-            (fromDb.engine_id === "messages_agent" || fromDb.engine_id === "openrouter_messages_agent") &&
-            (fromDb.model_id ?? "").trim() === modelToUse
-          ) {
-	            return fromDb;
-	          }
-		          try {
-		            const updated = await (USE_RUNTIME_CLIENT
-                  ? runtimeClient.setThreadEngine({
-                      thread_id: sessionId,
-                      engine_id: "messages_agent",
-                      model_id: modelToUse,
-                    })
-                  : invoke<ThreadRecord>("set_thread_engine_cmd", {
-                      threadId: sessionId,
-                      engineId: "messages_agent",
-                      modelId: modelToUse
-                    }));
-            setThreads((prev) => {
-              const existingIndex = prev.findIndex((t) => t.id === updated.id);
-              if (existingIndex === -1) return [updated, ...prev];
-              const next = [...prev];
-              next[existingIndex] = updated;
-              return next;
-            });
-            return updated;
-          } catch (error) {
-            console.error("Failed to set thread model:", error);
-            return null;
-          }
-      })();
-      if (!ensured) return;
-
-	        // Clear any prior streaming state before issuing a new turn.
-        streamingContentRef.current = null;
-        streamingTokensRef.current = null;
-        streamingMetaRef.current = null;
-        scheduleStreamingUpdate();
-
-	        const cwd = effectiveCwd || "";
-
-      await (USE_RUNTIME_CLIENT
-        ? runtimeClient.sendTurn({
-            thread_id: sessionId,
-            cwd,
-            input: userText,
-            user_content_json: contentJson,
-            supabase_url: session ? (getSupabaseUrl() ?? "") : "",
-            supabase_anon_key: session ? (getSupabaseAnonKey() ?? "") : "",
-            supabase_access_token: session ? (session.access_token ?? "") : "",
-          })
-        : invoke<SendTurnResult>("submit_turn_cmd", {
-            threadId: sessionId,
-            cwd,
-            input: userText,
-            userContentJson: contentJson,
-            supabaseUrl: session ? (getSupabaseUrl() ?? "") : "",
-            supabaseAnonKey: session ? (getSupabaseAnonKey() ?? "") : "",
-            supabaseAccessToken: session ? (session.access_token ?? "") : "",
-          }));
-      if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
-        try {
-          // Sync the newest assistant message + any trailing system content.
-          await syncRecentLocalMessagesToCloud(sessionId, session, 3);
-        } catch (error) {
-          const message =
-            typeof error === "string" ? error : error instanceof Error ? error.message : "";
-          if (message.toLowerCase().includes("cloud history limit reached")) {
-            setBuilderUpgradeContext("builder");
-            setBuilderBillingError(message);
-            setIsBuilderUpgradeOpen(true);
-          }
-        }
-      }
-      await loadMessages(sessionId);
-	    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Unknown error";
-
-      const targetSessionId = sessionId ?? activeThreadId;
-      if (!targetSessionId) {
-        setMemoryToast(`Failed to send message: ${message}`);
-        return;
-      }
-      await (USE_RUNTIME_CLIENT
-        ? runtimeClient.addMessage({
-            thread_id: targetSessionId,
-            role: "assistant",
-            content_json: JSON.stringify({ text: `Engine error: ${message}` }),
-          })
-        : invoke("add_message_cmd", {
-            sessionId: targetSessionId,
-            role: "assistant",
-            contentJson: JSON.stringify({ text: `Engine error: ${message}` })
-          }));
-    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session) {
-      try {
-        await syncRecentLocalMessagesToCloud(targetSessionId, session, 1);
-      } catch (error) {
-	        const message =
-	          typeof error === "string" ? error : error instanceof Error ? error.message : "";
-	        if (message.toLowerCase().includes("cloud history limit reached")) {
-	          setBuilderUpgradeContext("builder");
-	          setBuilderBillingError(message);
-	          setIsBuilderUpgradeOpen(true);
-	        }
-	      }
-	    }
-	    await loadMessages(targetSessionId);
-    } finally {
-      dispatchRunPhase({ type: "reset" });
-      setAgentStatus(null);
-      setRunningTools([]);
+  function handleCloudSyncError(error: unknown) {
+    const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+    if (message.toLowerCase().includes("cloud history limit reached")) {
+      setBuilderUpgradeContext("builder");
+      setBuilderBillingError(message);
+      setIsBuilderUpgradeOpen(true);
     }
+  }
+
+  async function ensureThreadReadyForSend(
+    sessionId: string,
+    session: SupabaseSession | null,
+  ): Promise<boolean> {
+    const fromState = threads.find((t) => t.id === sessionId) ?? null;
+    const fromDb =
+      fromState ??
+      (USE_RUNTIME_CLIENT
+        ? await runtimeClient.getThread(sessionId)
+        : await invoke<ThreadRecord | null>("get_thread_cmd", { threadId: sessionId }));
+    const currentModel = (fromDb?.model_id ?? "").trim();
+    const desiredModel = (activeModelId ?? "").trim();
+    const modelToUse = desiredModel || currentModel;
+    if (!modelToUse) {
+      setMemoryToast("No model selected. Enable a model in Settings → Models.");
+      return false;
+    }
+    const providerId = providerIdForModelId(modelToUse);
+    if (!providerId) {
+      setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
+      return false;
+    }
+    const hasKey = hasKeyForProvider(providerId);
+
+    let canUseArxPlatform = userAccessPolicy.allowPlatformInference;
+    let planStateResolved = userAccessPolicy.tier !== "unknown";
+    if (!hasKey && session && !planStateResolved) {
+      const url = getSupabaseUrl();
+      const anon = getSupabaseAnonKey();
+      if (url && anon) {
+        let status = builderBillingStatus;
+        if (!status) {
+          try {
+            status = await loadBuilderBillingStatus(session);
+          } catch {
+            status = null;
+          }
+        }
+        if (status) {
+          const resolvedPolicy = resolveUserAccessPolicy({
+            surface: "desktop",
+            authState: "authenticated",
+            builderTier: status.builder_tier,
+          });
+          canUseArxPlatform = resolvedPolicy.allowPlatformInference;
+          planStateResolved = true;
+        }
+      }
+    }
+
+    if (!hasKey && !canUseArxPlatform) {
+      if (session && !planStateResolved) {
+        setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
+      } else if (providerId === "openai") {
+        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
+      } else {
+        setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
+      }
+      setActiveView("settings");
+      setSettingsPage("models");
+      return false;
+    }
+
+    if (
+      fromDb &&
+      (fromDb.engine_id === "messages_agent" || fromDb.engine_id === "openrouter_messages_agent") &&
+      (fromDb.model_id ?? "").trim() === modelToUse
+    ) {
+      return true;
+    }
+
+    try {
+      const updated = await (USE_RUNTIME_CLIENT
+        ? runtimeClient.setThreadEngine({
+            thread_id: sessionId,
+            engine_id: "messages_agent",
+            model_id: modelToUse,
+          })
+        : invoke<ThreadRecord>("set_thread_engine_cmd", {
+            threadId: sessionId,
+            engineId: "messages_agent",
+            modelId: modelToUse,
+          }));
+      setThreads((prev) => {
+        const existingIndex = prev.findIndex((t) => t.id === updated.id);
+        if (existingIndex === -1) return [updated, ...prev];
+        const next = [...prev];
+        next[existingIndex] = updated;
+        return next;
+      });
+      return true;
+    } catch (error) {
+      console.error("Failed to set thread model:", error);
+      return false;
+    }
+  }
+
+  async function handleSendMessage(opts?: { text?: string }) {
+    await executeSendMessageFlow({
+      commandInput,
+      attachments,
+      activeThreadId,
+      effectiveCwd,
+      sendInFlightRef,
+      dispatchRunPhase,
+      onSendStart: () => {
+        autoScrollEnabledRef.current = true;
+      },
+      ensureThreadId,
+      getSession: () => supabaseSessionRef.current,
+      ensureWorkspaceThreadLensBeforeSend,
+      setCommandInput,
+      setAttachments,
+      handleSlashCommand,
+      addMessage: async ({ thread_id, role, content_json }) =>
+        USE_RUNTIME_CLIENT
+          ? runtimeClient.addMessage({ thread_id, role, content_json })
+          : invoke("add_message_cmd", {
+              sessionId: thread_id,
+              role,
+              contentJson: content_json,
+            }),
+      shouldSyncCloud: DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED,
+      syncRecentLocalMessagesToCloud,
+      onCloudSyncError: handleCloudSyncError,
+      loadMessages,
+      appendOptimisticUserMessage: (sessionId, contentJson) => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `optimistic-user-${crypto.randomUUID()}`,
+            session_id: sessionId,
+            role: "user",
+            content_json: contentJson,
+            created_at: Math.floor(Date.now() / 1000),
+          },
+        ]);
+      },
+      touchThreadForOptimisticMessage: (sessionId) => {
+        setThreads((prev) =>
+          prev.map((thread) => {
+            if (thread.id !== sessionId) return thread;
+            const nowSec = Math.floor(Date.now() / 1000);
+            return {
+              ...thread,
+              last_seq: Math.max(thread.last_seq ?? 0, 1),
+              updated_at: Math.max(thread.updated_at ?? 0, nowSec),
+            };
+          }),
+        );
+      },
+      ensureThreadReadyForSend,
+      clearStreamingRefs,
+      scheduleStreamingUpdate,
+      sendTurn: async ({
+        thread_id,
+        cwd,
+        input,
+        user_content_json,
+        supabase_url,
+        supabase_anon_key,
+        supabase_access_token,
+      }) =>
+        USE_RUNTIME_CLIENT
+          ? runtimeClient.sendTurn({
+              thread_id,
+              cwd,
+              input,
+              user_content_json,
+              supabase_url,
+              supabase_anon_key,
+              supabase_access_token,
+            })
+          : invoke<SendTurnResult>("submit_turn_cmd", {
+              threadId: thread_id,
+              cwd,
+              input,
+              userContentJson: user_content_json,
+              supabaseUrl: supabase_url,
+              supabaseAnonKey: supabase_anon_key,
+              supabaseAccessToken: supabase_access_token,
+            }),
+      getSupabaseUrl,
+      getSupabaseAnonKey,
+      getSupabaseAccessToken: (session) => session.access_token ?? "",
+      setMemoryToast,
+      setAgentStatus,
+      setRunningTools,
+    }, opts);
   }
 
   async function proposeShellCommand(_sessionId: string, _command: string) {
@@ -11540,16 +11457,18 @@ function App() {
             <>
               <div className="panel-title">Settings</div>
               <div className="session-list">
-                {(
-                  ["account", "models", "execution", "memory", "appearance"] as const
-                ).map((page) => (
+                {([
+                  { id: "account", label: settingsGroupLabel("account"), page: "account" as const },
+                  { id: "agent", label: settingsGroupLabel("agent"), page: "models" as const },
+                  { id: "appearance", label: settingsGroupLabel("appearance"), page: "appearance" as const },
+                ] as const).map((group) => (
                   <button
-                    key={page}
-                    className={settingsPage === page ? "nav-item active" : "nav-item"}
-                    onClick={() => setSettingsPage(page)}
+                    key={group.id}
+                    className={settingsGroup === group.id ? "nav-item active" : "nav-item"}
+                    onClick={() => setSettingsPage(group.page)}
                     type="button"
                   >
-                    {settingsPageLabel(page)}
+                    {group.label}
                   </button>
                 ))}
               </div>
@@ -12597,7 +12516,7 @@ function App() {
         )}
         {activeView === "settings" ? (
           <div className="settings-panel">
-            {settingsPage === "account" && (
+            {settingsGroup === "account" && (
               <>
                 <div className="settings-section">
                   <div className="settings-section-title">Profile</div>
@@ -12920,7 +12839,7 @@ function App() {
 
               </>
             )}
-	            {settingsPage === "models" && (
+	            {settingsGroup === "agent" && (
               <>
 	                <div className="settings-section">
 	                  <div className="settings-section-title">ChatGPT</div>
@@ -13023,7 +12942,7 @@ function App() {
 
               </>
             )}
-	            {settingsPage === "execution" && (
+	            {settingsGroup === "agent" && (
 	              <>
 	                <div className="settings-section">
 	                  <div className="settings-section-title">Approval Mode</div>
@@ -13066,7 +12985,7 @@ function App() {
                 </div>
               </>
             )}
-            {settingsPage === "memory" && (
+            {settingsGroup === "agent" && (
               <>
                 <div className="panel-title">Memory</div>
                 <div className="memory-panel">
@@ -13233,7 +13152,7 @@ function App() {
                 </div>
               </>
             )}
-            {settingsPage === "appearance" && (
+            {settingsGroup === "appearance" && (
               <>
                 <div className="panel-title">Appearance</div>
                 <div className="appearance-panel">
@@ -13488,56 +13407,29 @@ function App() {
 
                 const isGroupExpanded = expandedToolGroupIds.has(group.id);
 
-                // Derive activity verb from latest tool
-                const isGroupRunning = calls.some(
-                  (c) => c.status === "requested" || c.status === "approved" || c.status === "started"
-                );
-                const activityVerb = (() => {
-                  if (!isGroupRunning) return null;
-                  // Find the latest non-terminal tool
-                  const active = [...calls].reverse().find(
-                    (c) => c.status === "requested" || c.status === "approved" || c.status === "started"
-                  );
-                  if (!active) return "working";
-                  const name = active.tool_name;
-                  if (name === "read" || name === "list_dir" || name === "glob" || name === "grep") return "exploring";
-                  if (name === "write") return "writing";
-                  if (name === "edit" || name === "apply_patch") return "editing";
-                  if (name === "bash") return "running";
-                  if (name === "sha256") return "checking";
-                  if (name === "task") return "thinking";
-                  return "working";
-                })();
+                const hasErrors = counts.error > 0 || counts.denied > 0;
 
                 return (
-                  <div className={`tool-group${isGroupExpanded ? " expanded" : ""}`} key={group.id}>
+                  <div className={`tool-group-inline${isGroupExpanded ? " expanded" : ""}`} key={group.id}>
                     <button
                       type="button"
-                      className="tool-group-summary"
+                      className="tool-group-inline-summary"
                       onClick={() => toggleToolGroupExpanded(group.id)}
                       aria-expanded={isGroupExpanded}
                     >
-                      {isGroupRunning && activityVerb ? (
-                        <span className="tool-group-title">
-                          <span className="tool-activity-verb shimmer">{activityVerb}</span>
-                        </span>
-                      ) : (
-                        <>
-                          <span className="tool-group-title">
-                            tools
-                            <span className="tool-group-total">{calls.length}</span>
+                      <span className="tool-group-inline-label">
+                        {calls.length} tool{calls.length !== 1 ? "s" : ""} ran
+                        {hasErrors && (
+                          <span className="tool-group-inline-errors">
+                            {counts.error > 0 && ` · ${counts.error} error${counts.error !== 1 ? "s" : ""}`}
+                            {counts.denied > 0 && ` · ${counts.denied} denied`}
                           </span>
-                          <span className="tool-group-counts">
-                            {counts.ok > 0 && <span className="tool-group-count ok">✓ {counts.ok}</span>}
-                            {counts.error > 0 && <span className="tool-group-count error">✗ {counts.error}</span>}
-                            {counts.denied > 0 && <span className="tool-group-count denied">⛔ {counts.denied}</span>}
-                          </span>
-                        </>
-                      )}
-                      <span className="tool-group-toggle-label">{isGroupExpanded ? "HIDE" : "SHOW"}</span>
+                        )}
+                      </span>
+                      <span className="tool-group-inline-toggle">{isGroupExpanded ? "▾" : "▸"}</span>
                     </button>
                     {isGroupExpanded && (
-                      <div className="tool-group-items">
+                      <div className="tool-group-inline-items">
                         {calls.map((toolCall) => {
                         let args: any = {};
                         try {
@@ -13644,7 +13536,7 @@ function App() {
                                   {artifactLines.length > 0 && (
                                     <pre className="tool-output">{artifactLines.join("\n\n")}</pre>
                                   )}
-                                  {output && <pre className="tool-output">{output}</pre>}
+                                  {output && <ToolOutputBlock content={output} />}
                                 </>
                               )}
                             </div>
@@ -13775,7 +13667,7 @@ function App() {
                           {artifactLines.length > 0 && (
                             <pre className="tool-output">{artifactLines.join("\n\n")}</pre>
                           )}
-                          {output && <pre className="tool-output">{output}</pre>}
+                          {output && <ToolOutputBlock content={output} />}
                         </>
                       )}
                     </div>
@@ -14030,35 +13922,28 @@ function App() {
                     modelToggles,
                     null
                   );
-              const isWorking = runPhase === "running_tool" || agentStatus?.status === "working";
-              const timeLabel = sendElapsedSec > 0 ? ` (${sendElapsedSec}s)` : "";
-              const hasRunningTools = runningTools.length > 0;
               const hasStreamingStarted = Boolean((streamingContent ?? "").trim());
-              const statusLabel =
-                runPhase === "preparing"
-                  ? "Preparing"
-                  : runPhase === "awaiting_approval"
-                    ? "Awaiting approval"
-                    : runPhase === "running_tool"
-                      ? "Working"
-                      : runPhase === "cancelling"
-                        ? "Cancelling"
-                        : "Thinking";
 
-              // Hide the "thinking" indicator once token streaming begins.
+              // Hide the indicator once token streaming begins.
               if (hasStreamingStarted) {
                 return null;
               }
 
+              // Derive activity verb from live running tools
+              const liveRunning = runningTools.filter((t) => t.status === "running");
+              const activityVerb = (() => {
+                if (runPhase === "preparing") return "preparing";
+                if (runPhase === "cancelling") return "cancelling";
+                if (runPhase === "awaiting_approval") return "awaiting approval";
+                if (liveRunning.length > 0) {
+                  return toolActivityVerb(liveRunning[liveRunning.length - 1].name);
+                }
+                return "thinking";
+              })();
+
               return (
                 <div className="run-activity-container">
-                  <div className={`run-status-line${isWorking ? " working" : ""}`}>
-                    <span className="run-status-label">
-                      {statusLabel}
-                      {timeLabel}
-                    </span>
-                    {indicatorSignature && <span className="run-status-model">{indicatorSignature}</span>}
-                  </div>
+                  <ActivityNarrator verb={activityVerb} />
                 </div>
               );
             })()}
@@ -17597,7 +17482,197 @@ function parseToolCall(toolCall: ToolCallRecord): {
   }
 }
 
+/** Map a tool name to a human-readable activity verb. */
+function toolActivityVerb(name: string): string {
+  if (name === "read" || name === "list_dir" || name === "glob" || name === "grep") return "exploring";
+  if (name === "write") return "writing";
+  if (name === "edit" || name === "apply_patch") return "editing";
+  if (name === "bash") return "running";
+  if (name === "sha256") return "checking";
+  if (name === "task") return "thinking";
+  return "working";
+}
+
+/** Synonym pools for activity verb rotation. */
+const ACTIVITY_SYNONYMS: Record<string, string[]> = {
+  thinking:   ["thinking", "reasoning", "considering", "reflecting"],
+  exploring:  ["exploring", "reading", "scanning", "examining"],
+  writing:    ["writing", "composing", "creating", "drafting"],
+  editing:    ["editing", "refining", "adjusting", "updating"],
+  running:    ["running", "executing", "processing"],
+  checking:   ["checking", "verifying", "validating"],
+  preparing:  ["preparing", "setting up", "initializing"],
+  cancelling: ["cancelling"],
+  working:    ["working", "processing", "computing"],
+};
+
+/**
+ * Rotating activity narrator with crossfade.
+ * Cycles through synonym words for the current activity verb.
+ * When the base verb changes (e.g. "thinking" → "exploring"), it
+ * immediately shows the new verb, then resumes cycling synonyms.
+ */
+function ActivityNarrator({ verb }: { verb: string }) {
+  const pool = ACTIVITY_SYNONYMS[verb] ?? [verb];
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+  const prevVerbRef = useRef(verb);
+
+  // When the base verb changes, reset to first synonym immediately
+  useEffect(() => {
+    if (verb !== prevVerbRef.current) {
+      prevVerbRef.current = verb;
+      setIndex(0);
+      setVisible(true);
+    }
+  }, [verb]);
+
+  // Cycle through synonyms
+  useEffect(() => {
+    if (pool.length <= 1) return;
+    const interval = setInterval(() => {
+      // Fade out
+      setVisible(false);
+      // After fade-out, swap word and fade in
+      setTimeout(() => {
+        setIndex((i) => (i + 1) % pool.length);
+        setVisible(true);
+      }, 350);
+    }, 2800);
+    return () => clearInterval(interval);
+  }, [pool]);
+
+  const word = pool[index % pool.length];
+
+  return (
+    <span className="activity-narrator">
+      <MoleculeSpinner activeVerb={verb} />
+      <span className={`activity-verb ${visible ? "visible" : "fading"}`}>
+        {word}
+      </span>
+    </span>
+  );
+}
+
+/** Tiny rotating 3D molecular graph. */
+const MOLECULE_NODES: [number, number, number][] = [
+  [-1, -0.6, -0.5],   // 0: left
+  [-0.3, 0.8, 0.3],   // 1: top-left (accent node)
+  [0.2, 0, 0],         // 2: center
+  [0.9, 0.7, -0.4],   // 3: top-right
+  [1.1, -0.5, 0.5],   // 4: right
+  [0.3, -0.9, -0.3],  // 5: bottom
+];
+const MOLECULE_EDGES: [number, number][] = [
+  [0, 1], [0, 2], [1, 2], [2, 3], [2, 5], [3, 4], [4, 5], [2, 4],
+];
+
+// Map verb to which node lights up
+const VERB_NODE_MAP: Record<string, number> = {
+  thinking: 2, reasoning: 2, considering: 2, reflecting: 2,
+  exploring: 0, reading: 1, scanning: 3, examining: 4,
+  writing: 3, composing: 3, creating: 4, drafting: 5,
+  editing: 4, refining: 5, adjusting: 3, updating: 4,
+  running: 5, executing: 4, processing: 2,
+  checking: 1, verifying: 0, validating: 5,
+  preparing: 2, working: 2, computing: 2,
+};
+
+function MoleculeSpinner({ activeVerb }: { activeVerb: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const angleRef = useRef(0);
+  const activeNodeRef = useRef(2);
+
+  useEffect(() => {
+    activeNodeRef.current = VERB_NODE_MAP[activeVerb] ?? 2;
+  }, [activeVerb]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const size = 32;
+    const scale = 10;
+    const cx = size / 2;
+    const cy = size / 2;
+    let raf: number;
+
+    const draw = () => {
+      angleRef.current += 0.008;
+      const a = angleRef.current;
+      const cosA = Math.cos(a);
+      const sinA = Math.sin(a);
+      const cosB = Math.cos(a * 0.7);
+      const sinB = Math.sin(a * 0.7);
+
+      // Project 3D → 2D with Y-axis and X-axis rotation
+      const projected = MOLECULE_NODES.map(([x, y, z]) => {
+        const x1 = x * cosA - z * sinA;
+        const z1 = x * sinA + z * cosA;
+        const y1 = y * cosB - z1 * sinB;
+        const z2 = y * sinB + z1 * cosB;
+        const depth = 1 / (3 - z2);
+        return {
+          px: cx + x1 * scale * depth,
+          py: cy + y1 * scale * depth,
+          depth: z2,
+          scale: depth,
+        };
+      });
+
+      ctx.clearRect(0, 0, size, size);
+
+      // Draw edges
+      for (const [i, j] of MOLECULE_EDGES) {
+        const a = projected[i];
+        const b = projected[j];
+        const avgDepth = (a.depth + b.depth) / 2;
+        const alpha = 0.12 + avgDepth * 0.08;
+        ctx.beginPath();
+        ctx.moveTo(a.px, a.py);
+        ctx.lineTo(b.px, b.py);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.05, Math.min(alpha, 0.35))})`;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // Draw nodes
+      const activeIdx = activeNodeRef.current;
+      projected.forEach((p, i) => {
+        const r = 1.5 + p.scale * 1.2;
+        const isActive = i === activeIdx;
+        const alpha = isActive ? 0.9 : 0.2 + p.depth * 0.1;
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
+        if (isActive) {
+          ctx.fillStyle = `rgba(130, 230, 240, ${alpha})`;
+        } else {
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(alpha, 0.5))})`;
+        }
+        ctx.fill();
+      });
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={32}
+      height={32}
+      className="molecule-spinner"
+    />
+  );
+}
+
 /** Strip workspace root prefix from a path for compact display. */
+
 function trimWorkspacePath(fullPath: string, workspacePath: string | null | undefined): string {
   if (!workspacePath) return fullPath;
   const prefix = workspacePath.endsWith("/") ? workspacePath : workspacePath + "/";
@@ -17766,6 +17841,32 @@ function parseMessageContent(contentJson: string): { text: string; format: strin
 
 function parseMessageText(contentJson: string): string {
   return parseMessageContent(contentJson).text;
+}
+
+/** Renders tool output with diff coloring or syntax highlighting. */
+function ToolOutputBlock({ content }: { content: string }) {
+  const isDiff = /^[-+]{3} |^@@ /.test(content) || (
+    content.includes("\n+") && content.includes("\n-") && content.includes("--- ")
+  );
+
+  if (isDiff) {
+    const lines = content.split("\n");
+    return (
+      <pre className="tool-output tool-output-diff">
+        {lines.map((line, i) => {
+          let cls = "diff-ctx";
+          if (line.startsWith("+++") || line.startsWith("---")) cls = "diff-hdr";
+          else if (line.startsWith("@@")) cls = "diff-range";
+          else if (line.startsWith("+")) cls = "diff-add";
+          else if (line.startsWith("-")) cls = "diff-del";
+          return <span key={i} className={cls}>{line}{"\n"}</span>;
+        })}
+      </pre>
+    );
+  }
+
+  // For non-diff output, just render as plain monospace
+  return <pre className="tool-output">{content}</pre>;
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
