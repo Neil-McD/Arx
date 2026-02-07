@@ -5961,12 +5961,36 @@ function App() {
   }
 
   async function consumeOAuthHash() {
-    if (!window.location.hash) return;
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const accessToken = hash.get("access_token");
-    const refreshToken = hash.get("refresh_token");
-    const expiresIn = hash.get("expires_in");
-    if (!accessToken || !refreshToken || !expiresIn) return;
+    const query = new URLSearchParams(window.location.search);
+
+    const accessToken = hash.get("access_token") ?? query.get("access_token");
+    const refreshToken = hash.get("refresh_token") ?? query.get("refresh_token");
+    const expiresIn = hash.get("expires_in") ?? query.get("expires_in");
+
+    const clearCallbackParams = () => {
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    };
+
+    if (!accessToken || !refreshToken || !expiresIn) {
+      const oauthError =
+        hash.get("error_description") ??
+        query.get("error_description") ??
+        hash.get("error_code") ??
+        query.get("error_code") ??
+        hash.get("error") ??
+        query.get("error");
+      if (oauthError) {
+        setAuthError(`Google sign-in failed: ${oauthError}`);
+        clearCallbackParams();
+        return;
+      }
+      if (query.get("code")) {
+        setAuthError("Google sign-in returned an auth code instead of session tokens. Check Supabase OAuth flow settings.");
+        clearCallbackParams();
+      }
+      return;
+    }
     const user = await fetchSupabaseUser(accessToken);
     if (!user) {
       setAuthError("Failed to load user profile.");
@@ -5986,8 +6010,8 @@ function App() {
       localStorage.setItem("arx_supabase_session", JSON.stringify(session));
 	    }
 	    setSupabaseSession(session);
-	    // Preserve query params (e.g. invite codes) while clearing the OAuth hash.
-	    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+	    // Preserve query params (e.g. invite codes) while clearing OAuth callback params.
+	    clearCallbackParams();
 	  }
 
   function getOAuthRedirectUrl(): string {
