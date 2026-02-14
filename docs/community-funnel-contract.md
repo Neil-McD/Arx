@@ -1,54 +1,22 @@
-# Community Funnel Contract (Web2 MVP)
+# Community Landing Contract (MVP)
 
-This contract defines one canonical public funnel entry for communities:
+This contract defines the single public community entry surface used in MVP:
 
 - Public entry URL: `/c/:slug`
-- Canonical resolver: `public.get_public_community_funnel_by_slug(p_community_slug text)`
-- Canonical edge endpoint for funnel actions: `functions/v1/public_funnel`
+- Canonical resolver endpoint: `POST /functions/v1/public_funnel` with `intent = "resolve"`
+- Canonical checkout endpoint: `POST /functions/v1/public_funnel` with `intent = "checkout"`
 
 ## First-principles semantics
 
-- The community URL is the share link.
+- A community share link always resolves through `/c/:slug`.
+- Visibility is simplified to `published` and `unlisted`; entry remains gated by join policy.
 - Join behavior is server-resolved, not inferred by clients:
-  - `checkout`: there is at least one active paid option.
-  - `request_access`: free private OR free public/unlisted with approvals enabled.
-  - `join_free`: free public/unlisted with auto-approve enabled.
-- One active option per billing period (`monthly`, `yearly`) can exist at a time.
-- External funnels and native Arx landing use the same conversion endpoint shape.
+  - `checkout`: community has at least one active paid plan.
+  - `request_access`: community requires approval before joining.
+  - `join_free`: community allows immediate free join.
+- One active plan per billing period (`monthly`, `yearly`) can exist at a time.
 
-## SQL contract
-
-### `public.get_public_community_funnel_by_slug(text)`
-
-Returns one row with:
-
-- community identity and metadata (`slug`, `name`, visibility/media fields)
-- `join_mode`
-- `active_plans` JSON array (monthly/yearly options)
-
-### `public.capture_community_funnel_lead_by_slug(...)`
-
-Service-role only function to ingest leads from public funnels:
-
-- upserts to `public.community_funnel_leads`
-- emits `identity.email_captured` automation event (idempotent)
-
-### `public.get_community_funnel_config(uuid)` / `public.save_community_funnel_config(uuid, boolean, jsonb)`
-
-Owner/admin funnel-schema management:
-
-- one row per community in `public.community_funnel_configs`
-- `is_enabled` gate for custom funnel rendering
-- `schema_json` stores guarded builder output
-
-### `public.get_public_community_funnel_config_by_slug(text)`
-
-Public read projection used by edge resolve:
-
-- returns `is_enabled`, `schema_json`, `updated_at`
-- available for `public`, `private`, and `unlisted` community slugs
-
-## Edge contract
+## Runtime contract
 
 ### `POST /functions/v1/public_funnel`
 
@@ -56,15 +24,11 @@ Request payload:
 
 ```json
 {
-  "intent": "resolve | capture_email | checkout",
+  "intent": "resolve | checkout",
   "community_slug": "your-community-slug",
   "billing_period": "monthly | yearly",
   "success_url": "https://app.example.com/checkout/success",
   "cancel_url": "https://app.example.com/c/your-community-slug",
-  "email": "lead@example.com",
-  "full_name": "Lead Name",
-  "source": "public_funnel",
-  "metadata": {},
   "tracking": { "brandos_aid": "uuid-or-null" }
 }
 ```
@@ -73,34 +37,26 @@ Request payload:
 
 Response includes:
 
-- community metadata
-- `join_mode`
-- `active_plan` + `active_plans`
-- derived action booleans (`can_join_free`, `can_request_access`, `can_checkout`)
-- public funnel payload (`funnel.enabled`, `funnel.schema_json`, `funnel.updated_at`)
-
-#### `intent = "capture_email"`
-
-Response includes:
-
-- canonical lead row summary (community, email, first/last seen, capture count)
+- community metadata for landing
+- canonical `join_mode`
+- `active_plan` and `active_plans` summary
 
 #### `intent = "checkout"`
 
 Response includes:
 
-- Stripe checkout URL/session IDs from canonical `checkout_start` flow
+- checkout URL/session created via canonical paid-join flow
 
-## Current Web2 usage
+## Access/join RPCs used by web controller
 
-- `/c/:slug` landing resolves through `public_funnel` (`intent = "resolve"`).
-- Landing checkout CTA now calls `public_funnel` (`intent = "checkout"`), so external and native funnel checkout behavior is aligned.
-- Members tab now exposes captured lead review for owners/admins.
+- `get_my_community_access_by_slug`
+- `get_my_join_request_by_slug`
+- `request_community_access_by_slug`
+- `join_public_community_by_slug` (or `join_public_community` by ID)
 
-## What this does not include yet
+## Explicitly out of MVP contract
 
-- Visual funnel page builder UI
-- AI section generation/editor
-- Public lead dashboard UI on members/admin pages
-
-Those can be built on top of this contract without changing conversion semantics.
+- Public lead capture (`intent = "capture_email"`)
+- Community funnel schema/config storage
+- Funnel leads owner/admin review surface
+- Multi-template funnel builder behavior

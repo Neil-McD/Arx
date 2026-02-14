@@ -1,282 +1,153 @@
-# Arx MVP — Architecture Contract v2.1 (Reality-Aligned)
+# PolyNet.ai — MVP Agent Contract (v1)
 
-Arx is a **community + agent platform** with two primary surfaces:
-- **Web/PWA (community-first):** discovery + landing/checkout, join (free/public + pay-first), community chat, resources/library, members/admin/analytics, and a **personal AI workspace** (cloud threads/messages; BYOK model provider keys). Web cannot execute local tools.
-- **Desktop (power surface, Tauri):** everything web has **plus** a local **operator runtime** that can use local tools (filesystem/shell) inside a user-selected workspace, gated by approvals and bounded to a workspace binding. Desktop also handles deep links (e.g. `arx://claim?...`).
+PolyNet.ai is the first collective intelligence platform that lets anyone build their own collective intelligence.
 
-Note: A **community-scoped assistant** (i.e. “community AI” that can reason over `community_resources` and take community-tool actions) is **deferred**. MVP AI is currently **personal-thread scoped**.
+This file is the execution contract for agents working in this repository.
 
-This contract optimizes for **simplicity, scalability, reliability, and UX** while keeping the system adaptable to future execution substrates (cloud → decentralized compute) and future payment rails (Stripe → crypto).
+## 0) Vision and Philosophy
 
-Default mode is **BUILD**. Only switch to **EXPLORE** when explicitly asked. In EXPLORE, destructive actions are denied.
+### Product Vision
+- Build communities that can think, remember, and act with AI.
+- Give founders a simple way to launch a community intelligence system.
+- Keep the system understandable: explicit memory, explicit access, explicit payment state.
 
----
+### Product Philosophy
+- Simplicity is a feature: fewer surfaces, fewer flows, fewer hidden states.
+- Reliability over cleverness: deterministic behavior beats magic.
+- Security and trust by default: fail closed on permission boundaries.
+- Community value first: optimize creator setup + member participation loop.
 
-## 0) First Principles (Invariants)
-
-### Canonical State
-- **Cloud is canonical** for: `users/profiles`, `communities`, `entitlements`, `plans`, `payments`, `threads/messages`, and **personal + community memory**.
-- **Desktop local storage is not canonical cognition.** It stores workspace bindings, local approvals state, and optional caches.
-  - Desktop stores **runtime evidence + blobs** for the operator agent and mirrors user/assistant messages back to the cloud thread.
-  - Threads/messages/memory are **cloud-canonical when signed in**; offline/local-only chat is not an MVP requirement.
-- Users can export their cognition as **CSV** (threads/messages/personal memory) from Settings (web or desktop).
-- Users can reset/clear the desktop’s local cache (SQLite + blobs) without affecting cloud data.
-
-### Access Control
-- **Entitlements are canonical access** and represent **time-bounded access only** (`starts_at`/`ends_at`).
-- **Roles are manual-only** (`community_memberships.role` + `communities.owner_id`) and are checked per request for admin/mod operations.
-- **Role + entitlement checks happen per request** (no “checked once at login” assumption). UI never gates access based on provider-specific payment state.
-- **Membership rows are a roster projection** and may outlive entitlements; admin UX should show access status (e.g. `active` vs `declined`) without exposing payment internals.
-
-### Surface Capabilities (Enforced, Not Advisory)
-- **Capabilities differ by surface** and must be enforced server-side:
-  - Web copilot can only operate on **cloud community objects** (chat/resources/members).
-  - Desktop operator can operate on **local workspace tools** only when a workspace is locally bound.
-- Prompt instructions/manifests are helpful, but **hard enforcement** is the guarantee.
-
-### MVP Critical Guardrails
-- **No “superuser bot”:** any copilot/router that uses privileged keys must still enforce the same `user_id + community_id + role` checks per call; prefer user-scoped queries or SECURITY DEFINER RPCs that validate scope and fail closed.
-- **No “paid but can’t access”:** payment finality is webhook/provider-verified; redirects are not trusted. Users must have a recovery path (e.g. “Pending purchases” after login / resend link) so they can always claim access.
-
-### Payments (Rail-Agnostic)
-- Payments produce **receipts** (Stripe now, tx hashes later).
-- Receipts mint/extend **entitlements** through deterministic server rules.
-- For subscriptions (monthly/yearly), **provider subscription mapping** is mandatory (no email correlation for renewals).
-- **Payment finality must not depend on browser redirects.** Webhooks (and/or provider API verification) are authoritative; `checkout_finalize` is UX-only and must be idempotent.
-- **Delinquency is explicit:** payment failures start a grace window; access is revoked when grace ends. Lapsed access must surface as “declined” in admin member UI.
-- **Analytics is event-led:** normalize revenue-impacting events into a ledger primitive (so totals/series don’t depend on fragile provider object interpretation).
-
-### Memory (Two Levels)
-- **Personal memory**: cloud-canonical durable facts/preferences with user-controlled modes:
-  - `off`: no writes; retrieval disabled
-  - `suggest`: no automatic writes; suggestions are shown
-  - `auto`: opt-in automatic writes when the system judges it useful
-  - Retrieval/injection must include **provenance** (what was used and why).
-- **Community memory**: curated resources/artifacts. Raw chat is not “memory” by default.
-- Community retrieval/injection into AI is deferred for MVP; when implemented it must include provenance.
-
-### “Own Your Thoughts” (Crypto-Ready Framing)
-- Ownership is ultimately **cryptographic control** (keys) rather than “must run locally.”
-- v2.0 supports cloud-canonical cognition now; E2EE is deferred but the data model should be compatible with ciphertext later.
-  - Note: E2EE constrains server-side search/RAG; plan for client-side indexing or metadata-only retrieval when E2EE ships.
+### MVP North Star
+- A founder can create a community, share a landing link, and onboard members through a gated flow.
+- Members can join, chat/post/use voice, access resources, and use personal AI threads.
+- AI in a thread can switch community context safely and deterministically.
 
 ---
 
-## 1) Durable Primitives (Irreducible)
+## 1) MVP In Scope (Must Keep)
 
-### Cloud primitives (Supabase; canonical)
-- **User / Profile**
-- **Community**
-- **CommunityMembership** (roles/roster projection)
-- **Entitlement** (canonical access; time-bounded)
-- **Plan** (pricing listing)
-- **PaymentIntent** (pre-checkout attempt)
-- **PaymentReceipt** (normalized evidence)
-- **ProviderSubscription** (monthly/yearly lifecycle mapping)
-- **PurchaseClaim** (pay-first bridge token)
-- **PaymentProviderEvent** (webhook idempotency ledger)
-- **PaymentLedgerEntry** (normalized revenue events for analytics)
-- **Thread**
-- **Message**
-- **UserAIHistoryUsage** (server-enforced storage quota for personal AI threads)
-- **UserMemorySettings** (off/suggest/auto)
-- **UserModelSettings** (system prompt / model prefs)
-- **PersonalMemoryItem**
-- **CommunityResource** (community memory)
-
-### Local primitives (Desktop; device-local)
-- **WorkspaceBinding**: maps `thread_id` → `workspace_path/scope` on a specific device.
-- **Session approvals**: “allow write/edit this session” and other device-local UX state.
-- Optional caches (non-canonical): recent lists, drafts, local render caches.
+- Auth and session lifecycle.
+- Community creation and management.
+- Community visibility model simplified to `Published` and `Unlisted`.
+- Discover page retained using simplified visibility semantics.
+- Gated community access model (including for `Published` communities).
+- Public community landing pages for founder-shared links (YouTube/social/direct).
+- Core member UX: join, navigate, post/chat, and voice.
+- Billing and provider/account connections.
+- Automated payouts for community builders (existing community payout flow).
+- Tiered access and quota enforcement for personal AI usage.
+- Personal AI threads with community lens/context switching inside a thread.
+- Ongoing `App.tsx` decomposition and cleanup required for launch stability.
 
 ---
 
-## 2) Cloud Database (Supabase — replaceable)
+## 2) Deferred (Must Not Expand During MVP)
 
-Cloud is canonical for cross-device UX and community-first flows.
-
-### 2.1 Core community
-- `communities`
-- `community_memberships` (roles/ownership)
-- `community_invites` (optional for free joins / tracking)
-
-Visibility semantics:
-- `public`: discoverable + previewable
-- `private`: discoverable + preview gated until entitlement
-- `unlisted`: not in discovery; accessible by direct link (prelaunch)
-
-### 2.2 Community memory (curated)
-- `community_resources` (unified “post/resource” model; supports embeds: YouTube/Wistia/images/links)
-
-### 2.3 Cognition (threads/messages)
-- `threads` (cloud-canonical)
-- `messages` (cloud-canonical; stable ordering per thread)
-  - Ordering must not rely on timestamps. Use a server-assigned monotonic `seq` (or allocator) per thread and order by it.
-
-Thread engine semantics:
-- `community_chat` threads are community-scoped and readable/writable via membership-based rules; invariant `threads.id == threads.community_id == communities.id`.
-- Personal AI threads are owner-scoped (`engine_id <> 'community_chat'`).
-
-### 2.4 Personal memory
-- `personal_memory_items` (explicit user writes; pinned/tags optional)
-
-### 2.5 Monetization + payments (monthly/yearly)
-- `plans` (provider-agnostic pricing + billing period)
-- `payment_intents` (user_id nullable until claim redeem)
-- `payment_receipts` (normalized; raw_json preserved)
-- `provider_subscriptions` (maps provider subscription id → plan/community; binds to user_id on claim redeem)
-- `purchase_claims` (hash-only; single-use; expiring)
-- `payment_provider_events` (webhook idempotency ledger)
-- `payment_ledger_entries` (analytics; revenue series + totals)
+- Affiliate system as a launch requirement.
+- Automated affiliate payouts.
+- Advanced automations/workflow depth beyond minimal alpha.
+- Funnel builder.
+- Duplicate/legacy UI surfaces not required for MVP journeys.
+- Extra inference-gating complexity beyond minimal tier limits.
+- Nice-to-have platform expansions not directly improving creator setup + member participation.
 
 ---
 
-## 3) Desktop Local Storage (SQLite; minimal)
+## 3) Do-Not-Delete Platform Core
 
-Desktop local storage exists to enable the “operator agent” safely.
+These are protected and must not be removed in MVP simplification passes:
 
-Must store:
-- `workspace_bindings` (device-local): `thread_id`, `workspace_path`, `workspace_scope_id`, timestamps
-- `workspace_policies` (device-local approvals and scope rules) OR session-scoped policy in memory (MVP)
-- run/tool **evidence + blobs** (stdout/stderr/diffs) for crash recovery and UX
+- Coding harness.
+- Community harness.
+- Community compiler.
+- Community resources/memory systems.
+- References folders (research context).
 
-Should not be canonical for:
-- `threads/messages`
-- `personal memory`
-- community membership state
-
-Note:
-- Removing SQLite entirely is a larger refactor because the desktop operator runtime currently uses it for safe local execution state and evidence. If we later remove it, replace with a minimal file-backed store for bindings/policies.
+If a cleanup touches any of the above, require explicit human confirmation.
 
 ---
 
-## 4) Components (Minimal)
+## 4) Architecture Invariants (Non-Negotiable)
 
-| Component | Responsibility |
-|---|---|
-| **Web/PWA Client** | Community UI + discovery + pay-first join + claim redemption + personal AI workspace UI (cloud threads; BYOK keys) |
-| **Desktop Client (Tauri)** | Community UI + personal AI workspace UI + operator runtime UI; receives deep links; runs local tools with approvals |
-| **Supabase DB + RLS** | Canonical state: communities, memberships/roles, entitlements, threads/messages, memory, payments, analytics |
-| **Supabase Edge Functions** | `checkout_start`, `checkout_finalize`, `stripe_webhook`, `openrouter_turn`, public landing/discovery functions, billing/connect helpers |
-| **Desktop Runtime Service** | Serial agent loop + local tool runner; posts outputs back to cloud threads |
+### Canonical Data
+- Cloud is canonical for users, communities, memberships/entitlements, billing state, threads/messages, and memory records.
+- Desktop local runtime storage is operational evidence and workspace policy state; it is not the product source of truth.
 
----
+### Community Access + Visibility
+- Visibility has only two states: `Published` and `Unlisted`.
+- `Published` does not mean ungated access; entitlement and membership checks still apply.
+- Community landing page is a single canonical entry surface for join/gate.
 
-## 5) Flows (MVP)
+### Thread Community Lens
+- Thread-level community context is explicit and server-validated.
+- Switching lens affects subsequent turns only, never retroactively mutates prior turns.
+- Lens context must fail closed if membership/entitlement is missing.
+- Context used for each turn must be auditable from stored thread records/events.
 
-### 5.1 Pay-first join (monthly/yearly)
-1) Creator landing page → **Checkout**
-2) `checkout_start` creates `payment_intent` + Stripe Checkout Session
-3) **Authoritative finalization:** `stripe_webhook` (and/or provider API verification) writes receipt/subscription and updates `payment_intent` status (idempotent)
-4) **UX finalization:** Stripe success redirect → `checkout_finalize` (idempotent “status + continue” page; may mint a claim only if payment is confirmed)
-5) User continues (web or desktop):
-   - Web: `/claim?token=...` → auth → `redeem_purchase_claim`
-   - Desktop: `arx://claim?token=...` → auth → `redeem_purchase_claim`
-6) `redeem_purchase_claim` binds subscription to `user_id` and issues **entitlement + membership**
-7) Recovery must exist for “paid but didn’t finish redirect” (e.g. “Pending purchases” after login + auto-redeem) so users never get stuck.
-8) Subscription delinquency: failed invoices start a grace window; entitlement ends when grace ends. Admin UX shows lapsed access as `declined`.
+### Payments and Entitlements
+- Redirects are UX only; provider/webhook verification is authoritative.
+- `checkout_finalize` must remain idempotent.
+- Access decisions are entitlement-driven and evaluated per request.
+- Automated payouts for community builders remain active for MVP.
 
-### 5.2 Personal AI (owner-scoped; web + desktop)
-1) User message in a personal thread (`engine_id <> 'community_chat'`)
-2) Server builds context from personal memory + history snippets (with provenance)
-3) Model responds; assistant reply is written back to the same cloud-canonical thread/messages
-4) Web runtime cannot execute local tools; desktop operator runtime may execute local tools only when a workspace is bound and approved
-
-### 5.3 Desktop operator agent (local tools)
-1) User opens a cloud thread on desktop
-2) User binds a local workspace to the thread (device-local `workspace_binding`)
-3) Desktop runtime may run local tools subject to policy/approvals
-4) Results are posted back into the same cloud thread (so the thread stays canonical)
+### Security and Tool Boundaries
+- Web runtime cannot execute local filesystem/shell tools.
+- Desktop local tools are workspace-bounded and approval-gated.
+- Path traversal and symlink escape must fail closed.
 
 ---
 
-## 6) Permissions & Tooling
+## 5) Irreducibility Rules for Repo Simplification
 
-### 6.1 Desktop tool policy (approvals)
-Allowed by default (within workspace scope):
-- `read`, `list_dir`, `glob`, `grep`, `sha256`
+When deciding keep vs delete:
 
-Approval required:
-- `write`, `edit`, `bash`
+1. Keep only what directly supports MVP scope above.
+2. If there is no first-party call path, mark as delete candidate.
+3. Prefer one canonical flow per job (one landing path, one gate path, one checkout completion path).
+4. Remove dead docs/contracts/migrations for deferred systems once replacement truth exists.
+5. Do not keep duplicate “just in case” surfaces.
 
-Scope rule:
-- Tools must be workspace-scope limited by default and must fail closed when denied.
-- Workspace scope enforcement must be based on **canonical real paths**:
-  - resolve `realpath()` before checks
-  - deny `..` traversal and symlink escape outside the bound workspace
-  - apply the same rules to globs/recursive searches
-
-### 6.2 Web copilot tools (no local tools)
-Web tools must be limited to community operations, for example:
-- read/search community resources
-- draft or post messages
-- create/edit/delete resources (role-gated)
-- moderation actions (admin/mod only)
-
-Enforcement:
-- Capability + role + entitlement checks are enforced server-side per call.
-
-### 6.3 Web anti-abuse baseline (MVP)
-Web write paths must include a minimal anti-abuse baseline:
-- rate limits for posting and resource creation (per user and per community)
-- role-gated destructive operations (delete, revoke, ban)
-- optional “new member slow mode” (first N minutes/messages)
+Classification buckets for every candidate:
+- `KEEP (MVP core)`
+- `DELETE (deferred/dead)`
+- `DECISION REQUIRED (user confirmation)`
 
 ---
 
-## 7) Memory Model (v2.0)
+## 6) Agent Execution Rules
 
-### Personal memory (user)
-- Cloud-canonical `personal_memory_items`
-- User-controlled modes (`off` / `suggest` / `auto`); `auto` is opt-in
-- Retrieved and injected with provenance
-
-### Community memory (shared)
-- Cloud-canonical `community_resources`
-- Curated artifacts; raw chat is not memory by default
-- Retrieval/injection into AI is deferred for MVP; when implemented it must be provenance-bearing and capability-enforced
+- Default mode: `BUILD`.
+- Use `EXPLORE` only when explicitly requested.
+- Do not add new deferred features.
+- Do not widen scope while fixing MVP issues.
+- Keep changes small, reversible, and verifiable.
+- Update docs/contracts in the same PR when behavior changes.
+- Prefer deletion over partial deprecation for non-MVP paths.
 
 ---
 
-## 8) Crypto + Decentralized Compute Readiness
+## 7) MVP Acceptance Checklist
 
-### Identity
-- Identity is linkable: email/OAuth now; wallet later.
+All must be demonstrably true:
 
-### Payments
-- Keep receipts normalized and provider-agnostic; on-chain payments fit by adding chain fields (tx hash, chain id, addresses, token contract, base units).
-
-### Execution
-- Execution substrate must be swappable via an adapter interface later (cloud runner → decentralized runner) without changing entitlements, threads, or memory semantics.
-
----
-
-## 9) Acceptance Criteria (v2.0)
-
-Cross-device:
-- Threads/messages/memory are cloud-canonical and consistent across web + desktop after auth.
-
-Pay-first:
-- Web checkout + claim redemption gets a user inside a community on mobile and desktop.
-- Recovery exists for missed redirects (“Pending purchases”).
-- Delinquency grace revokes access deterministically; admin UI can see lapsed members as `declined`.
-
-Safety:
-- Web runtime cannot execute local tools (enforced server-side).
-- Desktop local tool execution is workspace-bound and approval-gated.
-
-Subscriptions:
-- Renewals/cancels update access via provider subscription mapping, not email guessing.
-
-Privacy:
-- Public preview surfaces must not leak stable internal identifiers unnecessarily.
+- Auth/session works across web + desktop surfaces.
+- Founder can create/manage community and share landing link.
+- Member can discover/open landing, pass gate, and join community.
+- Community usage loop works: navigate, post/chat, voice, resources.
+- Thread lens switch between communities works and remains auditable.
+- Billing flow reaches entitlement correctly; builder payouts continue.
+- No deferred feature is required to complete primary MVP journeys.
 
 ---
 
-## 10) What We Defer
+## 8) Definition of Done for “8/10 MVP”
 
-- End-to-end encryption (E2EE) for cloud cognition
-- Decentralized compute execution adapters
-- Community-scoped AI boundary + community resource retrieval/injection pipeline
-- Advanced moderation / anti-abuse ML
-- Enterprise features (SSO, SCIM)
+We call MVP ready only when:
+
+- Simplicity: no major duplicate surfaces; MVP boundary enforced.
+- Scalability: modular boundaries improve and monolith concentration is reducing.
+- Reliability: core join/chat/lens/billing flows are covered by automated contract tests.
+- Security: permission and scope boundaries fail closed.
+- Robustness: failure/retry paths are deterministic and recoverable.
+
+If a change harms these five dimensions, it is out of scope for launch.

@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 FILE="src/App.tsx"
-# Snapshot baseline for direct desktop invoke usage. Keep this flat or drive it down.
-BASELINE=85
+# App.tsx should not call Tauri invoke directly; runtime/shell clients own that boundary.
+BASELINE=0
 
 if [[ ! -f "$FILE" ]]; then
   echo "FAIL: missing $FILE"

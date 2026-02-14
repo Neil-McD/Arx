@@ -87,7 +87,7 @@ npm run build
 
 ```bash
 cd /Users/neilmcdevitt/code/arx/.worktrees/mvp
-bash scripts/arp_parity_check.sh
+bash scripts/harness_failure_matrix_check.sh
 cd /Users/neilmcdevitt/code/arx/.worktrees/mvp/src-tauri
 cargo test -q
 ```
@@ -101,4 +101,3 @@ Manual (with `VITE_ARP_CLIENT=1`):
 - Cancel in-flight run returns to idle cleanly.
 - Thread switch/back keeps messages and tool cards consistent.
 - App restart does not duplicate rows.
-

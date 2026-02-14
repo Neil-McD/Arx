@@ -15,8 +15,8 @@
 
 - ARP degrade regression check: PASS.
   - Command: `npm run check:arp-degrade`
-- ARP parity preflight script: PASS (compile + degrade checks).
-  - Command: `bash scripts/arp_parity_check.sh`
+- Harness preflight script: PASS (failure matrix + degrade checks).
+  - Command: `bash scripts/harness_failure_matrix_check.sh`
 - Web build: PASS.
   - Command: `npm run build`
 - Tauri tests: PASS (`14` tests).
@@ -47,7 +47,7 @@
 ## Remaining Execution Plan (Harness-Focused)
 
 1. Manual ARP UI parity run (required human verification)
-- Run app with `VITE_ARP_CLIENT=1` and complete checklist in `scripts/arp_parity_check.sh`.
+- Run app with `VITE_ARP_CLIENT=1` and complete checklist in `scripts/harness_failure_matrix_check.sh`.
 - Record pass/fail per item in release notes.
 
 2. Add compaction/handoff regression tests (code) [DONE]

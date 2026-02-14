@@ -32,17 +32,17 @@ if ! grep -q "setRuntimeSupportsCursorResume(false);" "$APP_FILE"; then
   exit 1
 fi
 
-echo "[3/4] Incremental sync failure must trip session circuit breaker..."
-if ! grep -q "Incremental sync failed; disabling cursor resume for this session." "$APP_FILE"; then
-  echo "FAIL: missing incremental sync failure warning in $APP_FILE"
+echo "[3/4] Incremental sync failure must trip per-thread circuit breaker..."
+if ! grep -q "Incremental sync failed; disabling cursor resume for thread" "$APP_FILE"; then
+  echo "FAIL: missing per-thread incremental sync failure warning in $APP_FILE"
   exit 1
 fi
 if ! grep -q "listEventsSince returned a non-advancing cursor" "$APP_FILE"; then
   echo "FAIL: missing non-advancing listEventsSince cursor guard in $APP_FILE"
   exit 1
 fi
-if ! grep -q "setRuntimeSupportsCursorResume(false);" "$APP_FILE"; then
-  echo "FAIL: incremental sync catch is not disabling cursor resume in $APP_FILE"
+if ! grep -q "cursorResumeDisabledByThreadRef.current\\[sessionId\\] = true;" "$APP_FILE"; then
+  echo "FAIL: incremental sync catch is not disabling cursor resume per thread in $APP_FILE"
   exit 1
 fi
 

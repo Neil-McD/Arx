@@ -18,7 +18,7 @@ This enables: “same conversation history, different community perspective/reso
 1. **Threads/messages remain cloud-canonical.** Lens switching must not fork or duplicate a personal thread.
 2. **Entitlements are canonical access.** Community context is only injected when the user has an active entitlement *at request time*.
 3. **Lens cannot grant access.** Selecting a lens never broadens data access beyond what entitlements allow.
-4. **No silent spend.** Lens switching must not change inference source; platform/BYOK consent rules stay intact (see `docs/llm-inference.md`).
+4. **No silent source switching.** Lens switching must not change inference source behavior or bypass platform policy (see `docs/llm-inference.md`).
 5. **No retroactive ambiguity.** Each assistant response must record which lens was used (provenance).
 
 ## Minimal data model contract (no new tables required)
@@ -61,7 +61,7 @@ In Arx MVP, we *do not* write lens-switch markers to `public.messages` because:
 
 Instead, MVP uses an ephemeral UI affordance (toast/indicator) and records the lens used per assistant turn via provenance (`meta.context_community_id`).
 
-## Inference contract (Web: `supabase/functions/openrouter_turn`)
+## Inference contract (Web: `supabase/functions/agent_turn`)
 
 ### Inputs (contract extension)
 

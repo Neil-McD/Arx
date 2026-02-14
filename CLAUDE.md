@@ -3,7 +3,7 @@
 `AGENTS.md` is the source of truth. This file is a shorter, tooling-oriented mirror for contributors and agents.
 
 ## Surfaces
-- **Web/PWA:** community UI (discovery + landing/checkout, join, chat, resources, members/admin/analytics) + **personal AI workspace** (cloud threads/messages; BYOK model provider keys). No local tool execution.
+- **Web/PWA:** community UI (discovery + landing/checkout, join, chat, resources, members/admin/analytics) + **personal AI workspace** (cloud threads/messages; platform inference). No local tool execution.
 - **Desktop (Tauri):** web features + **operator runtime** that can run local tools inside a bound workspace with approvals; also handles deep links (e.g. `arx://claim?...`).
 
 ## Canonical truth
@@ -31,7 +31,7 @@
 - Personal AI threads are owner-scoped (`engine_id <> 'community_chat'`).
 
 ## AI + memory
-- MVP AI is **personal-thread scoped** (`openrouter_turn`); community-scoped AI over `community_resources` is deferred.
+- MVP AI is **personal-thread scoped** (`agent_turn`); community-scoped AI over `community_resources` is deferred.
 - Personal memory is user-controlled (`off` / `suggest` / `auto`) and provenance-bearing.
 - Cloud AI history storage is quota-enforced server-side.
 
