@@ -1,84 +1,253 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
 import { TauriRuntimeClient } from "./runtime/arp/tauriClient";
 import type { RuntimeClient } from "./runtime/arp/client";
-import { ARP_PROTOCOL_VERSION, type RuntimeNotification } from "./runtime/arp/types";
+import {
+  ARP_PROTOCOL_VERSION,
+  type EventRecord as ArpEventRecord,
+  type MessageRecord as ArpMessageRecord,
+  type ProjectRecord as ArpProjectRecord,
+  type SessionResume as ArpSessionResume,
+  type ThreadRecord as ArpThreadRecord,
+  type ToolCallRecord as ArpToolCallRecord,
+  type TurnRecord as ArpTurnRecord,
+} from "./runtime/arp/types";
+import { TauriDesktopShellClient } from "./runtime/shell/tauriClient";
+import type { DesktopShellClient } from "./runtime/shell/client";
 import {
   runPhaseReducer,
   type AgentMode,
-  type RunPhase,
-  type VoiceSurface,
-  type VoiceUiState,
 } from "./features/harness/runPhase";
 import { useStreamingState } from "./features/harness/useStreamingState";
-import { executeSendMessageFlow } from "./features/harness/sendTurn";
+import { CommunityChatMessageRow } from "../shared/CommunityChatMessageRow";
+import { useLastClickWinsController } from "../shared/useLastClickWinsController";
+import { useCommunityChatRealtime } from "../shared/useCommunityChatRealtime";
+import { useCommunityChatViewport } from "../shared/useCommunityChatViewport";
+import { useCommunityChatLightbox } from "../shared/useCommunityChatLightbox";
+import { useMessageAttachmentInputController } from "../shared/useMessageAttachmentInputController";
+import { useCommunityChatDataController } from "../shared/useCommunityChatDataController";
+import { useCommunityChatMutationController } from "../shared/useCommunityChatMutationController";
+import { useCommunityInviteController } from "../shared/useCommunityInviteController";
+import { useCommunityResourceController } from "../shared/useCommunityResourceController";
+import { useCommunityResourceEditorController } from "../shared/useCommunityResourceEditorController";
+import { useCommunityCreateController } from "../shared/useCommunityCreateController";
+import { useCommunityDeleteController } from "../shared/useCommunityDeleteController";
+import { useBuilderUpgradeScrollHint } from "../shared/useBuilderUpgradeScrollHint";
+import { useWorkspaceAutoScroll } from "../shared/useWorkspaceAutoScroll";
+import { useModelPickerController } from "../shared/useModelPickerController";
+import { useCommunityAdminController } from "../shared/useCommunityAdminController";
+import { useCommunityAgentDraftController } from "../shared/useCommunityAgentDraftController";
+import { useCommunitySettingsGovernanceController } from "../shared/useCommunitySettingsGovernanceController";
+import { useCommunitySettingsDataController } from "../shared/useCommunitySettingsDataController";
+import { useCommunitySettingsFormController } from "../shared/useCommunitySettingsFormController";
+import { useCommunityAdminAnalyticsAutomationsLifecycle } from "../shared/useCommunityAdminAnalyticsAutomationsLifecycle";
+import { createThreadContextController } from "../shared/threadContextController";
 import {
-  classifyPublicCommunityJoinError,
+  extractCommunityEvidenceUsedV1,
+  type CommunityEvidenceItem,
+} from "../shared/communityEvidence";
+import { CommunityEvidenceCitations } from "../shared/CommunityEvidenceCitations";
+import { partitionCommunityAttachments } from "../shared/communityAttachmentUi";
+import {
+  buildReplyPrefix,
+  extractTextFromContentJson,
+  parseMessageAttachments,
+  parseReplyPrefix,
+  truncateReplyPreview,
+  type CommunityMessageAttachment,
+} from "../shared/communityMessageParsing";
+import {
+  buildDesktopBestInviteLink,
+  formatInviteLabel,
+  normalizeInviteCode,
+} from "../shared/communityInviteLinks";
+import { isValidCommunitySlug, slugifyCommunityName } from "../shared/communitySlug";
+import {
+  MessageCopyAction,
+  MessageFooter,
+  MessageSourcesAction,
+  MessageTeachAction,
+} from "../shared/MessageFooterActions";
+import { appendInferenceSourceLabel } from "../shared/inferenceSourceUi";
+import {
+  formatCommunityEvidenceTypeLabel,
+} from "../shared/communityEvidenceUi";
+import {
   captureBrandosAidFromLocation,
-  clearPendingPublicJoin,
   clearPendingPurchaseClaimToken,
-  getErrorMessage,
   getBrandosAidForCommunitySlug,
-  joinPublicCommunityRpc,
   listPendingPurchaseClaimsRpc,
-  readPendingPublicJoinBrandosAid,
-  readPendingPublicJoinCommunityId,
-  readPendingPublicJoinCommunitySlug,
   readPendingPurchaseClaimToken,
   redeemPendingPurchaseClaimsRpc,
   redeemPurchaseClaimRpc,
   storePendingPurchaseClaimToken,
   type PendingPurchaseClaim
 } from "../shared/pay_first";
+import { usePendingInviteJoinController } from "../shared/usePendingInviteJoinController";
+import { usePendingPublicCommunityJoinController } from "../shared/usePendingPublicCommunityJoinController";
+import { useDesktopDiscoverController } from "../shared/useDesktopDiscoverController";
+import {
+  readProfileDraftForUser,
+  writeProfileDraftForUser,
+} from "../shared/profileDraftStorage";
+import {
+  traceThreadContext,
+} from "../shared/threadTitleUi";
+import {
+  buildProjectByIdMap,
+  normalizeThreadLane,
+  normalizeThreadStorageMode,
+  resolveThreadProjectId as resolveThreadProjectIdShared,
+  storageModeForThreadLane,
+  sortProjectsByRootPathLengthDesc,
+} from "../shared/threadSidebarSelectors";
+import {
+  resolveThreadServiceDomain,
+  type ThreadService,
+} from "../shared/threadService";
+import {
+  createDesktopAppThreadServiceRouter,
+  createDesktopCloudChatThreadApi,
+  createDesktopCloudLensSync,
+} from "./services/thread";
+import {
+  getArxOwnerEmailSet,
+  getArxOwnerUserIdSet,
+  isUuid,
+} from "../shared/appIdentity";
+import {
+  isLikelyImageFile,
+  isLikelyTextFile,
+  isSupportedChatRasterImage,
+  readChatImageAsDataUrl,
+  readTextAttachmentPreview,
+  type ImageFileDetectionOptions,
+} from "../shared/attachmentHelpers";
+import {
+  anthropicLogo,
+  googleLogo,
+  openAiLogo,
+  openRouterLogo,
+  xAiLogo,
+} from "../shared/providerLogos";
+import { useDesktopThreadSidebarState } from "./controllers/desktop/useDesktopThreadSidebarState";
+import { useDesktopThreadPanelActions } from "./controllers/desktop/useDesktopThreadPanelActions";
+import { useDesktopThreadTitleViewModel } from "./controllers/desktop/useDesktopThreadTitleViewModel";
+import { useDesktopThreadLifecycle } from "./controllers/desktop/useDesktopThreadLifecycle";
+import { useDesktopThreadSendReadiness } from "./controllers/desktop/useDesktopThreadSendReadiness";
+import { useDesktopWorkspaceAttachmentController } from "./controllers/desktop/useDesktopWorkspaceAttachmentController";
+import { useDesktopSettingsImageUploadController } from "./controllers/desktop/useDesktopSettingsImageUploadController";
+import { useDesktopSendMessageFlow } from "./controllers/desktop/useDesktopSendMessageFlow";
+import { useDesktopRunOrchestration } from "./controllers/desktop/useDesktopRunOrchestration";
+import { useDesktopThreadFeedController } from "./controllers/desktop/useDesktopThreadFeedController";
+import { useDesktopThreadMetaLoaders } from "./controllers/desktop/useDesktopThreadMetaLoaders";
+import { useDesktopModelBootstrapController } from "./controllers/desktop/useDesktopModelBootstrapController";
+import { useDesktopModelPickerActions, type DesktopCuratedPickerModel } from "./controllers/desktop/useDesktopModelPickerActions";
+import { useDesktopSlashCommands } from "./controllers/desktop/useDesktopSlashCommands";
+import { useDesktopToolApprovalActions } from "./controllers/desktop/useDesktopToolApprovalActions";
+import { useDesktopBuilderBillingActions } from "./controllers/desktop/useDesktopBuilderBillingActions";
+import { useDesktopProfileDraftState } from "./controllers/desktop/useDesktopProfileDraftState";
+import { useDesktopVoiceInputController } from "./controllers/desktop/useDesktopVoiceInputController";
+import { VoiceInputButton } from "../shared/VoiceInputButton";
+import { useDesktopUiLifecycleEffects } from "./controllers/desktop/useDesktopUiLifecycleEffects";
+import { useDesktopAuthSessionLifecycle } from "./controllers/desktop/useDesktopAuthSessionLifecycle";
+import {
+  useDesktopSourcesUsed,
+  type SourcesUsedState,
+} from "./controllers/desktop/useDesktopSourcesUsed";
+import {
+  clearCreateCommunityDraft,
+  createCommunityDraftId,
+  loadCreateCommunityDraft,
+  saveCreateCommunityDraft,
+} from "../shared/communityDraftStorage";
+import {
+  DEFAULT_EMPTY_THREAD_LANDING,
+  buildDefaultCommunityEmptyThreadLanding,
+  normalizeCommunityAgentDraftForSave,
+  normalizeCommunityAgentLanding,
+  type CommunityAgentLanding,
+} from "../shared/communityAgentLanding";
+import {
+  buildCsv,
+  dateKeyLocal,
+  formatChatTime,
+  formatCount,
+  formatMoneyBaseUnits,
+  formatPercent,
+  formatRelativeTimeFromEpochSeconds as formatRelativeTime,
+  parseContentRangeTotal,
+} from "../shared/contentFormatting";
+import {
+  formatPlanPrice,
+  parseBuilderBillingReturn,
+  type BuilderBillingReturn,
+} from "../shared/builderBilling";
+import { AnalyticsLineChart } from "../shared/AnalyticsLineChart";
+import {
+  copyTextToClipboard,
+  downloadTextFile,
+  formatCommandForDisplay,
+  formatCommandPreview,
+  formatToolLabel,
+  getAvatarColor,
+  getInitials,
+  shortId,
+  shouldShowDateSeparator,
+} from "../shared/chatUi";
+import {
+  parseEmbedUrl,
+  renderTextWithLinks as renderTextWithLinksShared,
+} from "../shared/linkEmbedUi";
+import { renderMarkdown } from "../shared/markdownUi";
+import {
+  readAvatarFileAsSquareDataUrl,
+  readBannerFileAsWideDataUrlWithinLimit,
+} from "../shared/imageTransforms";
+import {
+  ensureSupabaseSessionForRequest,
+  fetchWithSupabaseAuthShared,
+  fetchWithSupabasePublicShared,
+  getSupabaseAnonKey,
+  getSupabaseAuthUid,
+  getSupabaseUrl,
+  readSupabaseError,
+  refreshSupabaseSessionWithLock,
+  refreshSupabaseSession,
+  type SupabaseSession,
+} from "../shared/supabaseAuthCore";
+import {
+  beginGoogleSupabaseSignIn,
+  expireSupabaseSessionFailClosed,
+  revokeSupabaseSessionRemote,
+  SUPABASE_SESSION_EXPIRED_MESSAGE,
+} from "../shared/supabaseAuthFlow";
+import { consumeSupabaseOAuthCallback } from "../shared/supabaseOAuthCallback";
+import {
+  buildTeachMemoryText,
+  deriveTeachCandidateTitle,
+  hashTeachCandidateContent,
+  listCommunityMemoryCandidatesRpc,
+  promoteCommunityMemoryCandidateRpc,
+  proposeCommunityMemoryCandidateRpc,
+  rejectCommunityMemoryCandidateRpc,
+  type CommunityMemoryCandidateRow,
+} from "../shared/communityMemoryCandidates";
+import { resetDesktopSessionStateAfterSignOut } from "./auth/resetSessionState";
+import { DesktopCommunityRail } from "./components/DesktopCommunityRail";
+import { DesktopTopbar } from "./components/DesktopTopbar";
+import { ThreadSidebarPanel } from "./components/ThreadSidebarPanel";
+import { ThreadSidebarSessionItem } from "./components/ThreadSidebarSessionItem";
 import { resolveUserAccessPolicy } from "../shared/capabilities";
 
-const USE_RUNTIME_CLIENT = (import.meta.env.VITE_ARP_CLIENT ?? "").trim() === "1";
-
-type ThreadRecord = {
-  id: string;
-  title: string | null;
-  engine_id: string;
-  model_id: string | null;
-  workspace_path: string | null;
-  community_id: string | null;
-  created_at: number;
-  updated_at: number;
-  last_event_at: number | null;
-  last_seq?: number;
-};
-
-type ProjectRecord = {
-  id: string;
-  name: string | null;
-  root_path: string;
-  git_root: string | null;
-  git_remote: string | null;
-  fingerprint: string;
-  created_at: number;
-  updated_at: number;
-};
-
-type ToolCallRecord = {
-  id: string;
-  session_id: string;
-  run_id?: string | null;
-  tool_name: string;
-  args_json: string;
-  status: string;
-  output_summary_json?: string | null;
-  stdout_excerpt?: string | null;
-  stderr_excerpt?: string | null;
-  exit_code?: number | null;
+type ThreadRecord = ArpThreadRecord;
+type ThreadLane = ArpThreadRecord["thread_lane"];
+type ProjectRecord = ArpProjectRecord;
+type ToolCallRecord = ArpToolCallRecord & {
   duration_ms?: number | null;
   raw_output_file_id?: string | null;
   egress_policy?: string;
-  created_at: number;
-  updated_at: number;
   command?: string;
 };
 
@@ -96,35 +265,6 @@ type AgentStatusPayload = {
   tool_args_preview: string | null;
 };
 
-type ToolCallProgressPayload = {
-  session_id: string;
-  tool_call_id: string;
-  tool_name: string;
-  tool_args_preview: string | null;
-  status: "started" | "finished";
-  result: "ok" | "error" | null;
-};
-
-type OpenedUrlsPayload = {
-  urls: string[];
-};
-
-type InferenceFallbackPayload = {
-  session_id: string;
-  from: string;
-  to: string;
-  reason: string;
-};
-
-type PlatformInferenceActionRequiredPayload = {
-  session_id: string;
-  approval_id: string;
-  provider_id: string;
-  provider_label: string;
-  model_id: string;
-  reason: string;
-};
-
 type RunningTool = {
   id: string;
   name: string;
@@ -132,74 +272,10 @@ type RunningTool = {
   status: "running" | "ok" | "error";
 };
 
-type ToolUiSpec = {
-  name: string;
-  description: string;
-  parameters: unknown;
-  requires_approval: boolean;
-  auto_apply: boolean;
-  parallel_safe: boolean;
-};
-
-type NativeVoiceCaptureStopped = {
-  audio_base64: string;
-  mime_type: string;
-  sample_rate_hz: number;
-  duration_ms: number;
-  rms: number;
-  peak: number;
-  speech_ratio: number;
-  speech_detected: boolean;
-};
-
-type MessageRecord = {
-  id: string;
-  session_id: string;
-  role: string;
-  content_json: string;
-  created_at: number;
-  engine_id?: string | null;
-  model_id?: string | null;
-  run_id?: string | null;
-};
-
-type TurnRecord = {
-  id: string;
-  thread_id: string;
-  user_event_id: string;
-  memory_retrieval_event_id: string | null;
-  engine_input_event_id: string | null;
-  assistant_event_id: string | null;
-  seq_start: number;
-  seq_end: number | null;
-  created_at: number;
-};
-
-type EventRecord = {
-  id: string;
-  thread_id: string;
-  seq: number;
-  type: string;
-  created_at: number;
-  text: string | null;
-  payload_json: string | null;
-  blob_ref: string | null;
-};
-
-type SendTurnResult = {
-  thread_id: string;
-  engine_id: string;
-  engine_input_event_id: string | null;
-  engine_input_seq: number | null;
-  run_id: string | null;
-};
-
-type SessionResume = {
-  session_id: string;
-  last_message_id: string | null;
-  last_message_at: number | null;
-  last_response_id: string | null;
-};
+type MessageRecord = ArpMessageRecord;
+type TurnRecord = ArpTurnRecord;
+type EventRecord = ArpEventRecord;
+type SessionResume = ArpSessionResume;
 
 type PersonalMemoryItemRecord = {
   id: string;
@@ -231,6 +307,8 @@ type ModelRegistryListRow = {
   enabled: boolean | null;
 };
 
+type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
+
 type ProviderKey = {
   id: string;
   label: string;
@@ -243,18 +321,6 @@ type ChatgptAuthSummary = {
   email?: string | null;
   account_id?: string | null;
   access_token_expires_at?: number | null;
-};
-
-type SupabaseUser = {
-  id: string;
-  email?: string;
-};
-
-type SupabaseSession = {
-  access_token: string;
-  refresh_token: string;
-  expires_at: number;
-  user: SupabaseUser;
 };
 
 type PendingInviteRecord = {
@@ -301,45 +367,7 @@ type ProductState = {
   platform_inference_standard_cap: number;
 };
 
-type BuilderBillingReturn = {
-  status: "success" | "cancel" | "return";
-  source: "web" | "desktop" | "unknown";
-  context: "builder" | "create_community" | "unknown";
-};
-
 type BuilderUpgradeContext = "builder" | "create_community";
-
-type CreateCommunityDraft = {
-  v: 1;
-  id: string;
-  created_at: number;
-  user_id: string | null;
-  name: string;
-  slug: string;
-  slug_edited: boolean;
-  visibility: "public" | "unlisted" | "private";
-  avatar_url: string | null;
-  banner_url: string | null;
-  description: string | null;
-};
-
-type OpenRouterStreamPayload = {
-  session_id: string;
-  run_id: string;
-  engine_id: string;
-  model_id: string;
-  inference_source?: string | null;
-  chunk: string;
-  full_content: string;
-  seq: number;
-  prompt_tokens?: number | null;
-  completion_tokens?: number | null;
-  max_tokens: number;
-};
-
-type SessionIdPayload = {
-  session_id: string;
-};
 
 type SecretScanRedaction = {
   kind: string;
@@ -351,17 +379,6 @@ type SecretScanResult = {
   blocked: boolean;
   redactions: SecretScanRedaction[];
 };
-
-type SourcesUsedState =
-  | { open: false }
-  | {
-      open: true;
-      turnId: string;
-      isLoading: boolean;
-      error: string | null;
-      workspacePath: string | null;
-      personalMemory: Array<{ id: string; content: string }>;
-    };
 
 type CommunityRecord = {
   id: string;
@@ -400,17 +417,6 @@ type DiscoverCommunity = PublicCommunityRecord & {
   active_plan?: PublicPlanSummary | null;
 };
 
-function formatPlanPrice(plan: PublicPlanSummary): string {
-  const raw = String(plan.amount_base_units ?? "").trim();
-  const amount = Number(raw);
-  const decimals = Number(plan.currency_decimals ?? 2);
-  const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
-  const currency = String(plan.currency ?? "").toUpperCase();
-  const suffix = plan.billing_period === "yearly" ? "/year" : plan.billing_period === "monthly" ? "/month" : "";
-  if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
-  return `${value.toFixed(0)} ${currency}${suffix}`;
-}
-
 type CommunityChatMessage = {
   id: string;
   community_id: string;
@@ -425,35 +431,6 @@ type CommunityChatMessage = {
 type ChatLightboxImage = {
   url: string;
   name: string;
-};
-
-type AutomationEndpoint = {
-  id: string;
-  name: string;
-  url: string;
-  is_enabled: boolean;
-  event_types: string[] | null;
-  include_email: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-type BrandosConnector = {
-  endpoint_id: string;
-  base_url: string;
-  brandos_account_id: string;
-  is_enabled: boolean;
-  updated_at: string;
-};
-
-type AutomationDelivery = {
-  attempted_at: string;
-  event_type: string;
-  endpoint_name: string;
-  status: "success" | "fail";
-  response_code: number | null;
-  duration_ms: number | null;
-  error: string | null;
 };
 
 type MessageReaction = {
@@ -473,16 +450,7 @@ type Attachment = {
   previewDataUrl?: string; // base64 data URL for image thumbnails
 };
 
-type MessageAttachment = {
-  id: string;
-  name: string;
-  type: "image" | "file";
-  mime: string | null;
-  size: number;
-  data_url?: string | null;
-  text?: string | null;
-  truncated?: boolean | null;
-};
+type MessageAttachment = CommunityMessageAttachment;
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
@@ -491,131 +459,23 @@ const MAX_COMMUNITY_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_COMMUNITY_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still compressed before sending)
 const MAX_COMMUNITY_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
-	const MAX_COMMUNITY_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
-	const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
-	const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
-	const DEFAULT_EMPTY_THREAD_LANDING: CommunityAgentLanding = {
-	  title: "How can I help?",
-	  subtitle: "Start with a prompt, or ask anything.",
-	  tabs: [
-	    {
-	      id: "community",
-	      label: "Community",
-	      prompts: [
-	        "What is a community, and why would I start one?",
-	        "Help me pick a community topic people will care about.",
-	        "Write my welcome message and simple rules.",
-	        "How do I get my first 20 members? Give me a simple plan.",
-	      ],
-	    },
-	    {
-	      id: "plan",
-	      label: "Plan",
-	      prompts: [
-	        "Help me plan my week so I actually ship.",
-	        "Turn my big goal into 5 small steps. Ask me 2 questions first.",
-	        "Make a simple 30-day plan for a launch.",
-	        "What should I do first today? Ask me 3 questions.",
-	      ],
-	    },
-	    {
-	      id: "ops",
-	      label: "Desktop",
-	      prompts: [
-	        "What can the desktop app do that the web can't?",
-	        "Help me set up the desktop app in a safe way.",
-	        "How do I use the desktop app with my project folder (simple steps)?",
-	        "Should I use web or desktop for this? Ask me a few questions.",
-	      ],
-	    },
-	    {
-	      id: "learn",
-	      label: "Learn",
-	      prompts: [
-	        "What is Arx, in plain English?",
-	        "What does Arx remember, and what does it forget?",
-	        "What gets saved online vs on my computer?",
-	        "How do paid communities work here (simple version)?",
-	      ],
-	    },
-	  ],
-	};
-
-	function buildDefaultCommunityEmptyThreadLanding(communityName: string): CommunityAgentLanding {
-	  const name = communityName.trim();
-	  return {
-	    title: name ? `Welcome to ${name}` : "Welcome",
-	    subtitle: "Say hi in Chat, browse Resources, or ask the AI agent for help.",
-	    tabs: [
-	      {
-	        id: "start",
-	        label: "Start here",
-	        prompts: [
-	          "Where do I find Chat, Library, and Resources in this community?",
-	          "Help me write a short intro message to post in Chat.",
-	          "Ask me 5 questions so you can point me to the right place in this community.",
-	          "What should I do first to get value here?",
-	        ],
-	      },
-	      {
-	        id: "community",
-	        label: "Community",
-	        prompts: [
-	          "Help me write a post asking for feedback (short + clear).",
-	          "Help me turn my idea into a good question for the community.",
-	          "Write a friendly reply to someone who responded to my post.",
-	          "Suggest 3 ways I can contribute here this week (even as a beginner).",
-	        ],
-	      },
-	      {
-	        id: "agent",
-	        label: "AI Agent",
-	        prompts: [
-	          "What can the AI agent help me do here? Give me 5 simple examples.",
-	          "Help me make a simple plan for the next 7 days.",
-	          "Turn my notes into a clean outline, then a first draft.",
-	          "Ask me 5 questions to scope my goal before we start.",
-	        ],
-	      },
-	    ],
-	  };
-	}
-
-	function normalizeCommunityAgentLanding(input: unknown): CommunityAgentLanding | null {
-	  if (!input || typeof input !== "object") return null;
-	  const raw = input as Record<string, unknown>;
-	  const title = typeof raw.title === "string" ? raw.title.trim() : "";
-	  const subtitle = typeof raw.subtitle === "string" ? raw.subtitle.trim() : "";
-	  const tabsRaw = Array.isArray(raw.tabs) ? raw.tabs : [];
-	  const tabs: CommunityAgentLandingTab[] = [];
-	  const seenIds = new Set<string>();
-	  for (let i = 0; i < tabsRaw.length; i++) {
-	    if (tabs.length >= 4) break;
-	    const tabRaw = tabsRaw[i];
-	    if (!tabRaw || typeof tabRaw !== "object") continue;
-	    const tab = tabRaw as Record<string, unknown>;
-	    const label = typeof tab.label === "string" ? tab.label.trim() : "";
-	    const promptsRaw = Array.isArray(tab.prompts) ? tab.prompts : [];
-	    const prompts = promptsRaw
-	      .map((p) => (typeof p === "string" ? p.trim() : ""))
-	      .filter((p) => p)
-	      .slice(0, 12);
-	    if (!label || prompts.length === 0) continue;
-	    let id = typeof tab.id === "string" ? tab.id.trim() : "";
-	    if (!id) id = `tab-${i + 1}`;
-	    while (seenIds.has(id)) id = `${id}-x`;
-	    seenIds.add(id);
-	    tabs.push({ id, label, prompts });
-	  }
-	  if (tabs.length === 0) return null;
-	  return {
-	    title: title || DEFAULT_EMPTY_THREAD_LANDING.title,
-	    subtitle: subtitle || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
-	    tabs,
-	  };
-	}
-
+const MAX_COMMUNITY_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
+const DESKTOP_IMAGE_FILE_DETECTION_OPTIONS: ImageFileDetectionOptions = {
+  allowSvg: true,
+  allowAvif: false,
+};
 const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
+const DESKTOP_FREE_MODEL_ALLOWLIST = new Set<string>(["gpt-oss-120b-free", "deepseek-r1-free"]);
+const DESKTOP_FREE_MODEL_LABELS: Record<string, string> = {
+  "gpt-oss-120b-free": "GPT OSS 120B (Free)",
+  "deepseek-r1-free": "DeepSeek R1 (Free)",
+};
+const DESKTOP_PREMIUM_MODEL_CATALOG: Array<{ id: string; label: string; section: ModelSectionId; description: string }> = [
+  { id: "kimi-k2", label: "Kimi K2", section: "openrouter", description: "Moonshot via OpenRouter" },
+  { id: "glm-4.7", label: "GLM 4.7", section: "openrouter", description: "Zhipu via OpenRouter" },
+  { id: "gpt-oss-20b", label: "GPT OSS 20B", section: "openrouter", description: "OpenAI OSS via OpenRouter" },
+  { id: "deepseek-v3.2", label: "DeepSeek V3.2", section: "openrouter", description: "DeepSeek via OpenRouter" },
+];
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
   { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
@@ -626,152 +486,8 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
   { id: "grok-4.1", label: "Grok 4.1", enabled: true },
 ];
 
-type LocalProfileDraft = {
-  name: string;
-  username: string;
-  bio: string;
-  avatarUrl: string | null;
-};
-
-const LEGACY_PROFILE_STORAGE_KEYS = {
-  name: "arx_profile_name",
-  displayName: "arx_profile_display_name",
-  username: "arx_profile_username",
-  bio: "arx_profile_bio",
-  avatar: "arx_profile_avatar",
-} as const;
-
-function profileStorageKeysForUser(userId: string | null | undefined): {
-  name: string;
-  username: string;
-  bio: string;
-  avatar: string;
-} {
-  const raw = (userId ?? "").trim();
-  const suffix = raw ? `user_${raw}_` : "guest_";
-  return {
-    name: `arx_profile_${suffix}name`,
-    username: `arx_profile_${suffix}username`,
-    bio: `arx_profile_${suffix}bio`,
-    avatar: `arx_profile_${suffix}avatar`,
-  };
-}
-
-function readLegacyProfileDraft(): LocalProfileDraft {
-  try {
-    const name =
-      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.name) ??
-      localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.displayName) ??
-      "";
-    const username = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.username) ?? "";
-    const bio = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.bio) ?? "";
-    const avatarRaw = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
-    return { name, username, bio, avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null };
-  } catch {
-    return { name: "", username: "", bio: "", avatarUrl: null };
-  }
-}
-
-function hasProfileDraftValue(draft: LocalProfileDraft): boolean {
-  return Boolean(draft.name.trim() || draft.username.trim() || draft.bio.trim() || (draft.avatarUrl ?? "").trim());
-}
-
-function readProfileDraftForUser(
-  userId: string | null | undefined,
-  opts?: { allowLegacyFallback?: boolean },
-): LocalProfileDraft {
-  const keys = profileStorageKeysForUser(userId);
-  try {
-    const name = localStorage.getItem(keys.name) ?? "";
-    const username = localStorage.getItem(keys.username) ?? "";
-    const bio = localStorage.getItem(keys.bio) ?? "";
-    const avatarRaw = localStorage.getItem(keys.avatar);
-    const scopedDraft: LocalProfileDraft = {
-      name,
-      username,
-      bio,
-      avatarUrl: avatarRaw && avatarRaw.trim() ? avatarRaw : null,
-    };
-    if (!hasProfileDraftValue(scopedDraft) && opts?.allowLegacyFallback) {
-      return readLegacyProfileDraft();
-    }
-    return scopedDraft;
-  } catch {
-    return opts?.allowLegacyFallback ? readLegacyProfileDraft() : { name: "", username: "", bio: "", avatarUrl: null };
-  }
-}
-
-function writeProfileDraftForUser(userId: string | null | undefined, draft: LocalProfileDraft): void {
-  const keys = profileStorageKeysForUser(userId);
-  const name = draft.name.trim();
-  const username = draft.username.trim();
-  const bio = draft.bio.trim();
-  const avatar = (draft.avatarUrl ?? "").trim();
-  try {
-    if (name) localStorage.setItem(keys.name, name);
-    else localStorage.removeItem(keys.name);
-    if (username) localStorage.setItem(keys.username, username);
-    else localStorage.removeItem(keys.username);
-    if (bio) localStorage.setItem(keys.bio, bio);
-    else localStorage.removeItem(keys.bio);
-    if (avatar) localStorage.setItem(keys.avatar, avatar);
-    else localStorage.removeItem(keys.avatar);
-  } catch {
-    // ignore
-  }
-}
-
-function clearLegacyProfileDraftStorage(): void {
-  try {
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.name);
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.displayName);
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.username);
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.bio);
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEYS.avatar);
-  } catch {
-    // ignore
-  }
-}
-
-const VOICE_CAPTURE_MIME_TYPES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/ogg;codecs=opus",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/mpeg",
-  "audio/wav",
-];
-type VoiceAudioContextCtor = new (contextOptions?: AudioContextOptions) => AudioContext;
-type VoiceUserMediaFn = (constraints: MediaStreamConstraints) => Promise<MediaStream>;
-type VoiceLegacyGetUserMediaFn = (
-  constraints: MediaStreamConstraints,
-  onSuccess: (stream: MediaStream) => void,
-  onError: (error: unknown) => void,
-) => void;
-type VoiceSupportState = {
-  hasGetUserMedia: boolean;
-  hasMediaRecorder: boolean;
-  hasAudioContext: boolean;
-  isSecureContext: boolean;
-  canRecord: boolean;
-};
-const VOICE_CAPTURE_SAMPLE_RATE = 16_000;
-const VOICE_CAPTURE_CONSTRAINTS: MediaStreamConstraints = {
-  audio: {
-    channelCount: 1,
-    sampleRate: VOICE_CAPTURE_SAMPLE_RATE,
-    sampleSize: 16,
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-  },
-  video: false,
-};
-// Alpha default: desktop personal threads are local-only. Set to "1" to re-enable
-// legacy cloud sync for personal threads during staged rollouts.
-const DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED =
-  ((import.meta.env.VITE_DESKTOP_PERSONAL_THREADS_CLOUD_SYNC as string | undefined) ?? "").trim() === "1";
+const THREAD_LANE_PREF_KEY = "arx-thread-lane-filter-v1";
+const PROJECT_EXPANDED_PREF_KEY = "arx-project-expanded-v1";
 const SLASH_COMMAND_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape"]);
 const SLASH_COMMANDS = [
   { name: "/status", description: "Show session, model, and tool-call status." },
@@ -781,234 +497,6 @@ const SLASH_COMMANDS = [
   { name: "/test", description: "Detect and propose a test command." },
   { name: "/remember", description: "Save a memory note (/remember Title :: Body) or open the memory editor." }
 ];
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-fA-F-]{36}$/.test(value);
-}
-
-function selectVoiceCaptureMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") return undefined;
-  for (const candidate of VOICE_CAPTURE_MIME_TYPES) {
-    try {
-      if (MediaRecorder.isTypeSupported(candidate)) return candidate;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
-}
-
-function getVoiceAudioContextConstructor(): VoiceAudioContextCtor | null {
-  const scope = globalThis as typeof globalThis & { webkitAudioContext?: VoiceAudioContextCtor };
-  const ctor = scope.AudioContext ?? scope.webkitAudioContext;
-  return typeof ctor === "function" ? ctor : null;
-}
-
-function getVoiceUserMedia(): VoiceUserMediaFn | null {
-  const modern = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
-  if (modern) return modern;
-  const legacyNavigator = navigator as Navigator & {
-    getUserMedia?: VoiceLegacyGetUserMediaFn;
-    webkitGetUserMedia?: VoiceLegacyGetUserMediaFn;
-    mozGetUserMedia?: VoiceLegacyGetUserMediaFn;
-    msGetUserMedia?: VoiceLegacyGetUserMediaFn;
-  };
-  const legacy =
-    legacyNavigator.getUserMedia ??
-    legacyNavigator.webkitGetUserMedia ??
-    legacyNavigator.mozGetUserMedia ??
-    legacyNavigator.msGetUserMedia;
-  if (!legacy) return null;
-  return (constraints) =>
-    new Promise<MediaStream>((resolve, reject) => {
-      try {
-        legacy.call(legacyNavigator, constraints, resolve, reject);
-      } catch (error) {
-        reject(error);
-      }
-    });
-}
-
-function getVoiceSupportState(): VoiceSupportState {
-  const hasGetUserMedia = Boolean(getVoiceUserMedia());
-  const hasMediaRecorder = typeof MediaRecorder !== "undefined";
-  const hasAudioContext = Boolean(getVoiceAudioContextConstructor());
-  const isSecure = typeof window !== "undefined" ? Boolean(window.isSecureContext) : false;
-  return {
-    hasGetUserMedia,
-    hasMediaRecorder,
-    hasAudioContext,
-    isSecureContext: isSecure,
-    canRecord: hasGetUserMedia && (hasMediaRecorder || hasAudioContext),
-  };
-}
-
-async function requestVoiceCaptureStream(requestUserMedia: VoiceUserMediaFn): Promise<MediaStream> {
-  try {
-    return await requestUserMedia(VOICE_CAPTURE_CONSTRAINTS);
-  } catch {
-    return await requestUserMedia({ audio: true, video: false });
-  }
-}
-
-function floatToInt16Pcm(input: Float32Array): Int16Array {
-  const out = new Int16Array(input.length);
-  for (let i = 0; i < input.length; i += 1) {
-    const sample = Math.max(-1, Math.min(1, input[i]));
-    out[i] = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
-  }
-  return out;
-}
-
-function createWavBlobFromInt16Chunks(chunks: Int16Array[], sampleRate: number): Blob {
-  let totalSamples = 0;
-  for (const chunk of chunks) totalSamples += chunk.length;
-  const dataSize = totalSamples * 2;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-  const writeString = (offset: number, value: string) => {
-    for (let i = 0; i < value.length; i += 1) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
-  };
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true); // PCM header size.
-  view.setUint16(20, 1, true); // PCM format.
-  view.setUint16(22, 1, true); // Mono channel.
-  view.setUint32(24, Math.max(8000, Math.floor(sampleRate || 16000)), true);
-  view.setUint32(28, Math.max(8000, Math.floor(sampleRate || 16000)) * 2, true); // sample_rate * channels * bytes_per_sample.
-  view.setUint16(32, 2, true); // block_align.
-  view.setUint16(34, 16, true); // bits_per_sample.
-  writeString(36, "data");
-  view.setUint32(40, dataSize, true);
-  let offset = 44;
-  for (const chunk of chunks) {
-    for (let i = 0; i < chunk.length; i += 1) {
-      view.setInt16(offset, chunk[i], true);
-      offset += 2;
-    }
-  }
-  return new Blob([buffer], { type: "audio/wav" });
-}
-
-function mergeVoiceTranscript(existing: string, transcript: string): string {
-  const next = transcript.trim();
-  if (!next) return existing;
-  if (!existing.trim()) return next;
-  return /\s$/.test(existing) ? `${existing}${next}` : `${existing} ${next}`;
-}
-
-function getVoiceLanguageHint(): string {
-  const locale = typeof navigator !== "undefined" ? (navigator.language || "").trim().toLowerCase() : "";
-  const twoLetter = locale.slice(0, 2);
-  return /^[a-z]{2}$/.test(twoLetter) ? twoLetter : "";
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  return bytesToBase64(new Uint8Array(buffer));
-}
-
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: mimeType });
-}
-
-function isValidCommunitySlug(value: string): boolean {
-  const trimmed = value.trim();
-  if (trimmed.length < 3 || trimmed.length > 32) return false;
-  return /^(?!-)[a-z0-9-]+(?<!-)$/.test(trimmed);
-}
-
-function createCommunityDraftId(): string {
-  try {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  } catch {
-    // ignore
-  }
-  return `draft_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-}
-
-function loadCreateCommunityDraft(): CreateCommunityDraft | null {
-  try {
-    const raw = localStorage.getItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return null;
-    const record = parsed as Record<string, unknown>;
-    if (record.v !== 1) return null;
-    const createdAt = Number(record.created_at);
-    if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
-    if (Date.now() - createdAt > CREATE_COMMUNITY_DRAFT_TTL_MS) {
-      localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
-      return null;
-    }
-
-    const id = typeof record.id === "string" ? record.id : createCommunityDraftId();
-    const user_id = typeof record.user_id === "string" ? record.user_id : null;
-    const name = typeof record.name === "string" ? record.name : "";
-    const slug = typeof record.slug === "string" ? record.slug : "";
-    const slug_edited = Boolean(record.slug_edited);
-    const visibility =
-      record.visibility === "public" || record.visibility === "unlisted" || record.visibility === "private"
-        ? (record.visibility as "public" | "unlisted" | "private")
-        : "private";
-    const avatar_url = typeof record.avatar_url === "string" ? record.avatar_url : null;
-    const banner_url = typeof record.banner_url === "string" ? record.banner_url : null;
-    const description = typeof record.description === "string" ? record.description : null;
-
-    if (!name.trim() || !isValidCommunitySlug(slug.trim().toLowerCase())) return null;
-
-    return {
-      v: 1,
-      id,
-      created_at: createdAt,
-      user_id,
-      name,
-      slug,
-      slug_edited,
-      visibility,
-      avatar_url,
-      banner_url,
-      description,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveCreateCommunityDraft(draft: CreateCommunityDraft): void {
-  try {
-    localStorage.setItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY, JSON.stringify(draft));
-  } catch {
-    // ignore
-  }
-}
-
-function clearCreateCommunityDraft(): void {
-  try {
-    localStorage.removeItem(CREATE_COMMUNITY_DRAFT_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
 
 const APPROVAL_PRESETS: Record<
   "read-only" | "agent" | "agent-full",
@@ -1082,15 +570,6 @@ type CommunityMember = {
   access_status?: string;
 };
 
-type CommunityMemberSettings = {
-  community_id: string;
-  user_id: string;
-  muted: boolean;
-  muted_until: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 type CommunityAccess = {
   community_id: string;
   user_id: string;
@@ -1107,16 +586,20 @@ type CommunityAccess = {
   can_manage_members: boolean;
 };
 
-type CommunityAgentLandingTab = {
-  id: string;
-  label: string;
-  prompts: string[];
+type TeachCandidateStatus = {
+  status: "submitting" | "submitted" | "error";
+  candidateId?: string | null;
+  routerState?: string | null;
+  promotedMemoryId?: string | null;
+  error?: string | null;
 };
 
-type CommunityAgentLanding = {
-  title: string;
-  subtitle: string;
-  tabs: CommunityAgentLandingTab[];
+type TeachCandidateDraft = {
+  communityId: string;
+  threadId: string;
+  messageId: string;
+  turnId: string | null;
+  evidenceItems: CommunityEvidenceItem[];
 };
 
 type CommunityAgentDraft = {
@@ -1175,7 +658,7 @@ type CommunityInviteRecord = {
 type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
 type SettingsGroup = "account" | "agent" | "appearance";
 
-type AppTheme = "light" | "dark" | "light-warm" | "dark-warm";
+type AppTheme = "light" | "dark" | "dark-warm";
 
 type AppPage = "workspace" | "community" | "discover";
 
@@ -1188,8 +671,7 @@ type CommunityTab =
   | "members"
   | "settings"
   | "ai_agent"
-  | "analytics"
-  | "automations";
+  | "analytics";
 
 type NavSnapshot = {
   page: AppPage;
@@ -1200,29 +682,71 @@ type NavSnapshot = {
   threadId: string | null;
 };
 
+const desktopShellClientSingleton: DesktopShellClient = new TauriDesktopShellClient();
+
 function App() {
-  const ARX_OWNER_EMAIL = "neilmcdevittd@gmail.com";
+  const arxOwnerEmailSet = useMemo(
+    () =>
+      getArxOwnerEmailSet({
+        ownerEmailsCsv: (import.meta.env.VITE_ARX_OWNER_EMAILS as string | undefined) ?? "",
+        ownerEmail: (import.meta.env.VITE_ARX_OWNER_EMAIL as string | undefined) ?? "",
+      }),
+    [],
+  );
+  const arxOwnerUserIdSet = useMemo(
+    () =>
+      getArxOwnerUserIdSet({
+        ownerUserIdsCsv: (import.meta.env.VITE_ARX_OWNER_USER_IDS as string | undefined) ?? "",
+        ownerUserId: (import.meta.env.VITE_ARX_OWNER_USER_ID as string | undefined) ?? "",
+      }),
+    [],
+  );
+  const isArxOwnerAccount = (user: { id?: string | null; email?: string | null } | null | undefined): boolean => {
+    if (!user) return false;
+    const userId = String(user.id ?? "").trim();
+    if (userId && arxOwnerUserIdSet.has(userId)) return true;
+    const email = String(user.email ?? "").trim().toLowerCase();
+    return Boolean(email && arxOwnerEmailSet.has(email));
+  };
   const runtimeClient = useMemo<RuntimeClient>(() => new TauriRuntimeClient(), []);
+  const shellClient = useMemo<DesktopShellClient>(() => desktopShellClientSingleton, []);
   const [runtimeSupportsCursorResume, setRuntimeSupportsCursorResume] = useState(false);
-  const eventCursorByThreadRef = useRef<Record<string, number>>({});
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
+  const [threadLaneFilter, setThreadLaneFilter] = useState<ThreadLane>(() => {
+    const saved =
+      typeof window !== "undefined" ? (window.localStorage.getItem(THREAD_LANE_PREF_KEY) ?? "").trim() : "";
+    return saved === "chat" ? "chat" : "agent";
+  });
   const [emptyThreadSection, setEmptyThreadSection] = useState<string>("community");
   const threadsHydratedRef = useRef(false);
-  const [newThreadTitle] = useState("Untitled thread");
   const [commandInput, setCommandInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const {
+    isDraggingOver,
+    handleAddAttachment,
+    handleRemoveAttachment,
+    handleDragOver,
+    handleDrop,
+  } = useDesktopWorkspaceAttachmentController<Attachment>({
+    shellClient,
+    setAttachments,
+    toAttachment: (result) => ({
+      id: result.id,
+      path: result.path,
+      name: result.name,
+      type: result.file_type,
+      size: result.size,
+      previewDataUrl: result.preview_data_url ?? undefined,
+    }),
+  });
   const [toolCalls, setToolCalls] = useState<ToolCallRecord[]>([]);
-  const [toolSpecsByName, setToolSpecsByName] = useState<Record<string, ToolUiSpec>>({});
   const [agentMode, setAgentMode] = useState<AgentMode>("build");
   const [pendingToolApproval, setPendingToolApproval] = useState<ToolApprovalRequestedPayload | null>(null);
   const [isToolApprovalSubmitting, setIsToolApprovalSubmitting] = useState(false);
-  const [pendingInferenceFallback, setPendingInferenceFallback] =
-    useState<PlatformInferenceActionRequiredPayload | null>(null);
-  const [isInferenceFallbackSubmitting, setIsInferenceFallbackSubmitting] = useState(false);
-  const [agentStatus, setAgentStatus] = useState<AgentStatusPayload | null>(null);
+  const [, setAgentStatus] = useState<AgentStatusPayload | null>(null);
   const [runningTools, setRunningTools] = useState<RunningTool[]>([]);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [turnsByAssistantEventId, setTurnsByAssistantEventId] = useState<Record<string, TurnRecord>>({});
@@ -1239,26 +763,31 @@ function App() {
   );
   const sendInFlightRef = useRef(false);
   const sendStartedAtRef = useRef<number | null>(null);
-  const [sendElapsedSec, setSendElapsedSec] = useState(0);
+  const [, setSendElapsedSec] = useState(0);
   const [activeView, setActiveView] = useState<"home" | "settings">("home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     const stored = localStorage.getItem("arx-theme");
-    if (stored && ["light", "dark", "light-warm", "dark-warm"].includes(stored)) {
+    if (stored && ["light", "dark", "dark-warm"].includes(stored)) {
       return stored as AppTheme;
     }
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
   const [communityTab, setCommunityTab] = useState<
-    "chat" | "library" | "resources" | "members" | "settings" | "ai_agent" | "analytics" | "automations"
+    "chat" | "library" | "resources" | "members" | "settings" | "ai_agent" | "analytics"
   >("chat");
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [modelProviderById, setModelProviderById] = useState<Record<string, ProviderKey["id"]>>({});
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const [modelPickerQuery, setModelPickerQuery] = useState("");
+  const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
+  const modelPickerRef = useRef<HTMLDivElement | null>(null);
+  const modelPickerSearchRef = useRef<HTMLInputElement | null>(null);
   const [toolDebug] = useState<ToolDebug | null>(null);
-  const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([
+  const [providerKeys] = useState<ProviderKey[]>([
     { id: "openai", label: "OpenAI", hasKey: false, inputValue: "", error: null },
     { id: "anthropic", label: "Anthropic", hasKey: false, inputValue: "", error: null },
     { id: "google", label: "Google (Gemini)", hasKey: false, inputValue: "", error: null },
@@ -1271,16 +800,14 @@ function App() {
   const [isLoadingSystemPrompt, setIsLoadingSystemPrompt] = useState(false);
   const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false);
   const [systemPromptError, setSystemPromptError] = useState<string | null>(null);
-  // Model availability is derived from provider keys for now (no remote "models list" fetch).
+  // Model availability is derived from local capability checks (no remote "models list" fetch).
 			  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
   const profileStorageUserId = (supabaseSession?.user?.id ?? "").trim() || null;
   const initialProfileDraft = useMemo(
-    () => readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId }),
+    () => readProfileDraftForUser(profileStorageUserId),
     [profileStorageUserId],
   );
 		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
-      const providerKeySyncInFlightRef = useRef<Promise<void> | null>(null);
-      const lastProviderKeySyncAtRef = useRef<number>(0);
 		  const supabaseAutoRefreshTimeoutRef = useRef<number | null>(null);
 		  const autoJoinInvitesAttemptedRef = useRef<Set<string>>(new Set());
 		  const autoJoinPublicCommunitiesAttemptedRef = useRef<Set<string>>(new Set());
@@ -1291,7 +818,7 @@ function App() {
       const [pendingPurchasesError, setPendingPurchasesError] = useState<string | null>(null);
       const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
       const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
-      const [isPendingPurchasesBannerDismissed, setIsPendingPurchasesBannerDismissed] = useState(false);
+      const [, setIsPendingPurchasesBannerDismissed] = useState(false);
       const redeemPendingPurchasesInFlightRef = useRef(false);
       const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
       const autoRedeemPendingPurchasesAttemptRef = useRef(0);
@@ -1309,36 +836,18 @@ function App() {
 	      const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
 	      const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
 	      const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
-	      const [isFinalizingBuilderReturn, setIsFinalizingBuilderReturn] = useState(false);
+	      const [, setIsFinalizingBuilderReturn] = useState(false);
 	      const [isFinalizingCreateCommunityFromBilling, setIsFinalizingCreateCommunityFromBilling] = useState(false);
-	      const [finalizeCreateCommunityError, setFinalizeCreateCommunityError] = useState<string | null>(null);
-	      const builderUpgradeModalBodyRef = useRef<HTMLDivElement | null>(null);
-	      const [showBuilderUpgradeScrollHint, setShowBuilderUpgradeScrollHint] = useState(false);
-
-	      const updateBuilderUpgradeScrollHint = useCallback(() => {
-	        const el = builderUpgradeModalBodyRef.current;
-	        if (!el) return;
-	        const threshold = 8;
-	        const scrollable = el.scrollHeight - el.clientHeight > threshold;
-	        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
-	        setShowBuilderUpgradeScrollHint(scrollable && !atBottom);
-	      }, []);
-
-	      useEffect(() => {
-	        if (!isBuilderUpgradeOpen) {
-	          setShowBuilderUpgradeScrollHint(false);
-	          return;
-	        }
-	        updateBuilderUpgradeScrollHint();
-	        const handleResize = () => updateBuilderUpgradeScrollHint();
-	        window.addEventListener("resize", handleResize);
-	        return () => window.removeEventListener("resize", handleResize);
-	      }, [isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
-
-	      useEffect(() => {
-	        if (!isBuilderUpgradeOpen) return;
-	        updateBuilderUpgradeScrollHint();
-	      }, [builderBillingStatus?.builder_tier, builderUpgradeContext, isBuilderUpgradeOpen, updateBuilderUpgradeScrollHint]);
+	      const [, setFinalizeCreateCommunityError] = useState<string | null>(null);
+	      const builderUpgradeScrollRefreshToken = `${builderBillingStatus?.builder_tier ?? ""}:${builderUpgradeContext}`;
+	      const {
+	        builderUpgradeModalBodyRef,
+	        showBuilderUpgradeScrollHint,
+	        updateBuilderUpgradeScrollHint,
+	      } = useBuilderUpgradeScrollHint({
+	        isOpen: isBuilderUpgradeOpen,
+	        refreshToken: builderUpgradeScrollRefreshToken,
+	      });
 
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
@@ -1452,45 +961,6 @@ function App() {
   const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
   const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
 
-  const [automationEndpoints, setAutomationEndpoints] = useState<AutomationEndpoint[]>([]);
-  const [automationDeliveries, setAutomationDeliveries] = useState<AutomationDelivery[]>([]);
-  const [isLoadingAutomations, setIsLoadingAutomations] = useState(false);
-  const [automationError, setAutomationError] = useState<string | null>(null);
-  const [isAutomationCreateOpen, setIsAutomationCreateOpen] = useState(false);
-  const [automationNameInput, setAutomationNameInput] = useState("");
-  const [automationUrlInput, setAutomationUrlInput] = useState("");
-  const [automationIsEnabledInput, setAutomationIsEnabledInput] = useState(true);
-  const [automationSelectedEventTypes, setAutomationSelectedEventTypes] = useState<string[]>([]);
-  const [automationRevealSecret, setAutomationRevealSecret] = useState<{ label: string; secret: string } | null>(null);
-  const [automationNotice, setAutomationNotice] = useState<string | null>(null);
-
-  const [brandosConnector, setBrandosConnector] = useState<BrandosConnector | null>(null);
-  const [isBrandosConnectOpen, setIsBrandosConnectOpen] = useState(false);
-  const [brandosBaseUrlInput, setBrandosBaseUrlInput] = useState("https://app.brandos.com");
-  const [brandosAccountIdInput, setBrandosAccountIdInput] = useState("");
-  const [brandosIdentifySecretInput, setBrandosIdentifySecretInput] = useState("");
-  const [brandosIsEnabledInput, setBrandosIsEnabledInput] = useState(true);
-  const [brandosError, setBrandosError] = useState<string | null>(null);
-  const [brandosNotice, setBrandosNotice] = useState<string | null>(null);
-  const [isSavingBrandosConnector, setIsSavingBrandosConnector] = useState(false);
-  const [isDeletingBrandosConnector, setIsDeletingBrandosConnector] = useState(false);
-
-  const lastBrandosIdentifyDelivery = useMemo(() => {
-    let best: AutomationDelivery | null = null;
-    let bestMs = -1;
-    for (const delivery of automationDeliveries) {
-      if (delivery.endpoint_name !== "BrandOS") continue;
-      if (delivery.event_type !== "identity.email_captured") continue;
-      const ms = new Date(delivery.attempted_at).getTime();
-      if (!Number.isFinite(ms)) continue;
-      if (!best || ms > bestMs) {
-        best = delivery;
-        bestMs = ms;
-      }
-    }
-    return best;
-  }, [automationDeliveries]);
-
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
@@ -1581,14 +1051,24 @@ function App() {
   const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   const [isSendingCommunityMessage, setIsSendingCommunityMessage] = useState(false);
-  const [isCommunityChatLightboxOpen, setIsCommunityChatLightboxOpen] = useState(false);
-  const [communityChatLightboxImages, setCommunityChatLightboxImages] = useState<ChatLightboxImage[]>([]);
-  const [communityChatLightboxIndex, setCommunityChatLightboxIndex] = useState(0);
-  const [replyingToMessage, setReplyingToMessage] = useState<CommunityChatMessage | null>(null);
-  const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
-  const communityTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
-  const communityTypingTopicRef = useRef<string | null>(null);
-  const lastCommunityTypingSentAtRef = useRef<number>(0);
+  const {
+    isCommunityChatLightboxOpen,
+    communityChatLightboxImages,
+    communityChatLightboxIndex,
+    setCommunityChatLightboxIndex,
+    openCommunityChatLightbox,
+    closeCommunityChatLightbox,
+  } = useCommunityChatLightbox<ChatLightboxImage>();
+  const {
+    handleAttachmentFileInputChange: handleCommunityFileInputChange,
+    removeAttachment: removeCommunityAttachment,
+  } = useMessageAttachmentInputController<MessageAttachment>({
+    attachmentsRef: communityAttachmentsRef,
+    setAttachments: setCommunityAttachments,
+    setError: setCommunityChatError,
+    ingestAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
+  });
+  const [replyingToMessage, setReplyingToMessage] = useState<Pick<CommunityChatMessage, "id" | "sender_id" | "body"> | null>(null);
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [resourceTitleInput, setResourceTitleInput] = useState("");
   const [resourceUrlInput, setResourceUrlInput] = useState("");
@@ -1601,14 +1081,7 @@ function App() {
   const [showResourceModal, setShowResourceModal] = useState(false);
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
   const [selectedLibraryResourceId, setSelectedLibraryResourceId] = useState<string | null>(null);
-	  const [isLoadingChat, setIsLoadingChat] = useState(false);
-	  const [isLoadingMoreChat, setIsLoadingMoreChat] = useState(false);
-	  const [communityChatHasMore, setCommunityChatHasMore] = useState(true);
 		  const [isLoadingResources, setIsLoadingResources] = useState(false);
-      const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
-      const [discoverQuery, setDiscoverQuery] = useState("");
-      const [discoverError, setDiscoverError] = useState<string | null>(null);
-      const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
       const [joiningDiscoverCommunityId, setJoiningDiscoverCommunityId] = useState<string | null>(null);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
@@ -1618,22 +1091,22 @@ function App() {
   const [resourceSuccess, setResourceSuccess] = useState(false);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
+  const [teachStatusByMessageId, setTeachStatusByMessageId] = useState<Record<string, TeachCandidateStatus>>({});
+  const [teachCandidateDraft, setTeachCandidateDraft] = useState<TeachCandidateDraft | null>(null);
+  const [teachCandidateTitleInput, setTeachCandidateTitleInput] = useState("");
+  const [teachCandidateMemoryInput, setTeachCandidateMemoryInput] = useState("");
+  const [teachCandidateSubmitError, setTeachCandidateSubmitError] = useState<string | null>(null);
+  const [isSubmittingTeachCandidate, setIsSubmittingTeachCandidate] = useState(false);
+  const [communityMemoryCandidates, setCommunityMemoryCandidates] = useState<CommunityMemoryCandidateRow[]>([]);
+  const [isLoadingCommunityMemoryCandidates, setIsLoadingCommunityMemoryCandidates] = useState(false);
+  const [communityMemoryCandidatesError, setCommunityMemoryCandidatesError] = useState<string | null>(null);
+  const [reviewingCommunityMemoryCandidateId, setReviewingCommunityMemoryCandidateId] = useState<string | null>(null);
+  const [communityMemoryRejectReasonById, setCommunityMemoryRejectReasonById] = useState<Record<string, string>>({});
 	  const [unreadCount, setUnreadCount] = useState(0);
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
 	  const isUserAtBottomRef = useRef(true);
-		  const communityChatOldestSeqRef = useRef<number | null>(null);
-		  const pendingChatPrependScrollRef = useRef<{ elementId: string; offset: number } | null>(null);
-		  const communityChatAnchorRef = useRef<{ elementId: string; offset: number } | null>(null);
 		  const communityMessageIdsRef = useRef<Set<string>>(new Set());
-	  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
-  const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
-  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
-  const voiceStreamRef = useRef<MediaStream | null>(null);
-  const voiceChunksRef = useRef<BlobPart[]>([]);
-  const voiceStopCaptureRef = useRef<(() => Promise<Blob>) | null>(null);
-  const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
   const [slashHover, setSlashHover] = useState<string | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   // User preference for panels (what they toggled)
@@ -1644,16 +1117,32 @@ function App() {
   const [showSidePanel, setShowSidePanel] = useState(true);
   const [showCommunityPanel, setShowCommunityPanel] = useState(false); // Right panel hidden - members moved to left nav
     const [sessionsCompact, setSessionsCompact] = useState(false);
-  const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
-  const [profileUsername, setProfileUsername] = useState(() => initialProfileDraft.username);
-  const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(() => initialProfileDraft.avatarUrl);
-  const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
-  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const profileSaveTimeoutRef = useRef<number | null>(null);
-  const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
+  const {
+    profileName,
+    setProfileName,
+    profileUsername,
+    setProfileUsername,
+    profileBio,
+    setProfileBio,
+    profileAvatarUrl,
+    setProfileAvatarUrl,
+    cloudProfile,
+    setCloudProfile,
+    profileSaveError,
+    setProfileSaveError,
+    profileSaveSuccess,
+    setProfileSaveSuccess,
+    isSavingProfile,
+    setIsSavingProfile,
+    isResettingLocalCache,
+    setIsResettingLocalCache,
+    profileSaveTimeoutRef,
+    isProfileAvatarDragOver,
+    setIsProfileAvatarDragOver,
+  } = useDesktopProfileDraftState<UserProfileDetail>({
+    profileStorageUserId,
+    initialProfileDraft,
+  });
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const resizeRaf = useRef<number | null>(null);
   const [expandedCommandIds, setExpandedCommandIds] = useState<Set<string>>(new Set());
@@ -1663,10 +1152,6 @@ function App() {
   const [execPolicyRules, setExecPolicyRules] = useState("");
   const [isSavingExecPolicy, setIsSavingExecPolicy] = useState(false);
   const [execPolicyError, setExecPolicyError] = useState<string | null>(null);
-  const [policyByToolCallId, setPolicyByToolCallId] = useState<Record<
-    string,
-    { decision: "allow" | "prompt" | "forbid"; reason: string; matched_rule?: string | null }
-  >>({});
   const [sessionResume, setSessionResume] = useState<SessionResume | null>(null);
   const [personalMemoryItems, setPersonalMemoryItems] = useState<PersonalMemoryItemRecord[]>([]);
   const [personalMemoryQuery, setPersonalMemoryQuery] = useState("");
@@ -1683,14 +1168,31 @@ function App() {
   const [approvalMode, setApprovalMode] = useState<"read-only" | "agent" | "agent-full">("agent");
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectRecord | null>(null);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [projectMenuProjectId, setProjectMenuProjectId] = useState<string | null>(null);
+  const [projectExpandedById, setProjectExpandedById] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(PROJECT_EXPANDED_PREF_KEY) ?? "";
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const next: Record<string, boolean> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        next[key] = value !== false;
+      }
+      return next;
+    } catch {
+      return {};
+    }
+  });
+  const projectMenuRef = useRef<HTMLDivElement | null>(null);
   const askInputRef = useRef<HTMLInputElement | null>(null);
   const [runningToolCallId, setRunningToolCallId] = useState<string | null>(null);
   const toolCallsRef = useRef<ToolCallRecord[]>([]);
   const activeModelIdRef = useRef<string | null>(null);
   const autoExecutedToolCallsRef = useRef<Set<string>>(new Set());
-  const communitySocketRef = useRef<WebSocket | null>(null);
-  const communityHeartbeatRef = useRef<number | null>(null);
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
+  const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
   const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
   const {
@@ -1711,6 +1213,560 @@ function App() {
   const autoScrollEnabledRef = useRef(true);
   const lastWorkspaceScrollTopRef = useRef(0);
   const isLoadingThreadRef = useRef(false); // Suppresses scroll handler during thread transitions
+  const capturePrependAnchorRef = useRef<() => void>(() => {});
+  const clearPendingPrependAnchorRef = useRef<() => void>(() => {});
+
+  const {
+    isLoadingChat,
+    isLoadingMoreChat,
+    communityChatHasMore,
+    toCommunityChatMessage,
+    ensureCommunityChatThread,
+    loadCommunityChat,
+    loadOlderCommunityChat,
+    resetCommunityChatDataState,
+  } = useCommunityChatDataController<
+    SupabaseSession,
+    MessageAttachment,
+    CommunityChatMessage,
+    MessageReaction
+  >({
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    extractTextFromContentJson,
+    parseMessageAttachments,
+    pageSize: COMMUNITY_CHAT_PAGE_SIZE,
+    setCommunityMessages,
+    setMessageReactions,
+    setUnreadCount,
+    setIsUserAtBottom,
+    isUserAtBottomRef,
+    capturePrependAnchor: () => {
+      capturePrependAnchorRef.current();
+    },
+    clearPendingPrependAnchor: () => {
+      clearPendingPrependAnchorRef.current();
+    },
+  });
+
+  const {
+    handleChatScroll,
+    capturePrependAnchor,
+    clearPendingPrependAnchor,
+  } = useCommunityChatViewport({
+    isEnabled: activePage === "community" && communityTab === "chat",
+    communityMessages,
+    communityChatListRef,
+    isUserAtBottom,
+    isUserAtBottomRef,
+    setIsUserAtBottom,
+    setUnreadCount,
+    loadMoreThresholdPx: COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX,
+    canLoadOlder: Boolean(
+      supabaseSession
+      && activeCommunityId
+      && communityTab === "chat"
+      && communityChatHasMore
+      && !isLoadingChat
+      && !isLoadingMoreChat,
+    ),
+    onLoadOlder: () => {
+      loadOlderFromScrollRef.current?.();
+    },
+  });
+
+  capturePrependAnchorRef.current = capturePrependAnchor;
+  clearPendingPrependAnchorRef.current = clearPendingPrependAnchor;
+  loadOlderFromScrollRef.current = () => {
+    if (!supabaseSession || !activeCommunityId) return;
+    void loadOlderCommunityChat(activeCommunityId, supabaseSession);
+  };
+
+  const { communityTypingUserIds, maybeBroadcastCommunityTyping } = useCommunityChatRealtime({
+    isEnabled: activePage === "community" && communityTab === "chat",
+    supabaseSession,
+    activeCommunityId,
+    getSupabaseUrl,
+    getSupabaseAnonKey,
+    ensureCommunityChatThread,
+    toCommunityChatMessage,
+    communityMessageIdsRef,
+    isUserAtBottomRef,
+    setUnreadCount,
+    setCommunityMessages,
+    setMessageReactions,
+  });
+
+  const {
+    handleToggleReaction,
+    handleStartReply,
+    handleStartEdit,
+    handleCancelEdit,
+    handleSaveEdit,
+    handleDeleteMessage,
+    handleSendCommunityMessage,
+  } = useCommunityChatMutationController({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    getSupabaseAnonKey,
+    requireAnonKey: true,
+    missingConfigMessage: "Missing Supabase config.",
+    missingPayloadMessage: "Message sent, but no response payload returned.",
+    fetchWithSupabaseAuth,
+    ensureCommunityChatThread,
+    toCommunityChatMessage,
+    loadCommunityChat,
+    parseReplyPrefix,
+    buildReplyPrefix,
+    beforeSendValidate: async (text) => {
+      const scan = await scanPublishContent(text);
+      if (scan?.blocked) return formatSecretScanError(scan);
+      return null;
+    },
+    onOptimisticSendScrollIntent: () => {
+      setIsUserAtBottom(true);
+    },
+    chatInputRef,
+    communityAttachmentsRef,
+    communityMessageInput,
+    communityMessages,
+    messageReactions,
+    replyingToMessage,
+    editingMessageId,
+    editingMessageText,
+    editingMessagePrefix,
+    setCommunityMessages,
+    setMessageReactions,
+    setCommunityMessageInput,
+    setCommunityAttachments,
+    setReplyingToMessage,
+    setReactionPickerMessageId,
+    setEditingMessageId,
+    setEditingMessageText,
+    setEditingMessagePrefix,
+    setIsSendingCommunityMessage,
+    setCommunityChatError,
+  });
+
+  const {
+    loadCommunityInvites,
+    handleCreateInvite,
+    handleRevokeInvite,
+    handleDeleteInvite,
+  } = useCommunityInviteController<SupabaseSession, CommunityInviteRecord>({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    inviteMaxUsesPreset,
+    inviteMaxUsesCustom,
+    inviteExpiryPreset,
+    inviteExpiryCustom,
+    setCommunityInvites,
+    setIsLoadingCommunityInvites,
+    setInviteCreateError,
+    setIsCreatingInvite,
+    setInviteMaxUsesPreset,
+    setInviteMaxUsesCustom,
+    setInviteExpiryPreset,
+    setInviteExpiryCustom,
+    onInviteCreated: async (invite) => {
+      const best = buildDesktopBestInviteLink({
+        shareBaseUrl: getPublicShareBaseUrl(),
+        communityId: activeCommunityId,
+        inviteCode: invite.code,
+      });
+      await copyTextToClipboard(best.link);
+    },
+  });
+
+  const {
+    loadPendingInvites,
+    consumeInviteQueryParam,
+    handleDismissInvite,
+    handleJoinInvite,
+    handleInviteGateJoin,
+    handleInviteGateDismiss,
+    maybeAutoJoinPendingInvites,
+  } = usePendingInviteJoinController<SupabaseSession, PendingInviteRecord>({
+    shellClient,
+    supabaseSession,
+    pendingInvites,
+    activeInviteGateKey,
+    autoJoinInvitesAttemptedRef,
+    getSupabaseUrl,
+    normalizeInviteCode,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    loadCommunities,
+    handleSignIn,
+    onJoinSuccess: (joined) => {
+      setActiveCommunityId(joined.id);
+      setActivePage("community");
+      setCommunityTab("chat");
+    },
+    setPendingInvites,
+    setInviteJoinError,
+    setIsJoiningInvite,
+    setActiveInviteGateKey,
+  });
+
+  const {
+    discoverCommunities,
+    discoverQuery,
+    setDiscoverQuery,
+    discoverError,
+    setDiscoverError,
+    isLoadingDiscover,
+    loadDiscoverCommunities,
+    filteredDiscoverCommunities,
+  } = useDesktopDiscoverController<DiscoverCommunity>({
+    isDiscoverActive: activePage === "discover",
+    getSupabaseUrl,
+    fetchWithSupabasePublic,
+    readSupabaseError,
+  });
+
+  const {
+    openCommunityLandingExternal,
+    maybeAutoJoinPendingPublicCommunity,
+    handleJoinDiscoverCommunity,
+  } = usePendingPublicCommunityJoinController<SupabaseSession>({
+    shellClient,
+    supabaseSession,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    loadCommunities,
+    autoJoinPublicCommunitiesAttemptedRef,
+    getBrandosAidForCommunitySlug,
+    isUuid,
+    onJoinSuccess: (joinedId) => {
+      setActiveCommunityId(joinedId);
+      setActivePage("community");
+      setCommunityTab("chat");
+    },
+    setJoiningDiscoverCommunityId,
+    setDiscoverError,
+  });
+
+  const {
+    loadCommunityResources,
+    handleSaveCommunityResource,
+    handleDeleteResource,
+  } = useCommunityResourceController<SupabaseSession, CommunityResource>({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    getSupabaseAnonKey,
+    requireAnonKey: true,
+    missingConfigMessage: "Missing Supabase config.",
+    parseEmbedUrl,
+    fetchWithSupabaseAuth,
+    includeCommunityIdOnPatch: true,
+    includeFileKeyOnSave: true,
+    clearErrorWhenEditingDeleted: false,
+    saveFailureMessage: "Failed to save resource.",
+    deleteFailureMessage: "Failed to delete resource.",
+    resourceTitleInput,
+    resourceUrlInput,
+    resourceBodyInput,
+    resourcePinnedInput,
+    editingResourceId,
+    beforeSaveValidate: async ({ title, description, rawUrl }) => {
+      const scan = await scanPublishContent([title, description, rawUrl].filter(Boolean).join("\n\n"));
+      if (scan?.blocked) return formatSecretScanError(scan);
+      return null;
+    },
+    setCommunityResources,
+    setIsLoadingResources,
+    setIsSavingResource,
+    setResourceError,
+    setResourceSuccess,
+    setShowResourceModal,
+    setEditingResourceId,
+    setResourceTitleInput,
+    setResourceUrlInput,
+    setResourceBodyInput,
+    setResourcePinnedInput,
+  });
+
+  const {
+    resetResourceForm,
+    openNewResourceModal,
+    closeResourceModal,
+    handleEditResource,
+  } = useCommunityResourceEditorController<CommunityResource>({
+    setEditingResourceId,
+    setResourceTitleInput,
+    setResourceUrlInput,
+    setResourceBodyInput,
+    setResourcePinnedInput,
+    setResourceError,
+    setShowResourceModal,
+  });
+
+  const {
+    loadCommunityMembers,
+    loadSelfProfile,
+    saveProfileToCloud,
+    loadCommunityAnalytics,
+    resetCommunityAnalytics,
+    handleSetCommunityMemberRole,
+    handleRemoveCommunityMember,
+  } = useCommunityAdminController<
+    SupabaseSession,
+    CommunityMember,
+    UserProfile,
+    UserProfileDetail
+  >({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    parseContentRangeTotal,
+    dateKeyLocal,
+    ensureCommunityChatThread,
+    confirmAction: (message) => window.confirm(message),
+    getMemberRefreshIncludeStatus: () => Boolean(activeCommunityAccess?.can_manage_members),
+    reloadCommunities: loadCommunities,
+    reloadCommunityAccess: loadCommunityAccess,
+    getProfileSaveSession: () => supabaseSessionRef.current ?? supabaseSession,
+    profileName,
+    profileBio,
+    profileAvatarUrl,
+    profileSaveTimeoutRef,
+    profileSaveFailureMessage: "Failed to save profile.",
+    profileSaveUnauthenticatedErrorMessage: "Sign in to save your profile.",
+    applyLoadedProfileToLocal: (profile) => {
+      const localName = profileName.trim();
+      const localBio = profileBio.trim();
+      const localAvatar = profileAvatarUrl ?? null;
+      const cloudName = (cloudProfile?.display_name ?? "").trim();
+      const cloudBio = (cloudProfile?.bio ?? "").trim();
+      const cloudAvatar = cloudProfile?.avatar_url ?? null;
+      const hasLocalEdits = localName !== cloudName || localBio !== cloudBio || localAvatar !== cloudAvatar;
+      const shouldOverwriteLocal = !cloudProfile || !hasLocalEdits;
+      if (!shouldOverwriteLocal) return;
+      setProfileName(profile.display_name ?? "");
+      setProfileBio(profile.bio ?? "");
+      setProfileAvatarUrl(profile.avatar_url ?? null);
+    },
+    setCommunityMembers,
+    setProfilesByUserId,
+    setCloudProfile,
+    setProfileName,
+    setProfileBio,
+    setProfileAvatarUrl,
+    setIsSavingProfile,
+    setProfileSaveError,
+    setProfileSaveSuccess,
+    setIsLoadingCommunityAnalytics,
+    setCommunityAnalyticsError,
+    setCommunityRevenueError,
+    setCommunityAnalyticsSummary,
+    setCommunityAnalyticsSeries,
+    setCommunityRevenueSeries,
+    setCommunityRevenueMeta,
+  });
+
+  const {
+    loadCommunityAgentDrafts,
+    handleSaveCommunityAgentDraft,
+    persistCommunityAgentTemplateName,
+    handleSetLiveCommunityAgentDraft,
+  } = useCommunityAgentDraftController<SupabaseSession, CommunityAgentLanding, CommunityAgentDraft>({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    communityAgentSelectedSlot,
+    communityAgentDraftName,
+    communityAgentDraftLanding,
+    communityAgentDraftSystemPrompt,
+    communityAgentDrafts,
+    normalizeDraftForSave: normalizeCommunityAgentDraftForSave,
+    hydrateDraftEditor: hydrateCommunityAgentEditor,
+    setLoadedCommunityId: (communityId) => {
+      communityAgentDraftsLoadedCommunityIdRef.current = communityId;
+    },
+    markDraftClean: () => {
+      communityAgentDraftDirtyRef.current = false;
+    },
+    setIsLoadingCommunityAgentDrafts,
+    setCommunityAgentDraftsError,
+    setCommunityAgentDrafts,
+    setIsSavingCommunityAgentDraft,
+    setCommunityAgentDraftSaveError,
+    saveValidationErrorMessage: "Add at least one tab with a label and one prompt.",
+    loadFailureMessage: "Failed to load AI agent drafts.",
+    saveFailureMessage: "Failed to save AI agent draft.",
+    renameFailureMessage: "Failed to rename template.",
+    setLiveFailureMessage: "Failed to set live draft.",
+  });
+
+  const {
+    syncCommunitySettingsSelection,
+  } = useCommunitySettingsFormController<CommunityRecord, CommunityInviteRecord>({
+    slugifyCommunityName,
+    communitySettingsLoadedCommunityIdRef,
+    communitySettingsDirtyRef,
+    communityPricingDirtyRef,
+    setCommunitySettingsError,
+    setCommunityMemberSettingsError,
+    setCommunitySettingsName,
+    setCommunitySettingsSlug,
+    setCommunitySettingsDescription,
+    setCommunitySettingsVisibility,
+    setCommunitySettingsAvatarUrl,
+    setCommunitySettingsBannerUrl,
+    setCommunitySettingsMonthlyPlanId,
+    setCommunitySettingsYearlyPlanId,
+    setCommunitySettingsPricingMode,
+    setCommunitySettingsPriceUsdMonthly,
+    setCommunitySettingsPriceUsdYearly,
+    setCommunityMemberMuted,
+    setCommunityInvites,
+    setInviteCreateError,
+    setCommunitySettingsBannerUploadError,
+    setIsProcessingCommunitySettingsBanner,
+    clearBannerOnMissingCommunity: true,
+  });
+
+  const {
+    loadCommunityMemberSettings,
+    loadCommunityPricing,
+  } = useCommunitySettingsDataController<SupabaseSession>({
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    communitySettingsLoadedCommunityIdRef,
+    communityPricingDirtyRef,
+    setCommunityMemberMuted,
+    setIsLoadingCommunityMemberSettings,
+    setCommunityMemberSettingsError,
+    setCommunitySettingsMonthlyPlanId,
+    setCommunitySettingsYearlyPlanId,
+    setCommunitySettingsPricingMode,
+    setCommunitySettingsPriceUsdMonthly,
+    setCommunitySettingsPriceUsdYearly,
+  });
+
+  const {
+    handleToggleCommunityMute,
+    handleLeaveCommunity,
+    handleSaveCommunitySettings,
+  } = useCommunitySettingsGovernanceController<SupabaseSession>({
+    activeCommunityId,
+    supabaseSession,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    confirmAction: (message) => window.confirm(message),
+    loadCommunities,
+    onLeaveCommunityLocalState: (leavingId) => {
+      setActiveCommunityId(null);
+      setActivePage("workspace");
+      setActiveView("home");
+      setCommunityTab("chat");
+      setCommunities((prev) => prev.filter((community) => community.id !== leavingId));
+    },
+    setCommunityMemberSettingsError,
+    setIsLoadingCommunityMemberSettings,
+    setCommunityMemberMuted,
+    setIsLeavingCommunity,
+    communitySettingsName,
+    communitySettingsSlug,
+    communitySettingsDescription,
+    communitySettingsVisibility,
+    communitySettingsAvatarUrl,
+    communitySettingsBannerUrl,
+    communitySettingsPricingMode,
+    communitySettingsPriceUsdMonthly,
+    communitySettingsPriceUsdYearly,
+    isValidCommunitySlug,
+    setCommunitySettingsError,
+    setIsSavingCommunitySettings,
+    onSaveCommunitySettingsSuccess: (result) => {
+      setCommunities((prev) =>
+        prev.map((community) =>
+          community.id === result.community_id
+            ? {
+                ...community,
+                name: result.name,
+                slug: result.slug,
+                description: result.description,
+                avatar_url: result.avatar_url,
+                banner_url: result.banner_url,
+                visibility: result.visibility,
+                updated_at: result.updated_at,
+              }
+            : community,
+        ),
+      );
+      setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
+      setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
+      communitySettingsDirtyRef.current = false;
+      communityPricingDirtyRef.current = false;
+    },
+  });
+  const {
+    openDeleteCommunityModal,
+    closeDeleteCommunityModal,
+    handleConfirmDeleteCommunity,
+  } = useCommunityDeleteController<
+    SupabaseSession,
+    CommunityRecord,
+    AppPage,
+    "home" | "settings",
+    CommunityTab
+  >({
+    supabaseSession,
+    activeCommunityId,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    loadCommunities,
+    setDeleteCommunityError,
+    setDeleteCommunityNameInput,
+    setDeleteCommunityConfirmInput,
+    setShowDeleteCommunityModal,
+    setIsDeletingCommunity,
+    setActiveCommunityId,
+    setActivePage,
+    setActiveView,
+    setCommunityTab,
+    setCommunities,
+    setCommunityRoleById,
+    getCommunityId: (community) => community.id,
+  });
+
+  const {
+    handleSettingsBannerDrop,
+    handleSettingsAvatarDrop,
+    handleCommunityAvatarUpload,
+    handleCommunityBannerUpload,
+    handleProfileAvatarUpload,
+    handleProfileAvatarDrop,
+  } = useDesktopSettingsImageUploadController({
+    setIsSettingsBannerDragOver,
+    setIsSettingsAvatarDragOver,
+    setIsProfileAvatarDragOver,
+    setCommunitySettingsAvatarUrl,
+    setCommunitySettingsBannerUrl,
+    setCommunitySettingsError,
+    setCommunitySettingsBannerUploadError,
+    setIsProcessingCommunitySettingsBanner,
+    markCommunitySettingsDirty,
+    isLikelyDesktopImageFile: (file) => isLikelyImageFile(file, DESKTOP_IMAGE_FILE_DETECTION_OPTIONS),
+    maxCommunityImageDataUrlChars: MAX_COMMUNITY_IMAGE_DATA_URL_CHARS,
+    setProfileAvatarUrl,
+    setAuthError,
+  });
 
   const slashState = useMemo(() => {
     const trimmed = commandInput.trim();
@@ -1734,30 +1790,65 @@ function App() {
     return { query, filtered, active };
   }, [commandInput, slashIndex]);
 
-		  useEffect(() => {
-		    captureBrandosAidFromLocation();
-		    void loadThreads();
-	    void loadWorkspaceRoot();
-	    void loadActiveProject();
-	    void loadModelToggles();
-	    void loadActiveModel();
-	    void loadProviderKeys();
-	    void loadChatgptAuthSummary();
-	    void loadExecPolicyRules();
-	    void loadPendingInvites();
-	    void consumeInviteQueryParam();
-		    void consumeOAuthHash();
-		    void loadSupabaseSession();
-		  }, []);
+  const { loadModelToggles, loadActiveModel, loadChatgptAuthSummary } =
+    useDesktopModelBootstrapController({
+      shellClient,
+      runtimeClient,
+      preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
+      defaultModelToggles: DEFAULT_MODEL_TOGGLES,
+      modelToggles,
+      activeModelId,
+      providerKeys,
+      isModelReady,
+      setModelToggles,
+      setActiveModelId,
+      setChatgptAuthSummary,
+    });
+
+  useDesktopAuthSessionLifecycle<SupabaseSession>({
+    session: supabaseSession,
+    sessionRef: supabaseSessionRef,
+    threadsHydratedRef,
+    refreshTimeoutRef: supabaseAutoRefreshTimeoutRef,
+    refreshLocked: refreshSupabaseSessionLocked,
+    onMountBootstrap: async () => {
+      captureBrandosAidFromLocation();
+      void loadThreads();
+      void loadProjects();
+      void loadWorkspaceRoot();
+      void loadActiveProject();
+      void loadModelToggles();
+      void loadActiveModel();
+      void loadChatgptAuthSummary();
+      void loadExecPolicyRules();
+      void loadPendingInvites();
+      void consumeInviteQueryParam();
+      try {
+        const oauthBootstrap = await consumeOAuthHash();
+        if (oauthBootstrap !== "session_set") {
+          await loadSupabaseSession();
+        }
+      } catch {
+        await loadSupabaseSession();
+      }
+    },
+    onSessionAvailable: (session) => {
+      void loadCommunities(session);
+      void maybeAutoJoinPendingInvites(session);
+      void maybeAutoJoinPendingPublicCommunity(session);
+      void loadPendingPurchaseClaims(session);
+      void loadBuilderBillingStatus(session);
+      void loadSelfProfile(session);
+      void loadModelRegistry(session);
+    },
+    onFocusWithSession: (current) => {
+      void loadBuilderBillingStatus(current);
+      void loadSelfProfile(current);
+      void loadModelRegistry(current);
+    },
+  });
 
   useEffect(() => {
-    return () => {
-      releaseVoiceCaptureResources();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!USE_RUNTIME_CLIENT) return;
     let cancelled = false;
     void runtimeClient
       .initialize()
@@ -1770,9 +1861,10 @@ function App() {
           setRuntimeSupportsCursorResume(false);
           return;
         }
-        setRuntimeSupportsCursorResume(
-          Boolean(init.capabilities.cursor_resume && init.capabilities.local_db_events)
+        const supportsCursorResume = Boolean(
+          init.capabilities.cursor_resume && init.capabilities.local_db_events
         );
+        setRuntimeSupportsCursorResume(supportsCursorResume);
       })
       .catch(() => {
         if (cancelled) return;
@@ -1817,6 +1909,14 @@ function App() {
   }, [appTheme]);
 
   useEffect(() => {
+    localStorage.setItem(THREAD_LANE_PREF_KEY, threadLaneFilter);
+  }, [threadLaneFilter]);
+
+  useEffect(() => {
+    localStorage.setItem(PROJECT_EXPANDED_PREF_KEY, JSON.stringify(projectExpandedById));
+  }, [projectExpandedById]);
+
+  useEffect(() => {
     if (activePage === "workspace") return;
     if (activeView !== "settings") return;
     setActiveView("home");
@@ -1852,16 +1952,57 @@ function App() {
     void loadSessionResume(activeThreadId);
   }, [activeThreadId, activeProject?.id]);
 
+  const activeThreadRefreshKeyRef = useRef<string>("");
+
+  const isSameThreadRecord = (a: ThreadRecord, b: ThreadRecord): boolean =>
+    a.id === b.id &&
+    a.title === b.title &&
+    a.engine_id === b.engine_id &&
+    a.model_id === b.model_id &&
+    a.thread_lane === b.thread_lane &&
+    a.storage_mode === b.storage_mode &&
+    a.project_id === b.project_id &&
+    a.workspace_path === b.workspace_path &&
+    a.workspace_fingerprint === b.workspace_fingerprint &&
+    a.community_id === b.community_id &&
+    a.context_version === b.context_version &&
+    a.created_at === b.created_at &&
+    a.updated_at === b.updated_at &&
+    a.last_event_at === b.last_event_at &&
+    a.last_seq === b.last_seq;
+
   useEffect(() => {
-    if (!activeThreadId) return;
-    void (USE_RUNTIME_CLIENT
-      ? runtimeClient.getThread(activeThreadId)
-      : invoke<ThreadRecord | null>("get_thread_cmd", { threadId: activeThreadId }))
+    if (!activeThreadId) {
+      activeThreadRefreshKeyRef.current = "";
+      return;
+    }
+    const fromState = threads.find((thread) => thread.id === activeThreadId) ?? null;
+    if (fromState?.model_id) {
+      setActiveModelId(fromState.model_id);
+    }
+    setActiveCommunityId(fromState?.community_id ?? null);
+    const refreshKey = fromState
+      ? [
+          fromState.id,
+          fromState.updated_at,
+          fromState.context_version,
+          fromState.model_id ?? "",
+          fromState.community_id ?? "",
+          fromState.storage_mode,
+        ].join("|")
+      : `${activeThreadId}|missing`;
+    if (activeThreadRefreshKeyRef.current === refreshKey) {
+      return;
+    }
+    activeThreadRefreshKeyRef.current = refreshKey;
+    void getThreadRecord(activeThreadId)
       .then((thread) => {
         if (!thread) return;
         setThreads((prev) => {
           const idx = prev.findIndex((t) => t.id === thread.id);
           if (idx === -1) return prev;
+          const existing = prev[idx];
+          if (isSameThreadRecord(existing, thread)) return prev;
           const next = [...prev];
           next[idx] = thread;
           return next;
@@ -1869,14 +2010,12 @@ function App() {
         if (thread.model_id) {
           setActiveModelId(thread.model_id);
         }
-        if (thread.community_id) {
-          setActiveCommunityId(thread.community_id);
-        }
+        setActiveCommunityId(thread.community_id ?? null);
       })
       .catch(() => {
         // Non-fatal; keep current selection.
       });
-  }, [activeThreadId, runtimeClient]);
+  }, [activeThreadId, runtimeClient, threads]);
 
   useEffect(() => {
     if (activeView !== "settings" || settingsPage !== "memory") return;
@@ -1892,7 +2031,135 @@ function App() {
   }, []);
 
   function getEffectiveWorkspacePath(): string {
-    return (activeProject?.root_path ?? workspaceRoot ?? "").trim();
+    return (activeThread?.workspace_path ?? activeProject?.root_path ?? workspaceRoot ?? "").trim();
+  }
+
+  async function getThreadRecord(threadId: string): Promise<ThreadRecord | null> {
+    const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+    if (!thread) return null;
+    const service = desktopThreadServiceRouter.resolveByThread(thread);
+    return (await service.getThread(threadId)) as ThreadRecord | null;
+  }
+
+  async function listLocalThreads(): Promise<ThreadRecord[]> {
+    return runtimeClient.listThreads();
+  }
+
+  const desktopCloudChatThreadApi = createDesktopCloudChatThreadApi({
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    getSupabaseAuthUid,
+    toUnixSecondsFromIso,
+    getThreads: () => threads,
+    setThreads,
+    getActiveModelId: () => activeModelId,
+  });
+  const setThreadCommunityLensInCloud = createDesktopCloudLensSync({
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    toUnixSecondsFromIso,
+    setThreads,
+    getCloudThreadRecord: desktopCloudChatThreadApi.getCloudThreadRecord,
+  });
+
+  async function createCloudChatThread(thread: ThreadRecord): Promise<ThreadRecord | null> {
+    const session = supabaseSessionRef.current;
+    if (!session) {
+      setAuthError("Sign in to create cloud chat threads.");
+      await handleSignIn();
+      return null;
+    }
+    return desktopCloudChatThreadApi.createCloudChatThread(thread, session);
+  }
+
+  async function deleteCloudChatThread(threadId: string): Promise<void> {
+    const session = supabaseSessionRef.current;
+    if (!session) {
+      setAuthError("Sign in to manage cloud chat threads.");
+      await handleSignIn();
+      return;
+    }
+    await desktopCloudChatThreadApi.deleteCloudChatThread(threadId, session);
+  }
+
+  const desktopThreadServiceRouter = createDesktopAppThreadServiceRouter({
+    threads,
+    runtimeClient,
+    getSession: () => supabaseSessionRef.current,
+    listCloudChatThreads: desktopCloudChatThreadApi.listCloudChatThreads,
+    getCloudThreadRecord: desktopCloudChatThreadApi.getCloudThreadRecord,
+    createCloudChatThread,
+    deleteCloudChatThread,
+    setThreadCommunityLensInCloud,
+    addCloudMessage: desktopCloudChatThreadApi.addCloudMessage,
+    sendCloudTurn: desktopCloudChatThreadApi.sendCloudTurn,
+    setCloudThreadTitle: desktopCloudChatThreadApi.setCloudThreadTitle,
+    setCloudThreadEngine: desktopCloudChatThreadApi.setCloudThreadEngine,
+    listLocalThreads,
+    setThreadCommunityLensLocal,
+  });
+
+  function resolveThreadServiceForThreadId(threadId: string): ThreadService {
+    try {
+      return desktopThreadServiceRouter.resolveByThreadId(threadId);
+    } catch (error) {
+      // New draft threads can be created and sent before React state re-renders with the thread row.
+      // Fall back to the currently selected lane domain to keep send flow deterministic.
+      const fallbackStorageMode = storageModeForThreadLane(threadLaneFilter);
+      console.warn(
+        `Thread service routing fallback for thread_id=${threadId} via ${threadLaneFilter}/${fallbackStorageMode}.`,
+        error,
+      );
+      return desktopThreadServiceRouter.resolveByLane(threadLaneFilter, fallbackStorageMode);
+    }
+  }
+
+  const resolveThreadStorageMode = useCallback((sessionId: string) => {
+    const service = resolveThreadServiceForThreadId(sessionId);
+    return service.storageMode;
+  }, [resolveThreadServiceForThreadId]);
+
+  const {
+    loadMessages,
+    loadToolCalls,
+    handleLoadOlderMessages,
+    hasOlderMessagesForActiveThread,
+    messageLoadErrorForActiveThread,
+    isLoadingOlderMessages,
+  } = useDesktopThreadFeedController({
+    activeThreadId,
+    runtimeClient,
+    runtimeSupportsCursorResume,
+    messages,
+    setMessages,
+    setToolCalls,
+    threads,
+    resolveThreadStorageMode,
+    supabaseSessionRef,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+  });
+
+  useEffect(() => {
+    if (!threadsHydratedRef.current) return;
+    if (!activeThreadId) return;
+    if (threads.some((thread) => thread.id === activeThreadId)) return;
+    const selectable = threads.filter((thread) => (thread.last_seq ?? 0) > 0);
+    setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
+  }, [activeThreadId, threads]);
+
+  const { loadTurns, loadSessionResume } = useDesktopThreadMetaLoaders({
+    runtimeClient,
+    resolveThreadServiceForThreadId,
+    setTurnsByAssistantEventId,
+    setSessionResume,
+  });
+
+  async function cancelRunForThread(threadId: string): Promise<boolean> {
+    return runtimeClient.cancelRun(threadId);
   }
 
   function sortPersonalMemory(items: PersonalMemoryItemRecord[]): PersonalMemoryItemRecord[] {
@@ -2122,36 +2389,20 @@ function App() {
   }
 
   async function exportThreadsCsv() {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    const useCloudExport = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
     try {
-      let rows: Array<Record<string, unknown>> = [];
-      if (useCloudExport && session && url) {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=2000`,
-          { method: "GET" },
-          session,
-        );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
-        rows = (await response.json()) as Array<Record<string, unknown>>;
-      } else {
-        const localThreads = USE_RUNTIME_CLIENT
-          ? await runtimeClient.listThreads()
-          : await invoke<ThreadRecord[]>("list_threads_cmd");
-        rows = localThreads
-          .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
-          .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0))
-          .map((thread) => ({
-            id: thread.id,
-            title: thread.title ?? "",
-            engine_id: thread.engine_id ?? "",
-            model_id: thread.model_id ?? "",
-            community_id: thread.community_id ?? "",
-            created_at: new Date((thread.created_at ?? 0) * 1000).toISOString(),
-            updated_at: new Date((thread.updated_at ?? 0) * 1000).toISOString(),
-          }));
-      }
+      const localThreads = await listLocalThreads();
+      const rows = localThreads
+        .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
+        .sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0))
+        .map((thread) => ({
+          id: thread.id,
+          title: thread.title ?? "",
+          engine_id: thread.engine_id ?? "",
+          model_id: thread.model_id ?? "",
+          community_id: thread.community_id ?? "",
+          created_at: new Date((thread.created_at ?? 0) * 1000).toISOString(),
+          updated_at: new Date((thread.updated_at ?? 0) * 1000).toISOString(),
+        }));
       const csv = buildCsv(
         ["id", "title", "engine_id", "model_id", "community_id", "created_at", "updated_at"],
         rows,
@@ -2164,69 +2415,29 @@ function App() {
   }
 
   async function exportMessagesCsv() {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    const useCloudExport = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
     try {
-      let rows: Array<Record<string, unknown>> = [];
-      if (useCloudExport && session && url) {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=20000`,
-          { method: "GET" },
-          session,
-        );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
-        const rawRows = (await response.json()) as Array<{
-          id: string;
-          thread_id: string;
-          seq: number;
-          role: string;
-          content_json: unknown;
-          engine_id: string | null;
-          model_id: string | null;
-          run_id: string | null;
-          created_at: string;
-        }>;
-        rows = rawRows.map((row) => ({
-          id: row.id,
-          thread_id: row.thread_id,
-          seq: row.seq,
-          role: row.role,
-          content: parseMessageText(JSON.stringify(row.content_json ?? { text: "" })),
-          engine_id: row.engine_id ?? "",
-          model_id: row.model_id ?? "",
-          run_id: row.run_id ?? "",
-          created_at: row.created_at,
-        }));
-      } else {
-        const localThreads = USE_RUNTIME_CLIENT
-          ? await runtimeClient.listThreads()
-          : await invoke<ThreadRecord[]>("list_threads_cmd");
-        const personalThreadIds = localThreads
-          .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
-          .map((thread) => thread.id)
-          .sort((a, b) => a.localeCompare(b));
-        const localRows: Array<Record<string, unknown>> = [];
-        for (const threadId of personalThreadIds) {
-          const localMessages = USE_RUNTIME_CLIENT
-            ? await runtimeClient.listMessages(threadId)
-            : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
-          for (let index = 0; index < localMessages.length; index += 1) {
-            const message = localMessages[index];
-            localRows.push({
-              id: message.id,
-              thread_id: threadId,
-              seq: index + 1,
-              role: message.role,
-              content: parseMessageText(message.content_json),
-              engine_id: message.engine_id ?? "",
-              model_id: message.model_id ?? "",
-              run_id: message.run_id ?? "",
-              created_at: new Date((message.created_at ?? 0) * 1000).toISOString(),
-            });
-          }
+      const localThreads = await listLocalThreads();
+      const personalThreadIds = localThreads
+        .filter((thread) => thread.id !== "system" && thread.engine_id !== "system" && thread.engine_id !== "community_chat")
+        .map((thread) => thread.id)
+        .sort((a, b) => a.localeCompare(b));
+      const rows: Array<Record<string, unknown>> = [];
+      for (const threadId of personalThreadIds) {
+        const localMessages = await runtimeClient.listMessages(threadId);
+        for (let index = 0; index < localMessages.length; index += 1) {
+          const message = localMessages[index];
+          rows.push({
+            id: message.id,
+            thread_id: threadId,
+            seq: index + 1,
+            role: message.role,
+            content: parseMessageText(message.content_json),
+            engine_id: message.engine_id ?? "",
+            model_id: message.model_id ?? "",
+            run_id: message.run_id ?? "",
+            created_at: new Date((message.created_at ?? 0) * 1000).toISOString(),
+          });
         }
-        rows = localRows;
       }
       const csv = buildCsv(
         ["id", "thread_id", "seq", "role", "content", "engine_id", "model_id", "run_id", "created_at"],
@@ -2266,27 +2477,22 @@ function App() {
   }
 
   async function resetLocalCache() {
-    if (isSending) return;
-    const ok = window.confirm(
-      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED
-        ? "Reset local cache? This deletes local tool evidence and UI state. Your cloud threads/messages/memory remain."
-        : "Reset local cache? This deletes local desktop threads/messages, tool evidence, and UI state on this device.",
-    );
+    if (isSending || isResettingLocalCache) return;
+    const prompt = "Reset local cache? This deletes local desktop threads/messages, tool evidence, and UI state on this device.";
+    const ok = window.confirm(prompt);
     if (!ok) return;
+    setIsResettingLocalCache(true);
     try {
-      await invoke("reset_local_db_cmd");
-      window.location.reload();
+      await shellClient.resetLocalDb();
+      setMemoryToast("Local cache reset. Reloading…");
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 200);
     } catch (error) {
       setMemoryToast(error instanceof Error ? error.message : "Failed to reset local cache.");
+      setIsResettingLocalCache(false);
     }
   }
-
-  useEffect(() => {
-    supabaseSessionRef.current = supabaseSession;
-    if (!supabaseSession) {
-      threadsHydratedRef.current = false;
-    }
-  }, [supabaseSession]);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -2295,11 +2501,12 @@ function App() {
   useEffect(() => {
     setIsLoadingSystemPrompt(true);
     setSystemPromptError(null);
-    void invoke<string | null>("get_system_prompt_cmd")
+    void shellClient
+      .getSystemPrompt()
       .then((value) => setSystemPromptDraft(value ?? ""))
       .catch(() => setSystemPromptDraft(""))
       .finally(() => setIsLoadingSystemPrompt(false));
-  }, []);
+  }, [shellClient]);
 
   async function fetchCloudSystemPrompt(session: SupabaseSession): Promise<string | null> {
     const url = getSupabaseUrl();
@@ -2341,7 +2548,7 @@ function App() {
         if (prompt === null) return;
         setSystemPromptDraft(prompt);
         try {
-          await invoke("set_system_prompt_cmd", { prompt });
+          await shellClient.setSystemPrompt(prompt);
         } catch {
           // ignore
         }
@@ -2356,7 +2563,7 @@ function App() {
     setIsSavingSystemPrompt(true);
     setSystemPromptError(null);
     try {
-      await invoke("set_system_prompt_cmd", { prompt });
+      await shellClient.setSystemPrompt(prompt);
       const session = supabaseSessionRef.current;
       if (session) {
         await setCloudSystemPrompt(session, prompt);
@@ -2376,179 +2583,9 @@ function App() {
     }
   }, [communityAnalyticsRange]);
 
-  async function fetchCloudProviderKey(
-    session: SupabaseSession,
-    params: { provider: string; reveal?: boolean },
-  ): Promise<{ hasKey: boolean; updatedAt: string | null; key: string | null } | null> {
-    const url = getSupabaseUrl();
-    if (!url) return null;
-    const response = await fetchWithSupabaseAuth(
-      `${url}/functions/v1/provider_key`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get", provider: params.provider, reveal: params.reveal ?? false }),
-      },
-      session,
-    );
-    if (!response.ok) return null;
-    const data = (await response.json()) as { has_key?: unknown; updated_at?: unknown; key?: unknown };
-    return {
-      hasKey: Boolean(data?.has_key),
-      updatedAt: typeof data?.updated_at === "string" ? data.updated_at : null,
-      key: typeof data?.key === "string" ? data.key : null,
-    };
-  }
-
-  async function setCloudProviderKey(session: SupabaseSession, provider: string, key: string): Promise<boolean> {
-    const url = getSupabaseUrl();
-    if (!url) return false;
-    const response = await fetchWithSupabaseAuth(
-      `${url}/functions/v1/provider_key`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "set", provider, key }),
-      },
-      session,
-    );
-    return response.ok;
-  }
-
-  async function clearCloudProviderKey(session: SupabaseSession, provider: string): Promise<boolean> {
-    const url = getSupabaseUrl();
-    if (!url) return false;
-    const response = await fetchWithSupabaseAuth(
-      `${url}/functions/v1/provider_key`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "clear", provider }),
-      },
-      session,
-    );
-    return response.ok;
-  }
-
-  const providerIdsToSync = ["openai", "anthropic", "google", "x-ai"] as const;
-
-  async function syncProviderKeysWithCloud(session: SupabaseSession): Promise<void> {
-    for (const provider of providerIdsToSync) {
-      const localKey = await invoke<string | null>("get_provider_key_cmd", { provider }).catch(() => null);
-      const localTrimmed = (localKey ?? "").trim();
-
-      const cloudStatus = await fetchCloudProviderKey(session, { provider, reveal: false }).catch(() => null);
-      if (cloudStatus?.hasKey) {
-        const cloudRevealed = await fetchCloudProviderKey(session, { provider, reveal: true }).catch(() => null);
-        const cloudKey = (cloudRevealed?.key ?? "").trim();
-        if (cloudKey && cloudKey !== localTrimmed) {
-          await invoke("set_provider_key_cmd", { provider, key: cloudKey });
-        }
-        continue;
-      }
-
-      if (localTrimmed) {
-        await setCloudProviderKey(session, provider, localTrimmed);
-      }
-    }
-    await loadProviderKeys();
-  }
-
-  function scheduleProviderKeySync(session: SupabaseSession, reason: "session" | "focus") {
-    const now = Date.now();
-    const minIntervalMs = reason === "focus" ? 10_000 : 0;
-    if (now - lastProviderKeySyncAtRef.current < minIntervalMs) return;
-    lastProviderKeySyncAtRef.current = now;
-
-    if (providerKeySyncInFlightRef.current) return;
-    providerKeySyncInFlightRef.current = syncProviderKeysWithCloud(session)
-      .catch((error) => console.warn("Provider key sync failed:", error))
-      .finally(() => {
-        providerKeySyncInFlightRef.current = null;
-      });
-  }
-
   useEffect(() => {
-    if (!supabaseSession) return;
     void loadThreads();
   }, [supabaseSession]);
-
-  useEffect(() => {
-    if (supabaseAutoRefreshTimeoutRef.current) {
-      window.clearTimeout(supabaseAutoRefreshTimeoutRef.current);
-      supabaseAutoRefreshTimeoutRef.current = null;
-    }
-    if (!supabaseSession) return;
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const refreshAtSec = Math.max(supabaseSession.expires_at - 90, nowSec + 5);
-    const delayMs = Math.max((refreshAtSec - nowSec) * 1000, 0);
-
-    const attemptRefresh = async () => {
-      const current = supabaseSessionRef.current;
-      if (!current) return;
-      const refreshed = await refreshSupabaseSessionLocked(current.refresh_token);
-      if (refreshed) return;
-
-      // Network flake or transient failure; retry a bit later if not fully expired yet.
-      const now = Math.floor(Date.now() / 1000);
-      if (current.expires_at > now) {
-        supabaseAutoRefreshTimeoutRef.current = window.setTimeout(() => {
-          void attemptRefresh();
-        }, 30_000);
-      }
-    };
-
-    supabaseAutoRefreshTimeoutRef.current = window.setTimeout(() => {
-      void attemptRefresh();
-    }, delayMs);
-
-    return () => {
-      if (supabaseAutoRefreshTimeoutRef.current) {
-        window.clearTimeout(supabaseAutoRefreshTimeoutRef.current);
-        supabaseAutoRefreshTimeoutRef.current = null;
-      }
-    };
-  }, [supabaseSession]);
-
-  useEffect(() => {
-    setCloudProfile(null);
-    setProfileSaveError(null);
-    setProfileSaveSuccess(false);
-    if (profileSaveTimeoutRef.current) {
-      window.clearTimeout(profileSaveTimeoutRef.current);
-      profileSaveTimeoutRef.current = null;
-    }
-  }, [profileStorageUserId]);
-
-		  useEffect(() => {
-		    const onFocus = () => {
-		      const current = supabaseSessionRef.current;
-	      if (!current) return;
-	      const now = Math.floor(Date.now() / 1000);
-	      if (current.expires_at <= now + 60) {
-	        void refreshSupabaseSessionLocked(current.refresh_token);
-	      }
-	      scheduleProviderKeySync(current, "focus");
-	      void loadBuilderBillingStatus(current);
-        void loadSelfProfile(current);
-        void loadModelRegistry(current);
-	    };
-	    window.addEventListener("focus", onFocus);
-		    return () => window.removeEventListener("focus", onFocus);
-		  }, []);
-
-	  useEffect(() => {
-	    if (!supabaseSession) return;
-	    void loadCommunities(supabaseSession);
-	    void maybeAutoJoinPendingInvites(supabaseSession);
-	    void maybeAutoJoinPendingPublicCommunity(supabaseSession);
-      void loadPendingPurchaseClaims(supabaseSession);
-      void loadBuilderBillingStatus(supabaseSession);
-      void loadSelfProfile(supabaseSession);
-      void loadModelRegistry(supabaseSession);
-      scheduleProviderKeySync(supabaseSession, "session");
-	  }, [supabaseSession]);
 
     useEffect(() => {
       if (!supabaseSession) {
@@ -2700,67 +2737,21 @@ function App() {
 	    setUnreadCount(0);
 	    setIsUserAtBottom(true);
 	    isUserAtBottomRef.current = true;
-	    setIsLoadingMoreChat(false);
-		    setCommunityChatHasMore(true);
-		    communityChatOldestSeqRef.current = null;
-		    pendingChatPrependScrollRef.current = null;
+	    resetCommunityChatDataState();
+		    clearPendingPrependAnchor();
 		    setOpenResourceEmbedId(null);
         setSelectedLibraryResourceId(null);
 		    if (chatInputRef.current) {
 		      chatInputRef.current.style.height = "auto";
 		    }
-		  }, [activeCommunityId]);
+		  }, [activeCommunityId, clearPendingPrependAnchor, resetCommunityChatDataState]);
 
-				  useEffect(() => {
-				    const nextLoadedId = activeCommunityId ?? null;
-				    const switchingCommunity = communitySettingsLoadedCommunityIdRef.current !== nextLoadedId;
-				    if (switchingCommunity) {
-				      communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
-				      communitySettingsDirtyRef.current = false;
-				      communityPricingDirtyRef.current = false;
-				      setCommunitySettingsMonthlyPlanId(null);
-				      setCommunitySettingsYearlyPlanId(null);
-				      setCommunitySettingsPricingMode("free");
-				      setCommunitySettingsPriceUsdMonthly("");
-				      setCommunitySettingsPriceUsdYearly("");
-				    }
-
-			    const current = communities.find((c) => c.id === activeCommunityId) ?? null;
-			    if (!current) {
-			      setCommunitySettingsError(null);
-			      setCommunityMemberSettingsError(null);
-			      setCommunitySettingsBannerUploadError(null);
-			      setIsProcessingCommunitySettingsBanner(false);
-			      setCommunitySettingsName("");
-			      setCommunitySettingsSlug("");
-			      setCommunitySettingsDescription("");
-			      setCommunitySettingsVisibility("private");
-			      setCommunitySettingsAvatarUrl(null);
-			      setCommunitySettingsBannerUrl(null);
-			      setCommunitySettingsMonthlyPlanId(null);
-			      setCommunitySettingsYearlyPlanId(null);
-			      setCommunitySettingsPriceUsdMonthly("");
-			      setCommunitySettingsPriceUsdYearly("");
-			      setCommunityMemberMuted(false);
-			      setCommunityInvites([]);
-			      setInviteCreateError(null);
-			      return;
-			    }
-
-			    if (!switchingCommunity && communitySettingsDirtyRef.current) return;
-
-			    setCommunitySettingsError(null);
-			    setCommunityMemberSettingsError(null);
-				    setCommunitySettingsBannerUploadError(null);
-				    setIsProcessingCommunitySettingsBanner(false);
-				    setCommunitySettingsName(current.name ?? "");
-				    setCommunitySettingsSlug(slugify(current.slug ?? ""));
-				    setCommunitySettingsDescription(current.description ?? "");
-				    setCommunitySettingsVisibility(current.visibility ?? "private");
-				    setCommunitySettingsAvatarUrl(current.avatar_url ?? null);
-				    setCommunitySettingsBannerUrl(current.banner_url ?? null);
-				    setInviteCreateError(null);
-			  }, [activeCommunityId, communities]);
+					  useEffect(() => {
+					    syncCommunitySettingsSelection({
+					      activeCommunityId,
+					      communities,
+					    });
+				  }, [activeCommunityId, communities, syncCommunitySettingsSelection]);
 
       useEffect(() => {
         if (activePage !== "community" || communityTab !== "settings") return;
@@ -2770,33 +2761,10 @@ function App() {
         }
         if (!activeCommunityAccess?.can_view) return;
         if (activeCommunityAccess.is_owner || activeCommunityAccess.can_manage_members) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-
-        setIsLoadingCommunityMemberSettings(true);
-        setCommunityMemberSettingsError(null);
-        (async () => {
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/community_member_settings?select=community_id,user_id,muted,muted_until,created_at,updated_at&community_id=eq.${encodeURIComponent(
-                activeCommunityId
-              )}&user_id=eq.${encodeURIComponent(supabaseSession.user.id)}&limit=1`,
-              { method: "GET" },
-              supabaseSession
-            );
-            if (!response.ok) {
-              setCommunityMemberMuted(false);
-              return;
-            }
-            const rows = (await response.json()) as CommunityMemberSettings[];
-            const row = rows[0];
-            setCommunityMemberMuted(Boolean(row?.muted));
-          } catch {
-            setCommunityMemberMuted(false);
-          } finally {
-            setIsLoadingCommunityMemberSettings(false);
-          }
-        })();
+        void loadCommunityMemberSettings({
+          communityId: activeCommunityId,
+          session: supabaseSession,
+        });
       }, [
         activePage,
         communityTab,
@@ -2805,86 +2773,10 @@ function App() {
         activeCommunityAccess?.can_view,
         activeCommunityAccess?.is_owner,
         activeCommunityAccess?.can_manage_members,
+        loadCommunityMemberSettings,
       ]);
 
-      async function handleToggleCommunityMute(nextMuted: boolean) {
-        if (!supabaseSession || !activeCommunityId) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setCommunityMemberSettingsError(null);
-        setIsLoadingCommunityMemberSettings(true);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/community_member_settings?on_conflict=community_id,user_id`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Prefer: "resolution=merge-duplicates,return=representation",
-              },
-              body: JSON.stringify({
-                community_id: activeCommunityId,
-                user_id: supabaseSession.user.id,
-                muted: nextMuted,
-                muted_until: null,
-              }),
-            },
-            supabaseSession
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          setCommunityMemberMuted(nextMuted);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to update settings.";
-          setCommunityMemberSettingsError(message);
-        } finally {
-          setIsLoadingCommunityMemberSettings(false);
-        }
-      }
-
-      async function handleLeaveCommunity() {
-        if (!supabaseSession || !activeCommunityId) return;
-        if (!confirm("Leave this community? You will lose access immediately.")) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setCommunityMemberSettingsError(null);
-        setIsLeavingCommunity(true);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/leave_community`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_community_id: activeCommunityId }),
-            },
-            supabaseSession
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          const leavingId = activeCommunityId;
-          setActiveCommunityId(null);
-          setActivePage("workspace");
-          setActiveView("home");
-          setCommunityTab("chat");
-          setCommunities((prev) => prev.filter((c) => c.id !== leavingId));
-          await loadCommunities(supabaseSession);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to leave community.";
-          setCommunityMemberSettingsError(message);
-        } finally {
-          setIsLeavingCommunity(false);
-        }
-      }
-
-	      useEffect(() => {
+		      useEffect(() => {
 	        if (activePage !== "community" || communityTab !== "settings") return;
 	        if (!supabaseSession || !activeCommunityId) {
 	          setCommunitySettingsMonthlyPlanId(null);
@@ -2895,53 +2787,14 @@ function App() {
 	          return;
 	        }
 	        if (!activeCommunityAccess?.can_manage_members) return;
-	        const url = getSupabaseUrl();
-	        if (!url) return;
 
 	        let cancelled = false;
 	        const communityId = activeCommunityId;
-	        (async () => {
-	          try {
-	            const response = await fetchWithSupabaseAuth(
-	              `${url}/rest/v1/rpc/get_community_pricing`,
-	              {
-	                method: "POST",
-	                headers: { "Content-Type": "application/json" },
-	                body: JSON.stringify({ p_community_id: communityId }),
-	              },
-	              supabaseSession
-	            );
-	            if (!response.ok) return;
-	            const rows = (await response.json()) as Array<{
-	              billing_period: string;
-	              plan_id: string;
-	              amount_base_units: number | string;
-	              currency: string;
-	              currency_decimals: number;
-	            }>;
-	            if (cancelled) return;
-	            if (communitySettingsLoadedCommunityIdRef.current !== communityId) return;
-	            if (communityPricingDirtyRef.current) return;
-	            const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
-	            const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
-	            setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
-	            setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
-
-            const formatPlanAmount = (row: typeof monthly): string => {
-              if (!row) return "";
-              const decimals = Number(row.currency_decimals ?? 2) || 2;
-              const major = Number(row.amount_base_units ?? 0) / Math.pow(10, decimals);
-              return Number.isFinite(major) ? major.toFixed(decimals).replace(/\.?0+$/, "") : "";
-            };
-            setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
-            setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
-	            setCommunitySettingsPricingMode(
-	              monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free"
-	            );
-	          } catch {
-	            // ignore
-	          }
-	        })();
+	        void loadCommunityPricing({
+	          communityId,
+	          session: supabaseSession,
+	          shouldIgnore: () => cancelled,
+	        });
 	        return () => {
 	          cancelled = true;
 	        };
@@ -2950,8 +2803,9 @@ function App() {
 	        communityTab,
 	        supabaseSession,
 	        activeCommunityId,
-        activeCommunityAccess?.can_manage_members,
-      ]);
+	        activeCommunityAccess?.can_manage_members,
+	        loadCommunityPricing,
+	      ]);
 
 	  useEffect(() => {
 	    if (!supabaseSession || !activeCommunityId) {
@@ -3048,13 +2902,6 @@ function App() {
         communityAgentDraftsLoadedCommunityIdRef.current = null;
         return;
       }
-      // If we already know the community owner's tier isn't Pro, avoid calling Pro-only RPCs.
-      if (activeCommunityOwnerIsPro === false) {
-        setCommunityAgentDrafts([]);
-        setCommunityAgentDraftsError("pro_plan_required");
-        communityAgentDraftsLoadedCommunityIdRef.current = activeCommunityId;
-        return;
-      }
       if (communityAgentDraftsLoadedCommunityIdRef.current === activeCommunityId) return;
       void loadCommunityAgentDrafts(activeCommunityId, supabaseSession);
     }, [
@@ -3063,7 +2910,6 @@ function App() {
       supabaseSession,
       activeCommunityId,
       activeCommunityAccess?.can_manage_members,
-      activeCommunityOwnerIsPro,
     ]);
 
 	  useEffect(() => {
@@ -3079,16 +2925,26 @@ function App() {
 	    void loadCommunityInvites(activeCommunityId, supabaseSession);
 	  }, [activePage, communityTab, supabaseSession, activeCommunityId, activeCommunityAccess?.can_invite]);
 
+	  useEffect(() => {
+	    if (activePage !== "community" || communityTab !== "members") return;
+	    if (!supabaseSession || !activeCommunityId) {
+	      setCommunityMemoryCandidates([]);
+	      setCommunityMemoryCandidatesError(null);
+	      return;
+	    }
+	    if (!activeCommunityAccess?.can_manage_members) {
+	      setCommunityMemoryCandidates([]);
+	      setCommunityMemoryCandidatesError(null);
+	      return;
+	    }
+	    void loadCommunityMemoryCandidates(activeCommunityId, supabaseSession);
+	  }, [activePage, communityTab, supabaseSession, activeCommunityId, activeCommunityAccess?.can_manage_members]);
+
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId) return;
     if (communityTab !== "resources" && communityTab !== "library") return;
     void loadCommunityResources(activeCommunityId, supabaseSession);
   }, [supabaseSession, activeCommunityId, communityTab]);
-
-  useEffect(() => {
-    if (activePage !== "discover") return;
-    void loadDiscoverCommunities();
-  }, [activePage]);
 
   useEffect(() => {
     if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
@@ -3109,467 +2965,15 @@ function App() {
     }
   }, [communityResources, communityTab, selectedLibraryResourceId]);
 
-		  function captureCommunityChatScrollAnchor(
-		    container: HTMLElement,
-		  ): { elementId: string; offset: number } | null {
-		    const rect = container.getBoundingClientRect();
-		    const x = rect.left + Math.min(32, rect.width / 2);
-		    const yCandidates = [rect.top + 20, rect.top + 60, rect.top + 100];
-		    for (const y of yCandidates) {
-		      if (y >= rect.bottom) continue;
-		      const hit = document.elementFromPoint(x, y);
-		      const messageEl = hit?.closest?.(".chat-message[id^='msg-']") as HTMLElement | null;
-		      if (messageEl?.id) {
-		        return { elementId: messageEl.id, offset: messageEl.offsetTop - container.scrollTop };
-		      }
-		    }
-
-		    // Fallback for odd layouts (rare): scan message nodes.
-		    const scrollTop = container.scrollTop;
-		    const nodes = container.querySelectorAll<HTMLElement>(".chat-message[id^='msg-']");
-		    for (const node of nodes) {
-		      const top = node.offsetTop;
-		      const bottom = top + node.offsetHeight;
-		      if (bottom > scrollTop + 1) {
-		        return { elementId: node.id, offset: top - scrollTop };
-		      }
-		    }
-		    return null;
-		  }
-
-		  function restoreCommunityChatScrollAnchor(
-		    container: HTMLElement,
-		    anchor: { elementId: string; offset: number },
-		  ) {
-		    const el = document.getElementById(anchor.elementId) as HTMLElement | null;
-		    if (!el) return;
-		    container.scrollTop = el.offsetTop - anchor.offset;
-		  }
-
-		  // Smart auto-scroll: only scroll to bottom if user is already near bottom
-		  useEffect(() => {
-		    const container = communityChatListRef.current;
-		    if (!container || !isUserAtBottom) return;
-		    container.scrollTop = container.scrollHeight;
-		  }, [communityMessages, isUserAtBottom]);
-
-		  useLayoutEffect(() => {
-		    const pending = pendingChatPrependScrollRef.current;
-		    if (!pending) return;
-		    const container = communityChatListRef.current;
-		    if (!container) return;
-		    restoreCommunityChatScrollAnchor(container, pending);
-		    pendingChatPrependScrollRef.current = null;
-		  }, [communityMessages]);
-
-		  // Keep the visible message anchored when the chat column width changes (panel toggles / resize).
-		  useEffect(() => {
-		    if (activePage !== "community" || communityTab !== "chat") return;
-		    const container = communityChatListRef.current;
-		    if (!container) return;
-		    let raf: number | null = null;
-		    const observer = new ResizeObserver(() => {
-		      if (raf !== null) cancelAnimationFrame(raf);
-		      raf = requestAnimationFrame(() => {
-		        const el = communityChatListRef.current;
-		        if (!el) return;
-		        if (isUserAtBottomRef.current) {
-		          el.scrollTop = el.scrollHeight;
-		          return;
-		        }
-		        const anchor = communityChatAnchorRef.current;
-		        if (!anchor) return;
-		        restoreCommunityChatScrollAnchor(el, anchor);
-		      });
-		    });
-		    observer.observe(container);
-		    return () => {
-		      observer.disconnect();
-		      if (raf !== null) cancelAnimationFrame(raf);
-		    };
-		  }, [activePage, communityTab, activeCommunityId]);
-
-		  // Track if user has scrolled up
-		  const handleChatScroll = () => {
-		    if (!communityChatListRef.current) return;
-		    const { scrollTop, scrollHeight, clientHeight } = communityChatListRef.current;
-		    const atBottom = scrollHeight - scrollTop <= clientHeight + 100;
-
-		    if (atBottom !== isUserAtBottomRef.current) {
-		      setIsUserAtBottom(atBottom);
-		      isUserAtBottomRef.current = atBottom;
-		    }
-		    // Reset unread count when scrolled to bottom
-		    if (atBottom) setUnreadCount(0);
-		    if (atBottom) {
-		      communityChatAnchorRef.current = null;
-		    } else {
-		      communityChatAnchorRef.current = captureCommunityChatScrollAnchor(communityChatListRef.current);
-		    }
-
-	    const nearTop = scrollTop <= COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX;
-	    if (
-	      nearTop &&
-	      !atBottom &&
-	      supabaseSession &&
-	      activeCommunityId &&
-	      communityTab === "chat" &&
-	      communityChatHasMore &&
-	      !isLoadingChat &&
-	      !isLoadingMoreChat
-	    ) {
-	      void loadOlderCommunityChat(activeCommunityId, supabaseSession);
-	    }
-	  };
-
-  // Workspace auto-scroll: scroll to bottom when new messages/tool calls/streaming content arrive
-  // Also handles thread transitions (isLoadingThreadRef) to ensure we start at bottom
-  // Use requestAnimationFrame to ensure DOM has painted before reading scrollHeight
-  useEffect(() => {
-    const isThreadLoad = isLoadingThreadRef.current;
-    // Scroll if auto-scroll is enabled OR if we're loading a new thread
-    if (!autoScrollEnabledRef.current && !isThreadLoad) return;
-
-    const raf = requestAnimationFrame(() => {
-      if (!workspaceMessageListRef.current) return;
-      // Re-check conditions inside RAF (state may have changed)
-      if (!autoScrollEnabledRef.current && !isLoadingThreadRef.current) return;
-
-      workspaceMessageListRef.current.scrollTo({
-        top: workspaceMessageListRef.current.scrollHeight,
-        behavior: "instant"
-      });
-
-      // After thread load scroll completes, clear the loading flag and ensure correct state
-      if (isLoadingThreadRef.current) {
-        // Update lastScrollTop to current position to prevent false "scrolled up" detection
-        lastWorkspaceScrollTopRef.current = workspaceMessageListRef.current.scrollTop;
-        isLoadingThreadRef.current = false;
-        setIsWorkspaceAtBottom(true);
-        autoScrollEnabledRef.current = true;
-      }
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [messages, toolCalls, streamingContent]);
-
-  // Track workspace scroll position
-  const handleWorkspaceScroll = () => {
-    if (!workspaceMessageListRef.current) return;
-    // Ignore scroll events during thread transitions to prevent race conditions
-    if (isLoadingThreadRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = workspaceMessageListRef.current;
-
-    // If content doesn't overflow, always consider "at bottom" (nothing to scroll to)
-    const hasScrollableContent = scrollHeight > clientHeight + 1;
-    if (!hasScrollableContent) {
-      setIsWorkspaceAtBottom(true);
-      autoScrollEnabledRef.current = true;
-      return;
-    }
-
-    const atBottom = scrollHeight - scrollTop <= clientHeight + 24;
-
-    const prevScrollTop = lastWorkspaceScrollTopRef.current;
-    lastWorkspaceScrollTopRef.current = scrollTop;
-    const scrolledUp = scrollTop < prevScrollTop - 2;
-
-    // If the user scrolls up even slightly, pause auto-scroll immediately (ChatGPT-style).
-    if (scrolledUp) {
-      autoScrollEnabledRef.current = false;
-      setIsWorkspaceAtBottom(false);
-      return;
-    }
-
-    setIsWorkspaceAtBottom(atBottom);
-    // Re-enable auto-scroll automatically when the user returns to the bottom.
-    autoScrollEnabledRef.current = atBottom;
-  };
-
-  useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || communityTab !== "chat") {
-      if (communitySocketRef.current) {
-        communitySocketRef.current.close();
-        communitySocketRef.current = null;
-      }
-      if (communityHeartbeatRef.current) {
-        window.clearInterval(communityHeartbeatRef.current);
-        communityHeartbeatRef.current = null;
-      }
-      return;
-    }
-
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) return;
-
-    const wsUrl = `${url.replace("https://", "wss://").replace("http://", "ws://")}/realtime/v1/websocket?apikey=${apiKey}&vsn=1.0.0`;
-    let socket: WebSocket | null = null;
-    let cancelled = false;
-    const joinRef = `${Date.now()}`;
-    const messagesTopic = "realtime:public:messages";
-    const reactionsJoinRef = `${Date.now()}-reactions`;
-    const reactionsTopic = "realtime:public:message_reactions";
-
-    void (async () => {
-      let threadId: string;
-      try {
-        threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
-      } catch {
-        return;
-      }
-      if (cancelled) return;
-
-      const typingJoinRef = `${Date.now()}-typing`;
-      const typingTopic = `realtime:typing_${threadId}`;
-      communityTypingTopicRef.current = typingTopic;
-
-      socket = new WebSocket(wsUrl);
-      communitySocketRef.current = socket;
-
-      socket.addEventListener("open", () => {
-        if (!socket) return;
-
-        socket.send(
-          JSON.stringify({
-            topic: messagesTopic,
-            event: "phx_join",
-            payload: {
-              config: {
-                broadcast: { ack: false },
-                postgres_changes: [
-                  {
-                    event: "INSERT",
-                    schema: "public",
-                    table: "messages",
-                    filter: `thread_id=eq.${threadId}`
-                  },
-                  {
-                    event: "UPDATE",
-                    schema: "public",
-                    table: "messages",
-                    filter: `thread_id=eq.${threadId}`
-                  },
-                  {
-                    event: "DELETE",
-                    schema: "public",
-                    table: "messages",
-                    filter: `thread_id=eq.${threadId}`
-                  }
-                ]
-              },
-              access_token: supabaseSession.access_token
-            },
-            ref: joinRef
-          })
-        );
-
-        socket.send(
-          JSON.stringify({
-            topic: reactionsTopic,
-            event: "phx_join",
-            payload: {
-              config: {
-                broadcast: { ack: false },
-                postgres_changes: [
-                  { event: "INSERT", schema: "public", table: "message_reactions" },
-                  { event: "UPDATE", schema: "public", table: "message_reactions" },
-                  { event: "DELETE", schema: "public", table: "message_reactions" }
-                ]
-              },
-              access_token: supabaseSession.access_token
-            },
-            ref: reactionsJoinRef
-          })
-        );
-
-        socket.send(
-          JSON.stringify({
-            topic: typingTopic,
-            event: "phx_join",
-            payload: {
-              config: {
-                broadcast: { ack: false }
-              },
-              access_token: supabaseSession.access_token
-            },
-            ref: typingJoinRef
-          })
-        );
-
-        communityHeartbeatRef.current = window.setInterval(() => {
-          if (!socket || socket.readyState !== WebSocket.OPEN) return;
-          socket.send(
-            JSON.stringify({
-              topic: "phoenix",
-              event: "heartbeat",
-              payload: {},
-              ref: `${Date.now()}`
-            })
-          );
-        }, 25000);
-      });
-
-      socket.addEventListener("message", (event) => {
-        try {
-          const data = JSON.parse(event.data) as {
-            topic?: string;
-            event?: string;
-            payload?: Record<string, unknown>;
-          };
-
-          if (data.event === "broadcast" && data.topic === typingTopic) {
-            const payload = data.payload as { event?: unknown; payload?: unknown; type?: unknown };
-            const name =
-              (typeof payload.event === "string" ? payload.event : null) ??
-              (typeof payload.type === "string" ? payload.type : null) ??
-              "";
-            if (name !== "typing") return;
-            const details = payload.payload as { user_id?: unknown; userId?: unknown } | null;
-            const userId =
-              (details && typeof details.user_id === "string" ? details.user_id : null) ??
-              (details && typeof details.userId === "string" ? details.userId : null);
-            if (!userId) return;
-            if (userId === supabaseSession?.user.id) return;
-
-            const existing = communityTypingTimeoutsRef.current.get(userId);
-            if (existing) window.clearTimeout(existing);
-            const timeoutId = window.setTimeout(() => {
-              communityTypingTimeoutsRef.current.delete(userId);
-              setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
-            }, 2500);
-            communityTypingTimeoutsRef.current.set(userId, timeoutId);
-            setCommunityTypingUserIds(Array.from(communityTypingTimeoutsRef.current.keys()));
-            return;
-          }
-
-          if (data.event !== "postgres_changes") return;
-
-          if (data.topic === messagesTopic) {
-            const payload = data.payload as {
-              eventType?: string;
-              type?: string;
-              new?: CloudMessageRow;
-              old?: CloudMessageRow;
-              record?: CloudMessageRow;
-              old_record?: CloudMessageRow;
-              data?: {
-                type?: string;
-                new?: CloudMessageRow;
-                old?: CloudMessageRow;
-                record?: CloudMessageRow;
-                old_record?: CloudMessageRow;
-              };
-            };
-
-            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
-            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
-            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
-
-            if (eventType === "DELETE") {
-              const deleted = oldRecord ?? newRecord;
-              if (!deleted) return;
-              if (deleted.thread_id !== threadId) return;
-              setCommunityMessages((prev) => prev.filter((m) => m.id !== deleted.id));
-              setMessageReactions((prev) => prev.filter((r) => r.message_id !== deleted.id));
-              return;
-            }
-
-            if (!newRecord) return;
-            if (newRecord.thread_id !== threadId) return;
-            const mapped = toCommunityChatMessage(newRecord);
-            if (!mapped) return;
-            setCommunityMessages((prev) => {
-              const idx = prev.findIndex((item) => item.id === mapped.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = { ...next[idx], ...mapped };
-                next.sort((a, b) => a.seq - b.seq);
-                return next;
-              }
-              const next = [...prev, mapped];
-              next.sort((a, b) => a.seq - b.seq);
-              return next;
-            });
-            // Increment unread count only when the user isn't at bottom.
-            if (
-              eventType === "INSERT" &&
-              mapped.sender_id !== supabaseSession?.user.id &&
-              !isUserAtBottomRef.current
-            ) {
-              setUnreadCount((prev) => prev + 1);
-            }
-            return;
-          }
-
-          if (data.topic === reactionsTopic) {
-            const payload = data.payload as {
-              eventType?: string;
-              type?: string;
-              new?: MessageReaction;
-              old?: MessageReaction;
-              record?: MessageReaction;
-              old_record?: MessageReaction;
-              data?: {
-                type?: string;
-                new?: MessageReaction;
-                old?: MessageReaction;
-                record?: MessageReaction;
-                old_record?: MessageReaction;
-              };
-            };
-
-            const eventType = (payload.eventType ?? payload.type ?? payload.data?.type ?? "").toUpperCase();
-            const newRecord = payload.new ?? payload.record ?? payload.data?.new ?? payload.data?.record;
-            const oldRecord = payload.old ?? payload.old_record ?? payload.data?.old ?? payload.data?.old_record;
-            const target = eventType === "DELETE" ? oldRecord ?? newRecord : newRecord;
-            if (!target) return;
-            if (!communityMessageIdsRef.current.has(target.message_id)) return;
-
-            if (eventType === "DELETE") {
-              setMessageReactions((prev) => prev.filter((r) => r.id !== target.id));
-              return;
-            }
-
-            setMessageReactions((prev) => {
-              const idx = prev.findIndex((item) => item.id === target.id);
-              if (idx >= 0) {
-                const next = [...prev];
-                next[idx] = { ...next[idx], ...target };
-                return next;
-              }
-              return [...prev, target];
-            });
-          }
-        } catch {
-          // Ignore malformed payloads
-        }
-      });
-
-      socket.addEventListener("close", () => {
-        if (communityHeartbeatRef.current) {
-          window.clearInterval(communityHeartbeatRef.current);
-          communityHeartbeatRef.current = null;
-        }
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-      socket?.close();
-      communitySocketRef.current = null;
-      if (communityHeartbeatRef.current) {
-        window.clearInterval(communityHeartbeatRef.current);
-        communityHeartbeatRef.current = null;
-      }
-      communityTypingTopicRef.current = null;
-      for (const timeoutId of communityTypingTimeoutsRef.current.values()) {
-        window.clearTimeout(timeoutId);
-      }
-      communityTypingTimeoutsRef.current.clear();
-      setCommunityTypingUserIds([]);
-    };
-  }, [supabaseSession, activeCommunityId, communityTab]);
+  const { handleWorkspaceScroll } = useWorkspaceAutoScroll({
+    workspaceMessageListRef,
+    isLoadingThreadRef,
+    autoScrollEnabledRef,
+    lastWorkspaceScrollTopRef,
+    setIsWorkspaceAtBottom,
+    autoScrollDependencies: [messages, toolCalls, streamingContent],
+    scrollBehavior: "instant",
+  });
 
   useEffect(() => {
     toolCallsRef.current = toolCalls;
@@ -3580,22 +2984,8 @@ function App() {
   }, [activeModelId]);
 
   useEffect(() => {
-    void invoke<ToolUiSpec[]>("list_tools_cmd")
-      .then((tools) => {
-        const next: Record<string, ToolUiSpec> = {};
-        for (const tool of tools) {
-          next[tool.name] = tool;
-        }
-        setToolSpecsByName(next);
-      })
-      .catch(() => {
-        // Non-fatal: tool metadata is used only for nicer UI labels.
-      });
-  }, []);
-
-  useEffect(() => {
     if (!activeThreadId) return;
-    void invoke<string>("get_agent_mode_cmd", { sessionId: activeThreadId })
+    void runtimeClient.getAgentMode(activeThreadId)
       .then((mode) => {
         const normalized = (mode || "build").toLowerCase();
         if (normalized === "plan" || normalized === "explore" || normalized === "build") {
@@ -3607,7 +2997,7 @@ function App() {
       .catch(() => {
         setAgentMode("build");
       });
-  }, [activeThreadId]);
+  }, [activeThreadId, runtimeClient]);
 
   useEffect(() => {
     if (slashState.query === null) {
@@ -3698,9 +3088,8 @@ function App() {
     }
   }, [windowWidth, userWantsSessions, userWantsCommunity, activePage, activeView]);
 
-  useEffect(() => {
-    // Stream model output updates into the chat UI.
-    const handleOpenedUrls = async (urls: string[]) => {
+  const handleOpenedUrls = useCallback(
+    async (urls: string[]) => {
       if (urls.length === 0) return;
 
       let newestInvite: string | null = null;
@@ -3730,24 +3119,9 @@ function App() {
             if (next) newestSettingsPage = next;
           }
           if (host === "billing" || pathname === "/billing") {
-            const status = (parsed.searchParams.get("status") ?? parsed.searchParams.get("billing") ?? "")
-              .trim()
-              .toLowerCase();
-            if (status === "success" || status === "cancel" || status === "return") {
-              const rawContext = (parsed.searchParams.get("context") ?? parsed.searchParams.get("billing_context") ?? "")
-                .trim()
-                .toLowerCase();
-              const context =
-                rawContext === "create_community"
-                  ? "create_community"
-                  : rawContext === "builder"
-                    ? "builder"
-                    : "unknown";
-              newestBillingReturn = {
-                status: status as BuilderBillingReturn["status"],
-                source: "desktop",
-                context,
-              };
+            const billingReturn = parseBuilderBillingReturn(parsed.searchParams, { fallbackSource: "desktop" });
+            if (billingReturn) {
+              newestBillingReturn = billingReturn;
             }
           }
         }
@@ -3759,7 +3133,7 @@ function App() {
 
         newestInvite = normalized;
         try {
-          await invoke("upsert_pending_invite_cmd", { inviteKey: normalized, source: "url" });
+          await shellClient.upsertPendingInvite({ invite_key: normalized, source: "url" });
         } catch {
           // ignore
         }
@@ -3799,474 +3173,9 @@ function App() {
         setActiveView("home");
         setActiveInviteGateKey(newestInvite);
       }
-    };
-
-    if (USE_RUNTIME_CLIENT) {
-      let cancelled = false;
-      let runtimeUnsubscribe: (() => void) | null = null;
-
-      const onNotification = (n: RuntimeNotification) => {
-        if (n.type === "turn_finished") {
-          if (n.session_id !== activeThreadId) return;
-          void (async () => {
-            dispatchRunPhase({ type: "turn_finished" });
-            clearStreamingRefs();
-            await loadMessages(n.session_id);
-            setStreamingContent(null);
-            setStreamingTokens(null);
-            setStreamingMeta(null);
-          })();
-          return;
-        }
-
-        if (n.type === "openrouter_stream") {
-          if (n.session_id !== activeThreadId) return;
-          dispatchRunPhase({ type: "stream_chunk" });
-          streamingContentRef.current = n.full_content;
-          streamingTokensRef.current = {
-            prompt_tokens: n.prompt_tokens ?? undefined,
-            completion_tokens: n.completion_tokens ?? undefined,
-            max_tokens: n.max_tokens
-          };
-          streamingMetaRef.current = {
-            engine_id: n.engine_id,
-            model_id: n.model_id,
-            inference_source: n.inference_source ?? null
-          };
-          scheduleStreamingUpdate();
-          return;
-        }
-
-        if (n.type === "memory_updated") {
-          if (n.session_id !== activeThreadId) return;
-          const label = n.label?.trim() || "memory";
-          const scope = n.scope?.trim();
-          const message = scope ? `Memory updated: ${label} (${scope})` : `Memory updated: ${label}`;
-          setMemoryToast(message);
-          if (memoryToastTimeoutRef.current) {
-            window.clearTimeout(memoryToastTimeoutRef.current);
-          }
-          memoryToastTimeoutRef.current = window.setTimeout(() => {
-            setMemoryToast(null);
-          }, 2000);
-          return;
-        }
-
-        if (n.type === "inference_fallback") {
-          if (n.session_id !== activeThreadId) return;
-          const reason = (n.reason ?? "").trim();
-          const from = (n.from ?? "").trim().toLowerCase();
-          const to = (n.to ?? "").trim().toLowerCase();
-          const message =
-            from === "chatgpt" && to === "platform"
-              ? (() => {
-                  const match = reason.match(/chatgpt_http_(\d+)/i);
-                  const code = match?.[1] ?? null;
-                  const detail = (() => {
-                    const idx = reason.indexOf(":");
-                    if (idx === -1) return null;
-                    const msg = reason.slice(idx + 1).trim();
-                    return msg.length ? msg : null;
-                  })();
-                  return code
-                    ? detail
-                      ? `ChatGPT unavailable (HTTP ${code}) — ${detail.slice(0, 140)}`
-                      : `ChatGPT unavailable (HTTP ${code}) — using Arx.`
-                    : "ChatGPT unavailable — using Arx.";
-                })()
-              : reason === "platform_quota_exceeded"
-                ? "Arx AI quota reached — switching to your API key."
-                : "Arx AI unavailable — switching to your API key.";
-          setMemoryToast(message);
-          if (memoryToastTimeoutRef.current) {
-            window.clearTimeout(memoryToastTimeoutRef.current);
-          }
-          memoryToastTimeoutRef.current = window.setTimeout(() => {
-            setMemoryToast(null);
-          }, 2500);
-          return;
-        }
-
-        if (n.type === "platform_inference_action_required") {
-          if (n.session_id !== activeThreadId) return;
-          setIsInferenceFallbackSubmitting(false);
-          setPendingInferenceFallback({
-            session_id: n.session_id,
-            approval_id: n.approval_id,
-            provider_id: n.provider_id,
-            provider_label: n.provider_label,
-            model_id: n.model_id,
-            reason: n.reason,
-          });
-          return;
-        }
-
-        if (n.type === "tool_calls_updated") {
-          if (n.session_id !== activeThreadId) return;
-          void loadToolCalls(n.session_id);
-          return;
-        }
-
-        if (n.type === "tool_approval_requested") {
-          if (n.session_id !== activeThreadId) return;
-          dispatchRunPhase({ type: "approval_requested" });
-          setIsToolApprovalSubmitting(false);
-          setPendingToolApproval({
-            session_id: n.session_id,
-            tool_call_id: n.tool_call_id,
-            tool_name: n.tool_name,
-            args_json: n.args_json,
-          });
-          return;
-        }
-
-        if (n.type === "agent_status") {
-          if (n.session_id !== activeThreadId) return;
-          if (n.status === "idle") {
-            dispatchRunPhase({ type: "turn_finished" });
-            setAgentStatus(null);
-            setRunningTools([]);
-          } else {
-            dispatchRunPhase({ type: n.status === "working" ? "agent_working" : "agent_thinking" });
-            setAgentStatus({
-              session_id: n.session_id,
-              status: n.status,
-              tool_name: n.tool_name,
-              tool_args_preview: n.tool_args_preview,
-            });
-          }
-          return;
-        }
-
-        if (n.type === "tool_call_progress") {
-          if (n.session_id !== activeThreadId) return;
-          if (shouldHideToolNameFromUi(n.tool_name)) return;
-          if (n.status === "started") {
-            dispatchRunPhase({ type: "tool_started" });
-            setRunningTools((prev) => [
-              ...prev,
-              {
-                id: n.tool_call_id,
-                name: n.tool_name,
-                preview: n.tool_args_preview,
-                status: "running",
-              },
-            ]);
-          } else if (n.status === "finished") {
-            setRunningTools((prev) =>
-              prev.map((tool) =>
-                tool.id === n.tool_call_id
-                  ? { ...tool, status: n.result === "ok" ? "ok" : "error" }
-                  : tool
-              )
-            );
-          }
-          return;
-        }
-
-        if (n.type === "opened_urls") {
-          void handleOpenedUrls(n.urls ?? []);
-        }
-      };
-
-      void runtimeClient
-        .subscribeNotifications(onNotification, {
-          thread_id: activeThreadId ?? undefined,
-        })
-        .then(({ unsubscribe }) => {
-          if (cancelled) {
-            unsubscribe();
-            return;
-          }
-          runtimeUnsubscribe = unsubscribe;
-        })
-        .catch(() => {
-          // Fall back to legacy direct listeners on next render if needed.
-        });
-
-      return () => {
-        clearStreamingRefs();
-        if (runtimeUnsubscribe) {
-          try {
-            runtimeUnsubscribe();
-          } catch {
-            // ignore
-          }
-        }
-        cancelled = true;
-        if (memoryToastTimeoutRef.current) {
-          window.clearTimeout(memoryToastTimeoutRef.current);
-          memoryToastTimeoutRef.current = null;
-        }
-      };
-    }
-
-    const unlistenAgent = listen<{ session_id: string }>(
-      "agent-turn-finished",
-      async (event) => {
-        if (!event.payload.session_id) return;
-        dispatchRunPhase({ type: "turn_finished" });
-        // Clear streaming refs before reloading persisted messages.
-        clearStreamingRefs();
-        // Load messages first, then clear streaming to avoid flicker
-        await loadMessages(event.payload.session_id);
-        setStreamingContent(null);
-        setStreamingMeta(null);
-      }
-    );
-
-    const unlistenStream = listen<{ session_id: string; chunk: string; full_content: string }>(
-      "agent-stream",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        dispatchRunPhase({ type: "stream_chunk" });
-        // Use throttled updates to avoid React batching all updates together
-        streamingContentRef.current = event.payload.full_content;
-        scheduleStreamingUpdate();
-      }
-    );
-
-    const unlistenOpenRouterStream = listen<OpenRouterStreamPayload>(
-      "openrouter-stream",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        dispatchRunPhase({ type: "stream_chunk" });
-        // Use throttled updates to ensure smooth token-by-token streaming
-        streamingContentRef.current = event.payload.full_content;
-        streamingTokensRef.current = {
-          prompt_tokens: event.payload.prompt_tokens ?? undefined,
-          completion_tokens: event.payload.completion_tokens ?? undefined,
-          max_tokens: event.payload.max_tokens
-        };
-        streamingMetaRef.current = {
-          engine_id: event.payload.engine_id,
-          model_id: event.payload.model_id,
-          inference_source: event.payload.inference_source ?? null
-        };
-        scheduleStreamingUpdate();
-      }
-    );
-
-    const unlistenOpenRouterDone = listen<SessionIdPayload>(
-      "openrouter-turn-finished",
-      async (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        dispatchRunPhase({ type: "turn_finished" });
-        // Clear streaming refs before reloading persisted messages.
-        clearStreamingRefs();
-        await loadMessages(event.payload.session_id);
-        setStreamingContent(null);
-        setStreamingTokens(null);
-        setStreamingMeta(null);
-      }
-    );
-    const unlistenMemory = listen<{ session_id: string; label: string; scope: string }>(
-      "memory-updated",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        const label = event.payload.label?.trim() || "memory";
-        const scope = event.payload.scope?.trim();
-        const message = scope ? `Memory updated: ${label} (${scope})` : `Memory updated: ${label}`;
-        setMemoryToast(message);
-        if (memoryToastTimeoutRef.current) {
-          window.clearTimeout(memoryToastTimeoutRef.current);
-        }
-        memoryToastTimeoutRef.current = window.setTimeout(() => {
-          setMemoryToast(null);
-        }, 2000);
-      }
-    );
-
-	    const unlistenInferenceFallback = listen<InferenceFallbackPayload>(
-	      "inference-fallback",
-	      (event) => {
-	        if (event.payload.session_id !== activeThreadId) return;
-	        const reason = (event.payload.reason ?? "").trim();
-          const from = (event.payload.from ?? "").trim().toLowerCase();
-          const to = (event.payload.to ?? "").trim().toLowerCase();
-	        const message =
-            from === "chatgpt" && to === "platform"
-              ? (() => {
-                  const match = reason.match(/chatgpt_http_(\d+)/i);
-                  const code = match?.[1] ?? null;
-                  const detail = (() => {
-                    const idx = reason.indexOf(":");
-                    if (idx === -1) return null;
-                    const msg = reason.slice(idx + 1).trim();
-                    return msg.length ? msg : null;
-                  })();
-                  return code
-                    ? detail
-                      ? `ChatGPT unavailable (HTTP ${code}) — ${detail.slice(0, 140)}`
-                      : `ChatGPT unavailable (HTTP ${code}) — using Arx.`
-                    : "ChatGPT unavailable — using Arx.";
-                })()
-              : reason === "platform_quota_exceeded"
-	              ? "Arx AI quota reached — switching to your API key."
-	              : "Arx AI unavailable — switching to your API key.";
-	        setMemoryToast(message);
-	        if (memoryToastTimeoutRef.current) {
-	          window.clearTimeout(memoryToastTimeoutRef.current);
-	        }
-	        memoryToastTimeoutRef.current = window.setTimeout(() => {
-	          setMemoryToast(null);
-	        }, 2500);
-	      }
-	    );
-
-	    const unlistenInferenceActionRequired = listen<PlatformInferenceActionRequiredPayload>(
-	      "platform-inference-action-required",
-	      (event) => {
-	        if (event.payload.session_id !== activeThreadId) return;
-	        setIsInferenceFallbackSubmitting(false);
-	        setPendingInferenceFallback(event.payload);
-	      }
-	    );
-
-    const unlistenToolCallsUpdated = listen<{ session_id: string }>(
-      "tool-calls-updated",
-      async (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        await loadToolCalls(event.payload.session_id);
-      }
-    );
-
-    const unlistenToolApproval = listen<ToolApprovalRequestedPayload>(
-      "tool-approval-requested",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        dispatchRunPhase({ type: "approval_requested" });
-        setIsToolApprovalSubmitting(false);
-        setPendingToolApproval(event.payload);
-      }
-    );
-
-    const unlistenAgentStatus = listen<AgentStatusPayload>(
-      "agent-status",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        if (event.payload.status === "idle") {
-          dispatchRunPhase({ type: "turn_finished" });
-          setAgentStatus(null);
-          setRunningTools([]);
-        } else {
-          dispatchRunPhase({
-            type: event.payload.status === "working" ? "agent_working" : "agent_thinking",
-          });
-          setAgentStatus(event.payload);
-        }
-      }
-    );
-
-    const unlistenToolProgress = listen<ToolCallProgressPayload>(
-      "tool-call-progress",
-      (event) => {
-        if (event.payload.session_id !== activeThreadId) return;
-        if (shouldHideToolNameFromUi(event.payload.tool_name)) return;
-        if (event.payload.status === "started") {
-          dispatchRunPhase({ type: "tool_started" });
-          setRunningTools((prev) => [
-            ...prev,
-            {
-              id: event.payload.tool_call_id,
-              name: event.payload.tool_name,
-              preview: event.payload.tool_args_preview,
-              status: "running",
-            },
-          ]);
-        } else if (event.payload.status === "finished") {
-          setRunningTools((prev) =>
-            prev.map((tool) =>
-              tool.id === event.payload.tool_call_id
-                ? { ...tool, status: event.payload.result === "ok" ? "ok" : "error" }
-                : tool
-            )
-          );
-        }
-      }
-    );
-
-	    const unlistenOpenedUrls = listen<OpenedUrlsPayload>(
-	      "app-opened-urls",
-	      async (event) => {
-	        await handleOpenedUrls(event.payload.urls ?? []);
-      }
-    );
-
-    return () => {
-      clearStreamingRefs();
-      void unlistenAgent.then((fn) => fn());
-      void unlistenStream.then((fn) => fn());
-      void unlistenOpenRouterStream.then((fn) => fn());
-      void unlistenOpenRouterDone.then((fn) => fn());
-		      void unlistenMemory.then((fn) => fn());
-		      void unlistenInferenceFallback.then((fn) => fn());
-		      void unlistenInferenceActionRequired.then((fn) => fn());
-	      void unlistenToolCallsUpdated.then((fn) => fn());
-	      void unlistenToolApproval.then((fn) => fn());
-	      void unlistenAgentStatus.then((fn) => fn());
-	      void unlistenToolProgress.then((fn) => fn());
-      void unlistenOpenedUrls.then((fn) => fn());
-      if (memoryToastTimeoutRef.current) {
-        window.clearTimeout(memoryToastTimeoutRef.current);
-        memoryToastTimeoutRef.current = null;
-      }
-    };
-  }, [activeThreadId, clearStreamingRefs, scheduleStreamingUpdate, runtimeClient]);
-
-  useEffect(() => {
-    const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (event.defaultPrevented) return;
-      if (activePage !== "workspace") return;
-      if (!activeThreadId) return;
-
-      // If the slash menu is active, let the input handler consume Escape.
-      if (slashState.query !== null) return;
-
-		      const cancelActiveRun = () => {
-		        setPendingToolApproval(null);
-		        setPendingInferenceFallback(null);
-            dispatchRunPhase({ type: "cancel_requested" });
-		        void (USE_RUNTIME_CLIENT
-              ? runtimeClient.cancelRun(activeThreadId)
-              : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
-		          // best-effort
-		        });
-		      };
-
-      // Cancel a running tool call if present, otherwise cancel the agent turn.
-      if (runningToolCallId) {
-        event.preventDefault();
-        setRunningToolCallId(null);
-        cancelActiveRun();
-        return;
-      }
-
-      if (pendingToolApproval) {
-        event.preventDefault();
-        cancelActiveRun();
-        return;
-      }
-
-      if (isSending || streamingContent) {
-        event.preventDefault();
-        cancelActiveRun();
-      }
-    };
-
-    window.addEventListener("keydown", handleGlobalEscape);
-    return () => window.removeEventListener("keydown", handleGlobalEscape);
-  }, [
-    activePage,
-    activeThreadId,
-    isSending,
-    pendingToolApproval,
-	    runningToolCallId,
-	    slashState.query,
-	    streamingContent,
-      runtimeClient,
-	  ]);
+    },
+    [handleSignIn, loadPendingInvites, redeemPurchaseClaim, shellClient],
+  );
 
   function toUnixSecondsFromIso(value: string | null | undefined): number | null {
     if (!value) return null;
@@ -4275,517 +3184,56 @@ function App() {
     return Math.floor(ms / 1000);
   }
 
-	  async function loadThreads() {
-	    const session = supabaseSessionRef.current;
-	    const url = session ? getSupabaseUrl() : null;
+  async function loadThreads() {
+    try {
+      const router = desktopThreadServiceRouter;
+      const localThreads = (await router.resolveByLane("agent", "local").listThreads()) as ThreadRecord[];
+      const localAgentThreads = localThreads
+        .filter(
+          (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
+        )
+        .map((thread) => ({
+          ...thread,
+          thread_lane: normalizeThreadLane(thread.thread_lane, thread.engine_id),
+          storage_mode: normalizeThreadStorageMode(
+            thread.storage_mode,
+            thread.thread_lane,
+            thread.engine_id,
+          ),
+          project_id: thread.project_id ?? null,
+        }))
+        .filter((thread) => thread.storage_mode === "local" && thread.thread_lane === "agent");
 
-    type CloudThreadRow = {
-      id: string;
-      title: string | null;
-      engine_id: string | null;
-      model_id: string | null;
-      community_id: string | null;
-      created_at: string;
-      updated_at: string;
-      last_seq?: unknown;
-    };
+      const cloudChatThreads = (await router.resolveByLane("chat", "cloud").listThreads()) as ThreadRecord[];
 
-    const loadCloud = async (auth: SupabaseSession): Promise<ThreadRecord[]> => {
-      if (!url) return [];
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc`,
-        { method: "GET" },
-        auth,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as CloudThreadRow[];
-      return rows
-        .filter((row) => row.id && row.id !== "system")
-        .map((row) => {
-          const parsedLastSeq =
-            typeof row.last_seq === "number"
-              ? row.last_seq
-              : typeof row.last_seq === "string"
-                ? Number(row.last_seq)
-                : Number.NaN;
-          return {
-            id: row.id,
-            title: row.title ?? null,
-            engine_id: (row.engine_id ?? "").trim() || "arx_harness",
-            model_id: (row.model_id ?? "").trim() || null,
-            workspace_path: null,
-            community_id: (row.community_id ?? "").trim() || null,
-            created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
-            updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
-            last_event_at: null,
-            last_seq: Number.isFinite(parsedLastSeq) ? parsedLastSeq : 0,
-          };
-        });
-    };
-
-	    try {
-	      if (!session || !url || !DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED) {
-	        // Local-first thread domain: desktop personal threads come from local DB.
-	        const localThreads = USE_RUNTIME_CLIENT
-            ? await runtimeClient.listThreads()
-            : await invoke<ThreadRecord[]>("list_threads_cmd");
-	        const visible = localThreads.filter(
-	          (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
-	        );
-        setThreads(visible);
-
-        if (activeThreadId && !visible.some((t) => t.id === activeThreadId)) {
-          setActiveThreadId(visible.length > 0 ? visible[0].id : null);
-        } else if (!activeThreadId && !threadsHydratedRef.current && visible.length > 0) {
-          setActiveThreadId(visible[0].id);
-        }
-        threadsHydratedRef.current = true;
-        return;
+      const combinedById = new Map<string, ThreadRecord>();
+      for (const thread of cloudChatThreads) combinedById.set(thread.id, thread);
+      for (const thread of localAgentThreads) {
+        if (!combinedById.has(thread.id)) combinedById.set(thread.id, thread);
       }
+      const visible = Array.from(combinedById.values()).sort((a, b) => {
+        const diff = (b.updated_at ?? 0) - (a.updated_at ?? 0);
+        if (diff !== 0) return diff;
+        return a.id.localeCompare(b.id);
+      });
 
-      const cloudThreads = await loadCloud(session);
-      const visible = cloudThreads.filter(
-        (t) => t.id !== "system" && t.engine_id !== "system" && t.engine_id !== "community_chat",
-      );
       setThreads(visible);
-
-      const selectable = visible.filter((t) => (t.last_seq ?? 0) > 0);
+      const selectable = visible.filter((thread) => (thread.last_seq ?? 0) > 0);
       const active = activeThreadId;
-      const activeThread = active ? visible.find((t) => t.id === active) ?? null : null;
+      const activeThread = active ? visible.find((thread) => thread.id === active) ?? null : null;
       const activeIsEmptyStub = activeThread ? (activeThread.last_seq ?? 0) <= 0 : false;
 
       if (activeIsEmptyStub) {
-        // Old behavior created empty threads. Treat those as draft and fall back to the latest real chat.
         setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
-      } else if (active && !visible.some((t) => t.id === active)) {
+      } else if (active && !visible.some((thread) => thread.id === active)) {
         setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
       } else if (!active && !threadsHydratedRef.current && selectable.length > 0) {
         setActiveThreadId(selectable[0].id);
       }
       threadsHydratedRef.current = true;
-
-      // Legacy cloud-sync mode: hydrate cloud threads into local DB for runtime execution.
-      for (const thread of cloudThreads) {
-        void invoke("upsert_thread_cmd", {
-          threadId: thread.id,
-          title: thread.title,
-          engineId: thread.engine_id,
-          modelId: thread.model_id,
-          communityId: thread.community_id,
-          createdAt: thread.created_at,
-          updatedAt: thread.updated_at,
-        }).catch(() => {
-          // best-effort
-        });
-      }
     } catch (error) {
       console.error("Failed to load threads:", error);
       setThreads([]);
-    }
-  }
-
-		  function toIsoFromUnixSeconds(value: number | null | undefined): string | null {
-		    if (!value || !Number.isFinite(value)) return null;
-		    return new Date(value * 1000).toISOString();
-		  }
-
-		  function normalizeMemoryUsedForCloud(value: unknown): unknown {
-		    if (!Array.isArray(value)) return value;
-		    return value.map((raw) => {
-		      if (!raw || typeof raw !== "object") return raw;
-		      const record = raw as Record<string, unknown>;
-		      const updatedAt = record.updated_at;
-		      if (typeof updatedAt === "number") {
-		        return { ...record, updated_at: toIsoFromUnixSeconds(updatedAt) ?? "" };
-		      }
-		      return record;
-		    });
-		  }
-
-		  function normalizeContentJsonForCloud(value: unknown): unknown {
-		    if (!value || typeof value !== "object") return value;
-		    const record = value as Record<string, unknown>;
-		    const meta = record.meta;
-		    if (!meta || typeof meta !== "object") return value;
-		    const metaRecord = meta as Record<string, unknown>;
-		    if ("memory_used" in metaRecord) {
-		      metaRecord.memory_used = normalizeMemoryUsedForCloud(metaRecord.memory_used);
-		    }
-		    return value;
-		  }
-
-		  async function syncRecentLocalMessagesToCloud(
-		    threadId: string,
-		    session: SupabaseSession,
-		    limit: number,
-		  ): Promise<void> {
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    if (!threadId) return;
-	    const maxTotal = Number.isFinite(limit) ? Math.max(200, Math.trunc(limit)) : 200;
-	    const batchSize = 50;
-
-	    let localMessages: MessageRecord[] = [];
-	    try {
-	      localMessages = USE_RUNTIME_CLIENT
-          ? await runtimeClient.listMessages(threadId)
-          : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId: threadId });
-	    } catch {
-	      return;
-	    }
-	    if (localMessages.length === 0) return;
-
-	    const cursorKey = `arx_cloud_sync_cursor:${threadId}`;
-	    const cursor = (() => {
-	      try {
-	        return (localStorage.getItem(cursorKey) ?? "").trim();
-	      } catch {
-	        return "";
-	      }
-	    })();
-
-	    let startIdx = 0;
-	    if (cursor) {
-	      const idx = localMessages.findIndex((m) => m.id === cursor);
-	      if (idx >= 0) startIdx = idx + 1;
-	    }
-	    // If no cursor is present, backfill a bounded window (covers offline bursts).
-	    startIdx = Math.max(startIdx, Math.max(0, localMessages.length - maxTotal));
-
-	    const allowedRoles = new Set(["user", "assistant", "system"]);
-	    const pending = localMessages
-	      .slice(startIdx)
-	      .filter((m) => isUuid(m.id) && allowedRoles.has(m.role));
-	    if (pending.length === 0) return;
-
-	    const slice = pending.slice(0, maxTotal);
-	    for (let i = 0; i < slice.length; i += batchSize) {
-	      const batch = slice.slice(i, i + batchSize);
-		      const payload = batch.map((m) => {
-		        let content: unknown = null;
-		        try {
-		          content = JSON.parse(m.content_json);
-		        } catch {
-		          content = { text: m.content_json };
-		        }
-		        content = normalizeContentJsonForCloud(content);
-		        return {
-		          id: m.id,
-		          thread_id: threadId,
-		          // Let the database assign a per-thread monotonic seq (trigger assigns when seq=0).
-	          seq: 0,
-	          role: m.role,
-	          content_json: content ?? { text: "" },
-	          engine_id: m.engine_id ?? null,
-	          model_id: m.model_id ?? null,
-	          run_id: m.run_id ?? null,
-	          created_at: toIsoFromUnixSeconds(m.created_at) ?? new Date().toISOString(),
-	        };
-	      });
-
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/messages?on_conflict=id`,
-	        {
-	          method: "POST",
-	          headers: {
-	            "Content-Type": "application/json",
-	            Prefer: "resolution=ignore-duplicates,return=minimal",
-	          },
-	          body: JSON.stringify(payload),
-	        },
-	        session,
-	      );
-	      if (!response.ok) {
-	        throw new Error(await readSupabaseError(response));
-	      }
-
-	      const last = batch[batch.length - 1];
-	      if (last?.id) {
-	        try {
-	          localStorage.setItem(cursorKey, last.id);
-	        } catch {
-	          // ignore
-	        }
-	      }
-	    }
-	  }
-
-	  async function loadToolCalls(sessionId: string) {
-      try {
-        const data = USE_RUNTIME_CLIENT
-          ? await runtimeClient.listToolCalls(sessionId, 500)
-          : await invoke<ToolCallRecord[]>("list_tool_calls_cmd", { threadId: sessionId, limit: 500 });
-        setToolCalls(data);
-      } catch {
-        setToolCalls([]);
-      }
-	  }
-
-		  async function loadMessages(sessionId: string) {
-	      const session = supabaseSessionRef.current;
-	      const url = session ? getSupabaseUrl() : null;
-
-	    type CloudMessageRow = {
-	      id: string;
-	      thread_id: string;
-      seq: number;
-      role: string;
-      content_json: unknown;
-      engine_id: string | null;
-      model_id: string | null;
-      run_id: string | null;
-      created_at: string;
-    };
-
-		    const loadCloudMessages = async (auth: SupabaseSession): Promise<MessageRecord[]> => {
-		      if (!url) return [];
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(sessionId)}&order=seq.asc`,
-	        { method: "GET" },
-        auth,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as CloudMessageRow[];
-      return rows.map((row) => ({
-        id: row.id,
-        session_id: row.thread_id,
-        role: row.role,
-        content_json: JSON.stringify(row.content_json ?? { text: "" }),
-        created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
-        engine_id: row.engine_id,
-        model_id: row.model_id,
-        run_id: row.run_id,
-		      }));
-		    };
-
-    const eventToMessage = (evt: EventRecord): MessageRecord | null => {
-      const evtType = (evt.type ?? "").trim();
-      const role =
-        evtType === "user_message" ? "user" : evtType === "assistant_message" ? "assistant" : null;
-      if (!role) return null;
-
-      let contentJson: string | null = null;
-      let engineId: string | null = null;
-      let modelId: string | null = null;
-      let runId: string | null = null;
-      if (evt.payload_json) {
-        try {
-          const parsed = JSON.parse(evt.payload_json) as { content?: unknown; meta?: unknown };
-          if (parsed && typeof parsed === "object" && "content" in parsed) {
-            contentJson = JSON.stringify((parsed as { content: unknown }).content ?? { text: evt.text ?? "" });
-          }
-          const meta = (parsed as { meta?: unknown }).meta;
-          if (meta && typeof meta === "object") {
-            const metaObj = meta as { engine_id?: unknown; model_id?: unknown; run_id?: unknown };
-            engineId = typeof metaObj.engine_id === "string" ? metaObj.engine_id : null;
-            modelId = typeof metaObj.model_id === "string" ? metaObj.model_id : null;
-            runId = typeof metaObj.run_id === "string" ? metaObj.run_id : null;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      if (!contentJson) {
-        contentJson = JSON.stringify({ text: evt.text ?? "" });
-      }
-
-      return {
-        id: evt.id,
-        session_id: evt.thread_id,
-        role,
-        content_json: contentJson,
-        created_at: evt.created_at,
-        engine_id: engineId,
-        model_id: modelId,
-        run_id: runId,
-      };
-    };
-
-    const normalizeContentJson = (raw: string): string => {
-      try {
-        return JSON.stringify(JSON.parse(raw));
-      } catch {
-        return raw;
-      }
-    };
-
-    const shouldPreferCloudMessages = Boolean(DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url);
-    if (USE_RUNTIME_CLIENT && runtimeSupportsCursorResume && !shouldPreferCloudMessages) {
-      const currentCursor = eventCursorByThreadRef.current[sessionId];
-      const hasLoadedCurrentThread = messages.length > 0 && messages[0]?.session_id === sessionId;
-      if (typeof currentCursor === "number" && hasLoadedCurrentThread) {
-        try {
-          const deltaPageSize = 500;
-          let nextCursor = currentCursor;
-          const deltaEvents: EventRecord[] = [];
-
-          while (true) {
-            const page = await runtimeClient.listEventsSince(sessionId, nextCursor, deltaPageSize);
-            if (page.length === 0) break;
-            const lastEvent = page[page.length - 1];
-            if (!lastEvent || lastEvent.seq <= nextCursor) {
-              throw new Error("listEventsSince returned a non-advancing cursor");
-            }
-            deltaEvents.push(...page);
-            nextCursor = lastEvent.seq;
-            if (page.length < deltaPageSize) break;
-          }
-
-          if (deltaEvents.length === 0) return;
-          eventCursorByThreadRef.current[sessionId] = nextCursor;
-
-          const mappedDelta = deltaEvents.map(eventToMessage).filter(Boolean) as MessageRecord[];
-          if (mappedDelta.length > 0) {
-            const canonicalUserPayloads = new Set(
-              mappedDelta
-                .filter((message) => message.role === "user")
-                .map((message) => normalizeContentJson(message.content_json))
-            );
-            setMessages((prev) => {
-              if (prev.length === 0 || prev[0]?.session_id !== sessionId) {
-                return mappedDelta;
-              }
-              let next = [...prev];
-              if (canonicalUserPayloads.size > 0) {
-                next = next.filter((message) => {
-                  if (message.role !== "user") return true;
-                  if (!message.id.startsWith("optimistic-user-")) return true;
-                  const payload = normalizeContentJson(message.content_json);
-                  return !canonicalUserPayloads.has(payload);
-                });
-              }
-              const seen = new Set(next.map((message) => message.id));
-              for (const message of mappedDelta) {
-                if (seen.has(message.id)) continue;
-                next.push(message);
-                seen.add(message.id);
-              }
-              return next;
-            });
-          }
-
-          const hasToolCallEvents = deltaEvents.some((evt) => (evt.type ?? "").trim().startsWith("tool_call_"));
-          if (hasToolCallEvents) {
-            await loadToolCalls(sessionId);
-          }
-          return;
-        } catch (error) {
-          // Trip a one-way circuit breaker for this session if incremental sync fails.
-          setRuntimeSupportsCursorResume(false);
-          console.warn("[ARP] Incremental sync failed; disabling cursor resume for this session.", error);
-          // Fall through to full refresh for compatibility.
-        }
-      }
-    }
-
-    if (USE_RUNTIME_CLIENT) {
-      try {
-        const events = await runtimeClient.listEvents(sessionId, 2000);
-        const lastEvent = events[events.length - 1];
-        eventCursorByThreadRef.current[sessionId] = lastEvent ? lastEvent.seq : 0;
-      } catch {
-        // Best-effort cursor sync; UI still loads full message history below.
-      }
-    }
-    await loadToolCalls(sessionId);
-
-    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
-      try {
-        const cloudMessages = await loadCloudMessages(session);
-        setMessages(cloudMessages);
-	        return;
-	      } catch {
-	        // Fall through to local projection as a best-effort fallback.
-	      }
-	    }
-
-		    try {
-		      const localMessages = USE_RUNTIME_CLIENT
-            ? await runtimeClient.listMessages(sessionId)
-            : await invoke<MessageRecord[]>("list_messages_cmd", { sessionId });
-		      setMessages(localMessages);
-		    } catch {
-		      setMessages([]);
-		    }
-		  }
-
-	  async function loadTurns(sessionId: string) {
-	    try {
-	      const turns = USE_RUNTIME_CLIENT
-          ? await runtimeClient.listTurns(sessionId, 500)
-          : await invoke<TurnRecord[]>("list_turns_cmd", {
-              threadId: sessionId,
-              limit: 500
-            });
-	      const map: Record<string, TurnRecord> = {};
-      for (const turn of turns) {
-        if (turn.assistant_event_id) {
-          map[turn.assistant_event_id] = turn;
-        }
-      }
-      setTurnsByAssistantEventId(map);
-    } catch (error) {
-      console.error(error);
-      setTurnsByAssistantEventId({});
-    }
-  }
-
-	  async function loadSessionResume(sessionId: string) {
-	    try {
-	      const data = USE_RUNTIME_CLIENT
-          ? await runtimeClient.getSessionResume(sessionId)
-          : await invoke<SessionResume>("get_session_resume_cmd", {
-              sessionId
-            });
-	      setSessionResume(data);
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  async function loadModelToggles() {
-    try {
-      const data = await invoke<ModelToggle[]>("get_model_toggles_cmd");
-      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
-      const cleaned = (data ?? []).filter((toggle) => allowedIds.has(toggle.id));
-      const merged = DEFAULT_MODEL_TOGGLES.map((toggle) => ({ ...toggle, enabled: true }));
-      const needsPersist =
-        cleaned.length !== (data ?? []).length ||
-        cleaned.length !== merged.length ||
-        cleaned.some((toggle) => toggle.enabled !== true);
-      if (needsPersist) {
-        await invoke("set_model_toggles_cmd", { toggles: merged }).catch(() => null);
-      }
-      setModelToggles(merged);
-    } catch (error) {
-      console.error(error);
-      setModelToggles(DEFAULT_MODEL_TOGGLES);
-    }
-  }
-
-  async function loadActiveModel() {
-    const modelId = await invoke<string | null>("get_active_model_cmd");
-    setActiveModelId(modelId);
-  }
-
-  async function loadProviderKeys() {
-    const updated = await Promise.all(
-      providerKeys.map(async (provider) => {
-        const hasKey = await invoke<boolean>("has_provider_key_cmd", {
-          provider: provider.id
-        });
-        return { ...provider, hasKey, error: null };
-      })
-    );
-    setProviderKeys(updated);
-  }
-
-  async function loadChatgptAuthSummary() {
-    try {
-      const summary = await invoke<ChatgptAuthSummary | null>("get_chatgpt_auth_summary_cmd");
-      setChatgptAuthSummary(summary);
-    } catch {
-      setChatgptAuthSummary(null);
     }
   }
 
@@ -4794,7 +3242,7 @@ function App() {
     setIsChatgptLoggingIn(true);
     setChatgptAuthError(null);
     try {
-      const summary = await invoke<ChatgptAuthSummary>("chatgpt_login_cmd");
+      const summary = await shellClient.chatgptLogin();
       setChatgptAuthSummary(summary);
     } catch (error) {
       const message =
@@ -4812,7 +3260,7 @@ function App() {
   async function handleChatgptLogout() {
     setChatgptAuthError(null);
     try {
-      await invoke("clear_chatgpt_auth_cmd");
+      await shellClient.clearChatgptAuth();
       setChatgptAuthSummary(null);
     } catch (error) {
       const message =
@@ -4872,7 +3320,7 @@ function App() {
 
       setModelProviderById(nextProviderById);
       setModelToggles(merged);
-      await invoke("set_model_toggles_cmd", { toggles: merged }).catch(() => null);
+      await shellClient.setModelToggles(merged).catch(() => null);
     } catch {
       // ignore
     }
@@ -4904,7 +3352,7 @@ function App() {
 
   async function loadExecPolicyRules() {
     try {
-      const value = await invoke<string | null>("get_exec_policy_rules_cmd");
+      const value = await shellClient.getExecPolicyRules();
       setExecPolicyRules(value ?? "prompt");
     } catch (error) {
       console.error(error);
@@ -4913,7 +3361,7 @@ function App() {
 
   async function loadApprovalMode() {
     try {
-      const value = await invoke<string | null>("get_approval_mode_cmd");
+      const value = await shellClient.getApprovalMode();
       if (value === "read-only" || value === "agent" || value === "agent-full") {
         setApprovalMode(value);
       } else {
@@ -4928,7 +3376,7 @@ function App() {
     setIsSavingExecPolicy(true);
     setExecPolicyError(null);
     try {
-      await invoke("set_exec_policy_rules_cmd", { rules: execPolicyRules });
+      await runtimeClient.setExecPolicyRules(execPolicyRules);
     } catch (error) {
       setExecPolicyError(
         typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to save rules"
@@ -4938,116 +3386,14 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    if (!activeThreadId) return;
-    const run = async () => {
-      const next: Record<
-        string,
-        { decision: "allow" | "prompt" | "forbid"; reason: string; matched_rule?: string | null }
-      > = {};
-      for (const toolCall of toolCalls) {
-        const details = parseToolCall(toolCall);
-        if (details.toolName !== "run_shell_command") {
-          continue;
-        }
-        if (!details.command.trim()) {
-          continue;
-        }
-        try {
-          const result = await invoke<{
-            decision: "allow" | "prompt" | "forbid";
-            reason: string;
-            matched_rule?: string | null;
-          }>("classify_command_cmd", {
-            sessionId: activeThreadId,
-            command: details.command
-          });
-          next[toolCall.id] = result;
-        } catch (error) {
-          console.error(error);
-        }
-      }
-      setPolicyByToolCallId(next);
-    };
-    void run();
-  }, [activeThreadId, execPolicyRules, toolCalls]);
-
-  // Auto-execute tool calls when policy decision is "allow" or read_file within workspace
-  useEffect(() => {
-    if (!activeThreadId) return;
-    const autoExecute = async () => {
-      for (const toolCall of toolCalls) {
-        // Skip if not proposed or already auto-executed
-        if (toolCall.status !== "proposed") continue;
-        if (autoExecutedToolCallsRef.current.has(toolCall.id)) continue;
-        // Skip if another tool is running
-        if (runningToolCallId) continue;
-
-        const details = parseToolCall(toolCall);
-
-        // Auto-execute read_file within workspace (always allowed, no policy check needed)
-        if (details.toolName === "read_file") {
-          const filePath = details.path ?? "";
-          // Check if path is within workspace using backend's canonicalized check
-          let isWithinWorkspace = false;
-          try {
-            isWithinWorkspace = await invoke<boolean>("is_path_within_workspace_cmd", { path: filePath });
-          } catch {
-            // If check fails (e.g., workspace not set), don't auto-execute
-            isWithinWorkspace = false;
-          }
-          if (isWithinWorkspace) {
-            autoExecutedToolCallsRef.current.add(toolCall.id);
-            try {
-              await runToolCallThroughBackend(toolCall);
-            } catch (error) {
-              console.error("Auto-execute read_file failed:", error);
-            }
-            break;
-          }
-          // If not within workspace, skip (require manual approval)
-          continue;
-        }
-
-        // Only auto-execute run_shell_command (never file-change tools)
-        if (details.toolName !== "run_shell_command") continue;
-        // Check policy
-        const policy = policyByToolCallId[toolCall.id];
-        if (!policy || policy.decision !== "allow") continue;
-        // Mark as auto-executed to avoid re-running
-        autoExecutedToolCallsRef.current.add(toolCall.id);
-        try {
-          await runToolCallThroughBackend(toolCall);
-        } catch (error) {
-          console.error("Auto-execute failed:", error);
-        }
-        // Only run one at a time
-        break;
-      }
-    };
-    void autoExecute();
-  }, [activeThreadId, toolCalls, policyByToolCallId, runningToolCallId]);
-
   async function loadSupabaseSession() {
+    // Desktop auth session persistence invariant:
+    // secure-store only (via shellClient), never localStorage fallback.
     let stored: string | null = null;
     try {
-      stored = await invoke<string | null>("get_supabase_session_cmd");
+      stored = await shellClient.getSupabaseSession();
     } catch {
       stored = null;
-    }
-
-    // Legacy migration: move any localStorage session into the OS keychain.
-    if (!stored) {
-      const legacy = localStorage.getItem("arx_supabase_session");
-      if (legacy) {
-        stored = legacy;
-        try {
-          await invoke("set_supabase_session_cmd", { sessionJson: legacy });
-          localStorage.removeItem("arx_supabase_session");
-        } catch {
-          // Keep legacy storage if keychain write fails, but don't crash.
-        }
-      }
     }
 
     if (!stored) return;
@@ -5057,57 +3403,17 @@ function App() {
       if (!refreshed) return;
       setSupabaseSession(refreshed);
       try {
-        await invoke("set_supabase_session_cmd", { sessionJson: JSON.stringify(refreshed) });
+        await shellClient.setSupabaseSession(JSON.stringify(refreshed));
       } catch {
-        // If keychain write fails, keep session in memory only.
+        // If secure-store write fails, keep session in memory only.
       }
     } catch {
       try {
-        await invoke("clear_supabase_session_cmd");
+        await shellClient.clearSupabaseSession();
       } catch {
         // ignore
       }
-      localStorage.removeItem("arx_supabase_session");
     }
-  }
-
-  async function loadPendingInvites() {
-    try {
-      const invites = await invoke<PendingInviteRecord[]>("list_pending_invites_cmd");
-      setPendingInvites(invites);
-    } catch {
-      // Non-fatal; keep any in-memory state.
-    }
-  }
-
-  async function consumeInviteQueryParam() {
-    const params = new URLSearchParams(window.location.search);
-    const inviteKey = params.get("invite") ?? params.get("join");
-    if (!inviteKey) return;
-
-    const normalized = normalizeInviteCode(inviteKey);
-    try {
-      await invoke("upsert_pending_invite_cmd", { inviteKey: normalized, source: "url" });
-    } catch {
-      // ignore
-    }
-
-    await loadPendingInvites();
-
-    params.delete("invite");
-    params.delete("join");
-    const nextQuery = params.toString();
-    const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
-    window.history.replaceState({}, document.title, nextUrl);
-  }
-
-  function formatInviteLabel(inviteKey: string, communityName?: string | null): string {
-    const cleaned = (communityName ?? "").trim();
-    return cleaned ? cleaned : inviteKey;
-  }
-
-  function normalizeInviteCode(inviteKey: string): string {
-    return inviteKey.trim().replace(/\s+/g, "").toUpperCase();
   }
 
   function getPublicShareBaseUrl(): string | null {
@@ -5136,420 +3442,38 @@ function App() {
     }
   }
 
-  function getPublicAppBaseUrl(): string | null {
-    const raw =
-      (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined) ??
-      (import.meta.env.VITE_APP_URL as string | undefined) ??
-      "";
-    const trimmed = raw.trim().replace(/\/+$/, "");
-    if (trimmed && /^https?:\/\//i.test(trimmed)) return trimmed;
-
-    const origin = window.location.origin.trim().replace(/\/+$/, "");
-    if (origin && /^https?:\/\//i.test(origin)) return origin;
-
-    return null;
-  }
-
-  async function openExternalUrl(url: string): Promise<boolean> {
-    const trimmed = url.trim();
-    if (!trimmed) return false;
-    try {
-      await invoke("open_external_url_cmd", { url: trimmed });
-      return true;
-    } catch {
-      try {
-        window.open(trimmed, "_blank", "noopener,noreferrer");
-        return true;
-      } catch {
-        return false;
-      }
-    }
-  }
-
-  async function openCommunityLandingExternal(community: { slug?: string | null }): Promise<void> {
-    const base = getPublicAppBaseUrl();
-    if (!base) {
-      setDiscoverError("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable checkout links.");
-      return;
-    }
-    const slug = (community.slug ?? "").trim();
-    if (!slug) {
-      setDiscoverError("Missing community slug.");
-      return;
-    }
-    const ok = await openExternalUrl(`${base}/c/${encodeURIComponent(slug)}`);
-    if (!ok) setDiscoverError("Failed to open the join page.");
-  }
-
-  function buildInviteLink(community: CommunityRecord | null, inviteCode: string): string | null {
-    const base = getPublicShareBaseUrl();
-    if (!base) return null;
-    const code = encodeURIComponent(normalizeInviteCode(inviteCode));
-    const communityPath = community?.id ? `/c/${encodeURIComponent(community.id)}` : "";
-    return `${base}${communityPath}?invite=${code}`;
-  }
-
-  function buildDeepInviteLink(inviteCode: string): string {
-    const code = encodeURIComponent(normalizeInviteCode(inviteCode));
-    return `arx://join?invite=${code}`;
-  }
-
-  function buildBestInviteLink(
-    community: CommunityRecord | null,
-    inviteCode: string
-  ): { kind: "web" | "app"; link: string } {
-    const web = buildInviteLink(community, inviteCode);
-    if (web) return { kind: "web", link: web };
-    return { kind: "app", link: buildDeepInviteLink(inviteCode) };
-  }
-
-  async function joinCommunityForInviteKey(
-    inviteKey: string,
-    session: SupabaseSession,
-  ): Promise<CommunityRecord> {
-    const url = getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-    const key = normalizeInviteCode(inviteKey);
-    if (!key) throw new Error("Invite code is required.");
-
-    let response: Response;
-    try {
-      response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/accept_community_invite`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ invite_code: key })
-        },
-        session
-      );
-    } catch {
-      throw new Error("Failed to reach Supabase.");
-    }
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || "Failed to join community.");
-    }
-    const rows = (await response.json()) as Array<{
-      community_id: string;
-      community_slug: string;
-      community_name: string;
-    }>;
-	    const first = rows[0];
-	    if (!first) throw new Error("Failed to join community.");
-
-	    return { id: first.community_id, slug: first.community_slug, name: first.community_name };
-	  }
-
-  async function handleDismissInvite(inviteKey: string) {
-    setInviteJoinError(null);
-    try {
-      await invoke("dismiss_pending_invite_cmd", { inviteKey });
-      await loadPendingInvites();
-    } catch {
-      // ignore
-    }
-  }
-
-  async function handleJoinInvite(inviteKey: string) {
-    const cleaned = normalizeInviteCode(inviteKey);
-    if (!cleaned) {
-      setInviteJoinError("Invite code is required.");
-      return;
-    }
-    setInviteJoinError(null);
-
-    if (!supabaseSession) {
-      try {
-        await invoke("request_join_pending_invite_cmd", { inviteKey: cleaned });
-        await loadPendingInvites();
-      } catch {
-        // ignore
-      }
-      await handleSignIn();
-      return;
-    }
-
-    setIsJoiningInvite(true);
-    try {
-      await invoke("upsert_pending_invite_cmd", { inviteKey: cleaned, source: "manual" });
-      await loadPendingInvites();
-
-      const joined = await joinCommunityForInviteKey(cleaned, supabaseSession);
-      await invoke("mark_pending_invite_joined_cmd", {
-        inviteKey: cleaned,
-        communityId: joined.id,
-        communityName: joined.name
-      });
-      await loadPendingInvites();
-
-      await loadCommunities(supabaseSession);
-      setActiveCommunityId(joined.id);
-      setActivePage("community");
-      setCommunityTab("chat");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to join community.";
-      setInviteJoinError(message);
-    } finally {
-      setIsJoiningInvite(false);
-    }
-  }
-
-  async function handleInviteGateJoin() {
-    if (!activeInviteGateKey) return;
-    const key = activeInviteGateKey;
-    setActiveInviteGateKey(null);
-    await handleJoinInvite(key);
-  }
-
-  async function handleInviteGateDismiss() {
-    if (!activeInviteGateKey) return;
-    const key = activeInviteGateKey;
-    setActiveInviteGateKey(null);
-    await handleDismissInvite(key);
-  }
-
-  async function maybeAutoJoinPendingInvites(session: SupabaseSession) {
-    let invites: PendingInviteRecord[] = [];
-    try {
-      invites = await invoke<PendingInviteRecord[]>("list_pending_invites_cmd");
-      setPendingInvites(invites);
-    } catch {
-      invites = pendingInvites;
-    }
-
-    const candidates = invites
-      .filter((invite) => invite.status === "pending" && Boolean(invite.join_intent_at))
-      .sort((a, b) => (a.join_intent_at ?? 0) - (b.join_intent_at ?? 0));
-
-    const next = candidates.find((invite) => !autoJoinInvitesAttemptedRef.current.has(invite.invite_key));
-    if (!next) return;
-
-    autoJoinInvitesAttemptedRef.current.add(next.invite_key);
-    try {
-      const joined = await joinCommunityForInviteKey(next.invite_key, session);
-      await invoke("mark_pending_invite_joined_cmd", {
-        inviteKey: next.invite_key,
-        communityId: joined.id,
-        communityName: joined.name
-      });
-      await loadPendingInvites();
-      await loadCommunities(session);
-      setActiveCommunityId(joined.id);
-      setActivePage("community");
-      setCommunityTab("chat");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to join community.";
-      setInviteJoinError(message);
-    }
-  }
-
-  async function maybeAutoJoinPendingPublicCommunity(session: SupabaseSession) {
-    const slug = readPendingPublicJoinCommunitySlug();
-    const id = readPendingPublicJoinCommunityId();
-    const brandosAid = readPendingPublicJoinBrandosAid();
-    const attemptKey = (slug || id).trim();
-    if (!attemptKey) return;
-    if (autoJoinPublicCommunitiesAttemptedRef.current.has(attemptKey)) return;
-    autoJoinPublicCommunitiesAttemptedRef.current.add(attemptKey);
-
-    const url = getSupabaseUrl();
-    if (!url) return;
-
-    setJoiningDiscoverCommunityId(attemptKey);
-    setDiscoverError(null);
-    try {
-      const resolvedBrandosAid = (() => {
-        const candidate = (brandosAid ?? "").trim();
-        if (candidate && isUuid(candidate)) return candidate;
-        return null;
-      })();
-      const joinedId = await joinPublicCommunityRpc({
-        url,
-        session,
-        communityId: id || undefined,
-        communitySlug: slug || undefined,
-        brandosAid: resolvedBrandosAid,
-        fetchWithSupabaseAuth,
-        readSupabaseError
-      });
-      clearPendingPublicJoin();
-
-      await loadCommunities(session);
-      setActiveCommunityId(joinedId);
-      setActivePage("community");
-      setCommunityTab("chat");
-    } catch (error) {
-      const kind = classifyPublicCommunityJoinError(error);
-      const message = getErrorMessage(error, "Failed to join community.");
-      if (
-        slug &&
-        (kind === "paid_plan_required" ||
-          kind === "approval_required" ||
-          kind === "paid_communities_do_not_use_request_access")
-      ) {
-        clearPendingPublicJoin();
-        await openCommunityLandingExternal({ slug });
-        return;
-      }
-      setDiscoverError(message);
-    } finally {
-      setJoiningDiscoverCommunityId(null);
-    }
-  }
-
   async function ensureFreshSession(session: SupabaseSession): Promise<SupabaseSession | null> {
-    const now = Math.floor(Date.now() / 1000);
-    if (session.expires_at > now + 60) {
-      return session;
-    }
-    const refreshed = await refreshSupabaseSession(session.refresh_token);
-    return refreshed;
-  }
-
-  async function refreshSupabaseSession(refreshToken: string): Promise<SupabaseSession | null> {
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) return null;
-    const response = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: {
-        apikey: apiKey,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ refresh_token: refreshToken })
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as {
-      access_token: string;
-      refresh_token: string;
-      expires_in: number;
-      user: SupabaseUser;
-    };
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
-      user: data.user
-    };
+    return await ensureSupabaseSessionForRequest(session, refreshSupabaseSession);
   }
 
   async function persistSupabaseSession(session: SupabaseSession) {
     try {
-      await invoke("set_supabase_session_cmd", { sessionJson: JSON.stringify(session) });
-      localStorage.removeItem("arx_supabase_session");
+      await shellClient.setSupabaseSession(JSON.stringify(session));
     } catch {
-      localStorage.setItem("arx_supabase_session", JSON.stringify(session));
+      // Fail closed to in-memory session only. Do not persist auth session in localStorage.
     }
   }
 
   async function clearPersistedSupabaseSession() {
     try {
-      await invoke("clear_supabase_session_cmd");
+      await shellClient.clearSupabaseSession();
     } catch {
       // ignore
     }
-    localStorage.removeItem("arx_supabase_session");
   }
 
   async function refreshSupabaseSessionLocked(refreshToken: string): Promise<SupabaseSession | null> {
-    if (!refreshToken) return null;
-    if (supabaseRefreshInFlightRef.current) {
-      return await supabaseRefreshInFlightRef.current;
-    }
-    const promise = (async () => {
-      const refreshed = await refreshSupabaseSession(refreshToken);
-      if (!refreshed) return null;
-      setAuthError(null);
-      setSupabaseSession(refreshed);
-      supabaseSessionRef.current = refreshed;
-      await persistSupabaseSession(refreshed);
-      return refreshed;
-    })();
-    supabaseRefreshInFlightRef.current = promise;
-    try {
-      return await promise;
-    } finally {
-      supabaseRefreshInFlightRef.current = null;
-    }
-  }
-
-  async function ensureSupabaseSessionForRequest(
-    session: SupabaseSession,
-  ): Promise<SupabaseSession | null> {
-    const now = Math.floor(Date.now() / 1000);
-    if (session.expires_at > now + 60) return session;
-    return await refreshSupabaseSessionLocked(session.refresh_token);
-  }
-
-  async function isSupabaseJwtExpired(response: Response): Promise<boolean> {
-    if (response.ok) return false;
-    if (response.status !== 401 && response.status !== 403) return false;
-    try {
-      const data = (await response.clone().json()) as { code?: unknown; message?: unknown };
-      const code = typeof data?.code === "string" ? data.code : "";
-      const message = typeof data?.message === "string" ? data.message : "";
-      if (code === "PGRST303") return true;
-      if (message.toLowerCase().includes("jwt expired")) return true;
-    } catch {
-      try {
-        const text = await response.clone().text();
-        if (text.toLowerCase().includes("jwt expired")) return true;
-      } catch {
-        // ignore
-      }
-    }
-    return false;
-  }
-
-  function decodeJwtPayload(token: string): unknown | null {
-    try {
-      const parts = token.split(".");
-      if (parts.length < 2) return null;
-      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
-      const json = atob(padded);
-      return JSON.parse(json) as unknown;
-    } catch {
-      return null;
-    }
-  }
-
-  function getSupabaseAuthUid(session: SupabaseSession): string {
-    const payload = decodeJwtPayload(session.access_token);
-    const sub =
-      payload && typeof payload === "object" && "sub" in payload && typeof (payload as any).sub === "string"
-        ? String((payload as any).sub)
-        : null;
-    return sub ?? session.user.id;
-  }
-
-  async function readSupabaseError(response: Response): Promise<string> {
-    try {
-      const json = (await response.clone().json()) as { message?: unknown };
-      if (typeof json?.message === "string" && json.message.trim()) return json.message;
-    } catch {
-      // ignore
-    }
-    try {
-      const text = await response.clone().text();
-      if (text.trim()) return text;
-    } catch {
-      // ignore
-    }
-    return `Supabase error (${response.status})`;
+    return await refreshSupabaseSessionWithLock({
+      refreshToken,
+      inFlightRef: supabaseRefreshInFlightRef,
+      refreshSession: refreshSupabaseSession,
+      onRefreshed: async (refreshed) => {
+        setAuthError(null);
+        setSupabaseSession(refreshed);
+        supabaseSessionRef.current = refreshed;
+        await persistSupabaseSession(refreshed);
+      },
+    });
   }
 
   async function fetchWithSupabaseAuth(
@@ -5557,47 +3481,315 @@ function App() {
     init: RequestInit,
     session: SupabaseSession,
   ): Promise<Response> {
-    const apiKey = getSupabaseAnonKey();
-    if (!apiKey) {
-      throw new Error("Missing Supabase anon key.");
-    }
-
-    const baseSession = supabaseSessionRef.current ?? session;
-
-    const ensureOrFail = async (current: SupabaseSession): Promise<SupabaseSession> => {
-      const fresh = await ensureSupabaseSessionForRequest(current);
-      if (fresh) return fresh;
-      await clearPersistedSupabaseSession();
-      setSupabaseSession(null);
-      supabaseSessionRef.current = null;
-      setAuthError("Session expired. Please sign in again.");
-      throw new Error("Session expired. Please sign in again.");
-    };
-
-    const doFetch = async (current: SupabaseSession): Promise<Response> => {
-      const headers = new Headers(init.headers);
-      headers.set("apikey", apiKey);
-      headers.set("Authorization", `Bearer ${current.access_token}`);
-      return await fetch(url, { ...init, headers });
-    };
-
-    const fresh = await ensureOrFail(baseSession);
-    const first = await doFetch(fresh);
-    if (!(await isSupabaseJwtExpired(first))) return first;
-
-    const refreshed = await refreshSupabaseSessionLocked(fresh.refresh_token);
-    const latest = await ensureOrFail(refreshed ?? supabaseSessionRef.current ?? fresh);
-    return await doFetch(latest);
+    return await fetchWithSupabaseAuthShared({
+      url,
+      init,
+      session,
+      sessionRef: supabaseSessionRef,
+      refreshLocked: refreshSupabaseSessionLocked,
+      onSessionExpired: async () => {
+        await expireSupabaseSessionFailClosed({
+          clearPersistedSupabaseSession,
+          setSupabaseSession,
+          sessionRef: supabaseSessionRef,
+          onExpired: () => {
+            setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
+          },
+        });
+      },
+      sessionExpiredMessage: SUPABASE_SESSION_EXPIRED_MESSAGE,
+    });
   }
 
   async function fetchWithSupabasePublic(url: string, init: RequestInit = {}): Promise<Response> {
-    const apiKey = getSupabaseAnonKey();
-    if (!apiKey) throw new Error("Missing Supabase anon key.");
-    const headers = new Headers(init.headers);
-    headers.set("apikey", apiKey);
-    // Use the anon JWT as the bearer token for PostgREST.
-    headers.set("Authorization", `Bearer ${apiKey}`);
-    return await fetch(url, { ...init, headers });
+    return await fetchWithSupabasePublicShared(url, init);
+  }
+
+  async function loadCommunityMemoryCandidates(communityId: string, session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setIsLoadingCommunityMemoryCandidates(true);
+    setCommunityMemoryCandidatesError(null);
+    try {
+      const fresh = await ensureFreshSession(session);
+      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+      const rows = await listCommunityMemoryCandidatesRpc({
+        url,
+        session: fresh,
+        communityId,
+        limit: 100,
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+      });
+      setCommunityMemoryCandidates(rows);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load memory candidates.";
+      setCommunityMemoryCandidates([]);
+      setCommunityMemoryCandidatesError(message);
+    } finally {
+      setIsLoadingCommunityMemoryCandidates(false);
+    }
+  }
+
+  async function handleTeachCommunityFromTurn(params: {
+    messageId: string;
+    turnId: string | null;
+    turnContent: string;
+    communityEvidence: ReturnType<typeof extractCommunityEvidenceUsedV1> | null;
+  }): Promise<void> {
+    const threadId = (activeThread?.id ?? "").trim();
+    if (!threadId) {
+      setMemoryToast("Select a thread before teaching community memory.");
+      return;
+    }
+    const communityId = (activeThread?.community_id ?? "").trim();
+    if (!communityId) {
+      setMemoryToast("Enable a community lens before teaching community memory.");
+      return;
+    }
+    if (teachStatusByMessageId[params.messageId]?.status === "submitting") return;
+
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session) {
+      setMemoryToast("Sign in to teach community memory.");
+      await handleSignIn();
+      return;
+    }
+
+    const memoryText = buildTeachMemoryText(params.turnContent);
+    if (!memoryText) {
+      setMemoryToast("No response content to teach yet.");
+      return;
+    }
+    const evidenceItems = params.communityEvidence?.items ?? [];
+    const draftTitle = deriveTeachCandidateTitle(memoryText) ?? "";
+    setTeachCandidateDraft({
+      communityId,
+      threadId,
+      messageId: params.messageId,
+      turnId: params.turnId,
+      evidenceItems,
+    });
+    setTeachCandidateTitleInput(draftTitle);
+    setTeachCandidateMemoryInput(memoryText);
+    setTeachCandidateSubmitError(null);
+  }
+
+  function closeTeachCandidateModal(): void {
+    if (isSubmittingTeachCandidate) return;
+    setTeachCandidateDraft(null);
+    setTeachCandidateTitleInput("");
+    setTeachCandidateMemoryInput("");
+    setTeachCandidateSubmitError(null);
+  }
+
+  async function handleSubmitTeachCommunityCandidate(): Promise<void> {
+    if (!teachCandidateDraft || isSubmittingTeachCandidate) return;
+
+    const memoryText = buildTeachMemoryText(teachCandidateMemoryInput);
+    if (!memoryText) {
+      setTeachCandidateSubmitError("Memory text is required.");
+      return;
+    }
+    const resolvedTitleInput = teachCandidateTitleInput.trim();
+    const resolvedTitle =
+      resolvedTitleInput.length > 0
+        ? resolvedTitleInput.slice(0, 160)
+        : deriveTeachCandidateTitle(memoryText);
+    const draft = teachCandidateDraft;
+    setIsSubmittingTeachCandidate(true);
+    setTeachCandidateSubmitError(null);
+    setTeachStatusByMessageId((prev) => ({
+      ...prev,
+      [draft.messageId]: { status: "submitting" },
+    }));
+    try {
+      const session = supabaseSessionRef.current ?? supabaseSession;
+      if (!session) {
+        throw new Error("Sign in to teach community memory.");
+      }
+      const fresh = await ensureFreshSession(session);
+      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+      const url = getSupabaseUrl();
+      if (!url) throw new Error("Missing Supabase URL.");
+
+      const requestHash = await hashTeachCandidateContent(`${resolvedTitle ?? ""}\n${memoryText}`);
+      const requestKey = `teach:${draft.threadId}:${draft.messageId}:${requestHash}`;
+      const evidencePayload = {
+        v: 1,
+        contract_id: "community_evidence_used_v1",
+        source_thread_id: draft.threadId,
+        source_message_id: draft.messageId,
+        source_turn_id: draft.turnId,
+        items: draft.evidenceItems.map((item) => ({
+          source_type: item.source_type,
+          source_id: item.source_id,
+          title: item.title,
+          snippet: item.snippet,
+          url: item.url,
+          score: item.score,
+          rank: item.rank,
+        })),
+      };
+
+      const row = await proposeCommunityMemoryCandidateRpc({
+        url,
+        session: fresh,
+        communityId: draft.communityId,
+        title: resolvedTitle,
+        memoryText,
+        evidence: evidencePayload,
+        requestKey,
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+      });
+      const candidateId = (row.candidate_id ?? "").trim();
+      const routerState = (row.router_state ?? "queued").trim().toLowerCase();
+      const routerReason = (row.router_reason ?? "").trim();
+      const promotedMemoryId = (row.promoted_memory_id ?? null) ? String(row.promoted_memory_id) : null;
+
+      if (routerState === "rejected") {
+        const reason = routerReason ? `Candidate rejected (${routerReason}).` : "Candidate rejected.";
+        setTeachStatusByMessageId((prev) => ({
+          ...prev,
+          [draft.messageId]: {
+            status: "error",
+            candidateId,
+            routerState,
+            error: reason,
+          },
+        }));
+        setTeachCandidateSubmitError(reason);
+        setMemoryToast(reason);
+        return;
+      }
+
+      setTeachStatusByMessageId((prev) => ({
+        ...prev,
+        [draft.messageId]: {
+          status: "submitted",
+          candidateId,
+          routerState,
+          promotedMemoryId,
+        },
+      }));
+      setTeachCandidateDraft(null);
+      setTeachCandidateTitleInput("");
+      setTeachCandidateMemoryInput("");
+      setTeachCandidateSubmitError(null);
+
+      if (promotedMemoryId) {
+        setMemoryToast("Community learned from this answer (auto-promoted).");
+      } else if (routerState === "needs_review" || routerState === "queued") {
+        setMemoryToast("Memory candidate submitted for community review.");
+      } else {
+        setMemoryToast("Memory candidate submitted.");
+      }
+
+      if (
+        activePage === "community" &&
+        communityTab === "members" &&
+        canManageMembersActiveCommunity &&
+        activeCommunityId === draft.communityId
+      ) {
+        void loadCommunityMemoryCandidates(draft.communityId, fresh);
+      }
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to teach community memory.";
+      setTeachStatusByMessageId((prev) => ({
+        ...prev,
+        [draft.messageId]: {
+          status: "error",
+          error: message,
+        },
+      }));
+      setTeachCandidateSubmitError(message);
+      setMemoryToast(message);
+    } finally {
+      setIsSubmittingTeachCandidate(false);
+    }
+  }
+
+  async function handlePromoteCommunityMemoryCandidate(candidateId: string): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setReviewingCommunityMemoryCandidateId(candidateId);
+    setCommunityMemoryCandidatesError(null);
+    try {
+      const fresh = await ensureFreshSession(session);
+      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+      await promoteCommunityMemoryCandidateRpc({
+        url,
+        session: fresh,
+        candidateId,
+        title: null,
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+      });
+      setMemoryToast("Candidate promoted to community memory.");
+      await loadCommunityMemoryCandidates(activeCommunityId, fresh);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to promote memory candidate.";
+      setCommunityMemoryCandidatesError(message);
+    } finally {
+      setReviewingCommunityMemoryCandidateId(null);
+    }
+  }
+
+  async function handleRejectCommunityMemoryCandidate(candidateId: string, reason: string | null): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session || !activeCommunityId) return;
+    const url = getSupabaseUrl();
+    if (!url) return;
+    setReviewingCommunityMemoryCandidateId(candidateId);
+    setCommunityMemoryCandidatesError(null);
+    try {
+      const fresh = await ensureFreshSession(session);
+      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+      await rejectCommunityMemoryCandidateRpc({
+        url,
+        session: fresh,
+        candidateId,
+        reason,
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+      });
+      setMemoryToast("Candidate rejected.");
+      setCommunityMemoryRejectReasonById((prev) => {
+        if (!(candidateId in prev)) return prev;
+        const next = { ...prev };
+        delete next[candidateId];
+        return next;
+      });
+      await loadCommunityMemoryCandidates(activeCommunityId, fresh);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to reject memory candidate.";
+      setCommunityMemoryCandidatesError(message);
+    } finally {
+      setReviewingCommunityMemoryCandidateId(null);
+    }
   }
 
   async function redeemPurchaseClaim(token: string): Promise<void> {
@@ -5719,24 +3911,25 @@ function App() {
 	    }
 	  }
 
-	  async function handleDevSetBuilderTier(nextTier: "free" | "builder" | "pro") {
+  async function handleDevSetBuilderTier(nextTier: "free" | "builder" | "architect" | "pro") {
 	    const session = supabaseSessionRef.current;
 	    const url = session ? getSupabaseUrl() : null;
 	    if (!session || !url) return;
 
 	    // Defense-in-depth: the RPC is also server-guarded.
-	    if ((session.user.email ?? "").toLowerCase() !== ARX_OWNER_EMAIL) return;
+	    if (!isArxOwnerAccount(session.user)) return;
 
 	    if (isDevSettingBuilderTier) return;
 	    setIsDevSettingBuilderTier(true);
 	    setDevSetBuilderTierError(null);
 	    try {
+	      const rpcTier = nextTier === "architect" ? "pro" : nextTier;
 	      const response = await fetchWithSupabaseAuth(
 	        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
 	        {
 	          method: "POST",
 	          headers: { "Content-Type": "application/json" },
-	          body: JSON.stringify({ p_builder_tier: nextTier }),
+	          body: JSON.stringify({ p_builder_tier: rpcTier }),
 	        },
 	        session,
 	      );
@@ -5752,144 +3945,122 @@ function App() {
 	      setDevSetBuilderTierError(message);
 	    } finally {
 	      setIsDevSettingBuilderTier(false);
-	    }
-	  }
-
-  async function startBuilderPlanCheckout(
-    tier: "builder" | "pro",
-    opts?: { context?: BuilderUpgradeContext },
-  ): Promise<void> {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to upgrade.");
-      await handleSignIn();
-      return;
-    }
-
-	    setBuilderBillingError(null);
-	    setIsStartingBuilderCheckout(true);
-	    try {
-	      const origin = getPublicAppBaseUrl();
-	      if (!origin) throw new Error("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable billing links.");
-	      const context: BuilderUpgradeContext = opts?.context ?? "builder";
-	      const successUrl = `${origin}/?billing=success&billing_source=desktop&billing_context=${encodeURIComponent(context)}`;
-	      const cancelUrl = `${origin}/?billing=cancel&billing_source=desktop&billing_context=${encodeURIComponent(context)}`;
-
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/functions/v1/builder_checkout_start`,
-	        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tier, success_url: successUrl, cancel_url: cancelUrl }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const data = (await response.json()) as { checkout_url?: unknown };
-      const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
-      if (!checkoutUrl) throw new Error("Missing checkout_url.");
-      const ok = await openExternalUrl(checkoutUrl);
-      if (!ok) throw new Error("Failed to open checkout.");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to start checkout.";
-      setBuilderBillingError(message);
-    } finally {
-      setIsStartingBuilderCheckout(false);
     }
   }
 
-  async function openBuilderBillingPortal(context: BuilderUpgradeContext = "builder"): Promise<void> {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to manage billing.");
-      await handleSignIn();
-      return;
-    }
-
-	    setBuilderBillingError(null);
-	    setIsStartingBuilderPortal(true);
-	    try {
-	      const origin = getPublicAppBaseUrl();
-	      const returnUrl = origin
-	        ? `${origin}/?billing=return&billing_source=desktop&billing_context=${encodeURIComponent(context)}`
-	        : window.location.href;
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/functions/v1/builder_billing_portal`,
-	        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ return_url: returnUrl }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const data = (await response.json()) as { url?: unknown };
-      const portalUrl = typeof data?.url === "string" ? data.url : "";
-      if (!portalUrl) throw new Error("Missing portal URL.");
-      const ok = await openExternalUrl(portalUrl);
-      if (!ok) throw new Error("Failed to open billing portal.");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to open billing portal.";
-      setBuilderBillingError(message);
-    } finally {
-      setIsStartingBuilderPortal(false);
-    }
-  }
-
-  async function startConnectOnboarding(): Promise<void> {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    if (!session || !url) {
-      setAuthError("Sign in to set up payouts.");
-      await handleSignIn();
-      return;
-    }
-
-    setBuilderBillingError(null);
-    setIsStartingConnectOnboarding(true);
+  const openExternalUrl = useCallback(async (url: string): Promise<boolean> => {
+    const trimmed = url.trim();
+    if (!trimmed) return false;
     try {
-      const origin = getPublicAppBaseUrl();
-      const returnUrl = origin ? `${origin}/?payouts=return` : window.location.href;
-      const refreshUrl = origin ? `${origin}/?payouts=refresh` : window.location.href;
-      const response = await fetchWithSupabaseAuth(
-        `${url}/functions/v1/connect_onboard_start`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ return_url: returnUrl, refresh_url: refreshUrl }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const data = (await response.json()) as { url?: unknown };
-      const linkUrl = typeof data?.url === "string" ? data.url : "";
-      if (!linkUrl) throw new Error("Missing onboarding URL.");
-      const ok = await openExternalUrl(linkUrl);
-      if (!ok) throw new Error("Failed to open onboarding.");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to start payout setup.";
-      setBuilderBillingError(message);
-    } finally {
-      setIsStartingConnectOnboarding(false);
+      await shellClient.openExternalUrl(trimmed);
+      return true;
+    } catch {
+      try {
+        window.open(trimmed, "_blank", "noopener,noreferrer");
+        return true;
+      } catch {
+        return false;
+      }
     }
-  }
+  }, [shellClient]);
+
+  const { startBuilderPlanCheckout, openBuilderBillingPortal, startConnectOnboarding } =
+    useDesktopBuilderBillingActions({
+      getSession: () => supabaseSessionRef.current,
+      getSupabaseUrl,
+      fetchWithSupabaseAuth,
+      readSupabaseError,
+      getPublicAppBaseUrl: getPublicShareBaseUrl,
+      openExternalUrl,
+      requireSignIn: async (message) => {
+        setAuthError(message);
+        await handleSignIn();
+      },
+      setBuilderBillingError,
+      setIsStartingBuilderCheckout,
+      setIsStartingBuilderPortal,
+      setIsStartingConnectOnboarding,
+    });
+
+  const {
+    openCreateCommunityModal,
+    closeCreateCommunityModal,
+    createCommunityFromDraft,
+    handleCreateCommunityPrimaryAction,
+    handleCreateCommunityAvatarUpload,
+    handleCreateCommunityBannerUpload,
+    handleCreateBannerDrop,
+    handleCreateAvatarDrop,
+  } = useCommunityCreateController<SupabaseSession, CommunityRecord, BuilderBillingStatus>({
+    supabaseSession,
+    builderBillingStatus,
+    communities,
+    communityRoleById,
+    getSupabaseUrl,
+    getSupabaseAnonKey,
+    fetchWithSupabaseAuth,
+    readSupabaseError,
+    loadBuilderBillingStatus,
+    openBuilderBillingPortal,
+    onStartUpgradeFlow: () => {
+      setBuilderUpgradeContext("create_community");
+      setIsBuilderUpgradeOpen(true);
+    },
+    onPrimaryUnauthenticated: async () => {
+      await handleSignIn();
+    },
+    buildDraftOnPrimaryUnauthenticated: false,
+    buildDraftOnCreateUnauthenticated: false,
+    onOwnedCommunityLimitReached: () => {
+      showAppToastMessage("You've built the maximum number of communities");
+    },
+    onCommunityCreated: (community) => {
+      setCommunities((prev) => [community, ...prev]);
+      setActiveCommunityId(community.id);
+      setActivePage("community");
+      setCommunityTab("chat");
+    },
+    onDraftCreatedCommunitySuccess: () => {
+      setBuilderBillingReturn(null);
+    },
+    getOwnedCountForOpenModal: (communityList, roleMap) => {
+      return communityList.reduce((acc, community) => acc + (roleMap[community.id] === "owner" ? 1 : 0), 0);
+    },
+    getOwnedCountForPrimary: (_communityList, roleMap) => {
+      return Object.values(roleMap).filter((role) => role === "owner").length;
+    },
+    createCommunityName,
+    createCommunitySlug,
+    createCommunitySlugEdited,
+    createCommunityVisibility,
+    createCommunityAvatarUrl,
+    createCommunityDescription,
+    createCommunityBannerUrl,
+    setCreateCommunityName,
+    setCreateCommunitySlug,
+    setCreateCommunitySlugEdited,
+    setCreateCommunityVisibility,
+    setCreateCommunityAvatarUrl,
+    setCreateCommunityDescription,
+    setCreateCommunityBannerUrl,
+    setCreateCommunityError,
+    setShowCreateCommunityModal,
+    setIsCreatingCommunity,
+    setIsFinalizingCreateCommunityFromBilling,
+    setFinalizeCreateCommunityError,
+    setIsCreateAvatarDragOver,
+    setIsCreateBannerDragOver,
+    readAvatarFileAsSquareDataUrl,
+    readBannerFileAsWideDataUrlWithinLimit,
+    isLikelyImageFile,
+    maxCreateImageDataUrlChars: MAX_COMMUNITY_IMAGE_DATA_URL_CHARS,
+    createDraftId: createCommunityDraftId,
+    loadCreateDraft: loadCreateCommunityDraft,
+    saveCreateDraft: saveCreateCommunityDraft,
+    clearCreateDraft: clearCreateCommunityDraft,
+    createUnauthenticatedErrorMessage: "Sign in to create a community.",
+    bannerLoadFailureMessage: "Failed to load image.",
+  });
 
   async function redeemPendingPurchases(opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> {
     const session = supabaseSessionRef.current;
@@ -5946,114 +4117,48 @@ function App() {
     }
   }
 
-  async function fetchSupabaseUser(accessToken: string): Promise<SupabaseUser | null> {
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) return null;
-    const response = await fetch(`${url}/auth/v1/user`, {
-      headers: {
-        apikey: apiKey,
-        Authorization: `Bearer ${accessToken}`
-      }
+  async function consumeOAuthHash(): Promise<"none" | "session_set" | "callback_error"> {
+    return await consumeSupabaseOAuthCallback({
+      onAuthError: (message) => {
+        setAuthError(message);
+      },
+      persistSession: persistSupabaseSession,
+      onSessionSet: (session) => {
+        setSupabaseSession(session);
+        setAuthError(null);
+        setActivePage("workspace");
+        setActiveView("home");
+        setSettingsPage("models");
+        setActiveCommunityId(null);
+      },
+      profileLoadErrorMessage: "Failed to load user profile.",
+      clearCallbackParamsOnSessionSet: true,
     });
-    if (!response.ok) return null;
-    return (await response.json()) as SupabaseUser;
-  }
-
-  async function consumeOAuthHash() {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const query = new URLSearchParams(window.location.search);
-
-    const accessToken = hash.get("access_token") ?? query.get("access_token");
-    const refreshToken = hash.get("refresh_token") ?? query.get("refresh_token");
-    const expiresIn = hash.get("expires_in") ?? query.get("expires_in");
-
-    const clearCallbackParams = () => {
-      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-    };
-
-    if (!accessToken || !refreshToken || !expiresIn) {
-      const oauthError =
-        hash.get("error_description") ??
-        query.get("error_description") ??
-        hash.get("error_code") ??
-        query.get("error_code") ??
-        hash.get("error") ??
-        query.get("error");
-      if (oauthError) {
-        setAuthError(`Google sign-in failed: ${oauthError}`);
-        clearCallbackParams();
-        return;
-      }
-      if (query.get("code")) {
-        setAuthError("Google sign-in returned an auth code instead of session tokens. Check Supabase OAuth flow settings.");
-        clearCallbackParams();
-      }
-      return;
-    }
-    const user = await fetchSupabaseUser(accessToken);
-    if (!user) {
-      setAuthError("Failed to load user profile.");
-      return;
-    }
-    const session: SupabaseSession = {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_at: Math.floor(Date.now() / 1000) + Number(expiresIn),
-      user
-    };
-    try {
-      await invoke("set_supabase_session_cmd", { sessionJson: JSON.stringify(session) });
-      localStorage.removeItem("arx_supabase_session");
-    } catch {
-      // If keychain write fails (e.g., permissions), fall back to legacy localStorage.
-      localStorage.setItem("arx_supabase_session", JSON.stringify(session));
-	    }
-	    setSupabaseSession(session);
-	    // Preserve query params (e.g. invite codes) while clearing OAuth callback params.
-	    clearCallbackParams();
-	  }
-
-  function getOAuthRedirectUrl(): string {
-    return import.meta.env.VITE_SUPABASE_REDIRECT_URL ?? window.location.origin;
   }
 
   async function handleSignIn() {
     setAuthError(null);
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      setAuthError("Missing Supabase URL or anon key.");
+    const result = await beginGoogleSupabaseSignIn();
+    if (!result.ok) {
+      setAuthError(result.error);
       return;
     }
-    const redirectTo = encodeURIComponent(getOAuthRedirectUrl());
-    const authUrl = `${url}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
-    window.location.assign(authUrl);
+    window.location.assign(result.authUrl);
   }
 
   async function handleSignOut() {
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    const accessToken = supabaseSession?.access_token;
-    if (url && apiKey && accessToken) {
-      await fetch(`${url}/auth/v1/logout`, {
-        method: "POST",
-        headers: {
-          apikey: apiKey,
-          Authorization: `Bearer ${accessToken}`
-        }
+    try {
+      await revokeSupabaseSessionRemote(supabaseSession?.access_token);
+    } finally {
+      // Always clear local auth state, even if remote logout fails.
+      await resetDesktopSessionStateAfterSignOut({
+        clearPersistedSupabaseSession,
+        setSupabaseSession,
+        setCommunities,
+        setActiveCommunityId,
+        navStackRef,
       });
     }
-    try {
-      await invoke("clear_supabase_session_cmd");
-    } catch {
-      // ignore
-    }
-    localStorage.removeItem("arx_supabase_session");
-    setSupabaseSession(null);
-    setCommunities([]);
-    setActiveCommunityId(null);
-    navStackRef.current = [];
   }
 
 	  async function loadCommunities(session: SupabaseSession) {
@@ -6138,692 +4243,7 @@ function App() {
 	    }
 	  }
 
-	  async function loadDiscoverCommunities() {
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    setIsLoadingDiscover(true);
-	    setDiscoverError(null);
-	    try {
-	      // Discover is public; use the anon path for better caching and to avoid extra refetches on auth changes.
-	      const response = await fetchWithSupabasePublic(`${url}/functions/v1/public_discover?limit=60`, { method: "GET" });
-	      if (!response.ok) {
-	        const message = await readSupabaseError(response);
-	        throw new Error(message);
-	      }
-	      const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunity[] };
-	      setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-	          : error instanceof Error
-	            ? error.message
-	            : "Failed to load communities.";
-	      setDiscoverError(message);
-	    } finally {
-	      setIsLoadingDiscover(false);
-	    }
-	  }
-
-	  async function handleJoinDiscoverCommunity(community: DiscoverCommunity) {
-	    const url = getSupabaseUrl();
-	    if (!url) {
-	      setDiscoverError("Missing Supabase URL.");
-	      return;
-	    }
-	    setDiscoverError(null);
-
-	    if (!supabaseSession) {
-	      await openCommunityLandingExternal(community);
-	      return;
-	    }
-
-	    setJoiningDiscoverCommunityId(community.slug);
-	    try {
-        const brandosAid = getBrandosAidForCommunitySlug(community.slug ?? null);
-        const resolvedBrandosAid = brandosAid && isUuid(brandosAid) ? brandosAid : null;
-        const joinedId = await joinPublicCommunityRpc({
-          url,
-          session: supabaseSession,
-          communitySlug: community.slug,
-          brandosAid: resolvedBrandosAid,
-          fetchWithSupabaseAuth,
-          readSupabaseError
-        });
-        clearPendingPublicJoin();
-
-	      await loadCommunities(supabaseSession);
-	      setActiveCommunityId(joinedId);
-	      setActivePage("community");
-	      setCommunityTab("chat");
-	    } catch (error) {
-	      const kind = classifyPublicCommunityJoinError(error);
-	      const message = getErrorMessage(error, "Failed to join community.");
-	      if (
-	        kind === "paid_plan_required" ||
-	        kind === "approval_required" ||
-	        kind === "paid_communities_do_not_use_request_access"
-	      ) {
-	        clearPendingPublicJoin();
-	        await openCommunityLandingExternal(community);
-	        return;
-	      }
-	      setDiscoverError(message);
-	    } finally {
-	      setJoiningDiscoverCommunityId(null);
-	    }
-	  }
-
-	  function generateInviteCode(length = 10): string {
-	    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-	    const bytes = new Uint8Array(length);
-	    crypto.getRandomValues(bytes);
-	    let out = "";
-	    for (let i = 0; i < bytes.length; i++) {
-	      out += alphabet[bytes[i] % alphabet.length];
-	    }
-	    return out;
-	  }
-
-	  async function loadCommunityInvites(communityId: string, session: SupabaseSession) {
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    setIsLoadingCommunityInvites(true);
-	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/community_invites?select=id,community_id,code,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
-	        {},
-	        session
-	      );
-	      if (!response.ok) {
-	        const text = await response.text();
-	        throw new Error(text || "Failed to load invites.");
-	      }
-	      const rows = (await response.json()) as CommunityInviteRecord[];
-	      setCommunityInvites(rows);
-	    } catch (error) {
-	      console.warn("Failed to load community invites:", error);
-	      setCommunityInvites([]);
-	    } finally {
-	      setIsLoadingCommunityInvites(false);
-	    }
-	  }
-
-	  async function handleCreateInvite() {
-	    if (!supabaseSession || !activeCommunityId) return;
-	    setInviteCreateError(null);
-	    setIsCreatingInvite(true);
-	    const url = getSupabaseUrl();
-	    if (!url) {
-	      setInviteCreateError("Missing Supabase URL.");
-	      setIsCreatingInvite(false);
-	      return;
-	    }
-
-    let maxUses: number | null = null;
-    if (inviteMaxUsesPreset === "custom") {
-      const raw = inviteMaxUsesCustom.trim();
-      const parsed = Number(raw);
-      if (!raw || !Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
-        setInviteCreateError("Custom max uses must be a positive integer.");
-        setIsCreatingInvite(false);
-        return;
-      }
-      maxUses = parsed;
-    } else if (inviteMaxUsesPreset !== "unlimited") {
-      maxUses = Number(inviteMaxUsesPreset);
-    }
-
-    let expiresAt: string | null = null;
-    if (inviteExpiryPreset === "custom") {
-      const raw = inviteExpiryCustom.trim();
-      const parsed = Number(raw);
-      if (!raw || !Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
-        setInviteCreateError("Custom expiry must be a positive integer (days).");
-        setIsCreatingInvite(false);
-        return;
-      }
-      expiresAt = new Date(Date.now() + parsed * 86400000).toISOString();
-    } else if (inviteExpiryPreset !== "never") {
-      const expiryMillisMap: Record<string, number> = {
-        "24h": 24 * 60 * 60 * 1000,
-        "7d": 7 * 86400000,
-        "30d": 30 * 86400000,
-        "90d": 90 * 86400000
-      };
-      const ms = expiryMillisMap[inviteExpiryPreset] ?? 0;
-      if (ms > 0) {
-        expiresAt = new Date(Date.now() + ms).toISOString();
-      }
-    }
-
-	    // Retry a couple times to avoid rare collisions on unique(code).
-	    let lastError: string | null = null;
-	    for (let attempt = 0; attempt < 3; attempt++) {
-	      const code = generateInviteCode(10);
-	      try {
-	        const response = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/community_invites`,
-	          {
-	            method: "POST",
-	            headers: {
-	              "Content-Type": "application/json",
-	              Prefer: "return=representation"
-	            },
-	            body: JSON.stringify({
-	              community_id: activeCommunityId,
-	              code,
-	              max_uses: maxUses,
-	              expires_at: expiresAt,
-	              created_by: supabaseSession.user.id
-	            })
-	          },
-	          supabaseSession
-	        );
-	        if (!response.ok) {
-	          const text = await response.text();
-	          throw new Error(text || "Failed to create invite.");
-	        }
-	        const created = (await response.json()) as CommunityInviteRecord[];
-	        const invite = created[0];
-	        setCommunityInvites((prev) => [invite, ...prev]);
-	        setInviteMaxUsesPreset("unlimited");
-        setInviteMaxUsesCustom("");
-	        setInviteExpiryPreset("7d");
-        setInviteExpiryCustom("");
-	        try {
-	          const best = buildBestInviteLink(activeCommunity, invite.code);
-	          await copyTextToClipboard(best.link);
-	        } catch {
-	          // ignore
-	        }
-	        setIsCreatingInvite(false);
-	        return;
-	      } catch (error) {
-	        lastError =
-	          typeof error === "string"
-	            ? error
-	            : error instanceof Error
-	              ? error.message
-	              : "Failed to create invite.";
-	      }
-	    }
-	    setInviteCreateError(lastError ?? "Failed to create invite.");
-	    setIsCreatingInvite(false);
-	  }
-
-	  async function handleRevokeInvite(inviteId: string) {
-	    if (!supabaseSession) return;
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/community_invites?id=eq.${inviteId}`,
-	        {
-	          method: "PATCH",
-	          headers: {
-	            "Content-Type": "application/json",
-	            Prefer: "return=representation"
-	          },
-	          body: JSON.stringify({ revoked_at: new Date().toISOString() })
-	        },
-	        supabaseSession
-	      );
-	      if (!response.ok) {
-	        const text = await response.text();
-	        throw new Error(text || "Failed to revoke invite.");
-	      }
-	      const updated = (await response.json()) as CommunityInviteRecord[];
-	      const row = updated[0];
-	      if (row) {
-	        setCommunityInvites((prev) => prev.map((inv) => (inv.id === inviteId ? row : inv)));
-	      }
-	    } catch (error) {
-	      console.warn("Failed to revoke invite:", error);
-	    }
-	  }
-
-	  async function handleDeleteInvite(inviteId: string) {
-	    if (!supabaseSession) return;
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/community_invites?id=eq.${inviteId}`,
-	        { method: "DELETE" },
-	        supabaseSession
-	      );
-	      if (!response.ok) {
-	        const text = await response.text();
-	        throw new Error(text || "Failed to delete invite.");
-	      }
-	      setCommunityInvites((prev) => prev.filter((inv) => inv.id !== inviteId));
-	    } catch (error) {
-	      console.warn("Failed to delete invite:", error);
-	    }
-	  }
-
-	  function extractTextFromContentJson(contentJson: unknown): string {
-	    if (contentJson === null || contentJson === undefined) return "";
-	    if (typeof contentJson === "string") {
-	      const trimmed = contentJson.trim();
-      if (!trimmed) return "";
-      try {
-        const parsed = JSON.parse(trimmed) as unknown;
-        return extractTextFromContentJson(parsed);
-      } catch {
-        return trimmed;
-      }
-    }
-    if (typeof contentJson === "object") {
-      const asAny = contentJson as any;
-      if (typeof asAny.text === "string") return asAny.text;
-      if (typeof asAny.body === "string") return asAny.body;
-    }
-    return "";
-  }
-
-  function parseMessageAttachments(contentJson: unknown): MessageAttachment[] {
-    if (contentJson === null || contentJson === undefined) return [];
-    let parsed: unknown = contentJson;
-    if (typeof parsed === "string") {
-      const trimmed = parsed.trim();
-      if (!trimmed) return [];
-      try {
-        parsed = JSON.parse(trimmed) as unknown;
-      } catch {
-        return [];
-      }
-    }
-    if (!parsed || typeof parsed !== "object") return [];
-    const raw = (parsed as any).attachments;
-    if (!Array.isArray(raw)) return [];
-    const out: MessageAttachment[] = [];
-    for (const item of raw) {
-      if (!item || typeof item !== "object") continue;
-      const id = typeof (item as any).id === "string" ? String((item as any).id) : crypto.randomUUID();
-      const name = typeof (item as any).name === "string" ? String((item as any).name) : "attachment";
-      const type = (item as any).type === "image" ? "image" : "file";
-      const mime = typeof (item as any).mime === "string" ? String((item as any).mime) : null;
-      const size = Number.isFinite((item as any).size) ? Number((item as any).size) : 0;
-      const data_url = typeof (item as any).data_url === "string" ? String((item as any).data_url) : null;
-      const text = typeof (item as any).text === "string" ? String((item as any).text) : null;
-      const truncated = typeof (item as any).truncated === "boolean" ? Boolean((item as any).truncated) : null;
-      out.push({ id, name, type, mime, size, data_url, text, truncated });
-    }
-    return out;
-  }
-
-  type CloudMessageRow = {
-    id: string;
-    thread_id: string;
-    seq: number;
-    role: string;
-    content_json: unknown;
-    sender_id: string | null;
-    reply_to_id: string | null;
-    created_at: string;
-  };
-
-  function toCommunityChatMessage(row: CloudMessageRow): CommunityChatMessage | null {
-    const threadId = (row.thread_id ?? "").trim();
-    if (!threadId) return null;
-    const id = (row.id ?? "").trim();
-    if (!id) return null;
-    if ((row.role ?? "").trim() !== "user") return null;
-    const senderId = (row.sender_id ?? "").trim() || "unknown";
-    const body = extractTextFromContentJson(row.content_json);
-    const attachments = parseMessageAttachments(row.content_json);
-    return {
-      id,
-      community_id: threadId,
-      sender_id: senderId,
-      body,
-      attachments: attachments.length > 0 ? attachments : undefined,
-      reply_to_id: row.reply_to_id ?? null,
-      created_at: row.created_at,
-      seq: Number(row.seq) || 0,
-    };
-  }
-
-  async function ensureCommunityChatThread(communityId: string, session: SupabaseSession): Promise<string> {
-    const url = getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-
-    const response = await fetchWithSupabaseAuth(
-      `${url}/rest/v1/rpc/ensure_community_chat_thread`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ p_community_id: communityId }),
-      },
-      session,
-    );
-    if (!response.ok) throw new Error(await readSupabaseError(response));
-    const rows = (await response.json()) as Array<{ thread_id: string }>;
-    const threadId = (rows[0]?.thread_id ?? "").trim();
-    if (!threadId) throw new Error("Failed to ensure community chat thread.");
-    return threadId;
-  }
-
-  async function loadCommunityChat(communityId: string, session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingChat(true);
-    setIsLoadingMoreChat(false);
-    setCommunityChatHasMore(true);
-    communityChatOldestSeqRef.current = null;
-    pendingChatPrependScrollRef.current = null;
-    try {
-      const threadId = await ensureCommunityChatThread(communityId, session);
-      let response: Response;
-      try {
-        response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
-            threadId,
-          )}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          { method: "GET" },
-          session,
-        );
-      } catch {
-        return;
-      }
-      if (!response.ok) return;
-      const rowsDesc = (await response.json()) as CloudMessageRow[];
-      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
-      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...mappedDesc].reverse();
-      setCommunityChatHasMore(hasMore);
-      setCommunityMessages(rows);
-      communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
-      setUnreadCount(0);
-      setIsUserAtBottom(true);
-      isUserAtBottomRef.current = true;
-      if (rows.length > 0) {
-        const messageIds = rows.map((m) => m.id);
-        await loadMessageReactions(messageIds, session);
-      }
-    } finally {
-      setIsLoadingChat(false);
-    }
-  }
-
-  async function loadOlderCommunityChat(communityId: string, session: SupabaseSession) {
-    if (isLoadingChat || isLoadingMoreChat) return;
-    if (!communityChatHasMore) return;
-    const cursor = communityChatOldestSeqRef.current;
-    if (!cursor) {
-      setCommunityChatHasMore(false);
-      return;
-    }
-    const url = getSupabaseUrl();
-    if (!url) return;
-
-	    const container = communityChatListRef.current;
-	    if (container) {
-	      pendingChatPrependScrollRef.current = captureCommunityChatScrollAnchor(container);
-	    }
-
-    setIsLoadingMoreChat(true);
-    try {
-      const threadId = await ensureCommunityChatThread(communityId, session);
-      let response: Response;
-      try {
-        response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
-            threadId,
-          )}&seq=lt.${cursor}&order=seq.desc&limit=${COMMUNITY_CHAT_PAGE_SIZE}`,
-          { method: "GET" },
-          session,
-        );
-      } catch {
-        pendingChatPrependScrollRef.current = null;
-        return;
-      }
-      if (!response.ok) {
-        pendingChatPrependScrollRef.current = null;
-        return;
-      }
-      const rowsDesc = (await response.json()) as CloudMessageRow[];
-      const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as CommunityChatMessage[];
-      if (mappedDesc.length === 0) {
-        setCommunityChatHasMore(false);
-        pendingChatPrependScrollRef.current = null;
-        return;
-      }
-
-      const hasMore = mappedDesc.length >= COMMUNITY_CHAT_PAGE_SIZE;
-      const rows = [...mappedDesc].reverse();
-      setCommunityChatHasMore(hasMore);
-      communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
-
-      setCommunityMessages((prev) => {
-        const existing = new Set(prev.map((m) => m.id));
-        const unique = rows.filter((m) => !existing.has(m.id));
-        if (unique.length === 0) {
-          pendingChatPrependScrollRef.current = null;
-          return prev;
-        }
-        return [...unique, ...prev];
-      });
-
-      await loadMessageReactions(rows.map((m) => m.id), session);
-    } finally {
-      setIsLoadingMoreChat(false);
-    }
-  }
-
-  async function loadMessageReactions(messageIds: string[], session: SupabaseSession) {
-    const url = getSupabaseUrl();
-    if (!url || messageIds.length === 0) return;
-    const idsFilter = messageIds.map(id => `"${id}"`).join(",");
-    let response: Response;
-    try {
-      response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/message_reactions?select=id,message_id,user_id,emoji,created_at&message_id=in.(${idsFilter})`,
-        {},
-        session
-      );
-    } catch {
-      return;
-    }
-    if (!response.ok) return;
-    const rows = (await response.json()) as MessageReaction[];
-    setMessageReactions((prev) => {
-      if (prev.length === 0) return rows;
-      const byId = new Map<string, MessageReaction>();
-      for (const reaction of prev) {
-        byId.set(reaction.id, reaction);
-      }
-      for (const reaction of rows) {
-        byId.set(reaction.id, reaction);
-      }
-      return Array.from(byId.values());
-    });
-  }
-
-  async function handleToggleReaction(messageId: string, emoji: string) {
-    if (!supabaseSession) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
-
-    const existingReaction = messageReactions.find(
-      r => r.message_id === messageId && r.user_id === supabaseSession.user.id && r.emoji === emoji
-    );
-
-    if (existingReaction) {
-      // Remove reaction
-      setMessageReactions(prev => prev.filter(r => r.id !== existingReaction.id));
-      try {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/message_reactions?id=eq.${existingReaction.id}`,
-          { method: "DELETE" },
-          supabaseSession
-        );
-        if (!response.ok) {
-          setMessageReactions(prev => [...prev, existingReaction]);
-        }
-      } catch {
-        setMessageReactions(prev => [...prev, existingReaction]);
-      }
-    } else {
-      // Add reaction (optimistic)
-      const optimisticId = `pending-${Date.now()}`;
-      const optimisticReaction: MessageReaction = {
-        id: optimisticId,
-        message_id: messageId,
-        user_id: supabaseSession.user.id,
-        emoji,
-        created_at: new Date().toISOString()
-      };
-      setMessageReactions(prev => [...prev, optimisticReaction]);
-
-      try {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/message_reactions`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Prefer: "return=representation"
-            },
-	            body: JSON.stringify({
-	              message_id: messageId,
-	              emoji
-	            })
-	          },
-	          supabaseSession
-        );
-        if (response.ok) {
-          const created = (await response.json()) as MessageReaction[];
-          if (created.length > 0) {
-            setMessageReactions(prev =>
-              prev.map(r => r.id === optimisticId ? created[0] : r)
-            );
-          }
-        } else {
-          setMessageReactions(prev => prev.filter(r => r.id !== optimisticId));
-        }
-      } catch {
-        setMessageReactions(prev => prev.filter(r => r.id !== optimisticId));
-      }
-    }
-    setReactionPickerMessageId(null);
-  }
-
-  function handleStartEdit(message: CommunityChatMessage) {
-    const reply = parseReplyPrefix(message.body);
-    setEditingMessageId(message.id);
-    setEditingMessageText(reply ? reply.rest : message.body);
-    setEditingMessagePrefix(reply ? buildReplyPrefix(reply.sender, reply.preview) : null);
-  }
-
-  function handleCancelEdit() {
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
-  }
-
-  async function handleSaveEdit() {
-    if (!supabaseSession || !editingMessageId) return;
-    const text = editingMessageText.trim();
-    if (!text) return;
-
-    const url = getSupabaseUrl();
-    if (!url) return;
-
-    const bodyToSave = editingMessagePrefix ? editingMessagePrefix + text : text;
-
-    // Optimistic update
-    setCommunityMessages(prev =>
-      prev.map(m => m.id === editingMessageId ? { ...m, body: bodyToSave } : m)
-    );
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
-
-    const existingAttachments = communityMessages.find((m) => m.id === editingMessageId)?.attachments ?? [];
-
-    let response: Response | null = null;
-    try {
-      response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?id=eq.${editingMessageId}&sender_id=eq.${supabaseSession.user.id}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            content_json: {
-              text: bodyToSave,
-              ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {})
-            }
-          })
-        },
-        supabaseSession
-      );
-    } catch {
-      response = null;
-    }
-    if (!response || !response.ok) {
-      // Reload to revert on error
-      if (activeCommunityId) {
-        await loadCommunityChat(activeCommunityId, supabaseSession);
-      }
-    }
-  }
-
-  async function handleDeleteMessage(messageId: string) {
-    if (!supabaseSession) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
-
-    // Optimistic update
-    setCommunityMessages(prev => prev.filter(m => m.id !== messageId));
-    setMessageReactions(prev => prev.filter(r => r.message_id !== messageId));
-
-    let response: Response | null = null;
-    try {
-      response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?id=eq.${messageId}&sender_id=eq.${supabaseSession.user.id}`,
-        { method: "DELETE" },
-        supabaseSession
-      );
-    } catch {
-      response = null;
-    }
-    if (!response || !response.ok) {
-      // Reload to revert on error
-      if (activeCommunityId) {
-        await loadCommunityChat(activeCommunityId, supabaseSession);
-      }
-    }
-  }
-
-	  async function loadCommunityResources(communityId: string, session: SupabaseSession) {
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    setIsLoadingResources(true);
-	    try {
-      let response: Response;
-      try {
-        response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_resources?select=id,community_id,type,title,body_md,url,file_key,pinned,created_at&community_id=eq.${communityId}&order=pinned.desc,created_at.desc&limit=200`,
-          {},
-          session
-        );
-      } catch {
-        return;
-      }
-      if (!response.ok) return;
-      const rows = (await response.json()) as CommunityResource[];
-      setCommunityResources(rows);
-    } finally {
-      setIsLoadingResources(false);
-	    }
-	  }
-
-	  async function loadCommunityAccess(communityId: string, session: SupabaseSession) {
+  async function loadCommunityAccess(communityId: string, session: SupabaseSession) {
 	    const url = getSupabaseUrl();
 	    if (!url) return;
 	    setIsLoadingCommunityAccess(true);
@@ -6847,68 +4267,6 @@ function App() {
 	    }
 	  }
 
-			  async function loadCommunityMembers(
-          communityId: string,
-          session: SupabaseSession,
-          opts?: { includeStatus?: boolean },
-        ) {
-			    const url = getSupabaseUrl();
-			    if (!url) return;
-          const membershipsUrl = `${url}/rest/v1/community_memberships?select=id,community_id,user_id,role,created_at&community_id=eq.${communityId}&order=created_at.asc&limit=200`;
-          const adminUrl = `${url}/rest/v1/rpc/list_community_members_admin`;
-			    let response: Response;
-    try {
-      response = await fetchWithSupabaseAuth(
-        opts?.includeStatus
-          ? adminUrl
-          : membershipsUrl,
-        opts?.includeStatus
-          ? {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_community_id: communityId }),
-            }
-          : {},
-        session
-      );
-    } catch {
-      return;
-	    }
-      if (!response.ok && opts?.includeStatus) {
-        // Fallback during rollout if the admin RPC is missing/unavailable.
-        try {
-          response = await fetchWithSupabaseAuth(membershipsUrl, {}, session);
-        } catch {
-          return;
-        }
-      }
-	    if (!response.ok) return;
-	    const rows = (await response.json()) as CommunityMember[];
-	    setCommunityMembers(rows);
-
-	    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
-	    if (userIds.length === 0) return;
-	    const idsFilter = userIds.map((id) => `"${id}"`).join(",");
-	    try {
-	      const profilesResponse = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url&user_id=in.(${idsFilter})`,
-	        {},
-	        session
-	      );
-	      if (!profilesResponse.ok) return;
-	      const profiles = (await profilesResponse.json()) as UserProfile[];
-	      setProfilesByUserId((prev) => {
-	        const next = { ...prev };
-	        for (const profile of profiles) {
-	          next[profile.user_id] = profile;
-	        }
-	        return next;
-	      });
-			    } catch {
-			      // ignore
-			    }
-			  }
-
         function hydrateCommunityAgentEditor(slot: number, drafts: CommunityAgentDraft[]) {
           const safeSlot = Math.max(1, Math.min(3, Math.floor(slot)));
           const row = drafts.find((d) => d.slot === safeSlot) ?? null;
@@ -6928,1115 +4286,7 @@ function App() {
           clearCommunityAgentLandingEdit();
         }
 
-        function normalizeCommunityAgentDraftForSave(draft: CommunityAgentLanding): CommunityAgentLanding | null {
-          const tabs = draft.tabs
-            .map((tab) => ({
-              id: tab.id,
-              label: (tab.label ?? "").trim(),
-              prompts: (tab.prompts ?? []).map((p) => (p ?? "").trim()).filter(Boolean),
-            }))
-            .filter((tab) => tab.label && tab.prompts.length > 0)
-            .slice(0, 4);
-          if (tabs.length === 0) return null;
-          return {
-            title: (draft.title ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.title,
-            subtitle: (draft.subtitle ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
-            tabs,
-          };
-        }
-
-        async function loadCommunityAgentDrafts(communityId: string, session: SupabaseSession) {
-          const url = getSupabaseUrl();
-          if (!url) return;
-          setIsLoadingCommunityAgentDrafts(true);
-          setCommunityAgentDraftsError(null);
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/list_community_agent_drafts`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: communityId }),
-              },
-              session,
-            );
-            if (!response.ok) {
-              const message = await readSupabaseError(response);
-              setCommunityAgentDrafts([]);
-              setCommunityAgentDraftsError(message);
-              communityAgentDraftsLoadedCommunityIdRef.current = communityId;
-              return;
-            }
-            const rows = (await response.json()) as CommunityAgentDraft[];
-            rows.sort((a, b) => a.slot - b.slot);
-            setCommunityAgentDrafts(rows);
-            communityAgentDraftsLoadedCommunityIdRef.current = communityId;
-
-            const activeSlot = rows.find((d) => d.is_active)?.slot ?? 1;
-            hydrateCommunityAgentEditor(activeSlot, rows);
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to load AI agent drafts.";
-            setCommunityAgentDrafts([]);
-            setCommunityAgentDraftsError(message);
-            communityAgentDraftsLoadedCommunityIdRef.current = communityId;
-          } finally {
-            setIsLoadingCommunityAgentDrafts(false);
-          }
-        }
-
-        async function handleSaveCommunityAgentDraft() {
-          if (!supabaseSession || !activeCommunityId) return;
-          const normalized = normalizeCommunityAgentDraftForSave(communityAgentDraftLanding);
-          if (!normalized) {
-            setCommunityAgentDraftSaveError("Add at least one tab with a label and one prompt.");
-            return;
-          }
-          const url = getSupabaseUrl();
-          if (!url) return;
-          setIsSavingCommunityAgentDraft(true);
-          setCommunityAgentDraftSaveError(null);
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/upsert_community_agent_draft`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  p_community_id: activeCommunityId,
-                  p_slot: communityAgentSelectedSlot,
-                  p_name: communityAgentDraftName,
-                  p_landing_json: normalized,
-                  p_system_prompt: communityAgentDraftSystemPrompt,
-                }),
-              },
-              supabaseSession,
-            );
-            if (!response.ok) {
-              const message = await readSupabaseError(response);
-              setCommunityAgentDraftSaveError(message);
-              return;
-            }
-            const rows = (await response.json()) as Array<{ id: string; slot: number; is_active: boolean; updated_at: string }>;
-            const row = rows[0];
-            if (!row) return;
-            setCommunityAgentDrafts((prev) => {
-              const without = prev.filter((d) => d.slot !== row.slot);
-              const next: CommunityAgentDraft[] = [
-                ...without,
-                {
-                  id: row.id,
-                  community_id: activeCommunityId,
-                  slot: row.slot,
-                  name: communityAgentDraftName.trim() ? communityAgentDraftName.trim() : null,
-                  landing_json: normalized,
-                  system_prompt: communityAgentDraftSystemPrompt,
-                  is_active: row.is_active,
-                  updated_at: row.updated_at,
-                },
-              ];
-              next.sort((a, b) => a.slot - b.slot);
-              return next;
-            });
-            communityAgentDraftDirtyRef.current = false;
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to save AI agent draft.";
-            setCommunityAgentDraftSaveError(message);
-          } finally {
-            setIsSavingCommunityAgentDraft(false);
-          }
-        }
-
-        async function persistCommunityAgentTemplateName(slot: number, nextName: string): Promise<boolean> {
-          if (!supabaseSession || !activeCommunityId) return false;
-
-          const row = communityAgentDrafts.find((d) => d.slot === slot);
-          if (!row) return false;
-
-          const url = getSupabaseUrl();
-          if (!url) return false;
-
-          try {
-            const normalized = nextName.trim();
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/upsert_community_agent_draft`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  p_community_id: activeCommunityId,
-                  p_slot: slot,
-                  p_name: normalized ? normalized : null,
-                  p_landing_json: row.landing_json ?? {},
-                  p_system_prompt: row.system_prompt ?? "",
-                }),
-              },
-              supabaseSession,
-            );
-            if (!response.ok) {
-              const message = await readSupabaseError(response);
-              setCommunityAgentDraftSaveError(message);
-              return false;
-            }
-            const rows = (await response.json()) as Array<{ id: string; slot: number; is_active: boolean; updated_at: string }>;
-            const updated = rows[0];
-            if (!updated) return false;
-            setCommunityAgentDrafts((prev) =>
-              prev.map((d) =>
-                d.slot === slot
-                  ? {
-                      ...d,
-                      id: updated.id,
-                      name: normalized ? normalized : null,
-                      is_active: updated.is_active,
-                      updated_at: updated.updated_at,
-                    }
-                  : d,
-              ),
-            );
-            return true;
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to rename template.";
-            setCommunityAgentDraftSaveError(message);
-            return false;
-          }
-        }
-
-        async function handleSetLiveCommunityAgentDraft() {
-          if (!supabaseSession || !activeCommunityId) return;
-          const url = getSupabaseUrl();
-          if (!url) return;
-          setIsSavingCommunityAgentDraft(true);
-          setCommunityAgentDraftSaveError(null);
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/set_active_community_agent_draft`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: activeCommunityId, p_slot: communityAgentSelectedSlot }),
-              },
-              supabaseSession,
-            );
-            if (!response.ok) {
-              const message = await readSupabaseError(response);
-              setCommunityAgentDraftSaveError(message);
-              return;
-            }
-            setCommunityAgentDrafts((prev) =>
-              prev.map((d) =>
-                d.community_id === activeCommunityId ? { ...d, is_active: d.slot === communityAgentSelectedSlot } : d,
-              ),
-            );
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to set live draft.";
-            setCommunityAgentDraftSaveError(message);
-          } finally {
-            setIsSavingCommunityAgentDraft(false);
-          }
-        }
-
-        async function loadSelfProfile(session: SupabaseSession) {
-          const url = getSupabaseUrl();
-          if (!url) return;
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/profiles?select=user_id,display_name,avatar_url,bio&user_id=eq.${encodeURIComponent(
-                session.user.id
-              )}&limit=1`,
-              { method: "GET" },
-              session
-            );
-            if (!response.ok) return;
-            const rows = (await response.json()) as UserProfileDetail[];
-            const row = rows[0];
-            if (!row) return;
-
-            const shouldOverwriteLocal = !cloudProfile || !isProfileDirty;
-            setCloudProfile(row);
-            setProfilesByUserId((prev) => ({
-              ...prev,
-              [row.user_id]: { user_id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url },
-            }));
-            if (shouldOverwriteLocal) {
-              setProfileName(row.display_name ?? "");
-              setProfileBio(row.bio ?? "");
-              setProfileAvatarUrl(row.avatar_url ?? null);
-            }
-          } catch {
-            // ignore
-          }
-        }
-
-        async function saveProfileToCloud() {
-          const session = supabaseSessionRef.current ?? supabaseSession;
-          const url = getSupabaseUrl();
-          if (!session || !url) {
-            setProfileSaveError("Sign in to save your profile.");
-            return;
-          }
-
-          const trimmedName = profileName.trim();
-          const trimmedBio = profileBio.trim();
-          if (trimmedName !== profileName) setProfileName(trimmedName);
-          if (trimmedBio !== profileBio) setProfileBio(trimmedBio);
-
-          if (profileSaveTimeoutRef.current) {
-            window.clearTimeout(profileSaveTimeoutRef.current);
-            profileSaveTimeoutRef.current = null;
-          }
-
-          setIsSavingProfile(true);
-          setProfileSaveError(null);
-          setProfileSaveSuccess(false);
-          try {
-            const response = await fetchWithSupabaseAuth(
-              `${url}/rest/v1/profiles?on_conflict=user_id&select=user_id,display_name,avatar_url,bio`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Prefer: "resolution=merge-duplicates,return=representation",
-                },
-                body: JSON.stringify({
-                  user_id: session.user.id,
-                  display_name: trimmedName || null,
-                  avatar_url: profileAvatarUrl ?? null,
-                  bio: trimmedBio || null,
-                }),
-              },
-              session
-            );
-            if (!response.ok) throw new Error(await readSupabaseError(response));
-            const rows = (await response.json()) as UserProfileDetail[];
-            const saved = rows[0];
-            if (saved) {
-              setCloudProfile(saved);
-              setProfilesByUserId((prev) => ({
-                ...prev,
-                [saved.user_id]: {
-                  user_id: saved.user_id,
-                  display_name: saved.display_name,
-                  avatar_url: saved.avatar_url,
-                },
-              }));
-              setProfileName(saved.display_name ?? "");
-              setProfileBio(saved.bio ?? "");
-              setProfileAvatarUrl(saved.avatar_url ?? null);
-            }
-            setProfileSaveSuccess(true);
-            profileSaveTimeoutRef.current = window.setTimeout(() => setProfileSaveSuccess(false), 2000);
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to save profile.";
-            setProfileSaveError(message);
-          } finally {
-            setIsSavingProfile(false);
-          }
-        }
-
-	      async function loadCommunityAnalytics(
-	        communityId: string,
-	        session: SupabaseSession,
-	        range: AnalyticsRange,
-	        communityCreatedAt: string | null
-	      ) {
-		        const url = getSupabaseUrl();
-		        if (!url) return;
-		        setIsLoadingCommunityAnalytics(true);
-		        setCommunityAnalyticsError(null);
-		        setCommunityRevenueError(null);
-
-	        const now = Date.now();
-	        const rangeToWindowStart = (): Date | null => {
-	          switch (range) {
-	            case "7d":
-	              return new Date(now - 7 * 86400000);
-	            case "30d":
-	              return new Date(now - 30 * 86400000);
-	            case "90d":
-	              return new Date(now - 90 * 86400000);
-	            case "1y":
-	              return new Date(now - 365 * 86400000);
-	            case "all": {
-	              if (!communityCreatedAt) return null;
-	              const created = new Date(communityCreatedAt);
-	              return Number.isNaN(created.getTime()) ? null : created;
-	            }
-	            default:
-	              return new Date(now - 30 * 86400000);
-	          }
-	        };
-
-	        const windowStart = rangeToWindowStart();
-	        const sinceWindowIso = windowStart ? windowStart.toISOString() : null;
-	        const chartBucket: "day" | "week" | "month" =
-	          range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
-
-	        const fetchCount = async (queryUrl: string): Promise<number | null> => {
-	          let response: Response;
-	          try {
-	            response = await fetchWithSupabaseAuth(
-	              queryUrl,
-	              { method: "HEAD", headers: { Prefer: "count=exact" } },
-	              session
-	            );
-	          } catch {
-	            return null;
-	          }
-	          if (!response.ok) return null;
-	          return parseContentRangeTotal(response.headers.get("content-range"));
-	        };
-
-	        const fetchEntitledMemberCount = async (): Promise<number | null> => {
-	          try {
-	            const response = await fetchWithSupabaseAuth(
-	              `${url}/rest/v1/rpc/community_entitled_member_count`,
-	              {
-	                method: "POST",
-	                headers: { "Content-Type": "application/json" },
-	                body: JSON.stringify({ p_community_id: communityId }),
-	              },
-	              session
-	            );
-	            if (!response.ok) return null;
-	            const data = await response.json();
-	            if (typeof data === "number") return data;
-	            if (typeof data === "string") return Number(data) || 0;
-	            const asObj = data as Record<string, unknown> | null;
-	            const maybeValue = asObj && typeof asObj === "object" ? asObj["community_entitled_member_count"] : null;
-	            if (typeof maybeValue === "number") return maybeValue;
-	            if (typeof maybeValue === "string") return Number(maybeValue) || 0;
-	            return null;
-	          } catch {
-	            return null;
-	          }
-	        };
-
-	        const startOfBucket = (date: Date, bucket: "day" | "week" | "month"): Date => {
-	          if (bucket === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
-	          if (bucket === "week") {
-	            const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-	            const day = d.getDay(); // 0=Sun..6=Sat
-	            const diff = (day + 6) % 7; // days since Monday
-	            d.setDate(d.getDate() - diff);
-	            return d;
-	          }
-	          return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-	        };
-
-	        const addBucket = (date: Date, bucket: "day" | "week" | "month"): Date => {
-	          if (bucket === "month") return new Date(date.getFullYear(), date.getMonth() + 1, 1);
-	          if (bucket === "week") return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 7);
-	          return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-	        };
-
-	        const bucketKey = (date: Date, bucket: "day" | "week" | "month"): string => {
-	          if (bucket === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-	          if (bucket === "week") return dateKeyLocal(date);
-	          return dateKeyLocal(date);
-	        };
-
-	        const bucketLabel = (date: Date, bucket: "day" | "week" | "month"): string => {
-	          if (bucket === "month") return date.toLocaleDateString([], { month: "short", year: "2-digit" });
-	          return date.toLocaleDateString([], { month: "short", day: "numeric" });
-	        };
-
-	        const buildSeries = (
-	          rows: Array<{ created_at: string }>,
-	          start: Date,
-	          bucket: "day" | "week" | "month"
-	        ): AnalyticsPoint[] => {
-	          const end = new Date();
-	          const startBucket = startOfBucket(start, bucket);
-	          const endBucket = startOfBucket(end, bucket);
-
-	          const counts = new Map<string, number>();
-	          for (const row of rows) {
-	            const created = new Date(row.created_at);
-	            if (Number.isNaN(created.getTime())) continue;
-	            if (created < startBucket) continue;
-	            const key = bucketKey(startOfBucket(created, bucket), bucket);
-	            counts.set(key, (counts.get(key) ?? 0) + 1);
-	          }
-
-	          const points: AnalyticsPoint[] = [];
-	          for (let cursor = startBucket; cursor <= endBucket; cursor = addBucket(cursor, bucket)) {
-	            const key = bucketKey(cursor, bucket);
-	            points.push({ label: bucketLabel(cursor, bucket), value: counts.get(key) ?? 0 });
-	          }
-	          return points;
-	        };
-
-	        try {
-	          const [entitledMembers, rosterMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
-	            fetchEntitledMemberCount(),
-	            fetchCount(`${url}/rest/v1/community_memberships?select=id&community_id=eq.${communityId}`),
-	            fetchCount(`${url}/rest/v1/community_resources?select=id&community_id=eq.${communityId}`),
-	            sinceWindowIso
-	              ? fetchCount(
-	                  `${url}/rest/v1/community_memberships?select=id&community_id=eq.${communityId}&created_at=gte.${encodeURIComponent(
-	                    sinceWindowIso
-	                  )}`
-	                )
-	              : null,
-	            sinceWindowIso
-	              ? fetchCount(
-	                  `${url}/rest/v1/community_resources?select=id&community_id=eq.${communityId}&created_at=gte.${encodeURIComponent(
-	                    sinceWindowIso
-	                  )}`
-	                )
-	              : null,
-	          ]);
-
-	          const totalMembers = entitledMembers ?? rosterMembers;
-
-	          let memberJoinsWindow: Array<{ created_at: string }> = [];
-	          try {
-	            const joinQueryBase = `${url}/rest/v1/community_memberships?select=created_at&community_id=eq.${communityId}`;
-	            const joinQuery =
-	              sinceWindowIso !== null
-	                ? `${joinQueryBase}&created_at=gte.${encodeURIComponent(sinceWindowIso)}`
-	                : joinQueryBase;
-	            const response = await fetchWithSupabaseAuth(
-	              `${joinQuery}&order=created_at.asc&limit=5000`,
-	              {},
-	              session
-	            );
-	            if (response.ok) {
-	              memberJoinsWindow = (await response.json()) as Array<{ created_at: string }>;
-	            }
-	          } catch {
-	            // ignore
-	          }
-
-	          let activeMembersWindow: number | null = null;
-	          try {
-	            const threadId = await ensureCommunityChatThread(communityId, session);
-	            const messagesQueryBase = `${url}/rest/v1/messages?select=sender_id&thread_id=eq.${encodeURIComponent(
-	              threadId
-	            )}&role=eq.user`;
-	            const messagesQuery =
-	              sinceWindowIso !== null
-	                ? `${messagesQueryBase}&created_at=gte.${encodeURIComponent(sinceWindowIso)}`
-	                : messagesQueryBase;
-	            const response = await fetchWithSupabaseAuth(
-	              `${messagesQuery}&limit=5000`,
-	              {},
-	              session
-	            );
-	            if (response.ok) {
-	              const rows = (await response.json()) as Array<{ sender_id: string | null }>;
-	              const senders = new Set<string>();
-	              for (const row of rows) {
-	                const sender = (row.sender_id ?? "").trim();
-	                if (sender) senders.add(sender);
-	              }
-	              activeMembersWindow = senders.size;
-	            }
-	          } catch {
-	            // ignore
-	          }
-
-	          const retentionWindow =
-	            totalMembers && totalMembers > 0 && activeMembersWindow != null ? activeMembersWindow / totalMembers : null;
-
-	          setCommunityAnalyticsSummary({
-	            total_members: totalMembers,
-	            new_members_window: newMembersWindow ?? totalMembers,
-	            active_members_window: activeMembersWindow,
-	            retention_window: retentionWindow,
-	            total_resources: totalResources,
-	            resources_added_window: resourcesAddedWindow ?? totalResources,
-	          });
-	          setCommunityAnalyticsSeries(
-	            buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket)
-	          );
-
-	          try {
-	            const response = await fetchWithSupabaseAuth(
-	              `${url}/rest/v1/rpc/community_revenue_series`,
-	              {
-	                method: "POST",
-	                headers: { "Content-Type": "application/json" },
-	                body: JSON.stringify({ p_community_id: communityId, p_range: range }),
-	              },
-	              session
-	            );
-	            if (!response.ok) {
-	              const message = await readSupabaseError(response);
-	              if (message.includes("schema cache")) {
-	                setCommunityRevenueSeries(
-	                  buildSeries([], windowStart ?? new Date(now - 30 * 86400000), chartBucket)
-	                );
-	                setCommunityRevenueMeta(null);
-	                setCommunityRevenueError(null);
-	              } else {
-	                setCommunityRevenueSeries([]);
-	                setCommunityRevenueMeta(null);
-	                setCommunityRevenueError(message);
-	              }
-	            } else {
-	              const rows = (await response.json()) as Array<{
-	                bucket_start: string;
-	                net_base_units: number | string | null;
-	                currency: string | null;
-	                currency_decimals: number | null;
-	              }>;
-	              const metaCurrency = rows[0]?.currency ?? null;
-	              const metaDecimals = rows[0]?.currency_decimals ?? null;
-	              if (metaCurrency && metaDecimals != null) {
-	                setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
-	              } else {
-	                setCommunityRevenueMeta(null);
-	              }
-	              setCommunityRevenueSeries(
-	                rows.map((row) => {
-	                  const date = new Date(row.bucket_start);
-	                  return {
-	                    label: bucketLabel(date, chartBucket),
-	                    value: Number(row.net_base_units ?? 0) || 0,
-	                  };
-	                })
-	              );
-	            }
-	          } catch {
-	            setCommunityRevenueSeries([]);
-	            setCommunityRevenueMeta(null);
-	            setCommunityRevenueError("Failed to load revenue.");
-	          }
-	        } catch (error) {
-	          const message =
-	            typeof error === "string"
-	              ? error
-	              : error instanceof Error
-	                ? error.message
-	                : "Failed to load analytics.";
-	          setCommunityAnalyticsError(message);
-        } finally {
-          setIsLoadingCommunityAnalytics(false);
-        }
-      }
-
-      async function loadCommunityAutomations(communityId: string, session: SupabaseSession) {
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setIsLoadingAutomations(true);
-        setAutomationError(null);
-        setBrandosError(null);
-
-        try {
-          const [endpointsRes, deliveriesRes, brandosRes] = await Promise.all([
-            fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/list_automation_endpoints`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: communityId }),
-              },
-              session,
-            ),
-            fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/list_automation_deliveries`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: communityId, p_limit: 50 }),
-              },
-              session,
-            ),
-            fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/get_brandos_connector`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_id: communityId }),
-              },
-              session,
-            ),
-          ]);
-
-          if (!endpointsRes.ok) throw new Error(await readSupabaseError(endpointsRes));
-          if (!deliveriesRes.ok) throw new Error(await readSupabaseError(deliveriesRes));
-
-          const endpoints = (await endpointsRes.json()) as AutomationEndpoint[];
-          const deliveries = (await deliveriesRes.json()) as AutomationDelivery[];
-          setAutomationEndpoints(endpoints);
-          setAutomationDeliveries(deliveries);
-
-          if (brandosRes.ok) {
-            const brandosRows = (await brandosRes.json()) as BrandosConnector[];
-            setBrandosConnector(brandosRows[0] ?? null);
-          } else {
-            setBrandosConnector(null);
-            setBrandosError(await readSupabaseError(brandosRes));
-          }
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to load automations.";
-          if (message.includes("schema cache")) {
-            setAutomationError("Automations are still syncing. Refresh in a moment.");
-          } else {
-            setAutomationError(message);
-          }
-        } finally {
-          setIsLoadingAutomations(false);
-        }
-      }
-
-      function resetAutomationForm() {
-        setAutomationNameInput("");
-        setAutomationUrlInput("");
-        setAutomationIsEnabledInput(true);
-        setAutomationSelectedEventTypes(["community.member_joined", "community.member_left"]);
-      }
-
-      function openBrandosConnect() {
-        setBrandosNotice(null);
-        setBrandosError(null);
-        setBrandosIdentifySecretInput("");
-        setBrandosBaseUrlInput(brandosConnector?.base_url?.trim() || "https://app.brandos.com");
-        setBrandosAccountIdInput(brandosConnector?.brandos_account_id?.trim() || "");
-        setBrandosIsEnabledInput(brandosConnector?.is_enabled ?? true);
-        setIsBrandosConnectOpen(true);
-      }
-
-      function closeBrandosConnect() {
-        setIsBrandosConnectOpen(false);
-        setBrandosIdentifySecretInput("");
-      }
-
-      async function handleSaveBrandosConnector() {
-        if (!supabaseSession || !activeCommunityId) return;
-        const url = getSupabaseUrl();
-        if (!url) {
-          setBrandosError("Missing Supabase URL.");
-          return;
-        }
-
-        setBrandosNotice(null);
-        setBrandosError(null);
-
-        const baseUrl = brandosBaseUrlInput.trim();
-        const accountId = brandosAccountIdInput.trim();
-        const secret = brandosIdentifySecretInput.trim();
-
-        if (!baseUrl) {
-          setBrandosError("BrandOS base URL is required.");
-          return;
-        }
-        if (!/^https?:\/\//.test(baseUrl)) {
-          setBrandosError("BrandOS base URL must start with https://");
-          return;
-        }
-        if (!accountId || !isUuid(accountId)) {
-          setBrandosError("BrandOS account id must be a UUID.");
-          return;
-        }
-        if (!secret) {
-          setBrandosError("BrandOS identify secret is required.");
-          return;
-        }
-
-        setIsSavingBrandosConnector(true);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/upsert_brandos_connector`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                p_community_id: activeCommunityId,
-                p_base_url: baseUrl,
-                p_brandos_account_id: accountId,
-                p_identify_secret: secret,
-                p_is_enabled: brandosIsEnabledInput,
-              }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          const rows = (await response.json()) as BrandosConnector[];
-          const connector = rows[0] ?? null;
-          setBrandosConnector(connector);
-          setBrandosNotice(connector ? "BrandOS connected." : "BrandOS saved.");
-          setIsBrandosConnectOpen(false);
-          setBrandosIdentifySecretInput("");
-          await loadCommunityAutomations(activeCommunityId, supabaseSession);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to save BrandOS connector.";
-          setBrandosError(message);
-        } finally {
-          setIsSavingBrandosConnector(false);
-        }
-      }
-
-      async function handleDeleteBrandosConnector() {
-        if (!supabaseSession || !activeCommunityId) return;
-        const url = getSupabaseUrl();
-        if (!url) {
-          setBrandosError("Missing Supabase URL.");
-          return;
-        }
-
-        setBrandosNotice(null);
-        setBrandosError(null);
-        setIsDeletingBrandosConnector(true);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/delete_brandos_connector`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_community_id: activeCommunityId }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          setBrandosConnector(null);
-          setBrandosNotice("BrandOS disconnected.");
-          setIsBrandosConnectOpen(false);
-          setBrandosIdentifySecretInput("");
-          await loadCommunityAutomations(activeCommunityId, supabaseSession);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to disconnect BrandOS.";
-          setBrandosError(message);
-        } finally {
-          setIsDeletingBrandosConnector(false);
-        }
-      }
-
-      async function handleCreateAutomationEndpoint() {
-        if (!supabaseSession || !activeCommunityId) return;
-        const url = getSupabaseUrl();
-        if (!url) {
-          setAutomationError("Missing Supabase URL.");
-          return;
-        }
-
-        setAutomationError(null);
-        setAutomationNotice(null);
-
-        const name = automationNameInput.trim();
-        const hookUrl = automationUrlInput.trim();
-        if (!name) {
-          setAutomationError("Name is required.");
-          return;
-        }
-        if (!hookUrl) {
-          setAutomationError("Webhook URL is required.");
-          return;
-        }
-        if (automationSelectedEventTypes.length === 0) {
-          setAutomationError("Select at least one event.");
-          return;
-        }
-
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/create_automation_endpoint`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                p_community_id: activeCommunityId,
-                p_name: name,
-                p_url: hookUrl,
-                p_event_types: automationSelectedEventTypes,
-                p_include_email: false,
-                p_is_enabled: automationIsEnabledInput,
-              }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          const rows = (await response.json()) as Array<AutomationEndpoint & { signing_secret: string | null }>;
-          const created = rows[0];
-          if (!created?.id || !created.signing_secret) throw new Error("Failed to create webhook.");
-
-          setAutomationRevealSecret({ label: `${created.name} signing secret`, secret: created.signing_secret });
-          setAutomationNotice("Webhook created. Copy the signing secret now.");
-          setIsAutomationCreateOpen(false);
-          resetAutomationForm();
-          await loadCommunityAutomations(activeCommunityId, supabaseSession);
-        } catch (error) {
-          const message =
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Failed to create webhook.";
-          setAutomationError(message);
-        }
-      }
-
-      async function handleToggleAutomationEndpointEnabled(endpoint: AutomationEndpoint) {
-        if (!supabaseSession) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setAutomationError(null);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/update_automation_endpoint`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                p_endpoint_id: endpoint.id,
-                p_is_enabled: !endpoint.is_enabled,
-              }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          setAutomationEndpoints((prev) =>
-            prev.map((row) => (row.id === endpoint.id ? { ...row, is_enabled: !endpoint.is_enabled } : row)),
-          );
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Failed to update webhook.";
-          setAutomationError(message);
-        }
-      }
-
-      async function handleRotateAutomationEndpointSecret(endpoint: AutomationEndpoint) {
-        if (!supabaseSession) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setAutomationError(null);
-        setAutomationNotice(null);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/rotate_automation_endpoint_secret`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_endpoint_id: endpoint.id }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          const rows = (await response.json()) as Array<{ signing_secret: string | null }>;
-          const secret = rows[0]?.signing_secret ?? null;
-          if (!secret) throw new Error("Failed to rotate secret.");
-          setAutomationRevealSecret({ label: `${endpoint.name} signing secret`, secret });
-          setAutomationNotice("Secret rotated. Update your webhook receiver.");
-          if (activeCommunityId) await loadCommunityAutomations(activeCommunityId, supabaseSession);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Failed to rotate secret.";
-          setAutomationError(message);
-        }
-      }
-
-      async function handleDeleteAutomationEndpoint(endpoint: AutomationEndpoint) {
-        if (!supabaseSession) return;
-        if (!window.confirm(`Delete webhook “${endpoint.name}”?`)) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setAutomationError(null);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/delete_automation_endpoint`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_endpoint_id: endpoint.id }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) throw new Error(await readSupabaseError(response));
-          setAutomationEndpoints((prev) => prev.filter((row) => row.id !== endpoint.id));
-          setAutomationNotice("Webhook deleted.");
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Failed to delete webhook.";
-          setAutomationError(message);
-        }
-      }
-
-      async function handleTestAutomationEndpoint(endpoint: AutomationEndpoint) {
-        if (!supabaseSession) return;
-        const url = getSupabaseUrl();
-        if (!url) return;
-        setAutomationError(null);
-        setAutomationNotice(null);
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/functions/v1/automations_test`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ endpoint_id: endpoint.id }),
-            },
-            supabaseSession,
-          );
-          const data = (await response.json().catch(() => null)) as
-            | { ok: true; delivered: boolean; response_code: number | null; error: string | null }
-            | { ok: false; error?: string }
-            | null;
-          if (!response.ok || !data || data.ok !== true) {
-            throw new Error((data as { error?: string } | null)?.error ?? "Test failed.");
-          }
-          setAutomationNotice(
-            data.delivered ? `Test delivered (${data.response_code ?? "ok"}).` : `Test failed: ${data.error ?? "unknown"}`,
-          );
-          if (activeCommunityId) await loadCommunityAutomations(activeCommunityId, supabaseSession);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Test failed.";
-          setAutomationError(message);
-        }
-      }
-
-			  async function handleSetCommunityMemberRole(userId: string, role: string) {
-			    if (!supabaseSession || !activeCommunityId) return;
-			    const url = getSupabaseUrl();
-			    if (!url) return;
-			    try {
-		      const response = await fetchWithSupabaseAuth(
-		        `${url}/rest/v1/rpc/set_member_role`,
-		        {
-		          method: "POST",
-		          headers: { "Content-Type": "application/json" },
-		          body: JSON.stringify({
-		            p_community_id: activeCommunityId,
-		            p_user_id: userId,
-		            p_role: role
-		          })
-		        },
-		        supabaseSession
-		      );
-		      if (!response.ok) {
-		        const message = await readSupabaseError(response);
-		        console.warn("Failed to set member role:", message);
-		      }
-		    } catch (error) {
-		      console.warn("Failed to set member role:", error);
-		    } finally {
-		      await loadCommunityMembers(activeCommunityId, supabaseSession, {
-		        includeStatus: Boolean(activeCommunityAccess?.can_manage_members),
-		      });
-		      await loadCommunities(supabaseSession);
-		      await loadCommunityAccess(activeCommunityId, supabaseSession);
-		    }
-		  }
-
-		  async function handleRemoveCommunityMember(userId: string) {
-		    if (!supabaseSession || !activeCommunityId) return;
-		    const url = getSupabaseUrl();
-		    if (!url) return;
-		    if (!window.confirm("Remove this member?")) return;
-		    try {
-		      const response = await fetchWithSupabaseAuth(
-		        `${url}/rest/v1/rpc/remove_member`,
-		        {
-		          method: "POST",
-		          headers: { "Content-Type": "application/json" },
-		          body: JSON.stringify({
-		            p_community_id: activeCommunityId,
-		            p_user_id: userId
-		          })
-		        },
-		        supabaseSession
-		      );
-		      if (!response.ok) {
-		        const message = await readSupabaseError(response);
-		        console.warn("Failed to remove member:", message);
-		      }
-		    } catch (error) {
-		      console.warn("Failed to remove member:", error);
-		    } finally {
-		      await loadCommunityMembers(activeCommunityId, supabaseSession, {
-		        includeStatus: Boolean(activeCommunityAccess?.can_manage_members),
-		      });
-		      await loadCommunities(supabaseSession);
-		      await loadCommunityAccess(activeCommunityId, supabaseSession);
-		    }
-		  }
-
-	  function slugify(input: string): string {
-	    return input
-	      .toLowerCase()
-	      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
-  }
-
-  function isValidSlug(value: string): boolean {
-    if (value.length < 3 || value.length > 32) return false;
-    return /^(?!-)[a-z0-9-]+(?<!-)$/.test(value);
-  }
-
-	  function openCreateCommunityModal() {
-	    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-	    const max = builderBillingStatus?.max_communities ?? 0;
-	    const ownedCount = communities.reduce(
-	      (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
-	      0,
-	    );
-	    if (tier === "pro" && max > 0 && ownedCount >= max) {
-	      showAppToastMessage("You've built the maximum number of communities");
-	      return;
-	    }
-	    setCreateCommunityError(null);
-	    const draft = loadCreateCommunityDraft();
-	    const currentUserId = supabaseSession?.user.id ?? null;
-	    if (draft && draft.user_id && currentUserId && draft.user_id !== currentUserId) {
-	      clearCreateCommunityDraft();
-	    }
-	    const safeDraft = draft && (!draft.user_id || !currentUserId || draft.user_id === currentUserId) ? draft : null;
-	    setCreateCommunityName(safeDraft?.name ?? "");
-	    setCreateCommunitySlug(safeDraft?.slug ?? "");
-	    setCreateCommunitySlugEdited(Boolean(safeDraft?.slug_edited));
-	    setCreateCommunityVisibility(safeDraft?.visibility ?? "private");
-	    setCreateCommunityAvatarUrl(safeDraft?.avatar_url ?? null);
-	    setCreateCommunityDescription(safeDraft?.description ?? "");
-	    setCreateCommunityBannerUrl(safeDraft?.banner_url ?? null);
-	    setIsCreateBannerDragOver(false);
-	    setIsCreateAvatarDragOver(false);
-	    setShowCreateCommunityModal(true);
-	  }
-
-	  function closeCreateCommunityModal() {
-	    setShowCreateCommunityModal(false);
-	    setCreateCommunityError(null);
-	  }
-
-	  function showAppToastMessage(message: string) {
+  function showAppToastMessage(message: string) {
 	    if (appToastTimeoutRef.current) {
 	      window.clearTimeout(appToastTimeoutRef.current);
 	      appToastTimeoutRef.current = null;
@@ -8047,464 +4297,6 @@ function App() {
 	      appToastTimeoutRef.current = null;
 	    }, 2400);
 	  }
-
-	  function buildCreateCommunityDraftFromState(): CreateCommunityDraft | null {
-	    setCreateCommunityError(null);
-	    const name = createCommunityName.trim();
-	    const rawSlug = createCommunitySlug.trim() || slugify(name);
-	    const slug = rawSlug.toLowerCase();
-	    if (!name || !slug) {
-	      setCreateCommunityError("Name and slug are required.");
-	      return null;
-	    }
-	    if (!isValidSlug(slug)) {
-	      setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
-	      return null;
-	    }
-	    if (!["public", "unlisted", "private"].includes(createCommunityVisibility)) {
-	      setCreateCommunityError("Visibility must be public, unlisted, or private.");
-	      return null;
-	    }
-	    const draft: CreateCommunityDraft = {
-	      v: 1,
-	      id: createCommunityDraftId(),
-	      created_at: Date.now(),
-	      user_id: supabaseSession?.user.id ?? null,
-	      name,
-	      slug,
-	      slug_edited: createCommunitySlugEdited,
-	      visibility: createCommunityVisibility,
-	      avatar_url: createCommunityAvatarUrl?.trim() || null,
-	      banner_url: createCommunityBannerUrl?.trim() || null,
-	      description: createCommunityDescription.trim() || null,
-	    };
-	    saveCreateCommunityDraft(draft);
-	    return draft;
-	  }
-
-		  async function createCommunityFromDraft(
-		    draft: CreateCommunityDraft,
-		    session: SupabaseSession,
-		  ): Promise<CommunityRecord | null> {
-	    const url = getSupabaseUrl();
-	    const apiKey = getSupabaseAnonKey();
-	    if (!url || !apiKey) {
-	      setFinalizeCreateCommunityError("Missing Supabase config.");
-	      return null;
-	    }
-	    setFinalizeCreateCommunityError(null);
-	    setIsFinalizingCreateCommunityFromBilling(true);
-	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/rpc/create_community`,
-	        {
-	          method: "POST",
-	          headers: { "Content-Type": "application/json" },
-	          body: JSON.stringify({
-	            p_name: draft.name,
-	            p_slug: draft.slug,
-	            p_visibility: draft.visibility,
-	            p_avatar_url: draft.avatar_url,
-	            p_description: draft.description,
-	            p_banner_url: draft.banner_url,
-	          }),
-	        },
-	        session,
-	      );
-	      if (!response.ok) throw new Error(await readSupabaseError(response));
-	      const created = (await response.json()) as CommunityRecord[];
-	      const community = created[0] ?? null;
-	      if (!community?.id) throw new Error("Failed to create community.");
-
-	      setCommunities((prev) => [community, ...prev]);
-	      setActiveCommunityId(community.id);
-	      setActivePage("community");
-	      setCommunityTab("chat");
-	      clearCreateCommunityDraft();
-	      closeCreateCommunityModal();
-	      setBuilderBillingReturn(null);
-	      return community;
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-	          : error instanceof Error
-	            ? error.message
-	            : "Failed to create community.";
-	      setFinalizeCreateCommunityError(message);
-	      return null;
-	    } finally {
-	      setIsFinalizingCreateCommunityFromBilling(false);
-		    }
-		  }
-
-		  async function handleCreateCommunityPrimaryAction(): Promise<void> {
-		    setFinalizeCreateCommunityError(null);
-		    if (!supabaseSession) {
-		      await handleSignIn();
-		      return;
-		    }
-		    const status = builderBillingStatus ?? (await loadBuilderBillingStatus(supabaseSession));
-		    if (!status) {
-		      setCreateCommunityError("Couldn't check your plan. Try again.");
-		      return;
-		    }
-		    const tier = (status.builder_tier ?? "free").toLowerCase();
-		    const max = status.max_communities ?? 0;
-		    const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
-		    const needsPlan = tier === "free";
-		    const limitReached = tier !== "free" && max > 0 && ownedCount >= max;
-		    const canCreate = !needsPlan && !limitReached;
-		    if (canCreate) {
-		      await handleCreateCommunity();
-		      return;
-		    }
-
-		    const draft = buildCreateCommunityDraftFromState();
-		    if (!draft) return;
-
-		    closeCreateCommunityModal();
-
-		    if (limitReached) {
-		      await openBuilderBillingPortal("create_community");
-		      return;
-		    }
-
-		    setBuilderUpgradeContext("create_community");
-		    setIsBuilderUpgradeOpen(true);
-		  }
-
-		  useEffect(() => {
-		    if (createCommunitySlugEdited) return;
-		    const next = slugify(createCommunityName);
-		    setCreateCommunitySlug(next);
-		  }, [createCommunityName, createCommunitySlugEdited]);
-
-  async function handleCreateCommunity() {
-    setCreateCommunityError(null);
-    if (!supabaseSession) {
-      setCreateCommunityError("Sign in to create a community.");
-      return;
-    }
-    const name = createCommunityName.trim();
-    const rawSlug = createCommunitySlug.trim() || slugify(name);
-    const slug = rawSlug.toLowerCase();
-    if (!name || !slug) {
-      setCreateCommunityError("Name and slug are required.");
-      return;
-    }
-    if (!isValidSlug(slug)) {
-      setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
-      return;
-    }
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      setCreateCommunityError("Missing Supabase config.");
-      return;
-    }
-    if (!["public", "unlisted", "private"].includes(createCommunityVisibility)) {
-      setCreateCommunityError("Visibility must be public, unlisted, or private.");
-      return;
-    }
-    setIsCreatingCommunity(true);
-    try {
-      const communityResponse = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/create_community`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            p_name: name,
-            p_slug: slug,
-            p_visibility: createCommunityVisibility,
-            p_avatar_url: createCommunityAvatarUrl?.trim() || null,
-            p_description: createCommunityDescription.trim() || null,
-            p_banner_url: createCommunityBannerUrl?.trim() || null
-          })
-        },
-        supabaseSession
-      );
-      if (!communityResponse.ok) {
-        const text = await communityResponse.text();
-        setCreateCommunityError(text || "Failed to create community.");
-        return;
-      }
-      const created = (await communityResponse.json()) as CommunityRecord[];
-      const community = created[0];
-      if (!community?.id) {
-        setCreateCommunityError("Failed to create community.");
-        return;
-      }
-
-	      setCommunities((prev) => [community, ...prev]);
-	      setActiveCommunityId(community.id);
-	      setActivePage("community");
-	      setCommunityTab("chat");
-	      clearCreateCommunityDraft();
-	      closeCreateCommunityModal();
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to create community.";
-      setCreateCommunityError(message);
-    } finally {
-      setIsCreatingCommunity(false);
-    }
-  }
-
-  async function copyTextToClipboard(text: string): Promise<void> {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        return;
-      }
-    } catch {
-      // Fall back below.
-    }
-    try {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.setAttribute("readonly", "true");
-      textarea.style.position = "fixed";
-      textarea.style.top = "0";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    } catch {
-      // ignore
-    }
-  }
-
-	  async function readAvatarFileAsSquareDataUrl(file: File, size = 128): Promise<string> {
-	    const url = URL.createObjectURL(file);
-	    try {
-	      const img = new Image();
-      img.decoding = "async";
-      const loaded = new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load image."));
-      });
-      img.src = url;
-      await loaded;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas not supported.");
-
-      const s = Math.min(img.width, img.height);
-      const sx = Math.floor((img.width - s) / 2);
-      const sy = Math.floor((img.height - s) / 2);
-      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
-
-      return canvas.toDataURL("image/png");
-	    } finally {
-	      URL.revokeObjectURL(url);
-	    }
-	  }
-
-	  async function readBannerFileAsWideDataUrlWithinLimit(file: File, maxChars: number): Promise<string> {
-	    const url = URL.createObjectURL(file);
-	    try {
-	      const img = new Image();
-	      img.decoding = "async";
-	      const loaded = new Promise<void>((resolve, reject) => {
-	        img.onload = () => resolve();
-	        img.onerror = () => reject(new Error("Failed to load image."));
-	      });
-	      img.src = url;
-	      await loaded;
-
-	      const sourceWidth = img.naturalWidth || img.width;
-	      const sourceHeight = img.naturalHeight || img.height;
-	      if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
-
-	      const candidates: Array<{ width: number; height: number; quality: number }> = [
-	        { width: 960, height: 320, quality: 0.86 },
-	        { width: 768, height: 256, quality: 0.82 },
-	        { width: 576, height: 192, quality: 0.78 },
-	        { width: 480, height: 160, quality: 0.74 }
-	      ];
-
-	      const targetAspect = candidates[0].width / candidates[0].height;
-	      const sourceAspect = sourceWidth / sourceHeight;
-	      let sx = 0;
-	      let sy = 0;
-	      let sw = sourceWidth;
-	      let sh = sourceHeight;
-
-	      if (sourceAspect > targetAspect) {
-	        sh = sourceHeight;
-	        sw = Math.max(1, Math.floor(sourceHeight * targetAspect));
-	        sx = Math.max(0, Math.floor((sourceWidth - sw) / 2));
-	        sy = 0;
-	      } else if (sourceAspect < targetAspect) {
-	        sw = sourceWidth;
-	        sh = Math.max(1, Math.floor(sourceWidth / targetAspect));
-	        sx = 0;
-	        sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
-	      }
-
-	      const canvas = document.createElement("canvas");
-	      const ctx = canvas.getContext("2d");
-	      if (!ctx) throw new Error("Canvas not supported.");
-
-	      let lastDataUrl = "";
-	      for (const { width, height, quality } of candidates) {
-	        canvas.width = width;
-	        canvas.height = height;
-	        ctx.clearRect(0, 0, width, height);
-	        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
-	        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-	        lastDataUrl = dataUrl;
-	        if (dataUrl.length <= maxChars) return dataUrl;
-	      }
-
-	      if (lastDataUrl && lastDataUrl.length <= maxChars) return lastDataUrl;
-	      throw new Error("Banner image is too large. Try a smaller image.");
-	    } finally {
-	      URL.revokeObjectURL(url);
-	    }
-	  }
-
-  function isLikelyTextFile(file: File): boolean {
-    const mime = (file.type ?? "").toLowerCase();
-    if (mime.startsWith("text/")) return true;
-    if (mime === "application/json") return true;
-    if (mime === "application/xml") return true;
-    if (mime === "application/x-yaml") return true;
-    const name = (file.name ?? "").toLowerCase();
-    return (
-      name.endsWith(".md") ||
-      name.endsWith(".txt") ||
-      name.endsWith(".csv") ||
-      name.endsWith(".ts") ||
-      name.endsWith(".tsx") ||
-      name.endsWith(".js") ||
-      name.endsWith(".jsx") ||
-      name.endsWith(".json") ||
-      name.endsWith(".py") ||
-      name.endsWith(".rs") ||
-      name.endsWith(".go") ||
-      name.endsWith(".html") ||
-      name.endsWith(".css") ||
-      name.endsWith(".yml") ||
-      name.endsWith(".yaml")
-    );
-  }
-
-  function isLikelyImageFile(file: File): boolean {
-    const mime = (file.type ?? "").toLowerCase();
-    if (mime.startsWith("image/")) return true;
-    const name = (file.name ?? "").toLowerCase();
-    return (
-      name.endsWith(".png") ||
-      name.endsWith(".jpg") ||
-      name.endsWith(".jpeg") ||
-      name.endsWith(".gif") ||
-      name.endsWith(".webp") ||
-      name.endsWith(".svg")
-    );
-  }
-
-  async function readTextAttachmentPreview(file: File): Promise<{ text: string; truncated: boolean }> {
-    const truncated = file.size > MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES;
-    const slice = truncated ? file.slice(0, MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES) : file;
-    const text = await slice.text();
-    return { text, truncated };
-  }
-
-  async function fileToDataUrl(file: File): Promise<string> {
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function isSupportedChatRasterImage(file: File): boolean {
-    const mime = (file.type ?? "").toLowerCase();
-    const name = (file.name ?? "").toLowerCase();
-    const isSvg = mime.includes("svg") || name.endsWith(".svg");
-    const isHeic =
-      mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
-    return !isSvg && !isHeic && isLikelyImageFile(file);
-  }
-
-  async function readChatImageAsDataUrl(file: File): Promise<string> {
-    // Fallback: if canvas path fails (some formats), try direct data URL when small enough.
-    const tryDirectDataUrl = async (): Promise<string | null> => {
-      if (file.size > 2 * 1024 * 1024) return null;
-      const raw = await fileToDataUrl(file);
-      if (!raw.startsWith("data:image/")) return null;
-      return raw.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS ? raw : null;
-    };
-
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image();
-      img.decoding = "async";
-      const loaded = new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load image."));
-      });
-      img.src = url;
-      await loaded;
-
-      const candidates: Array<{ maxDim: number; quality: number }> = [
-        { maxDim: 1280, quality: 0.85 },
-        { maxDim: 1024, quality: 0.82 },
-        { maxDim: 768, quality: 0.78 },
-        { maxDim: 512, quality: 0.74 },
-        { maxDim: 384, quality: 0.70 },
-        { maxDim: 320, quality: 0.66 }
-      ];
-
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas not supported.");
-
-      const sourceWidth = img.naturalWidth || img.width;
-      const sourceHeight = img.naturalHeight || img.height;
-      if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
-
-      let lastDataUrl = "";
-      for (const { maxDim, quality } of candidates) {
-        const scale = Math.min(1, maxDim / Math.max(sourceWidth, sourceHeight));
-        const width = Math.max(1, Math.round(sourceWidth * scale));
-        const height = Math.max(1, Math.round(sourceHeight * scale));
-        canvas.width = width;
-        canvas.height = height;
-        ctx.clearRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        try {
-          lastDataUrl = canvas.toDataURL("image/jpeg", quality);
-        } catch {
-          const direct = await tryDirectDataUrl();
-          if (direct) return direct;
-          throw new Error("Could not process image. Try exporting as PNG or JPG.");
-        }
-        if (lastDataUrl.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS) return lastDataUrl;
-      }
-
-      if (lastDataUrl && lastDataUrl.length <= MAX_COMMUNITY_IMAGE_DATA_URL_CHARS) return lastDataUrl;
-      const direct = await tryDirectDataUrl();
-      if (direct) return direct;
-      throw new Error("Image is too large to attach. Try a smaller one.");
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
 
   async function ingestCommunityAttachmentsFromFileList(
     files: FileList,
@@ -8523,7 +4315,7 @@ function App() {
     for (const file of picked) {
       if (!file) continue;
       const name = (file.name ?? "").trim() || "attachment";
-      const isImage = isLikelyImageFile(file);
+      const isImage = isLikelyImageFile(file, DESKTOP_IMAGE_FILE_DETECTION_OPTIONS);
       const maxBytes = isImage ? MAX_COMMUNITY_IMAGE_UPLOAD_BYTES : MAX_COMMUNITY_FILE_UPLOAD_BYTES;
       if (file.size > maxBytes) {
         onError(`${name} is too large (max ${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`);
@@ -8538,16 +4330,16 @@ function App() {
       };
       try {
         if (isImage) {
-          if (!isSupportedChatRasterImage(file)) {
+          if (!isSupportedChatRasterImage(file, DESKTOP_IMAGE_FILE_DETECTION_OPTIONS)) {
             onError(`${name}: unsupported image format. Please use PNG, JPG, GIF, WEBP, or AVIF.`);
             continue;
           }
           base.type = "image";
-          base.data_url = await readChatImageAsDataUrl(file);
+          base.data_url = await readChatImageAsDataUrl(file, MAX_COMMUNITY_IMAGE_DATA_URL_CHARS);
           next.push(base);
           continue;
         } else if (isLikelyTextFile(file)) {
-          const { text, truncated } = await readTextAttachmentPreview(file);
+          const { text, truncated } = await readTextAttachmentPreview(file, MAX_COMMUNITY_TEXT_ATTACHMENT_BYTES);
           base.text = text;
           base.truncated = truncated;
           next.push(base);
@@ -8570,793 +4362,11 @@ function App() {
     return [...existing, ...next];
   }
 
-  async function handleCreateCommunityAvatarUpload(file: File | null) {
-    if (!file) return;
-    try {
-      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
-      setCreateCommunityAvatarUrl(dataUrl);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load image.";
-      setCreateCommunityError(message);
-    }
-  }
-
-	  async function handleCreateCommunityBannerUpload(file: File | null) {
-	    if (!file) return;
-	    if (!isLikelyImageFile(file)) {
-	      setCreateCommunityError("Banner must be an image file.");
-	      return;
-	    }
-	    try {
-	      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_COMMUNITY_IMAGE_DATA_URL_CHARS);
-	      setCreateCommunityBannerUrl(dataUrl);
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load image.";
-      setCreateCommunityError(message);
-    }
-  }
-
-  function handleCreateBannerDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsCreateBannerDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCreateCommunityBannerUpload(file);
-  }
-
-  function handleCreateAvatarDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsCreateAvatarDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCreateCommunityAvatarUpload(file);
-  }
-
-  function handleSettingsBannerDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsSettingsBannerDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCommunityBannerUpload(file);
-  }
-
-  function handleSettingsAvatarDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsSettingsAvatarDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCommunityAvatarUpload(file);
-  }
-
-  async function handleCommunityAvatarUpload(file: File | null) {
-    if (!file) return;
-    try {
-      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
-      setCommunitySettingsAvatarUrl(dataUrl);
-      markCommunitySettingsDirty();
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load image.";
-      setCommunitySettingsError(message);
-    }
-  }
-
-	  async function handleCommunityBannerUpload(file: File | null) {
-	    if (!file) return;
-	    if (!isLikelyImageFile(file)) {
-	      setCommunitySettingsBannerUploadError("Banner must be an image file.");
-	      return;
-	    }
-	    setCommunitySettingsBannerUploadError(null);
-	    setIsProcessingCommunitySettingsBanner(true);
-	    try {
-	      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MAX_COMMUNITY_IMAGE_DATA_URL_CHARS);
-	      setCommunitySettingsBannerUrl(dataUrl);
-	      markCommunitySettingsDirty();
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-	          : error instanceof Error
-	            ? error.message
-	            : "Failed to load banner.";
-	      setCommunitySettingsBannerUploadError(message);
-	    } finally {
-	      setIsProcessingCommunitySettingsBanner(false);
-	    }
-	  }
-
-  async function handleProfileAvatarUpload(file: File | null) {
-    if (!file) return;
-    try {
-      const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
-      setProfileAvatarUrl(dataUrl);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load image.";
-      setAuthError(message);
-    }
-  }
-
-  function handleProfileAvatarDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsProfileAvatarDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleProfileAvatarUpload(file);
-  }
-
-  async function handleSaveCommunitySettings() {
-    if (!supabaseSession || !activeCommunityId) return;
-    setCommunitySettingsError(null);
-    setIsSavingCommunitySettings(true);
-    const url = getSupabaseUrl();
-    if (!url) {
-      setCommunitySettingsError("Missing Supabase URL.");
-      setIsSavingCommunitySettings(false);
-      return;
-    }
-
-	    const name = communitySettingsName.trim();
-	    const slug = communitySettingsSlug.trim().toLowerCase();
-	    if (!name || !slug) {
-	      setCommunitySettingsError("Name and slug are required.");
-	      setIsSavingCommunitySettings(false);
-	      return;
-	    }
-	    if (!isValidSlug(slug)) {
-	      setCommunitySettingsError("Slug must be 3–32 characters (letters, numbers, hyphens).");
-	      setIsSavingCommunitySettings(false);
-	      return;
-	    }
-
-    const visibility = communitySettingsVisibility;
-    if (!["public", "unlisted", "private"].includes(visibility)) {
-      setCommunitySettingsError("Visibility must be public, unlisted, or private.");
-      setIsSavingCommunitySettings(false);
-      return;
-    }
-
-    try {
-      const parsePriceBaseUnits = (raw: string): number | null => {
-        const text = raw.trim();
-        if (!text) return null;
-        const parsed = Number(text.replace(/[^0-9.]/g, ""));
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-          throw new Error("Prices must be positive numbers.");
-        }
-        return Math.round(parsed * 100);
-      };
-
-      const monthlyEnabled =
-        communitySettingsPricingMode === "monthly" || communitySettingsPricingMode === "both";
-      const yearlyEnabled =
-        communitySettingsPricingMode === "yearly" || communitySettingsPricingMode === "both";
-      const monthlyAmount = monthlyEnabled ? parsePriceBaseUnits(communitySettingsPriceUsdMonthly) : null;
-      const yearlyAmount = yearlyEnabled ? parsePriceBaseUnits(communitySettingsPriceUsdYearly) : null;
-      if (monthlyEnabled && monthlyAmount == null) throw new Error("Enter a monthly price.");
-      if (yearlyEnabled && yearlyAmount == null) throw new Error("Enter an annual price.");
-
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/save_community_settings`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: activeCommunityId,
-            p_name: name,
-            p_slug: slug,
-            p_description: communitySettingsDescription.trim() || null,
-            p_avatar_url: communitySettingsAvatarUrl?.trim() || null,
-            p_banner_url: communitySettingsBannerUrl?.trim() || null,
-            p_visibility: visibility,
-            p_monthly_amount_base_units: monthlyAmount,
-            p_yearly_amount_base_units: yearlyAmount,
-            p_currency: "usd",
-            p_currency_decimals: 2,
-          }),
-        },
-        supabaseSession
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const rows = (await response.json()) as Array<{
-        community_id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        avatar_url: string | null;
-        banner_url: string | null;
-        visibility: string;
-        updated_at: string;
-        monthly_plan_id: string | null;
-        yearly_plan_id: string | null;
-      }>;
-      const result = rows[0];
-      if (result?.community_id) {
-        setCommunities((prev) =>
-          prev.map((c) =>
-            c.id === result.community_id
-              ? {
-                  ...c,
-                  name: result.name,
-                  slug: result.slug,
-                  description: result.description,
-                  avatar_url: result.avatar_url,
-                  banner_url: result.banner_url,
-                  visibility: result.visibility,
-                  updated_at: result.updated_at,
-                }
-              : c
-          )
-        );
-        setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
-        setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
-        communitySettingsDirtyRef.current = false;
-        communityPricingDirtyRef.current = false;
-      }
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save settings.";
-      setCommunitySettingsError(message);
-    } finally {
-      setIsSavingCommunitySettings(false);
-    }
-  }
-
-  function openDeleteCommunityModal() {
-    setDeleteCommunityError(null);
-    setDeleteCommunityNameInput("");
-    setDeleteCommunityConfirmInput("");
-    setShowDeleteCommunityModal(true);
-  }
-
-  function closeDeleteCommunityModal() {
-    setShowDeleteCommunityModal(false);
-    setDeleteCommunityError(null);
-    setDeleteCommunityNameInput("");
-    setDeleteCommunityConfirmInput("");
-    setIsDeletingCommunity(false);
-  }
-
-  async function handleConfirmDeleteCommunity() {
-    if (!supabaseSession || !activeCommunityId) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setDeleteCommunityError(null);
-    setIsDeletingCommunity(true);
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/communities?id=eq.${activeCommunityId}`,
-        { method: "DELETE" },
-        supabaseSession
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const deletedId = activeCommunityId;
-      setShowDeleteCommunityModal(false);
-      setActiveCommunityId(null);
-      setActivePage("workspace");
-      setActiveView("home");
-      setCommunityTab("chat");
-      setCommunities((prev) => prev.filter((c) => c.id !== deletedId));
-      setCommunityRoleById((prev) => {
-        const next = { ...prev };
-        delete next[deletedId];
-        return next;
-      });
-      await loadCommunities(supabaseSession);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to delete community.";
-      setDeleteCommunityError(message);
-    } finally {
-      setIsDeletingCommunity(false);
-    }
-  }
-
   function scrollToCommunityMessage(messageId: string) {
     const target = document.getElementById(`msg-${messageId}`);
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
   }
-
-  function truncateReplyPreview(body: string): string {
-    const singleLine = body.replace(/\s+/g, " ").trim();
-    if (singleLine.length <= 90) return singleLine;
-    return singleLine.slice(0, 90) + "…";
-  }
-
-  function handleStartReply(message: CommunityChatMessage) {
-    if (message.id.startsWith("pending-")) return;
-    setReplyingToMessage(message);
-    setReactionPickerMessageId(null);
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
-    setTimeout(() => chatInputRef.current?.focus(), 0);
-  }
-
-  function maybeBroadcastCommunityTyping(nextValue: string) {
-    if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
-    if (!nextValue.trim()) return;
-    const socket = communitySocketRef.current;
-    const topic = communityTypingTopicRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || !topic) return;
-    const now = Date.now();
-    if (now - lastCommunityTypingSentAtRef.current < 1200) return;
-    lastCommunityTypingSentAtRef.current = now;
-    socket.send(
-      JSON.stringify({
-        topic,
-        event: "broadcast",
-        payload: {
-          event: "typing",
-          payload: {
-            user_id: supabaseSession.user.id
-          }
-        },
-        ref: `${now}`
-      })
-    );
-  }
-
-  async function handleCommunityFileInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const input = event.target;
-    const files = input.files;
-    if (!files || files.length === 0) {
-      input.value = "";
-      return;
-    }
-    setCommunityChatError(null);
-    const updated = await ingestCommunityAttachmentsFromFileList(
-      files,
-      communityAttachmentsRef.current,
-      (message) => setCommunityChatError(message)
-    );
-    setCommunityAttachments(updated);
-    input.value = "";
-  }
-
-  function removeCommunityAttachment(id: string) {
-    setCommunityAttachments((prev) => prev.filter((att) => att.id !== id));
-  }
-
-  function openCommunityChatLightbox(images: ChatLightboxImage[], index: number) {
-    if (!images || images.length === 0) return;
-    const clamped = Math.min(Math.max(index, 0), images.length - 1);
-    setCommunityChatLightboxImages(images);
-    setCommunityChatLightboxIndex(clamped);
-    setIsCommunityChatLightboxOpen(true);
-  }
-
-  function closeCommunityChatLightbox() {
-    setIsCommunityChatLightboxOpen(false);
-  }
-
-  useEffect(() => {
-    if (!isCommunityChatLightboxOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeCommunityChatLightbox();
-        return;
-      }
-      if (communityChatLightboxImages.length <= 1) return;
-      if (event.key === "ArrowLeft") {
-        setCommunityChatLightboxIndex((prev) => {
-          const next = prev - 1;
-          return next < 0 ? communityChatLightboxImages.length - 1 : next;
-        });
-      }
-      if (event.key === "ArrowRight") {
-        setCommunityChatLightboxIndex((prev) => (prev + 1) % communityChatLightboxImages.length);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isCommunityChatLightboxOpen, communityChatLightboxImages.length]);
-
-  async function handleSendCommunityMessage() {
-    if (!supabaseSession || !activeCommunityId) return;
-    const rawText = communityMessageInput.trim();
-    const attachmentsToSend = [...communityAttachmentsRef.current];
-    if (!rawText && attachmentsToSend.length === 0) return;
-
-    const replySnapshot = replyingToMessage;
-    const replyToId = replySnapshot ? replySnapshot.id : null;
-    const bodyToSend = rawText;
-
-    const scan = await scanPublishContent(bodyToSend);
-    if (scan?.blocked) {
-      setCommunityChatError(formatSecretScanError(scan));
-      return;
-    }
-
-    // Optimistic update: add message immediately with pending state
-    const optimisticId = `pending-${Date.now()}`;
-    const optimisticMessage: CommunityChatMessage = {
-      id: optimisticId,
-      community_id: activeCommunityId,
-      sender_id: supabaseSession.user.id,
-      body: bodyToSend,
-      attachments: attachmentsToSend,
-      reply_to_id: replyToId,
-      created_at: new Date().toISOString(),
-      seq: Number.MAX_SAFE_INTEGER,
-    };
-    setCommunityMessages((prev) => [...prev, optimisticMessage]);
-    setCommunityMessageInput("");
-    setCommunityAttachments([]);
-    setReplyingToMessage(null);
-    setIsUserAtBottom(true); // Scroll to show new message
-
-    // Reset textarea height
-    if (chatInputRef.current) {
-      chatInputRef.current.style.height = "auto";
-    }
-
-    setIsSendingCommunityMessage(true);
-    setCommunityChatError(null);
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      setCommunityChatError("Missing Supabase config.");
-      // Remove optimistic message on error
-      setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setCommunityMessageInput(rawText);
-      setCommunityAttachments(attachmentsToSend);
-      setReplyingToMessage(replySnapshot);
-      setIsSendingCommunityMessage(false);
-      return;
-    }
-    try {
-      const threadId = await ensureCommunityChatThread(activeCommunityId, supabaseSession);
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation"
-          },
-	          body: JSON.stringify({
-	            thread_id: threadId,
-	            role: "user",
-	            content_json: {
-                text: bodyToSend,
-                ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {})
-              },
-	            reply_to_id: replyToId
-	          })
-	        },
-	        supabaseSession
-      );
-      if (!response.ok) {
-        const errText = await response.text();
-        setCommunityChatError(errText || "Failed to send message.");
-        // Remove optimistic message on error
-        setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        setCommunityMessageInput(rawText);
-        setCommunityAttachments(attachmentsToSend);
-        setReplyingToMessage(replySnapshot);
-        return;
-      }
-      const created = (await response.json()) as CloudMessageRow[];
-      const record = created[0] ? toCommunityChatMessage(created[0]) : null;
-      if (!record) {
-        setCommunityChatError("Message sent, but no response payload returned.");
-        setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        setCommunityMessageInput(rawText);
-        setCommunityAttachments(attachmentsToSend);
-        setReplyingToMessage(replySnapshot);
-        return;
-      }
-      // Dedupe against realtime inserts: if the record already arrived via WS, drop the optimistic row.
-      setCommunityMessages((prev) => {
-        const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
-        if (withoutOptimistic.some((m) => m.id === record.id)) return withoutOptimistic;
-        const next = [...withoutOptimistic, record];
-        next.sort((a, b) => a.seq - b.seq);
-        return next;
-      });
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to send message.";
-      setCommunityChatError(message);
-      setCommunityMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setCommunityMessageInput(rawText);
-      setCommunityAttachments(attachmentsToSend);
-      setReplyingToMessage(replySnapshot);
-    } finally {
-      setIsSendingCommunityMessage(false);
-    }
-  }
-
-  async function handleSaveCommunityResource() {
-    if (!supabaseSession || !activeCommunityId) return;
-    const title = resourceTitleInput.trim();
-    if (!title) {
-      setResourceError("Title is required.");
-      return;
-    }
-    const description = resourceBodyInput.trim();
-    if (!description) {
-      setResourceError("Description is required.");
-      return;
-    }
-    const rawUrl = resourceUrlInput.trim();
-    const embedInfo = rawUrl ? parseEmbedUrl(rawUrl) : null;
-    const resourceType: CommunityResource["type"] = embedInfo
-      ? "embed"
-      : rawUrl
-        ? "link"
-        : "post";
-    const scan = await scanPublishContent(
-      [title, description, rawUrl].filter(Boolean).join("\n\n")
-    );
-    if (scan?.blocked) {
-      setResourceError(formatSecretScanError(scan));
-      return;
-    }
-    setResourceError(null);
-    setIsSavingResource(true);
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      setResourceError("Missing Supabase config.");
-      setIsSavingResource(false);
-      return;
-    }
-    const payload = {
-      community_id: activeCommunityId,
-      type: resourceType,
-      title,
-      body_md: description,
-      url: rawUrl || null,
-      file_key: null,
-      pinned: resourcePinnedInput
-    };
-    let response: Response;
-    try {
-      response = await fetchWithSupabaseAuth(
-        editingResourceId
-          ? `${url}/rest/v1/community_resources?id=eq.${editingResourceId}`
-          : `${url}/rest/v1/community_resources`,
-        {
-          method: editingResourceId ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation"
-          },
-          body: JSON.stringify(payload)
-        },
-        supabaseSession
-      );
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save resource.";
-      setResourceError(message);
-      setIsSavingResource(false);
-      return;
-    }
-    if (!response.ok) {
-      const errText = await response.text();
-      setResourceError(errText || "Failed to save resource.");
-      setIsSavingResource(false);
-      return;
-    }
-    setResourceTitleInput("");
-    setResourceUrlInput("");
-    setResourceBodyInput("");
-    setResourcePinnedInput(false);
-    setEditingResourceId(null);
-    setShowResourceModal(false);
-    await loadCommunityResources(activeCommunityId, supabaseSession);
-    setIsSavingResource(false);
-    // Show success toast
-    setResourceSuccess(true);
-    setTimeout(() => setResourceSuccess(false), 2000);
-  }
-
-  function handleEditResource(resource: CommunityResource) {
-    setEditingResourceId(resource.id);
-    setResourceTitleInput(resource.title);
-    setResourceUrlInput(resource.url ?? "");
-    setResourceBodyInput(resource.body_md ?? "");
-    setResourcePinnedInput(resource.pinned);
-    setResourceError(null);
-    setShowResourceModal(true);
-  }
-
-  function resetResourceForm() {
-    setEditingResourceId(null);
-    setResourceTitleInput("");
-    setResourceUrlInput("");
-    setResourceBodyInput("");
-    setResourcePinnedInput(false);
-    setResourceError(null);
-  }
-
-  function openNewResourceModal() {
-    resetResourceForm();
-    setShowResourceModal(true);
-  }
-
-  function closeResourceModal() {
-    setShowResourceModal(false);
-    resetResourceForm();
-  }
-
-  async function handleDeleteResource(resourceId: string) {
-    if (!supabaseSession || !activeCommunityId) return;
-    const url = getSupabaseUrl();
-    const apiKey = getSupabaseAnonKey();
-    if (!url || !apiKey) return;
-    let response: Response;
-    try {
-      response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_resources?id=eq.${resourceId}`,
-        { method: "DELETE" },
-        supabaseSession
-      );
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to delete resource.";
-      setResourceError(message);
-      return;
-    }
-    if (!response.ok) {
-      const errText = await response.text();
-      setResourceError(errText || "Failed to delete resource.");
-      return;
-    }
-    if (editingResourceId === resourceId) {
-      setEditingResourceId(null);
-      setResourceTitleInput("");
-      setResourceUrlInput("");
-      setResourceBodyInput("");
-      setResourcePinnedInput(false);
-    }
-    await loadCommunityResources(activeCommunityId, supabaseSession);
-  }
-
-  async function handleSaveProviderKey(id: string) {
-    if (!userAccessPolicy.allowByokLocalStore) {
-      setMemoryToast("BYOK is disabled. Use ChatGPT sign-in on desktop or upgrade for Arx AI.");
-      return;
-    }
-    const provider = providerKeys.find((item) => item.id === id);
-    const value = provider?.inputValue.trim() ?? "";
-    if (!provider || !value) return;
-    try {
-      await invoke("set_provider_key_cmd", {
-        provider: id,
-        key: value
-      });
-      const hasKey = await invoke<boolean>("has_provider_key_cmd", { provider: id });
-      setProviderKeys((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, hasKey, inputValue: "", error: null }
-            : item
-        )
-      );
-      if (supabaseSession) {
-        const ok = await setCloudProviderKey(supabaseSession, id, value);
-        if (!ok) {
-          setMemoryToast("Saved key locally, but failed to sync to cloud.");
-        }
-      }
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save key";
-      setProviderKeys((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, error: message } : item
-        )
-      );
-    }
-  }
-
-  async function handleClearProviderKey(id: string) {
-    if (!userAccessPolicy.allowByokLocalStore) return;
-    try {
-      await invoke("clear_provider_key_cmd", { provider: id });
-      setProviderKeys((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, hasKey: false, inputValue: "", error: null } : item
-        )
-      );
-      if (supabaseSession) {
-        const ok = await clearCloudProviderKey(supabaseSession, id);
-        if (!ok) {
-          setMemoryToast("Cleared key locally, but failed to sync to cloud.");
-        }
-      }
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to clear key";
-      setProviderKeys((prev) =>
-        prev.map((item) =>
-          item.id === id ? { ...item, error: message } : item
-        )
-      );
-    }
-  }
-
-  async function syncActiveModel(nextToggles: ModelToggle[]) {
-    const enabled = nextToggles.filter((toggle) => toggle.enabled);
-    if (enabled.length === 0) {
-      setActiveModelId(null);
-      return;
-    }
-    const enabledReady = enabled.filter((toggle) => isModelReady(toggle.id));
-
-    const shouldKeepActive =
-      activeModelId &&
-      enabled.some((toggle) => toggle.id === activeModelId) &&
-      (enabledReady.length === 0 || enabledReady.some((toggle) => toggle.id === activeModelId));
-
-    if (shouldKeepActive) return;
-
-    const preferredReady = enabledReady.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id;
-    const preferredEnabled = enabled.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID)?.id;
-    const fallback =
-      preferredReady ??
-      enabledReady[0]?.id ??
-      preferredEnabled ??
-      enabled[0].id;
-    setActiveModelId(fallback);
-    await invoke("set_active_model_cmd", { modelId: fallback });
-  }
-
-  useEffect(() => {
-    void syncActiveModel(modelToggles);
-  }, [modelToggles, activeModelId, providerKeys]);
 
   useEffect(() => {
     if (!isSending) {
@@ -9373,445 +4383,133 @@ function App() {
     return () => window.clearInterval(interval);
   }, [isSending]);
 
-		  const enabledModels = modelToggles.filter((toggle) => toggle.enabled);
 		  const activeCommunity = communities.find((item) => item.id === activeCommunityId) ?? null;
 		  const canInviteActiveCommunity = Boolean(activeCommunityAccess?.can_invite);
 		  const isActiveCommunityOwner = Boolean(activeCommunityAccess?.is_owner);
 			  const canViewActiveCommunitySettings = Boolean(activeCommunityAccess?.can_view);
 			  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
 			  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
-				  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
-				  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
-				  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
-				  const canViewActiveCommunityAutomations = canManageMembersActiveCommunity;
-			  const normalizedBuilderTier = useMemo<"free" | "builder" | "pro">(() => {
+			  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
+			  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
+			  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
+			  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(() => {
 			    const raw = String(builderBillingStatus?.builder_tier ?? "free")
 			      .trim()
 			      .toLowerCase();
-			    if (raw === "builder" || raw === "pro") return raw;
+			    if (raw === "builder") return "builder";
+          if (raw === "pro" || raw === "architect") return "architect";
 			    return "free";
 			  }, [builderBillingStatus?.builder_tier]);
-			  const userAccessPolicy = useMemo(
-			    () =>
-			      resolveUserAccessPolicy({
-			        surface: "desktop",
-			        authState: supabaseSession ? "authenticated" : "anonymous",
-			        builderTier: builderBillingStatus?.builder_tier ?? null,
-			      }),
-			    [supabaseSession, builderBillingStatus?.builder_tier],
-			  );
-
-				  function resolveVoiceInputIntent(surface: "workspace" | "community"): {
-			    mode:
-			      | "sign_in"
-			      | "select_community"
-			      | "join_community"
-			      | "start_recording"
-			      | "stop_recording"
-			      | "transcribing"
-			      | "busy";
-			    title: string;
-			  } {
-				    if (surface === "community") {
-				      if (!supabaseSession) {
-				        return {
-				          mode: "sign_in",
-			          title: "Sign in to use voice input in community chat.",
-				    };
-				  }
-			      if (!activeCommunity) {
-			        return {
-			          mode: "select_community",
-		          title: "Select a community first.",
-		        };
+		  const userAccessPolicy = useMemo(
+		    () =>
+		      resolveUserAccessPolicy({
+		        surface: "desktop",
+		        authState: supabaseSession ? "authenticated" : "anonymous",
+		        builderTier: builderBillingStatus?.builder_tier ?? null,
+		      }),
+		    [supabaseSession, builderBillingStatus?.builder_tier],
+		  );
+		  const hasPaidAccess = userAccessPolicy.allowPlatformInference && Boolean(supabaseSession);
+		  const applySelectedPickerModel = useCallback(
+		    async (modelId: string) => {
+		      setActiveModelId(modelId);
+		      await runtimeClient.setActiveModel(modelId);
+		      if (!activeThreadId) return;
+		      try {
+		        const service = resolveThreadServiceForThreadId(activeThreadId);
+		        const updated = service.setThreadEngine
+		          ? await service.setThreadEngine({
+		              threadId: activeThreadId,
+		              engineId: "messages_agent",
+		              modelId,
+		            })
+		          : null;
+		        if (!updated) return;
+		        setThreads((prev) => {
+		          const existingIndex = prev.findIndex((thread) => thread.id === updated.id);
+		          if (existingIndex === -1) return [updated as ThreadRecord, ...prev];
+		          const next = [...prev];
+		          next[existingIndex] = updated as ThreadRecord;
+		          return next;
+		        });
+		      } catch {
+		        // Non-fatal; keep local selection.
 		      }
-		      if (!canPostMessagesActiveCommunity) {
-		        return {
-		          mode: "join_community",
-			          title: "Join this community to use voice input.",
-			        };
-			      }
-			    }
-			    if (isVoiceTranscribing) {
-			      return {
-			        mode: "transcribing",
-			        title: "Transcribing voice input...",
-			      };
-			    }
-			    if (activeVoiceSurface && activeVoiceSurface !== surface) {
-			      return {
-			        mode: "busy",
-			        title: "Finish the current voice capture first.",
-			      };
-			    }
-			    if (activeVoiceSurface === surface) {
-			      return {
-			        mode: "stop_recording",
-			        title: "Stop recording and transcribe.",
-			      };
-			    }
-			    return {
-			      mode: "start_recording",
-			      title:
-			        normalizedBuilderTier === "pro"
-			          ? "Start voice input ($100 plan)."
-			          : normalizedBuilderTier === "builder"
-			            ? "Start voice input ($20 plan)."
-			            : "Start voice input.",
-				    };
-				  }
+		    },
+		    [activeThreadId, resolveThreadServiceForThreadId, runtimeClient],
+		  );
 
-          function resolveVoiceUiState(surface: VoiceSurface): VoiceUiState {
-            if (activeVoiceSurface !== surface) return "idle";
-            return isVoiceTranscribing ? "transcribing" : "recording";
-          }
+		  const {
+		    selectedModelLabel,
+		    curatedPickerModels,
+		    canSelectPickerModel,
+		    handleSelectPickerModel: handleSelectPickerModelBase,
+		  } = useDesktopModelPickerActions({
+		    modelToggles,
+		    activeModelId,
+		    isModelReady,
+		    providerIdForModelId,
+		    freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
+		    freeModelLabels: DESKTOP_FREE_MODEL_LABELS,
+		    premiumModelCatalog: DESKTOP_PREMIUM_MODEL_CATALOG,
+		    hasPaidAccess,
+		    hasSupabaseSession: Boolean(supabaseSession),
+		    hasChatgptAuth: Boolean(chatgptAuthSummary),
+		    handleSignIn,
+		    openBuilderUpgrade: () => {
+		      setBuilderUpgradeContext("builder");
+		      setIsBuilderUpgradeOpen(true);
+		    },
+		    openModelSettings: () => {
+		      setActiveView("settings");
+		      setSettingsPage("models");
+		    },
+		    setMemoryToast,
+		    onApplyModelSelection: applySelectedPickerModel,
+		  });
 
-          function renderVoiceButtonVisual(state: VoiceUiState) {
-            return (
-              <>
-                <span className="ask-mic-ripple" aria-hidden="true" />
-                {state === "transcribing" ? (
-                  <span className="ask-mic-loader" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                ) : (
-                  <svg className="ask-mic-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z" />
-                    <path d="M19 11a7 7 0 0 1-14 0" />
-                    <path d="M12 18v4" />
-                    <path d="M8 22h8" />
-                  </svg>
-                )}
-              </>
-            );
-          }
+		  const { visiblePickerModels, openModelPicker, closeModelPicker } = useModelPickerController<
+		    DesktopCuratedPickerModel,
+		    ModelSectionId
+		  >({
+		    curatedPickerModels,
+		    modelPickerQuery,
+		    modelPickerSection,
+		    setModelPickerQuery,
+		    setModelPickerSection,
+		    setIsModelPickerOpen,
+		    allSectionId: "all",
+		  });
 
-				  function releaseVoiceCaptureResources() {
-			    const cleanupCapture = voiceCaptureCleanupRef.current;
-			    if (cleanupCapture) {
-			      try {
-			        cleanupCapture();
-			      } catch {
-			        // ignore cleanup race
-			      }
-			    }
-			    voiceCaptureCleanupRef.current = null;
-			    voiceStopCaptureRef.current = null;
-			    const stream = voiceStreamRef.current;
-			    if (stream) {
-			      for (const track of stream.getTracks()) track.stop();
-			    }
-			    voiceStreamRef.current = null;
-			    voiceRecorderRef.current = null;
-			    voiceChunksRef.current = [];
-			  }
+		  const handleSelectPickerModel = useCallback(
+		    async (model: Parameters<typeof handleSelectPickerModelBase>[0]) => {
+		      await handleSelectPickerModelBase(model, closeModelPicker);
+		    },
+		    [closeModelPicker, handleSelectPickerModelBase],
+		  );
 
-			  function applyVoiceTranscript(surface: VoiceSurface, transcript: string) {
-			    if (!transcript) return;
-			    if (surface === "workspace") {
-			      setCommandInput((prev) => mergeVoiceTranscript(prev, transcript));
-			      window.setTimeout(() => askInputRef.current?.focus(), 0);
-			      return;
-			    }
-			    setCommunityMessageInput((prev) => mergeVoiceTranscript(prev, transcript));
-			    window.setTimeout(() => {
-			      const input = chatInputRef.current;
-			      if (!input) return;
-			      input.style.height = "auto";
-			      input.style.height = Math.min(input.scrollHeight, 120) + "px";
-			      input.focus();
-			    }, 0);
-			  }
-
-			  async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
-			    const url = getSupabaseUrl();
-			    if (!url) throw new Error("Missing Supabase URL.");
-			    const payload = JSON.stringify({
-			      audio_base64: await blobToBase64(blob),
-			      mime_type: blob.type || "audio/webm",
-            language: getVoiceLanguageHint(),
-            // Allow server-side fallback if primary transcription returns empty/errors.
-            prefer_primary: false,
-			      surface,
-			    });
-			    const session = supabaseSessionRef.current ?? supabaseSession;
-			    const response = session
-			      ? await fetchWithSupabaseAuth(
-			          `${url}/functions/v1/voice_transcribe`,
-			          {
-			            method: "POST",
-			            headers: { "Content-Type": "application/json" },
-			            body: payload,
-			          },
-			          session,
-			        )
-			      : await fetchWithSupabasePublic(`${url}/functions/v1/voice_transcribe`, {
-			          method: "POST",
-			          headers: { "Content-Type": "application/json" },
-			          body: payload,
-			        });
-			    if (!response.ok) throw new Error(await readSupabaseError(response));
-			    const data = (await response.json()) as { text?: unknown };
-			    return typeof data?.text === "string" ? data.text.trim() : "";
-			  }
-
-			  async function startVoiceCapture(surface: VoiceSurface): Promise<void> {
-          let nativeStartError: string | null = null;
-				    try {
-				      await invoke("start_native_voice_capture_cmd");
-				      voiceCaptureCleanupRef.current = () => {
-				        void invoke("cancel_native_voice_capture_cmd").catch(() => undefined);
-			      };
-				      voiceStopCaptureRef.current = async () => {
-				        const nativeResult = await invoke<NativeVoiceCaptureStopped>("stop_native_voice_capture_cmd");
-                console.info("[voice] native capture metrics", {
-                  sample_rate_hz: nativeResult?.sample_rate_hz,
-                  duration_ms: nativeResult?.duration_ms,
-                  rms: nativeResult?.rms,
-                  peak: nativeResult?.peak,
-                  speech_ratio: nativeResult?.speech_ratio,
-                  speech_detected: nativeResult?.speech_detected,
-                });
-				        if (!nativeResult?.audio_base64) {
-				          throw new Error("No audio captured.");
-				        }
-			        if (!nativeResult.speech_detected) {
-			          throw new Error("No speech detected.");
-			        }
-			        return base64ToBlob(nativeResult.audio_base64, nativeResult.mime_type || "audio/wav");
-			      };
-			      voiceStreamRef.current = null;
-			      voiceRecorderRef.current = null;
-			      voiceChunksRef.current = [];
-			      setActiveVoiceSurface(surface);
-				      showAppToastMessage("Listening... tap mic again to stop.");
-				      return;
-				    } catch (nativeError) {
-              nativeStartError = nativeError instanceof Error ? nativeError.message : String(nativeError);
-				      console.warn("[voice] native capture unavailable, falling back to web capture", nativeError);
-				    }
-
-				    const voiceSupport = getVoiceSupportState();
-				    const requestUserMedia = getVoiceUserMedia();
-				    if (!voiceSupport.canRecord) {
-              if (nativeStartError) {
-                showAppToastMessage(`Voice input unavailable: ${nativeStartError}`);
-                return;
-              }
-				      console.warn("[voice] unsupported desktop runtime", voiceSupport);
-				      if (!voiceSupport.hasGetUserMedia) {
-				        showAppToastMessage(
-			          voiceSupport.isSecureContext
-			            ? "Voice input unavailable: microphone API missing in this desktop runtime."
-			            : "Voice input unavailable: app is not running in a secure context.",
-			        );
-			      } else {
-			        showAppToastMessage("Voice input unavailable: recording APIs are missing in this desktop runtime.");
-				      }
-				      return;
-				    }
-				    if (!requestUserMedia) {
-              if (nativeStartError) {
-                showAppToastMessage(`Voice input unavailable: ${nativeStartError}`);
-                return;
-              }
-				      showAppToastMessage("Voice input unavailable: microphone API missing in this desktop runtime.");
-				      return;
-				    }
-			    try {
-			      const stream = await requestVoiceCaptureStream(requestUserMedia);
-			      const AudioContextCtor = getVoiceAudioContextConstructor();
-			      if (typeof MediaRecorder !== "undefined") {
-			        try {
-			          const mimeType = selectVoiceCaptureMimeType();
-			          const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-			          voiceChunksRef.current = [];
-			          recorder.ondataavailable = (event: BlobEvent) => {
-			            if (event.data && event.data.size > 0) voiceChunksRef.current.push(event.data);
-			          };
-			          recorder.onerror = () => {
-			            releaseVoiceCaptureResources();
-			            setActiveVoiceSurface(null);
-			            setIsVoiceTranscribing(false);
-			            showAppToastMessage("Microphone recording failed.");
-			          };
-			          voiceCaptureCleanupRef.current = () => {
-			            try {
-			              recorder.ondataavailable = null;
-			              recorder.onerror = null;
-			              if (recorder.state !== "inactive") recorder.stop();
-			            } catch {
-			              // ignore cleanup race
-			            }
-			          };
-			          voiceStopCaptureRef.current = () =>
-			            new Promise<Blob>((resolve, reject) => {
-			              const handleStop = () => {
-			                recorder.removeEventListener("stop", handleStop);
-			                recorder.removeEventListener("error", handleError);
-			                const blob = new Blob(voiceChunksRef.current, {
-			                  type: recorder.mimeType || "audio/webm",
-			                });
-			                resolve(blob);
-			              };
-			              const handleError = () => {
-			                recorder.removeEventListener("stop", handleStop);
-			                recorder.removeEventListener("error", handleError);
-			                reject(new Error("recording_failed"));
-			              };
-			              recorder.addEventListener("stop", handleStop, { once: true });
-			              recorder.addEventListener("error", handleError, { once: true });
-			              if (recorder.state === "inactive") {
-			                handleStop();
-			                return;
-			              }
-			              recorder.stop();
-			            });
-			          voiceStreamRef.current = stream;
-			          voiceRecorderRef.current = recorder;
-			          setActiveVoiceSurface(surface);
-			          recorder.start(250);
-			          showAppToastMessage("Listening... tap mic again to stop.");
-			          return;
-			        } catch (mediaRecorderError) {
-			          console.warn(
-			            "[voice] MediaRecorder unavailable in desktop runtime, attempting PCM fallback",
-			            mediaRecorderError,
-			          );
-			          if (!AudioContextCtor) throw new Error("voice_unsupported");
-			        }
-			      }
-			      if (!AudioContextCtor) throw new Error("voice_unsupported");
-			      let audioContext: AudioContext;
-			      try {
-			        audioContext = new AudioContextCtor({ sampleRate: VOICE_CAPTURE_SAMPLE_RATE });
-			      } catch {
-			        audioContext = new AudioContextCtor();
-			      }
-			      await audioContext.resume().catch(() => undefined);
-			      if (audioContext.state !== "running") throw new Error("voice_context_unavailable");
-			      const source = audioContext.createMediaStreamSource(stream);
-			      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-			      const silentSink = audioContext.createGain();
-			      silentSink.gain.value = 0;
-			      const pcmChunks: Int16Array[] = [];
-			      let cleanedUp = false;
-			      const cleanupCapture = () => {
-			        if (cleanedUp) return;
-			        cleanedUp = true;
-			        processor.onaudioprocess = null;
-			        try {
-			          source.disconnect();
-			        } catch {
-			          // ignore disconnect race
-			        }
-			        try {
-			          processor.disconnect();
-			        } catch {
-			          // ignore disconnect race
-			        }
-			        try {
-			          silentSink.disconnect();
-			        } catch {
-			          // ignore disconnect race
-			        }
-			        void audioContext.close().catch(() => undefined);
-			      };
-			      processor.onaudioprocess = (event) => {
-			        const samples = event.inputBuffer.getChannelData(0);
-			        if (!samples || samples.length === 0) return;
-			        pcmChunks.push(floatToInt16Pcm(samples));
-			      };
-			      source.connect(processor);
-			      processor.connect(silentSink);
-			      silentSink.connect(audioContext.destination);
-			      voiceCaptureCleanupRef.current = cleanupCapture;
-			      voiceStopCaptureRef.current = async () => {
-			        cleanupCapture();
-			        return createWavBlobFromInt16Chunks(pcmChunks, audioContext.sampleRate || VOICE_CAPTURE_SAMPLE_RATE);
-			      };
-			      voiceStreamRef.current = stream;
-			      voiceRecorderRef.current = null;
-			      voiceChunksRef.current = [];
-			      setActiveVoiceSurface(surface);
-			      showAppToastMessage("Listening... tap mic again to stop.");
-			    } catch (error) {
-			      const message =
-			        error instanceof DOMException && error.name === "NotAllowedError"
-			          ? "Microphone access was denied."
-			          : error instanceof DOMException && error.name === "NotFoundError"
-			            ? "No microphone was found."
-			            : error instanceof Error && error.message === "voice_unsupported"
-			              ? "Voice input unavailable: missing desktop audio runtime support."
-                  : error instanceof Error && error.message === "voice_context_unavailable"
-                    ? "Voice input unavailable: could not initialize desktop audio context."
-			            : "Could not start microphone capture.";
-			      showAppToastMessage(message);
-			      console.warn("[voice] failed to start capture", {
-			        error,
-			        support: getVoiceSupportState(),
-			      });
-			      releaseVoiceCaptureResources();
-			      setActiveVoiceSurface(null);
-			      setIsVoiceTranscribing(false);
-			    }
-			  }
-
-			  async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
-			    const stopCapture = voiceStopCaptureRef.current;
-			    if (!stopCapture || activeVoiceSurface !== surface) return;
-			    setIsVoiceTranscribing(true);
-			    try {
-			      const audioBlob = await stopCapture();
-			      releaseVoiceCaptureResources();
-			      if (audioBlob.size === 0) {
-			        showAppToastMessage("No audio captured.");
-			        return;
-			      }
-			      const transcript = await transcribeVoiceBlob(surface, audioBlob);
-			      if (!transcript) {
-			        showAppToastMessage("No speech detected.");
-			        return;
-			      }
-			      applyVoiceTranscript(surface, transcript);
-			      showAppToastMessage("Transcript inserted.");
-			    } catch (error) {
-			      const message = error instanceof Error ? error.message : String(error);
-			      showAppToastMessage(message || "Voice transcription failed.");
-			    } finally {
-			      releaseVoiceCaptureResources();
-			      setIsVoiceTranscribing(false);
-			      setActiveVoiceSurface(null);
-			    }
-			  }
-
-				  async function handleVoiceInputClick(surface: "workspace" | "community") {
-			    const intent = resolveVoiceInputIntent(surface);
-			    if (intent.mode === "sign_in") {
-			      void handleSignIn();
-			      return;
-			    }
-			    if (intent.mode === "select_community" || intent.mode === "join_community" || intent.mode === "busy") {
-			      showAppToastMessage(intent.title);
-			      return;
-			    }
-			    if (intent.mode === "transcribing") {
-			      showAppToastMessage(intent.title);
-			      return;
-			    }
-			    if (intent.mode === "stop_recording") {
-			      await stopVoiceCaptureAndTranscribe(surface);
-			      return;
-			    }
-				    await startVoiceCapture(surface);
-				  }
-
-          const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
-          const communityVoiceIntent = resolveVoiceInputIntent("community");
-          const workspaceVoiceUiState = resolveVoiceUiState("workspace");
-          const communityVoiceUiState = resolveVoiceUiState("community");
+				  const {
+          workspaceVoiceIntent,
+          communityVoiceIntent,
+          workspaceVoiceUiState,
+          communityVoiceUiState,
+          handleVoiceInputClick,
+        } = useDesktopVoiceInputController({
+          shellClient,
+          supabaseSession,
+          supabaseSessionRef,
+          fetchWithSupabaseAuth,
+          fetchWithSupabasePublic,
+          handleSignIn,
+          showAppToastMessage,
+          normalizedBuilderTier,
+          activeCommunity,
+          canPostMessagesActiveCommunity,
+          setCommandInput,
+          askInputRef,
+          setCommunityMessageInput,
+          chatInputRef,
+        });
 
         const showEmptyThreadLandingSkeleton = Boolean(
           !activeThreadId &&
@@ -9836,79 +4534,32 @@ function App() {
           return DEFAULT_EMPTY_THREAD_LANDING;
         }, [activeCommunity, activeCommunityAccess?.can_view, activeCommunityAgentLanding, activeCommunityId]);
 
-        useEffect(() => {
-          if (activeThreadId) return;
-          const first = emptyThreadLanding.tabs[0]?.id ?? "community";
-          setEmptyThreadSection(first);
-        }, [activeThreadId, emptyThreadLanding]);
+        useDesktopUiLifecycleEffects({
+          isModelPickerOpen,
+          modelPickerRef,
+          modelPickerSearchRef,
+          closeModelPicker,
+          activeThreadId,
+          emptyThreadLanding,
+          setEmptyThreadSection,
+          communityAgentDraftLanding,
+          setCommunityAgentPreviewTabId,
+          isCommunityAgentTemplateMenuOpen,
+          communityAgentTemplatePickerRef,
+          setIsCommunityAgentTemplateMenuOpen,
+        });
 
-        useEffect(() => {
-          const first = communityAgentDraftLanding.tabs[0]?.id ?? "";
-          setCommunityAgentPreviewTabId((prev) => {
-            if (!prev) return first;
-            if (communityAgentDraftLanding.tabs.some((tab) => tab.id === prev)) return prev;
-            return first;
-          });
-        }, [communityAgentDraftLanding]);
-
-        useEffect(() => {
-          if (!isCommunityAgentTemplateMenuOpen) return;
-          const handleMouseDown = (event: MouseEvent) => {
-            const root = communityAgentTemplatePickerRef.current;
-            if (!root) return;
-            if (root.contains(event.target as Node)) return;
-            setIsCommunityAgentTemplateMenuOpen(false);
-          };
-          window.addEventListener("mousedown", handleMouseDown);
-          return () => window.removeEventListener("mousedown", handleMouseDown);
-        }, [isCommunityAgentTemplateMenuOpen]);
-
-  useEffect(() => {
-    if (activePage !== "community" || communityTab !== "analytics") return;
-    if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAnalytics) {
-      setCommunityAnalyticsSummary({
-        total_members: null,
-        new_members_window: null,
-        active_members_window: null,
-        retention_window: null,
-        total_resources: null,
-        resources_added_window: null,
-      });
-      setCommunityAnalyticsSeries([]);
-      setCommunityRevenueSeries([]);
-      setCommunityRevenueMeta(null);
-      setCommunityRevenueError(null);
-      setCommunityAnalyticsError(null);
-      setIsLoadingCommunityAnalytics(false);
-      return;
-    }
-    void loadCommunityAnalytics(
-      activeCommunityId,
-      supabaseSession,
-      communityAnalyticsRange,
-      activeCommunity?.created_at ?? null
-    );
-  }, [
+  useCommunityAdminAnalyticsAutomationsLifecycle({
     activePage,
     communityTab,
     supabaseSession,
     activeCommunityId,
     canViewActiveCommunityAnalytics,
     communityAnalyticsRange,
-    activeCommunity?.created_at,
-  ]);
-
-  useEffect(() => {
-    if (activePage !== "community" || communityTab !== "automations") return;
-    if (!supabaseSession || !activeCommunityId || !canViewActiveCommunityAutomations) {
-      setAutomationEndpoints([]);
-      setAutomationDeliveries([]);
-      setAutomationError(null);
-      setIsLoadingAutomations(false);
-      return;
-    }
-    void loadCommunityAutomations(activeCommunityId, supabaseSession);
-  }, [activePage, communityTab, supabaseSession, activeCommunityId, canViewActiveCommunityAutomations]);
+    getCommunityCreatedAt: () => activeCommunity?.created_at ?? null,
+    loadCommunityAnalytics,
+    resetCommunityAnalytics,
+  });
 
 	      const libraryResources = useMemo(
 	        () => communityResources.filter((resource) => Boolean(resource.pinned)),
@@ -9922,16 +4573,7 @@ function App() {
           null
         );
       }, [libraryResources, selectedLibraryResourceId]);
-	  const filteredDiscoverCommunities = useMemo(() => {
-	    const query = discoverQuery.trim().toLowerCase();
-	    const list = discoverCommunities;
-    if (!query) return list;
-    return list.filter((c) => {
-      const haystack = `${c.name ?? ""}\n${c.slug ?? ""}\n${c.description ?? ""}`.toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [discoverCommunities, discoverQuery]);
-	  const communityMessageById = useMemo(() => {
+  const communityMessageById = useMemo(() => {
 	    const map = new Map<string, CommunityChatMessage>();
 	    for (const message of communityMessages) {
 	      map.set(message.id, message);
@@ -9943,40 +4585,286 @@ function App() {
 	    communityMessageIdsRef.current = new Set(communityMessages.map((m) => m.id));
 	  }, [communityMessages]);
 
-    useEffect(() => {
-      communityAttachmentsRef.current = communityAttachments;
-    }, [communityAttachments]);
+	  useEffect(() => {
+	    communityAttachmentsRef.current = communityAttachments;
+	  }, [communityAttachments]);
 	  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
+	  const pendingCommunityMemoryCandidates = useMemo(
+	    () =>
+	      communityMemoryCandidates.filter((candidate) => {
+	        const routerState = candidate.router_state.trim().toLowerCase();
+	        return routerState === "queued" || routerState === "needs_review";
+	      }),
+	    [communityMemoryCandidates],
+	  );
+		  const reviewedCommunityMemoryCandidates = useMemo(() => {
+		    const parseTimestampMs = (value: string | null | undefined): number | null => {
+		      const trimmed = (value ?? "").trim();
+		      if (!trimmed) return null;
+		      const parsed = Date.parse(trimmed);
+		      return Number.isFinite(parsed) ? parsed : null;
+		    };
+		    const reviewed = communityMemoryCandidates.filter((candidate) => {
+		      const routerState = candidate.router_state.trim().toLowerCase();
+		      return routerState !== "queued" && routerState !== "needs_review";
+		    });
+		    reviewed.sort((a, b) => {
+		      const aTs =
+		        parseTimestampMs(a.reviewed_at) ??
+		        parseTimestampMs(a.updated_at) ??
+		        parseTimestampMs(a.created_at) ??
+		        0;
+		      const bTs =
+		        parseTimestampMs(b.reviewed_at) ??
+		        parseTimestampMs(b.updated_at) ??
+		        parseTimestampMs(b.created_at) ??
+		        0;
+		      return bTs - aTs;
+		    });
+		    return reviewed;
+		  }, [communityMemoryCandidates]);
+	  const rejectedReviewedCommunityMemoryCandidates = useMemo(
+	    () =>
+	      reviewedCommunityMemoryCandidates.filter(
+	        (candidate) => candidate.router_state.trim().toLowerCase() === "rejected",
+	      ),
+	    [reviewedCommunityMemoryCandidates],
+	  );
 	  const actionablePendingInvites = useMemo(
 	    () => pendingInvites.filter((invite) => invite.status === "pending"),
 	    [pendingInvites]
 	  );
+	  const communityRailEmptyMessage = useMemo(() => {
+	    if (communities.length !== 0) return null;
+	    if (!(actionablePendingInvites.length > 0 || supabaseSession)) return null;
+	    if (actionablePendingInvites.length > 0) {
+	      return `Invite waiting: ${formatInviteLabel(
+	        actionablePendingInvites[0].invite_key,
+	        actionablePendingInvites[0].community_name,
+	      )}`;
+	    }
+	    if (communitiesLoadError) return "Couldn't load communities. Open Settings → Community.";
+	    return "No communities yet.";
+	  }, [actionablePendingInvites, communities.length, communitiesLoadError, supabaseSession]);
 
 	  const inviteGateRecord = useMemo(() => {
 	    if (!activeInviteGateKey) return null;
 	    return pendingInvites.find((invite) => invite.invite_key === activeInviteGateKey) ?? null;
 	  }, [activeInviteGateKey, pendingInvites]);
 	  const showCommunityRail = true;
-	  const effectiveCwd = (activeProject?.root_path ?? workspaceRoot ?? "").trim();
-	  const lastThreadWorkspaceRef = useRef<string | null>(null);
-  const useCloudPersonalThreadMode = Boolean(
-    DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && supabaseSession && getSupabaseUrl(),
-  );
-  const visibleThreads = useMemo(() => {
-    if (!useCloudPersonalThreadMode) return threads;
-    return threads.filter((t) => (t.last_seq ?? 0) > 0);
-  }, [threads, useCloudPersonalThreadMode]);
-    const normalizedThreadSearch = threadSearchQuery.trim().toLowerCase();
-    const threadSearchResults = useMemo(() => {
-      if (!normalizedThreadSearch) return visibleThreads;
-      return visibleThreads.filter((thread) => {
-        const title = (thread.title ?? "").trim() || "Untitled thread";
-        const workspaceHint = (thread.workspace_path ?? "").trim();
-        const workspaceLabel = workspaceHint ? (workspaceHint.split("/").pop() ?? workspaceHint) : "";
-        const haystack = `${title} ${workspaceLabel}`.toLowerCase();
-        return haystack.includes(normalizedThreadSearch);
+	  const effectiveCwd = (activeThread?.workspace_path ?? activeProject?.root_path ?? workspaceRoot ?? "").trim();
+	  const projectById = useMemo(() => {
+	    return buildProjectByIdMap(projects);
+	  }, [projects]);
+	  const sortedProjectsByRootDesc = useMemo(
+	    () => sortProjectsByRootPathLengthDesc(projects),
+	    [projects],
+	  );
+	  const resolveThreadProjectId = useCallback(
+	    (thread: ThreadRecord): string | null => {
+	      return resolveThreadProjectIdShared(thread, projectById, sortedProjectsByRootDesc);
+	    },
+	    [projectById, sortedProjectsByRootDesc],
+	  );
+	  const {
+	    getThreadDisplayTitle,
+	    getSidebarThreadTitle,
+	  } = useDesktopThreadTitleViewModel({
+	    activeThreadId,
+	    messages,
+	    communities,
+	    projectById,
+	    resolveThreadProjectId,
+	    parseMessageText,
+	  });
+	  const {
+	    normalizedThreadSearch,
+	    laneThreads,
+	    chatThreadGroups,
+	    threadSearchResults,
+	    projectThreadGroups,
+	    generalThreads,
+	  } = useDesktopThreadSidebarState({
+	    threads,
+	    projects,
+	    threadLaneFilter,
+	    threadSearchQuery,
+	    projectById,
+	    resolveThreadProjectId,
+	    getThreadDisplayTitle,
+	  });
+	  const resetThreadViewStateForDraft = useCallback(() => {
+	    setMessages([]);
+	    setToolCalls([]);
+	    setTurnsByAssistantEventId({});
+	    setSessionResume(null);
+	    setAgentStatus(null);
+	    setRunningTools([]);
+	    setSlashPanel(null);
+	    setPendingToolApproval(null);
+	    setIsToolApprovalSubmitting(false);
+	    clearStreamingState();
+	  }, [clearStreamingState]);
+	  const onMissingModelForThreadLifecycle = useCallback(() => {
+	    setMemoryToast("No model selected. Enable a model in Settings → Models.");
+	  }, []);
+	  const createDraftThreadRecord = useCallback(
+	    (threadId: string, nowSec: number): ThreadRecord => ({
+	      id: threadId,
+	      title: null,
+	      engine_id: "messages_agent",
+	      model_id: activeModelId,
+	      thread_lane: threadLaneFilter,
+	      storage_mode: storageModeForThreadLane(threadLaneFilter),
+	      project_id: threadLaneFilter === "agent" ? activeProject?.id ?? null : null,
+	      community_id: activeCommunityId ?? null,
+	      context_version: 0,
+	      workspace_path: null,
+	      created_at: nowSec,
+	      updated_at: nowSec,
+	      last_event_at: null,
+	      last_seq: 0,
+	    }),
+	    [activeCommunityId, activeModelId, activeProject?.id, threadLaneFilter],
+	  );
+  const {
+    ensureThreadId,
+    enterDraftThread,
+    handleDeleteThread,
+  } = useDesktopThreadLifecycle({
+	    activeThreadId,
+	    activeModelId,
+    effectiveCwd,
+    threads,
+    runtimeClient,
+    persistThread: async (thread) => {
+      const router = desktopThreadServiceRouter;
+      const domain = resolveThreadServiceDomain({
+        storageMode: thread.storage_mode,
+        threadLane: thread.thread_lane,
+        engineId: thread.engine_id,
       });
-    }, [normalizedThreadSearch, visibleThreads]);
+      const service = router.resolveByLane(thread.thread_lane, domain.storageMode);
+      try {
+        const created = await service.createThread({
+          threadId: thread.id,
+          title: thread.title,
+          engineId: thread.engine_id,
+          modelId: thread.model_id,
+          threadLane: thread.thread_lane,
+          storageMode: thread.storage_mode,
+          projectId: thread.project_id,
+          communityId: thread.community_id,
+          createdAt: thread.created_at,
+          updatedAt: thread.updated_at,
+        });
+        return (created as ThreadRecord | null) ?? thread;
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to persist thread.";
+        setMemoryToast(message);
+        return null;
+      }
+    },
+    deleteThreadRecord: async (threadId) => {
+      const service = resolveThreadServiceForThreadId(threadId);
+      try {
+        await service.deleteThread(threadId);
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to delete thread.";
+        setMemoryToast(message);
+        throw error;
+      }
+    },
+    createDraftThreadRecord,
+    onMissingModel: onMissingModelForThreadLifecycle,
+    setThreads,
+	    setActiveThreadId,
+	    setMessages,
+	    resetThreadViewStateForDraft,
+	    focusChatInput,
+	  });
+	  const onInvalidModelForThreadSend = useCallback(() => {
+	    setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
+	  }, []);
+	  const onRequirePaidAccessForThreadSend = useCallback(
+	    (ctx: { providerId: string; hasSession: boolean; planStateResolved: boolean }) => {
+	      if (ctx.hasSession && !ctx.planStateResolved) {
+	        setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
+	      } else if (ctx.providerId === "openai") {
+	        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
+	      } else {
+	        setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
+	      }
+	      setActiveView("settings");
+	      setSettingsPage("models");
+	    },
+	    [],
+	  );
+	  const ensureFreshSessionForThreadSend = useCallback(
+	    async (session: SupabaseSession): Promise<SupabaseSession | null> => {
+	      const fresh = await ensureSupabaseSessionForRequest(session, refreshSupabaseSessionLocked);
+	      if (!fresh) {
+	        await expireSupabaseSessionFailClosed({
+	          clearPersistedSupabaseSession,
+	          setSupabaseSession,
+	          sessionRef: supabaseSessionRef,
+	          onExpired: () => {
+	            setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
+	            setMemoryToast(SUPABASE_SESSION_EXPIRED_MESSAGE);
+	          },
+	        });
+	        return null;
+	      }
+	      if (
+	        fresh.access_token !== session.access_token ||
+	        fresh.refresh_token !== session.refresh_token ||
+	        fresh.expires_at !== session.expires_at
+	      ) {
+	        setSupabaseSession(fresh);
+	        supabaseSessionRef.current = fresh;
+	        await persistSupabaseSession(fresh);
+	      }
+	      return fresh;
+	    },
+	    [refreshSupabaseSessionLocked],
+	  );
+	  const resolveAllowPlatformInferenceForBuilderTier = useCallback((builderTier: string): boolean => {
+	    return resolveUserAccessPolicy({
+	      surface: "desktop",
+	      authState: "authenticated",
+	      builderTier,
+	    }).allowPlatformInference;
+	  }, []);
+	  const { ensureThreadReadyForSend } = useDesktopThreadSendReadiness({
+	    threads,
+	    getThreadRecord,
+	    activeModelId,
+	    providerIdForModelId,
+	    hasKeyForProvider,
+	    userAllowPlatformInference: userAccessPolicy.allowPlatformInference,
+	    userTier: userAccessPolicy.tier,
+	    builderBillingStatus,
+	    getSupabaseUrl,
+	    getSupabaseAnonKey,
+	    loadBuilderBillingStatus,
+	    resolveAllowPlatformInferenceForBuilderTier,
+	    onMissingModel: onMissingModelForThreadLifecycle,
+	    onInvalidModel: onInvalidModelForThreadSend,
+	    onRequirePaidAccess: onRequirePaidAccessForThreadSend,
+	    ensureFreshSessionForRequest: ensureFreshSessionForThreadSend,
+	    getThreadServiceById: resolveThreadServiceForThreadId,
+	    setThreads,
+	  });
 
   function communityInitials(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -9992,157 +4880,212 @@ function App() {
     return window.confirm("You have unsaved community settings. Discard changes?");
   }
 
-  async function setThreadCommunityLensInCloud(params: {
-    threadId: string;
-    communityId: string | null;
-    session: SupabaseSession;
-  }): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-    const response = await fetchWithSupabaseAuth(
-      `${url}/rest/v1/rpc/set_thread_community_lens`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ p_thread_id: params.threadId, p_community_id: params.communityId }),
-      },
-      params.session,
-    );
-    if (!response.ok) throw new Error(await readSupabaseError(response));
-  }
-
   type WorkspaceLensTarget = {
     threadId: string;
+    fromCommunityId: string | null;
     communityId: string | null;
     communityName: string;
     session: SupabaseSession | null;
-    syncToCloud: boolean;
+    storageMode: "cloud" | "local";
+    expectedContextVersion: number | null;
   };
 
-  // Desktop "last click wins" lens switching: serialize lens updates and coalesce
-  // rapid rail clicks so the active thread ends up in the user's last-selected lens.
-  const workspaceLensEpochRef = useRef(0);
-  const workspaceLensAppliedEpochRef = useRef(0);
-  const workspaceLensDesiredRef = useRef<WorkspaceLensTarget | null>(null);
-  const workspaceLensInFlightRef = useRef(false);
-  const workspaceLensWaitersRef = useRef<
-    Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }>
-  >([]);
+  function isThreadContextVersionConflict(error: unknown): boolean {
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "";
+    const normalized = message.toLowerCase();
+    return normalized.includes("thread context version conflict")
+      || normalized.includes("thread_context_version_conflict");
+  }
 
-  const settleWorkspaceLensWaiters = (upToEpoch: number, error: unknown | null) => {
-    const remaining: Array<{ epoch: number; resolve: () => void; reject: (error: unknown) => void }> = [];
-    for (const waiter of workspaceLensWaitersRef.current) {
-      if (waiter.epoch <= upToEpoch) {
-        if (error) waiter.reject(error);
-        else waiter.resolve();
-      } else {
-        remaining.push(waiter);
+  function resolveLensRouteErrorCode(error: unknown): string | null {
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "";
+    const normalized = message.toLowerCase();
+    if (!normalized) return null;
+    if (normalized.includes("missing session") || normalized.includes("sign in")) return "auth_required";
+    if (normalized.includes("thread not found") || normalized.includes("thread_not_found")) return "thread_not_found";
+    if (isThreadContextVersionConflict(message)) return "context_version_conflict";
+    if (normalized.includes("forbidden")) return "forbidden";
+    return "unknown";
+  }
+
+  async function setThreadCommunityLensLocal(params: {
+    threadId: string;
+    communityId: string | null;
+  }): Promise<ThreadRecord> {
+    return runtimeClient.setThreadContext({
+      thread_id: params.threadId,
+      community_id: params.communityId,
+      update_community_id: true,
+    });
+  }
+
+  const workspaceLensController = useLastClickWinsController<WorkspaceLensTarget>({
+    applyTarget: async (desired) => {
+      const service = resolveThreadServiceForThreadId(desired.threadId);
+      const updated = await service.setThreadLens({
+        threadId: desired.threadId,
+        communityId: desired.communityId,
+        expectedContextVersion: desired.expectedContextVersion,
+      });
+      if (!updated) return;
+      setThreads((prev) => {
+        const idx = prev.findIndex((t) => t.id === updated.id);
+        if (idx === -1) return prev;
+        const copy = [...prev];
+        copy[idx] = updated as ThreadRecord;
+        return copy;
+      });
+    },
+    onTargetSettled: ({ target, isLatest, error }) => {
+      if (!isLatest) return;
+      const result = error ? "error" : "ok";
+      const errorCode = resolveLensRouteErrorCode(error);
+      traceThreadContext("lens_route_apply", {
+        surface: "desktop",
+        thread_id: target.threadId,
+        storage_mode: target.storageMode,
+        from_community_id: target.fromCommunityId,
+        to_community_id: target.communityId,
+        result,
+        error_code: errorCode,
+      });
+      traceThreadContext("lens_set_settled", {
+        surface: "desktop",
+        thread_id: target.threadId,
+        to_community_id: target.communityId,
+        is_latest: isLatest,
+        status: result,
+        error:
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : null,
+      });
+      if (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to switch community context.";
+        showAppToastMessage(message);
+        return;
       }
-    }
-    workspaceLensWaitersRef.current = remaining;
-  };
-
-  const runWorkspaceLensWorker = async (): Promise<void> => {
-    if (workspaceLensInFlightRef.current) return;
-    workspaceLensInFlightRef.current = true;
-    try {
-      while (workspaceLensAppliedEpochRef.current < workspaceLensEpochRef.current) {
-        const epoch = workspaceLensEpochRef.current;
-        const desired = workspaceLensDesiredRef.current;
-        if (!desired) {
-          workspaceLensAppliedEpochRef.current = epoch;
-          settleWorkspaceLensWaiters(epoch, null);
-          break;
-        }
-
-        try {
-          if (desired.syncToCloud) {
-            if (!desired.session) throw new Error("Missing session for cloud thread lens update.");
-            await setThreadCommunityLensInCloud({
-              threadId: desired.threadId,
-              communityId: desired.communityId,
-              session: desired.session,
-            });
-          }
-	          const updated = await (USE_RUNTIME_CLIENT
-              ? runtimeClient.setThreadCommunity(desired.threadId, desired.communityId)
-              : invoke<ThreadRecord>("set_thread_community_cmd", {
-                  threadId: desired.threadId,
-                  communityId: desired.communityId,
-                }));
-          setThreads((prev) => {
-            const idx = prev.findIndex((t) => t.id === updated.id);
-            if (idx === -1) return prev;
-            const copy = [...prev];
-            copy[idx] = updated;
-            return copy;
-          });
-
-          workspaceLensAppliedEpochRef.current = epoch;
-          settleWorkspaceLensWaiters(epoch, null);
-          if (epoch === workspaceLensEpochRef.current) {
-            showAppToastMessage(
-              desired.communityId ? `Now using ${desired.communityName}.` : "Cleared community context.",
-            );
-          }
-        } catch (error) {
-          workspaceLensAppliedEpochRef.current = epoch;
-          settleWorkspaceLensWaiters(epoch, error);
-          if (epoch === workspaceLensEpochRef.current) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Failed to switch community context.";
-            showAppToastMessage(message);
-          }
-        }
-      }
-    } finally {
-      workspaceLensInFlightRef.current = false;
-    }
-  };
+      showAppToastMessage(
+        target.communityId ? `Now using ${target.communityName}.` : "Cleared community context.",
+      );
+    },
+  });
 
   const requestWorkspaceThreadLens = (target: WorkspaceLensTarget): Promise<void> => {
-    const currentLens = threads.find((t) => t.id === target.threadId)?.community_id ?? null;
-    if (currentLens === target.communityId && !workspaceLensInFlightRef.current) {
+    const currentThread = threads.find((t) => t.id === target.threadId) ?? null;
+    const currentLens = currentThread?.community_id ?? null;
+    if (currentLens === target.communityId && !workspaceLensController.isInFlight()) {
       return Promise.resolve();
     }
-
-    const epoch = (workspaceLensEpochRef.current += 1);
-    workspaceLensDesiredRef.current = target;
-    void runWorkspaceLensWorker();
-    return new Promise<void>((resolve, reject) => {
-      workspaceLensWaitersRef.current.push({ epoch, resolve, reject });
+    return workspaceLensController.requestTarget({
+      ...target,
+      expectedContextVersion:
+        typeof currentThread?.context_version === "number"
+          ? currentThread.context_version
+          : target.expectedContextVersion,
     });
   };
 
-  const ensureWorkspaceThreadLensBeforeSend = async (threadId: string): Promise<void> => {
-    if (activePage !== "workspace") return;
-    const desiredCommunityId = activeCommunityId ?? null;
-    const thread = threads.find((t) => t.id === threadId) ?? null;
-    const currentLens = thread?.community_id ?? null;
-    if (currentLens === desiredCommunityId) return;
-    const desiredName = desiredCommunityId
-      ? (communities.find((c) => c.id === desiredCommunityId)?.name ?? desiredCommunityId)
+  const syncWorkspaceThreadCommunityLens = (
+    thread: ThreadRecord,
+    desiredCommunityId: string | null,
+  ): Promise<void> => {
+    const storageMode = resolveThreadServiceDomain({
+      storageMode: thread.storage_mode,
+      threadLane: thread.thread_lane,
+      engineId: thread.engine_id,
+    }).storageMode;
+    const desiredCommunityName = desiredCommunityId
+      ? (communities.find((community) => community.id === desiredCommunityId)?.name ?? desiredCommunityId)
       : "none";
     const session = supabaseSessionRef.current;
-    const syncToCloud = Boolean(
-      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED &&
-      session &&
-      getSupabaseUrl() &&
-      thread &&
-      thread.engine_id !== "community_chat",
-    );
-    await requestWorkspaceThreadLens({
-      threadId,
+    if (storageMode === "cloud" && !session) {
+      const message = "Sign in to switch community context for cloud chat threads.";
+      setAuthError(message);
+      showAppToastMessage(message);
+      traceThreadContext("lens_route_apply", {
+        surface: "desktop",
+        thread_id: thread.id,
+        storage_mode: storageMode,
+        from_community_id: thread.community_id ?? null,
+        to_community_id: desiredCommunityId,
+        result: "blocked",
+        error_code: "auth_required",
+      });
+      void handleSignIn();
+      return Promise.resolve();
+    }
+    traceThreadContext("lens_set_requested", {
+      surface: "desktop",
+      thread_id: thread.id,
+      thread_lane: thread.thread_lane,
+      storage_mode: storageMode,
+      project_id: resolveThreadProjectId(thread),
+      from_community_id: thread.community_id ?? null,
+      to_community_id: desiredCommunityId,
+      context_version: typeof thread.context_version === "number" ? thread.context_version : null,
+    });
+    return requestWorkspaceThreadLens({
+      threadId: thread.id,
+      fromCommunityId: thread.community_id ?? null,
       communityId: desiredCommunityId,
-      communityName: desiredName,
-      session: session ?? null,
-      syncToCloud,
+      communityName: desiredCommunityName,
+      session: storageMode === "cloud" ? (session ?? null) : null,
+      storageMode,
+      expectedContextVersion:
+        typeof thread.context_version === "number" ? thread.context_version : null,
     });
   };
+
+  const desktopThreadContextController = createThreadContextController<ThreadRecord>({
+    surface: "desktop",
+    getActivePage: () => activePage,
+    getDesiredCommunityId: () => activeCommunityId ?? null,
+    getActiveThreadId: () => activeThreadId,
+    getActiveCommunityId: () => activeCommunityId ?? null,
+    findThreadById: (threadId: string) => threads.find((thread) => thread.id === threadId) ?? null,
+    getLatestThreadRecord: (threadId: string) => getThreadRecord(threadId),
+    syncThreadCommunityLens: (thread: ThreadRecord, desiredCommunityId: string | null) =>
+      syncWorkspaceThreadCommunityLens(thread, desiredCommunityId),
+    onSelectThread: (thread: ThreadRecord) => {
+      setActiveCommunityId(thread.community_id ?? null);
+      setActiveThreadId(thread.id);
+      const projectId = resolveThreadProjectId(thread);
+      const project = projectId ? projectById.get(projectId) ?? null : null;
+      const currentProjectId = activeProject?.id ?? null;
+      const nextProjectId = project?.id ?? null;
+      if (currentProjectId !== nextProjectId) {
+        void handleSetActiveProject(project);
+      }
+    },
+    trace: traceThreadContext,
+    buildThreadSelectedTrace: (thread: ThreadRecord) => ({
+      to_thread_lane: thread.thread_lane,
+      to_project_id: resolveThreadProjectId(thread),
+      to_context_version:
+        typeof thread.context_version === "number" ? thread.context_version : null,
+    }),
+  });
+
+  const ensureWorkspaceThreadLensBeforeSend = (threadId: string): Promise<void> =>
+    desktopThreadContextController.ensureLensBeforeSend(threadId);
 
   function handleSelectActiveCommunity(next: string) {
     if (!confirmDiscardUnsavedCommunitySettings(next)) return;
@@ -10153,24 +5096,15 @@ function App() {
     if (!activeThreadId) return;
     const currentLensCommunityId = activeThread?.community_id ?? null;
     if (next === currentLensCommunityId) return;
+    if (isSending || sendInFlightRef.current) {
+      const nextCommunityName = communities.find((c) => c.id === next)?.name ?? next;
+      showAppToastMessage(
+        `Switched to ${nextCommunityName}. Active run keeps prior context; new context applies next turn.`,
+      );
+    }
 
-    const thread = activeThread;
-    const session = supabaseSessionRef.current;
-    const syncToCloud = Boolean(
-      DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED &&
-      thread &&
-      thread.engine_id !== "community_chat" &&
-      session &&
-      getSupabaseUrl(),
-    );
-    const toCommunityName = communities.find((c) => c.id === next)?.name ?? next;
-    void requestWorkspaceThreadLens({
-      threadId: activeThreadId,
-      communityId: next,
-      communityName: toCommunityName,
-      session: session ?? null,
-      syncToCloud,
-    });
+    if (!activeThread) return;
+    void syncWorkspaceThreadCommunityLens(activeThread, next);
   }
 
   // Helper to display user names with session context
@@ -10200,18 +5134,10 @@ function App() {
     }
     return nextName !== prevName || nextBio !== prevBio || nextAvatar !== prevAvatar;
   }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
-
-  useEffect(() => {
-    const guestDraft = readProfileDraftForUser(null);
-    const legacyDraft = readLegacyProfileDraft();
-    if (hasProfileDraftValue(legacyDraft) && !hasProfileDraftValue(guestDraft)) {
-      writeProfileDraftForUser(null, legacyDraft);
-    }
-    clearLegacyProfileDraftStorage();
-  }, []);
+  const profileNeedsSave = Boolean(supabaseSession && (isProfileDirty || cloudProfile === null));
 
   useLayoutEffect(() => {
-    const nextDraft = readProfileDraftForUser(profileStorageUserId, { allowLegacyFallback: !profileStorageUserId });
+    const nextDraft = readProfileDraftForUser(profileStorageUserId);
     setProfileName(nextDraft.name);
     setProfileUsername(nextDraft.username);
     setProfileBio(nextDraft.bio);
@@ -10246,726 +5172,262 @@ function App() {
 
   async function loadWorkspaceRoot() {
     try {
-      const root = await invoke<string>("get_workspace_root_cmd");
+      const root = await runtimeClient.getWorkspaceRoot();
       setWorkspaceRoot((root ?? "").trim() || null);
     } catch {
       setWorkspaceRoot(null);
     }
   }
 
+  async function loadProjects() {
+    try {
+      const rows = await runtimeClient.listProjects();
+      setProjects(rows);
+      setProjectExpandedById((prev) => {
+        const next: Record<string, boolean> = {};
+        for (const project of rows) {
+          next[project.id] = prev[project.id] ?? true;
+        }
+        return next;
+      });
+    } catch {
+      setProjects([]);
+    }
+  }
+
   async function loadActiveProject() {
     try {
-      const active = await invoke<ProjectRecord | null>("get_active_project_cmd");
+      const active = await runtimeClient.getActiveProject();
       setActiveProject(active);
     } catch {
       setActiveProject(null);
     }
   }
 
-  async function handleChangeWorkspace() {
+  async function handleAddProjectFromFolderPicker() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Select Arx Workspace Root"
+      title: "Add Project Folder",
     });
     if (!selected || Array.isArray(selected)) return;
-	    await invoke("set_workspace_root_cmd", { path: selected });
-	    setWorkspaceRoot(selected);
-	    setActiveProject(null);
-	    await invoke("set_active_project_cmd", { projectId: null });
-	    if (activeThreadId) {
-	      await (USE_RUNTIME_CLIENT
-          ? runtimeClient.setThreadWorkspace(activeThreadId, selected)
-          : invoke("set_thread_workspace_cmd", { threadId: activeThreadId, workspacePath: selected }));
-	      lastThreadWorkspaceRef.current = selected;
-	    }
-	  }
-
-  async function handleAddAttachment() {
-    const selected = await open({
-      multiple: true,
-      title: "Add files to message",
-      filters: [
-        { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] },
-        { name: "Documents", extensions: ["txt", "md", "json", "csv", "pdf"] },
-        { name: "Code", extensions: ["ts", "tsx", "js", "jsx", "py", "rs", "go", "html", "css"] },
-        { name: "All Files", extensions: ["*"] }
-      ]
-    });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    for (const path of paths) {
-      try {
-        const result = await invoke<{
-          id: string;
-          path: string;
-          name: string;
-          file_type: "image" | "file";
-          size: number;
-          preview_data_url: string | null;
-        }>("ingest_attachment_cmd", { path });
-        setAttachments((prev) => [
-          ...prev,
-          {
-            id: result.id,
-            path: result.path,
-            name: result.name,
-            type: result.file_type,
-            size: result.size,
-            previewDataUrl: result.preview_data_url ?? undefined
-          }
-        ]);
-      } catch (error) {
-        console.error("Failed to add attachment:", error);
-      }
+    try {
+      const created = await runtimeClient.createProject(selected);
+      const existedBefore = projects.some((project) => project.id === created.id);
+      setProjects((prev) => {
+        const without = prev.filter((project) => project.id !== created.id);
+        return [created, ...without];
+      });
+      setProjectExpandedById((prev) => ({ ...prev, [created.id]: true }));
+      setActiveProject(created);
+      await runtimeClient.setActiveProject(created.id);
+      setMemoryToast(
+        existedBefore
+          ? `Project already added: ${(created.name ?? "").trim() || created.root_path}`
+          : `Added project: ${(created.name ?? "").trim() || created.root_path}`,
+      );
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to add project.";
+      setMemoryToast(message);
     }
   }
 
-  function handleRemoveAttachment(id: string) {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-  }
-
-  // Tauri drag-drop listener (gets actual file paths)
-  useEffect(() => {
-    const webview = getCurrentWebviewWindow();
-    const unlistenDrop = webview.onDragDropEvent(async (event) => {
-      if (event.payload.type === "over") {
-        setIsDraggingOver(true);
-      } else if (event.payload.type === "leave") {
-        setIsDraggingOver(false);
-      } else if (event.payload.type === "drop") {
-        setIsDraggingOver(false);
-        const paths = event.payload.paths;
-        for (const path of paths) {
-          try {
-            const result = await invoke<{
-              id: string;
-              path: string;
-              name: string;
-              file_type: "image" | "file";
-              size: number;
-              preview_data_url: string | null;
-            }>("ingest_attachment_cmd", { path });
-            setAttachments((prev) => [
-              ...prev,
-              {
-                id: result.id,
-                path: result.path,
-                name: result.name,
-                type: result.file_type,
-                size: result.size,
-                previewDataUrl: result.preview_data_url ?? undefined
-              }
-            ]);
-          } catch (error) {
-            console.error("Failed to add dropped file:", error);
-          }
-        }
-      }
-    });
-
-    return () => {
-      unlistenDrop.then((fn) => fn());
-    };
-  }, []);
-
-  // Prevent default browser behavior for drag events
-  function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-  }
-
-	  useEffect(() => {
-	    if (!activeThreadId) return;
-    const nextWorkspace = effectiveCwd;
-	    if (!nextWorkspace) return;
-	    if (lastThreadWorkspaceRef.current === nextWorkspace) return;
-	    lastThreadWorkspaceRef.current = nextWorkspace;
-	    void (USE_RUNTIME_CLIENT
-        ? runtimeClient.setThreadWorkspace(activeThreadId, nextWorkspace)
-        : invoke("set_thread_workspace_cmd", {
-            threadId: activeThreadId,
-            workspacePath: nextWorkspace
-          })).catch(() => {
-	      // Non-fatal; workspace is best-effort metadata.
-	    });
-	  }, [activeThreadId, effectiveCwd, runtimeClient]);
-
-  async function handleDeleteThread(threadId: string) {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
+  async function handleRemoveProject(project: ProjectRecord) {
+    setProjectMenuProjectId(null);
+    const label = (project.name ?? "").trim() || project.root_path;
+    const shouldRemove = window.confirm(
+      `Remove project \"${label}\" from this desktop?\n\nThreads stay in local history; this only removes project grouping.`,
+    );
+    if (!shouldRemove) return;
+    try {
+      await runtimeClient.deleteProject(project.id);
+      setProjects((prev) => prev.filter((row) => row.id !== project.id));
       try {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/threads?id=eq.${encodeURIComponent(threadId)}`,
-          { method: "DELETE", headers: { Prefer: "return=minimal" } },
-          session,
+        const refreshedThreads = await listLocalThreads();
+        setThreads(refreshedThreads);
+      } catch {
+        setThreads((prev) =>
+          prev.map((thread) =>
+            thread.project_id === project.id
+              ? {
+                  ...thread,
+                  project_id: null,
+                }
+              : thread,
+          ),
         );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
-      } catch (error) {
-        console.error("Failed to delete cloud thread:", error);
       }
-    }
-
-	    await (USE_RUNTIME_CLIENT
-        ? runtimeClient.deleteThread(threadId)
-        : invoke("delete_thread_cmd", { threadId }));
-    setThreads((prev) => prev.filter((t) => t.id !== threadId));
-    if (activeThreadId === threadId) {
-      const remaining = threads.filter((t) => t.id !== threadId);
-      const selectable = useCloudPersonalThreadMode ? remaining.filter((t) => (t.last_seq ?? 0) > 0) : remaining;
-      setActiveThreadId(selectable.length > 0 ? selectable[0].id : null);
-      setMessages([]);
+      setProjectExpandedById((prev) => {
+        const next = { ...prev };
+        delete next[project.id];
+        return next;
+      });
+      if (activeProject?.id === project.id) {
+        setActiveProject(null);
+        await runtimeClient.setActiveProject(null);
+      }
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to remove project.";
+      setMemoryToast(message);
     }
   }
 
-  function getThreadPreview(threadId: string): string {
-    if (threadId !== activeThreadId) return "";
-    const firstUserMsg = messages.find((m) => m.role === "user");
-    if (!firstUserMsg) return "No messages";
-    const text = parseMessageText(firstUserMsg.content_json);
-    return text.length > 40 ? text.slice(0, 40) + "..." : text;
+  async function handleRenameProject(project: ProjectRecord) {
+    setProjectMenuProjectId(null);
+    const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
+    const nextName = window.prompt("Project name", defaultName);
+    if (nextName === null) return;
+    const cleaned = nextName.trim();
+    if (!cleaned) {
+      setMemoryToast("Project name cannot be empty.");
+      return;
+    }
+    try {
+      const updated = await runtimeClient.updateProjectName(project.id, cleaned);
+      setProjects((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      if (activeProject?.id === updated.id) {
+        setActiveProject(updated);
+      }
+      setProjectMenuProjectId(null);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to rename project.";
+      setMemoryToast(message);
+    }
+  }
+
+  async function handleSetActiveProject(project: ProjectRecord | null) {
+    try {
+      await runtimeClient.setActiveProject(project?.id ?? null);
+      setActiveProject(project);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to switch project.";
+      setMemoryToast(message);
+    }
   }
 
   function focusChatInput() {
     requestAnimationFrame(() => chatInputRef.current?.focus());
   }
 
-  function enterDraftThread() {
-    // ChatGPT-like: "New chat" is a draft (no thread row until first send).
-    if (!activeThreadId) {
-      focusChatInput();
-      return;
-    }
+  const { handleSlashCommand, handleSlashSelect } = useDesktopSlashCommands({
+    sessionResume,
+    formatRelativeTime,
+    agentMode,
+    activeModelId,
+    workspaceRoot,
+    activeProject,
+    execPolicyRules,
+    effectiveCwd,
+    runtimeClient,
+    setSlashPanel,
+    setAgentMode,
+    getSession: () => supabaseSessionRef.current,
+    getSupabaseUrl,
+    setAuthError,
+    handleSignIn,
+    fetchWithSupabaseAuth,
+    getSupabaseAuthUid,
+    getEffectiveWorkspacePath,
+    readSupabaseError,
+    setActiveView,
+    setSettingsPage,
+    setPersonalMemoryQuery,
+    loadPersonalMemoryItems,
+    ensureThreadId,
+    setCommandInput,
+    dispatchRunPhase,
+    setAgentStatus,
+    setRunningTools,
+  });
 
-    setActiveThreadId(null);
-    setMessages([]);
-    setToolCalls([]);
-    setTurnsByAssistantEventId({});
-    setSessionResume(null);
-    setAgentStatus(null);
-    setRunningTools([]);
-    setSlashPanel(null);
-    setPendingToolApproval(null);
-    setIsToolApprovalSubmitting(false);
-    clearStreamingState();
-
-    focusChatInput();
-  }
-
-  async function ensureThreadId(): Promise<string | null> {
-    if (activeThreadId) return activeThreadId;
-    if (!activeModelId) {
-      setMemoryToast("No model selected. Enable a model in Settings → Models.");
-      return null;
-    }
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const threadId = crypto.randomUUID();
-    const thread: ThreadRecord = {
-      id: threadId,
-      title: newThreadTitle || null,
-      engine_id: "messages_agent",
-      model_id: activeModelId,
-      community_id: null,
-      workspace_path: null,
-      created_at: nowSec,
-      updated_at: nowSec,
-      last_event_at: null,
-      last_seq: 0,
-    };
-
-    if (DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED && session && url) {
-      try {
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/threads`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-            body: JSON.stringify({
-              id: threadId,
-              owner_id: getSupabaseAuthUid(session),
-              title: thread.title,
-              engine_id: thread.engine_id,
-              model_id: thread.model_id,
-              community_id: null,
-            }),
-          },
-          session,
-        );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
-      } catch (error) {
-        console.error("Failed to create cloud thread:", error);
-        setMemoryToast("Failed to create thread.");
-        return null;
+  const ensureThreadReadyForDesktopSend = useCallback(
+    async (threadId: string, session: SupabaseSession | null): Promise<boolean> => {
+      const service = resolveThreadServiceForThreadId(threadId);
+      if (service.storageMode === "cloud" && !session) {
+        setAuthError("Sign in to send cloud chat messages.");
+        await handleSignIn();
+        return false;
       }
-    }
+      return ensureThreadReadyForSend(threadId, session);
+    },
+    [ensureThreadReadyForSend, handleSignIn],
+  );
 
-    try {
-      await invoke("upsert_thread_cmd", {
-        threadId: thread.id,
-        title: thread.title,
-        engineId: thread.engine_id,
-        modelId: thread.model_id,
-        communityId: thread.community_id,
-        createdAt: thread.created_at,
-        updatedAt: thread.updated_at,
-      });
-    } catch {
-      // best-effort
-    }
-
-    setThreads((prev) => [thread, ...prev]);
-    setActiveThreadId(thread.id);
-	    const nextWorkspace = effectiveCwd;
-	    if (nextWorkspace) {
-	      try {
-	        await (USE_RUNTIME_CLIENT
-            ? runtimeClient.setThreadWorkspace(thread.id, nextWorkspace)
-            : invoke("set_thread_workspace_cmd", { threadId: thread.id, workspacePath: nextWorkspace }));
-	        lastThreadWorkspaceRef.current = nextWorkspace;
-	      } catch {
-        // best-effort
-      }
-    } else {
-      lastThreadWorkspaceRef.current = null;
-    }
-    return thread.id;
-  }
-
-  function handleCloudSyncError(error: unknown) {
-    const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
-    if (message.toLowerCase().includes("cloud history limit reached")) {
-      setBuilderUpgradeContext("builder");
-      setBuilderBillingError(message);
-      setIsBuilderUpgradeOpen(true);
-    }
-  }
-
-  async function ensureThreadReadyForSend(
-    sessionId: string,
-    session: SupabaseSession | null,
-  ): Promise<boolean> {
-    const fromState = threads.find((t) => t.id === sessionId) ?? null;
-    const fromDb =
-      fromState ??
-      (USE_RUNTIME_CLIENT
-        ? await runtimeClient.getThread(sessionId)
-        : await invoke<ThreadRecord | null>("get_thread_cmd", { threadId: sessionId }));
-    const currentModel = (fromDb?.model_id ?? "").trim();
-    const desiredModel = (activeModelId ?? "").trim();
-    const modelToUse = desiredModel || currentModel;
-    if (!modelToUse) {
-      setMemoryToast("No model selected. Enable a model in Settings → Models.");
-      return false;
-    }
-    const providerId = providerIdForModelId(modelToUse);
-    if (!providerId) {
-      setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
-      return false;
-    }
-    const hasKey = hasKeyForProvider(providerId);
-
-    let canUseArxPlatform = userAccessPolicy.allowPlatformInference;
-    let planStateResolved = userAccessPolicy.tier !== "unknown";
-    if (!hasKey && session && !planStateResolved) {
-      const url = getSupabaseUrl();
-      const anon = getSupabaseAnonKey();
-      if (url && anon) {
-        let status = builderBillingStatus;
-        if (!status) {
-          try {
-            status = await loadBuilderBillingStatus(session);
-          } catch {
-            status = null;
-          }
-        }
-        if (status) {
-          const resolvedPolicy = resolveUserAccessPolicy({
-            surface: "desktop",
-            authState: "authenticated",
-            builderTier: status.builder_tier,
-          });
-          canUseArxPlatform = resolvedPolicy.allowPlatformInference;
-          planStateResolved = true;
-        }
-      }
-    }
-
-    if (!hasKey && !canUseArxPlatform) {
-      if (session && !planStateResolved) {
-        setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
-      } else if (providerId === "openai") {
-        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
-      } else {
-        setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
-      }
-      setActiveView("settings");
-      setSettingsPage("models");
-      return false;
-    }
-
-    if (
-      fromDb &&
-      (fromDb.engine_id === "messages_agent" || fromDb.engine_id === "openrouter_messages_agent") &&
-      (fromDb.model_id ?? "").trim() === modelToUse
-    ) {
-      return true;
-    }
-
-    try {
-      const updated = await (USE_RUNTIME_CLIENT
-        ? runtimeClient.setThreadEngine({
-            thread_id: sessionId,
-            engine_id: "messages_agent",
-            model_id: modelToUse,
-          })
-        : invoke<ThreadRecord>("set_thread_engine_cmd", {
-            threadId: sessionId,
-            engineId: "messages_agent",
-            modelId: modelToUse,
-          }));
-      setThreads((prev) => {
-        const existingIndex = prev.findIndex((t) => t.id === updated.id);
-        if (existingIndex === -1) return [updated, ...prev];
-        const next = [...prev];
-        next[existingIndex] = updated;
-        return next;
-      });
-      return true;
-    } catch (error) {
-      console.error("Failed to set thread model:", error);
-      return false;
-    }
-  }
-
-  async function handleSendMessage(opts?: { text?: string }) {
-    await executeSendMessageFlow({
-      commandInput,
-      attachments,
-      activeThreadId,
-      effectiveCwd,
-      sendInFlightRef,
-      dispatchRunPhase,
-      onSendStart: () => {
-        autoScrollEnabledRef.current = true;
-      },
-      ensureThreadId,
-      getSession: () => supabaseSessionRef.current,
-      ensureWorkspaceThreadLensBeforeSend,
-      setCommandInput,
-      setAttachments,
-      handleSlashCommand,
-      addMessage: async ({ thread_id, role, content_json }) =>
-        USE_RUNTIME_CLIENT
-          ? runtimeClient.addMessage({ thread_id, role, content_json })
-          : invoke("add_message_cmd", {
-              sessionId: thread_id,
-              role,
-              contentJson: content_json,
-            }),
-      shouldSyncCloud: DESKTOP_PERSONAL_THREADS_CLOUD_SYNC_ENABLED,
-      syncRecentLocalMessagesToCloud,
-      onCloudSyncError: handleCloudSyncError,
-      loadMessages,
-      appendOptimisticUserMessage: (sessionId, contentJson) => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `optimistic-user-${crypto.randomUUID()}`,
-            session_id: sessionId,
-            role: "user",
-            content_json: contentJson,
-            created_at: Math.floor(Date.now() / 1000),
-          },
-        ]);
-      },
-      touchThreadForOptimisticMessage: (sessionId) => {
-        setThreads((prev) =>
-          prev.map((thread) => {
-            if (thread.id !== sessionId) return thread;
-            const nowSec = Math.floor(Date.now() / 1000);
-            return {
-              ...thread,
-              last_seq: Math.max(thread.last_seq ?? 0, 1),
-              updated_at: Math.max(thread.updated_at ?? 0, nowSec),
-            };
-          }),
-        );
-      },
-      ensureThreadReadyForSend,
-      clearStreamingRefs,
-      scheduleStreamingUpdate,
-      sendTurn: async ({
-        thread_id,
-        cwd,
-        input,
-        user_content_json,
-        supabase_url,
-        supabase_anon_key,
-        supabase_access_token,
-      }) =>
-        USE_RUNTIME_CLIENT
-          ? runtimeClient.sendTurn({
-              thread_id,
-              cwd,
-              input,
-              user_content_json,
-              supabase_url,
-              supabase_anon_key,
-              supabase_access_token,
-            })
-          : invoke<SendTurnResult>("submit_turn_cmd", {
-              threadId: thread_id,
-              cwd,
-              input,
-              userContentJson: user_content_json,
-              supabaseUrl: supabase_url,
-              supabaseAnonKey: supabase_anon_key,
-              supabaseAccessToken: supabase_access_token,
-            }),
-      getSupabaseUrl,
-      getSupabaseAnonKey,
-      getSupabaseAccessToken: (session) => session.access_token ?? "",
-      setMemoryToast,
-      setAgentStatus,
-      setRunningTools,
-    }, opts);
-  }
-
-  async function proposeShellCommand(_sessionId: string, _command: string) {
-    setSlashPanel({
-      kind: "info",
-      title: "Disabled",
-      body: "Internal tool execution is disabled in MVP; use the engine terminal."
-    });
-  }
-
-  async function handleSlashCommand(userText: string, sessionId: string): Promise<boolean> {
-    if (!userText.startsWith("/")) return false;
-    const [rawName] = userText.slice(1).trim().split(/\s+/);
-    const name = (rawName || "").toLowerCase();
-    if (!name) return false;
-
-    const showPanel = (kind: "status" | "approvals" | "info", title: string, body?: string) => {
-      setSlashPanel({ kind, title, body });
-    };
-
-    if (name === "status") {
-      const lastMsg = sessionResume?.last_message_at
-        ? formatRelativeTime(sessionResume.last_message_at)
-        : "—";
-      const responseId = sessionResume?.last_response_id ?? "—";
-      const text = [
-        "Status",
-        `Session: ${sessionId}`,
-        `Mode: ${agentMode}`,
-        `Model: ${activeModelId ?? "none"}`,
-        `Workspace: ${workspaceRoot ?? "(not bound)"}`,
-        `Project: ${activeProject?.name ?? activeProject?.root_path ?? "none"}`,
-        `Last message: ${lastMsg}`,
-        `Last response: ${responseId}`,
-        "Internal tool system: disabled (use engine terminal)"
-      ].join("\n");
-      showPanel("status", "Status", text);
-      return true;
-    }
-
-    if (name === "mode") {
-      const rest = userText.slice(userText.indexOf("mode") + "mode".length).trim();
-      const requested = (rest || "").toLowerCase();
-      if (!requested) {
-        showPanel("info", "Mode", `Current mode: ${agentMode}\n\nUsage: /mode build|plan|explore`);
-        return true;
-      }
-      if (requested !== "build" && requested !== "plan" && requested !== "explore") {
-        showPanel("info", "Mode", "Invalid mode. Usage: /mode build|plan|explore");
-        return true;
-      }
-      await invoke("set_agent_mode_cmd", { sessionId, mode: requested });
-      setAgentMode(requested as AgentMode);
-      showPanel("info", "Mode", `Set mode: ${requested}`);
-      return true;
-    }
-
-    if (name === "approvals") {
-      const globalRules = execPolicyRules.trim() ? execPolicyRules.trim() : "prompt";
-      const text = [
-        "Approvals",
-        "Global rules:",
-        globalRules
-      ].join("\n");
-      showPanel("approvals", "Approvals", text);
-      return true;
-    }
-
-    if (name === "diff") {
-      await proposeShellCommand(sessionId, "git diff");
-      showPanel("info", "Diff", "Proposed: git diff");
-      return true;
-    }
-
-    if (name === "test") {
-      const cwd = effectiveCwd || "";
-      const commands = await invoke<string[]>("detect_test_commands_cmd", {
-        cwd
-      });
-      if (!commands || commands.length === 0) {
-        showPanel("info", "Test", "No test command detected for this project.");
-        return true;
-      }
-      const command = commands[0];
-      await proposeShellCommand(sessionId, command);
-      const more = commands.length > 1 ? ` (also found: ${commands.slice(1).join(", ")})` : "";
-      showPanel("info", "Test", `Proposed: ${command}${more}`);
-      return true;
-    }
-
-	    if (name === "remember") {
-      const rest = userText.slice(userText.indexOf("remember") + "remember".length).trim();
-      try {
-        if (!rest) {
-          showPanel(
-            "info",
-            "Memory",
-            "Usage:\n/remember <content>\n/remember global: <content>\n/remember workspace: <content>"
-          );
-          return true;
-        }
-
-        let scope: "global" | "workspace" = "workspace";
-        let content = rest;
-        const scopeMatch = rest.match(/^(global|workspace)\s*:\s*([\s\S]+)$/i);
-        if (scopeMatch) {
-          scope = scopeMatch[1].toLowerCase() as "global" | "workspace";
-          content = scopeMatch[2];
-        }
-        content = content.trim();
-        if (!content) {
-          showPanel(
-            "info",
-            "Memory",
-            "Usage:\n/remember <content>\n/remember global: <content>\n/remember workspace: <content>"
-          );
-          return true;
-        }
-
-	        const session = supabaseSessionRef.current;
-	        const url = session ? getSupabaseUrl() : null;
-	        if (!session || !url) {
-	          setAuthError("Sign in to save memory.");
-	          await handleSignIn();
-	          return true;
-	        }
-
-	        const response = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/personal_memory_items`,
-	          {
-	            method: "POST",
-	            headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-	            body: JSON.stringify({
-	              user_id: getSupabaseAuthUid(session),
-	              content,
-	              scope,
-	              scope_id: scope === "workspace" ? getEffectiveWorkspacePath() : null,
-	              pinned: false,
-	            }),
-	          },
-	          session,
-	        );
-	        if (!response.ok) throw new Error(await readSupabaseError(response));
-
-	        setActiveView("settings");
-	        setSettingsPage("memory");
-	        setPersonalMemoryQuery("");
-	        await loadPersonalMemoryItems();
-	        showPanel("info", "Memory", `Saved to ${scope} memory.`);
-	      } catch (error) {
-	        const message =
-	          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to save memory";
-        showPanel("info", "Memory", message);
-      }
-      return true;
-    }
-
-    showPanel("info", "Slash command", `Unknown slash command: /${name}`);
-    return true;
-  }
+  const { handleSendMessage } = useDesktopSendMessageFlow<
+    ThreadRecord,
+    MessageRecord,
+    SupabaseSession | null
+  >({
+    commandInput,
+    attachments,
+    activeThreadId,
+    effectiveCwd,
+    sendInFlightRef,
+    autoScrollEnabledRef,
+    dispatchRunPhase,
+    ensureThreadId,
+    getSession: () => supabaseSessionRef.current,
+    ensureWorkspaceThreadLensBeforeSend,
+    traceThreadContext: (event, payload) =>
+      traceThreadContext(event, {
+        surface: "desktop",
+        ...payload,
+      }),
+    setCommandInput,
+    setAttachments,
+    handleSlashCommand,
+    getThreadServiceById: resolveThreadServiceForThreadId,
+    loadMessages,
+    setMessages,
+    setThreads,
+    ensureThreadReadyForSend: ensureThreadReadyForDesktopSend,
+    clearStreamingRefs,
+    scheduleStreamingUpdate,
+    getSupabaseUrl,
+    getSupabaseAnonKey,
+    setMemoryToast,
+    setAgentStatus,
+    setRunningTools,
+  });
 
   async function applyApprovalMode(mode: "read-only" | "agent" | "agent-full") {
     const preset = APPROVAL_PRESETS[mode];
     setApprovalMode(mode);
     setExecPolicyRules(preset.rules);
-    await invoke("set_approval_mode_cmd", { mode });
-    await invoke("set_exec_policy_rules_cmd", { rules: preset.rules });
+    await runtimeClient.setApprovalMode(mode);
+    await runtimeClient.setExecPolicyRules(preset.rules);
   }
 
-	  async function handleSlashSelect(command: string) {
-	    const sessionId = await ensureThreadId();
-	    if (!sessionId) return;
-	    setCommandInput("");
-	    dispatchRunPhase({ type: "send_start" });
-	    try {
-	      await handleSlashCommand(command, sessionId);
-	    } finally {
-	      dispatchRunPhase({ type: "reset" });
-	      setAgentStatus(null);
-	      setRunningTools([]);
-	    }
-		  }
-
-	  async function runToolCallThroughBackend(_toolCall: ToolCallRecord) {
-	    setSlashPanel({
-	      kind: "info",
-	      title: "Disabled",
-	      body: "Internal tool execution is disabled in this MVP."
-	    });
-	  }
-
-	  async function respondPermission(toolCall: ToolCallRecord, response: "session" | "always") {
-	    if (!activeThreadId) return;
-	    const modelId = activeModelId ?? "";
-	    const cwd = effectiveCwd || "";
-	    try {
-	      const message = await invoke<string>("respond_permission_cmd", {
-	        sessionId: activeThreadId,
-	        modelId,
-	        toolCallId: toolCall.id,
-	        response,
-	        cwd
-	      });
-	      setMemoryToast(message);
-	      if (memoryToastTimeoutRef.current) {
-	        window.clearTimeout(memoryToastTimeoutRef.current);
-	      }
-	      memoryToastTimeoutRef.current = window.setTimeout(() => {
-	        setMemoryToast(null);
-	      }, 2000);
-	    } catch (error) {
-	      console.error("Failed to respond to permission:", error);
-	    }
-	  }
-
-	  async function handleApproveAndRun(toolCall: ToolCallRecord) {
-	    await runToolCallThroughBackend(toolCall);
-	  }
-
-	  async function handleRejectToolCall(toolCall: ToolCallRecord) {
-	    setToolCalls((prev) =>
-	      prev.map((item) =>
-	        item.id === toolCall.id ? { ...item, status: "rejected" } : item
-	      )
-	    );
-	  }
+  const { resolvePendingToolApproval } = useDesktopToolApprovalActions<ToolApprovalRequestedPayload>({
+    runtimeClient,
+    setMemoryToast,
+    pendingToolApproval,
+    setPendingToolApproval,
+    setIsToolApprovalSubmitting,
+    onApprovalResolved: () => {
+      dispatchRunPhase({ type: "approval_resolved" });
+    },
+  });
 
   const activeToolCalls = useMemo(() => {
     if (!activeThreadId) return [];
@@ -10985,6 +5447,42 @@ function App() {
     call.tool_name === "update_plan";
   const shouldHideToolNameFromUi = (toolName: string | null | undefined): boolean =>
     (toolName ?? "").trim() === "update_plan";
+
+  const { cancelActiveRun } = useDesktopRunOrchestration<
+    ToolApprovalRequestedPayload,
+    AgentStatusPayload,
+    RunningTool
+  >({
+    activeThreadId,
+    activePage,
+    slashQuery: slashState.query,
+    isSending,
+    streamingContent,
+    pendingToolApproval,
+    runningToolCallId,
+    runtimeClient,
+    cancelRunForThread,
+    dispatchRunPhase,
+    setPendingToolApproval,
+    setIsToolApprovalSubmitting,
+    setAgentStatus,
+    setRunningTools,
+    setRunningToolCallId,
+    setMemoryToast,
+    memoryToastTimeoutRef,
+    clearStreamingRefs,
+    scheduleStreamingUpdate,
+    setStreamingContent,
+    setStreamingTokens,
+    setStreamingMeta,
+    streamingContentRef,
+    streamingTokensRef,
+    streamingMetaRef,
+    loadMessages,
+    loadToolCalls,
+    handleOpenedUrls,
+    shouldHideToolNameFromUi,
+  });
 
   const isAgentToolCallRecord = (call: ToolCallRecord): boolean =>
     ([
@@ -11058,11 +5556,51 @@ function App() {
       return aTime - bTime;
     });
   }, [messages, activeToolGroups, activeUngroupedToolCalls]);
+  const turnMetaByMessageId = useMemo(() => {
+    const result = new Map<string, { isEndOfTurn: boolean; turnContent: string }>();
+    const messageItems = combinedFeed.filter(
+      (item): item is { type: "message"; data: MessageRecord } => item.type === "message",
+    );
+    if (messageItems.length === 0 || streamingContent) {
+      return result;
+    }
 
+    let assistantBuffer: MessageRecord[] = [];
+    const flushAssistantTurn = () => {
+      if (assistantBuffer.length === 0) return;
+      const endMessage = assistantBuffer[assistantBuffer.length - 1];
+      const turnContent = assistantBuffer
+        .map((message) => parseMessageText(message.content_json))
+        .join("\n\n");
+      result.set(endMessage.id, {
+        isEndOfTurn: true,
+        turnContent,
+      });
+      assistantBuffer = [];
+    };
+
+    for (const item of messageItems) {
+      const message = item.data;
+      if (message.role === "assistant") {
+        assistantBuffer.push(message);
+        continue;
+      }
+      if (message.role === "user") {
+        flushAssistantTurn();
+      }
+    }
+    flushAssistantTurn();
+    return result;
+  }, [combinedFeed, streamingContent]);
   const [expandedOutputIds, setExpandedOutputIds] = useState<Set<string>>(new Set());
   const [expandedToolGroupIds, setExpandedToolGroupIds] = useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sourcesUsed, setSourcesUsed] = useState<SourcesUsedState>({ open: false });
+  const { handleOpenSourcesUsed } = useDesktopSourcesUsed({
+    activeThreadId,
+    runtimeClient,
+    setSourcesUsed,
+  });
 
   const toggleToolGroupExpanded = useCallback((groupId: string) => {
     setExpandedToolGroupIds((prev) => {
@@ -11077,51 +5615,9 @@ function App() {
     setExpandedToolGroupIds(new Set());
   }, [activeThreadId]);
 
-	  async function resolvePendingToolApproval(
-	    approved: boolean,
-      opts?: { allow_write_edit_for_session?: boolean }
-	  ) {
-    const pending = pendingToolApproval;
-    if (!pending) return;
-	    setIsToolApprovalSubmitting(true);
-	    try {
-	      await (USE_RUNTIME_CLIENT
-          ? runtimeClient.decideToolCall(pending.tool_call_id, {
-              approved,
-              allow_write_edit_for_session: opts?.allow_write_edit_for_session ?? false,
-            })
-          : invoke("decide_tool_call_cmd", {
-              toolCallId: pending.tool_call_id,
-              approved,
-              allowWriteEditForSession: opts?.allow_write_edit_for_session ?? null,
-            }));
-	      setPendingToolApproval(null);
-      dispatchRunPhase({ type: "approval_resolved" });
-    } catch (error) {
-      console.error("Failed to resolve tool approval:", error);
-      setMemoryToast("Failed to send tool approval decision.");
-    } finally {
-      setIsToolApprovalSubmitting(false);
-    }
-  }
-
-  async function resolvePendingInferenceFallback(approved: boolean) {
-    const pending = pendingInferenceFallback;
-    if (!pending) return;
-    setIsInferenceFallbackSubmitting(true);
-    try {
-      await invoke("decide_inference_fallback_cmd", {
-        approvalId: pending.approval_id,
-        approved,
-      });
-      setPendingInferenceFallback(null);
-    } catch (error) {
-      console.error("Failed to resolve inference fallback:", error);
-      setMemoryToast("Failed to send inference decision.");
-    } finally {
-      setIsInferenceFallbackSubmitting(false);
-    }
-  }
+  useEffect(() => {
+    setTeachStatusByMessageId({});
+  }, [activeThreadId]);
 
   async function handleCopyMessage(messageId: string, content: string) {
     try {
@@ -11133,83 +5629,12 @@ function App() {
     }
   }
 
-  async function handleOpenSourcesUsed(turn: TurnRecord) {
-    setSourcesUsed({
-      open: true,
-      turnId: turn.id,
-      isLoading: true,
-      error: null,
-      workspacePath: null,
-      personalMemory: []
-    });
-
-    if (!activeThreadId) {
-      setSourcesUsed({
-        open: true,
-        turnId: turn.id,
-        isLoading: false,
-        error: "No active thread.",
-        workspacePath: null,
-        personalMemory: []
-      });
-      return;
-    }
-
-    if (!turn.memory_retrieval_event_id) {
-      setSourcesUsed({
-        open: true,
-        turnId: turn.id,
-        isLoading: false,
-        error: null,
-        workspacePath: null,
-        personalMemory: []
-      });
-      return;
-    }
-
-    try {
-      const evt = await invoke<EventRecord | null>("get_event_cmd", {
-        threadId: activeThreadId,
-        eventId: turn.memory_retrieval_event_id
-      });
-      const payload = evt?.payload_json ? JSON.parse(evt.payload_json) : null;
-      const workspacePath =
-        payload && typeof payload === "object" ? (payload as { workspace_path?: unknown }).workspace_path : null;
-      const personal = (payload as any)?.personal_memory?.items;
-      const personalMemory: Array<{ id: string; content: string }> = Array.isArray(personal)
-        ? personal
-            .map((it: any) => ({
-              id: typeof it?.id === "string" ? it.id : "",
-              content: typeof it?.content === "string" ? it.content : ""
-            }))
-            .filter((it: any) => it.id && it.content)
-        : [];
-
-      setSourcesUsed({
-        open: true,
-        turnId: turn.id,
-        isLoading: false,
-        error: null,
-        workspacePath: typeof workspacePath === "string" ? workspacePath : null,
-        personalMemory
-      });
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load sources.";
-      setSourcesUsed({
-        open: true,
-        turnId: turn.id,
-        isLoading: false,
-        error: message,
-        workspacePath: null,
-        personalMemory: []
-      });
-    }
-  }
+  const formatCommunitySourceStatus = (ok: boolean | null, usedCount: number): string => {
+    if (ok === null) return "Unavailable";
+    if (!ok) return "Failed";
+    const count = Math.max(0, usedCount);
+    return `OK (${count} item${count === 1 ? "" : "s"})`;
+  };
 
   function toggleOutputExpanded(toolCallId: string) {
     setExpandedOutputIds((prev) => {
@@ -11223,11 +5648,53 @@ function App() {
     });
   }
 
+  const persistActiveProjectForPanel = useCallback(
+    async (projectId: string) => {
+      try {
+        await runtimeClient.setActiveProject(projectId);
+      } catch {
+        // best-effort persistence; local UI state is authoritative for immediate draft routing.
+      }
+    },
+    [runtimeClient],
+  );
+
+  const threadPanelController = useDesktopThreadPanelActions<ProjectRecord>({
+    activeProjectId: activeProject?.id ?? null,
+    setActiveProject: (project) => setActiveProject(project),
+    persistActiveProject: persistActiveProjectForPanel,
+    setThreadLaneFilter,
+    enterDraftThread,
+    projectMenuProjectId,
+    setProjectMenuProjectId,
+    setProjectExpandedById,
+    projectMenuRef,
+  });
+
+  const handleSelectThreadFromSidebar = (thread: ThreadRecord) => {
+    desktopThreadContextController.selectThread(thread);
+  };
+
+  const renderSessionItem = (
+    thread: ThreadRecord,
+    opts?: { showProjectHint?: boolean },
+  ) => {
+    const resolvedLabel = getSidebarThreadTitle(thread, opts);
+    return (
+      <ThreadSidebarSessionItem
+        key={thread.id}
+        title={resolvedLabel}
+        isActive={thread.id === activeThreadId}
+        onSelect={() => handleSelectThreadFromSidebar(thread)}
+        onDelete={() => handleDeleteThread(thread.id)}
+      />
+    );
+  };
+
   const formatBackTargetLabel = (snapshot: NavSnapshot): string => {
     if (snapshot.page === "discover") return "discover";
     if (snapshot.page === "community") {
-      const tab = snapshot.communityTab.replace(/_/g, " ").trim().toLowerCase();
-      return tab && tab !== "chat" ? `community / ${tab}` : "community";
+      return "community";
     }
     if (snapshot.page === "workspace") {
       if (snapshot.view === "settings") {
@@ -11241,138 +5708,66 @@ function App() {
   const defaultBackLabel = workspaceRoot ? `workspace / ${workspaceRoot.split("/").pop()}` : "workspace";
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabel(backTargetSnapshot) : null;
+  const handleTopbarBackFromWorkspaceSettings = () => {
+    if (goBack()) return;
+    setActiveView("home");
+  };
+  const handleTopbarToggleThreadsPanel = () => {
+    setUserWantsSessions((prev) => !prev);
+  };
+  const handleTopbarBackToWorkspace = () => {
+    if (goBack()) return;
+    setActivePage("workspace");
+  };
+  const handleTopbarOpenCommunity = () => {
+    if (!activeCommunity) return;
+    const nextCommunityId = activeCommunityId ?? activeCommunity.id;
+    const willChange =
+      activeView !== "home" ||
+      activePage !== "community" ||
+      communityTab !== "chat" ||
+      (activeCommunityId ?? null) !== nextCommunityId;
+    if (willChange) pushNavSnapshot();
+
+    if (activeView === "settings") {
+      setActiveView("home");
+    }
+
+    setActiveView("home");
+    setActivePage("community");
+    setCommunityTab("chat");
+    setUnreadCount(0); // Clear unread when opening community
+    setActiveCommunityId(nextCommunityId);
+  };
+  const handleRailOpenDiscover = () => {
+    if (activePage !== "discover") pushNavSnapshot();
+    setActiveView("home");
+    setActivePage("discover");
+  };
+  const handleRailToggleSettings = () => {
+    const nextView: AppView = activePage === "workspace" && activeView === "settings" ? "home" : "settings";
+    if (nextView === "settings") pushNavSnapshot();
+    setActivePage("workspace");
+    setActiveView(nextView);
+  };
 
   return (
     <div className="app-root desktop-root">
-      <header className="app-topbar" data-tauri-drag-region>
-        <div className="topbar-left" data-tauri-drag-region>
-          {activePage === "workspace" ? (
-            activeView === "settings" ? (
-              <button
-                className="back-to-workspace"
-                data-tauri-drag-region="false"
-                onClick={() => {
-                  if (goBack()) return;
-                  setActiveView("home");
-                }}
-                title="Back"
-              >
-                <svg viewBox="0 0 24 24" className="back-icon">
-                  <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
-                <span className="back-path">
-                  {backTargetLabel ?? defaultBackLabel}
-                </span>
-              </button>
-            ) : (
-              <>
-                <button
-                  className={`icon-button${userWantsSessions ? " active" : ""}`}
-                  data-tauri-drag-region="false"
-                  onClick={() => setUserWantsSessions((prev) => !prev)}
-                  aria-label="Toggle threads panel"
-                  title="Toggle threads panel"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path d="M9 4v16" />
-                  </svg>
-                </button>
-                <button
-                  className="workspace-selector"
-                  data-tauri-drag-region="false"
-                  onClick={handleChangeWorkspace}
-                  title={
-                    workspaceRoot
-                      ? `CWD: ${effectiveCwd || "(not bound)"}\nWorkspace root: ${workspaceRoot}`
-                      : `CWD: ${effectiveCwd || "(not bound)"}`
-                  }
-                >
-                  <svg viewBox="0 0 24 24" className="workspace-icon">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <span className="workspace-name">
-                    {!effectiveCwd
-                      ? "Select directory..."
-                      : effectiveCwd.split("/").pop() ?? effectiveCwd}
-                  </span>
-                </button>
-                <button
-                  className="new-session-header-btn"
-                  data-tauri-drag-region="false"
-                  onClick={enterDraftThread}
-                  title="New thread"
-                >
-                  <svg viewBox="0 0 24 24">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </button>
-              </>
-            )
-          ) : (
-            <button
-              className="back-to-workspace"
-              data-tauri-drag-region="false"
-              onClick={() => {
-                if (goBack()) return;
-                setActivePage("workspace");
-              }}
-              title="Back"
-            >
-              <svg viewBox="0 0 24 24" className="back-icon">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span className="back-path">
-                {backTargetLabel ?? defaultBackLabel}
-              </span>
-            </button>
-          )}
-        </div>
-        <div className="topbar-right" data-tauri-drag-region>
-          {activeCommunity && (
-            <button
-              className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-              data-tauri-drag-region="false"
-              onClick={() => {
-                const nextCommunityId = activeCommunityId ?? activeCommunity.id;
-                const willChange =
-                  activeView !== "home" ||
-                  activePage !== "community" ||
-                  communityTab !== "chat" ||
-                  (activeCommunityId ?? null) !== nextCommunityId;
-                if (willChange) pushNavSnapshot();
-
-                if (activeView === "settings") {
-                  setActiveView("home");
-                }
-
-                setActiveView("home");
-                setActivePage("community");
-                setCommunityTab("chat");
-                setUnreadCount(0); // Clear unread when opening community
-                setActiveCommunityId(nextCommunityId);
-              }}
-              aria-label="Open community"
-              title={activeCommunity.name}
-            >
-              {activeCommunity.avatar_url ? (
-                <img
-                  className="community-btn-avatar"
-                  src={activeCommunity.avatar_url}
-                  alt={activeCommunity.name}
-                  loading="lazy"
-                />
-              ) : (
-                <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
-              )}
-              {unreadCount > 0 && activePage !== "community" && (
-                <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-              )}
-            </button>
-          )}
-        </div>
-      </header>
+      <DesktopTopbar
+        activePage={activePage}
+        activeView={activeView}
+        userWantsSessions={userWantsSessions}
+        backTargetLabel={backTargetLabel}
+        defaultBackLabel={defaultBackLabel}
+        activeCommunity={activeCommunity}
+        unreadCount={unreadCount}
+        getCommunityInitials={communityInitials}
+        onBackFromWorkspaceSettings={handleTopbarBackFromWorkspaceSettings}
+        onToggleThreadsPanel={handleTopbarToggleThreadsPanel}
+        onNewThread={enterDraftThread}
+        onBackToWorkspace={handleTopbarBackToWorkspace}
+        onOpenCommunity={handleTopbarOpenCommunity}
+      />
       {appToast && (
         <div className="app-toast" role="status" aria-live="polite">
           <div className="app-toast-inner">{appToast}</div>
@@ -11382,98 +5777,18 @@ function App() {
         className={`app-shell${activePage === "workspace" ? " desktop-sessions-layout" : ""}${showCommunityRail ? " with-community-rail" : ""}${((activePage === "workspace" && !showSidePanel) || activePage === "discover") ? " no-left" : ""}${(activePage === "workspace" || !showCommunityPanel) ? " no-right" : ""}${sessionsCompact ? " sessions-compact" : ""}`}
       >
       {showCommunityRail && (
-        <aside className="rail community-rail" aria-label="Communities">
-          <div className="rail-main">
-            <button
-              type="button"
-              className={`community-rail-button${activePage === "discover" ? " active" : ""}`}
-              onClick={() => {
-                if (activePage !== "discover") pushNavSnapshot();
-                setActiveView("home");
-                setActivePage("discover");
-              }}
-              title="Discover communities"
-              aria-label="Discover communities"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="community-rail-icon">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M16.5 7.5l-3.2 8.1-8.1 3.2 3.2-8.1 8.1-3.2z" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-              </svg>
-            </button>
-            <div className="community-rail-divider" />
-            {communities.map((community) => (
-              <button
-                key={community.id}
-                type="button"
-                className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
-                onClick={() => handleSelectActiveCommunity(community.id)}
-                title={community.name}
-              >
-                {community.avatar_url ? (
-                  <img
-                    className="community-rail-avatar"
-                    src={community.avatar_url}
-                    alt={community.name}
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="community-rail-initials">{communityInitials(community.name)}</span>
-                )}
-              </button>
-            ))}
-            {communities.length === 0 && (actionablePendingInvites.length > 0 || supabaseSession) && (
-              <div className="community-rail-empty">
-                {actionablePendingInvites.length > 0
-                  ? `Invite waiting: ${formatInviteLabel(
-                      actionablePendingInvites[0].invite_key,
-                      actionablePendingInvites[0].community_name
-                    )}`
-                  : communitiesLoadError
-                    ? "Couldn't load communities. Open Settings → Community."
-                    : "No communities yet."}
-              </div>
-            )}
-            <div className="community-rail-divider" />
-            <button
-              type="button"
-              className="community-rail-button community-rail-add"
-              onClick={openCreateCommunityModal}
-              title="Create community"
-              aria-label="Create community"
-            >
-              +
-            </button>
-          </div>
-          <div className="rail-footer">
-            <button
-              type="button"
-              className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
-              onClick={() => {
-                const nextView: AppView = activePage === "workspace" && activeView === "settings" ? "home" : "settings";
-                if (nextView === "settings") pushNavSnapshot();
-                setActivePage("workspace");
-                setActiveView(nextView);
-              }}
-              title="Settings"
-              aria-label="Settings"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className="community-rail-icon"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-          </div>
-        </aside>
+        <DesktopCommunityRail
+          activePage={activePage}
+          activeView={activeView}
+          communities={communities}
+          activeCommunityId={activeCommunityId}
+          emptyMessage={communityRailEmptyMessage}
+          getCommunityInitials={communityInitials}
+          onOpenDiscover={handleRailOpenDiscover}
+          onSelectCommunity={handleSelectActiveCommunity}
+          onOpenCreateCommunity={openCreateCommunityModal}
+          onToggleSettings={handleRailToggleSettings}
+        />
       )}
       {activePage === "workspace" && (
         <aside className={`sessions${showSidePanel ? "" : " is-collapsed"}`} aria-hidden={!showSidePanel}>
@@ -11482,134 +5797,50 @@ function App() {
               <div className="panel-title">Settings</div>
               <div className="session-list">
                 {([
-                  { id: "account", label: settingsGroupLabel("account"), page: "account" as const },
-                  { id: "agent", label: settingsGroupLabel("agent"), page: "models" as const },
-                  { id: "appearance", label: settingsGroupLabel("appearance"), page: "appearance" as const },
-                ] as const).map((group) => (
+                  { id: "account", label: settingsGroupLabel("account"), page: "account" as const,
+                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></span> },
+                  { id: "agent", label: settingsGroupLabel("agent"), page: "models" as const,
+                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 9h6M9 13h6M9 17h4" /></svg></span> },
+                  { id: "appearance", label: settingsGroupLabel("appearance"), page: "appearance" as const,
+                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" /></svg></span> },
+                ] as { id: string; label: string; page: SettingsPage; icon: React.ReactNode }[]).map((group) => (
                   <button
                     key={group.id}
                     className={settingsGroup === group.id ? "nav-item active" : "nav-item"}
                     onClick={() => setSettingsPage(group.page)}
                     type="button"
                   >
+                    {group.icon}
                     {group.label}
                   </button>
                 ))}
               </div>
             </>
-          ) : (
-            <>
-	              <div className="session-search" role="search" aria-label="Search threads">
-                  <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                  <input
-                    value={threadSearchQuery}
-                    onChange={(event) => setThreadSearchQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        setThreadSearchQuery("");
-                      }
-                    }}
-                    placeholder="Search threads…"
-                    aria-label="Search threads"
-                  />
-                  {threadSearchQuery.trim() && (
-                    <button
-                      type="button"
-                      className="session-search-clear"
-                      onClick={() => setThreadSearchQuery("")}
-                      aria-label="Clear search"
-                      title="Clear"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-	              <div className="session-list">
-                  {normalizedThreadSearch ? (
-                    threadSearchResults.length === 0 ? (
-                      <div className="empty-state">No matching threads.</div>
-                    ) : (
-                      threadSearchResults.map((thread) => (
-                        <div
-                          key={thread.id}
-                          className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                          onClick={() => setActiveThreadId(thread.id)}
-                        >
-                          <div className="session-content">
-                            <div className="session-title">
-                              {(thread.title ?? "").trim() || "Untitled thread"}
-                            </div>
-                            <div className="session-preview">
-                              {getThreadPreview(thread.id)}
-                            </div>
-                          </div>
-                          <div className="session-meta">
-                            <div className="session-actions">
-                              <button
-                                className="session-action"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteThread(thread.id);
-                                }}
-                                title="Delete thread"
-                              >
-                                <svg viewBox="0 0 24 24">
-                                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )
-                  ) : (
-                    <>
-                      {groupThreadsByDate(visibleThreads).map((group) => (
-                        <div key={group.label} className="session-group">
-                          <div className="session-group-label">{group.label}</div>
-                          {group.threads.map((thread) => (
-                            <div
-                              key={thread.id}
-                              className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                              onClick={() => setActiveThreadId(thread.id)}
-                            >
-                              <div className="session-content">
-                                <div className="session-title">
-                                  {(thread.title ?? "").trim() || "Untitled thread"}
-                                </div>
-                                <div className="session-preview">
-                                  {getThreadPreview(thread.id)}
-                                </div>
-                              </div>
-                              <div className="session-meta">
-                                <div className="session-actions">
-                                  <button
-                                    className="session-action"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteThread(thread.id);
-                                    }}
-                                    title="Delete thread"
-                                  >
-                                    <svg viewBox="0 0 24 24">
-                                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                      {visibleThreads.length === 0 && (
-                        <div className="empty-state">No chats yet. Send a message to start.</div>
-                      )}
-                    </>
-                  )}
-	              </div>
+	          ) : (
+	            <>
+	              <ThreadSidebarPanel
+	                threadSearchQuery={threadSearchQuery}
+	                onThreadSearchQueryChange={setThreadSearchQuery}
+	                threadLaneFilter={threadLaneFilter}
+	                onSelectChatLane={threadPanelController.setChatLane}
+	                onSelectAgentLane={threadPanelController.setAgentLane}
+	                onAddProject={handleAddProjectFromFolderPicker}
+	                normalizedThreadSearch={normalizedThreadSearch}
+	                threadSearchResults={threadSearchResults}
+	                projectThreadGroups={projectThreadGroups}
+	                projectExpandedById={projectExpandedById}
+	                onToggleProjectExpanded={threadPanelController.toggleProjectExpanded}
+	                onStartDraftInProject={threadPanelController.startDraftInProject}
+	                onToggleProjectMenu={threadPanelController.toggleProjectMenu}
+	                projectMenuProjectId={projectMenuProjectId}
+	                projectMenuRef={projectMenuRef}
+	                onRenameProject={handleRenameProject}
+	                onRemoveProject={handleRemoveProject}
+	                generalThreads={generalThreads}
+	                laneThreadsCount={laneThreads.length}
+	                chatThreadGroups={chatThreadGroups}
+	                renderSessionItem={renderSessionItem}
+	              />
             </>
           )}
         </aside>
@@ -11714,7 +5945,7 @@ function App() {
                       setActiveView("home");
                       setCommunityTab("ai_agent");
                     }}
-                    title={activeCommunityOwnerIsPro === false ? "AI Agent (Pro)" : "AI Agent"}
+                    title={activeCommunityOwnerIsPro === false ? "AI Agent (Architect)" : "AI Agent"}
                   >
                     <span className="nav-icon">
                       <svg viewBox="0 0 24 24">
@@ -11760,28 +5991,6 @@ function App() {
 	                    </span>
 	                    Analytics
 	                  </button>
-	                  {canViewActiveCommunityAutomations && (
-	                    <button
-	                      className={communityTab === "automations" ? "nav-item active" : "nav-item"}
-	                      onClick={() => {
-	                        setActivePage("community");
-	                        setActiveView("home");
-	                        setCommunityTab("automations");
-	                      }}
-	                    >
-	                      <span className="nav-icon">
-	                        <svg viewBox="0 0 24 24">
-	                          <circle cx="6" cy="6" r="2" />
-	                          <circle cx="18" cy="6" r="2" />
-	                          <circle cx="12" cy="18" r="2" />
-	                          <path d="M8 6h8" />
-	                          <path d="M7.4 7.4l3.7 8.1" />
-	                          <path d="M16.6 7.4l-3.7 8.1" />
-	                        </svg>
-	                      </span>
-	                      Automations
-	                    </button>
-	                  )}
 	                </>
 	              )}
 	            </>
@@ -11789,39 +5998,6 @@ function App() {
         </aside>
       )}
       <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
-	        {supabaseSession && pendingPurchaseClaims.length > 0 && !isPendingPurchasesBannerDismissed && (
-	          <div className="pending-purchase-banner" role="status">
-	            <div className="pending-purchase-banner-copy">
-	              <div className="pending-purchase-banner-title">Pending community access</div>
-              <div className="pending-purchase-banner-subtitle">
-                {pendingPurchaseClaims.length === 1
-                  ? `You paid for ${
-                      pendingPurchaseClaims[0]?.community_name ??
-                      pendingPurchaseClaims[0]?.community_slug ??
-                      "a community"
-                    } but didn’t finish joining.`
-                  : `You have ${pendingPurchaseClaims.length} communities waiting to be claimed.`}
-              </div>
-            </div>
-            <div className="pending-purchase-banner-actions">
-              <button
-                type="button"
-                onClick={() => void redeemPendingPurchases()}
-                disabled={isRedeemingPendingPurchases}
-              >
-                {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-              </button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => setIsPendingPurchasesBannerDismissed(true)}
-                disabled={isRedeemingPendingPurchases}
-              >
-                Dismiss
-              </button>
-	            </div>
-	          </div>
-	        )}
           {isCommunityChatLightboxOpen && communityChatLightboxImages.length > 0 && (() => {
             const active =
               communityChatLightboxImages[
@@ -11878,67 +6054,6 @@ function App() {
               </div>
             );
 	          })()}
-		        {pendingInferenceFallback && (() => {
-		          const isQuota = pendingInferenceFallback.reason === "platform_quota_exceeded";
-		          const isChatgpt = pendingInferenceFallback.reason === "chatgpt_error";
-		          const providerLabel =
-		            (pendingInferenceFallback.provider_label ?? "").trim() ||
-		            (pendingInferenceFallback.provider_id ?? "").trim() ||
-		            "your";
-		          const modelId = (pendingInferenceFallback.model_id ?? "").trim();
-		          const title = isQuota ? "Arx AI quota reached" : isChatgpt ? "ChatGPT unavailable" : "Arx AI unavailable";
-		          const note = isQuota
-		            ? "You’ve used your Arx AI quota for this month."
-		            : isChatgpt
-		              ? "ChatGPT sign-in is unavailable right now."
-		              : "Arx platform inference is unavailable right now.";
-		          const modelNote = modelId ? `Model: ${modelId}` : null;
-		          return (
-		            <div className="modal-overlay" onClick={() => void resolvePendingInferenceFallback(false)}>
-		              <div className="modal" onClick={(event) => event.stopPropagation()}>
-		                <div className="modal-header">
-		                  <div className="modal-title">{title}</div>
-		                  <button
-		                    className="modal-close"
-		                    onClick={() => void resolvePendingInferenceFallback(false)}
-		                    title="Close"
-		                  >
-		                    ×
-		                  </button>
-		                </div>
-		                <div className="modal-body">
-		                  <div className="model-note">{note}</div>
-		                  <div className="model-note" style={{ marginTop: 10 }}>
-		                    Continue by using {providerLabel} API key{modelId ? " for this model" : ""}?
-		                  </div>
-		                  {modelNote && (
-		                    <div className="model-note" style={{ marginTop: 10 }}>
-		                      {modelNote}
-		                    </div>
-		                  )}
-		                </div>
-		                <div className="modal-footer">
-		                  <button
-		                    type="button"
-		                    className="secondary"
-		                    onClick={() => void resolvePendingInferenceFallback(false)}
-		                    disabled={isInferenceFallbackSubmitting}
-		                  >
-		                    Cancel
-		                  </button>
-		                  <button
-		                    type="button"
-		                    className="primary"
-		                    onClick={() => void resolvePendingInferenceFallback(true)}
-		                    disabled={isInferenceFallbackSubmitting}
-		                  >
-		                    Use my API key
-		                  </button>
-		                </div>
-		              </div>
-		            </div>
-		          );
-		        })()}
 		        {supabaseSession && isBuilderUpgradeOpen && (
 		          <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
 		            <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
@@ -11963,8 +6078,8 @@ function App() {
 		                {(() => {
 		                  const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
 		                  const freeIsCurrent = tier === "free";
-		                  const starterIsCurrent = tier === "builder";
-		                  const proIsCurrent = tier === "pro";
+			                  const builderIsCurrent = tier === "builder";
+			                  const architectIsCurrent = tier === "pro" || tier === "architect";
 		                  const feature = (included: boolean, label: string) => (
 		                    <li className={`plan-feature${included ? " on" : " off"}`}>
 		                      <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
@@ -12002,11 +6117,11 @@ function App() {
 		                        </button>
 		                      </div>
 
-		                      <div className={`plan-card${starterIsCurrent ? " current" : ""}`}>
-		                        <div className="plan-card-header">
-		                          <div className="plan-name">Starter</div>
-		                          {starterIsCurrent && <div className="plan-badge">Current</div>}
-		                        </div>
+			                      <div className={`plan-card${builderIsCurrent ? " current" : ""}`}>
+			                        <div className="plan-card-header">
+			                          <div className="plan-name">Builder</div>
+			                          {builderIsCurrent && <div className="plan-badge">Current</div>}
+			                        </div>
 		                        <div className="plan-price">
 		                          <span className="plan-price-amount">$20</span>
 		                          <span className="plan-price-period">/mo</span>
@@ -12030,21 +6145,21 @@ function App() {
 		                          onClick={() => {
 		                            void startBuilderPlanCheckout("builder", { context: builderUpgradeContext });
 		                          }}
-		                          disabled={isStartingBuilderCheckout || starterIsCurrent}
-		                        >
-		                          {starterIsCurrent
-		                            ? "Current plan"
-		                            : isStartingBuilderCheckout
-		                              ? "Starting…"
-		                              : "Get Starter"}
-		                        </button>
-		                      </div>
-		
-		                      <div className={`plan-card${proIsCurrent ? " current" : ""}`}>
-		                        <div className="plan-card-header">
-		                          <div className="plan-name">Pro</div>
-		                          {proIsCurrent && <div className="plan-badge">Current</div>}
-		                        </div>
+			                          disabled={isStartingBuilderCheckout || builderIsCurrent}
+			                        >
+			                          {builderIsCurrent
+			                            ? "Current plan"
+			                            : isStartingBuilderCheckout
+			                              ? "Starting…"
+			                              : "Get Builder"}
+			                        </button>
+			                      </div>
+			
+			                      <div className={`plan-card${architectIsCurrent ? " current" : ""}`}>
+			                        <div className="plan-card-header">
+			                          <div className="plan-name">Architect</div>
+			                          {architectIsCurrent && <div className="plan-badge">Current</div>}
+			                        </div>
 		                        <div className="plan-price">
 		                          <span className="plan-price-amount">$100</span>
 		                          <span className="plan-price-period">/mo</span>
@@ -12066,13 +6181,13 @@ function App() {
 		                          type="button"
 		                          className="plan-cta"
 		                          onClick={() => {
-		                            void startBuilderPlanCheckout("pro", { context: builderUpgradeContext });
+		                            void startBuilderPlanCheckout("architect", { context: builderUpgradeContext });
 		                          }}
-		                        disabled={isStartingBuilderCheckout || proIsCurrent}
-		                      >
-		                        {proIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Pro"}
-		                      </button>
-		                    </div>
+			                        disabled={isStartingBuilderCheckout || architectIsCurrent}
+			                      >
+			                        {architectIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Architect"}
+			                      </button>
+			                    </div>
 		                  </div>
 		                );
 		              })()}
@@ -12084,60 +6199,6 @@ function App() {
 	                  </div>
 	                </div>
 		              </div>
-	            </div>
-	          </div>
-	        )}
-	        {builderBillingReturn && (
-	          <div className="modal-overlay" onClick={() => setBuilderBillingReturn(null)}>
-	            <div className="modal" onClick={(event) => event.stopPropagation()}>
-	              <div className="modal-header">
-	                <div className="modal-title">Billing</div>
-	                <button className="modal-close" onClick={() => setBuilderBillingReturn(null)} title="Close">
-	                  ×
-	                </button>
-	              </div>
-	              <div className="modal-body">
-	                {builderBillingReturn.status === "cancel" ? (
-	                  <div className="model-note">Checkout canceled.</div>
-	                ) : builderBillingReturn.status === "return" ? (
-	                  <div className="model-note">Manage your plan and billing details.</div>
-		                ) : (
-		                  <div className="model-note">
-		                    {(() => {
-		                      const wantsCreate = builderBillingReturn.context === "create_community";
-		                      if (isFinalizingCreateCommunityFromBilling) return "Creating your community…";
-		                      if (isFinalizingBuilderReturn) return "Finalizing your plan…";
-		                      return wantsCreate ? "Plan confirmed — finishing your community setup." : "Thanks — confirming your plan.";
-		                    })()}
-		                  </div>
-		                )}
-
-	                {!supabaseSession ? (
-	                  <div className="model-note" style={{ marginTop: 10 }}>
-	                    Sign in to confirm your plan status.
-	                  </div>
-	                ) : (
-	                  <div className="model-note" style={{ marginTop: 10 }}>
-	                    {(() => {
-	                      const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-	                      const max = builderBillingStatus?.max_communities ?? 0;
-	                      const feeBps = builderBillingStatus?.platform_fee_bps ?? 1000;
-	                      const feePct = (feeBps / 100).toFixed(0);
-	                      const label = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
-	                      const limitLabel = max > 0 ? `${max} communities` : "0 communities";
-	                      return `${label} · ${limitLabel} · ${feePct}% take`;
-	                    })()}
-	                  </div>
-	                )}
-
-		                {finalizeCreateCommunityError && <div className="auth-error">{finalizeCreateCommunityError}</div>}
-		                {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-		              </div>
-	              <div className="modal-footer">
-	                <button type="button" className="secondary" onClick={() => setBuilderBillingReturn(null)}>
-	                  Close
-	                </button>
-	              </div>
 	            </div>
 	          </div>
 	        )}
@@ -12450,7 +6511,7 @@ function App() {
                         ? "Save changes"
                         : "Save resource"}
                   </button>
-                  <button className="secondary" onClick={closeResourceModal}>
+                  <button className="secondary" onClick={() => { resetResourceForm(); closeResourceModal(); }}>
                     Cancel
                   </button>
                 </div>
@@ -12458,9 +6519,9 @@ function App() {
             </div>
           </div>
         )}
-        {activeInviteGateKey && inviteGateRecord && inviteGateRecord.status === "pending" && (
-          <div className="modal-overlay" onClick={() => void handleInviteGateDismiss()}>
-            <div className="modal invite-gate-modal" onClick={(event) => event.stopPropagation()}>
+	        {activeInviteGateKey && inviteGateRecord && inviteGateRecord.status === "pending" && (
+	          <div className="modal-overlay" onClick={() => void handleInviteGateDismiss()}>
+	            <div className="modal invite-gate-modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
                 <div className="modal-title">Community invite</div>
                 <button
@@ -12495,12 +6556,71 @@ function App() {
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-        {sourcesUsed.open && (
-          <div className="modal-overlay" onClick={() => setSourcesUsed({ open: false })}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
+	            </div>
+	          </div>
+	        )}
+	        {teachCandidateDraft && (
+	          <div className="modal-overlay" onClick={closeTeachCandidateModal}>
+	            <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
+	              <div className="modal-header">
+	                <div className="modal-title">Teach community</div>
+	                <button
+	                  className="modal-close"
+	                  onClick={closeTeachCandidateModal}
+	                  title="Close"
+	                  disabled={isSubmittingTeachCandidate}
+	                >
+	                  ×
+	                </button>
+	              </div>
+	              <div className="modal-body">
+	                <div className="resource-form">
+	                  <input
+	                    type="text"
+	                    placeholder="Memory title (optional)"
+	                    value={teachCandidateTitleInput}
+	                    onChange={(event) => setTeachCandidateTitleInput(event.target.value)}
+	                    disabled={isSubmittingTeachCandidate}
+	                  />
+	                  <textarea
+	                    placeholder="Memory text"
+	                    value={teachCandidateMemoryInput}
+	                    onChange={(event) => setTeachCandidateMemoryInput(event.target.value)}
+	                    disabled={isSubmittingTeachCandidate}
+	                  />
+	                  <div className="resource-meta">
+	                    <span>Evidence items</span>
+	                    <span>{teachCandidateDraft.evidenceItems.length}</span>
+	                  </div>
+	                  {teachCandidateDraft.evidenceItems.length > 0 ? (
+	                    <CommunityEvidenceCitations items={teachCandidateDraft.evidenceItems.slice(0, 6)} />
+	                  ) : (
+	                    <div className="create-community-hint">
+	                      No evidence captured on this turn. This candidate will go to community review.
+	                    </div>
+	                  )}
+	                  {teachCandidateSubmitError && <div className="auth-error">{teachCandidateSubmitError}</div>}
+	                </div>
+	              </div>
+	              <div className="modal-footer">
+	                <div className="resource-modal-actions">
+	                  <button
+	                    onClick={() => void handleSubmitTeachCommunityCandidate()}
+	                    disabled={isSubmittingTeachCandidate || teachCandidateMemoryInput.trim().length === 0}
+	                  >
+	                    {isSubmittingTeachCandidate ? "Teaching..." : "Teach community"}
+	                  </button>
+	                  <button className="secondary" onClick={closeTeachCandidateModal} disabled={isSubmittingTeachCandidate}>
+	                    Cancel
+	                  </button>
+	                </div>
+	              </div>
+	            </div>
+	          </div>
+	        )}
+	        {sourcesUsed.open && (
+	          <div className="modal-overlay" onClick={() => setSourcesUsed({ open: false })}>
+	            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div className="modal-title">Sources used</div>
                 <button className="modal-close" onClick={() => setSourcesUsed({ open: false })} title="Close">
@@ -12519,6 +6639,151 @@ function App() {
                         <span>Workspace</span>
                         <span>{sourcesUsed.workspacePath}</span>
                       </div>
+                    )}
+                    {sourcesUsed.threadContext && (
+                      <>
+                        <div className="panel-title">Thread context</div>
+                        <div className="resource-meta">
+                          <span>Lane</span>
+                          <span>{sourcesUsed.threadContext.threadLane ?? "unknown"}</span>
+                        </div>
+                        <div className="resource-meta">
+                          <span>Project</span>
+                          <span>{sourcesUsed.threadContext.projectId ?? "none"}</span>
+                        </div>
+                        <div className="resource-meta">
+                          <span>Community lens</span>
+                          <span>{sourcesUsed.threadContext.communityId ?? "none"}</span>
+                        </div>
+                        <div className="resource-meta">
+                          <span>Context version</span>
+                          <span>
+                            {typeof sourcesUsed.threadContext.contextVersion === "number"
+                              ? sourcesUsed.threadContext.contextVersion
+                              : "unknown"}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {(sourcesUsed.communityContext || sourcesUsed.threadContext?.communityId) && (
+                      <>
+                        <div className="panel-title">Community retrieval</div>
+                        <div className="resource-meta">
+                          <span>Community</span>
+                          <span>
+                            {sourcesUsed.communityContext?.communityId ??
+                              sourcesUsed.threadContext?.communityId ??
+                              "none"}
+                          </span>
+                        </div>
+                        <div className="resource-meta">
+                          <span>Injected into prompt</span>
+                          <span>{sourcesUsed.communityContext?.injected ? "Yes" : "No"}</span>
+                        </div>
+                        <div className="resource-meta">
+                          <span>Attempted retrieval</span>
+                          <span>{sourcesUsed.communityContext?.attempted ? "Yes" : "No"}</span>
+                        </div>
+                        {sourcesUsed.communityContext?.failureClass && (
+                          <div className="resource-meta">
+                            <span>Failure class</span>
+                            <span>{sourcesUsed.communityContext.failureClass}</span>
+                          </div>
+                        )}
+                        {sourcesUsed.communityContext?.attempted && (
+                          <>
+                            <div className="resource-meta">
+                              <span>Compiled source</span>
+                              <span>
+                                {formatCommunitySourceStatus(
+                                  sourcesUsed.communityContext.compiledFetchOk,
+                                  sourcesUsed.communityContext.compiledItemsUsed,
+                                )}
+                              </span>
+                            </div>
+                            <div className="resource-meta">
+                              <span>Compile version</span>
+                              <span>
+                                {typeof sourcesUsed.communityContext.compileVersion === "number"
+                                  ? sourcesUsed.communityContext.compileVersion
+                                  : "unknown"}
+                              </span>
+                            </div>
+                            <div className="resource-meta">
+                              <span>Fallback used</span>
+                              <span>
+                                {sourcesUsed.communityContext.fallbackUsed === null
+                                  ? "Unknown"
+                                  : sourcesUsed.communityContext.fallbackUsed
+                                    ? "Yes"
+                                    : "No"}
+                              </span>
+                            </div>
+                            <div className="resource-meta">
+                              <span>Quality</span>
+                              <span>
+                                {sourcesUsed.communityContext.qualityBand
+                                  ? `${sourcesUsed.communityContext.qualityBand}${
+                                      typeof sourcesUsed.communityContext.qualityScore === "number"
+                                        ? ` (${Math.round(sourcesUsed.communityContext.qualityScore)})`
+                                        : ""
+                                    }`
+                                  : "Unknown"}
+                              </span>
+                            </div>
+                            <div className="resource-meta">
+                              <span>Latency</span>
+                              <span>
+                                {typeof sourcesUsed.communityContext.retrievalLatencyMs === "number"
+                                  ? `${Math.max(0, Math.round(sourcesUsed.communityContext.retrievalLatencyMs))} ms`
+                                  : "Unknown"}
+                              </span>
+                            </div>
+                            {sourcesUsed.communityContext.contractId && (
+                              <div className="resource-meta">
+                                <span>Observability contract</span>
+                                <span>{sourcesUsed.communityContext.contractId}</span>
+                              </div>
+                            )}
+                            <div className="resource-meta">
+                              <span>Chat source</span>
+                              <span>
+                                {formatCommunitySourceStatus(
+                                  sourcesUsed.communityContext.chatFetchOk,
+                                  sourcesUsed.communityContext.chatItemsUsed,
+                                )}
+                              </span>
+                            </div>
+                            <div className="resource-meta">
+                              <span>Resource source</span>
+                              <span>
+                                {formatCommunitySourceStatus(
+                                  sourcesUsed.communityContext.resourceFetchOk,
+                                  sourcesUsed.communityContext.resourceItemsUsed,
+                                )}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                    {sourcesUsed.communityEvidence && sourcesUsed.communityEvidence.items.length > 0 && (
+                      <>
+                        <div className="panel-title">Community evidence</div>
+                        {sourcesUsed.communityEvidence.items.map((item) => (
+                          <div
+                            key={`${item.source_type}:${item.source_id}:${item.rank}`}
+                            className="resource-meta"
+                          >
+                            <span>{formatCommunityEvidenceTypeLabel(item.source_type)}</span>
+                            <span>
+                              {item.title}
+                              {item.snippet ? `: ${item.snippet}` : ""}
+                              {item.url ? ` (${item.url})` : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </>
                     )}
                     <div className="panel-title">Personal memory</div>
                     {sourcesUsed.personalMemory.length === 0 ? (
@@ -12543,7 +6808,10 @@ function App() {
             {settingsGroup === "account" && (
               <>
                 <div className="settings-section">
-                  <div className="settings-section-title">Profile</div>
+                  <div className="settings-section-title">
+                    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                    Profile
+                  </div>
                   <div className="settings-section-desc">
                     {supabaseSession
                       ? "Profile details shown in communities. Save to sync across devices."
@@ -12622,6 +6890,7 @@ function App() {
                     </div>
                     <div className="auth-actions">
                       <button
+                        className={profileNeedsSave ? "profile-save-btn needs-save" : "profile-save-btn synced"}
                         type="button"
                         onClick={() => void saveProfileToCloud()}
                         disabled={!supabaseSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
@@ -12635,7 +6904,10 @@ function App() {
                 </div>
 
                 <div className="settings-section">
-                  <div className="settings-section-title">Account</div>
+                  <div className="settings-section-title">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                    Account
+                  </div>
                   <div className="settings-section-desc">
                     Sign in to join communities and sync your profile.
                   </div>
@@ -12653,7 +6925,15 @@ function App() {
                     </div>
                   ) : (
                     <div className="account-row">
-                      <button onClick={() => void handleSignIn()}>Sign in</button>
+                      <button className="google-sign-in" onClick={() => void handleSignIn()}>
+                        <svg className="google-logo" viewBox="0 0 24 24">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                        </svg>
+                        Sign in with Google
+                      </button>
                     </div>
                   )}
                   {authError && <div className="key-error">{authError}</div>}
@@ -12669,8 +6949,9 @@ function App() {
                       const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
                       const communitiesLabel =
                         max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
-                      const tierLabel = tier === "pro" ? "Builder Pro" : tier === "builder" ? "Builder" : "Free";
-                      const isArxOwner = (supabaseSession.user.email ?? "").toLowerCase() === ARX_OWNER_EMAIL;
+                      const tierLabel =
+                        tier === "pro" || tier === "architect" ? "Architect" : tier === "builder" ? "Builder" : "Free";
+                      const isArxOwner = isArxOwnerAccount(supabaseSession.user);
                       return (
                         <>
                           <div className="account-row">
@@ -12734,10 +7015,10 @@ function App() {
                                   <button
                                     type="button"
                                     className="secondary"
-                                    disabled={isDevSettingBuilderTier || tier === "pro"}
-                                    onClick={() => void handleDevSetBuilderTier("pro")}
+                                    disabled={isDevSettingBuilderTier || tier === "pro" || tier === "architect"}
+                                    onClick={() => void handleDevSetBuilderTier("architect")}
                                   >
-                                    Pro
+                                    Architect
                                   </button>
                                 </div>
                               </div>
@@ -12753,7 +7034,10 @@ function App() {
 
                 {supabaseSession && (
                   <div className="settings-section">
-                    <div className="settings-section-title">Your communities</div>
+                    <div className="settings-section-title">
+                      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                      Your communities
+                    </div>
                     <div className="settings-section-desc">
                       Open a community to manage pricing and payouts.
                     </div>
@@ -12814,7 +7098,10 @@ function App() {
 	                    pendingPurchasesError ||
                     pendingPurchasesSuccess) && (
                     <div className="settings-section">
-                      <div className="settings-section-title">Pending purchases</div>
+                      <div className="settings-section-title">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                        Pending purchases
+                      </div>
                       <div className="settings-section-desc">
                         Recover access if you paid but didn't finish the join flow.
                       </div>
@@ -12866,7 +7153,10 @@ function App() {
 	            {settingsGroup === "agent" && (
               <>
 	                <div className="settings-section">
-	                  <div className="settings-section-title">ChatGPT</div>
+	                  <div className="settings-section-title">
+	                    <svg className="section-icon-logo" viewBox="0 0 24 24"><path d="M22.28 9.37a5.93 5.93 0 0 0-.51-4.89 6.01 6.01 0 0 0-6.47-2.87A5.93 5.93 0 0 0 10.82.13a6.01 6.01 0 0 0-5.73 3.93A5.93 5.93 0 0 0 1.13 8a6.01 6.01 0 0 0 .74 7.07 5.93 5.93 0 0 0 .51 4.89 6.01 6.01 0 0 0 6.47 2.87A5.93 5.93 0 0 0 13.33 24a6.01 6.01 0 0 0 5.73-3.93A5.93 5.93 0 0 0 23.02 16a6.01 6.01 0 0 0-.74-6.63zM13.33 22.5a4.47 4.47 0 0 1-2.88-1.05l.14-.08 4.79-2.77a.78.78 0 0 0 .39-.67v-6.77l2.02 1.17a.07.07 0 0 1 .04.06v5.6a4.5 4.5 0 0 1-4.5 4.5zM3.6 18.37a4.47 4.47 0 0 1-.54-3.02l.14.09 4.79 2.77a.78.78 0 0 0 .78 0l5.85-3.38v2.33a.07.07 0 0 1-.03.06l-4.84 2.8a4.5 4.5 0 0 1-6.15-1.65zM2.34 7.89A4.47 4.47 0 0 1 4.7 5.91v5.71a.78.78 0 0 0 .39.67l5.85 3.38-2.02 1.17a.07.07 0 0 1-.07 0l-4.84-2.8A4.5 4.5 0 0 1 2.34 7.9zm17.32 4.03l-5.85-3.38 2.02-1.17a.07.07 0 0 1 .07 0l4.84 2.8a4.5 4.5 0 0 1-.7 8.11v-5.7a.78.78 0 0 0-.38-.66zm2.01-3.03l-.14-.09-4.79-2.77a.78.78 0 0 0-.78 0l-5.85 3.38V7.08a.07.07 0 0 1 .03-.06l4.84-2.8a4.5 4.5 0 0 1 6.69 4.67zM8.56 13.39l-2.02-1.17a.07.07 0 0 1-.04-.06v-5.6a4.5 4.5 0 0 1 7.38-3.45l-.14.08-4.79 2.77a.78.78 0 0 0-.39.67v6.76zm1.1-2.37l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5v-3z" fill="currentColor" /></svg>
+	                    ChatGPT
+	                  </div>
 	                  <div className="settings-section-desc">
 	                    Sign in to use your ChatGPT account for OpenAI models. This does not consume your Arx quota.
 	                  </div>
@@ -12889,48 +7179,11 @@ function App() {
 		                  {chatgptAuthError && <div className="auth-error">{chatgptAuthError}</div>}
 		                </div>
 
-	                {userAccessPolicy.allowByokLocalStore && (
-	                  <div className="settings-section">
-	                    <div className="settings-section-title">API Keys</div>
-	                    <div className="settings-section-desc">
-	                      Add your provider keys to enable models. Keys are stored in your OS keychain and synced to your Arx account.
-	                    </div>
-	                    {providerKeys.map((provider) => (
-                        <div key={provider.id}>
-                          <div className="settings-section-desc">{provider.label}</div>
-                          <div className="key-row">
-                            <input
-                              type="password"
-                              value={provider.inputValue ?? ""}
-                              placeholder={provider.hasKey ? "Key saved" : `Enter ${provider.label} API key`}
-                              onChange={(event) =>
-                                setProviderKeys((prev) =>
-                                  prev.map((item) =>
-                                    item.id === provider.id
-                                      ? { ...item, inputValue: event.target.value }
-                                      : item
-                                  )
-                                )
-                              }
-                            />
-                            <button onClick={() => void handleSaveProviderKey(provider.id)}>
-                              Save
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => void handleClearProviderKey(provider.id)}
-                            >
-                              Clear
-                            </button>
-                          </div>
-                          {provider.error && <div className="key-error">{provider.error}</div>}
-                        </div>
-                      ))}
-	                  </div>
-	                )}
-
 	                <div className="settings-section">
-	                  <div className="settings-section-title">System prompt</div>
+	                  <div className="settings-section-title">
+	                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
+	                    System prompt
+	                  </div>
 	                  <div className="settings-section-desc">
 	                    Applied to every model run (global). Use this to set tone, format, and defaults.
 	                  </div>
@@ -12969,7 +7222,10 @@ function App() {
 	            {settingsGroup === "agent" && (
 	              <>
 	                <div className="settings-section">
-	                  <div className="settings-section-title">Approval Mode</div>
+	                  <div className="settings-section-title">
+	                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+	                    Approval Mode
+	                  </div>
 	                  <div className="settings-section-desc">Control how tool executions are approved</div>
 	                  <div className="approval-selector">
 	                    {(["read-only", "agent", "agent-full"] as const).map((mode) => {
@@ -12990,7 +7246,10 @@ function App() {
 	                </div>
 
 	                <div className="settings-section">
-	                  <div className="settings-section-title">Global Policy Rules</div>
+	                  <div className="settings-section-title">
+	                    <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
+	                    Global Policy Rules
+	                  </div>
 	                  <div className="settings-section-desc">Default rules applied to all threads</div>
 	                  <div className="exec-policy">
                     <textarea
@@ -13019,7 +7278,10 @@ function App() {
                     )}
 
 		                  <div className="settings-section">
-			                    <div className="settings-section-title">Export</div>
+			                    <div className="settings-section-title">
+		                      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+		                      Export
+		                    </div>
 			                    <div className="settings-section-desc">
 			                      Download your threads, messages, and personal memory as CSV.
 			                    </div>
@@ -13037,27 +7299,33 @@ function App() {
 		                  </div>
 
                   <div className="settings-section">
-                    <div className="settings-section-title">Local Cache</div>
+                    <div className="settings-section-title">
+                      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>
+                      Local Cache
+                    </div>
                     <div className="settings-section-desc">
                       Clear local SQLite caches used by the desktop operator. Cloud data is unchanged.
                     </div>
                     <div className="export-actions">
-                      <button className="secondary" onClick={() => void resetLocalCache()} disabled={isSending}>
-                        Reset local cache
+                      <button className="secondary" onClick={() => void resetLocalCache()} disabled={isSending || isResettingLocalCache}>
+                        {isResettingLocalCache ? "Resetting..." : "Reset local cache"}
                       </button>
                     </div>
                   </div>
 
                   {(() => {
                     const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-                    const hasPersonalMemoryAccess = tier === "builder" || tier === "pro";
+                    const hasPersonalMemoryAccess = tier === "builder" || tier === "pro" || tier === "architect";
                     if (!supabaseSession) return null;
                     if (!hasPersonalMemoryAccess) {
                       return (
                         <div className="settings-section">
-                          <div className="settings-section-title">Personal memory</div>
+                          <div className="settings-section-title">
+                            <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z" /><path d="M20 2a10 10 0 0 1 0 10" /></svg>
+                            Personal memory
+                          </div>
                           <div className="settings-section-desc">
-                            Personal memory is included with Starter and Pro.
+                            Personal memory is included with Builder and Architect.
                           </div>
                           <div className="auth-actions" style={{ paddingLeft: 0 }}>
                             <button
@@ -13186,8 +7454,8 @@ function App() {
                       {([
                         { id: "light", label: "Light", description: "Default light theme", disabled: false },
                         { id: "dark", label: "Dark", description: "Default dark theme", disabled: false },
-                        { id: "light-warm", label: "Light (Warm)", description: "Stone + charcoal + gold", disabled: false },
                         { id: "dark-warm", label: "Dark (Warm)", description: "Warm obsidian + champagne gold", disabled: false },
+                        { id: "polynet", label: "Polynet Dark", description: "Monolithic surface + violet", disabled: false },
                       ] as const).map((theme) => (
                         <button
                           key={theme.id}
@@ -13231,6 +7499,22 @@ function App() {
             {toolDebug && (
               <div className="message-item debug">
                 <div className="message-text">{toolDebug.text}</div>
+              </div>
+            )}
+            {activeThreadId && hasOlderMessagesForActiveThread && (
+              <div className="message-item system">
+                <div className="message-text">
+                  <button
+                    type="button"
+                    className="message-copy-btn"
+                    disabled={isLoadingOlderMessages || isSending}
+                    onClick={() => {
+                      void handleLoadOlderMessages();
+                    }}
+                  >
+                    {isLoadingOlderMessages ? "Loading older messages..." : "Load older messages"}
+                  </button>
+                </div>
               </div>
             )}
             {!activeThreadId && (
@@ -13305,47 +7589,45 @@ function App() {
                 )}
               </>
             )}
-            {combinedFeed.map((item, index) => {
+            {activeThreadId && combinedFeed.length === 0 && !isSending && (
+              <div className="message-item system">
+                <div className="message-text">
+                  {messageLoadErrorForActiveThread
+                    ? `Couldn't load thread messages: ${messageLoadErrorForActiveThread}`
+                    : activeThread?.storage_mode === "cloud" && !supabaseSession
+                      ? "This is a cloud chat thread. Sign in to load messages, or switch to a local agent thread."
+                      : "This thread has no visible messages yet. Send a message to start, or switch threads."}
+                </div>
+              </div>
+            )}
+            {combinedFeed.map((item) => {
               if (item.type === "message") {
                 const message = item.data;
                 const isUser = message.role === "user";
                 const parsedContent = parseMessageContent(message.content_json);
                 const textContent = parsedContent.text;
                 const isTerminal = parsedContent.format === "terminal";
-                const messageInferenceSource = !isUser
-                  ? extractInferenceSourceFromContentJson(message.content_json)
-                  : null;
-                const messageSignature = !isUser
-                  ? formatExecutionLabel(message.engine_id, message.model_id, modelToggles, messageInferenceSource)
-                  : null;
-
-                // Check if this is the end of an agent turn:
-                // - Not a user message
-                // - Next item is either a user message or end of feed
-                // - Not currently streaming
-                const nextMessageItem = (() => {
-                  for (let i = index + 1; i < combinedFeed.length; i++) {
-                    const candidate = combinedFeed[i];
-                    if (candidate.type === "message") return candidate;
-                  }
-                  return null;
-                })();
-                const isEndOfTurn = !isUser &&
-                  !streamingContent &&
-                  (!nextMessageItem || nextMessageItem.data.role === "user");
-
-                // Collect all assistant message text from this turn for copying
-                let turnContent = "";
-                if (isEndOfTurn) {
-                  // Walk backwards to collect all assistant messages in this turn
-                  for (let i = index; i >= 0; i--) {
-                    const turnItem = combinedFeed[i];
-                    if (turnItem.type === "message") {
-                      if (turnItem.data.role === "user") break;
-                      turnContent = parseMessageText(turnItem.data.content_json) + (turnContent ? "\n\n" + turnContent : "");
-                    }
-                  }
-                }
+                const communityEvidence = !isUser ? extractCommunityEvidenceUsedV1(message.content_json) : null;
+                const inlineCommunityEvidence =
+                  !isUser && communityEvidence
+                    ? communityEvidence.items.slice(0, 4)
+                    : [];
+	                const turnForMessage = !isUser ? (turnsByAssistantEventId[message.id] ?? null) : null;
+	                const messageInferenceSource = !isUser
+	                  ? extractInferenceSourceFromContentJson(message.content_json)
+	                  : null;
+	                const messageSignature = !isUser
+		                  ? formatExecutionLabel(message.engine_id, message.model_id, modelToggles, messageInferenceSource)
+		                  : null;
+		                const teachStatus = !isUser ? (teachStatusByMessageId[message.id] ?? null) : null;
+		                const turnMeta = !isUser ? (turnMetaByMessageId.get(message.id) ?? null) : null;
+		                const isEndOfTurn = Boolean(turnMeta?.isEndOfTurn);
+		                const turnContent = turnMeta?.turnContent ?? "";
+		                const canTeachCommunity =
+		                  !isUser &&
+		                  isEndOfTurn &&
+		                  Boolean(activeThread?.community_id) &&
+		                  Boolean(turnContent.trim());
 
                 return (
                   <div
@@ -13359,47 +7641,68 @@ function App() {
                         ? textContent
                         : isTerminal
                           ? <pre className="terminal-message">{textContent}</pre>
-                          : renderMarkdown(textContent)}
+                          : renderMarkdown(textContent, { onCopyCode: copyTextToClipboard })}
                     </div>
+                    {!isUser && inlineCommunityEvidence.length > 0 && (
+                      <CommunityEvidenceCitations
+                        items={inlineCommunityEvidence}
+                        onChipClick={
+                          turnForMessage
+                            ? () => {
+                                void handleOpenSourcesUsed(turnForMessage);
+                              }
+                            : null
+                        }
+                        actionTitle="Open source details"
+                      />
+                    )}
                     {!isUser && (
-                      <div className="message-footer">
+                      <MessageFooter metaLabel={messageSignature}>
                         {isEndOfTurn && (
-                          <button
-                            className={`message-copy-btn${copiedMessageId === message.id ? " copied" : ""}`}
+                          <MessageCopyAction
+                            copied={copiedMessageId === message.id}
                             onClick={() => handleCopyMessage(message.id, turnContent)}
                             title="Copy response"
-                          >
-                            <svg viewBox="0 0 24 24">
-                              {copiedMessageId === message.id ? (
-                                <polyline points="20 6 9 17 4 12" />
-                              ) : (
-                                <>
-                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                </>
-                              )}
-                            </svg>
-                          </button>
+                            ariaLabel="Copy response"
+                          />
                         )}
-                        {isEndOfTurn && turnsByAssistantEventId[message.id] && (
-                          <button
-                            className="message-copy-btn"
-                            onClick={() => void handleOpenSourcesUsed(turnsByAssistantEventId[message.id])}
-                            title="Sources used"
-                          >
-                            <svg viewBox="0 0 24 24">
-                              <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20" />
-                              <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 0 4 19.5z" />
-                            </svg>
-                          </button>
-                        )}
-                        {messageSignature && (
-                          <span className="message-meta">{messageSignature}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
+	                        {isEndOfTurn && turnForMessage && (
+	                          <MessageSourcesAction
+	                            onClick={() => {
+	                              void handleOpenSourcesUsed(turnForMessage);
+	                            }}
+	                            title="Sources used"
+	                            ariaLabel="Sources used"
+	                          />
+	                        )}
+	                        {canTeachCommunity && (
+	                          <MessageTeachAction
+	                            onClick={() => {
+	                              void handleTeachCommunityFromTurn({
+	                                messageId: message.id,
+	                                turnId: turnForMessage?.id ?? null,
+	                                turnContent,
+	                                communityEvidence,
+	                              });
+	                            }}
+		                            title={
+		                              teachStatus?.status === "submitting"
+		                                ? "Teaching community memory..."
+		                                : teachStatus?.status === "submitted"
+		                                  ? teachStatus.promotedMemoryId
+		                                    ? "Teach again (last auto-promoted)"
+		                                    : "Teach again (last in review)"
+		                                  : "Teach community"
+		                            }
+		                            ariaLabel="Teach community memory"
+		                            disabled={teachStatus?.status === "submitting"}
+		                            className={`message-copy-btn${teachStatus?.status === "submitted" ? " copied" : ""}`}
+		                          />
+	                        )}
+	                      </MessageFooter>
+	                    )}
+	                  </div>
+	                );
               } else if (item.type === "tool_group") {
                 const group = item.data;
                 const calls = group.tool_calls;
@@ -13706,19 +8009,6 @@ function App() {
                 const output = fallbackOutput;
                 const isOutputExpanded = expandedOutputIds.has(toolCall.id);
                 const isRunning = runningToolCallId === toolCall.id;
-                const policy = policyByToolCallId[toolCall.id];
-                const isForbidden = policy?.decision === "forbid";
-                const isShell = details.toolName === "run_shell_command";
-                const toolSpec = toolSpecsByName[details.toolName];
-                const isDoomLoopGuarded = (() => {
-                  if (!toolCall.output_summary_json) return false;
-                  try {
-                    const parsed = JSON.parse(toolCall.output_summary_json) as { guard?: string };
-                    return parsed.guard === "doom_loop";
-                  } catch {
-                    return false;
-                  }
-                })();
 
                 const cmdPreview = formatCommandPreview(details.command);
                 const isCommandExpanded = expandedCommandIds.has(toolCall.id);
@@ -13743,11 +8033,6 @@ function App() {
                         {toolCall.status === "canceled" && "○"}
                         {" "}{toolCall.exit_code === 0 ? "executed" : toolCall.status}
                       </span>
-                      {policy && (
-                        <span className={`tool-policy ${policy.decision}`}>
-                          {policy.decision}
-                        </span>
-                      )}
                       {output && (
                         <button
                           className="tool-toggle"
@@ -13774,85 +8059,6 @@ function App() {
                           {isCommandExpanded ? "▼ full command" : "▶ full command"}
                         </button>
                       )}
-                      {toolCall.status === "proposed" && (
-                        <>
-                          <button
-                            className="tool-action"
-                            onClick={() => handleApproveAndRun(toolCall)}
-                            disabled={isForbidden}
-                          >
-                            Run
-                          </button>
-                          <button
-                            className="tool-action secondary"
-                            onClick={() => handleRejectToolCall(toolCall)}
-                          >
-                            Reject
-                          </button>
-                          {!isShell && toolSpec?.requires_approval && (
-                            <>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "session");
-                                }}
-                              >
-                                Allow session
-                              </button>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "always");
-                                }}
-                              >
-                                Allow always
-                              </button>
-                            </>
-                          )}
-                          {isShell && (
-                            <>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "session");
-                                }}
-                                disabled={isForbidden}
-                              >
-                                Allow session
-                              </button>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "always");
-                                }}
-                                disabled={isForbidden}
-                              >
-                                Allow always
-                              </button>
-                            </>
-                          )}
-                          {!isShell && isDoomLoopGuarded && toolSpec && toolSpec.requires_approval === false && (
-                            <>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "session");
-                                }}
-                              >
-                                Allow session
-                              </button>
-                              <button
-                                className="tool-action secondary"
-                                onClick={async () => {
-                                  await respondPermission(toolCall, "always");
-                                }}
-                              >
-                                Allow always
-                              </button>
-                            </>
-                          )}
-                        </>
-                      )}
                       {isRunning && (
                         <button
                           className="tool-action danger"
@@ -13873,24 +8079,11 @@ function App() {
                     {isCommandExpanded && cmdPreview?.truncated && (
                       <pre className="tool-command-full">{formatCommandForDisplay(details.command)}</pre>
                     )}
-                    {toolCall.status === "proposed" && isDoomLoopGuarded && (
-                      <div className="tool-output-meta">
-                        Possible doom loop: identical tool call repeated. Run once, allow session, allow always, or reject.
-                      </div>
-                    )}
-                    {toolCall.status === "proposed" && isShell && (
-                      <div className="tool-output-meta">
-                        Note: approved shell commands are not confined to the workspace root (no OS sandbox).
-                      </div>
-                    )}
                     {isOutputExpanded && output && (
                       <pre className="tool-output">{output}</pre>
                     )}
                     {actionError && (
                       <div className="tool-error">Error: {actionError}</div>
-                    )}
-                    {policy?.matched_rule && (
-                      <div className="tool-policy-reason">rule: {policy.matched_rule}</div>
                     )}
                   </div>
                 );
@@ -13917,16 +8110,13 @@ function App() {
                         {typeof streamingTokens.completion_tokens === "number" && (
                           <span>out: {streamingTokens.completion_tokens}</span>
                         )}
-                        {typeof streamingTokens.max_tokens === "number" && (
-                          <span>max: {streamingTokens.max_tokens}</span>
-                        )}
                       </div>
 		                    )}
                       {rendered &&
                         (usePlainTextFallback ? (
                           <pre className="streaming-plain-text">{rendered}</pre>
                         ) : (
-                          renderMarkdown(rendered)
+                          renderMarkdown(rendered, { onCopyCode: copyTextToClipboard })
                         ))}
 	                  </div>
 	                  {streamingSignature && (
@@ -13937,15 +8127,6 @@ function App() {
 	            })()}
             {/* Run activity indicator (works for streaming + non-streaming) */}
             {isSending && !pendingToolApproval && (() => {
-              const activeThread = threads.find((t) => t.id === activeThreadId);
-              const indicatorSignature = streamingMeta
-                ? formatExecutionLabel(streamingMeta.engine_id, streamingMeta.model_id, modelToggles, streamingMeta.inference_source)
-                : formatExecutionLabel(
-                    activeThread?.engine_id ?? "messages_agent",
-                    activeModelId,
-                    modelToggles,
-                    null
-                  );
               const hasStreamingStarted = Boolean((streamingContent ?? "").trim());
 
               // Hide the indicator once token streaming begins.
@@ -14192,83 +8373,224 @@ function App() {
               <button className="toolbar-icon" title="Add files" onClick={handleAddAttachment}>
                 <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
               </button>
-	              <div className="model-select">
-	                <select
-	                  value={activeModelId ?? ""}
-	                  onChange={async (event) => {
-	                    const modelId = event.target.value.trim();
-	                    if (!modelId) return;
-	                    setActiveModelId(modelId);
-	                    await invoke("set_active_model_cmd", { modelId });
-	                    if (!activeThreadId) return;
-			                    try {
-			                      await (USE_RUNTIME_CLIENT
-                            ? runtimeClient.setThreadEngine({
-                                thread_id: activeThreadId,
-                                engine_id: "messages_agent",
-                                model_id: modelId,
-                              })
-                            : invoke<ThreadRecord>("set_thread_engine_cmd", {
-                                threadId: activeThreadId,
-                                engineId: "messages_agent",
-                                modelId
-                              }));
-			                    } catch {
-			                      // Non-fatal; keep local selection.
-			                    }
-	                  }}
+	              <div className="ask-model" ref={modelPickerRef}>
+	                <button
+	                  className="ask-model-btn"
+	                  type="button"
+	                  aria-haspopup="dialog"
+	                  aria-expanded={isModelPickerOpen}
+	                  onClick={() => (isModelPickerOpen ? closeModelPicker() : openModelPicker())}
+	                  disabled={curatedPickerModels.length === 0}
+	                  title="Model"
 	                >
-	                  <optgroup label="Models">
-	                    {enabledModels.length === 0 && <option value="" disabled>No models enabled</option>}
-	                    {enabledModels.map((toggle) => {
-                        const providerId = providerIdForModelId(toggle.id);
-                        const providerLabel = providerId
-                          ? providerKeys.find((p) => p.id === providerId)?.label ?? providerId
-                          : "provider";
-                        const ready = isModelReady(toggle.id);
-                        return (
-                          <option
-                            key={toggle.id}
-                            value={toggle.id}
-                            disabled={!ready}
-                          >
-                            {toggle.label}
-                            {!ready && ` (missing ${providerLabel} key)`}
-                          </option>
-                        );
-                      })}
-                  </optgroup>
-                </select>
-              </div>
+	                  <span className="ask-model-label">{selectedModelLabel}</span>
+	                  <svg className="ask-model-chevron" viewBox="0 0 24 24" aria-hidden="true">
+	                    <path d="M6 9l6 6 6-6" />
+	                  </svg>
+	                </button>
+	                {isModelPickerOpen && (
+	                  <div className="model-picker-popover" role="dialog" aria-label="Choose a model">
+	                    <div className="model-picker-modal">
+	                      <div className="model-picker-search-row">
+	                        <input
+	                          ref={modelPickerSearchRef}
+	                          className="model-picker-search"
+	                          type="text"
+	                          placeholder="Search models…"
+	                          value={modelPickerQuery}
+	                          onChange={(event) => setModelPickerQuery(event.target.value)}
+	                        />
+	                        <button
+	                          className="model-picker-close"
+	                          type="button"
+	                          onClick={closeModelPicker}
+	                          aria-label="Close model picker"
+	                          title="Close"
+	                        >
+	                          <svg viewBox="0 0 24 24" aria-hidden="true">
+	                            <path d="M18 6L6 18M6 6l12 12" />
+	                          </svg>
+	                        </button>
+	                      </div>
+	                      <div className="model-picker-body">
+	                        <nav className="model-picker-nav" aria-label="Model sections">
+	                          {(
+	                            [
+	                              {
+	                                id: "all",
+	                                label: "All",
+	                                icon: (
+	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                    <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+	                                  </svg>
+	                                ),
+	                              },
+	                              {
+	                                id: "free",
+	                                label: "Free",
+	                                icon: (
+	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                    <path d="M20 12v10H4V12" />
+	                                    <path d="M2 7h20v5H2z" />
+	                                    <path d="M12 22V7" />
+	                                    <path d="M12 7c-2.2 0-4-1.8-4-4 2.2 0 4 1.8 4 4z" />
+	                                    <path d="M12 7c2.2 0 4-1.8 4-4-2.2 0-4 1.8-4 4z" />
+	                                  </svg>
+	                                ),
+	                              },
+	                              {
+	                                id: "openai",
+	                                label: "OpenAI",
+	                                icon: (
+	                                  <span className="model-picker-nav-logo">
+	                                    <img className="model-picker-nav-logo-img monochrome" src={openAiLogo} alt="" />
+	                                  </span>
+	                                ),
+	                              },
+	                              {
+	                                id: "anthropic",
+	                                label: "Anthropic",
+	                                icon: (
+	                                  <span className="model-picker-nav-logo">
+	                                    <img className="model-picker-nav-logo-img monochrome" src={anthropicLogo} alt="" />
+	                                  </span>
+	                                ),
+	                              },
+	                              {
+	                                id: "google",
+	                                label: "Google",
+	                                icon: (
+	                                  <span className="model-picker-nav-logo">
+	                                    <img className="model-picker-nav-logo-img monochrome" src={googleLogo} alt="" />
+	                                  </span>
+	                                ),
+	                              },
+	                              {
+	                                id: "x-ai",
+	                                label: "xAI",
+	                                icon: (
+	                                  <span className="model-picker-nav-logo">
+	                                    <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" />
+	                                  </span>
+	                                ),
+	                              },
+	                              {
+	                                id: "openrouter",
+	                                label: "OpenRouter",
+	                                icon: (
+	                                  <span className="model-picker-nav-logo">
+	                                    <img className="model-picker-nav-logo-img monochrome" src={openRouterLogo} alt="" />
+	                                  </span>
+	                                ),
+	                              },
+	                            ] as Array<{ id: ModelSectionId; label: string; icon: ReactNode }>
+	                          ).map((section) => (
+	                            <button
+	                              key={section.id}
+	                              className={
+	                                modelPickerSection === section.id
+	                                  ? "model-picker-nav-btn active"
+	                                  : "model-picker-nav-btn"
+	                              }
+	                              type="button"
+	                              aria-pressed={modelPickerSection === section.id}
+	                              aria-label={section.label}
+	                              title={section.label}
+	                              onClick={() => setModelPickerSection(section.id)}
+	                            >
+	                              <span className="model-picker-nav-icon" aria-hidden="true">
+	                                {section.icon}
+	                              </span>
+	                            </button>
+	                          ))}
+	                        </nav>
+	                        <div className="model-picker-list" role="list">
+	                          {(() => {
+	                            const sectionLabels: Record<string, string> = {
+	                              free: "Free", openai: "OpenAI", anthropic: "Anthropic",
+	                              google: "Google", "x-ai": "xAI", openrouter: "OpenRouter",
+	                            };
+	                            let lastSection = "";
+	                            return visiblePickerModels.map((model) => {
+	                              const isSelected = model.id === (activeModelId ?? "").trim();
+	                              const selectable = canSelectPickerModel(model);
+	                              const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
+	                              const showPremiumCrown = model.access === "paid" && !hasPaidAccess;
+	                              const providerId = providerIdForModelId(model.id);
+	                              const lockedLabel = model.access === "free"
+	                                ? "Free"
+	                                : !showPremiumCrown && !isModelEnabled
+	                                  ? "Soon"
+	                                  : !showPremiumCrown && providerId === "openai" && !chatgptAuthSummary
+	                                    ? "Sign in"
+	                                    : null;
+	                              const showGroupHeader = modelPickerSection === "all" && model.section !== lastSection && sectionLabels[model.section];
+	                              if (model.section !== lastSection) lastSection = model.section;
+	                              return (
+	                                <Fragment key={model.id}>
+	                                  {showGroupHeader && (
+	                                    <div className="model-picker-group-header">{sectionLabels[model.section]}</div>
+	                                  )}
+	                                  <div
+	                                    className={
+	                                      "model-picker-row" +
+	                                      (isSelected ? " selected" : "") +
+	                                      (!selectable ? " locked" : "")
+	                                    }
+	                                  >
+	                                    <button
+	                                      className="model-picker-row-main"
+	                                      type="button"
+	                                      onClick={() => void handleSelectPickerModel(model)}
+	                                      aria-current={isSelected ? "true" : undefined}
+	                                    >
+	                                      <div className="model-picker-row-info">
+	                                        <div className="model-picker-row-title">
+	                                          {model.label}
+	                                          {showPremiumCrown && (
+	                                            <span className="model-picker-row-crown" title="Premium model" aria-label="Premium model">
+	                                              <svg viewBox="0 0 24 24" aria-hidden="true">
+	                                                <path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 13H5L3 7z" />
+	                                                <path d="M8 17h8" />
+	                                              </svg>
+	                                            </span>
+	                                          )}
+	                                          {lockedLabel && <span className="model-picker-row-pill">{lockedLabel}</span>}
+	                                        </div>
+	                                        {model.description && (
+	                                          <div className="model-picker-row-subtitle">{model.description}</div>
+	                                        )}
+	                                      </div>
+	                                      <span className="model-picker-row-check" aria-hidden="true">
+	                                        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
+	                                      </span>
+	                                    </button>
+	                                  </div>
+	                                </Fragment>
+	                              );
+	                            });
+	                          })()}
+	                        </div>
+	                      </div>
+	                    </div>
+	                  </div>
+	                )}
+	              </div>
             </div>
 		            <div className="ask-toolbar-right">
-		              <button
-		                className={`ask-icon-btn ask-mic ${workspaceVoiceUiState}`}
-		                type="button"
-		                onClick={() => void handleVoiceInputClick("workspace")}
-		                aria-label={workspaceVoiceIntent.title}
-                    aria-pressed={workspaceVoiceUiState === "recording"}
-                    aria-busy={workspaceVoiceUiState === "transcribing"}
-		                title={workspaceVoiceIntent.title}
-		              >
-                    {renderVoiceButtonVisual(workspaceVoiceUiState)}
-		              </button>
+			              <VoiceInputButton
+			                state={workspaceVoiceUiState}
+			                title={workspaceVoiceIntent.title}
+			                onClick={() => void handleVoiceInputClick("workspace")}
+			              />
               {(() => {
                 const isTurnRunning = isSending || Boolean(streamingContent);
                 return (
               <button
                 className="chat-send ask-send-btn"
                 onClick={() => {
-	                  if (isTurnRunning) {
-	                    if (!activeThreadId) return;
-	                    setPendingToolApproval(null);
-	                    setPendingInferenceFallback(null);
-                      dispatchRunPhase({ type: "cancel_requested" });
-	                    void (USE_RUNTIME_CLIENT
-                        ? runtimeClient.cancelRun(activeThreadId)
-                        : invoke<boolean>("cancel_run_cmd", { threadId: activeThreadId })).catch(() => {
-	                      // best-effort
-	                    });
+		                  if (isTurnRunning) {
+		                    cancelActiveRun();
 	                    return;
                   }
                   handleSendMessage();
@@ -14512,298 +8834,57 @@ function App() {
 	                    {activeCommunity &&
 	                      !isLoadingChat &&
 	                      communityMessages.map((message, index) => {
-                      const isOwn = message.sender_id === supabaseSession?.user.id;
-                      const isPending = message.id.startsWith("pending-");
-                      const showMeta = shouldShowSender(communityMessages, index);
-                      const dateSeparator = shouldShowDateSeparator(communityMessages, index);
-                      const senderLabel = displayName(message.sender_id);
-                      const avatarUrl = isOwn ? profileAvatarUrl : profilesByUserId[message.sender_id]?.avatar_url ?? null;
-	                      const avatarColor = getAvatarColor(message.sender_id);
-	                      const shortTime = new Date(message.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-	                      const replyToId = message.reply_to_id ?? null;
-	                      const replyTarget = replyToId ? (communityMessageById.get(replyToId) ?? null) : null;
-	                      const legacyReply = !replyToId ? parseReplyPrefix(message.body) : null;
-	                      return (
-                        <Fragment key={message.id}>
-                          {dateSeparator && (
-                            <div className="chat-date-separator">
-                              <span>{dateSeparator}</span>
-                            </div>
-                          )}
-                          <div
-                            id={`msg-${message.id}`}
-                            className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
-                            data-time={shortTime}
-                        >
-                          <div
-                            className="chat-avatar"
-                            style={{ backgroundColor: avatarColor }}
-                            title={senderLabel}
-                          >
-                            {avatarUrl ? (
-                              <img src={avatarUrl} alt={senderLabel} />
-                            ) : (
-                              <span>{getInitials(senderLabel)}</span>
-                            )}
-                          </div>
-                          <div className="chat-content">
-                            <div className="chat-header">
-                              <span className="chat-sender">{senderLabel}</span>
-                              <span className="chat-time">{formatChatTime(message.created_at)}</span>
-                            </div>
-                            {editingMessageId === message.id ? (
-                              <div className="chat-edit-form">
-                                <textarea
-                                  className="chat-edit-input"
-                                  value={editingMessageText}
-                                  onChange={(e) => setEditingMessageText(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                      e.preventDefault();
-                                      void handleSaveEdit();
-                                    }
-                                    if (e.key === "Escape") {
-                                      handleCancelEdit();
-                                    }
-                                  }}
-                                  autoFocus
-                                  rows={1}
-                                />
-                                <div className="chat-edit-actions">
-                                  <button className="chat-edit-btn save" onClick={() => void handleSaveEdit()}>
-                                    Save
-                                  </button>
-                                  <button className="chat-edit-btn cancel" onClick={handleCancelEdit}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-	                            ) : (
-	                              <>
-		                                {replyTarget && (
-		                                  <button
-		                                    type="button"
-		                                    className="chat-reply-quote"
-		                                    onClick={() => scrollToCommunityMessage(replyToId!)}
-		                                    title="Jump to replied message"
-		                                  >
-		                                    {(() => {
-		                                      const thumb = replyTarget.attachments?.find(
-		                                        (att) =>
-		                                          att.type === "image" &&
-		                                          typeof att.data_url === "string" &&
-		                                          att.data_url.startsWith("data:image/"),
-		                                      );
-		                                      const text = truncateReplyPreview(
-		                                        (parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body).trim() ||
-		                                          (thumb ? "Image" : "Message"),
-		                                      );
-		                                      return (
-		                                        <>
-		                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-		                                      <polyline points="9 14 4 9 9 4" />
-		                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-		                                    </svg>
-		                                    {thumb?.data_url && (
-		                                      <img
-		                                        className="chat-reply-thumb"
-		                                        src={thumb.data_url}
-		                                        alt=""
-		                                        aria-hidden="true"
-		                                        loading="lazy"
-		                                      />
-		                                    )}
-		                                    <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
-		                                    <span className="chat-reply-text">{text}</span>
-		                                        </>
-		                                      );
-		                                    })()}
-		                                  </button>
-		                                )}
-	                                {!replyTarget && replyToId && (
-	                                  <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
-	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-	                                      <polyline points="9 14 4 9 9 4" />
-	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-	                                    </svg>
-	                                    <span className="chat-reply-sender">Reply</span>
-	                                    <span className="chat-reply-text">Replied message not loaded</span>
-	                                  </div>
-	                                )}
-	                                {legacyReply && (
-	                                  <div className="chat-reply-quote">
-	                                    <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-	                                      <polyline points="9 14 4 9 9 4" />
-	                                      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-	                                    </svg>
-	                                    <span className="chat-reply-sender">{legacyReply.sender}</span>
-	                                    <span className="chat-reply-text">{legacyReply.preview}</span>
-	                                  </div>
-	                                )}
-	                                <div className="chat-body">
-	                                  {renderTextWithLinks(legacyReply ? legacyReply.rest : message.body)}
-	                                </div>
-	                              </>
-	                            )}
-
-                            {message.attachments && message.attachments.length > 0 && (() => {
-                              const imageAttachments = message.attachments
-                                .filter(
-                                  (att) =>
-                                    att.type === "image" &&
-                                    typeof att.data_url === "string" &&
-                                    att.data_url.startsWith("data:image/")
-                                )
-                                .map((att) => ({ url: att.data_url as string, name: att.name }));
-                              const fileAttachments = message.attachments.filter(
-                                (att) =>
-                                  !(
-                                    att.type === "image" &&
-                                    typeof att.data_url === "string" &&
-                                    att.data_url.startsWith("data:image/")
-                                  )
-                              );
-                              const gridCount = Math.min(imageAttachments.length, 4);
-                              return (
-                                <>
-                                  {imageAttachments.length > 0 && (
-                                    <div className={`chat-media-grid count-${gridCount}`}>
-                                      {imageAttachments.slice(0, 4).map((img, idx) => (
-                                        <button
-                                          key={`${message.id}-img-${idx}`}
-                                          type="button"
-                                          className="chat-media-item"
-                                          onClick={() => openCommunityChatLightbox(imageAttachments, idx)}
-                                          title={img.name}
-                                          aria-label={img.name}
-                                        >
-                                          <img src={img.url} alt={img.name} loading="lazy" />
-                                          {idx === 3 && imageAttachments.length > 4 && (
-                                            <div className="chat-media-more">+{imageAttachments.length - 4}</div>
-                                          )}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  {fileAttachments.length > 0 && (
-                                    <div className="attachments-preview chat-attachments-preview">
-                                      {fileAttachments.map((att) => (
-                                        <button
-                                          key={att.id}
-                                          type="button"
-                                          className="attachment-item attachment-chip"
-                                          disabled
-                                          title={att.name}
-                                        >
-                                          <div className="attachment-icon" aria-hidden="true">
-                                            <svg viewBox="0 0 24 24">
-                                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                              <path d="M14 2v6h6" />
-                                              <path d="M16 13H8" />
-                                              <path d="M16 17H8" />
-                                              <path d="M10 9H8" />
-                                            </svg>
-                                          </div>
-                                          <span className="attachment-name">{att.name}</span>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
-                            {reactionPickerMessageId === message.id && (
-                              <div className="reaction-picker">
-                                {REACTION_EMOJIS.map(emoji => (
-                                  <button
-                                    key={emoji}
-                                    className="reaction-picker-btn"
-                                    onClick={() => void handleToggleReaction(message.id, emoji)}
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {(() => {
-                              const msgReactions = messageReactions.filter(r => r.message_id === message.id);
-                              if (msgReactions.length === 0) return null;
-                              const groups: Record<string, MessageReaction[]> = {};
-                              for (const r of msgReactions) {
-                                if (!groups[r.emoji]) groups[r.emoji] = [];
-                                groups[r.emoji].push(r);
-                              }
-                              return (
-                                <div className="chat-reactions">
-                                  {Object.entries(groups).map(([emoji, reactions]) => {
-                                    const hasOwn = reactions.some(r => r.user_id === supabaseSession?.user.id);
-                                    return (
-                                      <button
-                                        key={emoji}
-                                        className={`reaction-badge${hasOwn ? " own" : ""}`}
-                                        onClick={() => void handleToggleReaction(message.id, emoji)}
-                                        title={reactions.map(r => displayName(r.user_id)).join(", ")}
-                                      >
-                                        <span className="reaction-emoji">{emoji}</span>
-                                        <span className="reaction-count">{reactions.length}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="chat-actions">
-                            <button
-                              className="chat-action-btn"
-                              onClick={() => setReactionPickerMessageId(
-                                reactionPickerMessageId === message.id ? null : message.id
-                              )}
-                              title="Add reaction"
-                            >
-                              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
-                            </button>
-                            {!isPending && (
-                              <button
-                                className="chat-action-btn"
-                                onClick={() => handleStartReply(message)}
-                                title="Reply"
-                              >
-                                <svg viewBox="0 0 24 24">
-                                  <path d="M9 17l-5-5 5-5" />
-                                  <path d="M4 12h9a7 7 0 0 1 7 7v2" />
-                                </svg>
-                              </button>
-                            )}
-                            <button
-                              className="chat-action-btn"
-                              onClick={() => void copyTextToClipboard(message.body)}
-                              title="Copy message"
-                            >
-                              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                            </button>
-                            {isOwn && !isPending && (
-                              <>
-                                <button
-                                  className="chat-action-btn"
-                                  onClick={() => handleStartEdit(message)}
-                                  title="Edit"
-                                >
-                                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                                </button>
-                                <button
-                                  className="chat-action-btn delete"
-                                  onClick={() => void handleDeleteMessage(message.id)}
-                                  title="Delete"
-                                >
-                                  <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
-                                </button>
-                              </>
-                            )}
-                            </div>
-                          </div>
-                        </Fragment>
+                        const isOwn = message.sender_id === supabaseSession?.user.id;
+                        const isPending = message.id.startsWith("pending-");
+                        const showMeta = shouldShowSender(communityMessages, index);
+                        const dateSeparator = shouldShowDateSeparator(communityMessages, index);
+                        const senderLabel = displayName(message.sender_id);
+                        const avatarUrl = isOwn ? profileAvatarUrl : profilesByUserId[message.sender_id]?.avatar_url ?? null;
+                        const avatarColor = getAvatarColor(message.sender_id);
+                        const shortTime = new Date(message.created_at).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        });
+                        const replyToId = message.reply_to_id ?? null;
+                        const replyTarget = replyToId ? (communityMessageById.get(replyToId) ?? null) : null;
+                        return (
+                          <CommunityChatMessageRow
+                            key={message.id}
+                            message={message}
+                            dateSeparator={dateSeparator}
+                            isPending={isPending}
+                            showMeta={showMeta}
+                            isOwn={isOwn}
+                            senderLabel={senderLabel}
+                            avatarUrl={avatarUrl}
+                            avatarColor={avatarColor}
+                            shortTime={shortTime}
+                            formattedTime={formatChatTime(message.created_at)}
+                            editingMessageId={editingMessageId}
+                            editingMessageText={editingMessageText}
+                            reactionPickerMessageId={reactionPickerMessageId}
+                            messageReactions={messageReactions}
+                            supabaseUserId={supabaseSession?.user.id}
+                            replyToId={replyToId}
+                            replyTarget={replyTarget}
+                            reactionEmojis={REACTION_EMOJIS}
+                            getInitials={getInitials}
+                            displayName={displayName}
+                            parseReplyPrefix={parseReplyPrefix}
+                            truncateReplyPreview={truncateReplyPreview}
+                            renderTextWithLinks={renderTextWithLinks}
+                            onScrollToReplyMessage={scrollToCommunityMessage}
+                            onOpenCommunityChatLightbox={openCommunityChatLightbox}
+                            onToggleReaction={handleToggleReaction}
+                            onSetReactionPickerMessageId={setReactionPickerMessageId}
+                            onStartReply={handleStartReply}
+                            onCopyMessage={copyTextToClipboard}
+                            onStartEdit={handleStartEdit}
+                            onDeleteMessage={handleDeleteMessage}
+                            onEditingMessageTextChange={setEditingMessageText}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={handleCancelEdit}
+                          />
                         );
                       })}
                   </div>
@@ -14864,34 +8945,22 @@ function App() {
                   </div>
                 )}
                 {communityAttachments.length > 0 && (() => {
-                  const images = communityAttachments.filter(
-                    (att) =>
-                      att.type === "image" &&
-                      typeof att.data_url === "string" &&
-                      att.data_url.startsWith("data:image/")
-                  );
-                  const files = communityAttachments.filter(
-                    (att) =>
-                      !(
-                        att.type === "image" &&
-                        typeof att.data_url === "string" &&
-                        att.data_url.startsWith("data:image/")
-                      )
-                  );
-                  const gridCount = Math.min(Math.max(images.length, 1), 4);
+                  const { imageAttachments, fileAttachments } =
+                    partitionCommunityAttachments(communityAttachments);
+                  const gridCount = Math.min(Math.max(imageAttachments.length, 1), 4);
                   return (
                     <>
-                      {images.length > 0 && (
+                      {imageAttachments.length > 0 && (
                         <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
-                          {images.map((att) => (
-                            <div key={att.id} className="chat-media-item chat-media-item-static">
-                              <img src={att.data_url ?? ""} alt={att.name} />
+                          {imageAttachments.map((item) => (
+                            <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
+                              <img src={item.url} alt={item.name} />
                               <button
                                 type="button"
                                 className="chat-media-remove"
-                                onClick={() => removeCommunityAttachment(att.id)}
+                                onClick={() => removeCommunityAttachment(item.attachment.id)}
                                 title="Remove"
-                                aria-label={`Remove ${att.name}`}
+                                aria-label={`Remove ${item.name}`}
                               >
                                 ×
                               </button>
@@ -14899,9 +8968,9 @@ function App() {
                           ))}
                         </div>
                       )}
-                      {files.length > 0 && (
+                      {fileAttachments.length > 0 && (
                         <div className="attachments-preview chat-attachments-preview">
-                          {files.map((att) => (
+                          {fileAttachments.map((att) => (
                             <div key={att.id} className="attachment-item" title={att.name}>
                               <div className="attachment-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24">
@@ -14983,17 +9052,11 @@ function App() {
 	                    disabled={!activeCommunity || !canPostMessagesActiveCommunity}
 	                    rows={1}
 	                  />
-		                  <button
-		                    className={`ask-icon-btn ask-mic ${communityVoiceUiState}`}
-		                    type="button"
-		                    onClick={() => void handleVoiceInputClick("community")}
-		                    aria-label={communityVoiceIntent.title}
-                        aria-pressed={communityVoiceUiState === "recording"}
-                        aria-busy={communityVoiceUiState === "transcribing"}
-		                    title={communityVoiceIntent.title}
-		                  >
-                        {renderVoiceButtonVisual(communityVoiceUiState)}
-		                  </button>
+			                  <VoiceInputButton
+			                    state={communityVoiceUiState}
+			                    title={communityVoiceIntent.title}
+			                    onClick={() => void handleVoiceInputClick("community")}
+			                  />
                   <button
 	                    className="chat-send ask-send-btn"
                       type="button"
@@ -15138,7 +9201,7 @@ function App() {
 			                          value={communitySettingsSlug}
 			                          maxLength={32}
 			                          onChange={(event) => {
-			                            setCommunitySettingsSlug(slugify(event.target.value));
+			                            setCommunitySettingsSlug(slugifyCommunityName(event.target.value));
 			                            markCommunitySettingsDirty();
 			                          }}
 			                        />
@@ -15491,27 +9554,28 @@ function App() {
 
                             <div className="premium-gate-overlay">
                               <div className="premium-gate-card">
-                                <div className="premium-gate-eyebrow">PRO</div>
-                                <div className="premium-gate-title">For Pro members only</div>
+                                <div className="premium-gate-eyebrow">ARCHITECT</div>
+                                <div className="premium-gate-title">For Architect members only</div>
                                 <div className="model-note" style={{ marginTop: 8 }}>
-                                  Upgrade to Builder Pro ($100/mo) to customize the empty-thread landing page and a
+                                  Upgrade to Architect ($100/mo) to customize the empty-thread landing page and a
                                   community system prompt.
                                 </div>
                                 {isActiveCommunityOwner ? (
                                   <div className="create-community-actions" style={{ marginTop: 12 }}>
                                     <button
+                                      className="premium-gate-cta"
                                       type="button"
                                       onClick={() => {
                                         setBuilderUpgradeContext("builder");
                                         setIsBuilderUpgradeOpen(true);
                                       }}
                                     >
-                                      Upgrade to Pro
+                                      Upgrade to Architect
                                     </button>
                                   </div>
                                 ) : (
                                   <div className="model-note" style={{ marginTop: 12 }}>
-                                    Ask the community owner to upgrade to Builder Pro.
+                                    Ask the community owner to upgrade to Architect.
                                   </div>
                                 )}
                               </div>
@@ -16429,380 +10493,6 @@ function App() {
 		              </div>
 		            )}
 
-	            {activePage === "community" && communityTab === "automations" && (
-	              <div className="settings-panel community-settings-panel">
-	                {!activeCommunity ? (
-	                  <div className="chat-empty">Select a community to view automations.</div>
-	                ) : !supabaseSession ? (
-	                  <div className="chat-empty">Sign in to view community automations.</div>
-	                ) : !canViewActiveCommunityAutomations ? (
-	                  <div className="chat-empty">Only owners and admins can manage automations.</div>
-	                ) : (
-	                  <>
-	                    {automationNotice && (
-	                      <div className="success-toast" style={{ marginBottom: 12 }}>
-	                        {automationNotice}
-	                      </div>
-	                    )}
-	                    {brandosNotice && (
-	                      <div className="success-toast" style={{ marginBottom: 12 }}>
-	                        {brandosNotice}
-	                      </div>
-	                    )}
-	                    {automationError && (
-	                      <div className="auth-error" style={{ marginBottom: 12 }}>
-	                        {automationError}
-	                      </div>
-	                    )}
-	                    {brandosError && (
-	                      <div className="auth-error" style={{ marginBottom: 12 }}>
-	                        {brandosError}
-	                      </div>
-	                    )}
-	                    {automationRevealSecret && (
-	                      <div className="analytics-chart-card" style={{ marginBottom: 12 }}>
-	                        <div className="analytics-chart-header">
-	                          <div className="analytics-chart-title">{automationRevealSecret.label}</div>
-	                          <button type="button" className="secondary" onClick={() => setAutomationRevealSecret(null)}>
-	                            Close
-	                          </button>
-	                        </div>
-	                        <div className="tool-output">{automationRevealSecret.secret}</div>
-	                        <div className="model-note">
-	                          Copy this secret now. You can rotate it later, but it won't be shown again.
-	                        </div>
-	                      </div>
-	                    )}
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">Presets</div>
-	                      <div className="analytics-chart-card">
-	                        <div className="analytics-chart-header">
-	                          <div className="analytics-chart-title">BrandOS</div>
-	                          <div className="analytics-chart-header-right">
-	                            {isBrandosConnectOpen ? (
-	                              <>
-	                                <button
-	                                  type="button"
-	                                  className="secondary"
-	                                  onClick={closeBrandosConnect}
-	                                  disabled={isSavingBrandosConnector}
-	                                >
-	                                  Cancel
-	                                </button>
-	                                <button
-	                                  type="button"
-	                                  onClick={() => void handleSaveBrandosConnector()}
-	                                  disabled={isSavingBrandosConnector}
-	                                >
-	                                  {isSavingBrandosConnector ? "Saving…" : brandosConnector ? "Save" : "Connect"}
-	                                </button>
-	                              </>
-	                            ) : brandosConnector ? (
-	                              <>
-	                                <button type="button" className="secondary" onClick={openBrandosConnect}>
-	                                  Manage
-	                                </button>
-	                                <button
-	                                  type="button"
-	                                  className="danger"
-	                                  onClick={() => void handleDeleteBrandosConnector()}
-	                                  disabled={isDeletingBrandosConnector}
-	                                >
-	                                  {isDeletingBrandosConnector ? "Disconnecting…" : "Disconnect"}
-	                                </button>
-	                              </>
-	                            ) : (
-	                              <button type="button" onClick={openBrandosConnect}>
-	                                Connect
-	                              </button>
-	                            )}
-	                          </div>
-	                        </div>
-	                        <div className="model-note">
-	                          One-click attribution: Arx captures bid/aid and identifies on email capture.
-	                        </div>
-	                        {brandosConnector && !isBrandosConnectOpen && (
-	                          <div className="model-note">Connected to {brandosConnector.base_url}.</div>
-	                        )}
-	                        {isBrandosConnectOpen && (
-	                          <div style={{ marginTop: 12 }}>
-	                            <div className="invite-create-row invite-create-row-custom">
-	                              <label className="create-community-field">
-	                                <span>Base URL</span>
-	                                <input
-	                                  type="text"
-	                                  placeholder="https://app.brandos.com"
-	                                  value={brandosBaseUrlInput}
-	                                  onChange={(event) => setBrandosBaseUrlInput(event.target.value)}
-	                                />
-	                              </label>
-	                              <label className="create-community-field">
-	                                <span>Account id</span>
-	                                <input
-	                                  type="text"
-	                                  placeholder="00000000-0000-0000-0000-000000000000"
-	                                  value={brandosAccountIdInput}
-	                                  onChange={(event) => setBrandosAccountIdInput(event.target.value)}
-	                                />
-	                              </label>
-	                            </div>
-	                            <div className="invite-create-row invite-create-row-custom" style={{ marginTop: 12 }}>
-	                              <label className="create-community-field" style={{ flex: 1 }}>
-	                                <span>Identify secret</span>
-	                                <input
-	                                  type="password"
-	                                  placeholder="Paste your BrandOS identify secret"
-	                                  value={brandosIdentifySecretInput}
-	                                  onChange={(event) => setBrandosIdentifySecretInput(event.target.value)}
-	                                />
-	                              </label>
-	                            </div>
-	                            <div className="model-list" style={{ marginTop: 12 }}>
-	                              <label className="model-toggle">
-	                                <input
-	                                  type="checkbox"
-	                                  checked={brandosIsEnabledInput}
-	                                  onChange={(event) => setBrandosIsEnabledInput(event.target.checked)}
-	                                />
-	                                <span>Enabled</span>
-	                              </label>
-	                            </div>
-	                            <div className="model-note" style={{ marginTop: 10 }}>
-	                              Arx will POST to <span className="token">/api/identify</span> on{" "}
-	                              <span className="token">Email captured</span>.
-	                            </div>
-	                            <div className="model-note" style={{ marginTop: 8 }}>
-	                              {lastBrandosIdentifyDelivery ? (
-	                                (() => {
-	                                  const isSkipped =
-	                                    lastBrandosIdentifyDelivery.status === "success" &&
-	                                    (lastBrandosIdentifyDelivery.error ?? "").startsWith("skipped_");
-	                                  const statusLabel = isSkipped
-	                                    ? "Skipped"
-	                                    : lastBrandosIdentifyDelivery.status === "success"
-	                                      ? "Success"
-	                                      : "Failed";
-	                                  const attemptedEpoch = Math.floor(
-	                                    new Date(lastBrandosIdentifyDelivery.attempted_at).getTime() / 1000
-	                                  );
-	                                  const detail = [
-	                                    "Last identify",
-	                                    Number.isFinite(attemptedEpoch) ? formatRelativeTime(attemptedEpoch) : "",
-	                                    statusLabel,
-	                                    formatAutomationDeliveryError(lastBrandosIdentifyDelivery.error),
-	                                  ]
-	                                    .filter(Boolean)
-	                                    .join(" • ");
-	                                  return <>{detail}</>;
-	                                })()
-	                              ) : (
-	                                <>No identify attempts yet.</>
-	                              )}
-	                            </div>
-	                          </div>
-	                        )}
-	                      </div>
-	                    </div>
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">Webhooks</div>
-	                      <div className="analytics-chart-card">
-	                        <div className="analytics-chart-header">
-	                          <div className="analytics-chart-title">
-	                            {isAutomationCreateOpen ? "New webhook" : "Webhook endpoints"}
-	                          </div>
-	                          <div className="analytics-chart-header-right">
-	                            {isAutomationCreateOpen ? (
-	                              <>
-	                                <button
-	                                  type="button"
-	                                  className="secondary"
-	                                  onClick={() => {
-	                                    setIsAutomationCreateOpen(false);
-	                                    resetAutomationForm();
-	                                  }}
-	                                >
-	                                  Cancel
-	                                </button>
-	                                <button type="button" onClick={() => void handleCreateAutomationEndpoint()}>
-	                                  Create
-	                                </button>
-	                              </>
-	                            ) : (
-	                              <button
-	                                type="button"
-	                                onClick={() => {
-	                                  setAutomationNotice(null);
-	                                  setAutomationError(null);
-	                                  setAutomationRevealSecret(null);
-	                                  resetAutomationForm();
-	                                  setIsAutomationCreateOpen(true);
-	                                }}
-	                              >
-	                                Add webhook
-	                              </button>
-	                            )}
-	                          </div>
-	                        </div>
-	                        {isAutomationCreateOpen && (
-	                          <div style={{ marginBottom: 14 }}>
-	                            <div className="invite-create-row invite-create-row-custom">
-	                              <label className="create-community-field">
-	                                <span>Name</span>
-	                                <input
-	                                  type="text"
-	                                  placeholder="Zapier"
-	                                  value={automationNameInput}
-	                                  onChange={(event) => setAutomationNameInput(event.target.value)}
-	                                />
-	                              </label>
-	                              <label className="create-community-field">
-	                                <span>Webhook URL</span>
-	                                <input
-	                                  type="text"
-	                                  placeholder="https://hooks.zapier.com/..."
-	                                  value={automationUrlInput}
-	                                  onChange={(event) => setAutomationUrlInput(event.target.value)}
-	                                />
-	                              </label>
-	                            </div>
-
-	                            <div className="model-note" style={{ marginTop: 10 }}>
-	                              Select which events to send. Email captured includes email.
-	                            </div>
-	                            <div className="model-list">
-	                              {[
-	                                { id: "identity.email_captured", label: "Email captured" },
-	                                { id: "community.member_joined", label: "Member joined" },
-	                                { id: "community.member_left", label: "Member churned" },
-	                              ].map((option) => (
-	                                <label key={option.id} className="model-toggle">
-	                                  <input
-	                                    type="checkbox"
-	                                    checked={automationSelectedEventTypes.includes(option.id)}
-	                                    onChange={(event) => {
-	                                      const checked = event.target.checked;
-	                                      setAutomationSelectedEventTypes((prev) => {
-	                                        if (checked) return Array.from(new Set([...prev, option.id]));
-	                                        return prev.filter((value) => value !== option.id);
-	                                      });
-	                                    }}
-	                                  />
-	                                  <span>{option.label}</span>
-	                                </label>
-	                              ))}
-	                              <label className="model-toggle">
-	                                <input
-	                                  type="checkbox"
-	                                  checked={automationIsEnabledInput}
-	                                  onChange={(event) => setAutomationIsEnabledInput(event.target.checked)}
-	                                />
-	                                <span>Enabled</span>
-	                              </label>
-	                            </div>
-	                          </div>
-	                        )}
-
-	                        {isLoadingAutomations ? (
-	                          <div className="chat-empty">Loading…</div>
-	                        ) : automationEndpoints.length === 0 ? (
-	                          <div className="model-note">No webhooks yet.</div>
-	                        ) : (
-	                          <div className="invite-list">
-	                            {automationEndpoints.map((endpoint) => {
-	                              const statusClass = endpoint.is_enabled ? "active" : "revoked";
-	                              const statusText = endpoint.is_enabled ? "Enabled" : "Disabled";
-	                              const eventLabels: Record<string, string> = {
-	                                "identity.email_captured": "Email captured",
-	                                "community.member_joined": "Member joined",
-	                                "community.member_left": "Member churned",
-	                              };
-	                              const events =
-	                                endpoint.event_types && endpoint.event_types.length > 0
-	                                  ? endpoint.event_types
-	                                  : ["community.member_joined", "community.member_left"];
-	                              const eventsLabel = events.map((eventType) => eventLabels[eventType] ?? eventType).join(", ");
-	                              return (
-	                                <div key={endpoint.id} className="invite-row">
-	                                  <div className="invite-main">
-	                                    <div className="invite-code">{endpoint.name}</div>
-	                                    <div className={`invite-status ${statusClass}`}>
-	                                      {statusText} • {eventsLabel} • {endpoint.url}
-	                                    </div>
-	                                  </div>
-	                                  <div className="invite-actions">
-	                                    <button type="button" onClick={() => void handleTestAutomationEndpoint(endpoint)}>
-	                                      Test
-	                                    </button>
-	                                    <button
-	                                      type="button"
-	                                      className="secondary"
-	                                      onClick={() => void handleToggleAutomationEndpointEnabled(endpoint)}
-	                                    >
-	                                      {endpoint.is_enabled ? "Disable" : "Enable"}
-	                                    </button>
-	                                    <button
-	                                      type="button"
-	                                      className="secondary"
-	                                      onClick={() => void handleRotateAutomationEndpointSecret(endpoint)}
-	                                    >
-	                                      Rotate secret
-	                                    </button>
-	                                    <button
-	                                      type="button"
-	                                      className="danger"
-	                                      onClick={() => void handleDeleteAutomationEndpoint(endpoint)}
-	                                    >
-	                                      Delete
-	                                    </button>
-	                                  </div>
-	                                </div>
-	                              );
-	                            })}
-	                          </div>
-	                        )}
-	                      </div>
-	                    </div>
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">Delivery log</div>
-	                      <div className="analytics-chart-card">
-	                        {isLoadingAutomations ? (
-	                          <div className="chat-empty">Loading…</div>
-	                        ) : automationDeliveries.length === 0 ? (
-	                          <div className="model-note">No deliveries yet.</div>
-	                        ) : (
-	                          <div className="invite-list">
-	                            {automationDeliveries.map((delivery) => {
-	                              const key = `${delivery.attempted_at}:${delivery.endpoint_name}:${delivery.event_type}`;
-	                              const statusClass = delivery.status === "success" ? "active" : "revoked";
-	                              const formattedError = formatAutomationDeliveryError(delivery.error);
-	                              const attemptedEpoch = Math.floor(new Date(delivery.attempted_at).getTime() / 1000);
-	                              const details = [
-	                                Number.isFinite(attemptedEpoch) ? formatRelativeTime(attemptedEpoch) : "",
-	                                delivery.endpoint_name,
-	                                delivery.response_code != null ? `HTTP ${delivery.response_code}` : null,
-	                              ]
-	                                .filter(Boolean)
-	                                .join(" • ");
-	                              return (
-	                                <div key={key} className="invite-row">
-	                                  <div className="invite-main">
-	                                    <div className="invite-code">{delivery.event_type}</div>
-	                                    <div className={`invite-status ${statusClass}`}>
-	                                      {details}
-	                                      {formattedError ? ` • ${formattedError}` : ""}
-	                                    </div>
-	                                  </div>
-	                                </div>
-	                              );
-	                            })}
-	                          </div>
-	                        )}
-	                      </div>
-	                    </div>
-	                  </>
-	                )}
-	              </div>
-	            )}
 	            {activePage === "community" && communityTab === "library" && (
 	              <div className="community-panel library-panel">
 	                {!activeCommunity && "Select a community."}
@@ -16869,7 +10559,9 @@ function App() {
                                   )}
                                   <div className="library-version-body">
                                     {selectedLibraryResource.body_md ? (
-                                      renderMarkdown(selectedLibraryResource.body_md)
+                                      renderMarkdown(selectedLibraryResource.body_md, {
+                                        onCopyCode: copyTextToClipboard,
+                                      })
                                     ) : (
                                       <div className="chat-empty">No content.</div>
                                     )}
@@ -17025,7 +10717,7 @@ function App() {
             )}
 	            {activePage === "community" && communityTab === "members" && (
 	              <div className="community-panel members-panel">
-	                <div className={`members-layout${canInviteActiveCommunity ? " with-invites" : ""}`}>
+		                <div className={`members-layout${(canInviteActiveCommunity || canManageMembersActiveCommunity) ? " with-invites" : ""}`}>
 	                  <section className="members-section">
                     <div className="members-header-row">
                       <div className="members-header">Members</div>
@@ -17112,145 +10804,310 @@ function App() {
 	                    </div>
 	                  </section>
 
-	                  {activeCommunity && supabaseSession && canInviteActiveCommunity && (
+	                  {activeCommunity && supabaseSession && (canInviteActiveCommunity || canManageMembersActiveCommunity) && (
 	                    <section className="invites-section">
-                      <div className="members-header-row">
-                        <div className="members-header">Invites</div>
-                      </div>
-                      <div className="invites-card">
-                        <div className="invite-create-row invite-create-row-cta">
-                          <label className="invite-field">
-                            <span>Max uses</span>
-                            <select
-                              className="select-styled"
-                              value={inviteMaxUsesPreset}
-                              onChange={(event) => setInviteMaxUsesPreset(event.target.value)}
-                            >
-                              <option value="unlimited">Unlimited</option>
-                              <option value="1">1 use</option>
-                              <option value="5">5 uses</option>
-                              <option value="10">10 uses</option>
-                              <option value="25">25 uses</option>
-                              <option value="100">100 uses</option>
-                              <option value="custom">Custom…</option>
-                            </select>
-                          </label>
-                          <label className="invite-field">
-                            <span>Expires</span>
-                            <select
-                              className="select-styled"
-                              value={inviteExpiryPreset}
-                              onChange={(event) => setInviteExpiryPreset(event.target.value)}
-                            >
-                              <option value="never">Never</option>
-                              <option value="24h">24 hours</option>
-                              <option value="7d">7 days</option>
-                              <option value="30d">30 days</option>
-                              <option value="90d">90 days</option>
-                              <option value="custom">Custom…</option>
-                            </select>
-                          </label>
-                          <button
-                            className="invite-create-btn"
-                            onClick={() => void handleCreateInvite()}
-                            disabled={isCreatingInvite}
-                          >
-                            {isCreatingInvite ? "Creating…" : "Create"}
-                          </button>
-                        </div>
-                        {(inviteMaxUsesPreset === "custom" || inviteExpiryPreset === "custom") && (
-                          <div className="invite-create-row invite-create-row-custom">
-                            {inviteMaxUsesPreset === "custom" && (
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="Custom max uses"
-                                value={inviteMaxUsesCustom}
-                                onChange={(event) => setInviteMaxUsesCustom(event.target.value)}
-                              />
-                            )}
-                            {inviteExpiryPreset === "custom" && (
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="Custom expiry (days)"
-                                value={inviteExpiryCustom}
-                                onChange={(event) => setInviteExpiryCustom(event.target.value)}
-                              />
-                            )}
-                          </div>
-                        )}
-                        {inviteCreateError && <div className="auth-error">{inviteCreateError}</div>}
-                        <div className="invite-list">
-                          {isLoadingCommunityInvites ? (
-                            <div className="chat-empty">Loading invites…</div>
-                          ) : communityInvites.length === 0 ? (
-                            <div className="chat-empty">No invites yet.</div>
-                          ) : (
-                            communityInvites.map((invite) => {
-                              const revoked = Boolean(invite.revoked_at);
-                              const expired = Boolean(
-                                invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()
-                              );
-                              const status = revoked ? "revoked" : expired ? "expired" : "active";
-                              const bestInviteLink = buildBestInviteLink(activeCommunity, invite.code);
-                              return (
-                                <div key={invite.id} className="invite-row">
-                                  <div className="invite-main">
-                                    <div className="invite-code">{invite.code}</div>
-                                    <div className={`invite-status ${status}`}>
-                                      {status}
-                                      {invite.max_uses ? ` • max ${invite.max_uses}` : ""}
-                                      {invite.expires_at
-                                        ? ` • exp ${new Date(invite.expires_at).toLocaleDateString()}`
-                                        : ""}
-                                    </div>
-                                  </div>
-                                  <div className="invite-actions">
-                                    <button
-                                      className="secondary"
-                                      onClick={() =>
-                                        void copyTextToClipboard(
-                                          bestInviteLink.link
-                                        )
-                                      }
-                                      title={bestInviteLink.kind === "web" ? "Copy web join link" : "Copy app link"}
-                                    >
-                                      Copy link
-                                    </button>
-                                    <button
-                                      className="secondary"
-                                      onClick={() => void copyTextToClipboard(invite.code)}
-                                      title="Copy invite code"
-                                    >
-                                      Copy code
-                                    </button>
-                                    <button
-                                      className="secondary"
-                                      onClick={() => void handleRevokeInvite(invite.id)}
-                                      disabled={revoked}
-                                      title="Revoke invite"
-                                    >
-                                      Revoke
-                                    </button>
-                                    <button
-                                      className="danger"
-                                      onClick={() => void handleDeleteInvite(invite.id)}
-                                      title="Delete invite"
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </section>
-                  )}
-                </div>
-              </div>
+	                      {canManageMembersActiveCommunity && (
+	                        <>
+	                          <div className="members-header-row">
+	                            <div className="members-header">Memory review</div>
+	                            <div className="members-count">{pendingCommunityMemoryCandidates.length}</div>
+	                          </div>
+	                          <div className="invites-card">
+	                            {isLoadingCommunityMemoryCandidates ? (
+	                              <div className="chat-empty">Loading memory candidates…</div>
+	                            ) : communityMemoryCandidatesError ? (
+	                              <div className="auth-error">{communityMemoryCandidatesError}</div>
+		                            ) : pendingCommunityMemoryCandidates.length === 0 ? (
+		                              <div className="chat-empty">No memory candidates waiting for review.</div>
+		                            ) : (
+			                              <div className="invite-list">
+			                                {pendingCommunityMemoryCandidates.map((candidate) => {
+                                      const candidateEvidence = extractCommunityEvidenceUsedV1(candidate.evidence_json);
+                                      const rejectReason = communityMemoryRejectReasonById[candidate.id] ?? "";
+                                      return (
+		                                  <div key={candidate.id} className="invite-row community-memory-review-row">
+		                                    <div className="invite-main">
+		                                      <div className="invite-code">
+		                                        {(candidate.title ?? "").trim() || "Untitled candidate"}
+		                                      </div>
+		                                      <div className="invite-status">
+		                                        by {displayName(candidate.proposer_user_id)} • score {candidate.signal_score}
+		                                      </div>
+		                                      <div className="create-community-hint">
+		                                        {previewText(candidate.memory_text, 180)}
+		                                      </div>
+                                      {candidateEvidence && candidateEvidence.items.length > 0 && (
+                                        <div className="community-memory-evidence-preview">
+                                          <CommunityEvidenceCitations items={candidateEvidence.items.slice(0, 3)} />
+                                        </div>
+                                      )}
+                                      <input
+                                        className="community-memory-reject-reason"
+                                        type="text"
+                                        placeholder="Reject reason (optional)"
+                                        value={rejectReason}
+                                        onChange={(event) => {
+                                          const value = event.target.value;
+                                          setCommunityMemoryRejectReasonById((prev) => ({
+                                            ...prev,
+                                            [candidate.id]: value,
+                                          }));
+                                        }}
+                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
+                                      />
+		                                    </div>
+		                                    <div className="invite-actions">
+		                                      <button
+		                                        className="secondary"
+		                                        onClick={() => void handlePromoteCommunityMemoryCandidate(candidate.id)}
+	                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
+	                                      >
+	                                        {reviewingCommunityMemoryCandidateId === candidate.id ? "Saving…" : "Promote"}
+	                                      </button>
+		                                      <button
+		                                        className="danger"
+		                                        onClick={() =>
+                                          void handleRejectCommunityMemoryCandidate(
+                                            candidate.id,
+                                            rejectReason.trim() ? rejectReason.trim() : null,
+                                          )
+                                        }
+		                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
+		                                      >
+		                                        Reject
+		                                      </button>
+		                                    </div>
+		                                  </div>
+		                                );
+                                    })}
+			                              </div>
+			                            )}
+		                          </div>
+		                          <div className="members-header-row">
+		                            <div className="members-header">Review history</div>
+		                            <div className="members-count">{reviewedCommunityMemoryCandidates.length}</div>
+		                          </div>
+		                          <div className="invites-card">
+		                            {isLoadingCommunityMemoryCandidates ? (
+		                              <div className="chat-empty">Loading review history…</div>
+		                            ) : communityMemoryCandidatesError ? (
+		                              <div className="auth-error">{communityMemoryCandidatesError}</div>
+		                            ) : reviewedCommunityMemoryCandidates.length === 0 ? (
+		                              <div className="chat-empty">No reviewed memory candidates yet.</div>
+		                            ) : (
+		                              <>
+		                                <div className="invite-list">
+			                                  {reviewedCommunityMemoryCandidates.slice(0, 20).map((candidate) => {
+			                                    const routerState = candidate.router_state.trim().toLowerCase();
+			                                    const stateLabel =
+			                                      routerState === "rejected"
+			                                        ? "Rejected"
+			                                        : routerState === "promoted"
+			                                          ? "Promoted"
+			                                          : routerState === "auto_promoted"
+			                                            ? "Auto-promoted"
+			                                          : routerState === "published"
+			                                            ? "Published"
+			                                            : routerState === "approved"
+			                                              ? "Approved"
+			                                              : routerState.replace(/_/g, " ");
+		                                    const reviewedAt = candidate.reviewed_at
+		                                      ? formatChatTime(candidate.reviewed_at)
+		                                      : formatChatTime(candidate.updated_at);
+		                                    const reviewedByLabel = candidate.reviewed_by
+		                                      ? displayName(candidate.reviewed_by)
+		                                      : "router";
+		                                    const routerReason = (candidate.router_reason ?? "").trim();
+		                                    return (
+		                                      <div key={candidate.id} className="invite-row community-memory-review-row">
+		                                        <div className="invite-main">
+		                                          <div className="invite-code">
+		                                            {(candidate.title ?? "").trim() || "Untitled candidate"}
+		                                          </div>
+		                                          <div className="community-memory-review-history-meta">
+		                                            <span className={`community-memory-review-state ${routerState}`}>
+		                                              {stateLabel}
+		                                            </span>
+		                                            <span className="invite-status">
+		                                              by {displayName(candidate.proposer_user_id)} • score {candidate.signal_score}
+		                                            </span>
+		                                            <span className="invite-status">
+		                                              reviewed {reviewedAt} by {reviewedByLabel}
+		                                            </span>
+		                                          </div>
+		                                          <div className="create-community-hint">
+		                                            {previewText(candidate.memory_text, 180)}
+		                                          </div>
+		                                          {routerState === "rejected" && (
+		                                            <div className="community-memory-review-reason">
+		                                              Reject reason: {routerReason || "not provided"}
+		                                            </div>
+		                                          )}
+		                                        </div>
+		                                      </div>
+		                                    );
+		                                  })}
+		                                </div>
+		                                {reviewedCommunityMemoryCandidates.length > 20 && (
+		                                  <div className="community-memory-review-history-note">
+		                                    Showing latest 20 reviewed candidates.
+		                                  </div>
+		                                )}
+		                                {rejectedReviewedCommunityMemoryCandidates.length > 0 && (
+		                                  <div className="community-memory-review-history-note">
+		                                    Rejected: {rejectedReviewedCommunityMemoryCandidates.length}
+		                                  </div>
+		                                )}
+		                              </>
+		                            )}
+		                          </div>
+		                        </>
+		                      )}
+	                      {canInviteActiveCommunity && (
+	                        <>
+	                          <div className="members-header-row">
+	                            <div className="members-header">Invites</div>
+	                          </div>
+	                          <div className="invites-card">
+	                            <div className="invite-create-row invite-create-row-cta">
+	                              <label className="invite-field">
+	                                <span>Max uses</span>
+	                                <select
+	                                  className="select-styled"
+	                                  value={inviteMaxUsesPreset}
+	                                  onChange={(event) => setInviteMaxUsesPreset(event.target.value)}
+	                                >
+	                                  <option value="unlimited">Unlimited</option>
+	                                  <option value="1">1 use</option>
+	                                  <option value="5">5 uses</option>
+	                                  <option value="10">10 uses</option>
+	                                  <option value="25">25 uses</option>
+	                                  <option value="100">100 uses</option>
+	                                  <option value="custom">Custom…</option>
+	                                </select>
+	                              </label>
+	                              <label className="invite-field">
+	                                <span>Expires</span>
+	                                <select
+	                                  className="select-styled"
+	                                  value={inviteExpiryPreset}
+	                                  onChange={(event) => setInviteExpiryPreset(event.target.value)}
+	                                >
+	                                  <option value="never">Never</option>
+	                                  <option value="24h">24 hours</option>
+	                                  <option value="7d">7 days</option>
+	                                  <option value="30d">30 days</option>
+	                                  <option value="90d">90 days</option>
+	                                  <option value="custom">Custom…</option>
+	                                </select>
+	                              </label>
+	                              <button
+	                                className="invite-create-btn"
+	                                onClick={() => void handleCreateInvite()}
+	                                disabled={isCreatingInvite}
+	                              >
+	                                {isCreatingInvite ? "Creating…" : "Create"}
+	                              </button>
+	                            </div>
+	                            {(inviteMaxUsesPreset === "custom" || inviteExpiryPreset === "custom") && (
+	                              <div className="invite-create-row invite-create-row-custom">
+	                                {inviteMaxUsesPreset === "custom" && (
+	                                  <input
+	                                    type="text"
+	                                    inputMode="numeric"
+	                                    placeholder="Custom max uses"
+	                                    value={inviteMaxUsesCustom}
+	                                    onChange={(event) => setInviteMaxUsesCustom(event.target.value)}
+	                                  />
+	                                )}
+	                                {inviteExpiryPreset === "custom" && (
+	                                  <input
+	                                    type="text"
+	                                    inputMode="numeric"
+	                                    placeholder="Custom expiry (days)"
+	                                    value={inviteExpiryCustom}
+	                                    onChange={(event) => setInviteExpiryCustom(event.target.value)}
+	                                  />
+	                                )}
+	                              </div>
+	                            )}
+	                            {inviteCreateError && <div className="auth-error">{inviteCreateError}</div>}
+	                            <div className="invite-list">
+	                              {isLoadingCommunityInvites ? (
+	                                <div className="chat-empty">Loading invites…</div>
+	                              ) : communityInvites.length === 0 ? (
+	                                <div className="chat-empty">No invites yet.</div>
+	                              ) : (
+	                                communityInvites.map((invite) => {
+	                                  const revoked = Boolean(invite.revoked_at);
+	                                  const expired = Boolean(
+	                                    invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()
+	                                  );
+	                                  const status = revoked ? "revoked" : expired ? "expired" : "active";
+	                                  const bestInviteLink = buildDesktopBestInviteLink({
+	                                    shareBaseUrl: getPublicShareBaseUrl(),
+	                                    communityId: activeCommunity?.id ?? null,
+	                                    inviteCode: invite.code,
+	                                  });
+	                                  return (
+	                                    <div key={invite.id} className="invite-row">
+	                                      <div className="invite-main">
+	                                        <div className="invite-code">{invite.code}</div>
+	                                        <div className={`invite-status ${status}`}>
+	                                          {status}
+	                                          {invite.max_uses ? ` • max ${invite.max_uses}` : ""}
+	                                          {invite.expires_at
+	                                            ? ` • exp ${new Date(invite.expires_at).toLocaleDateString()}`
+	                                            : ""}
+	                                        </div>
+	                                      </div>
+	                                      <div className="invite-actions">
+	                                        <button
+	                                          className="secondary"
+	                                          onClick={() =>
+	                                            void copyTextToClipboard(
+	                                              bestInviteLink.link
+	                                            )
+	                                          }
+	                                          title={bestInviteLink.kind === "web" ? "Copy web join link" : "Copy app link"}
+	                                        >
+	                                          Copy link
+	                                        </button>
+	                                        <button
+	                                          className="secondary"
+	                                          onClick={() => void copyTextToClipboard(invite.code)}
+	                                          title="Copy invite code"
+	                                        >
+	                                          Copy code
+	                                        </button>
+	                                        <button
+	                                          className="secondary"
+	                                          onClick={() => void handleRevokeInvite(invite.id)}
+	                                          disabled={revoked}
+	                                          title="Revoke invite"
+	                                        >
+	                                          Revoke
+	                                        </button>
+	                                        <button
+	                                          className="danger"
+	                                          onClick={() => void handleDeleteInvite(invite.id)}
+	                                          title="Delete invite"
+	                                        >
+	                                          Delete
+	                                        </button>
+	                                      </div>
+	                                    </div>
+	                                  );
+	                                })
+	                              )}
+	                            </div>
+	                          </div>
+	                        </>
+	                      )}
+	                    </section>
+	                  )}
+	                </div>
+	              </div>
             )}
           </div>
         )}
@@ -17307,23 +11164,23 @@ function App() {
 export default App;
 
 // Format tool approval for inline display
-function canEnableWriteEditSessionApproval(toolName: string): boolean {
+const canEnableWriteEditSessionApproval = (toolName: string): boolean => {
   const normalized = toolName.trim().toLowerCase();
   return normalized === "write" || normalized === "edit" || normalized === "write_file" || normalized === "edit_file";
-}
+};
 
-function truncateApprovalPreview(value: string, limit = 1200): string {
+const truncateApprovalPreview = (value: string, limit = 1200): string => {
   if (value.length <= limit) return value;
   return `${value.slice(0, limit)}\n...`;
-}
+};
 
-function formatToolApproval(toolName: string, argsJson: string): {
+const formatToolApproval = (toolName: string, argsJson: string): {
   badge: string;
   title: string;
   subtitle: string | null;
   preview: string | null;
   previewType: "code" | "diff" | "text";
-} {
+} => {
   let args: Record<string, unknown> = {};
   let argsRawFallback: string | null = null;
   try {
@@ -17434,9 +11291,9 @@ function formatToolApproval(toolName: string, argsJson: string): {
         previewType: "code",
       };
   }
-}
+};
 
-function parseToolCall(toolCall: ToolCallRecord): {
+const parseToolCall = (toolCall: ToolCallRecord): {
   toolName: string;
   command: string;
   shell: string;
@@ -17454,9 +11311,9 @@ function parseToolCall(toolCall: ToolCallRecord): {
   destPath?: string;
   label?: string;
   query?: string;
-} {
+} => {
   if (toolCall.command) {
-    return { toolName: "run_shell_command", command: toolCall.command, shell: "zsh", cwd: "." };
+    return { toolName: "bash", command: toolCall.command, shell: "zsh", cwd: "." };
   }
   try {
     const parsed = JSON.parse(toolCall.args_json) as {
@@ -17483,7 +11340,7 @@ function parseToolCall(toolCall: ToolCallRecord): {
     };
     const normalizedPath = parsed.path ?? parsed.file_path ?? parsed.dir_path;
     return {
-      toolName: toolCall.tool_name || parsed.tool || "run_shell_command",
+      toolName: toolCall.tool_name || parsed.tool || "bash",
       command: parsed.command ?? "",
       shell: parsed.shell ?? "zsh",
       cwd: parsed.cwd ?? parsed.workdir ?? ".",
@@ -17502,12 +11359,12 @@ function parseToolCall(toolCall: ToolCallRecord): {
       query: parsed.query
     };
   } catch {
-    return { toolName: toolCall.tool_name || "run_shell_command", command: "", shell: "zsh", cwd: "." };
+    return { toolName: toolCall.tool_name || "bash", command: "", shell: "zsh", cwd: "." };
   }
-}
+};
 
 /** Map a tool name to a human-readable activity verb. */
-function toolActivityVerb(name: string): string {
+const toolActivityVerb = (name: string): string => {
   if (name === "read" || name === "list_dir" || name === "glob" || name === "grep") return "exploring";
   if (name === "write") return "writing";
   if (name === "edit" || name === "apply_patch") return "editing";
@@ -17515,7 +11372,7 @@ function toolActivityVerb(name: string): string {
   if (name === "sha256") return "checking";
   if (name === "task") return "thinking";
   return "working";
-}
+};
 
 /** Synonym pools for activity verb rotation. */
 const ACTIVITY_SYNONYMS: Record<string, string[]> = {
@@ -17536,7 +11393,7 @@ const ACTIVITY_SYNONYMS: Record<string, string[]> = {
  * When the base verb changes (e.g. "thinking" → "exploring"), it
  * immediately shows the new verb, then resumes cycling synonyms.
  */
-function ActivityNarrator({ verb }: { verb: string }) {
+const ActivityNarrator = ({ verb }: { verb: string }) => {
   const pool = ACTIVITY_SYNONYMS[verb] ?? [verb];
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -17570,130 +11427,12 @@ function ActivityNarrator({ verb }: { verb: string }) {
 
   return (
     <span className="activity-narrator">
-      <MoleculeSpinner activeVerb={verb} />
-      <span className={`activity-verb ${visible ? "visible" : "fading"}`}>
+      <span className={`activity-verb shimmer ${visible ? "visible" : "fading"}`}>
         {word}
       </span>
     </span>
   );
-}
-
-/** Tiny rotating 3D molecular graph. */
-const MOLECULE_NODES: [number, number, number][] = [
-  [-1, -0.6, -0.5],   // 0: left
-  [-0.3, 0.8, 0.3],   // 1: top-left (accent node)
-  [0.2, 0, 0],         // 2: center
-  [0.9, 0.7, -0.4],   // 3: top-right
-  [1.1, -0.5, 0.5],   // 4: right
-  [0.3, -0.9, -0.3],  // 5: bottom
-];
-const MOLECULE_EDGES: [number, number][] = [
-  [0, 1], [0, 2], [1, 2], [2, 3], [2, 5], [3, 4], [4, 5], [2, 4],
-];
-
-// Map verb to which node lights up
-const VERB_NODE_MAP: Record<string, number> = {
-  thinking: 2, reasoning: 2, considering: 2, reflecting: 2,
-  exploring: 0, reading: 1, scanning: 3, examining: 4,
-  writing: 3, composing: 3, creating: 4, drafting: 5,
-  editing: 4, refining: 5, adjusting: 3, updating: 4,
-  running: 5, executing: 4, processing: 2,
-  checking: 1, verifying: 0, validating: 5,
-  preparing: 2, working: 2, computing: 2,
 };
-
-function MoleculeSpinner({ activeVerb }: { activeVerb: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const angleRef = useRef(0);
-  const activeNodeRef = useRef(2);
-
-  useEffect(() => {
-    activeNodeRef.current = VERB_NODE_MAP[activeVerb] ?? 2;
-  }, [activeVerb]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const size = 32;
-    const scale = 10;
-    const cx = size / 2;
-    const cy = size / 2;
-    let raf: number;
-
-    const draw = () => {
-      angleRef.current += 0.008;
-      const a = angleRef.current;
-      const cosA = Math.cos(a);
-      const sinA = Math.sin(a);
-      const cosB = Math.cos(a * 0.7);
-      const sinB = Math.sin(a * 0.7);
-
-      // Project 3D → 2D with Y-axis and X-axis rotation
-      const projected = MOLECULE_NODES.map(([x, y, z]) => {
-        const x1 = x * cosA - z * sinA;
-        const z1 = x * sinA + z * cosA;
-        const y1 = y * cosB - z1 * sinB;
-        const z2 = y * sinB + z1 * cosB;
-        const depth = 1 / (3 - z2);
-        return {
-          px: cx + x1 * scale * depth,
-          py: cy + y1 * scale * depth,
-          depth: z2,
-          scale: depth,
-        };
-      });
-
-      ctx.clearRect(0, 0, size, size);
-
-      // Draw edges
-      for (const [i, j] of MOLECULE_EDGES) {
-        const a = projected[i];
-        const b = projected[j];
-        const avgDepth = (a.depth + b.depth) / 2;
-        const alpha = 0.12 + avgDepth * 0.08;
-        ctx.beginPath();
-        ctx.moveTo(a.px, a.py);
-        ctx.lineTo(b.px, b.py);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0.05, Math.min(alpha, 0.35))})`;
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-      }
-
-      // Draw nodes
-      const activeIdx = activeNodeRef.current;
-      projected.forEach((p, i) => {
-        const r = 1.5 + p.scale * 1.2;
-        const isActive = i === activeIdx;
-        const alpha = isActive ? 0.9 : 0.2 + p.depth * 0.1;
-        ctx.beginPath();
-        ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
-        if (isActive) {
-          ctx.fillStyle = `rgba(130, 230, 240, ${alpha})`;
-        } else {
-          ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(alpha, 0.5))})`;
-        }
-        ctx.fill();
-      });
-
-      raf = requestAnimationFrame(draw);
-    };
-
-    draw();
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={32}
-      height={32}
-      className="molecule-spinner"
-    />
-  );
-}
 
 /** Strip workspace root prefix from a path for compact display. */
 
@@ -17703,107 +11442,6 @@ function trimWorkspacePath(fullPath: string, workspacePath: string | null | unde
   if (fullPath.startsWith(prefix)) return fullPath.slice(prefix.length);
   if (fullPath === workspacePath) return ".";
   return fullPath;
-}
-
-function formatCommandPreview(command: string): { preview: string; truncated: boolean; cmdCount: number } {
-  // Split by && or | to count commands
-  const segments = command.split(/\s*(?:&&|\|)\s*/).filter(Boolean);
-  const cmdCount = segments.length;
-
-  // Get first segment and truncate if needed
-  const firstSegment = segments[0] || command;
-  const maxLen = 80;
-
-  // Also check for heredocs - truncate at first <<
-  const heredocIndex = firstSegment.indexOf("<<");
-  let preview = heredocIndex > 0 ? firstSegment.slice(0, heredocIndex + 10) + "..." : firstSegment;
-
-  if (preview.length > maxLen) {
-    preview = preview.slice(0, maxLen - 3) + "...";
-  }
-
-  const truncated = cmdCount > 1 || firstSegment !== preview || command.includes("<<");
-
-  return { preview, truncated, cmdCount };
-}
-
-function formatCommandForDisplay(cmd: string): string {
-  // Format multi-line commands for readability
-  return cmd
-    .replace(/\s*&&\s*/g, " \\\n  && ")
-    .replace(/\s*\|\s*/g, " \\\n  | ");
-}
-
-function formatToolLabel(
-  details: {
-    toolName: string;
-    command: string;
-    path?: string;
-    pattern?: string;
-    srcPath?: string;
-    destPath?: string;
-    label?: string;
-    query?: string;
-  },
-  cmdPreview: { preview: string } | null
-): string {
-  if (details.toolName === "run_shell_command") {
-    return cmdPreview?.preview || details.command || "run shell command";
-  }
-  if (details.toolName === "read_file") {
-    return details.path ? `read file ${details.path}` : "read file";
-  }
-  if (details.toolName === "list_dir") {
-    return details.path ? `list dir ${details.path}` : "list dir";
-  }
-  if (details.toolName === "list_files") {
-    return details.path ? `list files ${details.path}` : "list files";
-  }
-  if (details.toolName === "grep_files") {
-    if (details.pattern?.trim()) {
-      return `search ${details.pattern}`;
-    }
-    return "search files";
-  }
-  if (details.toolName === "grep_lines") {
-    if (details.pattern?.trim()) {
-      return `search lines ${details.pattern}`;
-    }
-    return "search lines";
-  }
-  if (details.toolName === "stat_file") {
-    return details.path ? `stat ${details.path}` : "stat file";
-  }
-  if (details.toolName === "propose_memory_update") {
-    return "update memory";
-  }
-  if (details.toolName === "update_plan") {
-    return "update plan";
-  }
-  if (details.toolName === "write_file") {
-    return details.path ? `write file ${details.path}` : "write file";
-  }
-  if (details.toolName === "edit_file") {
-    return details.path ? `edit file ${details.path}` : "edit file";
-  }
-  if (details.toolName === "multi_edit") {
-    return "multi edit";
-  }
-  if (details.toolName === "mkdir") {
-    return details.path ? `mkdir ${details.path}` : "mkdir";
-  }
-  if (details.toolName === "delete_file") {
-    return details.path ? `delete file ${details.path}` : "delete file";
-  }
-  if (details.toolName === "copy_file") {
-    if (details.srcPath && details.destPath) return `copy ${details.srcPath} → ${details.destPath}`;
-    return "copy file";
-  }
-  if (details.toolName === "move_file") {
-    if (details.srcPath && details.destPath) return `move ${details.srcPath} → ${details.destPath}`;
-    return "move file";
-  }
-  return details.toolName || "tool";
 }
 
 function formatExecutionLabel(
@@ -17823,17 +11461,7 @@ function formatExecutionLabel(
     const modelId = (modelIdInput ?? "").trim();
     if (!modelId) return null;
     const modelLabel = modelToggles.find((toggle) => toggle.id === modelId)?.label;
-    const base = modelLabel ?? modelId;
-    const source = (inferenceSourceInput ?? "").trim().toLowerCase();
-    const sourceLabel =
-      source === "chatgpt"
-        ? "ChatGPT"
-        : source === "platform"
-          ? "Arx"
-          : source === "user"
-            ? "BYOK"
-            : "";
-    return sourceLabel ? `${base} · ${sourceLabel}` : base;
+    return appendInferenceSourceLabel(modelLabel ?? modelId, inferenceSourceInput);
   }
   return engineId.replace(/_/g, " ");
 }
@@ -17850,6 +11478,13 @@ function extractInferenceSourceFromContentJson(contentJson: string): string | nu
   } catch {
     return null;
   }
+}
+
+function previewText(value: string, limit = 160): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
 function parseMessageContent(contentJson: string): { text: string; format: string | null } {
@@ -17893,43 +11528,6 @@ function ToolOutputBlock({ content }: { content: string }) {
   return <pre className="tool-output">{content}</pre>;
 }
 
-function CodeBlock({ code, language }: { code: string; language?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const highlighted = useMemo(() => {
-    if (language && hljs.getLanguage(language)) {
-      try {
-        return hljs.highlight(code, { language }).value;
-      } catch {
-        return hljs.highlightAuto(code).value;
-      }
-    }
-    return hljs.highlightAuto(code).value;
-  }, [code, language]);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="code-block-wrapper">
-      <div className="code-block-header">
-        {language && <span className="code-block-lang">{language}</span>}
-        <button className="code-block-copy" onClick={handleCopy}>
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      </div>
-      <pre className="md-code-block">
-        <code
-          className={language ? `language-${language} hljs` : 'hljs'}
-          dangerouslySetInnerHTML={{ __html: highlighted }}
-        />
-      </pre>
-    </div>
-  );
-}
 
 // Clean streaming content: remove TOOL_CALL/TOOLCALL and JSON tool content
 function cleanStreamingContent(text: string): {
@@ -18021,397 +11619,10 @@ function cleanStreamingContent(text: string): {
   return { cleaned, toolCallRaw, toolName, commandPreview, hasToolCall };
 }
 
-function renderMarkdown(text: string): ReactNode {
-  const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  const elements: ReactNode[] = [];
-  let i = 0;
-  let key = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-
-    // Code block (handle indented code blocks too)
-    if (trimmedLine.startsWith('```')) {
-      const lang = trimmedLine.slice(3).trim();
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith('```')) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      elements.push(
-        <CodeBlock key={key++} code={codeLines.join('\n')} language={lang || undefined} />
-      );
-      i++;
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmedLine)) {
-      elements.push(<hr key={key++} className="md-hr" />);
-      i++;
-      continue;
-    }
-
-    // Headers
-    const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
-    if (headerMatch) {
-      const level = headerMatch[1].length;
-      const content = headerMatch[2];
-      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-      elements.push(<Tag key={key++} className="md-header">{renderInline(content)}</Tag>);
-      i++;
-      continue;
-    }
-
-    // Blockquote
-    if (trimmedLine.startsWith('>')) {
-      const quoteLines: string[] = [];
-      while (i < lines.length) {
-        const raw = lines[i] ?? '';
-        const trimmed = raw.trim();
-        if (trimmed === '') {
-          quoteLines.push('');
-          i++;
-          continue;
-        }
-        if (!trimmed.startsWith('>')) break;
-        let inner = trimmed.slice(1);
-        if (inner.startsWith(' ')) inner = inner.slice(1);
-        quoteLines.push(inner);
-        i++;
-      }
-      elements.push(
-        <blockquote key={key++} className="md-blockquote">
-          {renderMarkdown(quoteLines.join('\n'))}
-        </blockquote>
-      );
-      continue;
-    }
-
-    // Numbered list
-    if (/^\d+\.\s+/.test(trimmedLine)) {
-      const listItems: Array<{ kind: 'text'; lines: string[] } | { kind: 'code'; code: string; language?: string }> = [];
-      while (i < lines.length) {
-        const rawLine = lines[i] ?? '';
-        const currentLine = rawLine.trim();
-        if (/^\d+\.\s+/.test(currentLine)) {
-          const content = currentLine.replace(/^\d+\.\s+/, '');
-          listItems.push({ kind: 'text', lines: [content] });
-          i++;
-        } else if (currentLine.startsWith('```')) {
-          // Code block inside list
-          const lang = currentLine.slice(3).trim();
-          const codeLines: string[] = [];
-          i++;
-          while (i < lines.length && !lines[i].trim().startsWith('```')) {
-            codeLines.push(lines[i]);
-            i++;
-          }
-          listItems.push({ kind: 'code', code: codeLines.join('\n'), language: lang || undefined });
-          i++;
-        } else if (currentLine === '') {
-          i++;
-        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
-          const last = listItems[listItems.length - 1];
-          if (last && last.kind === 'text') {
-            last.lines.push(currentLine);
-            i++;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-      elements.push(
-        <ol key={key++} className="md-list">
-          {listItems.map((item) =>
-            item.kind === 'code' ? (
-              <li key={key++} className="md-list-code">
-                <CodeBlock code={item.code} language={item.language} />
-              </li>
-            ) : (
-              <li key={key++}>{renderInline(item.lines.join('\n'))}</li>
-            )
-          )}
-        </ol>
-      );
-      continue;
-    }
-
-    // Bullet list
-    if (/^[-*]\s+/.test(trimmedLine)) {
-      const listItems: Array<{ kind: 'text'; lines: string[] } | { kind: 'code'; code: string; language?: string }> = [];
-      while (i < lines.length) {
-        const rawLine = lines[i] ?? '';
-        const currentLine = rawLine.trim();
-        if (/^[-*]\s+/.test(currentLine)) {
-          const content = currentLine.replace(/^[-*]\s+/, '');
-          listItems.push({ kind: 'text', lines: [content] });
-          i++;
-        } else if (currentLine.startsWith('```')) {
-          // Code block inside list
-          const lang = currentLine.slice(3).trim();
-          const codeLines: string[] = [];
-          i++;
-          while (i < lines.length && !lines[i].trim().startsWith('```')) {
-            codeLines.push(lines[i]);
-            i++;
-          }
-          listItems.push({ kind: 'code', code: codeLines.join('\n'), language: lang || undefined });
-          i++;
-        } else if (currentLine === '') {
-          i++;
-        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
-          const last = listItems[listItems.length - 1];
-          if (last && last.kind === 'text') {
-            last.lines.push(currentLine);
-            i++;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-      elements.push(
-        <ul key={key++} className="md-list">
-          {listItems.map((item) =>
-            item.kind === 'code' ? (
-              <li key={key++} className="md-list-code">
-                <CodeBlock code={item.code} language={item.language} />
-              </li>
-            ) : (
-              <li key={key++}>{renderInline(item.lines.join('\n'))}</li>
-            )
-          )}
-        </ul>
-      );
-      continue;
-    }
-
-    // Empty line
-    if (trimmedLine === '') {
-      i++;
-      continue;
-    }
-
-    // Paragraph: join soft-wrapped lines until a blank line or a new block.
-    const paragraphLines: string[] = [];
-    while (i < lines.length) {
-      const raw = lines[i] ?? '';
-      const trimmed = raw.trim();
-      if (trimmed === '') break;
-      if (
-        trimmed.startsWith('```') ||
-        /^(-{3,}|_{3,}|\*{3,})$/.test(trimmed) ||
-        /^(#{1,6})\s+(.+)$/.test(trimmed) ||
-        trimmed.startsWith('>') ||
-        /^\d+\.\s+/.test(trimmed) ||
-        /^[-*]\s+/.test(trimmed)
-      ) {
-        break;
-      }
-      paragraphLines.push(raw);
-      i++;
-    }
-    elements.push(<p key={key++} className="md-paragraph">{renderInline(paragraphLines.join('\n'))}</p>);
-  }
-
-  return <>{elements}</>;
-}
-
-function renderInline(text: string): ReactNode {
-  const parts: ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-	while (remaining.length > 0) {
-	  // Inline code
-	  const codeMatch = remaining.match(/^`([^`]+)`/);
-	  if (codeMatch) {
-	    parts.push(<code key={key++} className="md-inline-code">{codeMatch[1]}</code>);
-	    remaining = remaining.slice(codeMatch[0].length);
-	    continue;
-	  }
-
-	  const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-	  if (linkMatch) {
-	    const label = linkMatch[1] ?? '';
-	    const href = (linkMatch[2] ?? '').trim();
-	    const safeHref =
-	      href.startsWith('https://') || href.startsWith('http://') || href.startsWith('mailto:') ? href : null;
-	    parts.push(
-	      safeHref ? (
-	        <a key={key++} className="md-link" href={safeHref} target="_blank" rel="noreferrer">
-	          {label}
-	        </a>
-	      ) : (
-	        label
-	      )
-	    );
-	    remaining = remaining.slice(linkMatch[0].length);
-	    continue;
-	  }
-
-	  const strikeMatch = remaining.match(/^~~([^~]+)~~/);
-	  if (strikeMatch) {
-	    parts.push(<s key={key++}>{strikeMatch[1]}</s>);
-	    remaining = remaining.slice(strikeMatch[0].length);
-	    continue;
-	  }
-
-	  // Bold
-	  const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) || remaining.match(/^__([^_]+)__/);
-	  if (boldMatch) {
-	    parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
-	    remaining = remaining.slice(boldMatch[0].length);
-	    continue;
-	  }
-
-    // Italic
-    const italicMatch = remaining.match(/^\*([^*]+)\*/) || remaining.match(/^_([^_]+)_/);
-    if (italicMatch) {
-      parts.push(<em key={key++}>{italicMatch[1]}</em>);
-      remaining = remaining.slice(italicMatch[0].length);
-      continue;
-	  }
-
-	  // Plain text until next special character
-	  const nextSpecial = remaining.search(/[`*_\[~]/);
-	  if (nextSpecial === -1) {
-	    parts.push(remaining);
-	    break;
-	  } else if (nextSpecial === 0) {
-	    parts.push(remaining[0]);
-      remaining = remaining.slice(1);
-    } else {
-      parts.push(remaining.slice(0, nextSpecial));
-      remaining = remaining.slice(nextSpecial);
-    }
-  }
-
-  return <>{parts}</>;
-}
-
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp * 1000;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  if (hours < 24) return `${hours}h`;
-  if (days < 7) return `${days}d`;
-  return new Date(timestamp * 1000).toLocaleDateString();
-}
-
-function formatAutomationDeliveryError(error: string | null): string | null {
-  if (!error) return null;
-  if (error === "skipped_missing_brandos_aid") return "Skipped (missing BrandOS token)";
-  if (error === "skipped_invalid_brandos_aid") return "Skipped (invalid BrandOS token)";
-  if (error === "skipped_unknown_brandos_aid") return "Skipped (no tracked click found)";
-  return error;
-}
-
-function shortId(id: string, currentUserId?: string, currentUserEmail?: string): string {
-  // For current user, show email prefix
-  if (currentUserId && id === currentUserId && currentUserEmail) {
-    const prefix = currentUserEmail.split("@")[0];
-    return prefix.length > 12 ? prefix.slice(0, 12) + "…" : prefix;
-  }
-  // For others, show friendlier "Member #XXXX" format
-  if (id.length > 8) {
-    return `Member #${id.slice(-4).toUpperCase()}`;
-  }
-  return id;
-}
-
-function hashCode(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return hash;
-}
-
-function getAvatarColor(id: string): string {
-  const colors = [
-    "#e57373", "#f06292", "#ba68c8", "#9575cd", "#7986cb",
-    "#64b5f6", "#4fc3f7", "#4dd0e1", "#4db6ac", "#81c784",
-    "#aed581", "#dce775", "#fff176", "#ffd54f", "#ffb74d",
-    "#ff8a65", "#a1887f", "#90a4ae"
-  ];
-  const index = Math.abs(hashCode(id)) % colors.length;
-  return colors[index];
-}
-
-function getInitials(id: string): string {
-  // For now, just use first 2 chars of the ID
-  return id.slice(0, 2).toUpperCase();
-}
-
-type ReplyPrefix = {
-  sender: string;
-  preview: string;
-  rest: string;
-};
-
-function buildReplyPrefix(sender: string, preview: string): string {
-  return `> ↪︎ ${sender}: ${preview}\n\n`;
-}
-
-function parseReplyPrefix(body: string): ReplyPrefix | null {
-  if (!body.startsWith(">")) return null;
-  const lines = body.split(/\r?\n/);
-  if (lines.length === 0) return null;
-  const first = lines[0] ?? "";
-  const match = first.match(/^>\s*↪︎\s*(.+)$/);
-  if (!match) return null;
-  const content = (match[1] ?? "").trim();
-  const colonIndex = content.indexOf(":");
-  if (colonIndex === -1) return null;
-  const sender = content.slice(0, colonIndex).trim();
-  const preview = content.slice(colonIndex + 1).trim();
-
-  let start = 1;
-  while (start < lines.length && lines[start]?.trim() === "") {
-    start += 1;
-  }
-  const rest = lines.slice(start).join("\n");
-  return { sender, preview, rest };
-}
-
-function formatChatTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  const timeStr = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-  if (messageDate.getTime() === today.getTime()) {
-    return timeStr;
-  } else if (messageDate.getTime() === yesterday.getTime()) {
-    return `Yesterday ${timeStr}`;
-  } else {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" }) + ` ${timeStr}`;
-  }
-}
-
-const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
-
 function openExternalUrlBestEffort(url: string): void {
   const trimmed = url.trim();
   if (!trimmed) return;
-  void invoke("open_external_url_cmd", { url: trimmed }).catch(() => {
+  void desktopShellClientSingleton.openExternalUrl(trimmed).catch(() => {
     try {
       window.open(trimmed, "_blank", "noopener,noreferrer");
     } catch {
@@ -18420,221 +11631,8 @@ function openExternalUrlBestEffort(url: string): void {
   });
 }
 
-function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
-  let url = candidate;
-  let trailing = "";
-  while (url.length > 0) {
-    const last = url.slice(-1);
-    if (").,!?;:]}'\"".includes(last)) {
-      trailing = last + trailing;
-      url = url.slice(0, -1);
-      continue;
-    }
-    break;
-  }
-  return { url, trailing };
-}
-
 function renderTextWithLinks(text: string): ReactNode {
-  if (!text) return "";
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-  for (const match of text.matchAll(CHAT_LINK_RE)) {
-    const index = match.index ?? -1;
-    if (index < 0) continue;
-    if (index > lastIndex) nodes.push(text.slice(lastIndex, index));
-    const raw = match[0] ?? "";
-    const { url, trailing } = splitUrlAndTrailingPunctuation(raw);
-    const href = url.startsWith("http://") || url.startsWith("https://") ? url : `https://${url}`;
-    nodes.push(
-      <a
-        key={`link-${index}`}
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-        onClick={(event) => {
-          event.preventDefault();
-          openExternalUrlBestEffort(href);
-        }}
-      >
-        {url}
-      </a>
-    );
-    if (trailing) nodes.push(trailing);
-    lastIndex = index + raw.length;
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes.length > 0 ? <>{nodes}</> : text;
-}
-
-function parseContentRangeTotal(value: string | null): number | null {
-  if (!value) return null;
-  const parts = value.split("/");
-  if (parts.length !== 2) return null;
-  const total = Number(parts[1]);
-  return Number.isFinite(total) ? total : null;
-}
-
-function formatCount(value: number | null): string {
-  if (value == null || Number.isNaN(value)) return "—";
-  return value.toLocaleString();
-}
-
-function formatPercent(value: number | null, digits = 1): string {
-  if (value == null || Number.isNaN(value)) return "—";
-  return `${(value * 100).toFixed(digits)}%`;
-}
-
-function formatMoneyBaseUnits(
-  value: number | null,
-  currency: string | null,
-  currencyDecimals: number | null
-): string {
-  if (value == null || currency == null || currencyDecimals == null) return "—";
-  const major = value / Math.pow(10, currencyDecimals);
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: currency.toUpperCase(),
-      maximumFractionDigits: currencyDecimals,
-    }).format(major);
-  } catch {
-    return major.toFixed(Math.min(Math.max(currencyDecimals, 0), 6));
-  }
-}
-
-function dateKeyLocal(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function AnalyticsLineChart({
-  points,
-  valueFormatter,
-}: {
-  points: AnalyticsPoint[];
-  valueFormatter?: (value: number) => string;
-}) {
-  const width = 720;
-  const height = 180;
-  const paddingX = 22;
-  const paddingY = 22;
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
-
-  if (!points || points.length === 0) {
-    return <div className="analytics-line-chart analytics-line-chart-empty">No trend data yet.</div>;
-  }
-
-  const maxValue = Math.max(1, ...points.map((point) => point.value));
-  const innerWidth = width - paddingX * 2;
-  const innerHeight = height - paddingY * 2;
-  const stepX = points.length > 1 ? innerWidth / (points.length - 1) : innerWidth;
-  const bottomY = height - paddingY;
-
-  const coords = points.map((point, index) => {
-    const x = paddingX + stepX * index;
-    const y = paddingY + innerHeight - (point.value / maxValue) * innerHeight;
-    return { x, y };
-  });
-
-  const linePath = coords
-    .map((coord, index) => `${index === 0 ? "M" : "L"}${coord.x.toFixed(2)},${coord.y.toFixed(2)}`)
-    .join(" ");
-  const areaPath = `M${coords[0].x.toFixed(2)},${bottomY.toFixed(2)} L ${coords
-    .map((coord) => `${coord.x.toFixed(2)},${coord.y.toFixed(2)}`)
-    .join(" L ")} L ${coords[coords.length - 1].x.toFixed(2)},${bottomY.toFixed(2)} Z`;
-
-  const startLabel = points[0]?.label ?? "";
-  const endLabel = points[points.length - 1]?.label ?? "";
-  const gradientId = "analyticsAreaGradient";
-  const activeIndex = hoverIndex == null ? null : Math.min(Math.max(hoverIndex, 0), points.length - 1);
-  const activeCoord = activeIndex == null ? null : coords[activeIndex];
-  const activePoint = activeIndex == null ? null : points[activeIndex];
-  const activeLabel = activePoint?.label ?? "";
-  const activeValue = activePoint?.value ?? null;
-  
-  return (
-    <div className="analytics-line-chart">
-      <svg
-        className="analytics-chart-svg"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="Trend chart"
-        preserveAspectRatio="none"
-        onPointerLeave={() => setHoverIndex(null)}
-        onPointerMove={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          if (rect.width <= 0) return;
-          const x = (event.clientX - rect.left) * (width / rect.width);
-          const idx = Math.round((x - paddingX) / stepX);
-          const clamped = Math.min(Math.max(idx, 0), points.length - 1);
-          setHoverIndex(clamped);
-        }}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent-gold)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--accent-gold)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {[0.25, 0.5, 0.75].map((ratio) => {
-          const y = paddingY + innerHeight * ratio;
-          return (
-            <line
-              key={ratio}
-              className="analytics-chart-grid"
-              x1={paddingX}
-              y1={y}
-              x2={width - paddingX}
-              y2={y}
-            />
-          );
-        })}
-
-        <path className="analytics-chart-area" d={areaPath} fill={`url(#${gradientId})`} />
-        <path className="analytics-chart-line" d={linePath} />
-
-        {activeCoord && (
-          <>
-            <line
-              className="analytics-chart-hover-line"
-              x1={activeCoord.x}
-              y1={paddingY}
-              x2={activeCoord.x}
-              y2={height - paddingY}
-            />
-            <circle className="analytics-chart-hover-dot" cx={activeCoord.x} cy={activeCoord.y} r="4" />
-          </>
-        )}
-
-        {coords.length > 0 && !activeCoord && (
-          <circle className="analytics-chart-dot" cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3" />
-        )}
-      </svg>
-      {activeCoord && (
-        <div
-          className="analytics-chart-tooltip"
-          style={{
-            left: `${(activeCoord.x / width) * 100}%`,
-            top: "50%",
-          }}
-        >
-          <div className="analytics-chart-tooltip-label">{activeLabel}</div>
-          <div className="analytics-chart-tooltip-value">
-            {activeValue == null ? "—" : formatValue(activeValue)}
-          </div>
-        </div>
-      )}
-      <div className="analytics-chart-axis">
-        <span>{startLabel}</span>
-        <span>{endLabel}</span>
-      </div>
-    </div>
-  );
+  return renderTextWithLinksShared(text, { onOpenUrl: openExternalUrlBestEffort });
 }
 
 function shouldShowSender(
@@ -18661,201 +11659,6 @@ function shouldShowSender(
   return false;
 }
 
-function shouldShowDateSeparator(
-  messages: { created_at: string }[],
-  index: number
-): string | null {
-  const curr = new Date(messages[index].created_at);
-  const currDateStr = curr.toDateString();
-
-  if (index === 0) {
-    return formatDateSeparator(curr);
-  }
-
-  const prev = new Date(messages[index - 1].created_at);
-  if (prev.toDateString() !== currDateStr) {
-    return formatDateSeparator(curr);
-  }
-
-  return null;
-}
-
-function formatDateSeparator(date: Date): string {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-  if (msgDate.getTime() === today.getTime()) {
-    return "Today";
-  }
-  if (msgDate.getTime() === yesterday.getTime()) {
-    return "Yesterday";
-  }
-  return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-}
-
-type ParsedEmbed =
-  | { provider: "youtube"; id: string; src: string; thumbnailUrl: string }
-  | { provider: "wistia"; id: string; src: string };
-
-function parseTimeToSeconds(value: string): number | null {
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return null;
-  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
-  let seconds = 0;
-  let matched = false;
-  const re = /(\d+)(h|m|s)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(trimmed))) {
-    matched = true;
-    const qty = Number.parseInt(m[1] ?? "0", 10);
-    const unit = m[2];
-    if (unit === "h") seconds += qty * 3600;
-    if (unit === "m") seconds += qty * 60;
-    if (unit === "s") seconds += qty;
-  }
-  return matched ? seconds : null;
-}
-
-function normalizeExternalUrl(raw: string): URL | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  try {
-    return new URL(trimmed);
-  } catch {
-    // Allow bare domains like youtu.be/VIDEOID
-    try {
-      return new URL(`https://${trimmed}`);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } | null {
-  const host = url.hostname.toLowerCase();
-  const parts = url.pathname.split("/").filter(Boolean);
-
-  let id: string | null = null;
-  if (host === "youtu.be") {
-    id = parts[0] ?? null;
-  } else if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
-    if (url.pathname === "/watch") {
-      id = url.searchParams.get("v");
-    } else if (parts[0] === "embed" || parts[0] === "shorts" || parts[0] === "live" || parts[0] === "v") {
-      id = parts[1] ?? null;
-    }
-  }
-
-  if (!id) return null;
-  id = id.replace(/[^a-zA-Z0-9_-]/g, "");
-  if (id.length < 6) return null;
-
-  const startRaw = url.searchParams.get("start") ?? url.searchParams.get("t");
-  const startSeconds = startRaw ? parseTimeToSeconds(startRaw) : null;
-  return { id, startSeconds };
-}
-
-function parseWistiaId(url: URL): string | null {
-  const host = url.hostname.toLowerCase();
-  if (!host.includes("wistia.com") && !host.includes("wistia.net")) return null;
-
-  const fromQuery = url.searchParams.get("wvideo");
-  if (fromQuery && /^[a-zA-Z0-9]+$/.test(fromQuery)) return fromQuery;
-
-  const match = url.pathname.match(/(?:medias|iframe)\/([a-zA-Z0-9]+)/);
-  if (match && match[1]) return match[1];
-  return null;
-}
-
-function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
-  const url = normalizeExternalUrl(rawUrl);
-  if (!url) return null;
-
-  const youtube = parseYouTubeId(url);
-  if (youtube) {
-    const params = new URLSearchParams();
-    if (youtube.startSeconds && youtube.startSeconds > 0) {
-      params.set("start", String(youtube.startSeconds));
-    }
-    const src = `https://www.youtube.com/embed/${youtube.id}${params.toString() ? `?${params.toString()}` : ""}`;
-    const thumbnailUrl = `https://i.ytimg.com/vi/${youtube.id}/hqdefault.jpg`;
-    return { provider: "youtube", id: youtube.id, src, thumbnailUrl };
-  }
-
-  const wistiaId = parseWistiaId(url);
-  if (wistiaId) {
-    const src = `https://fast.wistia.net/embed/iframe/${wistiaId}?seo=false&videoFoam=true`;
-    return { provider: "wistia", id: wistiaId, src };
-  }
-
-  return null;
-}
-
-function groupThreadsByDate(threads: ThreadRecord[]): { label: string; threads: ThreadRecord[] }[] {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const weekAgo = new Date(today.getTime() - 7 * 86400000);
-
-  const groups: { label: string; threads: ThreadRecord[] }[] = [
-    { label: "Today", threads: [] },
-    { label: "Yesterday", threads: [] },
-    { label: "This Week", threads: [] },
-    { label: "Older", threads: [] }
-  ];
-
-  for (const thread of threads) {
-    const date = new Date(thread.updated_at * 1000);
-    if (date >= today) {
-      groups[0].threads.push(thread);
-    } else if (date >= yesterday) {
-      groups[1].threads.push(thread);
-    } else if (date >= weekAgo) {
-      groups[2].threads.push(thread);
-    } else {
-      groups[3].threads.push(thread);
-    }
-  }
-
-  return groups.filter((g) => g.threads.length > 0);
-}
-
-function getSupabaseUrl(): string | null {
-  return import.meta.env.VITE_SUPABASE_URL ?? null;
-}
-
-function getSupabaseAnonKey(): string | null {
-  return import.meta.env.VITE_SUPABASE_ANON_KEY ?? null;
-}
-
-function csvEscape(value: unknown): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function buildCsv(columns: string[], rows: Array<Record<string, unknown>>): string {
-  const header = columns.map(csvEscape).join(",");
-  const lines = rows.map((row) => columns.map((col) => csvEscape(row[col])).join(","));
-  return [header, ...lines].join("\n");
-}
-
-function downloadTextFile(filename: string, content: string, mime = "text/csv;charset=utf-8"): void {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 function formatSecretScanError(scan: SecretScanResult): string {
   if (!scan.redactions || scan.redactions.length === 0) {
     return "Blocked: sensitive content detected. Remove secrets before sending.";
@@ -18866,7 +11669,7 @@ function formatSecretScanError(scan: SecretScanResult): string {
 
 async function scanPublishContent(text: string): Promise<SecretScanResult | null> {
   try {
-    return await invoke<SecretScanResult>("scan_publish_content_cmd", { text });
+    return await desktopShellClientSingleton.scanPublishContent(text);
   } catch {
     return null;
   }

@@ -36,12 +36,9 @@ type SendMessageFlowDeps<TSession> = {
   setAttachments: (value: SendMessageAttachment[]) => void;
   handleSlashCommand: (userText: string, threadId: string) => Promise<boolean>;
   addMessage: (params: SendMessageParams) => Promise<void>;
-  shouldSyncCloud: boolean;
-  syncRecentLocalMessagesToCloud?: (threadId: string, session: NonNullable<TSession>, limit: number) => Promise<void>;
-  onCloudSyncError?: (error: unknown) => void;
   loadMessages: (threadId: string) => Promise<void>;
   appendOptimisticUserMessage: (threadId: string, contentJson: string) => void;
-  touchThreadForOptimisticMessage: (threadId: string) => void;
+  touchThreadForOptimisticMessage: (threadId: string, userText: string) => void;
   ensureThreadReadyForSend: (threadId: string, session: TSession) => Promise<boolean>;
   clearStreamingRefs: () => void;
   scheduleStreamingUpdate: () => void;
@@ -52,27 +49,13 @@ type SendMessageFlowDeps<TSession> = {
   setMemoryToast: (message: string) => void;
   setAgentStatus: (value: null) => void;
   setRunningTools: (value: []) => void;
+  traceThreadContext?: (event: string, payload: Record<string, unknown>) => void;
 };
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
   return "Unknown error";
-}
-
-async function maybeSyncRecent<TSession>(
-  deps: SendMessageFlowDeps<TSession>,
-  threadId: string,
-  session: TSession,
-  limit: number,
-): Promise<void> {
-  if (!deps.shouldSyncCloud || !deps.syncRecentLocalMessagesToCloud) return;
-  if (!session) return;
-  try {
-    await deps.syncRecentLocalMessagesToCloud(threadId, session as NonNullable<TSession>, limit);
-  } catch (error) {
-    deps.onCloudSyncError?.(error);
-  }
 }
 
 export async function executeSendMessageFlow<TSession>(
@@ -101,7 +84,14 @@ export async function executeSendMessageFlow<TSession>(
     if (!threadId) return;
     session = deps.getSession();
 
+    deps.traceThreadContext?.("send_preflight_lens_start", {
+      thread_id: threadId,
+      has_session: Boolean(session),
+    });
     await deps.ensureWorkspaceThreadLensBeforeSend(threadId);
+    deps.traceThreadContext?.("send_preflight_lens_complete", {
+      thread_id: threadId,
+    });
 
     deps.setCommandInput("");
     deps.setAttachments([]);
@@ -129,25 +119,34 @@ export async function executeSendMessageFlow<TSession>(
         role: "user",
         content_json: contentJson,
       });
-      await maybeSyncRecent(deps, threadId, session, 1);
+      await deps.loadMessages(threadId);
+      return;
+    }
+
+    const ensured = await deps.ensureThreadReadyForSend(threadId, session);
+    if (!ensured) {
+      deps.setCommandInput(userText);
+      deps.setAttachments(currentAttachments);
       await deps.loadMessages(threadId);
       return;
     }
 
     deps.appendOptimisticUserMessage(threadId, contentJson);
-    deps.touchThreadForOptimisticMessage(threadId);
-
-    const ensured = await deps.ensureThreadReadyForSend(threadId, session);
-    if (!ensured) return;
+    deps.touchThreadForOptimisticMessage(threadId, userText);
 
     deps.clearStreamingRefs();
     deps.scheduleStreamingUpdate();
 
     const cwd = deps.effectiveCwd || "";
-    const supabase_url = session ? (deps.getSupabaseUrl() ?? "") : "";
-    const supabase_anon_key = session ? (deps.getSupabaseAnonKey() ?? "") : "";
+    const supabase_url = deps.getSupabaseUrl() ?? "";
+    const supabase_anon_key = deps.getSupabaseAnonKey() ?? "";
     const supabase_access_token = session ? deps.getSupabaseAccessToken(session as NonNullable<TSession>) : "";
 
+    deps.traceThreadContext?.("send_turn_dispatch", {
+      thread_id: threadId,
+      input_chars: userText.length,
+      has_supabase_access_token: Boolean(supabase_access_token),
+    });
     await deps.sendTurn({
       thread_id: threadId,
       cwd,
@@ -157,12 +156,18 @@ export async function executeSendMessageFlow<TSession>(
       supabase_anon_key,
       supabase_access_token,
     });
+    deps.traceThreadContext?.("send_turn_dispatch_complete", {
+      thread_id: threadId,
+    });
 
-    await maybeSyncRecent(deps, threadId, session, 3);
     await deps.loadMessages(threadId);
   } catch (error) {
     const message = getErrorMessage(error);
     const targetThreadId = threadId ?? deps.activeThreadId;
+    deps.traceThreadContext?.("send_turn_error", {
+      thread_id: targetThreadId,
+      message,
+    });
     if (!targetThreadId) {
       deps.setMemoryToast(`Failed to send message: ${message}`);
       return;
@@ -174,9 +179,11 @@ export async function executeSendMessageFlow<TSession>(
       content_json: JSON.stringify({ text: `Engine error: ${message}` }),
     });
 
-    await maybeSyncRecent(deps, targetThreadId, session, 1);
     await deps.loadMessages(targetThreadId);
   } finally {
+    deps.traceThreadContext?.("send_turn_finalize", {
+      thread_id: threadId ?? deps.activeThreadId,
+    });
     deps.sendInFlightRef.current = false;
     deps.dispatchRunPhase({ type: "reset" });
     deps.setAgentStatus(null);

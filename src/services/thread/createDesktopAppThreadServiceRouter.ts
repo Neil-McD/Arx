@@ -1,0 +1,163 @@
+import type { RuntimeClient } from "../../runtime/arp/client";
+import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { ThreadServiceRouter, ThreadServiceThread } from "../../../shared/threadService";
+import { createDesktopThreadServiceRouter as createCoreThreadServiceRouter } from "./createDesktopThreadServiceRouter";
+
+type CreateDesktopAppThreadServiceRouterDeps = {
+  threads: ThreadServiceThread[];
+  runtimeClient: RuntimeClient;
+  getSession: () => SupabaseSession | null;
+  listCloudChatThreads: (session: SupabaseSession) => Promise<ThreadServiceThread[]>;
+  getCloudThreadRecord: (
+    threadId: string,
+    session: SupabaseSession,
+  ) => Promise<ThreadServiceThread | null>;
+  createCloudChatThread: (thread: ThreadServiceThread) => Promise<ThreadServiceThread | null>;
+  deleteCloudChatThread: (threadId: string) => Promise<void>;
+  setThreadCommunityLensInCloud: (params: {
+    threadId: string;
+    communityId: string | null;
+    session: SupabaseSession;
+    expectedContextVersion: number | null;
+  }) => Promise<ThreadServiceThread | null>;
+  addCloudMessage: (params: {
+    thread_id: string;
+    role: "user" | "assistant";
+    content_json: string;
+    session: SupabaseSession;
+  }) => Promise<void>;
+  sendCloudTurn: (params: {
+    thread_id: string;
+    input: string;
+    user_content_json: string;
+    session: SupabaseSession;
+  }) => Promise<void>;
+  setCloudThreadTitle: (params: {
+    thread_id: string;
+    title: string;
+    session: SupabaseSession;
+  }) => Promise<void>;
+  setCloudThreadEngine: (params: {
+    thread_id: string;
+    engine_id: string;
+    model_id: string | null;
+    session: SupabaseSession;
+  }) => Promise<ThreadServiceThread | null>;
+  listLocalThreads: () => Promise<ThreadServiceThread[]>;
+  setThreadCommunityLensLocal: (params: {
+    threadId: string;
+    communityId: string | null;
+  }) => Promise<ThreadServiceThread>;
+};
+
+export function createDesktopAppThreadServiceRouter(
+  deps: CreateDesktopAppThreadServiceRouterDeps,
+): ThreadServiceRouter {
+  return createCoreThreadServiceRouter({
+    threads: deps.threads,
+    getSession: deps.getSession,
+    listCloudThreads: deps.listCloudChatThreads,
+    getCloudThread: deps.getCloudThreadRecord,
+    createCloudThread: async (input) =>
+      deps.createCloudChatThread({
+        id: input.threadId,
+        title: input.title,
+        engine_id: input.engineId,
+        model_id: input.modelId,
+        thread_lane: input.threadLane,
+        storage_mode: input.storageMode,
+        project_id: input.projectId,
+        workspace_path: null,
+        community_id: input.communityId,
+        context_version: 0,
+        created_at: input.createdAt,
+        updated_at: input.updatedAt,
+        last_event_at: null,
+        last_seq: 0,
+      }),
+    deleteCloudThread: async (threadId) => deps.deleteCloudChatThread(threadId),
+    setCloudLens: async (input, session) =>
+      deps.setThreadCommunityLensInCloud({
+        threadId: input.threadId,
+        communityId: input.communityId,
+        session,
+        expectedContextVersion:
+          typeof input.expectedContextVersion === "number"
+            ? input.expectedContextVersion
+            : null,
+      }),
+    addCloudMessage: async (input, session) =>
+      deps.addCloudMessage({
+        thread_id: input.threadId,
+        role: input.role,
+        content_json: input.contentJson,
+        session,
+      }),
+    sendCloudTurn: async (input, session) =>
+      deps.sendCloudTurn({
+        thread_id: input.threadId,
+        input: input.input,
+        user_content_json: input.userContentJson,
+        session,
+      }),
+    setCloudThreadTitle: async (threadId, title, session) =>
+      deps.setCloudThreadTitle({
+        thread_id: threadId,
+        title,
+        session,
+      }),
+    setCloudThreadEngine: async (input, session) =>
+      deps.setCloudThreadEngine({
+        thread_id: input.threadId,
+        engine_id: input.engineId,
+        model_id: input.modelId,
+        session,
+      }),
+    listLocalThreads: deps.listLocalThreads,
+    getLocalThread: async (threadId) => deps.runtimeClient.getThread(threadId),
+    createLocalThread: async (input) => {
+      await deps.runtimeClient.upsertThread({
+        thread_id: input.threadId,
+        title: input.title,
+        engine_id: input.engineId,
+        model_id: input.modelId,
+        thread_lane: input.threadLane,
+        project_id: input.projectId,
+        community_id: input.communityId,
+        created_at: input.createdAt,
+        updated_at: input.updatedAt,
+      });
+      return deps.runtimeClient.getThread(input.threadId);
+    },
+    deleteLocalThread: async (threadId) => deps.runtimeClient.deleteThread(threadId),
+    setLocalLens: async (input) =>
+      deps.setThreadCommunityLensLocal({
+        threadId: input.threadId,
+        communityId: input.communityId,
+      }),
+    addLocalMessage: async (input) =>
+      deps.runtimeClient.addMessage({
+        thread_id: input.threadId,
+        role: input.role,
+        content_json: input.contentJson,
+      }),
+    sendLocalTurn: async (input) =>
+      deps.runtimeClient.sendTurn({
+        thread_id: input.threadId,
+        cwd: input.cwd ?? "",
+        input: input.input,
+        user_content_json: input.userContentJson,
+        supabase_url: input.supabaseUrl ?? null,
+        supabase_anon_key: input.supabaseAnonKey ?? null,
+        supabase_access_token: input.supabaseAccessToken ?? "",
+      }),
+    setLocalThreadTitle: async (threadId, title) =>
+      deps.runtimeClient.setThreadTitle(threadId, title),
+    setLocalThreadEngine: async (input) =>
+      deps.runtimeClient.setThreadEngine({
+        thread_id: input.threadId,
+        engine_id: input.engineId,
+        model_id: input.modelId,
+      }),
+  });
+}
