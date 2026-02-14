@@ -12,5 +12,24 @@ export default defineConfig({
       // Allow importing the shared desktop CSS from repo root.
       allow: [resolve(process.cwd(), "../..")]
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) {
+            return "react-vendor";
+          }
+          if (id.includes("highlight.js")) {
+            return "highlight-vendor";
+          }
+          if (id.includes("@supabase")) {
+            return "supabase-vendor";
+          }
+          return "vendor";
+        }
+      }
+    }
   }
 });
