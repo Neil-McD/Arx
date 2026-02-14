@@ -1,0 +1,139 @@
+[
+  {
+    "name": "mixed_compiled_rows",
+    "community_id": "community-abc",
+    "compiled_rows": [
+      {
+        "source_type": "chat_message",
+        "snippet": "Weekly launch retrospective",
+        "sender_display": "Alice",
+        "compile_version": 9
+      },
+      {
+        "source_type": "community_resource",
+        "title": "Runbook",
+        "snippet": "How to roll forward safely",
+        "url": "https://example.com/runbook",
+        "compile_version": 9
+      },
+      {
+        "source_type": "unknown",
+        "snippet": "ignored"
+      },
+      {
+        "source_type": "chat_message",
+        "snippet": "Keep changelog and incident notes updated",
+        "sender_display": "Ops Team"
+      }
+    ],
+    "expected": {
+      "compile_version": 9,
+      "compiled_items_used": 4,
+      "chat_items_used": 2,
+      "resource_items_used": 1,
+      "prompt": "Community evidence (community-abc)\n- [chat:1] Weekly launch retrospective (from Alice)\n- [chat:2] Keep changelog and incident notes updated (from Ops Team)\n- [resource:1] Runbook: How to roll forward safely (https://example.com/runbook)",
+      "diagnostics": {
+        "attempted": true,
+        "compiled_fetch_ok": true,
+        "compiled_items_used": 4,
+        "compile_version": 9,
+        "fallback_used": false,
+        "chat_fetch_ok": true,
+        "resource_fetch_ok": true,
+        "chat_items_used": 2,
+        "resource_items_used": 1,
+        "retrieval_latency_ms": null,
+        "failure_class": "none",
+        "quality_score": 60,
+        "quality_band": "medium",
+        "contract_id": "community_context_observability_v1"
+      }
+    }
+  },
+  {
+    "name": "string_compile_version_and_empty_sender",
+    "community_id": "community-def",
+    "compiled_rows": [
+      {
+        "source_type": "unknown",
+        "snippet": "ignored",
+        "compile_version": "7"
+      },
+      {
+        "source_type": "chat_message",
+        "snippet": "Ship small batches",
+        "sender_display": ""
+      },
+      {
+        "source_type": "community_resource",
+        "title": " ",
+        "snippet": "",
+        "url": "   "
+      }
+    ],
+    "expected": {
+      "compile_version": 7,
+      "compiled_items_used": 3,
+      "chat_items_used": 1,
+      "resource_items_used": 0,
+      "prompt": "Community evidence (community-def)\n- [chat:1] Ship small batches (from member)",
+      "diagnostics": {
+        "attempted": true,
+        "compiled_fetch_ok": true,
+        "compiled_items_used": 3,
+        "compile_version": 7,
+        "fallback_used": false,
+        "chat_fetch_ok": true,
+        "resource_fetch_ok": true,
+        "chat_items_used": 1,
+        "resource_items_used": 0,
+        "retrieval_latency_ms": null,
+        "failure_class": "none",
+        "quality_score": 32,
+        "quality_band": "low",
+        "contract_id": "community_context_observability_v1"
+      }
+    }
+  },
+  {
+    "name": "no_usable_rows",
+    "community_id": "community-empty",
+    "compiled_rows": [
+      {
+        "source_type": "chat_message",
+        "snippet": "   ",
+        "sender_display": "Bob",
+        "compile_version": 2
+      },
+      {
+        "source_type": "community_resource",
+        "title": " ",
+        "snippet": " ",
+        "url": null
+      }
+    ],
+    "expected": {
+      "compile_version": 2,
+      "compiled_items_used": 2,
+      "chat_items_used": 0,
+      "resource_items_used": 0,
+      "prompt": null,
+      "diagnostics": {
+        "attempted": true,
+        "compiled_fetch_ok": true,
+        "compiled_items_used": 2,
+        "compile_version": 2,
+        "fallback_used": false,
+        "chat_fetch_ok": true,
+        "resource_fetch_ok": true,
+        "chat_items_used": 0,
+        "resource_items_used": 0,
+        "retrieval_latency_ms": null,
+        "failure_class": "none",
+        "quality_score": 0,
+        "quality_band": "none",
+        "contract_id": "community_context_observability_v1"
+      }
+    }
+  }
+]

@@ -248,6 +248,43 @@ export type PublicCommunityJoinErrorKind =
   | "forbidden"
   | null;
 
+export type InviteAcceptErrorKind = "invite_expired" | null;
+
+export type AcceptCommunityInviteResult = {
+  community_id: string;
+  community_slug: string;
+  community_name: string;
+};
+
+export function classifyInviteAcceptError(error: unknown): InviteAcceptErrorKind {
+  const values: string[] = [];
+  const collect = (value: unknown) => {
+    const normalized = normalizeErrorToken(value);
+    if (normalized) values.push(normalized);
+  };
+
+  if (isSupabaseRpcError(error)) {
+    collect(error.code);
+    collect(error.message);
+    collect(error.details);
+    collect(error.hint);
+  } else if (error instanceof Error) {
+    collect(error.message);
+  } else {
+    collect(error);
+  }
+
+  const has = (token: string): boolean =>
+    values.some((value) => value === token || value.includes(token));
+
+  if (has("invite_expired")) return "invite_expired";
+  if (has("invite has expired")) return "invite_expired";
+  if (has("invite expired")) return "invite_expired";
+  if (has("expired invite")) return "invite_expired";
+
+  return null;
+}
+
 export function classifyPublicCommunityJoinError(error: unknown): PublicCommunityJoinErrorKind {
   const values: string[] = [];
   const collect = (value: unknown) => {
@@ -301,6 +338,33 @@ export async function redeemPurchaseClaimRpc<S extends SupabaseSessionLike>(opts
   const communityId = rows[0]?.community_id;
   if (!communityId) throw new Error("Redeem succeeded but community missing.");
   return communityId;
+}
+
+export async function acceptCommunityInviteRpc<S extends SupabaseSessionLike>(opts: {
+  url: string;
+  session: S;
+  inviteCode: string;
+  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
+  readSupabaseError: ReadSupabaseError;
+}): Promise<AcceptCommunityInviteResult> {
+  const inviteCode = opts.inviteCode.trim();
+  if (!inviteCode) throw new Error("Invite code is required.");
+
+  const response = await opts.fetchWithSupabaseAuth(
+    `${opts.url}/rest/v1/rpc/accept_community_invite`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invite_code: inviteCode }),
+    },
+    opts.session,
+  );
+  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
+
+  const rows = (await response.json()) as AcceptCommunityInviteResult[];
+  const first = rows[0];
+  if (!first) throw new Error("Failed to join community.");
+  return first;
 }
 
 export async function listPendingPurchaseClaimsRpc<S extends SupabaseSessionLike>(opts: {

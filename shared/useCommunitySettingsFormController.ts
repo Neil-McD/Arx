@@ -1,0 +1,112 @@
+import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { toCanonicalCommunityVisibility } from "./communityVisibility";
+
+type CommunityLike = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  description: string | null;
+  visibility: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+};
+
+type UseCommunitySettingsFormControllerArgs<InviteT> = {
+  slugifyCommunityName: (value: string) => string;
+  communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
+  communitySettingsDirtyRef: MutableRefObject<boolean>;
+  communityPricingDirtyRef: MutableRefObject<boolean>;
+
+  setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
+  setCommunityMemberSettingsError: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsName: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsSlug: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsDescription: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsVisibility: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsMonthlyPlanId: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsYearlyPlanId: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "yearly" | "both">>;
+  setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
+  setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
+  setCommunityInvites: Dispatch<SetStateAction<InviteT[]>>;
+  setInviteCreateError: Dispatch<SetStateAction<string | null>>;
+
+  setCommunitySettingsBannerUploadError?: Dispatch<SetStateAction<string | null>>;
+  setIsProcessingCommunitySettingsBanner?: Dispatch<SetStateAction<boolean>>;
+  clearBannerOnMissingCommunity?: boolean;
+  onCommunitySwitched?: (nextCommunityId: string | null) => void;
+  onNoCommunitySelected?: () => void;
+};
+
+export function useCommunitySettingsFormController<CommunityT extends CommunityLike, InviteT>(
+  args: UseCommunitySettingsFormControllerArgs<InviteT>,
+) {
+  const argsRef = useRef(args);
+  argsRef.current = args;
+
+  const clearBannerState = useCallback((onMissingCommunity: boolean) => {
+    const current = argsRef.current;
+    if (onMissingCommunity && !current.clearBannerOnMissingCommunity) return;
+    current.setCommunitySettingsBannerUploadError?.(null);
+    current.setIsProcessingCommunitySettingsBanner?.(false);
+  }, []);
+
+  const syncCommunitySettingsSelection = useCallback((params: { activeCommunityId: string | null; communities: CommunityT[] }) => {
+    const current = argsRef.current;
+    const nextLoadedId = params.activeCommunityId ?? null;
+    const switchingCommunity = current.communitySettingsLoadedCommunityIdRef.current !== nextLoadedId;
+    if (switchingCommunity) {
+      current.communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
+      current.communitySettingsDirtyRef.current = false;
+      current.communityPricingDirtyRef.current = false;
+      current.setCommunitySettingsMonthlyPlanId(null);
+      current.setCommunitySettingsYearlyPlanId(null);
+      current.setCommunitySettingsPricingMode("free");
+      current.setCommunitySettingsPriceUsdMonthly("");
+      current.setCommunitySettingsPriceUsdYearly("");
+      current.onCommunitySwitched?.(nextLoadedId);
+    }
+
+    const selectedCommunity = params.communities.find((community) => community.id === params.activeCommunityId) ?? null;
+    if (!selectedCommunity) {
+      current.setCommunitySettingsError(null);
+      current.setCommunityMemberSettingsError(null);
+      clearBannerState(true);
+      current.setCommunitySettingsName("");
+      current.setCommunitySettingsSlug("");
+      current.setCommunitySettingsDescription("");
+      current.setCommunitySettingsVisibility("unlisted");
+      current.setCommunitySettingsAvatarUrl(null);
+      current.setCommunitySettingsBannerUrl(null);
+      current.setCommunitySettingsMonthlyPlanId(null);
+      current.setCommunitySettingsYearlyPlanId(null);
+      current.setCommunitySettingsPriceUsdMonthly("");
+      current.setCommunitySettingsPriceUsdYearly("");
+      current.setCommunityMemberMuted(false);
+      current.setCommunityInvites([]);
+      current.setInviteCreateError(null);
+      current.onNoCommunitySelected?.();
+      return;
+    }
+
+    if (!switchingCommunity && current.communitySettingsDirtyRef.current) return;
+
+    current.setCommunitySettingsError(null);
+    current.setCommunityMemberSettingsError(null);
+    clearBannerState(false);
+    current.setCommunitySettingsName(selectedCommunity.name ?? "");
+    current.setCommunitySettingsSlug(current.slugifyCommunityName(selectedCommunity.slug ?? ""));
+    current.setCommunitySettingsDescription(selectedCommunity.description ?? "");
+    current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
+    current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
+    current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);
+    current.setInviteCreateError(null);
+  }, [clearBannerState]);
+
+  return {
+    syncCommunitySettingsSelection,
+  };
+}

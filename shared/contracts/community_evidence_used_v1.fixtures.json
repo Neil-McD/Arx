@@ -1,0 +1,152 @@
+[
+  {
+    "name": "mixed_chat_resource_memory_with_scores",
+    "chat_rows": [
+      {
+        "message_id": "chat-1",
+        "sender_display": "Alice",
+        "snippet": "Weekly office hours unblock members quickly.",
+        "score": 0.91
+      },
+      {
+        "source_id": "chat-2",
+        "sender_display": "",
+        "snippet": "Pin the onboarding checklist in welcome."
+      }
+    ],
+    "resource_rows": [
+      {
+        "resource_id": "res-1",
+        "resource_type": "resource",
+        "title": "Onboarding doc",
+        "snippet": "Checklist and templates.",
+        "url": "https://example.com/onboarding",
+        "score": "0.72"
+      },
+      {
+        "source_id": "mem-1",
+        "resource_type": "memory",
+        "title": "",
+        "snippet": "",
+        "url": "",
+        "rank_score": 0.66
+      }
+    ],
+    "expected": {
+      "v": 1,
+      "contract_id": "community_evidence_used_v1",
+      "items": [
+        {
+          "source_type": "chat",
+          "source_id": "chat-1",
+          "title": "Alice",
+          "snippet": "Weekly office hours unblock members quickly.",
+          "url": null,
+          "score": 0.91,
+          "rank": 1
+        },
+        {
+          "source_type": "chat",
+          "source_id": "chat-2",
+          "title": "Community chat",
+          "snippet": "Pin the onboarding checklist in welcome.",
+          "url": null,
+          "score": null,
+          "rank": 2
+        },
+        {
+          "source_type": "resource",
+          "source_id": "res-1",
+          "title": "Onboarding doc",
+          "snippet": "Checklist and templates.",
+          "url": "https://example.com/onboarding",
+          "score": 0.72,
+          "rank": 3
+        },
+        {
+          "source_type": "memory",
+          "source_id": "mem-1",
+          "title": "Community memory",
+          "snippet": "Community memory",
+          "url": null,
+          "score": 0.66,
+          "rank": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "skips_invalid_rows_and_uses_fallback_ids",
+    "chat_rows": [
+      {
+        "message_id": "",
+        "sender_display": "Ignored",
+        "snippet": "Missing source id"
+      },
+      {
+        "thread_id": "thread-fallback",
+        "sender_display": "Ops",
+        "snippet": "Use thread id when message id is missing."
+      }
+    ],
+    "resource_rows": [
+      {
+        "source_id": "resource-fallback",
+        "resource_type": "resource",
+        "title": "",
+        "snippet": "",
+        "url": ""
+      },
+      {
+        "resource_id": "",
+        "resource_type": "memory",
+        "title": "No source id should be skipped",
+        "snippet": "ignored"
+      }
+    ],
+    "expected": {
+      "v": 1,
+      "contract_id": "community_evidence_used_v1",
+      "items": [
+        {
+          "source_type": "chat",
+          "source_id": "thread-fallback",
+          "title": "Ops",
+          "snippet": "Use thread id when message id is missing.",
+          "url": null,
+          "score": null,
+          "rank": 1
+        },
+        {
+          "source_type": "resource",
+          "source_id": "resource-fallback",
+          "title": "Community resource",
+          "snippet": "Community resource",
+          "url": null,
+          "score": null,
+          "rank": 2
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty_rows_yield_null",
+    "chat_rows": [
+      {
+        "message_id": "",
+        "sender_display": "member",
+        "snippet": ""
+      }
+    ],
+    "resource_rows": [
+      {
+        "resource_id": "",
+        "resource_type": "resource",
+        "title": "",
+        "snippet": "",
+        "url": ""
+      }
+    ],
+    "expected": null
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "community_evidence_used_v1",
+  "intent": "Canonical cross-surface payload for community evidence actually injected/used in a turn.",
+  "fields": {
+    "v": "integer",
+    "contract_id": "string",
+    "items": [
+      {
+        "source_type": "chat|resource|memory",
+        "source_id": "string",
+        "title": "string",
+        "snippet": "string",
+        "url": "string|null",
+        "score": "number|null",
+        "rank": "integer (1-based)"
+      }
+    ]
+  },
+  "limits": {
+    "chat_limit": 6,
+    "resource_limit": 5,
+    "total_limit": 11
+  }
+}

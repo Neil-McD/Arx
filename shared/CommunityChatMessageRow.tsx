@@ -1,0 +1,348 @@
+import { Fragment, type ReactNode } from "react";
+import { AttachmentChipButton } from "./AttachmentChipButton";
+import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
+import { partitionCommunityAttachments } from "./communityAttachmentUi";
+
+type CommunityMessageAttachment = {
+  id: string;
+  type: string;
+  name: string;
+  data_url?: string | null;
+};
+
+type CommunityChatMessageRecord = {
+  id: string;
+  sender_id: string;
+  body: string;
+  attachments?: CommunityMessageAttachment[];
+  reply_to_id?: string | null;
+  created_at: string;
+};
+
+type MessageReactionRecord = {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+};
+
+type ReplyPrefix = {
+  sender: string;
+  preview: string;
+  rest: string;
+};
+
+type CommunityChatMessageRowProps = {
+  message: CommunityChatMessageRecord;
+  dateSeparator: string | null;
+  isPending: boolean;
+  showMeta: boolean;
+  isOwn: boolean;
+  senderLabel: string;
+  avatarUrl: string | null;
+  avatarColor: string;
+  shortTime: string;
+  formattedTime: string;
+  editingMessageId: string | null;
+  editingMessageText: string;
+  reactionPickerMessageId: string | null;
+  messageReactions: MessageReactionRecord[];
+  supabaseUserId: string | null | undefined;
+  replyToId: string | null;
+  replyTarget: CommunityChatMessageRecord | null;
+  reactionEmojis: string[];
+  getInitials: (label: string) => string;
+  displayName: (userId: string) => string;
+  parseReplyPrefix: (body: string) => ReplyPrefix | null;
+  truncateReplyPreview: (value: string) => string;
+  renderTextWithLinks: (text: string) => ReactNode;
+  onScrollToReplyMessage: (replyMessageId: string) => void;
+  onOpenCommunityChatLightbox: (images: CommunityChatMediaImage[], index: number) => void;
+  onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
+  onSetReactionPickerMessageId: (messageId: string | null) => void;
+  onStartReply: (message: CommunityChatMessageRecord) => void;
+  onCopyMessage: (body: string) => void | Promise<void>;
+  onStartEdit: (message: CommunityChatMessageRecord) => void;
+  onDeleteMessage: (messageId: string) => void | Promise<void>;
+  onEditingMessageTextChange: (value: string) => void;
+  onSaveEdit: () => void | Promise<void>;
+  onCancelEdit: () => void;
+};
+
+export function CommunityChatMessageRow({
+  message,
+  dateSeparator,
+  isPending,
+  showMeta,
+  isOwn,
+  senderLabel,
+  avatarUrl,
+  avatarColor,
+  shortTime,
+  formattedTime,
+  editingMessageId,
+  editingMessageText,
+  reactionPickerMessageId,
+  messageReactions,
+  supabaseUserId,
+  replyToId,
+  replyTarget,
+  reactionEmojis,
+  getInitials,
+  displayName,
+  parseReplyPrefix,
+  truncateReplyPreview,
+  renderTextWithLinks,
+  onScrollToReplyMessage,
+  onOpenCommunityChatLightbox,
+  onToggleReaction,
+  onSetReactionPickerMessageId,
+  onStartReply,
+  onCopyMessage,
+  onStartEdit,
+  onDeleteMessage,
+  onEditingMessageTextChange,
+  onSaveEdit,
+  onCancelEdit,
+}: CommunityChatMessageRowProps) {
+  const { imageAttachments, fileAttachments } = partitionCommunityAttachments(message.attachments);
+  const lightboxImages: CommunityChatMediaImage[] = imageAttachments.map((item) => ({
+    url: item.url,
+    name: item.name,
+  }));
+
+  const msgReactions = messageReactions.filter((reaction) => reaction.message_id === message.id);
+  const groupedReactions = (() => {
+    const groups: Record<string, MessageReactionRecord[]> = {};
+    for (const reaction of msgReactions) {
+      if (!groups[reaction.emoji]) groups[reaction.emoji] = [];
+      groups[reaction.emoji].push(reaction);
+    }
+    return groups;
+  })();
+
+  return (
+    <Fragment>
+      {dateSeparator && (
+        <div className="chat-date-separator">
+          <span>{dateSeparator}</span>
+        </div>
+      )}
+      <div
+        id={`msg-${message.id}`}
+        className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
+        data-time={shortTime}
+      >
+        <div
+          className="chat-avatar"
+          style={{ backgroundColor: avatarColor }}
+          title={senderLabel}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={senderLabel} />
+          ) : (
+            <span>{getInitials(senderLabel)}</span>
+          )}
+        </div>
+        <div className="chat-content">
+          <div className="chat-header">
+            <span className="chat-sender">{senderLabel}</span>
+            <span className="chat-time">{formattedTime}</span>
+          </div>
+          {editingMessageId === message.id ? (
+            <div className="chat-edit-form">
+              <textarea
+                className="chat-edit-input"
+                value={editingMessageText}
+                onChange={(event) => onEditingMessageTextChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void onSaveEdit();
+                  }
+                  if (event.key === "Escape") {
+                    onCancelEdit();
+                  }
+                }}
+                autoFocus
+                rows={1}
+              />
+              <div className="chat-edit-actions">
+                <button className="chat-edit-btn save" onClick={() => void onSaveEdit()}>
+                  Save
+                </button>
+                <button className="chat-edit-btn cancel" onClick={onCancelEdit}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {replyTarget && (
+                <button
+                  type="button"
+                  className="chat-reply-quote"
+                  onClick={() => {
+                    if (!replyToId) return;
+                    onScrollToReplyMessage(replyToId);
+                  }}
+                  title="Jump to replied message"
+                >
+                  {(() => {
+                    const thumb = replyTarget.attachments?.find(
+                      (attachment) =>
+                        attachment.type === "image" &&
+                        typeof attachment.data_url === "string" &&
+                        attachment.data_url.startsWith("data:image/"),
+                    );
+                    const text = truncateReplyPreview(
+                      (parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body).trim() ||
+                      (thumb ? "Image" : "Message"),
+                    );
+                    return (
+                      <>
+                        <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 14 4 9 9 4" />
+                          <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                        </svg>
+                        {thumb?.data_url && (
+                          <img
+                            className="chat-reply-thumb"
+                            src={thumb.data_url}
+                            alt=""
+                            aria-hidden="true"
+                            loading="lazy"
+                          />
+                        )}
+                        <span className="chat-reply-sender">{displayName(replyTarget.sender_id)}</span>
+                        <span className="chat-reply-text">{text}</span>
+                      </>
+                    );
+                  })()}
+                </button>
+              )}
+              {!replyTarget && replyToId && (
+                <div className="chat-reply-quote" title={`Reply to ${replyToId}`}>
+                  <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 14 4 9 9 4" />
+                    <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                  </svg>
+                  <span className="chat-reply-sender">Reply</span>
+                  <span className="chat-reply-text">Replied message not loaded</span>
+                </div>
+              )}
+              <div className="chat-body">
+                {renderTextWithLinks(message.body)}
+              </div>
+            </>
+          )}
+
+          <CommunityChatMediaGrid
+            images={lightboxImages}
+            onOpenImage={onOpenCommunityChatLightbox}
+          />
+
+          {fileAttachments.length > 0 && (
+            <div className="attachments-preview chat-attachments-preview">
+              {fileAttachments.map((attachment) => (
+                <AttachmentChipButton
+                  key={attachment.id}
+                  name={attachment.name}
+                  disabled
+                />
+              ))}
+            </div>
+          )}
+
+          {reactionPickerMessageId === message.id && (
+            <div className="reaction-picker">
+              {reactionEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  className="reaction-picker-btn"
+                  onClick={() => {
+                    void onToggleReaction(message.id, emoji);
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {msgReactions.length > 0 && (
+            <div className="chat-reactions">
+              {Object.entries(groupedReactions).map(([emoji, reactions]) => {
+                const hasOwn = reactions.some((reaction) => reaction.user_id === supabaseUserId);
+                return (
+                  <button
+                    key={emoji}
+                    className={`reaction-badge${hasOwn ? " own" : ""}`}
+                    onClick={() => {
+                      void onToggleReaction(message.id, emoji);
+                    }}
+                    title={reactions.map((reaction) => displayName(reaction.user_id)).join(", ")}
+                  >
+                    <span className="reaction-emoji">{emoji}</span>
+                    <span className="reaction-count">{reactions.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="chat-actions">
+          <button
+            className="chat-action-btn"
+            onClick={() =>
+              onSetReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id)
+            }
+            title="Add reaction"
+          >
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
+          </button>
+          {!isPending && (
+            <button
+              className="chat-action-btn"
+              onClick={() => onStartReply(message)}
+              title="Reply"
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M9 17l-5-5 5-5" />
+                <path d="M4 12h9a7 7 0 0 1 7 7v2" />
+              </svg>
+            </button>
+          )}
+          <button
+            className="chat-action-btn"
+            onClick={() => {
+              void onCopyMessage(message.body);
+            }}
+            title="Copy message"
+          >
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+          </button>
+          {isOwn && !isPending && (
+            <>
+              <button
+                className="chat-action-btn"
+                onClick={() => onStartEdit(message)}
+                title="Edit"
+              >
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
+              <button
+                className="chat-action-btn delete"
+                onClick={() => {
+                  void onDeleteMessage(message.id);
+                }}
+                title="Delete"
+              >
+                <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </Fragment>
+  );
+}

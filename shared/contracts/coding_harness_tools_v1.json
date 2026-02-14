@@ -1,0 +1,313 @@
+{
+  "id": "coding_harness_tools_v1",
+  "version": 1,
+  "lane": "agent",
+  "runtime_exposed_tools": {
+    "desktop": [
+      "update_plan",
+      "read",
+      "list_dir",
+      "glob",
+      "grep",
+      "sha256",
+      "write",
+      "edit",
+      "bash"
+    ]
+  },
+  "capabilities": [
+    {
+      "name": "update_plan",
+      "description": "Update the UI Plan panel for this session. Use a short plan with 3–6 steps and statuses: pending|in_progress|completed.",
+      "status": "active",
+      "side_effect_class": "none",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": false,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "explanation": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ]
+                }
+              },
+              "required": [
+                "step",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "plan"
+        ]
+      }
+    },
+    {
+      "name": "read",
+      "description": "Read a file with line numbers. Use offset/limit for large files.",
+      "status": "active",
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "list_dir",
+      "description": "List a directory (files vs folders). Use this for folders; use read for files.",
+      "status": "active",
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "sha256",
+      "description": "Compute SHA-256 of a file's raw bytes (hex).",
+      "status": "active",
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "write",
+      "description": "Write full content to a file (creates parent directories). expected_before_sha256 is optional (sha256 hex string to precondition overwrite). For multiple files, you can also pass writes: [{path, content}, ...]. If omitted, proceeds nano-style.",
+      "status": "active",
+      "side_effect_class": "write",
+      "approval_policy": {
+        "desktop": "required"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "expected_before_sha256": {
+            "type": "string"
+          },
+          "writes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "expected_before_sha256": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "edit",
+      "description": "Replace old with new in a file. Replaces the first occurrence by default; set all=true (or replaceAll=true) to replace all. Supports aliases: filePath, oldString, newString, replaceAll. If old is empty, overwrites the file with new. expected_before_sha256 is optional (string).",
+      "status": "active",
+      "side_effect_class": "write",
+      "approval_policy": {
+        "desktop": "required"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "filePath": {
+            "type": "string"
+          },
+          "old": {
+            "type": "string"
+          },
+          "oldString": {
+            "type": "string"
+          },
+          "new": {
+            "type": "string"
+          },
+          "newString": {
+            "type": "string"
+          },
+          "all": {
+            "type": "boolean"
+          },
+          "replaceAll": {
+            "type": "boolean"
+          },
+          "expected_before_sha256": {
+            "type": "string"
+          },
+          "expectedBeforeSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "old",
+          "new"
+        ]
+      }
+    },
+    {
+      "name": "glob",
+      "description": "Find files by glob pattern (supports **). Sorted by mtime desc. Returns up to 200 hits. Ignores .git, node_modules, dist, target, blobs.",
+      "status": "active",
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pat": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pat"
+        ]
+      }
+    },
+    {
+      "name": "grep",
+      "description": "Search files for a regex pattern. Uses ripgrep (rg) (bundled/downloaded as needed) with a fallback Rust scan. Returns up to 50 hits. Skips large/binary files and ignores .git, node_modules, dist, target, blobs. Optional include glob: \"*.ts\" or \"*.{ts,tsx}\".",
+      "status": "active",
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pat": {
+            "type": "string"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "include": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pat"
+        ]
+      }
+    },
+    {
+      "name": "bash",
+      "description": "Run a shell command (30s timeout). Creates cwd if needed. Requires approval.",
+      "status": "active",
+      "side_effect_class": "external",
+      "approval_policy": {
+        "desktop": "required"
+      },
+      "prompt_visible": true,
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "cmd": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cmd"
+        ]
+      }
+    }
+  ]
+}

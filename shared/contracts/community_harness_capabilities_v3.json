@@ -1,0 +1,173 @@
+{
+  "version": 3,
+  "id": "community_harness_capabilities_v3",
+  "lane": "chat",
+  "intent": "Define the explicit community harness capability surface for read-first retrieval and governed community-memory curation.",
+  "runtime_exposed_tools": {
+    "desktop": [
+      "community_context_search",
+      "community_memory_search",
+      "community_memory_candidate_propose"
+    ],
+    "web": [
+      "community_context_search",
+      "community_memory_search",
+      "community_memory_candidate_propose"
+    ]
+  },
+  "surface_contract": {
+    "desktop": {
+      "workspace_access": false,
+      "shell_access": false,
+      "file_read_access": false,
+      "file_write_access": false
+    },
+    "web": {
+      "workspace_access": false,
+      "shell_access": false,
+      "file_read_access": false,
+      "file_write_access": false
+    }
+  },
+  "denied_tool_names": [
+    "read",
+    "list_dir",
+    "glob",
+    "grep",
+    "sha256",
+    "write",
+    "edit",
+    "bash",
+    "community_chat_post",
+    "community_resource_publish",
+    "community_artifact_publish",
+    "community_automation_trigger"
+  ],
+  "capability_status_values": ["active", "deprecated"],
+  "side_effect_classes": ["none", "read", "write", "external"],
+  "capabilities": [
+    {
+      "name": "community_context_search",
+      "category": "context",
+      "status": "active",
+      "surfaces": ["desktop", "web"],
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never",
+        "web": "never"
+      },
+      "entitlement": {
+        "auth_required": true,
+        "requires_active_entitlement": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": ["community_id", "query"],
+        "properties": {
+          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "query": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 12 }
+        }
+      },
+      "verification": {
+        "type": "rpc_response",
+        "rpc": "search_compiled_community_context",
+        "success_condition": "http_2xx_and_json_array"
+      },
+      "idempotency": {
+        "strategy": "pure_read",
+        "key_fields": ["community_id", "query", "limit"]
+      },
+      "slo": {
+        "timeout_ms": 8000,
+        "max_attempts": 2,
+        "retry_backoff_ms": [100, 300]
+      }
+    },
+    {
+      "name": "community_memory_search",
+      "category": "memory",
+      "status": "active",
+      "surfaces": ["desktop", "web"],
+      "side_effect_class": "read",
+      "approval_policy": {
+        "desktop": "never",
+        "web": "never"
+      },
+      "entitlement": {
+        "auth_required": true,
+        "requires_active_entitlement": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": ["community_id", "query"],
+        "properties": {
+          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "query": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 12 }
+        }
+      },
+      "verification": {
+        "type": "rpc_response",
+        "rpc": "search_community_memory_items",
+        "success_condition": "http_2xx_and_json_array"
+      },
+      "idempotency": {
+        "strategy": "pure_read",
+        "key_fields": ["community_id", "query", "limit"]
+      },
+      "slo": {
+        "timeout_ms": 7000,
+        "max_attempts": 2,
+        "retry_backoff_ms": [100, 250]
+      }
+    },
+    {
+      "name": "community_memory_candidate_propose",
+      "category": "action",
+      "status": "active",
+      "surfaces": ["desktop", "web"],
+      "side_effect_class": "write",
+      "approval_policy": {
+        "desktop": "required",
+        "web": "required"
+      },
+      "entitlement": {
+        "auth_required": true,
+        "requires_active_entitlement": true
+      },
+      "input_schema": {
+        "type": "object",
+        "required": ["community_id", "memory_text"],
+        "properties": {
+          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "maxLength": 160 },
+          "memory_text": { "type": "string", "minLength": 1, "maxLength": 32000 },
+          "evidence": { "type": "object" },
+          "request_key": { "type": "string", "maxLength": 128 }
+        }
+      },
+      "verification": {
+        "type": "post_write_readback",
+        "rpc": "community_memory_candidate_propose",
+        "success_condition": "candidate_created_or_deduped"
+      },
+      "idempotency": {
+        "strategy": "request_key",
+        "key_fields": ["community_id", "memory_text", "request_key"]
+      },
+      "slo": {
+        "timeout_ms": 10000,
+        "max_attempts": 2,
+        "retry_backoff_ms": [200, 500]
+      }
+    }
+  ],
+  "execution_requirements": {
+    "requires_plan_ir": true,
+    "requires_idempotency_keys_for_writes": true,
+    "requires_verification_for_side_effects": true,
+    "requires_event_audit_trail": true,
+    "requires_memory_router": true
+  }
+}
