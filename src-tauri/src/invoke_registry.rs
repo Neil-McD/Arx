@@ -1,0 +1,76 @@
+use tauri::{ipc::Invoke, Wry};
+
+pub(crate) fn build_handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        // Runtime + thread lifecycle
+        crate::commands::runtime_thread::initialize_cmd,
+        crate::commands::runtime_thread::create_thread_cmd,
+        crate::commands::runtime_thread::upsert_thread_cmd,
+        crate::commands::runtime_thread::delete_thread_cmd,
+        crate::commands::runtime_thread::list_threads_cmd,
+        crate::commands::runtime_thread::get_thread_cmd,
+        crate::commands::runtime_thread::list_events_cmd,
+        crate::commands::runtime_thread::list_events_since_cmd,
+        crate::commands::runtime_thread::list_tool_calls_cmd,
+        crate::commands::runtime_thread::get_event_cmd,
+        crate::commands::runtime_thread::list_turns_cmd,
+        crate::commands::runtime_thread::reset_local_db_cmd,
+        crate::commands::runtime_thread::get_agent_mode_cmd,
+        crate::commands::runtime_thread::set_agent_mode_cmd,
+        crate::commands::runtime_thread::decide_tool_call_cmd,
+        crate::commands::runtime_thread::cancel_run_cmd,
+        crate::commands::runtime_thread::submit_turn_cmd,
+        // Auth + external identity
+        crate::commands::auth_invite::get_supabase_session_cmd,
+        crate::commands::auth_invite::set_supabase_session_cmd,
+        crate::commands::auth_invite::clear_supabase_session_cmd,
+        crate::commands::auth_invite::get_chatgpt_auth_summary_cmd,
+        crate::commands::auth_invite::clear_chatgpt_auth_cmd,
+        crate::commands::auth_invite::chatgpt_login_cmd,
+        crate::commands::auth_invite::open_external_url_cmd,
+        // Invites + onboarding
+        crate::commands::auth_invite::list_pending_invites_cmd,
+        crate::commands::auth_invite::upsert_pending_invite_cmd,
+        crate::commands::auth_invite::dismiss_pending_invite_cmd,
+        crate::commands::auth_invite::request_join_pending_invite_cmd,
+        crate::commands::auth_invite::mark_pending_invite_joined_cmd,
+        crate::commands::auth_invite::mark_pending_invite_expired_cmd,
+        // Workspace + projects
+        crate::commands::workspace_project::get_workspace_root_cmd,
+        crate::commands::workspace_project::is_path_within_workspace_cmd,
+        crate::commands::workspace_project::get_active_project_cmd,
+        crate::commands::workspace_project::set_active_project_cmd,
+        crate::commands::workspace_project::list_projects_cmd,
+        crate::commands::workspace_project::create_project_cmd,
+        crate::commands::workspace_project::delete_project_cmd,
+        crate::commands::workspace_project::update_project_name_cmd,
+        // Messages + model/runtime settings
+        crate::commands::message_settings::add_message_cmd,
+        crate::commands::message_settings::list_messages_cmd,
+        crate::commands::message_settings::list_messages_tail_cmd,
+        crate::commands::message_settings::list_messages_before_seq_cmd,
+        crate::commands::message_settings::get_model_toggles_cmd,
+        crate::commands::message_settings::set_model_toggles_cmd,
+        crate::commands::message_settings::get_active_model_cmd,
+        crate::commands::message_settings::set_active_model_cmd,
+        crate::commands::message_settings::scan_publish_content_cmd,
+        crate::commands::message_settings::get_exec_policy_rules_cmd,
+        crate::commands::message_settings::get_system_prompt_cmd,
+        crate::commands::message_settings::get_approval_mode_cmd,
+        crate::commands::message_settings::detect_test_commands_cmd,
+        crate::commands::message_settings::set_exec_policy_rules_cmd,
+        crate::commands::message_settings::set_system_prompt_cmd,
+        crate::commands::message_settings::set_approval_mode_cmd,
+        crate::commands::message_settings::get_session_resume_cmd,
+        // Attachments + voice capture
+        crate::commands::attachment::ingest_attachment_cmd,
+        crate::commands::voice_capture::start_native_voice_capture_cmd,
+        crate::commands::voice_capture::stop_native_voice_capture_cmd,
+        crate::commands::voice_capture::cancel_native_voice_capture_cmd,
+        // Thread metadata
+        crate::commands::thread_metadata::set_thread_workspace_cmd,
+        crate::commands::thread_metadata::set_thread_title_cmd,
+        crate::commands::thread_metadata::set_thread_context_cmd,
+        crate::commands::thread_metadata::set_thread_engine_cmd
+    ]
+}

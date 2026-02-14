@@ -12,7 +12,7 @@ import {
   type InferenceFallbackNotification,
   type OpenedUrlsNotification,
   type OpenRouterStreamNotification,
-  type PlatformInferenceActionRequiredNotification,
+  type ProjectRecord,
   type PlanUpdatedNotification,
   type RuntimeNotification,
   type ThreadId,
@@ -59,7 +59,6 @@ type OpenRouterStreamPayload = {
   model_id: string;
   inference_source?: string | null;
   chunk: string;
-  full_content: string;
   seq: number;
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
@@ -71,16 +70,82 @@ type ToolCallsUpdatedPayload = { session_id: string };
 type MemoryUpdatedPayload = { session_id: string; label: string; scope: string };
 type OpenedUrlsPayload = { urls: string[] };
 type InferenceFallbackPayload = { session_id: string; from: string; to: string; reason: string };
-type PlatformInferenceActionRequiredPayload = {
-  session_id: string;
-  approval_id: string;
-  provider_id: string;
-  provider_label: string;
-  model_id: string;
-  reason: string;
+
+type SetThreadContextArgs = {
+  thread_id: ThreadId;
+  thread_lane?: "chat" | "agent" | null;
+  project_id?: string | null;
+  community_id?: string | null;
+  expected_context_version?: number | null;
+  update_thread_lane?: boolean;
+  update_project_id?: boolean;
+  update_community_id?: boolean;
 };
 
 export class TauriRuntimeClient implements RuntimeClient {
+  private static isThreadContextVersionConflict(error: unknown): boolean {
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "";
+    const normalized = message.toLowerCase();
+    return normalized.includes("thread context version conflict")
+      || normalized.includes("thread_context_version_conflict");
+  }
+
+  private async invokeSetThreadContext(args: SetThreadContextArgs): Promise<ThreadRecord> {
+    return invoke<ThreadRecord>("set_thread_context_cmd", {
+      threadId: args.thread_id,
+      threadLane: args.thread_lane ?? null,
+      projectId: args.project_id ?? null,
+      communityId: args.community_id ?? null,
+      expectedContextVersion: args.expected_context_version ?? null,
+      updateThreadLane: args.update_thread_lane ?? false,
+      updateProjectId: args.update_project_id ?? false,
+      updateCommunityId: args.update_community_id ?? false,
+    });
+  }
+
+  private async setThreadContextWithOptimisticRetry(args: SetThreadContextArgs): Promise<ThreadRecord> {
+    const firstRead = await this.getThread(args.thread_id);
+    if (!firstRead) throw new Error("Thread not found.");
+    let expectedContextVersion = firstRead.context_version ?? 0;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.invokeSetThreadContext({
+          ...args,
+          expected_context_version: expectedContextVersion,
+        });
+      } catch (error) {
+        if (attempt > 0 || !TauriRuntimeClient.isThreadContextVersionConflict(error)) {
+          throw error;
+        }
+        const latest = await this.getThread(args.thread_id);
+        if (!latest) throw error;
+
+        const targetLane = args.thread_lane ?? null;
+        const targetProject = args.project_id ?? null;
+        const targetCommunity = args.community_id ?? null;
+        const laneAlreadyApplied =
+          !args.update_thread_lane || (latest.thread_lane ?? null) === targetLane;
+        const projectAlreadyApplied =
+          !args.update_project_id || (latest.project_id ?? null) === targetProject;
+        const communityAlreadyApplied =
+          !args.update_community_id || (latest.community_id ?? null) === targetCommunity;
+        if (laneAlreadyApplied && projectAlreadyApplied && communityAlreadyApplied) {
+          return latest;
+        }
+
+        expectedContextVersion = latest.context_version ?? 0;
+      }
+    }
+
+    throw new Error("Failed to set thread context.");
+  }
+
   async initialize(): Promise<InitializeResponse> {
     try {
       return await invoke<InitializeResponse>("initialize_cmd");
@@ -100,6 +165,52 @@ export class TauriRuntimeClient implements RuntimeClient {
     }
   }
 
+  async getWorkspaceRoot(): Promise<string> {
+    return invoke<string>("get_workspace_root_cmd");
+  }
+
+  async getAgentMode(thread_id: ThreadId): Promise<string> {
+    return invoke<string>("get_agent_mode_cmd", { sessionId: thread_id });
+  }
+
+  async isPathWithinWorkspace(path: string): Promise<boolean> {
+    return invoke<boolean>("is_path_within_workspace_cmd", { path });
+  }
+
+  async getEvent(args: { thread_id: ThreadId; event_id: string }): Promise<EventRecord | null> {
+    return invoke<EventRecord | null>("get_event_cmd", {
+      threadId: args.thread_id,
+      eventId: args.event_id,
+    });
+  }
+
+  async listProjects(): Promise<ProjectRecord[]> {
+    return invoke<ProjectRecord[]>("list_projects_cmd");
+  }
+
+  async getActiveProject(): Promise<ProjectRecord | null> {
+    return invoke<ProjectRecord | null>("get_active_project_cmd");
+  }
+
+  async createProject(path: string): Promise<ProjectRecord> {
+    return invoke<ProjectRecord>("create_project_cmd", { path });
+  }
+
+  async updateProjectName(project_id: string, name: string | null): Promise<ProjectRecord> {
+    return invoke<ProjectRecord>("update_project_name_cmd", {
+      projectId: project_id,
+      name: name ?? null,
+    });
+  }
+
+  async deleteProject(project_id: string): Promise<void> {
+    await invoke("delete_project_cmd", { projectId: project_id });
+  }
+
+  async setActiveProject(project_id: string | null): Promise<void> {
+    await invoke("set_active_project_cmd", { projectId: project_id ?? null });
+  }
+
   async listThreads(): Promise<ThreadRecord[]> {
     return invoke<ThreadRecord[]>("list_threads_cmd");
   }
@@ -108,11 +219,15 @@ export class TauriRuntimeClient implements RuntimeClient {
     title: string;
     engine_id?: string | null;
     model_id?: string | null;
+    thread_lane?: "chat" | "agent" | null;
+    project_id?: string | null;
   }): Promise<ThreadRecord> {
     return invoke<ThreadRecord>("create_thread_cmd", {
       title: args.title,
       engineId: args.engine_id ?? null,
       modelId: args.model_id ?? null,
+      threadLane: args.thread_lane ?? null,
+      projectId: args.project_id ?? null,
     });
   }
 
@@ -124,11 +239,18 @@ export class TauriRuntimeClient implements RuntimeClient {
     await invoke("set_thread_workspace_cmd", { threadId: thread_id, workspacePath: workspace_path });
   }
 
-  async setThreadCommunity(thread_id: ThreadId, community_id: string | null): Promise<ThreadRecord> {
-    return invoke<ThreadRecord>("set_thread_community_cmd", {
-      threadId: thread_id,
-      communityId: community_id,
-    });
+  async setThreadContext(args: SetThreadContextArgs): Promise<ThreadRecord> {
+    const hasPatch =
+      Boolean(args.update_thread_lane) ||
+      Boolean(args.update_project_id) ||
+      Boolean(args.update_community_id);
+    const hasExpectedVersion =
+      typeof args.expected_context_version === "number" &&
+      Number.isFinite(args.expected_context_version);
+    if (hasPatch && !hasExpectedVersion) {
+      return this.setThreadContextWithOptimisticRetry(args);
+    }
+    return this.invokeSetThreadContext(args);
   }
 
   async setThreadEngine(args: {
@@ -140,6 +262,37 @@ export class TauriRuntimeClient implements RuntimeClient {
       threadId: args.thread_id,
       engineId: args.engine_id,
       modelId: args.model_id ?? null,
+    });
+  }
+
+  async upsertThread(args: {
+    thread_id: ThreadId;
+    title?: string | null;
+    engine_id?: string | null;
+    model_id?: string | null;
+    thread_lane?: "chat" | "agent" | null;
+    project_id?: string | null;
+    community_id?: string | null;
+    created_at?: number | null;
+    updated_at?: number | null;
+  }): Promise<ThreadRecord> {
+    return invoke<ThreadRecord>("upsert_thread_cmd", {
+      threadId: args.thread_id,
+      title: args.title ?? null,
+      engineId: args.engine_id ?? null,
+      modelId: args.model_id ?? null,
+      threadLane: args.thread_lane ?? null,
+      projectId: args.project_id ?? null,
+      communityId: args.community_id ?? null,
+      createdAt: args.created_at ?? null,
+      updatedAt: args.updated_at ?? null,
+    });
+  }
+
+  async setThreadTitle(thread_id: ThreadId, title: string | null): Promise<void> {
+    await invoke("set_thread_title_cmd", {
+      threadId: thread_id,
+      title: title ?? null,
     });
   }
 
@@ -155,16 +308,28 @@ export class TauriRuntimeClient implements RuntimeClient {
     });
   }
 
-  async getAutoApproveWriteEdit(thread_id: ThreadId): Promise<boolean> {
-    return invoke<boolean>("get_auto_approve_write_edit_cmd", { threadId: thread_id });
-  }
-
   async getThread(thread_id: ThreadId): Promise<ThreadRecord | null> {
     return invoke<ThreadRecord | null>("get_thread_cmd", { threadId: thread_id });
   }
 
   async listMessages(thread_id: ThreadId): Promise<MessageRecord[]> {
     return invoke<MessageRecord[]>("list_messages_cmd", { sessionId: thread_id });
+  }
+
+  async listMessagesTail(thread_id: ThreadId, limit: number): Promise<MessageRecord[]> {
+    return invoke<MessageRecord[]>("list_messages_tail_cmd", { sessionId: thread_id, limit });
+  }
+
+  async listMessagesBeforeSeq(
+    thread_id: ThreadId,
+    before_seq: number,
+    limit: number,
+  ): Promise<MessageRecord[]> {
+    return invoke<MessageRecord[]>("list_messages_before_seq_cmd", {
+      sessionId: thread_id,
+      beforeSeq: before_seq,
+      limit,
+    });
   }
 
   async listTurns(thread_id: ThreadId, limit: number): Promise<TurnRecord[]> {
@@ -221,6 +386,26 @@ export class TauriRuntimeClient implements RuntimeClient {
       supabaseAnonKey: args.supabase_anon_key ?? null,
       supabaseAccessToken: args.supabase_access_token ?? null,
     });
+  }
+
+  async setAgentMode(thread_id: ThreadId, mode: "build" | "plan" | "explore"): Promise<void> {
+    await invoke("set_agent_mode_cmd", { sessionId: thread_id, mode });
+  }
+
+  async detectTestCommands(cwd: string): Promise<string[]> {
+    return invoke<string[]>("detect_test_commands_cmd", { cwd });
+  }
+
+  async setApprovalMode(mode: string): Promise<void> {
+    await invoke("set_approval_mode_cmd", { mode });
+  }
+
+  async setExecPolicyRules(rules: string): Promise<void> {
+    await invoke("set_exec_policy_rules_cmd", { rules });
+  }
+
+  async setActiveModel(model_id: string): Promise<void> {
+    await invoke("set_active_model_cmd", { modelId: model_id });
   }
 
   async cancelRun(thread_id: ThreadId): Promise<boolean> {
@@ -315,7 +500,6 @@ export class TauriRuntimeClient implements RuntimeClient {
           model_id: payload.model_id,
           inference_source: payload.inference_source ?? null,
           chunk: payload.chunk,
-          full_content: payload.full_content,
           seq: payload.seq,
           prompt_tokens: payload.prompt_tokens ?? null,
           completion_tokens: payload.completion_tokens ?? null,
@@ -388,22 +572,6 @@ export class TauriRuntimeClient implements RuntimeClient {
           session_id: payload.session_id,
           from: payload.from,
           to: payload.to,
-          reason: payload.reason,
-        };
-        wrap(n);
-      })
-    );
-
-    unsubs.push(
-      listen<PlatformInferenceActionRequiredPayload>("platform-inference-action-required", (event) => {
-        const payload = event.payload;
-        const n: PlatformInferenceActionRequiredNotification = {
-          type: "platform_inference_action_required",
-          session_id: payload.session_id,
-          approval_id: payload.approval_id,
-          provider_id: payload.provider_id,
-          provider_label: payload.provider_label,
-          model_id: payload.model_id,
           reason: payload.reason,
         };
         wrap(n);

@@ -1,16 +1,27 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod blob_store;
+mod commands;
+mod community_context;
 mod context;
 mod context_builder;
 mod db;
-
+mod hash_utils;
+mod invoke_registry;
+mod native_voice;
+mod runtime_tools;
+mod startup;
+mod text_utils;
+mod thread_context_trace;
+mod workspace_identity;
+use crate::hash_utils::hex_sha256;
+use crate::text_utils::truncate_utf8_for_prompt;
 use db::{
-    add_message, create_personal_memory_item, create_thread, delete_personal_memory_item,
-    delete_thread, delete_ui_state, get_project_by_id, get_session_resume, get_thread_by_id,
-    get_ui_state, list_events, list_events_since, list_messages, list_personal_memory_items,
-    list_threads, list_tool_calls, open_conn, search_personal_memory_items,
-    set_personal_memory_item_pinned, set_thread_community_id, set_thread_engine_model,
-    set_thread_workspace_path, set_ui_state, upsert_project, upsert_workspace_binding, DbState,
+    create_thread, get_thread_by_id, get_ui_state, list_messages_tail, open_conn,
+    set_thread_engine_model, set_thread_workspace_path, set_ui_state,
+};
+use runtime_tools::{
+    is_known_agent_tool_name, normalize_agent_tool_name, run_agent_tool,
+    run_community_capability_tool, tool_error, tool_ok, ToolExecResult,
 };
 use futures::StreamExt;
 use keyring::Entry;
@@ -18,28 +29,259 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use std::collections::{HashMap, VecDeque};
-use std::io::BufRead;
 use std::path::Path;
-use std::process::Command;
-use std::process::Stdio;
-use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
-use std::time::Instant;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::process::Command as TokioCommand;
 use tokio::sync::{oneshot, watch, Mutex};
+use tokio::time::timeout;
 
 const ENGINE_MESSAGES_AGENT: &str = "messages_agent";
 const ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT: &str = "openrouter_messages_agent";
 const ENGINE_LEGACY_OPENROUTER_CHAT: &str = "openrouter_chat";
 const ARP_PROTOCOL_VERSION: i64 = 1;
-const DEFAULT_MAX_TOKENS: u32 = 1024;
+const DEFAULT_MAX_TOKENS: u32 = 4096;
 const IO_BLOB_THRESHOLD_BYTES: usize = 16 * 1024;
-const RIPGREP_VERSION: &str = "14.1.1";
-const BYOK_ENABLED: bool = false;
+const IO_CHUNK_BATCH_MAX_BYTES: usize = 8 * 1024;
+const IO_CHUNK_BATCH_MAX_CHUNKS: u64 = 24;
+const IO_CHUNK_BATCH_MAX_DELAY_MS: u64 = 120;
+const THREAD_LANE_CHAT: &str = "chat";
+const THREAD_LANE_AGENT: &str = "agent";
+const COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID: &str = "community_harness_capabilities_v3";
+const CODING_HARNESS_CAPABILITY_CONTRACT_ID: &str = "coding_harness_tools_v1";
+const PREFLIGHT_REMOTE_TIMEOUT_MS: u64 = 1_500;
+const CHATGPT_AUTH_PREFETCH_TIMEOUT_MS: u64 = 1_500;
+const INFERENCE_REQUEST_START_TIMEOUT_PLATFORM_MS: u64 = 2_500;
+const INFERENCE_REQUEST_START_TIMEOUT_CHATGPT_MS: u64 = 3_000;
+const MODEL_REGISTRY_CACHE_TTL_MS: u64 = 5 * 60 * 1000;
+const MODEL_REGISTRY_NEGATIVE_CACHE_TTL_MS: u64 = 20 * 1000;
+const DESKTOP_PUBLIC_FREE_MODEL_GPT_OSS_120B: &str = "gpt-oss-120b-free";
+const DESKTOP_PUBLIC_FREE_MODEL_DEEPSEEK_R1: &str = "deepseek-r1-free";
+
+pub(crate) use thread_context_trace::emit_thread_context_trace;
+pub(crate) use native_voice::{
+    NativeVoiceCaptureManager, NativeVoiceCaptureStarted, NativeVoiceCaptureStopped,
+    NativeVoiceWorkerCommand,
+};
+#[derive(Debug, Deserialize, Default)]
+struct CodingHarnessApprovalPolicy {
+    #[serde(default)]
+    desktop: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodingHarnessCapability {
+    name: String,
+    description: String,
+    input_schema: serde_json::Value,
+    #[serde(default)]
+    approval_policy: CodingHarnessApprovalPolicy,
+    #[serde(default)]
+    prompt_visible: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodingHarnessRuntimeExposedTools {
+    desktop: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodingHarnessToolsContract {
+    id: String,
+    version: u64,
+    runtime_exposed_tools: CodingHarnessRuntimeExposedTools,
+    capabilities: Vec<CodingHarnessCapability>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct CommunityHarnessApprovalPolicy {
+    #[serde(default)]
+    desktop: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommunityHarnessCapability {
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+    input_schema: serde_json::Value,
+    status: String,
+    #[serde(default)]
+    approval_policy: CommunityHarnessApprovalPolicy,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommunityHarnessRuntimeExposedTools {
+    desktop: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommunityHarnessToolsContract {
+    id: String,
+    version: u64,
+    runtime_exposed_tools: CommunityHarnessRuntimeExposedTools,
+    capabilities: Vec<CommunityHarnessCapability>,
+}
+
+static CODING_HARNESS_TOOLS_CONTRACT: Lazy<CodingHarnessToolsContract> = Lazy::new(|| {
+    serde_json::from_str(include_str!(
+        "../../shared/contracts/coding_harness_tools_v1.json"
+    ))
+    .expect("invalid shared/contracts/coding_harness_tools_v1.json")
+});
+
+static COMMUNITY_HARNESS_TOOLS_CONTRACT: Lazy<CommunityHarnessToolsContract> = Lazy::new(|| {
+    serde_json::from_str(include_str!(
+        "../../shared/contracts/community_harness_capabilities_v3.json"
+    ))
+    .expect("invalid shared/contracts/community_harness_capabilities_v3.json")
+});
+
+fn coding_harness_tools_contract() -> &'static CodingHarnessToolsContract {
+    &CODING_HARNESS_TOOLS_CONTRACT
+}
+
+fn coding_harness_capabilities() -> &'static [CodingHarnessCapability] {
+    coding_harness_tools_contract().capabilities.as_slice()
+}
+
+fn coding_harness_desktop_runtime_tools() -> &'static [String] {
+    coding_harness_tools_contract()
+        .runtime_exposed_tools
+        .desktop
+        .as_slice()
+}
+
+fn coding_harness_prompt_visible_tools_line() -> String {
+    let names = coding_harness_capabilities()
+        .iter()
+        .filter(|capability| capability.prompt_visible)
+        .map(|capability| capability.name.as_str())
+        .collect::<Vec<_>>();
+    format!("available_tools: {}\n", names.join(", "))
+}
+
+fn community_harness_tools_contract() -> &'static CommunityHarnessToolsContract {
+    &COMMUNITY_HARNESS_TOOLS_CONTRACT
+}
+
+fn community_harness_capabilities() -> &'static [CommunityHarnessCapability] {
+    community_harness_tools_contract().capabilities.as_slice()
+}
+
+fn community_harness_desktop_runtime_tools() -> &'static [String] {
+    community_harness_tools_contract()
+        .runtime_exposed_tools
+        .desktop
+        .as_slice()
+}
+
+fn community_harness_capability_for_tool(
+    tool_name: &str,
+) -> Option<&'static CommunityHarnessCapability> {
+    community_harness_capabilities()
+        .iter()
+        .find(|capability| capability.name == tool_name && capability.status == "active")
+}
+
+fn community_harness_runtime_capability(tool_name: &str) -> &'static CommunityHarnessCapability {
+    community_harness_capability_for_tool(tool_name).unwrap_or_else(|| {
+        panic!(
+            "community_harness_capabilities_v3 missing active capability for runtime tool '{}'",
+            tool_name
+        )
+    })
+}
+
+fn community_harness_prompt_tools_line() -> String {
+    let names = community_harness_desktop_runtime_tools()
+        .iter()
+        .map(|name| name.as_str())
+        .collect::<Vec<_>>();
+    format!("available_tools: {}\n", names.join(", "))
+}
+
+fn community_tool_default_description(tool_name: &str) -> &'static str {
+    match tool_name {
+        "community_context_search" => "Search the compiled community context for relevant evidence snippets. Requires auth + entitlement and returns evidence rows only.",
+        "community_memory_search" => "Search curated community memory items. Read-only and entitlement-gated.",
+        "community_memory_candidate_propose" => "Submit a candidate memory item to the governed community-memory router. May auto-promote if high-signal; otherwise enters review queue.",
+        _ => "Community tool",
+    }
+}
+
+fn normalize_thread_lane_input(value: Option<&str>) -> Result<&'static str, String> {
+    match value.map(|raw| raw.trim().to_ascii_lowercase()).as_deref() {
+        None | Some("") => Ok(THREAD_LANE_CHAT),
+        Some("chat") => Ok(THREAD_LANE_CHAT),
+        Some("agent") => Ok(THREAD_LANE_AGENT),
+        _ => Err("thread_lane must be 'chat' or 'agent'".to_string()),
+    }
+}
+
+fn is_community_lane(thread_lane: &str) -> bool {
+    thread_lane.trim().eq_ignore_ascii_case(THREAD_LANE_CHAT)
+}
+
+fn capability_contract_id_for_lane(thread_lane: &str) -> &'static str {
+    if is_community_lane(thread_lane) {
+        COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID
+    } else {
+        CODING_HARNESS_CAPABILITY_CONTRACT_ID
+    }
+}
+
+fn is_tool_allowed_for_lane(thread_lane: &str, tool_name: &str) -> bool {
+    if is_community_lane(thread_lane) {
+        community_harness_desktop_runtime_tools()
+            .iter()
+            .any(|candidate| candidate == tool_name)
+    } else {
+        coding_harness_desktop_runtime_tools()
+            .iter()
+            .any(|candidate| candidate == tool_name)
+    }
+}
+
+fn available_tools_line_for_lane(thread_lane: &str) -> String {
+    if is_community_lane(thread_lane) {
+        community_harness_prompt_tools_line()
+    } else {
+        coding_harness_prompt_visible_tools_line()
+    }
+}
+
+fn normalize_optional_context_value(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+#[derive(Clone, Debug)]
+struct ThreadContextSnapshot {
+    thread_lane: String,
+    project_id: Option<String>,
+    community_id: Option<String>,
+    context_version: i64,
+}
+
+impl ThreadContextSnapshot {
+    fn from_thread(thread: &db::ThreadRecord) -> Self {
+        let thread_lane = normalize_thread_lane_input(Some(thread.thread_lane.as_str()))
+            .unwrap_or(THREAD_LANE_CHAT)
+            .to_string();
+        Self {
+            thread_lane,
+            project_id: normalize_optional_context_value(thread.project_id.as_deref()),
+            community_id: normalize_optional_context_value(thread.community_id.as_deref()),
+            context_version: thread.context_version,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PlatformProvider {
@@ -63,14 +305,66 @@ struct PlatformProxyConfig {
     access_token: String,
 }
 
+#[derive(Clone, Debug)]
+struct PublicProxyConfig {
+    supabase_url: String,
+    supabase_anon_key: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DesktopInferenceLane {
+    Chatgpt,
+    Platform,
+    Public,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct ModelRegistryApiRow {
-    id: String,
     provider: Option<String>,
     provider_model: Option<String>,
     enabled: Option<bool>,
-    platform_enabled: Option<bool>,
-    byok_enabled: Option<bool>,
+}
+
+#[derive(Clone)]
+struct ModelRegistryResolutionCacheEntry {
+    cached_at: Instant,
+    ttl_ms: u64,
+    result: Result<PlatformModelRef, String>,
+}
+
+impl ModelRegistryResolutionCacheEntry {
+    fn is_fresh(&self) -> bool {
+        self.cached_at.elapsed().as_millis() < u128::from(self.ttl_ms)
+    }
+}
+
+static MODEL_REGISTRY_RESOLUTION_CACHE: Lazy<StdMutex<HashMap<String, ModelRegistryResolutionCacheEntry>>> =
+    Lazy::new(|| StdMutex::new(HashMap::new()));
+
+fn model_registry_cache_key(proxy: &PlatformProxyConfig, alias_model_id: &str) -> String {
+    format!(
+        "{}::{}",
+        proxy.supabase_url.trim_end_matches('/').to_lowercase(),
+        alias_model_id.trim().to_lowercase()
+    )
+}
+
+fn model_registry_cache_get(key: &str) -> Option<ModelRegistryResolutionCacheEntry> {
+    let cache = MODEL_REGISTRY_RESOLUTION_CACHE.lock().ok()?;
+    cache.get(key).cloned()
+}
+
+fn model_registry_cache_set(key: String, result: Result<PlatformModelRef, String>, ttl_ms: u64) {
+    if let Ok(mut cache) = MODEL_REGISTRY_RESOLUTION_CACHE.lock() {
+        cache.insert(
+            key,
+            ModelRegistryResolutionCacheEntry {
+                cached_at: Instant::now(),
+                ttl_ms,
+                result,
+            },
+        );
+    }
 }
 
 fn normalize_platform_provider(input: &str) -> Result<PlatformProvider, String> {
@@ -101,95 +395,1836 @@ fn parse_platform_model_ref(ref_str: &str) -> Result<PlatformModelRef, String> {
     })
 }
 
-fn load_platform_model_map() -> Result<std::collections::HashMap<String, String>, String> {
-    let raw = std::env::var("PLATFORM_MODEL_MAP_JSON").unwrap_or_default();
-    let raw = raw.trim().to_string();
-    if raw.is_empty() {
-        return Ok(std::collections::HashMap::new());
+fn is_desktop_public_free_model(model_id: &str) -> bool {
+    let cleaned = model_id.trim().to_lowercase();
+    matches!(
+        cleaned.as_str(),
+        DESKTOP_PUBLIC_FREE_MODEL_GPT_OSS_120B | DESKTOP_PUBLIC_FREE_MODEL_DEEPSEEK_R1
+    )
+}
+
+fn first_desktop_inference_lane(
+    openai_model: bool,
+    has_chatgpt_auth: bool,
+    has_platform_lane: bool,
+    has_public_lane: bool,
+) -> Option<DesktopInferenceLane> {
+    if openai_model && has_chatgpt_auth {
+        return Some(DesktopInferenceLane::Chatgpt);
     }
-    let parsed: serde_json::Value =
-        serde_json::from_str(&raw).map_err(|_| "Invalid PLATFORM_MODEL_MAP_JSON".to_string())?;
-    let obj = parsed
-        .as_object()
-        .ok_or_else(|| "Invalid PLATFORM_MODEL_MAP_JSON".to_string())?;
-    let mut out: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for (k, v) in obj.iter() {
-        let id = k.trim();
-        let Some(v) = v.as_str() else { continue };
-        let ref_str = v.trim();
-        if id.is_empty() || ref_str.is_empty() {
-            continue;
+    if has_platform_lane {
+        return Some(DesktopInferenceLane::Platform);
+    }
+    if has_public_lane {
+        return Some(DesktopInferenceLane::Public);
+    }
+    None
+}
+
+fn next_desktop_inference_lane(
+    current: DesktopInferenceLane,
+    has_platform_lane: bool,
+    has_public_lane: bool,
+) -> Option<DesktopInferenceLane> {
+    match current {
+        DesktopInferenceLane::Chatgpt => {
+            if has_platform_lane {
+                Some(DesktopInferenceLane::Platform)
+            } else if has_public_lane {
+                Some(DesktopInferenceLane::Public)
+            } else {
+                None
+            }
         }
-        out.insert(id.to_string(), ref_str.to_string());
+        DesktopInferenceLane::Platform => {
+            if has_public_lane {
+                Some(DesktopInferenceLane::Public)
+            } else {
+                None
+            }
+        }
+        DesktopInferenceLane::Public => None,
     }
-    Ok(out)
-}
-
-fn model_alias_looks_openai(alias_model_id: &str) -> bool {
-    let cleaned = alias_model_id.trim().to_lowercase();
-    if cleaned.is_empty() || cleaned.contains('/') {
-        return false;
-    }
-    cleaned.starts_with("gpt-")
-        || cleaned.starts_with("o1")
-        || cleaned.starts_with("o3")
-        || cleaned.starts_with("o4")
-        || cleaned.starts_with("chatgpt-")
-}
-
-fn infer_openai_model_ref_from_alias(alias_model_id: &str) -> Option<PlatformModelRef> {
-    if !model_alias_looks_openai(alias_model_id) {
-        return None;
-    }
-    let cleaned = alias_model_id.trim();
-    Some(PlatformModelRef {
-        provider: PlatformProvider::OpenAi,
-        model: cleaned.to_string(),
-        ref_str: format!("openai/{}", cleaned),
-    })
 }
 
 #[cfg(test)]
-mod model_resolution_tests {
-    use super::*;
+mod lane_tool_contract_tests {
+    use super::{is_community_lane, is_tool_allowed_for_lane, THREAD_LANE_AGENT, THREAD_LANE_CHAT};
 
     #[test]
-    fn openai_alias_detection_matches_expected_prefixes() {
-        assert!(model_alias_looks_openai("gpt-5.2"));
-        assert!(model_alias_looks_openai("gpt-5.2-codex"));
-        assert!(model_alias_looks_openai("o3-mini"));
-        assert!(model_alias_looks_openai("chatgpt-4o-latest"));
-        assert!(!model_alias_looks_openai("claude-sonnet-4.5"));
-        assert!(!model_alias_looks_openai("anthropic/claude-sonnet-4.5"));
+    fn chat_lane_exposes_only_community_tools() {
+        assert!(is_community_lane(THREAD_LANE_CHAT));
+        assert!(is_tool_allowed_for_lane(
+            THREAD_LANE_CHAT,
+            "community_context_search"
+        ));
+        assert!(is_tool_allowed_for_lane(
+            THREAD_LANE_CHAT,
+            "community_memory_search"
+        ));
+        assert!(is_tool_allowed_for_lane(
+            THREAD_LANE_CHAT,
+            "community_memory_candidate_propose"
+        ));
+        assert!(!is_tool_allowed_for_lane(THREAD_LANE_CHAT, "update_plan"));
+        assert!(!is_tool_allowed_for_lane(THREAD_LANE_CHAT, "read"));
+        assert!(!is_tool_allowed_for_lane(THREAD_LANE_CHAT, "bash"));
     }
 
     #[test]
-    fn infer_openai_alias_model_ref_builds_openai_ref() {
-        let inferred = infer_openai_model_ref_from_alias("gpt-5.2").expect("expected inference");
-        assert_eq!(inferred.provider, PlatformProvider::OpenAi);
-        assert_eq!(inferred.model, "gpt-5.2");
-        assert_eq!(inferred.ref_str, "openai/gpt-5.2");
+    fn agent_lane_keeps_coding_tool_surface() {
+        assert!(!is_community_lane(THREAD_LANE_AGENT));
+        assert!(is_tool_allowed_for_lane(THREAD_LANE_AGENT, "update_plan"));
+        assert!(is_tool_allowed_for_lane(THREAD_LANE_AGENT, "read"));
+        assert!(is_tool_allowed_for_lane(THREAD_LANE_AGENT, "write"));
+        assert!(!is_tool_allowed_for_lane(
+            THREAD_LANE_AGENT,
+            "community_context_search"
+        ));
+        assert!(!is_tool_allowed_for_lane(
+            THREAD_LANE_AGENT,
+            "community_memory_search"
+        ));
     }
 }
 
-fn resolve_platform_model_for_alias(alias_model_id: &str) -> Result<PlatformModelRef, String> {
-    let cleaned = alias_model_id.trim();
-    if cleaned.is_empty() {
-        return Err("model_id is required".to_string());
-    }
-    if cleaned.contains('/') {
-        return parse_platform_model_ref(cleaned);
+#[cfg(test)]
+mod coding_harness_contract_tests {
+    use super::{
+        available_tools_line_for_lane, coding_harness_capabilities,
+        coding_harness_desktop_runtime_tools, coding_harness_tools_contract,
+        is_tool_allowed_for_lane, make_agent_tool_schema, tool_requires_approval,
+        CODING_HARNESS_CAPABILITY_CONTRACT_ID, THREAD_LANE_AGENT,
+    };
+
+    #[test]
+    fn coding_contract_id_and_version_match_runtime_constant() {
+        let contract = coding_harness_tools_contract();
+        assert_eq!(contract.id, CODING_HARNESS_CAPABILITY_CONTRACT_ID);
+        assert_eq!(contract.version, 1);
     }
 
-    let map = load_platform_model_map()?;
-    if !map.is_empty() {
-        let Some(raw) = map.get(cleaned) else {
-            return Err(format!("Platform model not configured for '{}'", cleaned));
+    #[test]
+    fn coding_runtime_tools_match_agent_lane_gate() {
+        for tool_name in coding_harness_desktop_runtime_tools() {
+            assert!(
+                is_tool_allowed_for_lane(THREAD_LANE_AGENT, tool_name),
+                "tool '{}' from coding contract is not allowed in agent lane",
+                tool_name
+            );
+        }
+        assert!(!is_tool_allowed_for_lane(
+            THREAD_LANE_AGENT,
+            "community_context_search"
+        ));
+    }
+
+    #[test]
+    fn coding_schema_order_matches_contract_order() {
+        let schema_names = make_agent_tool_schema()
+            .into_iter()
+            .filter_map(|tool| {
+                tool.get("name")
+                    .and_then(|value| value.as_str())
+                    .map(|name| name.to_string())
+            })
+            .collect::<Vec<_>>();
+        let contract_names = coding_harness_capabilities()
+            .iter()
+            .map(|capability| capability.name.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(schema_names, contract_names);
+    }
+
+    #[test]
+    fn approval_policy_and_prompt_visible_line_match_contract() {
+        let required_names = coding_harness_capabilities()
+            .iter()
+            .filter(|capability| capability.approval_policy.desktop.as_deref() == Some("required"))
+            .map(|capability| capability.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(required_names, vec!["write", "edit", "bash"]);
+        for name in required_names {
+            assert!(
+                tool_requires_approval(name),
+                "expected '{}' to require approval",
+                name
+            );
+        }
+
+        assert!(tool_requires_approval("community_memory_candidate_propose"));
+        assert!(!tool_requires_approval("read"));
+
+        let prompt_visible = coding_harness_capabilities()
+            .iter()
+            .filter(|capability| capability.prompt_visible)
+            .map(|capability| capability.name.as_str())
+            .collect::<Vec<_>>();
+        let expected_line = format!("available_tools: {}\n", prompt_visible.join(", "));
+        assert_eq!(
+            available_tools_line_for_lane(THREAD_LANE_AGENT),
+            expected_line
+        );
+        assert!(!available_tools_line_for_lane(THREAD_LANE_AGENT).contains("update_plan"));
+    }
+}
+
+#[cfg(test)]
+mod community_harness_contract_tests {
+    use super::{
+        available_tools_line_for_lane, community_harness_capabilities,
+        community_harness_desktop_runtime_tools, community_harness_tools_contract,
+        is_tool_allowed_for_lane, make_community_tool_schema, tool_requires_approval,
+        COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID, THREAD_LANE_AGENT, THREAD_LANE_CHAT,
+    };
+
+    #[test]
+    fn community_contract_id_and_version_match_runtime_constant() {
+        let contract = community_harness_tools_contract();
+        assert_eq!(contract.id, COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID);
+        assert_eq!(contract.version, 3);
+    }
+
+    #[test]
+    fn community_runtime_tools_match_chat_lane_gate() {
+        for tool_name in community_harness_desktop_runtime_tools() {
+            assert!(
+                is_tool_allowed_for_lane(THREAD_LANE_CHAT, tool_name),
+                "tool '{}' from community contract is not allowed in chat lane",
+                tool_name
+            );
+            assert!(
+                !is_tool_allowed_for_lane(THREAD_LANE_AGENT, tool_name),
+                "tool '{}' from community contract must not be allowed in agent lane",
+                tool_name
+            );
+        }
+        assert!(!is_tool_allowed_for_lane(THREAD_LANE_CHAT, "read"));
+    }
+
+    #[test]
+    fn community_schema_order_matches_runtime_tools() {
+        let schema_names = make_community_tool_schema()
+            .into_iter()
+            .filter_map(|tool| {
+                tool.get("name")
+                    .and_then(|value| value.as_str())
+                    .map(|name| name.to_string())
+            })
+            .collect::<Vec<_>>();
+        let runtime_names = community_harness_desktop_runtime_tools()
+            .iter()
+            .map(|name| name.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(schema_names, runtime_names);
+    }
+
+    #[test]
+    fn community_approval_policy_and_prompt_line_match_contract() {
+        let required_names = community_harness_capabilities()
+            .iter()
+            .filter(|capability| capability.approval_policy.desktop.as_deref() == Some("required"))
+            .map(|capability| capability.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(required_names, vec!["community_memory_candidate_propose"]);
+        for name in required_names {
+            assert!(tool_requires_approval(name));
+        }
+        assert!(!tool_requires_approval("community_context_search"));
+
+        let expected_line = format!(
+            "available_tools: {}\n",
+            community_harness_desktop_runtime_tools()
+                .iter()
+                .map(|name| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        assert_eq!(
+            available_tools_line_for_lane(THREAD_LANE_CHAT),
+            expected_line
+        );
+    }
+}
+
+#[cfg(test)]
+mod community_action_tool_event_tests {
+    use super::*;
+    use serde_json::Value;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::path::Path;
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+    use tempfile::TempDir;
+
+    #[derive(Clone, Debug)]
+    struct CapturedRpcRequest {
+        path: String,
+        body: Value,
+    }
+
+    struct MockCommunityRpcServer {
+        base_url: String,
+        captured: Arc<Mutex<Vec<CapturedRpcRequest>>>,
+        shutdown_tx: mpsc::Sender<()>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl MockCommunityRpcServer {
+        fn start() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock rpc server");
+            listener
+                .set_nonblocking(true)
+                .expect("configure mock rpc server as nonblocking");
+            let addr = listener.local_addr().expect("mock rpc local addr");
+            let base_url = format!("http://{}", addr);
+            let captured: Arc<Mutex<Vec<CapturedRpcRequest>>> = Arc::new(Mutex::new(Vec::new()));
+            let captured_for_thread = Arc::clone(&captured);
+            let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
+
+            let handle = thread::spawn(move || loop {
+                if shutdown_rx.try_recv().is_ok() {
+                    break;
+                }
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        if let Some(request) = read_request(&mut stream) {
+                            if let Ok(mut guard) = captured_for_thread.lock() {
+                                guard.push(request.clone());
+                            }
+                            let (status, body) = mock_rpc_response(&request.path);
+                            let bytes = body.as_bytes();
+                            let response = format!(
+                                    "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                    status,
+                                    bytes.len(),
+                                    body
+                                );
+                            let _ = stream.write_all(response.as_bytes());
+                            let _ = stream.flush();
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(_) => break,
+                }
+            });
+
+            Self {
+                base_url,
+                captured,
+                shutdown_tx,
+                handle: Some(handle),
+            }
+        }
+
+        fn captured_requests(&self) -> Vec<CapturedRpcRequest> {
+            self.captured
+                .lock()
+                .map(|guard| guard.clone())
+                .unwrap_or_default()
+        }
+    }
+
+    impl Drop for MockCommunityRpcServer {
+        fn drop(&mut self) {
+            let _ = self.shutdown_tx.send(());
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn read_request(stream: &mut TcpStream) -> Option<CapturedRpcRequest> {
+        let mut buffer = Vec::<u8>::new();
+        let mut chunk = [0_u8; 2048];
+        let mut header_end: Option<usize> = None;
+
+        while header_end.is_none() {
+            let bytes = stream.read(&mut chunk).ok()?;
+            if bytes == 0 {
+                return None;
+            }
+            buffer.extend_from_slice(&chunk[..bytes]);
+            header_end = find_subslice(&buffer, b"\r\n\r\n");
+        }
+
+        let header_end = header_end?;
+        let header_text = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+        let content_len = parse_content_length(&header_text);
+        let body_start = header_end + 4;
+        while buffer.len() < body_start + content_len {
+            let bytes = stream.read(&mut chunk).ok()?;
+            if bytes == 0 {
+                break;
+            }
+            buffer.extend_from_slice(&chunk[..bytes]);
+        }
+        let body_bytes = if content_len == 0 || buffer.len() < body_start {
+            &[][..]
+        } else {
+            let end = std::cmp::min(buffer.len(), body_start + content_len);
+            &buffer[body_start..end]
         };
-        return parse_platform_model_ref(raw);
+        let body = if body_bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice::<Value>(body_bytes).unwrap_or(Value::Null)
+        };
+        let request_line = header_text.lines().next().unwrap_or("");
+        let raw_path = request_line.split_whitespace().nth(1).unwrap_or("/").trim();
+        let path = normalize_request_path(raw_path);
+        Some(CapturedRpcRequest { path, body })
     }
 
-    Err("Missing PLATFORM_MODEL_MAP_JSON".to_string())
+    fn normalize_request_path(raw_path: &str) -> String {
+        let trimmed = raw_path.trim();
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            let without_scheme = trimmed
+                .split_once("://")
+                .map(|(_, rest)| rest)
+                .unwrap_or(trimmed);
+            if let Some(idx) = without_scheme.find('/') {
+                let path = &without_scheme[idx..];
+                return path.split('?').next().unwrap_or(path).to_string();
+            }
+        }
+        trimmed.split('?').next().unwrap_or(trimmed).to_string()
+    }
+
+    fn parse_content_length(headers: &str) -> usize {
+        headers
+            .lines()
+            .find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    if name.trim().eq_ignore_ascii_case("content-length") {
+                        value.trim().parse::<usize>().ok()
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or(0)
+    }
+
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() || haystack.len() < needle.len() {
+            return None;
+        }
+        haystack
+            .windows(needle.len())
+            .position(|window| window == needle)
+    }
+
+    fn mock_rpc_response(path: &str) -> (&'static str, String) {
+        if path.ends_with("/community_memory_candidate_propose") {
+            (
+                "200 OK",
+                serde_json::json!({
+                    "ok": true,
+                    "candidate_id": "cand_123",
+                    "router_state": "needs_review",
+                    "signal_score": 58
+                })
+                .to_string(),
+            )
+        } else if path.ends_with("/search_community_memory_items") {
+            (
+                "200 OK",
+                serde_json::json!([
+                  {
+                    "memory_id": "mem_001",
+                    "community_id": "community-1",
+                    "title": "Retention tactic",
+                    "snippet": "Host weekly office-hours to resolve blockers.",
+                    "source": "candidate_auto",
+                    "created_at": "2026-02-08T00:00:00Z",
+                    "updated_at": "2026-02-08T00:00:00Z",
+                    "score": 0.71
+                  }
+                ])
+                .to_string(),
+            )
+        } else {
+            (
+                "404 Not Found",
+                serde_json::json!({
+                    "ok": false,
+                    "error": format!("unknown rpc path: {}", path)
+                })
+                .to_string(),
+            )
+        }
+    }
+
+    fn setup_db_with_chat_thread() -> (TempDir, db::DbState, rusqlite::Connection, db::ThreadRecord)
+    {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let db_path = temp_dir.path().join("arx.db");
+        let state = db::init_db_at(&db_path, "test-key").expect("init db");
+        let conn = open_conn(&state.db_path, &state.key).expect("open conn");
+        let thread = create_thread(
+            &conn,
+            "seed",
+            ENGINE_MESSAGES_AGENT,
+            Some("openai/gpt-5"),
+            Some(THREAD_LANE_CHAT),
+            None,
+        )
+        .expect("create thread");
+        (temp_dir, state, conn, thread)
+    }
+
+    fn event_payload_json(event: &db::EventRecord) -> Value {
+        event
+            .payload_json
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .unwrap_or(Value::Null)
+    }
+
+    fn assert_tool_event_sequence_for_run(
+        conn: &rusqlite::Connection,
+        thread_id: &str,
+        run_id: &str,
+        expected_tool_name: &str,
+    ) {
+        let events = db::list_events(conn, thread_id, 200).expect("list events");
+        let tool_events: Vec<(String, Value)> = events
+            .into_iter()
+            .filter_map(|event| {
+                let payload = event_payload_json(&event);
+                let payload_run_id = payload
+                    .get("run_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                if payload_run_id == run_id && event.r#type.starts_with("tool_call_") {
+                    Some((event.r#type, payload))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            tool_events.len(),
+            4,
+            "expected requested/approved/started/finished events"
+        );
+        assert_eq!(tool_events[0].0, "tool_call_requested");
+        assert_eq!(tool_events[1].0, "tool_call_approved");
+        assert_eq!(tool_events[2].0, "tool_call_started");
+        assert_eq!(tool_events[3].0, "tool_call_finished");
+
+        let requested = &tool_events[0].1;
+        assert_eq!(
+            requested.get("tool_name").and_then(|value| value.as_str()),
+            Some(expected_tool_name)
+        );
+        let tool_call_id = requested
+            .get("tool_call_id")
+            .and_then(|value| value.as_str())
+            .expect("requested event has tool_call_id")
+            .to_string();
+
+        for (_, payload) in tool_events.iter().skip(1) {
+            assert_eq!(
+                payload.get("tool_call_id").and_then(|value| value.as_str()),
+                Some(tool_call_id.as_str()),
+                "all tool events should reference the same tool_call_id"
+            );
+        }
+
+        let finished = &tool_events[3].1;
+        assert_eq!(
+            finished.get("status").and_then(|value| value.as_str()),
+            Some("ok")
+        );
+        let result_text = finished
+            .get("tool_result")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        assert!(
+            result_text.contains(expected_tool_name),
+            "finished tool_result should include tool name"
+        );
+    }
+
+    fn assert_tool_event_sequence_without_approval(
+        conn: &rusqlite::Connection,
+        thread_id: &str,
+        run_id: &str,
+        expected_tool_name: &str,
+    ) {
+        let events = db::list_events(conn, thread_id, 200).expect("list events");
+        let tool_events: Vec<(String, Value)> = events
+            .into_iter()
+            .filter_map(|event| {
+                let payload = event_payload_json(&event);
+                let payload_run_id = payload
+                    .get("run_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                if payload_run_id == run_id && event.r#type.starts_with("tool_call_") {
+                    Some((event.r#type, payload))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(
+            tool_events.len(),
+            3,
+            "expected requested/started/finished events"
+        );
+        assert_eq!(tool_events[0].0, "tool_call_requested");
+        assert_eq!(tool_events[1].0, "tool_call_started");
+        assert_eq!(tool_events[2].0, "tool_call_finished");
+
+        let requested = &tool_events[0].1;
+        assert_eq!(
+            requested.get("tool_name").and_then(|value| value.as_str()),
+            Some(expected_tool_name)
+        );
+    }
+
+    #[tokio::test]
+    async fn community_memory_candidate_propose_records_requested_started_finished_events() {
+        let server = MockCommunityRpcServer::start();
+        let (_tmp, state, mut conn, thread) = setup_db_with_chat_thread();
+        let proxy = PlatformProxyConfig {
+            supabase_url: server.base_url.clone(),
+            supabase_anon_key: "anon".to_string(),
+            access_token: "test-token".to_string(),
+        };
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+        let mut auto_approve_write_edit = false;
+        let run_id = "run-memory-candidate";
+
+        let outcome = execute_agent_tool_call(
+            None,
+            &mut conn,
+            Path::new(&state.db_path),
+            &thread.id,
+            THREAD_LANE_CHAT,
+            "",
+            Some("community-1"),
+            "build",
+            Some(&proxy),
+            Some("user-1"),
+            run_id,
+            "",
+            "tool-use-1",
+            "community_memory_candidate_propose",
+            serde_json::json!({
+                "community_id": "community-1",
+                "title": "Weekly support pattern",
+                "memory_text": "Members are most satisfied when support responses happen in under 12 hours and include a concrete next step.",
+                "evidence": {
+                    "source": "analysis",
+                    "confidence": 0.82
+                },
+                "request_key": "req-memory-1"
+            }),
+            "auto_approve::test",
+            &mut auto_approve_write_edit,
+            Some(ToolApprovalDecision {
+                approved: true,
+                allow_write_edit_for_session: false,
+            }),
+            cancel_rx,
+        )
+        .await;
+
+        assert!(!outcome.cancelled);
+        assert!(
+            outcome
+                .tool_result_content
+                .contains("\"community_memory_candidate_propose\""),
+            "tool output should include tool name"
+        );
+        assert_tool_event_sequence_for_run(
+            &conn,
+            &thread.id,
+            run_id,
+            "community_memory_candidate_propose",
+        );
+
+        let captured = server.captured_requests();
+        assert_eq!(captured.len(), 1, "expected one RPC request");
+        assert!(captured[0]
+            .path
+            .ends_with("/rest/v1/rpc/community_memory_candidate_propose"));
+        assert_eq!(
+            captured[0]
+                .body
+                .get("p_title")
+                .and_then(|value| value.as_str()),
+            Some("Weekly support pattern")
+        );
+        assert_eq!(
+            captured[0]
+                .body
+                .get("p_memory_text")
+                .and_then(|value| value.as_str()),
+            Some(
+                "Members are most satisfied when support responses happen in under 12 hours and include a concrete next step."
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn community_memory_search_is_read_only_and_skips_approval_event() {
+        let server = MockCommunityRpcServer::start();
+        let (_tmp, state, mut conn, thread) = setup_db_with_chat_thread();
+        let proxy = PlatformProxyConfig {
+            supabase_url: server.base_url.clone(),
+            supabase_anon_key: "anon".to_string(),
+            access_token: "test-token".to_string(),
+        };
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+        let mut auto_approve_write_edit = false;
+        let run_id = "run-memory-search";
+
+        let outcome = execute_agent_tool_call(
+            None,
+            &mut conn,
+            Path::new(&state.db_path),
+            &thread.id,
+            THREAD_LANE_CHAT,
+            "",
+            Some("community-1"),
+            "build",
+            Some(&proxy),
+            Some("user-1"),
+            run_id,
+            "",
+            "tool-use-2",
+            "community_memory_search",
+            serde_json::json!({
+                "community_id": "community-1",
+                "query": "support response time",
+                "limit": 3
+            }),
+            "auto_approve::test",
+            &mut auto_approve_write_edit,
+            Some(ToolApprovalDecision {
+                approved: true,
+                allow_write_edit_for_session: false,
+            }),
+            cancel_rx,
+        )
+        .await;
+
+        assert!(!outcome.cancelled);
+        assert!(
+            outcome
+                .tool_result_content
+                .contains("\"community_memory_search\""),
+            "tool output should include tool name"
+        );
+        assert_tool_event_sequence_without_approval(
+            &conn,
+            &thread.id,
+            run_id,
+            "community_memory_search",
+        );
+
+        let captured = server.captured_requests();
+        assert_eq!(captured.len(), 1, "expected one RPC request");
+        assert!(captured[0]
+            .path
+            .ends_with("/rest/v1/rpc/search_community_memory_items"));
+        assert_eq!(
+            captured[0]
+                .body
+                .get("p_query")
+                .and_then(|value| value.as_str()),
+            Some("support response time")
+        );
+    }
+}
+
+#[cfg(test)]
+mod assistant_evidence_binding_tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    fn setup_db_with_agent_thread() -> (TempDir, db::DbState, rusqlite::Connection, db::ThreadRecord)
+    {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let db_path = temp_dir.path().join("arx.db");
+        let state = db::init_db_at(&db_path, "test-key").expect("init db");
+        let conn = open_conn(&state.db_path, &state.key).expect("open conn");
+        let thread = create_thread(
+            &conn,
+            "seed",
+            ENGINE_MESSAGES_AGENT,
+            Some("openai/gpt-5"),
+            Some(THREAD_LANE_CHAT),
+            None,
+        )
+        .expect("create thread");
+        (temp_dir, state, conn, thread)
+    }
+
+    #[test]
+    fn assistant_message_uses_matching_run_memory_retrieval_evidence_only() {
+        let (_tmp, state, conn, thread) = setup_db_with_agent_thread();
+        let run_one = "run-evidence-1";
+        let run_two = "run-evidence-2";
+
+        let retrieval_one = json!({
+          "v": 1,
+          "run_id": run_one,
+          "community_evidence_used_v1": {
+            "v": 1,
+            "contract_id": "community_evidence_used_v1",
+            "items": [
+              {
+                "source_type": "chat",
+                "source_id": "chat-source-run-one",
+                "title": "Run one",
+                "snippet": "first run evidence",
+                "url": null,
+                "score": null,
+                "rank": 1
+              }
+            ]
+          }
+        });
+        let retrieval_two = json!({
+          "v": 1,
+          "run_id": run_two,
+          "community_evidence_used_v1": {
+            "v": 1,
+            "contract_id": "community_evidence_used_v1",
+            "items": [
+              {
+                "source_type": "resource",
+                "source_id": "resource-source-run-two",
+                "title": "Run two",
+                "snippet": "second run evidence",
+                "url": "https://example.com/two",
+                "score": 0.87,
+                "rank": 1
+              }
+            ]
+          }
+        });
+
+        db::append_event(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "memory_retrieval",
+            Some("retrieval run one"),
+            Some(&retrieval_one.to_string()),
+            None,
+        )
+        .expect("append retrieval run one");
+        db::append_event(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "memory_retrieval",
+            Some("retrieval run two"),
+            Some(&retrieval_two.to_string()),
+            None,
+        )
+        .expect("append retrieval run two");
+
+        append_messages_agent_assistant_message(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "assistant for run one",
+            "openai/gpt-5",
+            run_one,
+            &[],
+            "openai",
+            Some("gpt-5"),
+            "platform",
+            DEFAULT_MAX_TOKENS,
+            None,
+            Some("community-a"),
+        );
+        append_messages_agent_assistant_message(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "assistant for run two",
+            "openai/gpt-5",
+            run_two,
+            &[],
+            "openai",
+            Some("gpt-5"),
+            "platform",
+            DEFAULT_MAX_TOKENS,
+            None,
+            Some("community-a"),
+        );
+
+        let messages = db::list_messages(&conn, &thread.id).expect("list messages");
+        let mut evidence_source_by_run: HashMap<String, String> = HashMap::new();
+
+        for message in messages
+            .iter()
+            .filter(|message| message.role.eq_ignore_ascii_case("assistant"))
+        {
+            let content: serde_json::Value =
+                serde_json::from_str(&message.content_json).expect("parse assistant content_json");
+            let meta = content
+                .get("meta")
+                .and_then(|value| value.as_object())
+                .expect("assistant message meta");
+            let run_id = meta
+                .get("run_id")
+                .and_then(|value| value.as_str())
+                .expect("assistant run_id")
+                .to_string();
+            let source_id = meta
+                .get("community_evidence_used_v1")
+                .and_then(|value| value.get("items"))
+                .and_then(|value| value.as_array())
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("source_id"))
+                .and_then(|value| value.as_str())
+                .expect("assistant evidence source_id")
+                .to_string();
+            evidence_source_by_run.insert(run_id, source_id);
+        }
+
+        assert_eq!(
+            evidence_source_by_run.get(run_one),
+            Some(&"chat-source-run-one".to_string())
+        );
+        assert_eq!(
+            evidence_source_by_run.get(run_two),
+            Some(&"resource-source-run-two".to_string())
+        );
+    }
+}
+
+#[cfg(test)]
+mod thread_context_snapshot_tests {
+    use super::{
+        build_run_finished_payload, build_run_started_payload, ThreadContextSnapshot,
+        COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
+    };
+
+    fn sample_thread(
+        lane: &str,
+        project_id: Option<&str>,
+        community_id: Option<&str>,
+    ) -> crate::db::ThreadRecord {
+        crate::db::ThreadRecord {
+            id: "thread-1".to_string(),
+            title: Some("t".to_string()),
+            engine_id: "messages_agent".to_string(),
+            model_id: Some("gpt-5".to_string()),
+            thread_lane: lane.to_string(),
+            storage_mode: if lane.eq_ignore_ascii_case("agent") {
+                crate::db::THREAD_STORAGE_MODE_LOCAL.to_string()
+            } else {
+                crate::db::THREAD_STORAGE_MODE_CLOUD.to_string()
+            },
+            project_id: project_id.map(str::to_string),
+            workspace_path: Some("/tmp".to_string()),
+            workspace_fingerprint: Some("fp".to_string()),
+            community_id: community_id.map(str::to_string),
+            context_version: 7,
+            created_at: 1,
+            updated_at: 1,
+            last_event_at: Some(1),
+            last_seq: 1,
+        }
+    }
+
+    #[test]
+    fn snapshot_normalizes_lane_and_trims_optional_values() {
+        let snapshot = ThreadContextSnapshot::from_thread(&sample_thread(
+            "AGENT",
+            Some("  project-a  "),
+            Some("  community-a "),
+        ));
+        assert_eq!(snapshot.thread_lane, "agent");
+        assert_eq!(snapshot.project_id.as_deref(), Some("project-a"));
+        assert_eq!(snapshot.community_id.as_deref(), Some("community-a"));
+        assert_eq!(snapshot.context_version, 7);
+    }
+
+    #[test]
+    fn run_started_payload_includes_thread_context_snapshot_fields() {
+        let snapshot = ThreadContextSnapshot::from_thread(&sample_thread(
+            "invalid",
+            None,
+            Some("community-b"),
+        ));
+        let payload = build_run_started_payload(
+            "thread-1",
+            "run-1",
+            "",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &snapshot,
+        );
+        assert_eq!(payload["thread_lane"].as_str(), Some("chat"));
+        assert_eq!(
+            payload["capability_contract_id"].as_str(),
+            Some(COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID)
+        );
+        assert!(payload["project_id"].is_null());
+        assert_eq!(payload["community_id"].as_str(), Some("community-b"));
+        assert_eq!(payload["context_version"].as_i64(), Some(7));
+        assert!(payload["workspace_scope_id"].is_null());
+    }
+
+    #[test]
+    fn run_started_payload_uses_immutable_thread_context_snapshot() {
+        let mut source = sample_thread("agent", Some("project-a"), Some("community-a"));
+        let snapshot = ThreadContextSnapshot::from_thread(&source);
+
+        source.thread_lane = "chat".to_string();
+        source.project_id = Some("project-b".to_string());
+        source.community_id = None;
+        source.context_version = 42;
+
+        let payload = build_run_started_payload(
+            "thread-1",
+            "run-2",
+            "/tmp/workspace",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &snapshot,
+        );
+
+        assert_eq!(payload["thread_lane"].as_str(), Some("agent"));
+        assert_eq!(payload["project_id"].as_str(), Some("project-a"));
+        assert_eq!(payload["community_id"].as_str(), Some("community-a"));
+        assert_eq!(payload["context_version"].as_i64(), Some(7));
+    }
+
+    #[test]
+    fn next_run_snapshot_reflects_new_lens_after_context_switch() {
+        let mut thread = sample_thread("agent", Some("project-a"), Some("community-a"));
+
+        let run_one_snapshot = ThreadContextSnapshot::from_thread(&thread);
+        let run_one_payload = build_run_started_payload(
+            "thread-1",
+            "run-1",
+            "/tmp/workspace",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &run_one_snapshot,
+        );
+        assert_eq!(
+            run_one_payload["community_id"].as_str(),
+            Some("community-a")
+        );
+        assert_eq!(run_one_payload["context_version"].as_i64(), Some(7));
+
+        thread.community_id = Some("community-b".to_string());
+        thread.context_version = 8;
+
+        let run_two_snapshot = ThreadContextSnapshot::from_thread(&thread);
+        let run_two_payload = build_run_started_payload(
+            "thread-1",
+            "run-2",
+            "/tmp/workspace",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &run_two_snapshot,
+        );
+        assert_eq!(
+            run_two_payload["community_id"].as_str(),
+            Some("community-b")
+        );
+        assert_eq!(run_two_payload["context_version"].as_i64(), Some(8));
+
+        // Prior payload remains unchanged evidence for the first run.
+        assert_eq!(
+            run_one_payload["community_id"].as_str(),
+            Some("community-a")
+        );
+        assert_eq!(run_one_payload["context_version"].as_i64(), Some(7));
+    }
+
+    #[test]
+    fn cancelled_run_then_lens_retarget_uses_new_lens_on_next_run_snapshot() {
+        let mut thread = sample_thread("agent", Some("project-a"), Some("community-a"));
+
+        let run_one_snapshot = ThreadContextSnapshot::from_thread(&thread);
+        let run_one_payload = build_run_started_payload(
+            "thread-1",
+            "run-1",
+            "/tmp/workspace",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &run_one_snapshot,
+        );
+        assert_eq!(
+            run_one_payload["community_id"].as_str(),
+            Some("community-a")
+        );
+        assert_eq!(run_one_payload["context_version"].as_i64(), Some(7));
+
+        let cancelled_payload =
+            build_run_finished_payload("run-1", "cancelled", Some("user_cancel"));
+        assert_eq!(cancelled_payload["status"].as_str(), Some("cancelled"));
+        assert_eq!(cancelled_payload["reason"].as_str(), Some("user_cancel"));
+
+        // User retargets thread context immediately after cancellation.
+        thread.community_id = Some("community-b".to_string());
+        thread.context_version = 8;
+
+        let run_two_snapshot = ThreadContextSnapshot::from_thread(&thread);
+        let run_two_payload = build_run_started_payload(
+            "thread-1",
+            "run-2",
+            "/tmp/workspace",
+            "build",
+            "messages_agent",
+            Some("gpt-5"),
+            &run_two_snapshot,
+        );
+        assert_eq!(
+            run_two_payload["community_id"].as_str(),
+            Some("community-b")
+        );
+        assert_eq!(run_two_payload["context_version"].as_i64(), Some(8));
+
+        // Prior run evidence remains unchanged.
+        assert_eq!(
+            run_one_payload["community_id"].as_str(),
+            Some("community-a")
+        );
+        assert_eq!(run_one_payload["context_version"].as_i64(), Some(7));
+    }
+}
+
+#[cfg(test)]
+mod community_context_prompt_tests {
+    use crate::community_context::{
+        build_cloud_community_context_prompt, build_community_evidence_user_message,
+        split_compiled_community_rows, COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX,
+    };
+
+    #[test]
+    fn community_prompt_uses_chat_rows_when_resource_fetch_is_empty() {
+        let chat_rows = vec![serde_json::json!({
+            "snippet": "Weekly launch retrospective",
+            "sender_display": "Alice"
+        })];
+        let resource_rows: Vec<serde_json::Value> = Vec::new();
+
+        let (prompt, chat_items_used, resource_items_used) =
+            build_cloud_community_context_prompt("community-a", &chat_rows, &resource_rows);
+
+        let prompt = prompt.expect("expected prompt from chat rows");
+        assert!(prompt.contains("Community evidence (community-a)"));
+        assert!(prompt.contains("[chat:1] Weekly launch retrospective (from Alice)"));
+        assert_eq!(chat_items_used, 1);
+        assert_eq!(resource_items_used, 0);
+    }
+
+    #[test]
+    fn community_prompt_uses_resource_rows_when_chat_fetch_is_empty() {
+        let chat_rows: Vec<serde_json::Value> = Vec::new();
+        let resource_rows = vec![serde_json::json!({
+            "title": "Launch checklist",
+            "snippet": "Keep rollout and rollback docs updated",
+            "url": "https://example.com/checklist",
+            "resource_type": "resource"
+        })];
+
+        let (prompt, chat_items_used, resource_items_used) =
+            build_cloud_community_context_prompt("community-b", &chat_rows, &resource_rows);
+
+        let prompt = prompt.expect("expected prompt from resource rows");
+        assert!(prompt.contains("Community evidence (community-b)"));
+        assert!(prompt
+            .contains("[resource:1] Launch checklist: Keep rollout and rollback docs updated"));
+        assert_eq!(chat_items_used, 0);
+        assert_eq!(resource_items_used, 1);
+    }
+
+    #[test]
+    fn community_prompt_labels_memory_rows_distinctly() {
+        let chat_rows: Vec<serde_json::Value> = Vec::new();
+        let resource_rows = vec![serde_json::json!({
+            "title": "Retention pattern",
+            "snippet": "Weekly office-hours reduce churn for new members.",
+            "url": null,
+            "resource_type": "memory"
+        })];
+
+        let (prompt, chat_items_used, resource_items_used) =
+            build_cloud_community_context_prompt("community-memory", &chat_rows, &resource_rows);
+
+        let prompt = prompt.expect("expected prompt from memory rows");
+        assert!(prompt.contains(
+            "[memory:1] Retention pattern: Weekly office-hours reduce churn for new members."
+        ));
+        assert_eq!(chat_items_used, 0);
+        assert_eq!(resource_items_used, 1);
+    }
+
+    #[test]
+    fn community_prompt_returns_none_when_rows_have_no_usable_text() {
+        let chat_rows = vec![serde_json::json!({
+            "snippet": "   ",
+            "sender_display": "member"
+        })];
+        let resource_rows = vec![serde_json::json!({
+            "title": "   ",
+            "snippet": "   ",
+            "url": null
+        })];
+
+        let (prompt, chat_items_used, resource_items_used) =
+            build_cloud_community_context_prompt("community-c", &chat_rows, &resource_rows);
+
+        assert!(prompt.is_none());
+        assert_eq!(chat_items_used, 0);
+        assert_eq!(resource_items_used, 0);
+    }
+
+    #[test]
+    fn split_compiled_rows_maps_chat_and_resource_items() {
+        let rows = vec![
+            serde_json::json!({
+                "source_type": "chat_message",
+                "snippet": "Shipping notes for v1",
+                "sender_display": "Jordan",
+                "compile_version": 3
+            }),
+            serde_json::json!({
+                "source_type": "community_resource",
+                "title": "Runbook",
+                "snippet": "How to roll forward safely",
+                "url": "https://example.com/runbook",
+                "compile_version": 3
+            }),
+            serde_json::json!({
+                "source_type": "community_memory",
+                "title": "Retention signal",
+                "snippet": "Keep onboarding support under 12 hours.",
+                "compile_version": 3
+            }),
+        ];
+
+        let (chat_rows, resource_rows, compile_version) = split_compiled_community_rows(&rows);
+        assert_eq!(compile_version, Some(3));
+        assert_eq!(chat_rows.len(), 1);
+        assert_eq!(resource_rows.len(), 2);
+        assert_eq!(
+            chat_rows[0]
+                .get("sender_display")
+                .and_then(|value| value.as_str()),
+            Some("Jordan")
+        );
+        assert_eq!(
+            resource_rows[0]
+                .get("title")
+                .and_then(|value| value.as_str()),
+            Some("Runbook")
+        );
+        assert_eq!(
+            resource_rows[1]
+                .get("resource_type")
+                .and_then(|value| value.as_str()),
+            Some("memory")
+        );
+    }
+
+    #[test]
+    fn split_compiled_rows_ignores_unknown_source_types() {
+        let rows = vec![
+            serde_json::json!({
+                "source_type": "unknown",
+                "snippet": "ignored",
+                "compile_version": "7"
+            }),
+            serde_json::json!({
+                "source_type": "chat_message",
+                "snippet": "valid snippet",
+                "sender_display": "member"
+            }),
+        ];
+
+        let (chat_rows, resource_rows, compile_version) = split_compiled_community_rows(&rows);
+        assert_eq!(compile_version, Some(7));
+        assert_eq!(chat_rows.len(), 1);
+        assert!(resource_rows.is_empty());
+    }
+
+    #[test]
+    fn community_evidence_user_message_uses_shared_prefix() {
+        let message =
+            build_community_evidence_user_message(Some("Community evidence (abc)\n- item 1"))
+                .expect("message should be present");
+        assert!(message.starts_with(COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX));
+    }
+}
+
+#[cfg(test)]
+mod community_context_contract_fixture_tests {
+    use crate::community_context::{
+        build_cloud_community_context_prompt, build_community_context_diagnostics,
+        build_community_evidence_used_payload, split_compiled_community_rows,
+        CommunityContextFetchOutcome, COMMUNITY_CONTEXT_CHAT_LIMIT,
+        COMMUNITY_CONTEXT_CHAT_SENDER_MAX_CHARS, COMMUNITY_CONTEXT_CHAT_SNIPPET_MAX_CHARS,
+        COMMUNITY_CONTEXT_COMPILED_LIMIT, COMMUNITY_CONTEXT_OBSERVABILITY_CONTRACT_ID,
+        COMMUNITY_CONTEXT_QUERY_MAX_CHARS, COMMUNITY_CONTEXT_RESOURCE_LIMIT,
+        COMMUNITY_CONTEXT_RESOURCE_SNIPPET_MAX_CHARS, COMMUNITY_CONTEXT_RESOURCE_TITLE_MAX_CHARS,
+        COMMUNITY_CONTEXT_RESOURCE_URL_MAX_CHARS, COMMUNITY_EVIDENCE_USED_CONTRACT_ID,
+        COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX, COMMUNITY_RPC_ACTIVE_SYSTEM_PROMPT,
+        COMMUNITY_RPC_CHAT_SNIPPET_SEARCH, COMMUNITY_RPC_COMPILED_CONTEXT_SEARCH,
+        COMMUNITY_RPC_ENTITLEMENT_CHECK, COMMUNITY_RPC_MEMORY_CANDIDATE_PROPOSE,
+        COMMUNITY_RPC_MEMORY_SEARCH, COMMUNITY_RPC_RESOURCE_SNIPPET_SEARCH,
+    };
+    use serde::Deserialize;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityContextFixtureExpectedDiagnostics {
+        attempted: bool,
+        compiled_fetch_ok: bool,
+        compiled_items_used: usize,
+        compile_version: Option<i64>,
+        fallback_used: bool,
+        chat_fetch_ok: bool,
+        resource_fetch_ok: bool,
+        chat_items_used: usize,
+        resource_items_used: usize,
+        retrieval_latency_ms: Option<u64>,
+        failure_class: String,
+        quality_score: i64,
+        quality_band: String,
+        contract_id: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityContextFixtureExpected {
+        compile_version: Option<i64>,
+        compiled_items_used: usize,
+        chat_items_used: usize,
+        resource_items_used: usize,
+        prompt: Option<String>,
+        diagnostics: CommunityContextFixtureExpectedDiagnostics,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityContextFixture {
+        name: String,
+        community_id: String,
+        compiled_rows: Vec<serde_json::Value>,
+        expected: CommunityContextFixtureExpected,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityContextObservabilityFixtureBundle {
+        compiled_attempted: bool,
+        compiled_fetch_ok: bool,
+        compiled_items_used: usize,
+        compile_version: Option<i64>,
+        fallback_used: bool,
+        chat_fetch_ok: bool,
+        resource_fetch_ok: bool,
+        retrieval_latency_ms: Option<u64>,
+        failure_class: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityContextObservabilityFixture {
+        name: String,
+        bundle: CommunityContextObservabilityFixtureBundle,
+        chat_items_used: usize,
+        resource_items_used: usize,
+        expected: CommunityContextFixtureExpectedDiagnostics,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommunityEvidenceFixture {
+        name: String,
+        chat_rows: Vec<serde_json::Value>,
+        resource_rows: Vec<serde_json::Value>,
+        expected: Option<serde_json::Value>,
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+    }
+
+    fn read_json_file(relative_path: &str) -> serde_json::Value {
+        let path = repo_root().join(relative_path);
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {}", path.display(), err));
+        serde_json::from_str::<serde_json::Value>(&raw)
+            .unwrap_or_else(|err| panic!("failed to parse {}: {}", path.display(), err))
+    }
+
+    fn load_fixtures() -> Vec<CommunityContextFixture> {
+        let value = read_json_file("shared/contracts/community_context_bundle_v1.fixtures.json");
+        serde_json::from_value::<Vec<CommunityContextFixture>>(value)
+            .expect("fixtures must be a valid array")
+    }
+
+    fn load_observability_fixtures() -> Vec<CommunityContextObservabilityFixture> {
+        let value =
+            read_json_file("shared/contracts/community_context_observability_v1.fixtures.json");
+        serde_json::from_value::<Vec<CommunityContextObservabilityFixture>>(value)
+            .expect("observability fixtures must be a valid array")
+    }
+
+    fn load_community_evidence_fixtures() -> Vec<CommunityEvidenceFixture> {
+        let value = read_json_file("shared/contracts/community_evidence_used_v1.fixtures.json");
+        serde_json::from_value::<Vec<CommunityEvidenceFixture>>(value)
+            .expect("community evidence fixtures must be a valid array")
+    }
+
+    fn assert_diagnostics_matches_expected(
+        fixture_name: &str,
+        diagnostics: &serde_json::Value,
+        expected: &CommunityContextFixtureExpectedDiagnostics,
+    ) {
+        assert_eq!(
+            diagnostics.get("attempted").and_then(|v| v.as_bool()),
+            Some(expected.attempted),
+            "attempted mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("compiled_fetch_ok")
+                .and_then(|v| v.as_bool()),
+            Some(expected.compiled_fetch_ok),
+            "compiled_fetch_ok mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("compiled_items_used")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize),
+            Some(expected.compiled_items_used),
+            "compiled_items_used mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("compile_version").and_then(|v| v.as_i64()),
+            expected.compile_version,
+            "compile_version mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("fallback_used").and_then(|v| v.as_bool()),
+            Some(expected.fallback_used),
+            "fallback_used mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("chat_fetch_ok").and_then(|v| v.as_bool()),
+            Some(expected.chat_fetch_ok),
+            "chat_fetch_ok mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("resource_fetch_ok")
+                .and_then(|v| v.as_bool()),
+            Some(expected.resource_fetch_ok),
+            "resource_fetch_ok mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("chat_items_used")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize),
+            Some(expected.chat_items_used),
+            "chat_items_used mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("resource_items_used")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize),
+            Some(expected.resource_items_used),
+            "resource_items_used mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics
+                .get("retrieval_latency_ms")
+                .and_then(|v| v.as_u64()),
+            expected.retrieval_latency_ms,
+            "retrieval_latency_ms mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("failure_class").and_then(|v| v.as_str()),
+            Some(expected.failure_class.as_str()),
+            "failure_class mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("quality_score").and_then(|v| v.as_i64()),
+            Some(expected.quality_score),
+            "quality_score mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("quality_band").and_then(|v| v.as_str()),
+            Some(expected.quality_band.as_str()),
+            "quality_band mismatch for fixture {}",
+            fixture_name
+        );
+        assert_eq!(
+            diagnostics.get("contract_id").and_then(|v| v.as_str()),
+            Some(expected.contract_id.as_str()),
+            "contract_id mismatch for fixture {}",
+            fixture_name
+        );
+    }
+
+    #[test]
+    fn contract_constants_match_json_contract() {
+        let value = read_json_file("shared/contracts/community_context_bundle_v1.json");
+        let limits = value
+            .get("limits")
+            .and_then(|v| v.as_object())
+            .expect("limits object missing from contract");
+
+        let read_limit = |key: &str| -> usize {
+            limits
+                .get(key)
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .unwrap_or_else(|| panic!("missing numeric limit '{}'", key))
+        };
+
+        assert_eq!(
+            read_limit("query_max_chars"),
+            COMMUNITY_CONTEXT_QUERY_MAX_CHARS
+        );
+        assert_eq!(
+            read_limit("compiled_limit"),
+            COMMUNITY_CONTEXT_COMPILED_LIMIT
+        );
+        assert_eq!(read_limit("chat_limit"), COMMUNITY_CONTEXT_CHAT_LIMIT);
+        assert_eq!(
+            read_limit("resource_limit"),
+            COMMUNITY_CONTEXT_RESOURCE_LIMIT
+        );
+        assert_eq!(
+            read_limit("chat_snippet_max_chars"),
+            COMMUNITY_CONTEXT_CHAT_SNIPPET_MAX_CHARS
+        );
+        assert_eq!(
+            read_limit("chat_sender_max_chars"),
+            COMMUNITY_CONTEXT_CHAT_SENDER_MAX_CHARS
+        );
+        assert_eq!(
+            read_limit("resource_title_max_chars"),
+            COMMUNITY_CONTEXT_RESOURCE_TITLE_MAX_CHARS
+        );
+        assert_eq!(
+            read_limit("resource_snippet_max_chars"),
+            COMMUNITY_CONTEXT_RESOURCE_SNIPPET_MAX_CHARS
+        );
+        assert_eq!(
+            read_limit("resource_url_max_chars"),
+            COMMUNITY_CONTEXT_RESOURCE_URL_MAX_CHARS
+        );
+    }
+
+    #[test]
+    fn observability_and_capability_contract_ids_match_json_contracts() {
+        let observability =
+            read_json_file("shared/contracts/community_context_observability_v1.json");
+        assert_eq!(
+            observability.get("id").and_then(|v| v.as_str()),
+            Some(COMMUNITY_CONTEXT_OBSERVABILITY_CONTRACT_ID)
+        );
+
+        let capabilities_v3 =
+            read_json_file("shared/contracts/community_harness_capabilities_v3.json");
+        assert_eq!(
+            capabilities_v3.get("id").and_then(|v| v.as_str()),
+            Some("community_harness_capabilities_v3")
+        );
+        assert_eq!(
+            capabilities_v3.get("version").and_then(|v| v.as_u64()),
+            Some(3)
+        );
+        let runtime_desktop = capabilities_v3
+            .get("runtime_exposed_tools")
+            .and_then(|v| v.get("desktop"))
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let runtime_desktop_names = runtime_desktop
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            runtime_desktop_names,
+            vec![
+                "community_context_search",
+                "community_memory_search",
+                "community_memory_candidate_propose"
+            ]
+        );
+
+        let capabilities = capabilities_v3
+            .get("capabilities")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            capabilities.len() >= 3,
+            "community_harness_capabilities_v3 should define at least three capabilities"
+        );
+        let has_active_context_search = capabilities.iter().any(|cap| {
+            cap.get("name").and_then(|v| v.as_str()) == Some("community_context_search")
+                && cap.get("status").and_then(|v| v.as_str()) == Some("active")
+        });
+        let has_active_memory_search = capabilities.iter().any(|cap| {
+            cap.get("name").and_then(|v| v.as_str()) == Some("community_memory_search")
+                && cap.get("status").and_then(|v| v.as_str()) == Some("active")
+        });
+        let has_active_memory_candidate_propose = capabilities.iter().any(|cap| {
+            cap.get("name").and_then(|v| v.as_str()) == Some("community_memory_candidate_propose")
+                && cap.get("status").and_then(|v| v.as_str()) == Some("active")
+        });
+        let active_action_count = capabilities
+            .iter()
+            .filter(|cap| {
+                cap.get("status").and_then(|v| v.as_str()) == Some("active")
+                    && cap.get("category").and_then(|v| v.as_str()) == Some("action")
+            })
+            .count();
+        assert!(
+            has_active_context_search,
+            "community_harness_capabilities_v3 is missing required active capabilities"
+        );
+        assert!(
+            has_active_memory_search && has_active_memory_candidate_propose,
+            "community_harness_capabilities_v3 is missing required memory capabilities"
+        );
+        assert!(
+            active_action_count >= 1,
+            "community_harness_capabilities_v3 should define at least one active action capability"
+        );
+    }
+
+    #[test]
+    fn wire_contract_constants_match_runtime_constants() {
+        let wire_contract = read_json_file("shared/contracts/community_harness_wire_v1.json");
+        let rpcs = wire_contract
+            .get("rpcs")
+            .and_then(|v| v.as_object())
+            .expect("community_harness_wire_v1.rpcs missing");
+        let rpc = |key: &str| -> &str {
+            rpcs.get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| panic!("missing rpc key '{}'", key))
+        };
+
+        assert_eq!(
+            wire_contract
+                .get("community_evidence_user_message_prefix")
+                .and_then(|v| v.as_str()),
+            Some(COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX)
+        );
+        assert_eq!(
+            rpc("active_community_system_prompt"),
+            COMMUNITY_RPC_ACTIVE_SYSTEM_PROMPT
+        );
+        assert_eq!(rpc("entitlement_check"), COMMUNITY_RPC_ENTITLEMENT_CHECK);
+        assert_eq!(
+            rpc("compiled_context_search"),
+            COMMUNITY_RPC_COMPILED_CONTEXT_SEARCH
+        );
+        assert_eq!(
+            rpc("chat_snippet_search"),
+            COMMUNITY_RPC_CHAT_SNIPPET_SEARCH
+        );
+        assert_eq!(
+            rpc("resource_snippet_search"),
+            COMMUNITY_RPC_RESOURCE_SNIPPET_SEARCH
+        );
+        assert_eq!(rpc("memory_search"), COMMUNITY_RPC_MEMORY_SEARCH);
+        assert_eq!(
+            rpc("memory_candidate_propose"),
+            COMMUNITY_RPC_MEMORY_CANDIDATE_PROPOSE
+        );
+    }
+
+    #[test]
+    fn compiled_row_fixtures_match_expected_prompt_and_diagnostics() {
+        for fixture in load_fixtures() {
+            let (chat_rows, resource_rows, compile_version) =
+                split_compiled_community_rows(&fixture.compiled_rows);
+            let (prompt, chat_items_used, resource_items_used) =
+                build_cloud_community_context_prompt(
+                    fixture.community_id.as_str(),
+                    &chat_rows,
+                    &resource_rows,
+                );
+
+            assert_eq!(
+                compile_version, fixture.expected.compile_version,
+                "compile_version mismatch for fixture {}",
+                fixture.name
+            );
+            assert_eq!(
+                prompt, fixture.expected.prompt,
+                "prompt mismatch for fixture {}",
+                fixture.name
+            );
+            assert_eq!(
+                fixture.compiled_rows.len(),
+                fixture.expected.compiled_items_used,
+                "compiled_items_used fixture sanity mismatch for {}",
+                fixture.name
+            );
+            assert_eq!(
+                chat_items_used, fixture.expected.chat_items_used,
+                "chat_items_used mismatch for fixture {}",
+                fixture.name
+            );
+            assert_eq!(
+                resource_items_used, fixture.expected.resource_items_used,
+                "resource_items_used mismatch for fixture {}",
+                fixture.name
+            );
+
+            let diagnostics = build_community_context_diagnostics(&CommunityContextFetchOutcome {
+                prompt: prompt.clone(),
+                attempted: true,
+                compiled_fetch_ok: true,
+                compiled_items_used: fixture.compiled_rows.len(),
+                compile_version,
+                fallback_used: false,
+                chat_fetch_ok: true,
+                resource_fetch_ok: true,
+                chat_items_used,
+                resource_items_used,
+                retrieval_latency_ms: None,
+                failure_class: String::new(),
+                evidence_chat_rows: Vec::new(),
+                evidence_resource_rows: Vec::new(),
+            });
+
+            assert_diagnostics_matches_expected(
+                fixture.name.as_str(),
+                &diagnostics,
+                &fixture.expected.diagnostics,
+            );
+        }
+    }
+
+    #[test]
+    fn observability_fixtures_match_expected_diagnostics() {
+        let observability_contract =
+            read_json_file("shared/contracts/community_context_observability_v1.json");
+        let allowed_failure_classes = observability_contract
+            .get("failure_classes")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect::<std::collections::HashSet<_>>();
+        let allowed_quality_bands = observability_contract
+            .get("quality_bands")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect::<std::collections::HashSet<_>>();
+
+        for fixture in load_observability_fixtures() {
+            let diagnostics = build_community_context_diagnostics(&CommunityContextFetchOutcome {
+                prompt: None,
+                attempted: fixture.bundle.compiled_attempted,
+                compiled_fetch_ok: fixture.bundle.compiled_fetch_ok,
+                compiled_items_used: fixture.bundle.compiled_items_used,
+                compile_version: fixture.bundle.compile_version,
+                fallback_used: fixture.bundle.fallback_used,
+                chat_fetch_ok: fixture.bundle.chat_fetch_ok,
+                resource_fetch_ok: fixture.bundle.resource_fetch_ok,
+                chat_items_used: fixture.chat_items_used,
+                resource_items_used: fixture.resource_items_used,
+                retrieval_latency_ms: fixture.bundle.retrieval_latency_ms,
+                failure_class: fixture.bundle.failure_class.unwrap_or_default(),
+                evidence_chat_rows: Vec::new(),
+                evidence_resource_rows: Vec::new(),
+            });
+
+            let failure_class = diagnostics
+                .get("failure_class")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let quality_band = diagnostics
+                .get("quality_band")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+
+            assert!(
+                allowed_failure_classes.contains(&failure_class),
+                "failure_class {} not present in observability contract",
+                failure_class
+            );
+            assert!(
+                allowed_quality_bands.contains(&quality_band),
+                "quality_band {} not present in observability contract",
+                quality_band
+            );
+
+            assert_diagnostics_matches_expected(
+                fixture.name.as_str(),
+                &diagnostics,
+                &fixture.expected,
+            );
+        }
+    }
+
+    #[test]
+    fn community_evidence_fixtures_match_expected_payload() {
+        let contract = read_json_file("shared/contracts/community_evidence_used_v1.json");
+        assert_eq!(
+            contract.get("id").and_then(|v| v.as_str()),
+            Some(COMMUNITY_EVIDENCE_USED_CONTRACT_ID)
+        );
+
+        for fixture in load_community_evidence_fixtures() {
+            let actual =
+                build_community_evidence_used_payload(&fixture.chat_rows, &fixture.resource_rows);
+            assert_eq!(
+                actual, fixture.expected,
+                "community evidence payload mismatch for fixture {}",
+                fixture.name
+            );
+        }
+    }
 }
 
 async fn fetch_model_registry_row(
@@ -209,17 +2244,14 @@ async fn fetch_model_registry_row(
     let url = reqwest::Url::parse_with_params(
         &base,
         [
-            (
-                "select",
-                "id,provider,provider_model,enabled,platform_enabled,byok_enabled",
-            ),
+            ("select", "provider,provider_model,enabled"),
             ("id", id_filter.as_str()),
             ("limit", "1"),
         ],
     )
     .ok()?;
 
-    let res = reqwest::Client::new()
+    let res = preflight_http_client()
         .get(url)
         .header("apikey", proxy.supabase_anon_key.clone())
         .bearer_auth(proxy.access_token.clone())
@@ -261,12 +2293,32 @@ fn parse_boolish_i64(value: Option<&serde_json::Value>) -> i64 {
 fn parse_epoch_i64(value: Option<&serde_json::Value>) -> Option<i64> {
     match value {
         Some(serde_json::Value::Number(num)) => num.as_i64(),
-        Some(serde_json::Value::String(raw)) => raw
-            .trim()
-            .parse::<i64>()
-            .ok(),
+        Some(serde_json::Value::String(raw)) => raw.trim().parse::<i64>().ok(),
         _ => None,
     }
+}
+
+fn preflight_http_client() -> reqwest::Client {
+    static PREFLIGHT_HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_millis(750))
+            .timeout(Duration::from_millis(PREFLIGHT_REMOTE_TIMEOUT_MS))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    });
+    PREFLIGHT_HTTP_CLIENT.clone()
+}
+
+fn inference_http_client() -> reqwest::Client {
+    static INFERENCE_HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_millis(750))
+            .pool_idle_timeout(Duration::from_secs(60))
+            .tcp_keepalive(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    });
+    INFERENCE_HTTP_CLIENT.clone()
 }
 
 async fn fetch_cloud_personal_memory_items_json(
@@ -294,7 +2346,7 @@ async fn fetch_cloud_personal_memory_items_json(
     )
     .ok()?;
 
-    let response = reqwest::Client::new()
+    let response = preflight_http_client()
         .get(url)
         .header("apikey", proxy.supabase_anon_key.clone())
         .bearer_auth(proxy.access_token.clone())
@@ -347,66 +2399,9 @@ async fn fetch_cloud_personal_memory_items_json(
     serde_json::to_string(&normalized).ok()
 }
 
-async fn fetch_active_community_system_prompt(
-    proxy: &PlatformProxyConfig,
-    user_id: &str,
-    community_id: &str,
-) -> Option<String> {
-    let cleaned_user = user_id.trim();
-    let cleaned_community = community_id.trim();
-    if cleaned_user.is_empty() || cleaned_community.is_empty() {
-        return None;
-    }
-
-    let url = format!(
-        "{}/rest/v1/rpc/get_active_community_agent_system_prompt",
-        proxy.supabase_url.trim_end_matches('/')
-    );
-    let body = serde_json::json!({
-        "p_user_id": cleaned_user,
-        "p_community_id": cleaned_community,
-    });
-    let response = reqwest::Client::new()
-        .post(url)
-        .header("apikey", proxy.supabase_anon_key.clone())
-        .bearer_auth(proxy.access_token.clone())
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
-        .ok()?;
-
-    if !response.status().is_success() {
-        return None;
-    }
-
-    let payload: serde_json::Value = response.json().await.ok()?;
-    let prompt = match payload {
-        serde_json::Value::Array(rows) => rows
-            .first()
-            .and_then(|row| row.get("system_prompt"))
-            .and_then(|v| v.as_str())
-            .map(|v| v.trim().to_string())
-            .unwrap_or_default(),
-        serde_json::Value::Object(map) => map
-            .get("system_prompt")
-            .and_then(|v| v.as_str())
-            .map(|v| v.trim().to_string())
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-
-    if prompt.is_empty() {
-        None
-    } else {
-        Some(prompt)
-    }
-}
-
 async fn resolve_platform_model_for_alias_with_registry(
     alias_model_id: &str,
     platform_proxy: Option<&PlatformProxyConfig>,
-    allow_openai_alias_inference: bool,
 ) -> Result<PlatformModelRef, String> {
     let cleaned = alias_model_id.trim();
     if cleaned.is_empty() {
@@ -417,47 +2412,69 @@ async fn resolve_platform_model_for_alias_with_registry(
     }
 
     if let Some(proxy) = platform_proxy {
+        let cache_key = model_registry_cache_key(proxy, cleaned);
+        let cached_entry = model_registry_cache_get(cache_key.as_str());
+        if let Some(entry) = cached_entry.as_ref() {
+            if entry.is_fresh() {
+                return entry.result.clone();
+            }
+        }
+
         if let Some(row) = fetch_model_registry_row(proxy, cleaned).await {
             if row.enabled == Some(false) {
-                return Err("Model is not available.".to_string());
+                let err = "Model is not available.".to_string();
+                model_registry_cache_set(
+                    cache_key.clone(),
+                    Err(err.clone()),
+                    MODEL_REGISTRY_NEGATIVE_CACHE_TTL_MS,
+                );
+                return Err(err);
             }
             let provider_raw = row.provider.unwrap_or_default();
-            let provider = normalize_platform_provider(&provider_raw)?;
+            let provider = match normalize_platform_provider(&provider_raw) {
+                Ok(value) => value,
+                Err(err) => {
+                    model_registry_cache_set(
+                        cache_key.clone(),
+                        Err(err.clone()),
+                        MODEL_REGISTRY_NEGATIVE_CACHE_TTL_MS,
+                    );
+                    return Err(err);
+                }
+            };
             let provider_model = row.provider_model.unwrap_or_default().trim().to_string();
             if !provider_model.is_empty() {
-                return Ok(PlatformModelRef {
+                let resolved = PlatformModelRef {
                     provider,
                     model: provider_model.clone(),
                     ref_str: format!("{}/{}", platform_provider_id(provider), provider_model),
-                });
+                };
+                model_registry_cache_set(
+                    cache_key.clone(),
+                    Ok(resolved.clone()),
+                    MODEL_REGISTRY_CACHE_TTL_MS,
+                );
+                return Ok(resolved);
             }
         }
-    }
 
-    // Transition fallback: allow legacy env mapping until provider_model is populated in model_registry.
-    match resolve_platform_model_for_alias(cleaned) {
-        Ok(value) => Ok(value),
-        Err(err) => {
-            if allow_openai_alias_inference
-                && (err == "Missing PLATFORM_MODEL_MAP_JSON"
-                    || err.starts_with("Platform model not configured for"))
-            {
-                if let Some(inferred) = infer_openai_model_ref_from_alias(cleaned) {
-                    return Ok(inferred);
-                }
+        // If refresh failed or returned empty, prefer stale successful cache over hard failure.
+        if let Some(entry) = cached_entry {
+            if let Ok(stale) = entry.result {
+                return Ok(stale);
             }
-            Err(err)
         }
-    }
-}
 
-fn platform_provider_key_name(provider: PlatformProvider) -> &'static str {
-    match provider {
-        PlatformProvider::OpenAi => "openai",
-        PlatformProvider::Anthropic => "anthropic",
-        PlatformProvider::Google => "google",
-        PlatformProvider::XAi => "x-ai",
+        let err = format!("Platform model not configured for '{}'", cleaned);
+        model_registry_cache_set(
+            cache_key,
+            Err(err.clone()),
+            MODEL_REGISTRY_NEGATIVE_CACHE_TTL_MS,
+        );
+        return Err(err);
     }
+
+    Err(format!("Platform model not configured for '{}'", cleaned))
 }
 
 fn platform_provider_id(provider: PlatformProvider) -> &'static str {
@@ -469,29 +2486,9 @@ fn platform_provider_id(provider: PlatformProvider) -> &'static str {
     }
 }
 
-fn platform_provider_display_name(provider: PlatformProvider) -> &'static str {
-    match provider {
-        PlatformProvider::OpenAi => "OpenAI",
-        PlatformProvider::Anthropic => "Anthropic",
-        PlatformProvider::Google => "Google",
-        PlatformProvider::XAi => "xAI",
-    }
-}
-
-fn platform_openai_compatible_base_url(provider: PlatformProvider) -> Option<&'static str> {
-    match provider {
-        PlatformProvider::OpenAi => Some("https://api.openai.com/v1"),
-        PlatformProvider::Google => Some("https://generativelanguage.googleapis.com/v1beta/openai"),
-        PlatformProvider::XAi => Some("https://api.x.ai/v1"),
-        PlatformProvider::Anthropic => None,
-    }
-}
-
 static THREAD_RUN_LOCKS: Lazy<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static PENDING_TOOL_APPROVALS: Lazy<Mutex<HashMap<String, oneshot::Sender<ToolApprovalDecision>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-static PENDING_INFERENCE_APPROVALS: Lazy<Mutex<HashMap<String, oneshot::Sender<bool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static CANCEL_RUN_SIGNALS: Lazy<Mutex<HashMap<String, watch::Sender<bool>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -621,13 +2618,6 @@ fn format_provider_error(resp_bytes: &[u8]) -> String {
     }
 }
 
-fn parse_boolish(value: &str) -> bool {
-    matches!(
-        value.trim().to_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
-}
-
 fn is_platform_inference_quota_exceeded(resp_bytes: &[u8]) -> bool {
     String::from_utf8_lossy(resp_bytes)
         .to_lowercase()
@@ -653,14 +2643,30 @@ async fn lock_thread_run(thread_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
     lock.lock_owned().await
 }
 
-fn workspace_scope_id_from_path(path: &str) -> String {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let p = Path::new(trimmed);
-    let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-    canon.to_string_lossy().to_string()
+fn build_run_started_payload(
+    thread_id: &str,
+    run_id: &str,
+    workspace_scope_id: &str,
+    mode: &str,
+    engine_id: &str,
+    model_id: Option<&str>,
+    thread_context: &ThreadContextSnapshot,
+) -> serde_json::Value {
+    serde_json::json!({
+      "v": 1,
+      "run_id": run_id,
+      "runtime_id": "arx_harness",
+      "thread_id": thread_id,
+      "workspace_scope_id": if workspace_scope_id.trim().is_empty() { serde_json::Value::Null } else { serde_json::Value::String(workspace_scope_id.to_string()) },
+      "mode": mode,
+      "engine_id": engine_id,
+      "model_id": model_id,
+      "capability_contract_id": capability_contract_id_for_lane(thread_context.thread_lane.as_str()),
+      "thread_lane": thread_context.thread_lane.as_str(),
+      "project_id": thread_context.project_id.as_deref(),
+      "community_id": thread_context.community_id.as_deref(),
+      "context_version": thread_context.context_version
+    })
 }
 
 fn append_run_started(
@@ -672,17 +2678,17 @@ fn append_run_started(
     mode: &str,
     engine_id: &str,
     model_id: Option<&str>,
+    thread_context: &ThreadContextSnapshot,
 ) {
-    let payload = serde_json::json!({
-      "v": 1,
-      "run_id": run_id,
-      "runtime_id": "arx_harness",
-      "thread_id": thread_id,
-      "workspace_scope_id": if workspace_scope_id.trim().is_empty() { serde_json::Value::Null } else { serde_json::Value::String(workspace_scope_id.to_string()) },
-      "mode": mode,
-      "engine_id": engine_id,
-      "model_id": model_id
-    });
+    let payload = build_run_started_payload(
+        thread_id,
+        run_id,
+        workspace_scope_id,
+        mode,
+        engine_id,
+        model_id,
+        thread_context,
+    );
     let _ = db::append_event(
         conn,
         db_path,
@@ -691,6 +2697,21 @@ fn append_run_started(
         None,
         Some(&payload.to_string()),
         None,
+    );
+    emit_thread_context_trace(
+        "run_started",
+        serde_json::json!({
+          "thread_id": thread_id,
+          "run_id": run_id,
+          "mode": mode,
+          "engine_id": engine_id,
+          "model_id": model_id,
+          "thread_lane": thread_context.thread_lane,
+          "project_id": thread_context.project_id,
+          "community_id": thread_context.community_id,
+          "context_version": thread_context.context_version,
+          "workspace_scope_id": if workspace_scope_id.trim().is_empty() { serde_json::Value::Null } else { serde_json::Value::String(workspace_scope_id.to_string()) }
+        }),
     );
 }
 
@@ -702,12 +2723,7 @@ fn append_run_finished(
     status: &str,
     reason: Option<&str>,
 ) {
-    let payload = serde_json::json!({
-      "v": 1,
-      "run_id": run_id,
-      "status": status,
-      "reason": reason
-    });
+    let payload = build_run_finished_payload(run_id, status, reason);
     let _ = db::append_event(
         conn,
         db_path,
@@ -717,6 +2733,19 @@ fn append_run_finished(
         Some(&payload.to_string()),
         None,
     );
+}
+
+fn build_run_finished_payload(
+    run_id: &str,
+    status: &str,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+      "v": 1,
+      "run_id": run_id,
+      "status": status,
+      "reason": reason
+    })
 }
 
 fn finish_cancelled_messages_agent(
@@ -760,79 +2789,6 @@ fn finish_cancelled_messages_agent(
     }
 }
 
-#[derive(Clone, Serialize)]
-struct ToolUiSpec {
-    name: String,
-    description: String,
-    parameters: serde_json::Value,
-    requires_approval: bool,
-    auto_apply: bool,
-    parallel_safe: bool,
-}
-
-struct ProjectIdentity {
-    name: Option<String>,
-    root_path: String,
-    git_root: Option<String>,
-    git_remote: Option<String>,
-    fingerprint: String,
-}
-
-fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
-}
-
-#[tauri::command]
-fn list_tools_cmd() -> Result<Vec<ToolUiSpec>, String> {
-    // MVP: engines own execution. Arx does not expose an internal tool registry.
-    Ok(Vec::new())
-}
-
-#[derive(Serialize)]
-struct RuntimeCapabilities {
-    transport: String,
-    cursor_resume: bool,
-    tool_approvals: bool,
-    local_db_events: bool,
-    streaming_tokens: bool,
-}
-
-#[derive(Serialize)]
-struct InitializeResponse {
-    protocol_version: i64,
-    runtime_id: String,
-    capabilities: RuntimeCapabilities,
-}
-
-#[tauri::command]
-fn initialize_cmd() -> Result<InitializeResponse, String> {
-    Ok(InitializeResponse {
-        protocol_version: ARP_PROTOCOL_VERSION,
-        runtime_id: "arx_harness_tauri".to_string(),
-        capabilities: RuntimeCapabilities {
-            transport: "tauri".to_string(),
-            cursor_resume: true,
-            tool_approvals: true,
-            local_db_events: true,
-            streaming_tokens: true,
-        },
-    })
-}
-
 fn normalize_agent_mode(mode: &str) -> Option<&'static str> {
     match mode.trim().to_lowercase().as_str() {
         "build" => Some("build"),
@@ -840,177 +2796,6 @@ fn normalize_agent_mode(mode: &str) -> Option<&'static str> {
         "explore" => Some("explore"),
         _ => None,
     }
-}
-
-#[tauri::command]
-fn get_agent_mode_cmd(state: tauri::State<DbState>, session_id: String) -> Result<String, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let key = format!("agent_mode::{}", session_id);
-    Ok(get_ui_state(&conn, &key)
-        .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "build".to_string()))
-}
-
-#[tauri::command]
-fn set_agent_mode_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-    mode: String,
-) -> Result<(), String> {
-    let Some(mode) = normalize_agent_mode(&mode) else {
-        return Err("invalid mode (expected build|plan|explore)".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let key = format!("agent_mode::{}", session_id);
-    set_ui_state(&conn, &key, mode).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn respond_permission_cmd(
-    state: tauri::State<'_, DbState>,
-    session_id: String,
-    model_id: String,
-    tool_call_id: String,
-    response: String,
-    cwd: String,
-) -> Result<String, String> {
-    // MVP: no internal tool execution. Keep this command for UI compatibility.
-    let _ = (&state, session_id, model_id, tool_call_id, response, cwd);
-    Ok("Internal tool system is disabled in MVP; use the engine terminal.".to_string())
-}
-
-#[tauri::command]
-async fn decide_tool_call_cmd(
-    tool_call_id: String,
-    approved: bool,
-    allow_write_edit_for_session: Option<bool>,
-) -> Result<(), String> {
-    let sender = {
-        let mut map = PENDING_TOOL_APPROVALS.lock().await;
-        map.remove(tool_call_id.trim())
-    };
-    let Some(sender) = sender else {
-        return Err("tool call not awaiting approval".to_string());
-    };
-    sender
-        .send(ToolApprovalDecision {
-            approved,
-            allow_write_edit_for_session: allow_write_edit_for_session.unwrap_or(false),
-        })
-        .map_err(|_| "tool call approval receiver dropped".to_string())
-}
-
-#[tauri::command]
-async fn decide_inference_fallback_cmd(approval_id: String, approved: bool) -> Result<(), String> {
-    let approval_id = approval_id.trim().to_string();
-    if approval_id.is_empty() {
-        return Err("approval_id is required".to_string());
-    }
-    let sender = {
-        let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
-        map.remove(&approval_id)
-    };
-    let Some(sender) = sender else {
-        return Err("inference fallback not awaiting approval".to_string());
-    };
-    sender
-        .send(approved)
-        .map_err(|_| "inference fallback approval receiver dropped".to_string())
-}
-
-#[tauri::command]
-fn get_auto_approve_write_edit_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-) -> Result<bool, String> {
-    let thread_id = thread_id.trim();
-    if thread_id.is_empty() {
-        return Err("thread_id is required".to_string());
-    }
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let key = format!("auto_approve_write_edit::{}", thread_id);
-    Ok(get_ui_state(&conn, &key)
-        .ok()
-        .flatten()
-        .map(|value| parse_boolish(&value))
-        .unwrap_or(false))
-}
-
-#[tauri::command]
-fn set_auto_approve_write_edit_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    enabled: bool,
-) -> Result<(), String> {
-    let thread_id = thread_id.trim();
-    if thread_id.is_empty() {
-        return Err("thread_id is required".to_string());
-    }
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let key = format!("auto_approve_write_edit::{}", thread_id);
-    set_ui_state(&conn, &key, if enabled { "1" } else { "0" }).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn cancel_run_cmd(thread_id: String) -> Result<bool, String> {
-    let thread_id = thread_id.trim().to_string();
-    if thread_id.is_empty() {
-        return Err("thread_id is required".to_string());
-    }
-    let sender = {
-        let map = CANCEL_RUN_SIGNALS.lock().await;
-        map.get(&thread_id).cloned()
-    };
-    if let Some(sender) = sender {
-        let _ = sender.send(true);
-        return Ok(true);
-    }
-    Ok(false)
-}
-
-fn hex_sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut out = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        out.push_str(&format!("{:02x}", b));
-    }
-    out
-}
-
-fn append_memory_write_event(
-    conn: &rusqlite::Connection,
-    db_path: &Path,
-    thread_id: &str,
-    action: &str,
-    item: &db::PersonalMemoryItemRecord,
-    provenance_event_id: Option<&str>,
-) {
-    let (preview, report) = context::redact_secrets(&item.content);
-    let payload = serde_json::json!({
-      "v": 1,
-      "action": action,
-      "item": {
-        "id": item.id,
-        "scope": item.scope,
-        "scope_id": item.scope_id,
-        "pinned": item.pinned,
-        "content_sha256": hex_sha256(item.content.as_bytes()),
-        "content_len": item.content.len(),
-        "content_preview_redacted": preview,
-        "blocked": report.blocked,
-        "redactions": report.redactions.iter().map(|(kind, count)| serde_json::json!({"kind": kind, "count": count})).collect::<Vec<_>>()
-      },
-      "provenance_event_id": provenance_event_id
-    });
-    let _ = db::append_event(
-        conn,
-        db_path,
-        thread_id,
-        "memory_write",
-        Some("memory_write"),
-        Some(&payload.to_string()),
-        None,
-    );
 }
 
 #[derive(Clone, Serialize)]
@@ -1140,7 +2925,16 @@ mod tool_cycle_tests {
 }
 
 fn tool_requires_approval(tool_name: &str) -> bool {
-    matches!(tool_name, "write" | "edit" | "bash")
+    if community_harness_capability_for_tool(tool_name)
+        .map(|capability| capability.approval_policy.desktop.as_deref() == Some("required"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    coding_harness_capabilities().iter().any(|capability| {
+        capability.name == tool_name
+            && capability.approval_policy.desktop.as_deref() == Some("required")
+    })
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -1230,12 +3024,16 @@ struct AgentToolCallOutcome {
 }
 
 async fn execute_agent_tool_call(
-    window: &tauri::Window,
+    window: Option<&tauri::Window>,
     conn: &mut rusqlite::Connection,
     db_path: &Path,
     thread_id: &str,
+    thread_lane: &str,
     workspace: &str,
+    thread_community_id: Option<&str>,
     mode: &str,
+    platform_proxy: Option<&PlatformProxyConfig>,
+    cloud_user_id: Option<&str>,
     run_id: &str,
     workspace_scope_id: &str,
     tool_use_id: &str,
@@ -1243,6 +3041,7 @@ async fn execute_agent_tool_call(
     tool_args: serde_json::Value,
     auto_approve_key: &str,
     auto_approve_write_edit: &mut bool,
+    approval_override: Option<ToolApprovalDecision>,
     cancel_rx: watch::Receiver<bool>,
 ) -> AgentToolCallOutcome {
     let mut tool_name = normalize_agent_tool_name(raw_tool_name);
@@ -1282,8 +3081,12 @@ async fn execute_agent_tool_call(
         if !msg.ends_with('\n') {
             msg.push('\n');
         }
-        msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
-        msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+        msg.push_str(&available_tools_line_for_lane(thread_lane));
+        if !is_community_lane(thread_lane) {
+            msg.push_str(
+                "hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n",
+            );
+        }
 
         tool_args_for_events = serde_json::json!({
           "tool": raw_tool_name,
@@ -1299,8 +3102,12 @@ async fn execute_agent_tool_call(
         if !msg.ends_with('\n') {
             msg.push('\n');
         }
-        msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
-        msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+        msg.push_str(&available_tools_line_for_lane(thread_lane));
+        if !is_community_lane(thread_lane) {
+            msg.push_str(
+                "hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n",
+            );
+        }
 
         tool_args_for_events = serde_json::json!({
           "tool": raw_tool_name,
@@ -1311,8 +3118,12 @@ async fn execute_agent_tool_call(
     } else if !is_known_agent_tool_name(tool_name.as_str()) {
         let mut msg = String::new();
         msg.push_str(&format!("unknown tool: {}\n", tool_name));
-        msg.push_str("available_tools: read, list_dir, glob, grep, sha256, write, edit, bash\n");
-        msg.push_str("hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n");
+        msg.push_str(&available_tools_line_for_lane(thread_lane));
+        if !is_community_lane(thread_lane) {
+            msg.push_str(
+                "hint: use write (or writes: [...]) for creating files; use edit for small in-file changes.\n",
+            );
+        }
 
         tool_args_for_events = serde_json::json!({
           "tool": raw_tool_name,
@@ -1327,11 +3138,15 @@ async fn execute_agent_tool_call(
         compute_tool_call_key(&tool_name, &tool_args_for_events, workspace_scope_id);
     let args_json = canonical_json_string(&tool_args_for_events);
     let requires_approval = tool_requires_approval(&tool_name);
+    let denied_by_capability_contract = !is_tool_allowed_for_lane(thread_lane, &tool_name);
     let denied_by_mode = mode == "explore" && requires_approval;
     let is_write_edit = matches!(tool_name.as_str(), "write" | "edit");
     let is_non_idempotent_tool = matches!(tool_name.as_str(), "bash" | "write" | "edit");
-    let auto_approved_by_session =
-        !denied_by_mode && requires_approval && is_write_edit && *auto_approve_write_edit;
+    let auto_approved_by_session = !denied_by_capability_contract
+        && !denied_by_mode
+        && requires_approval
+        && is_write_edit
+        && *auto_approve_write_edit;
 
     let requested_payload = serde_json::json!({
       "v": 1,
@@ -1341,6 +3156,8 @@ async fn execute_agent_tool_call(
       "tool_name": tool_name.clone(),
       "args": tool_args_for_events.clone(),
       "requires_approval": requires_approval,
+      "thread_lane": thread_lane,
+      "capability_contract_id": capability_contract_id_for_lane(thread_lane),
       "policy_basis": "mvp_default"
     });
     if db::append_event(
@@ -1357,7 +3174,14 @@ async fn execute_agent_tool_call(
         emit_tool_calls_updated(window, thread_id);
     }
 
-    let decision = if denied_by_mode {
+    let decision = if let Some(override_decision) = approval_override {
+        override_decision
+    } else if denied_by_capability_contract {
+        ToolApprovalDecision {
+            approved: false,
+            allow_write_edit_for_session: false,
+        }
+    } else if denied_by_mode {
         ToolApprovalDecision {
             approved: false,
             allow_write_edit_for_session: false,
@@ -1369,15 +3193,22 @@ async fn execute_agent_tool_call(
                 allow_write_edit_for_session: false,
             }
         } else {
-            await_tool_approval(
-                window,
-                thread_id,
-                &tool_call_id,
-                &tool_name,
-                &args_json,
-                cancel_rx.clone(),
-            )
-            .await
+            if let Some(window) = window {
+                await_tool_approval(
+                    window,
+                    thread_id,
+                    &tool_call_id,
+                    &tool_name,
+                    &args_json,
+                    cancel_rx.clone(),
+                )
+                .await
+            } else {
+                ToolApprovalDecision {
+                    approved: false,
+                    allow_write_edit_for_session: false,
+                }
+            }
         }
     } else {
         ToolApprovalDecision {
@@ -1416,7 +3247,10 @@ async fn execute_agent_tool_call(
 
     let approved = decision.approved;
     let mut note: Option<&'static str> = None;
-    let approved_by = if denied_by_mode {
+    let approved_by = if denied_by_capability_contract {
+        note = Some("community_capability_contract");
+        "policy"
+    } else if denied_by_mode {
         note = Some("explore_mode");
         "policy"
     } else if auto_approved_by_session {
@@ -1431,11 +3265,13 @@ async fn execute_agent_tool_call(
         "user"
     };
 
-    if requires_approval {
+    if requires_approval || denied_by_capability_contract {
         let decision_payload = serde_json::json!({
           "v": 1,
           "run_id": run_id,
           "tool_call_id": tool_call_id.clone(),
+          "thread_lane": thread_lane,
+          "capability_contract_id": capability_contract_id_for_lane(thread_lane),
           "approved": approved,
           "approved_by": approved_by,
           "note": note
@@ -1461,7 +3297,13 @@ async fn execute_agent_tool_call(
 
     if !approved {
         return AgentToolCallOutcome {
-            tool_result_content: if denied_by_mode {
+            tool_result_content: if denied_by_capability_contract {
+                format!(
+                    "error: denied (capability contract: {}; available_tools: {})",
+                    capability_contract_id_for_lane(thread_lane),
+                    available_tools_line_for_lane(thread_lane).trim()
+                )
+            } else if denied_by_mode {
                 "error: denied (explore mode)".to_string()
             } else {
                 "error: denied".to_string()
@@ -1502,17 +3344,19 @@ async fn execute_agent_tool_call(
                     emit_tool_calls_updated(window, thread_id);
                 }
 
-                let _ = window.emit(
-                    "tool-call-progress",
-                    ToolCallProgressPayload {
-                        session_id: thread_id.to_string(),
-                        tool_call_id: tool_call_id.clone(),
-                        tool_name: tool_name.clone(),
-                        tool_args_preview: None,
-                        status: "finished".to_string(),
-                        result: Some("error".to_string()),
-                    },
-                );
+                if let Some(window) = window {
+                    let _ = window.emit(
+                        "tool-call-progress",
+                        ToolCallProgressPayload {
+                            session_id: thread_id.to_string(),
+                            tool_call_id: tool_call_id.clone(),
+                            tool_name: tool_name.clone(),
+                            tool_args_preview: None,
+                            status: "finished".to_string(),
+                            result: Some("error".to_string()),
+                        },
+                    );
+                }
 
                 return AgentToolCallOutcome {
                     tool_result_content: format!(
@@ -1584,17 +3428,19 @@ async fn execute_agent_tool_call(
             emit_tool_calls_updated(window, thread_id);
         }
 
-        let _ = window.emit(
-            "tool-call-progress",
-            ToolCallProgressPayload {
-                session_id: thread_id.to_string(),
-                tool_call_id: tool_call_id.clone(),
-                tool_name: tool_name.clone(),
-                tool_args_preview: None,
-                status: "finished".to_string(),
-                result: Some("ok".to_string()),
-            },
-        );
+        if let Some(window) = window {
+            let _ = window.emit(
+                "tool-call-progress",
+                ToolCallProgressPayload {
+                    session_id: thread_id.to_string(),
+                    tool_call_id: tool_call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    tool_args_preview: None,
+                    status: "finished".to_string(),
+                    result: Some("ok".to_string()),
+                },
+            );
+        }
 
         return AgentToolCallOutcome {
             tool_result_content: reused_tool_result,
@@ -1686,27 +3532,29 @@ async fn execute_agent_tool_call(
         path.or(cmd).or(pat).or(writes)
     };
 
-    let _ = window.emit(
-        "agent-status",
-        AgentStatusPayload {
-            session_id: thread_id.to_string(),
-            status: "working".to_string(),
-            tool_name: Some(tool_name.clone()),
-            tool_args_preview: tool_args_preview.clone(),
-        },
-    );
+    if let Some(window) = window {
+        let _ = window.emit(
+            "agent-status",
+            AgentStatusPayload {
+                session_id: thread_id.to_string(),
+                status: "working".to_string(),
+                tool_name: Some(tool_name.clone()),
+                tool_args_preview: tool_args_preview.clone(),
+            },
+        );
 
-    let _ = window.emit(
-        "tool-call-progress",
-        ToolCallProgressPayload {
-            session_id: thread_id.to_string(),
-            tool_call_id: tool_call_id.clone(),
-            tool_name: tool_name.clone(),
-            tool_args_preview: tool_args_preview.clone(),
-            status: "started".to_string(),
-            result: None,
-        },
-    );
+        let _ = window.emit(
+            "tool-call-progress",
+            ToolCallProgressPayload {
+                session_id: thread_id.to_string(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: tool_name.clone(),
+                tool_args_preview: tool_args_preview.clone(),
+                status: "started".to_string(),
+                result: None,
+            },
+        );
+    }
 
     let exec = if let Some(exec) = synthetic_exec {
         exec
@@ -1717,17 +3565,35 @@ async fn execute_agent_tool_call(
                     let key = format!("task_plan::{}", thread_id);
                     let _ = set_ui_state(conn, &key, &value);
                 }
-                let _ = window.emit(
-                    "plan-updated",
-                    PlanUpdatedPayload {
-                        session_id: thread_id.to_string(),
-                        args: plan_payload,
-                    },
-                );
+                if let Some(window) = window {
+                    let _ = window.emit(
+                        "plan-updated",
+                        PlanUpdatedPayload {
+                            session_id: thread_id.to_string(),
+                            args: plan_payload,
+                        },
+                    );
+                }
                 tool_ok("ok".to_string())
             }
             Err(err) => tool_error(err),
         }
+    } else if is_community_lane(thread_lane)
+        && matches!(
+            tool_name.as_str(),
+            "community_context_search"
+                | "community_memory_search"
+                | "community_memory_candidate_propose"
+        )
+    {
+        run_community_capability_tool(
+            tool_name.as_str(),
+            &tool_args_for_exec,
+            platform_proxy,
+            cloud_user_id,
+            thread_community_id,
+        )
+        .await
     } else {
         run_agent_tool(workspace, db_path, &tool_name, &tool_args_for_exec).await
     };
@@ -1774,21 +3640,23 @@ async fn execute_agent_tool_call(
         emit_tool_calls_updated(window, thread_id);
     }
 
-    let _ = window.emit(
-        "tool-call-progress",
-        ToolCallProgressPayload {
-            session_id: thread_id.to_string(),
-            tool_call_id: tool_call_id.clone(),
-            tool_name: tool_name.clone(),
-            tool_args_preview,
-            status: "finished".to_string(),
-            result: Some(if exec.status == "ok" {
-                "ok".to_string()
-            } else {
-                "error".to_string()
-            }),
-        },
-    );
+    if let Some(window) = window {
+        let _ = window.emit(
+            "tool-call-progress",
+            ToolCallProgressPayload {
+                session_id: thread_id.to_string(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: tool_name.clone(),
+                tool_args_preview,
+                status: "finished".to_string(),
+                result: Some(if exec.status == "ok" {
+                    "ok".to_string()
+                } else {
+                    "error".to_string()
+                }),
+            },
+        );
+    }
 
     AgentToolCallOutcome {
         tool_result_content: exec.tool_result_content,
@@ -1800,6 +3668,7 @@ fn build_atom_system_prompt(
     workspace_path: &str,
     used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
     community_id: Option<&str>,
+    community_context_prompt: Option<&str>,
     user_system_prompt: Option<&str>,
     community_system_prompt: Option<&str>,
 ) -> String {
@@ -1829,7 +3698,14 @@ fn build_atom_system_prompt(
     };
 
     let community_name = community_id.unwrap_or("none");
-    let community_memory_block = "(none)".to_string();
+    let community_memory_block = if community_context_prompt
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+    {
+        "(available as untrusted retrieval evidence in this turn)".to_string()
+    } else {
+        "(none)".to_string()
+    };
 
     let community_prompt_block = community_system_prompt
     .map(|v| v.trim())
@@ -1879,6 +3755,8 @@ struct HistoryOverrideMessage {
     content_json: serde_json::Value,
 }
 
+const RECENT_HISTORY_MESSAGE_LIMIT: usize = 20;
+
 fn load_recent_history_messages(
     conn: &rusqlite::Connection,
     thread_id: &str,
@@ -1900,15 +3778,19 @@ fn load_recent_history_messages(
                 };
                 filtered.push((role, value));
             }
-            if filtered.len() > 20 {
-                filtered = filtered.into_iter().rev().take(20).collect::<Vec<_>>();
+            if filtered.len() > RECENT_HISTORY_MESSAGE_LIMIT {
+                filtered = filtered
+                    .into_iter()
+                    .rev()
+                    .take(RECENT_HISTORY_MESSAGE_LIMIT)
+                    .collect::<Vec<_>>();
                 filtered.reverse();
             }
             return filtered;
         }
     }
 
-    if let Ok(history) = list_messages(conn, thread_id) {
+    if let Ok(history) = list_messages_tail(conn, thread_id, RECENT_HISTORY_MESSAGE_LIMIT) {
         let mut filtered: Vec<(String, serde_json::Value)> = Vec::new();
         for msg in history {
             if msg.role != "user" && msg.role != "assistant" {
@@ -1917,10 +3799,6 @@ fn load_recent_history_messages(
             let value: serde_json::Value =
                 serde_json::from_str(&msg.content_json).unwrap_or(serde_json::Value::Null);
             filtered.push((msg.role, value));
-        }
-        if filtered.len() > 20 {
-            filtered = filtered.into_iter().rev().take(20).collect::<Vec<_>>();
-            filtered.reverse();
         }
         return filtered;
     }
@@ -1942,19 +3820,6 @@ const AGENT_MAX_RUN_WALL_MS: u128 = 15 * 60 * 1000;
 
 fn json_role(value: &serde_json::Value) -> Option<&str> {
     value.get("role").and_then(|v| v.as_str())
-}
-
-fn truncate_utf8_for_prompt(value: &str, max_bytes: usize) -> (String, bool) {
-    let trimmed = value.trim();
-    if trimmed.len() <= max_bytes {
-        return (trimmed.to_string(), false);
-    }
-    let mut end = max_bytes;
-    while end > 0 && !trimmed.is_char_boundary(end) {
-        end -= 1;
-    }
-    let out = trimmed[..end].to_string();
-    (out, true)
 }
 
 fn truncate_tool_result_for_prompt(value: &str) -> String {
@@ -2642,8 +4507,8 @@ mod compaction_tests {
         let db_path = temp_root.join("arx.db");
         let state = db::init_db_at(&db_path, "test-key").expect("init db");
         let conn = open_conn(&state.db_path, &state.key).expect("open conn");
-        let thread =
-            create_thread(&conn, "test", ENGINE_MESSAGES_AGENT, None).expect("create thread");
+        let thread = create_thread(&conn, "test", ENGINE_MESSAGES_AGENT, None, None, None)
+            .expect("create thread");
 
         let first_id = append_handoff_summary_event(
             &conn,
@@ -2773,152 +4638,37 @@ fn trim_anthropic_tool_loop_messages(messages: &mut Vec<serde_json::Value>) {
 }
 
 fn make_agent_tool_schema() -> Vec<serde_json::Value> {
-    vec![
-        serde_json::json!({
-          "name": "update_plan",
-          "description": "Update the UI Plan panel for this session. Use a short plan with 3–6 steps and statuses: pending|in_progress|completed.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "explanation": { "type": "string" },
-              "plan": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "step": { "type": "string" },
-                    "status": { "type": "string", "enum": ["pending", "in_progress", "completed"] }
-                  },
-                  "required": ["step", "status"]
-                }
-              }
-            },
-            "required": ["plan"]
-          }
-        }),
-        serde_json::json!({
-          "name": "read",
-          "description": "Read a file with line numbers. Use offset/limit for large files.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": { "type": "string" },
-              "offset": { "type": "integer" },
-              "limit": { "type": "integer" }
-            },
-            "required": ["path"]
-          }
-        }),
-        serde_json::json!({
-          "name": "list_dir",
-          "description": "List a directory (files vs folders). Use this for folders; use read for files.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": { "type": "string" }
-            },
-            "required": ["path"]
-          }
-        }),
-        serde_json::json!({
-          "name": "sha256",
-          "description": "Compute SHA-256 of a file's raw bytes (hex).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": { "type": "string" }
-            },
-            "required": ["path"]
-          }
-        }),
-        serde_json::json!({
-          "name": "write",
-          "description": "Write full content to a file (creates parent directories). expected_before_sha256 is optional (sha256 hex string to precondition overwrite). For multiple files, you can also pass writes: [{path, content}, ...]. If omitted, proceeds nano-style.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": { "type": "string" },
-              "content": { "type": "string" },
-              "expected_before_sha256": { "type": "string" },
-              "writes": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "expected_before_sha256": { "type": "string" }
-                  },
-                  "required": ["path", "content"]
-                }
-              }
-            },
-            "required": ["path", "content"]
-          }
-        }),
-        serde_json::json!({
-          "name": "edit",
-          "description": "Replace old with new in a file. Replaces the first occurrence by default; set all=true (or replaceAll=true) to replace all. Supports aliases: filePath, oldString, newString, replaceAll. If old is empty, overwrites the file with new. expected_before_sha256 is optional (string).",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "path": { "type": "string" },
-              "filePath": { "type": "string" },
-              "old": { "type": "string" },
-              "oldString": { "type": "string" },
-              "new": { "type": "string" },
-              "newString": { "type": "string" },
-              "all": { "type": "boolean" },
-              "replaceAll": { "type": "boolean" },
-              "expected_before_sha256": { "type": "string" },
-              "expectedBeforeSha256": { "type": "string" }
-            },
-            "required": ["path", "old", "new"]
-          }
-        }),
-        serde_json::json!({
-          "name": "glob",
-          "description": "Find files by glob pattern (supports **). Sorted by mtime desc. Returns up to 200 hits. Ignores .git, node_modules, dist, target, blobs.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "pat": { "type": "string" },
-              "path": { "type": "string" }
-            },
-            "required": ["pat"]
-          }
-        }),
-        serde_json::json!({
-                  "name": "grep",
-                  "description": "Search files for a regex pattern. Uses ripgrep (rg) (bundled/downloaded as needed) with a fallback Rust scan. Returns up to 50 hits. Skips large/binary files and ignores .git, node_modules, dist, target, blobs. Optional include glob: \"*.ts\" or \"*.{ts,tsx}\".",
-                  "input_schema": {
-                    "type": "object",
-                    "properties": {
-                      "pat": { "type": "string" },
-                    "pattern": { "type": "string" },
-                    "query": { "type": "string" },
-                    "path": { "type": "string" },
-                    "include": { "type": "string" }
-            },
-            "required": ["pat"]
-          }
-        }),
-        serde_json::json!({
-          "name": "bash",
-          "description": "Run a shell command (30s timeout). Creates cwd if needed. Requires approval.",
-          "input_schema": {
-            "type": "object",
-            "properties": {
-              "cmd": { "type": "string" },
-              "cwd": { "type": "string" }
-            },
-            "required": ["cmd"]
-          }
-        }),
-    ]
+    coding_harness_capabilities()
+        .iter()
+        .map(|capability| {
+            serde_json::json!({
+              "name": capability.name.as_str(),
+              "description": capability.description.as_str(),
+              "input_schema": capability.input_schema.clone()
+            })
+        })
+        .collect()
 }
 
-fn make_agent_tool_schema_update_plan_only() -> Vec<serde_json::Value> {
+fn make_community_tool_schema() -> Vec<serde_json::Value> {
+    community_harness_desktop_runtime_tools()
+        .iter()
+        .map(|tool_name| {
+            let capability = community_harness_runtime_capability(tool_name);
+            let description = capability
+                .description
+                .as_deref()
+                .unwrap_or_else(|| community_tool_default_description(capability.name.as_str()));
+            serde_json::json!({
+              "name": capability.name.as_str(),
+              "description": description,
+              "input_schema": capability.input_schema.clone()
+            })
+        })
+        .collect()
+}
+
+fn make_update_plan_only_tool_schema() -> Vec<serde_json::Value> {
     make_agent_tool_schema()
         .into_iter()
         .filter(|tool| tool.get("name").and_then(|v| v.as_str()) == Some("update_plan"))
@@ -2976,8 +4726,8 @@ fn make_agent_tool_schema_openai_responses() -> Vec<serde_json::Value> {
         .collect()
 }
 
-fn make_agent_tool_schema_openai_update_plan_only() -> Vec<serde_json::Value> {
-    make_agent_tool_schema_update_plan_only()
+fn make_community_tool_schema_openai() -> Vec<serde_json::Value> {
+    make_community_tool_schema()
         .into_iter()
         .filter_map(|tool| {
             let name = tool.get("name")?.as_str()?.to_string();
@@ -3002,8 +4752,34 @@ fn make_agent_tool_schema_openai_update_plan_only() -> Vec<serde_json::Value> {
         .collect()
 }
 
-fn make_agent_tool_schema_openai_responses_update_plan_only() -> Vec<serde_json::Value> {
-    make_agent_tool_schema_update_plan_only()
+fn make_update_plan_only_tool_schema_openai() -> Vec<serde_json::Value> {
+    make_update_plan_only_tool_schema()
+        .into_iter()
+        .filter_map(|tool| {
+            let name = tool.get("name")?.as_str()?.to_string();
+            let description = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let parameters = tool
+                .get("input_schema")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            Some(serde_json::json!({
+              "type": "function",
+              "function": {
+                "name": name,
+                "description": description,
+                "parameters": parameters
+              }
+            }))
+        })
+        .collect()
+}
+
+fn make_community_tool_schema_openai_responses() -> Vec<serde_json::Value> {
+    make_community_tool_schema()
         .into_iter()
         .filter_map(|tool| {
             let name = tool.get("name")?.as_str()?.to_string();
@@ -3027,1419 +4803,64 @@ fn make_agent_tool_schema_openai_responses_update_plan_only() -> Vec<serde_json:
         .collect()
 }
 
-fn resolve_scoped_path(root: &str, raw_path: &str) -> Result<std::path::PathBuf, String> {
-    let cleaned = raw_path.trim();
-    if cleaned.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let resolved = resolve_path_under_root(root, cleaned);
-    let resolved_str = resolved.to_string_lossy().to_string();
-    if !is_within_root(root, &resolved_str) {
-        return Err(format!("path outside workspace scope: {}", cleaned));
-    }
-    Ok(resolved)
-}
-
-fn rel_path_display(root: &str, abs: &std::path::Path) -> String {
-    let root_path = std::path::Path::new(root);
-    let root_canon = root_path
-        .canonicalize()
-        .unwrap_or_else(|_| root_path.to_path_buf());
-    let abs_canon = abs.canonicalize().unwrap_or_else(|_| abs.to_path_buf());
-    abs_canon
-        .strip_prefix(&root_canon)
-        .ok()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| abs.to_string_lossy().to_string())
-}
-
-fn write_file_atomic(path: &std::path::Path, bytes: &[u8]) -> anyhow::Result<()> {
-    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    std::fs::create_dir_all(parent)?;
-
-    let tmp_name = format!(
-        ".arx.tmp.{}.{}",
-        uuid::Uuid::new_v4().simple(),
-        std::process::id()
-    );
-    let tmp_path = parent.join(tmp_name);
-    {
-        use std::io::Write as _;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&tmp_path)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-    }
-    std::fs::rename(&tmp_path, path)?;
-    Ok(())
-}
-
-struct ToolExecResult {
-    status: &'static str, // "ok" | "error"
-    tool_result_content: String,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    exit_code: Option<i32>,
-    artifacts: Vec<serde_json::Value>,
-    reason: Option<String>,
-}
-
-fn tool_ok(content: String) -> ToolExecResult {
-    ToolExecResult {
-        status: "ok",
-        stdout: content.as_bytes().to_vec(),
-        stderr: Vec::new(),
-        exit_code: Some(0),
-        artifacts: Vec::new(),
-        reason: None,
-        tool_result_content: content,
-    }
-}
-
-fn tool_error(message: String) -> ToolExecResult {
-    ToolExecResult {
-        status: "error",
-        stdout: Vec::new(),
-        stderr: message.as_bytes().to_vec(),
-        exit_code: Some(1),
-        artifacts: Vec::new(),
-        reason: Some("tool_error".to_string()),
-        tool_result_content: format!("error: {}", message),
-    }
-}
-
-fn is_ignored_component(name: &str) -> bool {
-    matches!(name, ".git" | "node_modules" | "dist" | "target" | "blobs")
-}
-
-fn is_ignored_path(path: &std::path::Path) -> bool {
-    path.components().any(|c| match c {
-        std::path::Component::Normal(s) => s.to_str().map(is_ignored_component).unwrap_or(false),
-        _ => false,
-    })
-}
-
-fn pattern_needs_pcre2(pat: &str) -> bool {
-    pat.contains("(?=")
-        || pat.contains("(?!")
-        || pat.contains("(?<=")
-        || pat.contains("(?<!")
-        || pat.contains("(?<")
-        || pat.contains("\\1")
-        || pat.contains("\\2")
-        || pat.contains("\\k<")
-}
-
-fn ripgrep_exe_name() -> &'static str {
-    if cfg!(windows) {
-        "rg.exe"
-    } else {
-        "rg"
-    }
-}
-
-fn ripgrep_platform_config() -> Result<(&'static str, &'static str), String> {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        return Ok(("aarch64-apple-darwin", "tar.gz"));
-    }
-    if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        return Ok(("x86_64-apple-darwin", "tar.gz"));
-    }
-    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        return Ok(("x86_64-unknown-linux-musl", "tar.gz"));
-    }
-    if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-        return Ok(("aarch64-unknown-linux-gnu", "tar.gz"));
-    }
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        return Ok(("x86_64-pc-windows-msvc", "zip"));
-    }
-    Err("unsupported platform for bundled ripgrep".to_string())
-}
-
-fn find_executable_in_path(exe_name: &str) -> Option<std::path::PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(exe_name);
-        if candidate.exists() && candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn ripgrep_bin_dir(db_path: &Path) -> Result<std::path::PathBuf, String> {
-    Ok(db_path
-        .parent()
-        .ok_or_else(|| "failed to resolve app data dir".to_string())?
-        .join("bin"))
-}
-
-fn find_file_recursive(root: &Path, filename: &str) -> Option<std::path::PathBuf> {
-    let read_dir = std::fs::read_dir(root).ok()?;
-    for entry in read_dir.flatten() {
-        let path = entry.path();
-        let file_type = entry.file_type().ok()?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        if file_type.is_dir() {
-            if let Some(found) = find_file_recursive(&path, filename) {
-                return Some(found);
-            }
-            continue;
-        }
-        if file_type.is_file() {
-            if path.file_name().and_then(|v| v.to_str()) == Some(filename) {
-                return Some(path);
-            }
-        }
-    }
-    None
-}
-
-fn run_checked_command(cmd: &mut std::process::Command, label: &str) -> Result<(), String> {
-    let output = cmd
-        .output()
-        .map_err(|e| format!("{} failed: {}", label, e))?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if stderr.is_empty() {
-        return Err(format!("{} failed", label));
-    }
-    Err(format!("{} failed: {}", label, stderr))
-}
-
-async fn ensure_ripgrep(db_path: &Path) -> Result<std::path::PathBuf, String> {
-    let exe_name = ripgrep_exe_name();
-
-    if let Ok(override_path) = std::env::var("ARX_RIPGREP_PATH") {
-        let p = std::path::PathBuf::from(override_path);
-        if p.exists() && p.is_file() {
-            return Ok(p);
-        }
-        return Err("ARX_RIPGREP_PATH points to a missing file".to_string());
-    }
-
-    if let Some(path) = find_executable_in_path(exe_name) {
-        return Ok(path);
-    }
-
-    let bin_dir = ripgrep_bin_dir(db_path)?;
-    let managed = bin_dir.join(exe_name);
-    if managed.exists() && managed.is_file() {
-        return Ok(managed);
-    }
-
-    let (platform, ext) = ripgrep_platform_config()?;
-    let filename = format!("ripgrep-{}-{}.{}", RIPGREP_VERSION, platform, ext);
-    let url = format!(
-        "https://github.com/BurntSushi/ripgrep/releases/download/{}/{}",
-        RIPGREP_VERSION, filename
-    );
-
-    std::fs::create_dir_all(&bin_dir).map_err(|e| format!("create bin dir failed: {}", e))?;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("ripgrep download failed: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!(
-            "ripgrep download failed (status {})",
-            resp.status()
-        ));
-    }
-    let archive_bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("ripgrep download read failed: {}", e))?
-        .to_vec();
-
-    let archive_path = bin_dir.join(&filename);
-    write_file_atomic(&archive_path, &archive_bytes)
-        .map_err(|e| format!("write ripgrep archive failed: {}", e))?;
-
-    let extract_dir = bin_dir.join(format!(
-        ".arx.ripgrep.extract.{}",
-        uuid::Uuid::new_v4().simple()
-    ));
-    std::fs::create_dir_all(&extract_dir)
-        .map_err(|e| format!("create extract dir failed: {}", e))?;
-
-    let extract_result = match ext {
-        "tar.gz" => {
-            let mut cmd = std::process::Command::new("tar");
-            cmd.arg("-xzf")
-                .arg(&archive_path)
-                .arg("-C")
-                .arg(&extract_dir);
-            run_checked_command(&mut cmd, "tar extract")
-        }
-        "zip" => {
-            if cfg!(windows) {
-                let archive_str = archive_path.to_string_lossy().replace('\'', "''");
-                let dest_str = extract_dir.to_string_lossy().replace('\'', "''");
-                let mut cmd = std::process::Command::new("powershell");
-                cmd.arg("-NoProfile").arg("-Command").arg(format!(
-                    "Expand-Archive -Force -Path '{}' -DestinationPath '{}'",
-                    archive_str, dest_str
-                ));
-                run_checked_command(&mut cmd, "powershell Expand-Archive")
-            } else {
-                Err("zip extraction is only supported on Windows".to_string())
-            }
-        }
-        other => Err(format!("unsupported ripgrep archive type: {}", other)),
-    };
-
-    let extracted_bin_path = if extract_result.is_ok() {
-        find_file_recursive(&extract_dir, exe_name)
-            .ok_or_else(|| format!("{} not found in extracted ripgrep archive", exe_name))
-    } else {
-        Err(extract_result
-            .err()
-            .unwrap_or_else(|| "extract failed".to_string()))
-    };
-
-    let cleanup = || {
-        let _ = std::fs::remove_file(&archive_path);
-        let _ = std::fs::remove_dir_all(&extract_dir);
-    };
-
-    let extracted_bin_path = match extracted_bin_path {
-        Ok(v) => v,
-        Err(err) => {
-            cleanup();
-            return Err(err);
-        }
-    };
-
-    let bin_bytes = std::fs::read(&extracted_bin_path).map_err(|e| {
-        cleanup();
-        format!("read extracted ripgrep failed: {}", e)
-    })?;
-
-    write_file_atomic(&managed, &bin_bytes).map_err(|e| {
-        cleanup();
-        format!("write ripgrep failed: {}", e)
-    })?;
-
-    cleanup();
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        let mut perms = std::fs::metadata(&managed)
-            .map_err(|e| format!("ripgrep metadata failed: {}", e))?
-            .permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&managed, perms)
-            .map_err(|e| format!("ripgrep chmod failed: {}", e))?;
-    }
-
-    Ok(managed)
-}
-
-fn run_ripgrep_grep(
-    rg_path: &Path,
-    workspace_root: &str,
-    base_rel: &str,
-    pat: &str,
-    include: Option<&str>,
-    max_hits: usize,
-    needs_pcre2: bool,
-) -> Result<(Vec<String>, bool, bool), String> {
-    use std::io::{BufRead, BufReader, Read as _};
-    use std::process::Stdio;
-
-    let mut cmd = std::process::Command::new(rg_path);
-    cmd.current_dir(workspace_root)
-        .arg("-nH")
-        .arg("--color")
-        .arg("never")
-        .arg("--no-messages")
-        .arg("--hidden")
-        .arg("--no-follow")
-        .arg("--max-filesize")
-        .arg("2M");
-
-    for glob in [
-        "!.git/**",
-        "!node_modules/**",
-        "!dist/**",
-        "!target/**",
-        "!blobs/**",
-    ] {
-        cmd.arg("--glob").arg(glob);
-    }
-
-    if needs_pcre2 {
-        cmd.arg("--pcre2");
-    }
-
-    cmd.arg("--regexp").arg(pat);
-
-    if let Some(include) = include.map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        cmd.arg("--glob").arg(include);
-    }
-
-    cmd.arg(base_rel)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let mut child = match cmd.spawn() {
-        Ok(child) => child,
-        Err(err) => return Err(format!("ripgrep spawn failed: {}", err)),
-    };
-
-    let stderr_handle = child.stderr.take().map(|mut stderr| {
-        std::thread::spawn(move || {
-            let mut out: Vec<u8> = Vec::new();
-            let _ = stderr.read_to_end(&mut out);
-            out
+fn make_update_plan_only_tool_schema_openai_responses() -> Vec<serde_json::Value> {
+    make_update_plan_only_tool_schema()
+        .into_iter()
+        .filter_map(|tool| {
+            let name = tool.get("name")?.as_str()?.to_string();
+            let description = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let parameters = tool
+                .get("input_schema")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            Some(serde_json::json!({
+              "type": "function",
+              "name": name,
+              "description": description,
+              "parameters": parameters,
+              "strict": false
+            }))
         })
-    });
+        .collect()
+}
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "failed to capture ripgrep stdout".to_string())?;
-    let reader = BufReader::new(stdout);
-
-    let mut hits: Vec<String> = Vec::new();
-    let mut truncated = false;
-
-    for line in reader.lines() {
-        let line = match line {
-            Ok(v) => v,
-            Err(_) => break,
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        hits.push(line.replace('\\', "/"));
-        if hits.len() >= max_hits {
-            truncated = true;
-            let _ = child.kill();
-            break;
-        }
-    }
-
-    let status = child
-        .wait()
-        .map_err(|e| format!("ripgrep wait failed: {}", e))?;
-    let exit_code = status.code();
-    let stderr_bytes = stderr_handle
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default();
-    let stderr_text = String::from_utf8_lossy(&stderr_bytes).trim().to_string();
-
-    if truncated {
-        return Ok((hits, true, false));
-    }
-
-    match exit_code {
-        Some(0) => Ok((hits, false, false)),
-        Some(1) => Ok((Vec::new(), false, false)),
-        Some(2) => {
-            if hits.is_empty() {
-                let msg = if stderr_text.is_empty() {
-                    "ripgrep failed".to_string()
-                } else {
-                    format!("ripgrep failed: {}", stderr_text)
-                };
-                Err(msg)
-            } else {
-                Ok((hits, false, true))
-            }
-        }
-        Some(code) => {
-            let msg = if stderr_text.is_empty() {
-                format!("ripgrep failed (exit code {})", code)
-            } else {
-                format!("ripgrep failed (exit code {}): {}", code, stderr_text)
-            };
-            Err(msg)
-        }
-        None => Err("ripgrep failed (terminated)".to_string()),
+fn make_tool_schema_for_lane(thread_lane: &str, workspace: &str) -> Vec<serde_json::Value> {
+    if is_community_lane(thread_lane) {
+        make_community_tool_schema()
+    } else if workspace.trim().is_empty() {
+        make_update_plan_only_tool_schema()
+    } else {
+        make_agent_tool_schema()
     }
 }
 
-fn normalize_agent_tool_name(tool_name: &str) -> String {
-    let trimmed = tool_name.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    let lower = trimmed.to_lowercase();
-    match lower.as_str() {
-        "list" | "ls" => "list_dir".to_string(),
-        "updateplan" => "update_plan".to_string(),
-        _ => lower,
+fn make_tool_schema_openai_for_lane(thread_lane: &str, workspace: &str) -> Vec<serde_json::Value> {
+    if is_community_lane(thread_lane) {
+        make_community_tool_schema_openai()
+    } else if workspace.trim().is_empty() {
+        make_update_plan_only_tool_schema_openai()
+    } else {
+        make_agent_tool_schema_openai()
     }
 }
 
-fn is_known_agent_tool_name(tool_name: &str) -> bool {
-    matches!(
-        tool_name,
-        "update_plan"
-            | "read"
-            | "list_dir"
-            | "sha256"
-            | "write"
-            | "edit"
-            | "glob"
-            | "grep"
-            | "bash"
-    )
-}
-
-async fn read_limited(mut reader: impl tokio::io::AsyncRead + Unpin, max_bytes: usize) -> Vec<u8> {
-    let mut out = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        let n = match reader.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(_) => break,
-        };
-        if out.len() < max_bytes {
-            let remaining = max_bytes - out.len();
-            out.extend_from_slice(&buf[..std::cmp::min(remaining, n)]);
-        }
-    }
-    out
-}
-
-async fn run_agent_tool(
-    workspace_root: &str,
-    db_path: &Path,
-    tool_name: &str,
-    args: &serde_json::Value,
-) -> ToolExecResult {
-    let workspace_root = workspace_root.trim();
-    if workspace_root.is_empty() || !std::path::Path::new(workspace_root).is_absolute() {
-        return tool_error(
-            "workspace not bound; select a workspace before using tools".to_string(),
-        );
-    }
-
-    let Some(obj) = args.as_object() else {
-        return tool_error("args must be an object".to_string());
-    };
-
-    match tool_name {
-        "read" => {
-            let path = obj
-                .get("path")
-                .or_else(|| obj.get("file_path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            let offset = obj
-                .get("offset")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0)
-                .max(0) as usize;
-            let limit = obj
-                .get("limit")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(200)
-                .max(1) as usize;
-            let abs = match resolve_scoped_path(workspace_root, path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            let meta = match std::fs::metadata(&abs) {
-                Ok(m) => m,
-                Err(err) => return tool_error(format!("read failed: {}", err)),
-            };
-            if meta.is_dir() {
-                return tool_error("path is a directory; use list_dir for folders".to_string());
-            }
-            let file = match std::fs::File::open(&abs) {
-                Ok(f) => f,
-                Err(err) => return tool_error(format!("open failed: {}", err)),
-            };
-            let reader = std::io::BufReader::new(file);
-            let mut out = String::new();
-            for (idx, line) in reader.lines().skip(offset).take(limit).enumerate() {
-                let line_no = offset + idx + 1;
-                match line {
-                    Ok(line) => {
-                        out.push_str(&format!("{:4}| {}\n", line_no, line));
-                    }
-                    Err(_) => break,
-                }
-            }
-            if out.trim().is_empty() {
-                out = "(empty)".to_string();
-            }
-            tool_ok(out)
-        }
-        "list_dir" => {
-            let path = obj
-                .get("path")
-                .or_else(|| obj.get("dir_path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or(".")
-                .trim();
-            let abs = match resolve_scoped_path(workspace_root, path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            let meta = match std::fs::metadata(&abs) {
-                Ok(m) => m,
-                Err(err) => return tool_error(format!("list_dir failed: {}", err)),
-            };
-            if !meta.is_dir() {
-                return tool_error("path is not a directory".to_string());
-            }
-
-            let mut dirs: Vec<String> = Vec::new();
-            let mut files: Vec<String> = Vec::new();
-            let read_dir = match std::fs::read_dir(&abs) {
-                Ok(rd) => rd,
-                Err(err) => return tool_error(format!("list_dir failed: {}", err)),
-            };
-            for entry in read_dir.flatten() {
-                let file_name = entry.file_name();
-                let name = file_name.to_string_lossy().to_string();
-                if is_ignored_component(name.as_str()) {
-                    continue;
-                }
-                let file_type = match entry.file_type() {
-                    Ok(ft) => ft,
-                    Err(_) => continue,
-                };
-                if file_type.is_dir() {
-                    dirs.push(format!("{}/", name));
-                } else if file_type.is_file() {
-                    files.push(name);
-                }
-            }
-            dirs.sort();
-            files.sort();
-            let rel = rel_path_display(workspace_root, &abs);
-            let mut out_lines: Vec<String> = Vec::new();
-            out_lines.push(format!(
-                "dir: {} ({} dirs, {} files)",
-                rel,
-                dirs.len(),
-                files.len()
-            ));
-            if !dirs.is_empty() || !files.is_empty() {
-                out_lines.push(String::new());
-                out_lines.extend(dirs);
-                out_lines.extend(files);
-            }
-            tool_ok(out_lines.join("\n"))
-        }
-        "sha256" => {
-            let path = obj
-                .get("path")
-                .or_else(|| obj.get("file_path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            let abs = match resolve_scoped_path(workspace_root, path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            if !abs.exists() {
-                return tool_error("file does not exist".to_string());
-            }
-            let bytes = match std::fs::read(&abs) {
-                Ok(b) => b,
-                Err(err) => return tool_error(format!("read failed: {}", err)),
-            };
-            let sha = hex_sha256(&bytes);
-            let mut result = tool_ok(sha.clone());
-            result.artifacts.push(serde_json::json!({
-              "type": "file_hash",
-              "path": rel_path_display(workspace_root, &abs),
-              "sha256": sha,
-              "byte_len": bytes.len()
-            }));
-            result
-        }
-        "glob" => {
-            let pat = obj
-                .get("pat")
-                .or_else(|| obj.get("pattern"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            if pat.is_empty() {
-                return tool_error("pat is required".to_string());
-            }
-            let base = obj
-                .get("path")
-                .or_else(|| obj.get("cwd"))
-                .or_else(|| obj.get("workdir"))
-                .and_then(|v| v.as_str())
-                .unwrap_or(".")
-                .trim();
-            let base_abs = match resolve_scoped_path(workspace_root, base) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            if !base_abs.exists() {
-                return tool_error("path does not exist".to_string());
-            }
-
-            let pattern_abs = if std::path::Path::new(pat).is_absolute() {
-                std::path::PathBuf::from(pat)
-            } else {
-                base_abs.join(pat)
-            };
-            let pattern = pattern_abs.to_string_lossy().replace('\\', "/");
-
-            // Guardrail: ensure the non-wildcard prefix stays within the workspace scope.
-            let prefix = pattern
-                .char_indices()
-                .find(|(_idx, ch)| matches!(ch, '*' | '?' | '[' | '{'))
-                .map(|(idx, _)| pattern[..idx].to_string())
-                .unwrap_or_else(|| pattern.clone());
-            let prefix_path = if prefix.trim().is_empty() {
-                base_abs.to_string_lossy().to_string()
-            } else {
-                prefix
-            };
-            if !is_within_root(workspace_root, &prefix_path) {
-                return tool_error("pat resolves outside workspace scope".to_string());
-            }
-
-            let mut hits: Vec<(i64, String)> = Vec::new();
-            let mut total_matches: usize = 0;
-            const MAX_HITS: usize = 200;
-            match glob::glob(&pattern) {
-                Ok(paths) => {
-                    for p in paths.flatten() {
-                        if is_ignored_path(&p) {
-                            continue;
-                        }
-                        let rel = rel_path_display(workspace_root, &p);
-                        if std::path::Path::new(&rel).is_absolute() {
-                            continue;
-                        }
-                        total_matches += 1;
-                        let mtime = std::fs::metadata(&p)
-                            .and_then(|m| m.modified())
-                            .ok()
-                            .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(0);
-                        hits.push((mtime, rel));
-                    }
-                }
-                Err(err) => return tool_error(format!("invalid glob: {}", err)),
-            }
-            hits.sort_by(|a, b| b.0.cmp(&a.0));
-            let truncated = hits.len() > MAX_HITS;
-            if hits.len() > MAX_HITS {
-                hits.truncate(MAX_HITS);
-            }
-            let mut out_lines: Vec<String> = Vec::new();
-            out_lines.push(format!(
-                "matches: {} (returned: {}{}) (ignored: .git,node_modules,dist,target,blobs)",
-                total_matches,
-                hits.len(),
-                if truncated { ", truncated" } else { "" }
-            ));
-            if !hits.is_empty() {
-                out_lines.push(String::new());
-                out_lines.extend(hits.into_iter().map(|(_mtime, rel)| rel));
-            }
-            tool_ok(out_lines.join("\n"))
-        }
-        "grep" => {
-            let pat = obj
-                .get("pat")
-                .or_else(|| obj.get("query"))
-                .or_else(|| obj.get("pattern"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            if pat.is_empty() {
-                return tool_error("pat is required".to_string());
-            }
-            let base = obj
-                .get("path")
-                .or_else(|| obj.get("cwd"))
-                .or_else(|| obj.get("workdir"))
-                .and_then(|v| v.as_str())
-                .unwrap_or(".")
-                .trim();
-            let include = obj
-                .get("include")
-                .or_else(|| obj.get("glob"))
-                .and_then(|v| v.as_str())
-                .map(|v| v.trim())
-                .filter(|v| !v.is_empty());
-            let base_abs = match resolve_scoped_path(workspace_root, base) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            if !base_abs.exists() {
-                return tool_error("path does not exist".to_string());
-            }
-
-            const MAX_HITS: usize = 50;
-
-            let needs_pcre2 = pattern_needs_pcre2(pat);
-            let mut base_rel = rel_path_display(workspace_root, &base_abs);
-            if base_rel.trim().is_empty() {
-                base_rel = ".".to_string();
-            }
-            let mut rg_err: Option<String> = None;
-            let rg_path = match ensure_ripgrep(db_path).await {
-                Ok(path) => Some(path),
-                Err(err) => {
-                    rg_err = Some(err);
-                    None
-                }
-            };
-
-            if let Some(rg_path) = rg_path {
-                match run_ripgrep_grep(
-                    &rg_path,
-                    workspace_root,
-                    &base_rel,
-                    pat,
-                    include,
-                    MAX_HITS,
-                    needs_pcre2,
-                ) {
-                    Ok((hits, truncated, had_errors)) => {
-                        let mut out_lines: Vec<String> = Vec::new();
-                        out_lines.push(format!(
-                            "hits: {}{} (backend: rg{})",
-                            hits.len(),
-                            if truncated { " (truncated)" } else { "" },
-                            if needs_pcre2 { ", pcre2" } else { "" }
-                        ));
-                        if had_errors {
-                            out_lines
-                                .push("(some paths were inaccessible and skipped)".to_string());
-                        }
-                        if !hits.is_empty() {
-                            out_lines.push(String::new());
-                            out_lines.extend(hits);
-                        }
-                        return tool_ok(out_lines.join("\n"));
-                    }
-                    Err(err) => {
-                        if needs_pcre2 {
-                            return tool_error(err);
-                        }
-                        // Fall through to Rust scan.
-                        rg_err = Some(err);
-                    }
-                }
-            } else if needs_pcre2 {
-                return tool_error(match rg_err {
-                    Some(err) => {
-                        format!("unsupported regex feature (look-around/backrefs); {}", err)
-                    }
-                    None => "unsupported regex feature (look-around/backrefs); ripgrep unavailable"
-                        .to_string(),
-                });
-            }
-
-            let re = match regex::Regex::new(pat) {
-                Ok(re) => re,
-                Err(err) => return tool_error(format!("invalid regex: {}", err)),
-            };
-
-            let mut stack = vec![base_abs];
-            let mut hits: Vec<String> = Vec::new();
-            const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
-            let mut scanned_files: u64 = 0;
-            let mut skipped_large: u64 = 0;
-            let mut skipped_binary: u64 = 0;
-
-            while let Some(dir) = stack.pop() {
-                if hits.len() >= MAX_HITS {
-                    break;
-                }
-                if is_ignored_path(&dir) {
-                    continue;
-                }
-                let read_dir = match std::fs::read_dir(&dir) {
-                    Ok(rd) => rd,
-                    Err(_) => continue,
-                };
-                for entry in read_dir.flatten() {
-                    let path = entry.path();
-                    if is_ignored_path(&path) {
-                        continue;
-                    }
-                    let file_type = match entry.file_type() {
-                        Ok(ft) => ft,
-                        Err(_) => continue,
-                    };
-                    if file_type.is_dir() {
-                        stack.push(path);
-                        continue;
-                    }
-                    if !file_type.is_file() {
-                        continue;
-                    }
-                    scanned_files += 1;
-
-                    let meta = match std::fs::metadata(&path) {
-                        Ok(m) => m,
-                        Err(_) => continue,
-                    };
-                    if meta.len() > MAX_FILE_BYTES {
-                        skipped_large += 1;
-                        continue;
-                    }
-
-                    let bytes = match std::fs::read(&path) {
-                        Ok(b) => b,
-                        Err(_) => continue,
-                    };
-                    if bytes.iter().any(|b| *b == 0) {
-                        skipped_binary += 1;
-                        continue;
-                    }
-                    let text = String::from_utf8_lossy(&bytes);
-                    for (idx, line) in text.lines().enumerate() {
-                        if re.is_match(line) {
-                            let rel = rel_path_display(workspace_root, &path);
-                            hits.push(format!("{}:{}:{}", rel, idx + 1, line));
-                            if hits.len() >= MAX_HITS {
-                                break;
-                            }
-                        }
-                    }
-                    if hits.len() >= MAX_HITS {
-                        break;
-                    }
-                }
-            }
-
-            let mut out_lines: Vec<String> = Vec::new();
-            let backend_note = rg_err
-                .as_ref()
-                .map(|err| {
-                    let trimmed = err.trim();
-                    if trimmed.is_empty() {
-                        String::new()
-                    } else if trimmed.len() > 120 {
-                        format!(", rg unavailable: {}...", &trimmed[..117])
-                    } else {
-                        format!(", rg unavailable: {}", trimmed)
-                    }
-                })
-                .unwrap_or_default();
-            out_lines.push(format!(
-          "hits: {}{} (backend: rust{}; scanned_files: {}, skipped_large: {}, skipped_binary: {})",
-          hits.len(),
-          if hits.len() >= MAX_HITS { " (truncated)" } else { "" },
-          backend_note,
-          scanned_files,
-          skipped_large,
-          skipped_binary
-        ));
-            if !hits.is_empty() {
-                out_lines.push(String::new());
-                out_lines.extend(hits);
-            }
-            tool_ok(out_lines.join("\n"))
-        }
-        "write" => {
-            #[derive(Clone)]
-            enum ExpectedBeforeSha {
-                Create,
-                Hash(String),
-            }
-
-            let parse_expected_before = |obj: &serde_json::Map<String, serde_json::Value>| -> Result<Option<ExpectedBeforeSha>, ToolExecResult> {
-        match obj.get("expected_before_sha256") {
-          None => Ok(None),
-          Some(serde_json::Value::Null) => Ok(Some(ExpectedBeforeSha::Create)),
-          Some(serde_json::Value::String(s)) => {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-              Ok(None)
-            } else {
-              Ok(Some(ExpectedBeforeSha::Hash(trimmed.to_string())))
-            }
-          }
-          Some(_) => Err(tool_error("expected_before_sha256 must be string or null".to_string())),
-        }
-      };
-
-            if let Some(writes) = obj.get("writes").and_then(|v| v.as_array()) {
-                if writes.is_empty() {
-                    return tool_error("writes must be a non-empty array".to_string());
-                }
-
-                struct PreparedWrite {
-                    rel: String,
-                    abs: std::path::PathBuf,
-                    content: String,
-                    before_bytes: Option<Vec<u8>>,
-                }
-
-                let mut prepared: Vec<PreparedWrite> = Vec::new();
-                for (idx, entry) in writes.iter().enumerate() {
-                    let Some(entry_obj) = entry.as_object() else {
-                        return tool_error(format!("writes[{}] must be an object", idx));
-                    };
-
-                    let path = entry_obj
-                        .get("path")
-                        .or_else(|| entry_obj.get("filePath"))
-                        .or_else(|| entry_obj.get("filepath"))
-                        .or_else(|| entry_obj.get("file_path"))
-                        .or_else(|| entry_obj.get("filename"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .trim()
-                        .to_string();
-                    if path.is_empty() {
-                        return tool_error(format!("writes[{}].path is required", idx));
-                    }
-
-                    let content = entry_obj
-                        .get("content")
-                        .or_else(|| entry_obj.get("text"))
-                        .or_else(|| entry_obj.get("contents"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    let expected = match parse_expected_before(entry_obj) {
-                        Ok(v) => v,
-                        Err(e) => return e,
-                    };
-
-                    let abs = match resolve_scoped_path(workspace_root, &path) {
-                        Ok(v) => v,
-                        Err(e) => return tool_error(e),
-                    };
-
-                    let meta = match std::fs::metadata(&abs) {
-                        Ok(m) => Some(m),
-                        Err(_) => None,
-                    };
-                    if meta.as_ref().is_some_and(|m| m.is_dir()) {
-                        return tool_error(format!("writes[{}].path is a directory", idx));
-                    }
-
-                    let exists = meta.is_some();
-                    let before_bytes = if exists {
-                        std::fs::read(&abs).ok()
-                    } else {
-                        None
-                    };
-                    if exists {
-                        let before_hash = hex_sha256(before_bytes.as_ref().unwrap_or(&Vec::new()));
-                        match expected.clone() {
-                            Some(ExpectedBeforeSha::Create) => {
-                                return tool_error(format!(
-                  "writes[{}]: expected_before_sha256 was null (create), but file exists; refuse overwrite",
-                  idx
-                ));
-                            }
-                            Some(ExpectedBeforeSha::Hash(expected_hash)) => {
-                                if before_hash != expected_hash {
-                                    return tool_error(format!(
-                    "writes[{}]: expected_before_sha256 mismatch (expected {}, got {})",
-                    idx, expected_hash, before_hash
-                  ));
-                                }
-                            }
-                            None => {}
-                        }
-                    }
-
-                    let rel = rel_path_display(workspace_root, &abs);
-                    prepared.push(PreparedWrite {
-                        rel,
-                        abs,
-                        content,
-                        before_bytes,
-                    });
-                }
-
-                let mut artifacts: Vec<serde_json::Value> = Vec::new();
-                let mut changed: Vec<String> = Vec::new();
-                for item in prepared {
-                    if let Err(err) = write_file_atomic(&item.abs, item.content.as_bytes()) {
-                        return tool_error(format!("write failed ({}): {}", item.rel, err));
-                    }
-                    let after_bytes = std::fs::read(&item.abs)
-                        .unwrap_or_else(|_| item.content.as_bytes().to_vec());
-                    let after_hash = hex_sha256(&after_bytes);
-                    let before_hash = item.before_bytes.as_ref().map(|b| hex_sha256(b));
-
-                    changed.push(item.rel.clone());
-                    artifacts.push(serde_json::json!({
-                      "type": "file_write",
-                      "path": item.rel,
-                      "before_sha256": before_hash,
-                      "after_sha256": after_hash,
-                      "byte_len": after_bytes.len()
-                    }));
-                }
-
-                changed.sort();
-                changed.dedup();
-                let summary = format!(
-                    "ok\nwrote {} file(s):\n{}",
-                    changed.len(),
-                    changed.join("\n")
-                );
-                let mut result = tool_ok(summary);
-                result.artifacts = artifacts;
-                return result;
-            }
-
-            let path = obj
-                .get("path")
-                .or_else(|| obj.get("filePath"))
-                .or_else(|| obj.get("filepath"))
-                .or_else(|| obj.get("file_path"))
-                .or_else(|| obj.get("filename"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            if path.is_empty() {
-                return tool_error(
-          "path is required. Provide {\"path\":\"folder/file.txt\",\"content\":\"...\"}. For multiple files, you can also use {\"writes\":[{\"path\":\"a.txt\",\"content\":\"...\"}]}."
-            .to_string(),
-        );
-            }
-            let content = obj
-                .get("content")
-                .or_else(|| obj.get("text"))
-                .or_else(|| obj.get("contents"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let expected = match parse_expected_before(obj) {
-                Ok(v) => v,
-                Err(e) => return e,
-            };
-
-            let abs = match resolve_scoped_path(workspace_root, path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-
-            if std::fs::metadata(&abs).ok().is_some_and(|m| m.is_dir()) {
-                return tool_error("path is a directory; use a file path".to_string());
-            }
-
-            let exists = abs.exists();
-            let before_bytes = if exists {
-                std::fs::read(&abs).ok()
-            } else {
-                None
-            };
-            if exists {
-                let before_bytes = before_bytes.clone().unwrap_or_default();
-                let before_hash = hex_sha256(&before_bytes);
-                match expected {
-                    Some(ExpectedBeforeSha::Create) => {
-                        return tool_error(
-              "expected_before_sha256 was null (create), but file exists; refuse overwrite".to_string(),
-            );
-                    }
-                    Some(ExpectedBeforeSha::Hash(expected_hash)) => {
-                        if before_hash != expected_hash {
-                            return tool_error(format!(
-                                "expected_before_sha256 mismatch (expected {}, got {})",
-                                expected_hash, before_hash
-                            ));
-                        }
-                    }
-                    None => {
-                        // Nano-style: if no precondition is provided, proceed using current file content.
-                    }
-                }
-            }
-
-            if let Err(err) = write_file_atomic(&abs, content.as_bytes()) {
-                return tool_error(format!("write failed: {}", err));
-            }
-
-            let after_bytes = std::fs::read(&abs).unwrap_or_else(|_| content.as_bytes().to_vec());
-            let after_hash = hex_sha256(&after_bytes);
-            let before_hash = before_bytes.as_ref().map(|b| hex_sha256(b));
-
-            let mut result = tool_ok("ok".to_string());
-            result.artifacts.push(serde_json::json!({
-              "type": "file_write",
-              "path": rel_path_display(workspace_root, &abs),
-              "before_sha256": before_hash,
-              "after_sha256": after_hash,
-              "byte_len": after_bytes.len()
-            }));
-            result
-        }
-        "edit" => {
-            let path = obj
-                .get("path")
-                .or_else(|| obj.get("filePath"))
-                .or_else(|| obj.get("filepath"))
-                .or_else(|| obj.get("file_path"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            if path.is_empty() {
-                return tool_error("path is required".to_string());
-            }
-            let old = obj
-                .get("old")
-                .or_else(|| obj.get("oldString"))
-                .or_else(|| obj.get("old_string"))
-                .or_else(|| obj.get("find"))
-                .or_else(|| obj.get("from"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let new = obj
-                .get("new")
-                .or_else(|| obj.get("newString"))
-                .or_else(|| obj.get("new_string"))
-                .or_else(|| obj.get("replace"))
-                .or_else(|| obj.get("to"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let all = obj
-                .get("all")
-                .or_else(|| obj.get("replaceAll"))
-                .or_else(|| obj.get("replace_all"))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let expected = obj
-                .get("expected_before_sha256")
-                .or_else(|| obj.get("expectedBeforeSha256"))
-                .and_then(|v| v.as_str())
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty());
-            let abs = match resolve_scoped_path(workspace_root, path) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            let exists = abs.exists();
-            let before_bytes = if exists {
-                match std::fs::read(&abs) {
-                    Ok(b) => Some(b),
-                    Err(err) => return tool_error(format!("read failed: {}", err)),
-                }
-            } else {
-                None
-            };
-            let before_hash = before_bytes.as_ref().map(|b| hex_sha256(b));
-
-            if exists {
-                if let Some(expected) = expected.as_deref() {
-                    if before_hash.as_deref() != Some(expected) {
-                        return tool_error(format!(
-                            "expected_before_sha256 mismatch (expected {}, got {})",
-                            expected,
-                            before_hash.clone().unwrap_or_default()
-                        ));
-                    }
-                }
-            } else if expected.is_some() {
-                return tool_error(
-                    "expected_before_sha256 provided, but file does not exist".to_string(),
-                );
-            }
-
-            if old.is_empty() {
-                if let Err(err) = write_file_atomic(&abs, new.as_bytes()) {
-                    return tool_error(format!("write failed: {}", err));
-                }
-                let after_bytes = std::fs::read(&abs).unwrap_or_else(|_| new.as_bytes().to_vec());
-                let after_hash = hex_sha256(&after_bytes);
-
-                let mut result = tool_ok(if exists {
-                    "ok".to_string()
-                } else {
-                    "ok (created)".to_string()
-                });
-                result.artifacts.push(serde_json::json!({
-                  "type": "file_edit",
-                  "path": rel_path_display(workspace_root, &abs),
-                  "before_sha256": before_hash,
-                  "after_sha256": after_hash,
-                  "byte_len": after_bytes.len()
-                }));
-                return result;
-            }
-
-            if !exists {
-                return tool_error("file does not exist".to_string());
-            }
-
-            let text = String::from_utf8_lossy(before_bytes.as_ref().unwrap()).to_string();
-            if !text.contains(old) {
-                return tool_error(
-          "old_string not found; use read to inspect the file, then retry with a more specific old_string (or use write to overwrite the file)".to_string(),
-        );
-            }
-            let count = text.matches(old).count();
-            let replaced = if all {
-                text.replace(old, new)
-            } else {
-                text.replacen(old, new, 1)
-            };
-            if let Err(err) = write_file_atomic(&abs, replaced.as_bytes()) {
-                return tool_error(format!("write failed: {}", err));
-            }
-            let after_bytes = std::fs::read(&abs).unwrap_or_else(|_| replaced.as_bytes().to_vec());
-            let after_hash = hex_sha256(&after_bytes);
-
-            let mut result = tool_ok(if !all && count > 1 {
-                format!(
-          "ok (replaced first occurrence; old_string appears {} times; use replaceAll=true to replace all)",
-          count
-        )
-            } else {
-                "ok".to_string()
-            });
-            result.artifacts.push(serde_json::json!({
-              "type": "file_edit",
-              "path": rel_path_display(workspace_root, &abs),
-              "before_sha256": before_hash,
-              "after_sha256": after_hash,
-              "byte_len": after_bytes.len()
-            }));
-            result
-        }
-        "bash" => {
-            let cmd = obj
-                .get("cmd")
-                .or_else(|| obj.get("command"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            if cmd.is_empty() {
-                return tool_error("cmd is required".to_string());
-            }
-            let cwd = obj
-                .get("cwd")
-                .or_else(|| obj.get("workdir"))
-                .and_then(|v| v.as_str())
-                .unwrap_or(".")
-                .trim();
-            let cwd_abs = match resolve_scoped_path(workspace_root, cwd) {
-                Ok(v) => v,
-                Err(e) => return tool_error(e),
-            };
-            if !cwd_abs.exists() {
-                if let Err(err) = std::fs::create_dir_all(&cwd_abs) {
-                    return tool_error(format!(
-                        "cwd does not exist and could not be created: {}",
-                        err
-                    ));
-                }
-            }
-
-            let mut command = if cfg!(windows) {
-                let mut c = TokioCommand::new("cmd");
-                c.arg("/C").arg(cmd);
-                c
-            } else {
-                let mut c = TokioCommand::new("sh");
-                c.arg("-lc").arg(cmd);
-                c
-            };
-            command
-                .current_dir(&cwd_abs)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-
-            let mut child = match command.spawn() {
-                Ok(c) => c,
-                Err(err) => return tool_error(format!("spawn failed: {}", err)),
-            };
-            let stdout = child.stdout.take();
-            let stderr = child.stderr.take();
-            let stdout_fut = async move {
-                if let Some(stdout) = stdout {
-                    read_limited(stdout, 1024 * 1024).await
-                } else {
-                    Vec::new()
-                }
-            };
-            let stderr_fut = async move {
-                if let Some(stderr) = stderr {
-                    read_limited(stderr, 256 * 1024).await
-                } else {
-                    Vec::new()
-                }
-            };
-            let stdout_task = tokio::spawn(stdout_fut);
-            let stderr_task = tokio::spawn(stderr_fut);
-
-            let mut timed_out = false;
-            let status = tokio::select! {
-              res = child.wait() => res.ok(),
-              _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
-                timed_out = true;
-                let _ = child.kill().await;
-                let _ = child.wait().await;
-                None
-              }
-            };
-
-            let stdout = stdout_task.await.unwrap_or_default();
-            let stderr = stderr_task.await.unwrap_or_default();
-            let exit_code = status.and_then(|s| s.code());
-
-            let tool_result_content = if timed_out {
-                let mut out = String::from_utf8_lossy(&stdout).to_string();
-                if !out.is_empty() && !out.ends_with('\n') {
-                    out.push('\n');
-                }
-                out.push_str("(timed out after 30s)");
-                out
-            } else {
-                let mut out = String::from_utf8_lossy(&stdout).to_string();
-                if !stderr.is_empty() {
-                    if !out.is_empty() && !out.ends_with('\n') {
-                        out.push('\n');
-                    }
-                    out.push_str(&String::from_utf8_lossy(&stderr));
-                }
-                if out.trim().is_empty() {
-                    "(empty)".to_string()
-                } else {
-                    out.trim().to_string()
-                }
-            };
-
-            ToolExecResult {
-                status: if timed_out { "error" } else { "ok" },
-                tool_result_content,
-                stdout,
-                stderr,
-                exit_code,
-                artifacts: Vec::new(),
-                reason: if timed_out {
-                    Some("timeout".to_string())
-                } else {
-                    None
-                },
-            }
-        }
-        _ => tool_error(format!("unknown tool: {}", tool_name)),
+fn make_tool_schema_openai_responses_for_lane(
+    thread_lane: &str,
+    workspace: &str,
+) -> Vec<serde_json::Value> {
+    if is_community_lane(thread_lane) {
+        make_community_tool_schema_openai_responses()
+    } else if workspace.trim().is_empty() {
+        make_update_plan_only_tool_schema_openai_responses()
+    } else {
+        make_agent_tool_schema_openai_responses()
     }
 }
+
 
 #[derive(Clone, Serialize)]
 struct OpenRouterStreamPayload {
@@ -4449,7 +4870,6 @@ struct OpenRouterStreamPayload {
     model_id: String,
     inference_source: String,
     chunk: String,
-    full_content: String,
     seq: u64,
     prompt_tokens: Option<u64>,
     completion_tokens: Option<u64>,
@@ -4461,13 +4881,15 @@ struct SessionIdPayload {
     session_id: String,
 }
 
-fn emit_tool_calls_updated(window: &tauri::Window, session_id: &str) {
-    let _ = window.emit(
-        "tool-calls-updated",
-        SessionIdPayload {
-            session_id: session_id.to_string(),
-        },
-    );
+fn emit_tool_calls_updated(window: Option<&tauri::Window>, session_id: &str) {
+    if let Some(window) = window {
+        let _ = window.emit(
+            "tool-calls-updated",
+            SessionIdPayload {
+                session_id: session_id.to_string(),
+            },
+        );
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -4475,16 +4897,6 @@ struct InferenceFallbackPayload {
     session_id: String,
     from: String,
     to: String,
-    reason: String,
-}
-
-#[derive(Clone, Serialize)]
-struct PlatformInferenceActionRequiredPayload {
-    session_id: String,
-    approval_id: String,
-    provider_id: String,
-    provider_label: String,
-    model_id: String,
     reason: String,
 }
 
@@ -4530,6 +4942,28 @@ fn append_messages_agent_assistant_message(
     memory_used: Option<&[context_builder::UsedPersonalMemoryItem]>,
     context_community_id: Option<&str>,
 ) {
+    fn load_run_community_evidence_used(
+        conn: &rusqlite::Connection,
+        thread_id: &str,
+        run_id: &str,
+    ) -> Option<serde_json::Value> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT payload_json
+                 FROM events
+                 WHERE thread_id = ?1 AND type = 'memory_retrieval'
+                   AND json_extract(payload_json, '$.run_id') = ?2
+                 ORDER BY seq DESC
+                 LIMIT 1",
+            )
+            .ok()?;
+        let payload_json: Option<String> =
+            stmt.query_row([thread_id, run_id], |row| row.get(0)).ok()?;
+        let payload_text = payload_json?;
+        let parsed: serde_json::Value = serde_json::from_str(payload_text.as_str()).ok()?;
+        parsed.get("community_evidence_used_v1").cloned()
+    }
+
     let mut payload = serde_json::json!({
       "v": 1,
       "role": "assistant",
@@ -4568,6 +5002,11 @@ fn append_messages_agent_assistant_message(
                     ),
                 );
             }
+        }
+    }
+    if let Some(evidence_used) = load_run_community_evidence_used(conn, thread_id, run_id) {
+        if let Some(meta) = payload.get_mut("meta").and_then(|v| v.as_object_mut()) {
+            meta.insert("community_evidence_used_v1".to_string(), evidence_used);
         }
     }
     let (fts_text, _report) = context::redact_secrets(content_text);
@@ -4630,54 +5069,6 @@ async fn await_tool_approval(
     }
 }
 
-async fn await_inference_fallback_approval(
-    window: &tauri::Window,
-    session_id: &str,
-    model_id: &str,
-    provider: PlatformProvider,
-    reason: &str,
-    mut cancel_rx: watch::Receiver<bool>,
-) -> bool {
-    let approval_id = uuid::Uuid::new_v4().to_string();
-    let (tx, rx) = oneshot::channel::<bool>();
-    {
-        let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
-        map.insert(approval_id.clone(), tx);
-    }
-
-    let _ = window.emit(
-        "platform-inference-action-required",
-        PlatformInferenceActionRequiredPayload {
-            session_id: session_id.to_string(),
-            approval_id: approval_id.clone(),
-            provider_id: platform_provider_id(provider).to_string(),
-            provider_label: platform_provider_display_name(provider).to_string(),
-            model_id: model_id.to_string(),
-            reason: reason.to_string(),
-        },
-    );
-
-    if *cancel_rx.borrow() {
-        let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
-        map.remove(&approval_id);
-        return false;
-    }
-
-    let decision = tokio::select! {
-      decision = rx => {
-        match decision {
-          Ok(approved) => approved,
-          Err(_) => false,
-        }
-      }
-      _ = cancel_rx.changed() => false
-    };
-
-    let mut map = PENDING_INFERENCE_APPROVALS.lock().await;
-    map.remove(&approval_id);
-    decision
-}
-
 fn write_blob_and_record(
     conn: &rusqlite::Connection,
     db_path: &Path,
@@ -4695,99 +5086,431 @@ fn write_blob_and_record(
     }
 }
 
+fn flush_engine_io_chunk_batch(
+    conn: &rusqlite::Connection,
+    db_path: &Path,
+    thread_id: &str,
+    provider_id: &str,
+    model_id: &str,
+    provider_model_ref: &str,
+    run_id: &str,
+    call_seq: u64,
+    http_status: u16,
+    chunk_seq_start: &mut Option<u64>,
+    chunk_seq_end: &mut u64,
+    chunk_count: &mut u64,
+    chunk_lossy: &mut bool,
+    chunk_bytes: &mut Vec<u8>,
+    evidence_event_ids: &mut Vec<String>,
+) {
+    if *chunk_count == 0 || chunk_bytes.is_empty() {
+        *chunk_seq_start = None;
+        *chunk_seq_end = 0;
+        *chunk_count = 0;
+        *chunk_lossy = false;
+        chunk_bytes.clear();
+        return;
+    }
+
+    let seq_start = chunk_seq_start.unwrap_or(*chunk_seq_end);
+    let seq_end = *chunk_seq_end;
+    let chunk_count_value = *chunk_count;
+    let chunk_bytes_len = chunk_bytes.len() as i64;
+    let chunk_text = String::from_utf8_lossy(chunk_bytes).to_string();
+    let (chunk_text_preview, preview_truncated) = truncate_utf8_for_prompt(&chunk_text, 1_200);
+
+    let mut chunk_blob_ref: Option<String> = None;
+    let chunk_payload = if *chunk_lossy || chunk_bytes.len() > IO_BLOB_THRESHOLD_BYTES {
+        if let Some(blob) = write_blob_and_record(conn, db_path, chunk_bytes.as_slice()) {
+            chunk_blob_ref = Some(blob.rel_path.clone());
+            serde_json::json!({
+              "v": 1,
+              "engine_id": ENGINE_MESSAGES_AGENT,
+              "provider_id": provider_id,
+              "model_id": model_id,
+              "provider_model_ref": provider_model_ref,
+              "run_id": run_id,
+              "call_seq": call_seq,
+              "chunk_seq_start": seq_start,
+              "chunk_seq_end": seq_end,
+              "chunk_count": chunk_count_value,
+              "http_status": http_status,
+              "chunk_blob_ref": blob.rel_path,
+              "chunk_byte_len": blob.byte_len,
+              "chunk_text_preview": chunk_text_preview,
+              "chunk_text_preview_truncated": preview_truncated
+            })
+        } else {
+            serde_json::json!({
+              "v": 1,
+              "engine_id": ENGINE_MESSAGES_AGENT,
+              "provider_id": provider_id,
+              "model_id": model_id,
+              "provider_model_ref": provider_model_ref,
+              "run_id": run_id,
+              "call_seq": call_seq,
+              "chunk_seq_start": seq_start,
+              "chunk_seq_end": seq_end,
+              "chunk_count": chunk_count_value,
+              "http_status": http_status,
+              "chunk_byte_len": chunk_bytes_len,
+              "chunk": chunk_text
+            })
+        }
+    } else {
+        serde_json::json!({
+          "v": 1,
+          "engine_id": ENGINE_MESSAGES_AGENT,
+          "provider_id": provider_id,
+          "model_id": model_id,
+          "provider_model_ref": provider_model_ref,
+          "run_id": run_id,
+          "call_seq": call_seq,
+          "chunk_seq_start": seq_start,
+          "chunk_seq_end": seq_end,
+          "chunk_count": chunk_count_value,
+          "http_status": http_status,
+          "chunk_byte_len": chunk_bytes_len,
+          "chunk": chunk_text
+        })
+    };
+
+    if let Ok(evt) = db::append_event(
+        conn,
+        db_path,
+        thread_id,
+        "engine_io_chunk",
+        None,
+        Some(&chunk_payload.to_string()),
+        chunk_blob_ref.as_deref(),
+    ) {
+        evidence_event_ids.push(evt.id);
+    }
+
+    *chunk_seq_start = None;
+    *chunk_seq_end = 0;
+    *chunk_count = 0;
+    *chunk_lossy = false;
+    chunk_bytes.clear();
+}
+
+#[derive(Clone, Serialize)]
+struct HeadersWaitSample {
+    attempt: u32,
+    inference_source: String,
+    headers_wait_ms: u64,
+}
+
+#[derive(Default)]
+struct StreamTimingTracker {
+    first_io_chunk_at: Option<Instant>,
+    first_text_token_at: Option<Instant>,
+    last_io_chunk_at: Option<Instant>,
+    request_start_to_headers_ms: Option<u64>,
+    headers_wait_ms_by_attempt: Vec<HeadersWaitSample>,
+    model_resolve_ms: Option<u64>,
+    auth_prefetch_ms: Option<u64>,
+    engine_input_blob_write_ms: u64,
+    platform_preflight_ms: Option<u64>,
+    platform_auth_ms: Option<u64>,
+    platform_json_ms: Option<u64>,
+    platform_tier_ms: Option<u64>,
+    platform_user_rl_ms: Option<u64>,
+    platform_ip_rl_ms: Option<u64>,
+    platform_model_ms: Option<u64>,
+    platform_quota_ms: Option<u64>,
+    io_chunk_count: u64,
+    io_chunk_bytes: u64,
+    io_gap_samples: u64,
+    io_gap_sum_ms: u128,
+    io_gap_min_ms: Option<u128>,
+    io_gap_max_ms: Option<u128>,
+}
+
+impl StreamTimingTracker {
+    fn note_model_resolve(&mut self, started_at: Instant) {
+        self.model_resolve_ms = Some(started_at.elapsed().as_millis() as u64);
+    }
+
+    fn note_auth_prefetch(&mut self, started_at: Instant) {
+        self.auth_prefetch_ms = Some(started_at.elapsed().as_millis() as u64);
+    }
+
+    fn note_engine_input_blob_write(&mut self, started_at: Instant) {
+        self.engine_input_blob_write_ms = self
+            .engine_input_blob_write_ms
+            .saturating_add(started_at.elapsed().as_millis() as u64);
+    }
+
+    fn note_response_headers(
+        &mut self,
+        request_started_at: Instant,
+        headers: &reqwest::header::HeaderMap,
+        attempt: u32,
+        inference_source: &str,
+    ) {
+        fn parse_u64_header(headers: &reqwest::header::HeaderMap, key: &str) -> Option<u64> {
+            headers
+                .get(key)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|text| text.trim().parse::<u64>().ok())
+        }
+
+        let headers_wait_ms = request_started_at.elapsed().as_millis() as u64;
+        self.request_start_to_headers_ms = Some(headers_wait_ms);
+        self.headers_wait_ms_by_attempt.push(HeadersWaitSample {
+            attempt,
+            inference_source: inference_source.to_string(),
+            headers_wait_ms,
+        });
+        self.platform_preflight_ms = parse_u64_header(headers, "x-arx-platform-preflight-ms");
+        self.platform_auth_ms = parse_u64_header(headers, "x-arx-platform-auth-ms");
+        self.platform_json_ms = parse_u64_header(headers, "x-arx-platform-json-ms");
+        self.platform_tier_ms = parse_u64_header(headers, "x-arx-platform-tier-ms");
+        self.platform_user_rl_ms = parse_u64_header(headers, "x-arx-platform-user-rl-ms");
+        self.platform_ip_rl_ms = parse_u64_header(headers, "x-arx-platform-ip-rl-ms");
+        self.platform_model_ms = parse_u64_header(headers, "x-arx-platform-model-ms");
+        self.platform_quota_ms = parse_u64_header(headers, "x-arx-platform-quota-ms");
+    }
+
+    fn note_io_chunk(&mut self, byte_len: usize) {
+        let now = Instant::now();
+        if self.first_io_chunk_at.is_none() {
+            self.first_io_chunk_at = Some(now);
+        }
+        if let Some(previous) = self.last_io_chunk_at {
+            let gap_ms = now
+                .checked_duration_since(previous)
+                .unwrap_or_default()
+                .as_millis();
+            self.io_gap_sum_ms = self.io_gap_sum_ms.saturating_add(gap_ms);
+            self.io_gap_samples = self.io_gap_samples.saturating_add(1);
+            self.io_gap_min_ms = Some(self.io_gap_min_ms.map_or(gap_ms, |value| value.min(gap_ms)));
+            self.io_gap_max_ms = Some(self.io_gap_max_ms.map_or(gap_ms, |value| value.max(gap_ms)));
+        }
+        self.last_io_chunk_at = Some(now);
+        self.io_chunk_count = self.io_chunk_count.saturating_add(1);
+        self.io_chunk_bytes = self.io_chunk_bytes.saturating_add(byte_len as u64);
+    }
+
+    fn note_text_delta(&mut self) {
+        if self.first_text_token_at.is_none() {
+            self.first_text_token_at = Some(Instant::now());
+        }
+    }
+
+    fn to_json(&self, run_started_at: Instant) -> serde_json::Value {
+        let first_io_chunk_ms = self.first_io_chunk_at.map(|at| {
+            at.checked_duration_since(run_started_at)
+                .unwrap_or_default()
+                .as_millis() as u64
+        });
+        let first_text_token_ms = self.first_text_token_at.map(|at| {
+            at.checked_duration_since(run_started_at)
+                .unwrap_or_default()
+                .as_millis() as u64
+        });
+        let last_io_chunk_ms = self.last_io_chunk_at.map(|at| {
+            at.checked_duration_since(run_started_at)
+                .unwrap_or_default()
+                .as_millis() as u64
+        });
+        let io_gap_avg_ms = if self.io_gap_samples > 0 {
+            Some((self.io_gap_sum_ms / self.io_gap_samples as u128) as u64)
+        } else {
+            None
+        };
+        let headers_to_first_io_chunk_ms = match (self.request_start_to_headers_ms, first_io_chunk_ms) {
+            (Some(headers_ms), Some(first_chunk_ms)) if first_chunk_ms >= headers_ms => {
+                Some(first_chunk_ms - headers_ms)
+            }
+            _ => None,
+        };
+        serde_json::json!({
+          "model_resolve_ms": self.model_resolve_ms,
+          "auth_prefetch_ms": self.auth_prefetch_ms,
+          "engine_input_blob_write_ms": self.engine_input_blob_write_ms,
+          "request_start_to_headers_ms": self.request_start_to_headers_ms,
+          "headers_wait_ms_by_attempt": self.headers_wait_ms_by_attempt.iter().map(|sample| serde_json::json!({
+            "attempt": sample.attempt,
+            "inference_source": sample.inference_source,
+            "headers_wait_ms": sample.headers_wait_ms
+          })).collect::<Vec<_>>(),
+          "headers_to_first_io_chunk_ms": headers_to_first_io_chunk_ms,
+          "platform_preflight_ms": self.platform_preflight_ms,
+          "platform_auth_ms": self.platform_auth_ms,
+          "platform_json_ms": self.platform_json_ms,
+          "platform_tier_ms": self.platform_tier_ms,
+          "platform_user_rl_ms": self.platform_user_rl_ms,
+          "platform_ip_rl_ms": self.platform_ip_rl_ms,
+          "platform_model_ms": self.platform_model_ms,
+          "platform_quota_ms": self.platform_quota_ms,
+          "io_chunk_count": self.io_chunk_count,
+          "io_chunk_bytes": self.io_chunk_bytes,
+          "first_io_chunk_ms": first_io_chunk_ms,
+          "first_text_token_ms": first_text_token_ms,
+          "last_io_chunk_ms": last_io_chunk_ms,
+          "io_gap_samples": self.io_gap_samples,
+          "io_gap_avg_ms": io_gap_avg_ms,
+          "io_gap_min_ms": self.io_gap_min_ms.map(|value| value as u64),
+          "io_gap_max_ms": self.io_gap_max_ms.map(|value| value as u64)
+        })
+    }
+}
+
+fn emit_run_latency_trace(
+    thread_id: &str,
+    run_id: &str,
+    model_id: &str,
+    inference_source: Option<&str>,
+    turn_started_at: Instant,
+    run_started_at: Instant,
+    stream_timing: &StreamTimingTracker,
+    status: &str,
+    reason: Option<&str>,
+) {
+    let preflight_ms = run_started_at
+        .checked_duration_since(turn_started_at)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    emit_thread_context_trace(
+        "run_latency",
+        serde_json::json!({
+          "thread_id": thread_id,
+          "run_id": run_id,
+          "engine_id": ENGINE_MESSAGES_AGENT,
+          "model_id": model_id,
+          "status": status,
+          "reason": reason,
+          "inference_source": inference_source,
+          "turn_total_ms": turn_started_at.elapsed().as_millis() as u64,
+          "run_loop_ms": run_started_at.elapsed().as_millis() as u64,
+          "preflight_ms": preflight_ms,
+          "stream": stream_timing.to_json(turn_started_at)
+        }),
+    );
+}
+
 async fn send_turn_messages_agent(
     window: &tauri::Window,
     mut conn: rusqlite::Connection,
     db_path: &Path,
     thread_id: &str,
+    run_id: String,
     workspace: &str,
+    workspace_scope_id: &str,
     mode: &str,
     selected_model_id: &str,
     input: &str,
     atom_system_prompt: &str,
+    community_context_prompt: Option<String>,
     used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
     history_messages_json: Option<String>,
     platform_proxy: Option<PlatformProxyConfig>,
+    public_proxy: Option<PublicProxyConfig>,
+    cloud_user_id: Option<String>,
     mut cancel_rx: watch::Receiver<bool>,
-    context_community_id: Option<String>,
+    thread_context: ThreadContextSnapshot,
+    turn_started_at: Instant,
 ) -> Result<SendTurnResult, String> {
-    let run_id = uuid::Uuid::new_v4().to_string();
     let run_started_at = Instant::now();
+    let mut stream_timing = StreamTimingTracker::default();
     let mut final_inference_source: Option<String> = None;
-    let context_community_id = context_community_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-    let workspace_scope_id = workspace_scope_id_from_path(workspace);
+    let context_community_id = thread_context.community_id.as_deref();
 
     append_run_started(
         &conn,
         db_path,
         thread_id,
         &run_id,
-        &workspace_scope_id,
+        workspace_scope_id,
         mode,
         ENGINE_MESSAGES_AGENT,
         Some(selected_model_id),
+        &thread_context,
     );
 
-    let prefetched_chatgpt_auth: Option<ChatgptAuthV1> =
-        if model_alias_looks_openai(selected_model_id) {
-            match get_chatgpt_auth_for_inference().await {
-                Ok(value) => value,
-                Err(_) => None,
+    let model_resolve_started_at = Instant::now();
+    let model_ref_result =
+        resolve_platform_model_for_alias_with_registry(selected_model_id, platform_proxy.as_ref())
+            .await;
+    stream_timing.note_model_resolve(model_resolve_started_at);
+    let selected_model_clean = selected_model_id.trim().to_string();
+    let selected_model_is_openai = selected_model_clean.to_lowercase().starts_with("gpt-");
+    let mut model_ref_resolved = true;
+    let model_ref = match model_ref_result {
+        Ok(v) => v,
+        Err(err) => {
+            let allow_synthetic_openai_ref =
+                selected_model_is_openai || is_desktop_public_free_model(&selected_model_clean);
+            if allow_synthetic_openai_ref {
+                model_ref_resolved = false;
+                PlatformModelRef {
+                    provider: PlatformProvider::OpenAi,
+                    model: selected_model_clean.clone(),
+                    ref_str: format!("openai/{}", selected_model_clean),
+                }
+            } else {
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &format!("Engine error: {}", err),
+                    selected_model_id,
+                    &run_id,
+                    &[],
+                    "unknown",
+                    None,
+                    "system",
+                    DEFAULT_MAX_TOKENS,
+                    None,
+                    context_community_id,
+                );
+                emit_run_latency_trace(
+                    thread_id,
+                    &run_id,
+                    selected_model_id,
+                    final_inference_source.as_deref(),
+                    turn_started_at,
+                    run_started_at,
+                    &stream_timing,
+                    "error",
+                    Some("missing_model_mapping"),
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("missing_model_mapping"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: None,
+                    engine_input_seq: None,
+                    run_id: Some(run_id),
+                });
             }
+        }
+    };
+    let auth_prefetch_started_at = Instant::now();
+    let prefetched_chatgpt_auth: Option<ChatgptAuthV1> =
+        if selected_model_is_openai {
+            get_chatgpt_auth_for_inference_with_timeout(CHATGPT_AUTH_PREFETCH_TIMEOUT_MS).await
         } else {
             None
         };
-
-    let model_ref = match resolve_platform_model_for_alias_with_registry(
-        selected_model_id,
-        platform_proxy.as_ref(),
-        model_alias_looks_openai(selected_model_id),
-    )
-    .await
-    {
-        Ok(v) => v,
-        Err(err) => {
-            append_messages_agent_assistant_message(
-                &conn,
-                db_path,
-                thread_id,
-                &format!("Engine error: {}", err),
-                selected_model_id,
-                &run_id,
-                &[],
-                "unknown",
-                None,
-                "system",
-                DEFAULT_MAX_TOKENS,
-                None,
-                context_community_id,
-            );
-            append_run_finished(
-                &conn,
-                db_path,
-                thread_id,
-                &run_id,
-                "error",
-                Some("missing_model_mapping"),
-            );
-            let _ = window.emit(
-                "openrouter-turn-finished",
-                SessionIdPayload {
-                    session_id: thread_id.to_string(),
-                },
-            );
-            return Ok(SendTurnResult {
-                thread_id: thread_id.to_string(),
-                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                engine_input_event_id: None,
-                engine_input_seq: None,
-                run_id: Some(run_id),
-            });
-        }
-    };
+    if selected_model_is_openai {
+        stream_timing.note_auth_prefetch(auth_prefetch_started_at);
+    }
     let provider_id = platform_provider_id(model_ref.provider);
     let provider_model_ref_str = model_ref.ref_str.clone();
     let provider_model_ref = Some(provider_model_ref_str.as_str());
@@ -4839,41 +5562,26 @@ async fn send_turn_messages_agent(
     } else {
         input_redacted.trim().to_string()
     };
+    let community_context_message = community_context::build_community_evidence_user_message(
+        community_context_prompt.as_deref(),
+    );
 
-    let mut platform_available_for_run = platform_proxy.as_ref().is_some();
+    let mut platform_available_for_run =
+        platform_proxy.as_ref().is_some() && model_ref_resolved;
+    let public_available_for_run = public_proxy.as_ref().is_some()
+        && is_desktop_public_free_model(selected_model_id);
     let platform_agent_infer_url = platform_proxy.as_ref().map(|cfg| {
         format!(
             "{}/functions/v1/platform_agent_infer",
             cfg.supabase_url.trim_end_matches('/')
         )
     });
-    let mut platform_fallback_notified = false;
-
-    let mut byok_provider_key: Option<String> = None;
-    let mut get_byok_provider_key = || -> Result<String, String> {
-        if !BYOK_ENABLED {
-            return Err(
-                "BYOK is disabled. Use Arx AI quota, ChatGPT sign-in for OpenAI on desktop, or upgrade."
-                    .to_string(),
-            );
-        }
-        if let Some(value) = byok_provider_key.clone() {
-            return Ok(value);
-        }
-        let key_name = platform_provider_key_name(model_ref.provider);
-        let entry = Entry::new("com.arx.app", key_name).map_err(|e| e.to_string())?;
-        match entry.get_password() {
-            Ok(value) => {
-                byok_provider_key = Some(value.clone());
-                Ok(value)
-            }
-            Err(_) => Err(format!(
-                "Missing {} API key. Add it in Settings → Models.",
-                platform_provider_display_name(model_ref.provider)
-            )),
-        }
-    };
-
+    let public_turn_url = public_proxy.as_ref().map(|cfg| {
+        format!(
+            "{}/functions/v1/public_turn",
+            cfg.supabase_url.trim_end_matches('/')
+        )
+    });
     if model_ref.provider != PlatformProvider::Anthropic {
         #[derive(Default, Clone)]
         struct PartialToolCall {
@@ -4917,6 +5625,9 @@ async fn send_turn_messages_agent(
             }
             messages.push(serde_json::json!({ "role": role, "content": redacted }));
         }
+        if let Some(community_context_text) = community_context_message.as_deref() {
+            messages.push(serde_json::json!({ "role": "user", "content": community_context_text }));
+        }
         if messages
             .last()
             .and_then(|m| m.get("role"))
@@ -4931,28 +5642,19 @@ async fn send_turn_messages_agent(
             messages.push(serde_json::json!({ "role": "user", "content": input_to_send.clone() }));
         }
 
-        let tools_schema_chat = if workspace.trim().is_empty() {
-            make_agent_tool_schema_openai_update_plan_only()
-        } else {
-            make_agent_tool_schema_openai()
-        };
-        let tools_schema_responses = if workspace.trim().is_empty() {
-            make_agent_tool_schema_openai_responses_update_plan_only()
-        } else {
-            make_agent_tool_schema_openai_responses()
-        };
-        let client = reqwest::Client::new();
-        let base_url = platform_openai_compatible_base_url(model_ref.provider)
-            .unwrap_or("https://api.openai.com/v1")
-            .trim_end_matches('/');
-        let chat_url = format!("{}/chat/completions", base_url);
+        let tools_schema_chat =
+            make_tool_schema_openai_for_lane(thread_context.thread_lane.as_str(), workspace);
+        let tools_schema_responses = make_tool_schema_openai_responses_for_lane(
+            thread_context.thread_lane.as_str(),
+            workspace,
+        );
+        let client = inference_http_client();
         let mut chatgpt_auth: Option<ChatgptAuthV1> =
             if model_ref.provider == PlatformProvider::OpenAi {
                 prefetched_chatgpt_auth.clone()
             } else {
                 None
             };
-        let mut chatgpt_fallback_approved_for_run = false;
         let mut chatgpt_fallback_notified = false;
         let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
         let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
@@ -5169,14 +5871,60 @@ async fn send_turn_messages_agent(
             call_seq += 1;
             let mut request_max_tokens = DEFAULT_MAX_TOKENS;
             let mut request_attempt: u32 = 1;
-            let mut use_platform_for_call = platform_available_for_run
-                && !(model_ref.provider == PlatformProvider::OpenAi && chatgpt_auth.is_some());
+            let has_platform_lane =
+                platform_available_for_run && platform_agent_infer_url.is_some();
+            let has_public_lane = public_available_for_run && public_turn_url.is_some();
+            let mut current_lane = match first_desktop_inference_lane(
+                selected_model_is_openai,
+                chatgpt_auth.is_some(),
+                has_platform_lane,
+                has_public_lane,
+            ) {
+                Some(value) => value,
+                None => {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "No available inference lane for this model. Connect ChatGPT, sign in for Arx AI, or switch to a free model.",
+                        selected_model_id,
+                        &run_id,
+                        &evidence_event_ids,
+                        provider_id,
+                        provider_model_ref,
+                        "system",
+                        request_max_tokens,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("missing_inference_lane"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: first_engine_input_event_id.clone(),
+                        engine_input_seq: first_engine_input_seq,
+                        run_id: Some(run_id),
+                    });
+                }
+            };
 
             let (engine_input_event, status, resp_bytes, parsed_response) = loop {
-                let using_platform = use_platform_for_call && platform_agent_infer_url.is_some();
-                let using_chatgpt = !using_platform
-                    && model_ref.provider == PlatformProvider::OpenAi
-                    && chatgpt_auth.is_some();
+                let using_chatgpt = current_lane == DesktopInferenceLane::Chatgpt;
+                let using_platform = current_lane == DesktopInferenceLane::Platform;
+                let using_public = current_lane == DesktopInferenceLane::Public;
                 let request_model_id = if using_chatgpt {
                     selected_model_id
                 } else {
@@ -5305,6 +6053,36 @@ async fn send_turn_messages_agent(
                         "arx.platform_agent_infer.json",
                         "platform",
                     )
+                } else if using_public {
+                    let public_messages = messages
+                        .iter()
+                        .filter_map(|msg| {
+                            let role = msg.get("role").and_then(|v| v.as_str())?;
+                            if role != "system" && role != "user" && role != "assistant" {
+                                return None;
+                            }
+                            let content = msg.get("content").and_then(|v| v.as_str())?;
+                            let trimmed = content.trim();
+                            if trimmed.is_empty() {
+                                return None;
+                            }
+                            Some(serde_json::json!({
+                                "role": role,
+                                "content": trimmed
+                            }))
+                        })
+                        .collect::<Vec<_>>();
+                    let request = serde_json::json!({
+                        "model_id": selected_model_id,
+                        "stream": true,
+                        "messages": public_messages
+                    });
+                    (
+                        serde_json::to_vec(&request)
+                            .map_err(|e| format!("Request serialization failed: {}", e))?,
+                        "arx.public_turn.json",
+                        "public",
+                    )
                 } else {
                     (
                         serde_json::to_vec(&provider_request)
@@ -5318,8 +6096,10 @@ async fn send_turn_messages_agent(
                     )
                 };
                 final_inference_source = Some(inference_source.to_string());
+                let request_blob_write_started_at = Instant::now();
                 let request_blob = blob_store::write_blob(db_path, &request_bytes)
                     .map_err(|e| format!("Request blob write failed: {}", e))?;
+                stream_timing.note_engine_input_blob_write(request_blob_write_started_at);
                 let _ = db::record_blob(
                     &conn,
                     &request_blob.id,
@@ -5327,7 +6107,7 @@ async fn send_turn_messages_agent(
                     request_blob.byte_len,
                 );
 
-                let engine_input_max_tokens = if using_chatgpt {
+                let engine_input_max_tokens = if using_chatgpt || using_public {
                     // ChatGPT/Codex subscription endpoint rejects max token params; keep evidence truthful.
                     serde_json::Value::Null
                 } else {
@@ -5389,6 +6169,17 @@ async fn send_turn_messages_agent(
                             None,
                             context_community_id,
                         );
+                        emit_run_latency_trace(
+                            thread_id,
+                            run_id.as_str(),
+                            selected_model_id,
+                            Some(inference_source),
+                            turn_started_at,
+                            run_started_at,
+                            &stream_timing,
+                            "error",
+                            Some("engine_input_record_failed"),
+                        );
                         append_run_finished(
                             &conn,
                             db_path,
@@ -5449,74 +6240,81 @@ async fn send_turn_messages_agent(
                         .header("Accept", "text/event-stream")
                         .body(request_bytes)
                         .send()
-                } else {
-                    if using_chatgpt {
-                        let auth = chatgpt_auth.as_ref().ok_or_else(|| {
-                            "ChatGPT session not available. Sign in again.".to_string()
-                        })?;
-                        let mut req = client
-                            .post(CHATGPT_CODEX_RESPONSES_URL)
-                            .header("Authorization", format!("Bearer {}", auth.access_token))
-                            .header("User-Agent", "codex-cli")
-                            .header("Content-Type", "application/json")
-                            .header("Accept", "text/event-stream");
-                        if let Some(account_id) =
-                            auth.account_id.as_deref().filter(|v| !v.trim().is_empty())
-                        {
-                            req = req.header("ChatGPT-Account-Id", account_id.trim());
-                        }
-                        req.body(request_bytes).send()
-                    } else {
-                        let provider_key = match get_byok_provider_key() {
-                            Ok(value) => value,
-                            Err(message) => {
-                                append_messages_agent_assistant_message(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &message,
-                                    selected_model_id,
-                                    &run_id,
-                                    &[],
-                                    provider_id,
-                                    provider_model_ref,
-                                    inference_source,
-                                    request_max_tokens,
-                                    None,
-                                    context_community_id,
-                                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("missing_api_key"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-                        };
-                        client
-                            .post(chat_url.clone())
-                            .header("Authorization", format!("Bearer {}", provider_key))
-                            .header("Content-Type", "application/json")
-                            .header("Accept", "text/event-stream")
-                            .body(request_bytes)
-                            .send()
+                } else if using_chatgpt {
+                    let auth = chatgpt_auth
+                        .as_ref()
+                        .ok_or_else(|| "ChatGPT session not available. Sign in again.".to_string())?;
+                    let mut req = client
+                        .post(CHATGPT_CODEX_RESPONSES_URL)
+                        .header("Authorization", format!("Bearer {}", auth.access_token))
+                        .header("User-Agent", "codex-cli")
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "text/event-stream");
+                    if let Some(account_id) =
+                        auth.account_id.as_deref().filter(|v| !v.trim().is_empty())
+                    {
+                        req = req.header("ChatGPT-Account-Id", account_id.trim());
                     }
+                    req.body(request_bytes).send()
+                } else if using_public {
+                    let cfg = public_proxy
+                        .as_ref()
+                        .ok_or_else(|| "public proxy is not configured".to_string())?;
+                    let url = public_turn_url.clone().unwrap_or_default();
+                    client
+                        .post(url)
+                        .header("apikey", cfg.supabase_anon_key.clone())
+                        .header("Authorization", format!("Bearer {}", cfg.supabase_anon_key))
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "text/event-stream")
+                        .body(request_bytes)
+                        .send()
+                } else {
+                    append_messages_agent_assistant_message(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        "Arx AI is unavailable for this run. Use Arx AI quota, ChatGPT sign-in for OpenAI on desktop, or switch to a free model.",
+                        selected_model_id,
+                        &run_id,
+                        &[],
+                        provider_id,
+                        provider_model_ref,
+                        inference_source,
+                        request_max_tokens,
+                        None,
+                        context_community_id,
+                    );
+                    append_run_finished(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        &run_id,
+                        "error",
+                        Some("missing_api_key"),
+                    );
+                    let _ = window.emit(
+                        "openrouter-turn-finished",
+                        SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                        },
+                    );
+                    return Ok(SendTurnResult {
+                        thread_id: thread_id.to_string(),
+                        engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                        engine_input_event_id: Some(engine_input_event.id),
+                        engine_input_seq: Some(engine_input_event.seq),
+                        run_id: Some(run_id),
+                    });
                 };
+                let request_start_timeout_ms = if using_platform {
+                    INFERENCE_REQUEST_START_TIMEOUT_PLATFORM_MS
+                } else if using_chatgpt {
+                    INFERENCE_REQUEST_START_TIMEOUT_CHATGPT_MS
+                } else {
+                    INFERENCE_REQUEST_START_TIMEOUT_PLATFORM_MS
+                };
+                let request_started_at = Instant::now();
 
                 let res = tokio::select! {
                   _ = cancel_rx.changed() => {
@@ -5530,7 +6328,63 @@ async fn send_turn_messages_agent(
                       first_engine_input_seq,
                     ));
                   }
-                  res = send_fut => res,
+                  res = timeout(Duration::from_millis(request_start_timeout_ms), send_fut) => {
+                    match res {
+                      Ok(res) => res,
+                      Err(_) => {
+                        append_messages_agent_assistant_message(
+                          &conn,
+                          db_path,
+                          thread_id,
+                          &format!(
+                            "Engine error: request timed out before first response bytes ({}ms budget).",
+                            request_start_timeout_ms
+                          ),
+                          selected_model_id,
+                          &run_id,
+                          &[],
+                          provider_id,
+                          provider_model_ref,
+                          inference_source,
+                          request_max_tokens,
+                          None,
+                          context_community_id,
+                        );
+                        emit_run_latency_trace(
+                          thread_id,
+                          run_id.as_str(),
+                          selected_model_id,
+                          Some(inference_source),
+                          turn_started_at,
+                          run_started_at,
+                          &stream_timing,
+                          "error",
+                          Some("provider_request_timeout"),
+                        );
+                        append_run_finished(
+                          &conn,
+                          db_path,
+                          thread_id,
+                          &run_id,
+                          "error",
+                          Some("provider_request_timeout"),
+                        );
+                        let _ = window.emit(
+                          "openrouter-turn-finished",
+                          SessionIdPayload {
+                            session_id: thread_id.to_string(),
+                          },
+                        );
+                        return Ok(SendTurnResult {
+                          thread_id: thread_id.to_string(),
+                          engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                          engine_input_event_id: Some(engine_input_event.id),
+                          engine_input_seq: Some(engine_input_event.seq),
+                          run_id: Some(run_id),
+                        });
+                      }
+                    }
+                  },
                 };
 
                 let res = match res {
@@ -5574,6 +6428,12 @@ async fn send_turn_messages_agent(
                         });
                     }
                 };
+                stream_timing.note_response_headers(
+                    request_started_at,
+                    res.headers(),
+                    request_attempt,
+                    inference_source,
+                );
 
                 let status = res.status();
                 let content_type = res
@@ -5645,234 +6505,61 @@ async fn send_turn_messages_agent(
                         platform_available_for_run = false;
 
                         if is_platform_inference_quota_exceeded(&resp_bytes) {
-                            let provider_key_ok = get_byok_provider_key().is_ok();
-                            if !provider_key_ok {
-                                append_messages_agent_assistant_message(
-	                  &conn,
-	                  db_path,
-	                  thread_id,
-	                  &format!(
-		                    "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
-		                  ),
-	                  selected_model_id,
-	                  &run_id,
-	                  &evidence_event_ids,
-	                  provider_id,
-	                  provider_model_ref,
-                    inference_source,
-	                  request_max_tokens,
-	                  None,
-	                  context_community_id,
-	                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("platform_quota_exceeded"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-
-                            let approved = await_inference_fallback_approval(
-                                window,
+                            append_messages_agent_assistant_message(
+                                &conn,
+                                db_path,
                                 thread_id,
+                                "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
                                 selected_model_id,
-                                model_ref.provider,
-                                "platform_quota_exceeded",
-                                cancel_rx.clone(),
-                            )
-                            .await;
-                            if !approved {
-                                append_messages_agent_assistant_message(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &format!(
-	                  "Arx AI quota reached. Cancelled — upgrade to continue.",
-	                ),
-                                    selected_model_id,
-                                    &run_id,
-                                    &evidence_event_ids,
-                                    provider_id,
-                                    provider_model_ref,
-                                    inference_source,
-                                    request_max_tokens,
-                                    None,
-                                    context_community_id,
-                                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("platform_fallback_denied"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-
-                            let approved = await_inference_fallback_approval(
-                                window,
+                                &run_id,
+                                &evidence_event_ids,
+                                provider_id,
+                                provider_model_ref,
+                                inference_source,
+                                request_max_tokens,
+                                None,
+                                context_community_id,
+                            );
+                            append_run_finished(
+                                &conn,
+                                db_path,
                                 thread_id,
-                                selected_model_id,
-                                model_ref.provider,
-                                "platform_quota_exceeded",
-                                cancel_rx.clone(),
-                            )
-                            .await;
-                            if !approved {
-                                append_messages_agent_assistant_message(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &format!(
-		                  "Arx AI quota reached. Cancelled — upgrade to continue.",
-		                ),
-                                    selected_model_id,
-                                    &run_id,
-                                    &evidence_event_ids,
-                                    provider_id,
-                                    provider_model_ref,
-                                    inference_source,
-                                    request_max_tokens,
-                                    None,
-                                    context_community_id,
-                                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("platform_fallback_denied"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
+                                &run_id,
+                                "error",
+                                Some("platform_quota_exceeded"),
+                            );
+                            let _ = window.emit(
+                                "openrouter-turn-finished",
+                                SessionIdPayload {
+                                    session_id: thread_id.to_string(),
+                                },
+                            );
+                            return Ok(SendTurnResult {
+                                thread_id: thread_id.to_string(),
+                                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                                engine_input_event_id: Some(engine_input_event.id),
+                                engine_input_seq: Some(engine_input_event.seq),
+                                run_id: Some(run_id),
+                            });
+                        }
 
-                            if !platform_fallback_notified {
-                                let _ = window.emit(
-                                    "inference-fallback",
-                                    InferenceFallbackPayload {
-                                        session_id: thread_id.to_string(),
-                                        from: "platform".to_string(),
-                                        to: "user".to_string(),
-                                        reason: "platform_quota_exceeded".to_string(),
-                                    },
-                                );
-                                platform_fallback_notified = true;
+                        let has_platform_lane_now =
+                            platform_available_for_run && platform_agent_infer_url.is_some();
+                        let has_public_lane_now =
+                            public_available_for_run && public_turn_url.is_some();
+                        if let Some(next_lane) = first_desktop_inference_lane(
+                            selected_model_is_openai,
+                            chatgpt_auth.is_some(),
+                            has_platform_lane_now,
+                            has_public_lane_now,
+                        ) {
+                            if next_lane != current_lane {
+                                current_lane = next_lane;
+                                continue;
                             }
-                            use_platform_for_call = false;
-                            continue;
                         }
 
                         if is_platform_inference_not_allowed(&resp_bytes) {
-                            use_platform_for_call = false;
-                            continue;
-                        }
-
-                        // Best-effort: if platform is misconfigured/unavailable and BYOK is enabled, fall back.
-                        if get_byok_provider_key().is_ok() {
-                            let approved = await_inference_fallback_approval(
-                                window,
-                                thread_id,
-                                selected_model_id,
-                                model_ref.provider,
-                                "platform_error",
-                                cancel_rx.clone(),
-                            )
-                            .await;
-                            if !approved {
-                                append_messages_agent_assistant_message(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &format!(
-		                    "Arx AI is temporarily unavailable. Please try again.",
-		                  ),
-                                    selected_model_id,
-                                    &run_id,
-                                    &evidence_event_ids,
-                                    provider_id,
-                                    provider_model_ref,
-                                    inference_source,
-                                    request_max_tokens,
-                                    None,
-                                    context_community_id,
-                                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("platform_fallback_denied"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-
-                            if !platform_fallback_notified {
-                                let _ = window.emit(
-                                    "inference-fallback",
-                                    InferenceFallbackPayload {
-                                        session_id: thread_id.to_string(),
-                                        from: "platform".to_string(),
-                                        to: "user".to_string(),
-                                        reason: "platform_error".to_string(),
-                                    },
-                                );
-                                platform_fallback_notified = true;
-                            }
-                            use_platform_for_call = false;
                             continue;
                         }
                     }
@@ -5880,18 +6567,28 @@ async fn send_turn_messages_agent(
                     if using_chatgpt && !status.is_success() {
                         // First try: refresh ChatGPT token and retry once.
                         if request_attempt == 1 {
-                            if let Ok(value) = get_chatgpt_auth_for_inference().await {
-                                if value.is_some() {
-                                    chatgpt_auth = value;
-                                    request_attempt = 2;
-                                    continue;
-                                }
+                            let value = get_chatgpt_auth_for_inference_with_timeout(
+                                CHATGPT_AUTH_PREFETCH_TIMEOUT_MS,
+                            )
+                            .await;
+                            if value.is_some() {
+                                chatgpt_auth = value;
+                                request_attempt = 2;
+                                continue;
                             }
                         }
 
-                        // ChatGPT auth isn't usable for this run; fall back to Arx platform if available.
+                        // ChatGPT auth isn't usable for this run; fall back to the next available lane.
                         chatgpt_auth = None;
-                        if platform_available_for_run && platform_agent_infer_url.is_some() {
+                        let has_platform_lane_now =
+                            platform_available_for_run && platform_agent_infer_url.is_some();
+                        let has_public_lane_now =
+                            public_available_for_run && public_turn_url.is_some();
+                        if let Some(next_lane) = next_desktop_inference_lane(
+                            current_lane,
+                            has_platform_lane_now,
+                            has_public_lane_now,
+                        ) {
                             if !chatgpt_fallback_notified {
                                 let friendly = format_provider_error(&resp_bytes);
                                 let reason = if friendly.trim().is_empty() {
@@ -5899,116 +6596,63 @@ async fn send_turn_messages_agent(
                                 } else {
                                     format!("chatgpt_http_{}: {}", status.as_u16(), friendly)
                                 };
+                                let to = match next_lane {
+                                    DesktopInferenceLane::Chatgpt => "chatgpt",
+                                    DesktopInferenceLane::Platform => "platform",
+                                    DesktopInferenceLane::Public => "public",
+                                };
                                 let _ = window.emit(
                                     "inference-fallback",
                                     InferenceFallbackPayload {
                                         session_id: thread_id.to_string(),
                                         from: "chatgpt".to_string(),
-                                        to: "platform".to_string(),
+                                        to: to.to_string(),
                                         reason,
                                     },
                                 );
                                 chatgpt_fallback_notified = true;
                             }
-                            use_platform_for_call = true;
+                            current_lane = next_lane;
                             continue;
                         }
 
-                        // Otherwise, require explicit approval before switching to BYOK (when enabled).
-                        if !chatgpt_fallback_approved_for_run {
-                            let provider_key_ok = get_byok_provider_key().is_ok();
-                            if !provider_key_ok {
-                                append_messages_agent_assistant_message(
-	                  &conn,
-	                  db_path,
-	                  thread_id,
-	                  "ChatGPT sign-in failed. Reconnect ChatGPT or upgrade to continue.",
-	                  selected_model_id,
-	                  &run_id,
-	                  &evidence_event_ids,
-	                  provider_id,
-	                  provider_model_ref,
-                    inference_source,
-	                  request_max_tokens,
-	                  None,
-	                  context_community_id,
-	                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("chatgpt_auth_failed"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-
-                            let approved = await_inference_fallback_approval(
-                                window,
-                                thread_id,
-                                selected_model_id,
-                                model_ref.provider,
-                                "chatgpt_error",
-                                cancel_rx.clone(),
-                            )
-                            .await;
-                            if !approved {
-                                append_messages_agent_assistant_message(
-	                  &conn,
-	                  db_path,
-	                  thread_id,
-	                  "ChatGPT sign-in failed. Cancelled — reconnect ChatGPT or upgrade.",
-	                  selected_model_id,
-	                  &run_id,
-	                  &evidence_event_ids,
-	                  provider_id,
-	                  provider_model_ref,
-                    inference_source,
-	                  request_max_tokens,
-	                  None,
-	                  context_community_id,
-	                );
-                                append_run_finished(
-                                    &conn,
-                                    db_path,
-                                    thread_id,
-                                    &run_id,
-                                    "error",
-                                    Some("chatgpt_fallback_denied"),
-                                );
-                                let _ = window.emit(
-                                    "openrouter-turn-finished",
-                                    SessionIdPayload {
-                                        session_id: thread_id.to_string(),
-                                    },
-                                );
-                                return Ok(SendTurnResult {
-                                    thread_id: thread_id.to_string(),
-                                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                    engine_input_event_id: Some(engine_input_event.id),
-                                    engine_input_seq: Some(engine_input_event.seq),
-                                    run_id: Some(run_id),
-                                });
-                            }
-
-                            chatgpt_fallback_approved_for_run = true;
-                        }
-
-                        use_platform_for_call = false;
-                        continue;
+                        // Otherwise, fail closed (desktop user-key fallback is disabled).
+                        append_messages_agent_assistant_message(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            "ChatGPT sign-in failed. Reconnect ChatGPT or upgrade to continue.",
+                            selected_model_id,
+                            &run_id,
+                            &evidence_event_ids,
+                            provider_id,
+                            provider_model_ref,
+                            inference_source,
+                            request_max_tokens,
+                            None,
+                            context_community_id,
+                        );
+                        append_run_finished(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            &run_id,
+                            "error",
+                            Some("chatgpt_auth_failed"),
+                        );
+                        let _ = window.emit(
+                            "openrouter-turn-finished",
+                            SessionIdPayload {
+                                session_id: thread_id.to_string(),
+                            },
+                        );
+                        return Ok(SendTurnResult {
+                            thread_id: thread_id.to_string(),
+                            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                            engine_input_event_id: Some(engine_input_event.id),
+                            engine_input_seq: Some(engine_input_event.seq),
+                            run_id: Some(run_id),
+                        });
                     }
 
                     let friendly = format_provider_error(&resp_bytes);
@@ -6025,52 +6669,61 @@ async fn send_turn_messages_agent(
                     if status.is_success() {
                         let parsed: serde_json::Value =
                             serde_json::from_slice(&resp_bytes).unwrap_or(serde_json::Value::Null);
-                        let choice = parsed
-                            .get("choices")
-                            .and_then(|v| v.as_array())
-                            .and_then(|arr| arr.first())
-                            .cloned()
-                            .unwrap_or(serde_json::Value::Null);
-                        parsed_response.text = choice
-                            .get("message")
-                            .and_then(|m| m.get("content"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        if let Some(tcs) = choice
-                            .get("message")
-                            .and_then(|m| m.get("tool_calls"))
-                            .and_then(|v| v.as_array())
-                        {
-                            for tc in tcs {
-                                let id = tc
-                                    .get("id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                let name = tc
-                                    .get("function")
-                                    .and_then(|f| f.get("name"))
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                let arguments = tc
-                                    .get("function")
-                                    .and_then(|f| f.get("arguments"))
-                                    .map(|v| {
-                                        if let Some(s) = v.as_str() {
-                                            s.to_string()
-                                        } else {
-                                            v.to_string()
-                                        }
-                                    })
-                                    .unwrap_or_else(|| "{}".to_string());
-                                if !name.trim().is_empty() {
-                                    parsed_response.tool_calls.push(PartialToolCall {
-                                        id,
-                                        name,
-                                        arguments,
-                                    });
+                        if using_public {
+                            parsed_response.text = parsed
+                                .get("full_content")
+                                .and_then(|v| v.as_str())
+                                .or_else(|| parsed.get("text").and_then(|v| v.as_str()))
+                                .unwrap_or("")
+                                .to_string();
+                        } else {
+                            let choice = parsed
+                                .get("choices")
+                                .and_then(|v| v.as_array())
+                                .and_then(|arr| arr.first())
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Null);
+                            parsed_response.text = choice
+                                .get("message")
+                                .and_then(|m| m.get("content"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            if let Some(tcs) = choice
+                                .get("message")
+                                .and_then(|m| m.get("tool_calls"))
+                                .and_then(|v| v.as_array())
+                            {
+                                for tc in tcs {
+                                    let id = tc
+                                        .get("id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let name = tc
+                                        .get("function")
+                                        .and_then(|f| f.get("name"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let arguments = tc
+                                        .get("function")
+                                        .and_then(|f| f.get("arguments"))
+                                        .map(|v| {
+                                            if let Some(s) = v.as_str() {
+                                                s.to_string()
+                                            } else {
+                                                v.to_string()
+                                            }
+                                        })
+                                        .unwrap_or_else(|| "{}".to_string());
+                                    if !name.trim().is_empty() {
+                                        parsed_response.tool_calls.push(PartialToolCall {
+                                            id,
+                                            name,
+                                            arguments,
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -6082,6 +6735,12 @@ async fn send_turn_messages_agent(
                 let mut stream = res.bytes_stream();
                 let mut pending = String::new();
                 let mut chunk_seq: u64 = 0;
+                let mut chunk_batch_seq_start: Option<u64> = None;
+                let mut chunk_batch_seq_end: u64 = 0;
+                let mut chunk_batch_count: u64 = 0;
+                let mut chunk_batch_lossy = false;
+                let mut chunk_batch_bytes: Vec<u8> = Vec::new();
+                let mut chunk_batch_started_at = Instant::now();
                 let mut stream_seq: u64 = 0;
                 let mut assistant = String::new();
                 let mut tool_calls: Vec<PartialToolCall> = Vec::new();
@@ -6092,6 +6751,23 @@ async fn send_turn_messages_agent(
 
                 loop {
                     if *cancel_rx.borrow() {
+                        flush_engine_io_chunk_batch(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            provider_id,
+                            selected_model_id,
+                            provider_model_ref_str.as_str(),
+                            run_id.as_str(),
+                            call_seq,
+                            status.as_u16(),
+                            &mut chunk_batch_seq_start,
+                            &mut chunk_batch_seq_end,
+                            &mut chunk_batch_count,
+                            &mut chunk_batch_lossy,
+                            &mut chunk_batch_bytes,
+                            &mut evidence_event_ids,
+                        );
                         return Ok(finish_cancelled_messages_agent(
                             window,
                             &conn,
@@ -6105,6 +6781,23 @@ async fn send_turn_messages_agent(
 
                     let next = tokio::select! {
                       _ = cancel_rx.changed() => {
+                        flush_engine_io_chunk_batch(
+                          &conn,
+                          db_path,
+                          thread_id,
+                          provider_id,
+                          selected_model_id,
+                          provider_model_ref_str.as_str(),
+                          run_id.as_str(),
+                          call_seq,
+                          status.as_u16(),
+                          &mut chunk_batch_seq_start,
+                          &mut chunk_batch_seq_end,
+                          &mut chunk_batch_count,
+                          &mut chunk_batch_lossy,
+                          &mut chunk_batch_bytes,
+                          &mut evidence_event_ids,
+                        );
                         return Ok(finish_cancelled_messages_agent(
                           window,
                           &conn,
@@ -6122,6 +6815,23 @@ async fn send_turn_messages_agent(
                     let bytes = match next {
                         Ok(bytes) => bytes,
                         Err(err) => {
+                            flush_engine_io_chunk_batch(
+                                &conn,
+                                db_path,
+                                thread_id,
+                                provider_id,
+                                selected_model_id,
+                                provider_model_ref_str.as_str(),
+                                run_id.as_str(),
+                                call_seq,
+                                status.as_u16(),
+                                &mut chunk_batch_seq_start,
+                                &mut chunk_batch_seq_end,
+                                &mut chunk_batch_count,
+                                &mut chunk_batch_lossy,
+                                &mut chunk_batch_bytes,
+                                &mut evidence_event_ids,
+                            );
                             append_messages_agent_assistant_message(
                                 &conn,
                                 db_path,
@@ -6136,6 +6846,17 @@ async fn send_turn_messages_agent(
                                 request_max_tokens,
                                 None,
                                 context_community_id,
+                            );
+                            emit_run_latency_trace(
+                                thread_id,
+                                run_id.as_str(),
+                                selected_model_id,
+                                Some(inference_source),
+                                turn_started_at,
+                                run_started_at,
+                                &stream_timing,
+                                "error",
+                                Some("provider_stream_error"),
                             );
                             append_run_finished(
                                 &conn,
@@ -6160,6 +6881,7 @@ async fn send_turn_messages_agent(
                             });
                         }
                     };
+                    stream_timing.note_io_chunk(bytes.len());
 
                     let (chunk_text, chunk_lossy) = match std::str::from_utf8(&bytes) {
                         Ok(s) => (s.to_string(), false),
@@ -6168,63 +6890,14 @@ async fn send_turn_messages_agent(
                     pending.push_str(&chunk_text);
 
                     chunk_seq += 1;
-                    let mut chunk_blob_ref: Option<String> = None;
-                    let chunk_payload = if chunk_lossy || bytes.len() > IO_BLOB_THRESHOLD_BYTES {
-                        if let Some(blob) = write_blob_and_record(&conn, db_path, bytes.as_ref()) {
-                            chunk_blob_ref = Some(blob.rel_path.clone());
-                            serde_json::json!({
-                              "v": 1,
-                              "engine_id": ENGINE_MESSAGES_AGENT,
-                              "provider_id": provider_id,
-                              "model_id": selected_model_id,
-                              "provider_model_ref": provider_model_ref_str.as_str(),
-                              "run_id": run_id,
-                              "call_seq": call_seq,
-                              "chunk_seq": chunk_seq,
-                              "http_status": status.as_u16(),
-                              "chunk_blob_ref": blob.rel_path,
-                              "chunk_byte_len": blob.byte_len,
-                              "chunk_text_preview": chunk_text,
-                            })
-                        } else {
-                            serde_json::json!({
-                              "v": 1,
-                              "engine_id": ENGINE_MESSAGES_AGENT,
-                              "provider_id": provider_id,
-                              "model_id": selected_model_id,
-                              "provider_model_ref": provider_model_ref_str.as_str(),
-                              "run_id": run_id,
-                              "call_seq": call_seq,
-                              "chunk_seq": chunk_seq,
-                              "http_status": status.as_u16(),
-                              "chunk": chunk_text,
-                            })
-                        }
-                    } else {
-                        serde_json::json!({
-                          "v": 1,
-                          "engine_id": ENGINE_MESSAGES_AGENT,
-                          "provider_id": provider_id,
-                          "model_id": selected_model_id,
-                          "provider_model_ref": provider_model_ref_str.as_str(),
-                          "run_id": run_id,
-                          "call_seq": call_seq,
-                          "chunk_seq": chunk_seq,
-                          "http_status": status.as_u16(),
-                          "chunk": chunk_text,
-                        })
-                    };
-                    if let Ok(evt) = db::append_event(
-                        &conn,
-                        db_path,
-                        thread_id,
-                        "engine_io_chunk",
-                        None,
-                        Some(&chunk_payload.to_string()),
-                        chunk_blob_ref.as_deref(),
-                    ) {
-                        evidence_event_ids.push(evt.id);
+                    if chunk_batch_seq_start.is_none() {
+                        chunk_batch_seq_start = Some(chunk_seq);
+                        chunk_batch_started_at = Instant::now();
                     }
+                    chunk_batch_seq_end = chunk_seq;
+                    chunk_batch_count = chunk_batch_count.saturating_add(1);
+                    chunk_batch_lossy = chunk_batch_lossy || chunk_lossy;
+                    chunk_batch_bytes.extend_from_slice(bytes.as_ref());
 
                     while let Some(idx) = pending.find('\n') {
                         let mut line = pending[..idx].to_string();
@@ -6268,6 +6941,7 @@ async fn send_turn_messages_agent(
                             if kind == "response.output_text.delta" {
                                 if let Some(delta) = parsed.get("delta").and_then(|v| v.as_str()) {
                                     if !delta.is_empty() {
+                                        stream_timing.note_text_delta();
                                         saw_chatgpt_output_text_delta = true;
                                         assistant.push_str(delta);
                                         stream_seq += 1;
@@ -6280,7 +6954,6 @@ async fn send_turn_messages_agent(
                                                 model_id: selected_model_id.to_string(),
                                                 inference_source: inference_source.to_string(),
                                                 chunk: delta.to_string(),
-                                                full_content: assistant.clone(),
                                                 seq: stream_seq,
                                                 prompt_tokens,
                                                 completion_tokens,
@@ -6297,6 +6970,7 @@ async fn send_turn_messages_agent(
                             {
                                 if let Some(text) = parsed.get("text").and_then(|v| v.as_str()) {
                                     if !text.trim().is_empty() {
+                                        stream_timing.note_text_delta();
                                         saw_chatgpt_output_text_done = true;
                                         assistant.push_str(text);
                                         stream_seq += 1;
@@ -6309,7 +6983,6 @@ async fn send_turn_messages_agent(
                                                 model_id: selected_model_id.to_string(),
                                                 inference_source: inference_source.to_string(),
                                                 chunk: text.to_string(),
-                                                full_content: assistant.clone(),
                                                 seq: stream_seq,
                                                 prompt_tokens,
                                                 completion_tokens,
@@ -6348,6 +7021,7 @@ async fn send_turn_messages_agent(
                                                 }
                                             }
                                             if !text.trim().is_empty() {
+                                                stream_timing.note_text_delta();
                                                 saw_chatgpt_output_text_done = true;
                                                 assistant.push_str(&text);
                                                 stream_seq += 1;
@@ -6362,7 +7036,6 @@ async fn send_turn_messages_agent(
                                                         inference_source: inference_source
                                                             .to_string(),
                                                         chunk: text,
-                                                        full_content: assistant.clone(),
                                                         seq: stream_seq,
                                                         prompt_tokens,
                                                         completion_tokens,
@@ -6398,6 +7071,63 @@ async fn send_turn_messages_agent(
                                     }
                                 }
                             }
+                        } else if using_public {
+                            if let Some(delta) = parsed.get("delta").and_then(|v| v.as_str()) {
+                                if !delta.is_empty() {
+                                    stream_timing.note_text_delta();
+                                    assistant.push_str(delta);
+                                    stream_seq += 1;
+                                    let _ = window.emit(
+                                        "openrouter-stream",
+                                        OpenRouterStreamPayload {
+                                            session_id: thread_id.to_string(),
+                                            run_id: run_id.clone(),
+                                            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                                            model_id: selected_model_id.to_string(),
+                                            inference_source: inference_source.to_string(),
+                                            chunk: delta.to_string(),
+                                            seq: stream_seq,
+                                            prompt_tokens,
+                                            completion_tokens,
+                                            max_tokens: request_max_tokens,
+                                        },
+                                    );
+                                }
+                            }
+
+                            if let Some(full_content) =
+                                parsed.get("full_content").and_then(|v| v.as_str())
+                            {
+                                if !full_content.is_empty() {
+                                    let missing = if full_content.starts_with(&assistant) {
+                                        &full_content[assistant.len()..]
+                                    } else if assistant.is_empty() {
+                                        full_content
+                                    } else {
+                                        ""
+                                    };
+                                    if !missing.is_empty() {
+                                        stream_timing.note_text_delta();
+                                        assistant.push_str(missing);
+                                        stream_seq += 1;
+                                        let _ = window.emit(
+                                            "openrouter-stream",
+                                            OpenRouterStreamPayload {
+                                                session_id: thread_id.to_string(),
+                                                run_id: run_id.clone(),
+                                                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                                                model_id: selected_model_id.to_string(),
+                                                inference_source: inference_source.to_string(),
+                                                chunk: missing.to_string(),
+                                                seq: stream_seq,
+                                                prompt_tokens,
+                                                completion_tokens,
+                                                max_tokens: request_max_tokens,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
                         } else {
                             if let Some(usage) = parsed.get("usage") {
                                 prompt_tokens = usage
@@ -6423,6 +7153,7 @@ async fn send_turn_messages_agent(
                                 .and_then(|v| v.as_str())
                             {
                                 if !delta.is_empty() {
+                                    stream_timing.note_text_delta();
                                     assistant.push_str(delta);
                                     stream_seq += 1;
                                     let _ = window.emit(
@@ -6434,7 +7165,6 @@ async fn send_turn_messages_agent(
                                             model_id: selected_model_id.to_string(),
                                             inference_source: inference_source.to_string(),
                                             chunk: delta.to_string(),
-                                            full_content: assistant.clone(),
                                             seq: stream_seq,
                                             prompt_tokens,
                                             completion_tokens,
@@ -6482,8 +7212,49 @@ async fn send_turn_messages_agent(
                             }
                         }
                     }
+
+                    let should_flush_batch = chunk_batch_count >= IO_CHUNK_BATCH_MAX_CHUNKS
+                        || chunk_batch_bytes.len() >= IO_CHUNK_BATCH_MAX_BYTES
+                        || chunk_batch_started_at.elapsed().as_millis()
+                            >= u128::from(IO_CHUNK_BATCH_MAX_DELAY_MS);
+                    if should_flush_batch {
+                        flush_engine_io_chunk_batch(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            provider_id,
+                            selected_model_id,
+                            provider_model_ref_str.as_str(),
+                            run_id.as_str(),
+                            call_seq,
+                            status.as_u16(),
+                            &mut chunk_batch_seq_start,
+                            &mut chunk_batch_seq_end,
+                            &mut chunk_batch_count,
+                            &mut chunk_batch_lossy,
+                            &mut chunk_batch_bytes,
+                            &mut evidence_event_ids,
+                        );
+                    }
                 }
 
+                flush_engine_io_chunk_batch(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    provider_id,
+                    selected_model_id,
+                    provider_model_ref_str.as_str(),
+                    run_id.as_str(),
+                    call_seq,
+                    status.as_u16(),
+                    &mut chunk_batch_seq_start,
+                    &mut chunk_batch_seq_end,
+                    &mut chunk_batch_count,
+                    &mut chunk_batch_lossy,
+                    &mut chunk_batch_bytes,
+                    &mut evidence_event_ids,
+                );
                 parsed_response.text = assistant;
                 for tc in tool_calls {
                     if !tc.name.trim().is_empty() {
@@ -6509,6 +7280,17 @@ async fn send_turn_messages_agent(
                     request_max_tokens,
                     None,
                     context_community_id,
+                );
+                emit_run_latency_trace(
+                    thread_id,
+                    &run_id,
+                    selected_model_id,
+                    final_inference_source.as_deref(),
+                    turn_started_at,
+                    run_started_at,
+                    &stream_timing,
+                    "error",
+                    Some("provider_http_error"),
                 );
                 append_run_finished(
                     &conn,
@@ -6553,6 +7335,17 @@ async fn send_turn_messages_agent(
                     request_max_tokens,
                     None,
                     context_community_id,
+                );
+                emit_run_latency_trace(
+                    thread_id,
+                    &run_id,
+                    selected_model_id,
+                    final_inference_source.as_deref(),
+                    turn_started_at,
+                    run_started_at,
+                    &stream_timing,
+                    "error",
+                    Some("loop_guard_tool_round_limit"),
                 );
                 append_run_finished(
                     &conn,
@@ -6747,12 +7540,16 @@ async fn send_turn_messages_agent(
                 }
 
                 let outcome = execute_agent_tool_call(
-                    window,
+                    Some(window),
                     &mut conn,
                     db_path,
                     thread_id,
+                    thread_context.thread_lane.as_str(),
                     workspace,
+                    context_community_id,
                     mode,
+                    platform_proxy.as_ref(),
+                    cloud_user_id.as_deref(),
                     &run_id,
                     &workspace_scope_id,
                     &tool_use_id,
@@ -6760,6 +7557,7 @@ async fn send_turn_messages_agent(
                     parsed_args,
                     &auto_approve_key,
                     &mut auto_approve_write_edit,
+                    None,
                     cancel_rx.clone(),
                 )
                 .await;
@@ -6815,6 +7613,17 @@ async fn send_turn_messages_agent(
                 None,
                 context_community_id,
             );
+            emit_run_latency_trace(
+                thread_id,
+                &run_id,
+                selected_model_id,
+                final_inference_source.as_deref(),
+                turn_started_at,
+                run_started_at,
+                &stream_timing,
+                "error",
+                Some("empty_response"),
+            );
             append_run_finished(
                 &conn,
                 db_path,
@@ -6852,6 +7661,17 @@ async fn send_turn_messages_agent(
             DEFAULT_MAX_TOKENS,
             Some(used_personal_memory),
             context_community_id,
+        );
+        emit_run_latency_trace(
+            thread_id,
+            &run_id,
+            selected_model_id,
+            final_inference_source.as_deref(),
+            turn_started_at,
+            run_started_at,
+            &stream_timing,
+            "ok",
+            None,
         );
         append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
@@ -6907,17 +7727,19 @@ async fn send_turn_messages_agent(
           "content": [{ "type": "text", "text": redacted }]
         }));
     }
+    if let Some(community_context_text) = community_context_message.as_deref() {
+        messages.push(serde_json::json!({
+          "role": "user",
+          "content": [{ "type": "text", "text": community_context_text }]
+        }));
+    }
     messages.push(serde_json::json!({
       "role": "user",
       "content": [{ "type": "text", "text": input_to_send.clone() }]
     }));
 
-    let tools_schema = if workspace.trim().is_empty() {
-        make_agent_tool_schema_update_plan_only()
-    } else {
-        make_agent_tool_schema()
-    };
-    let client = reqwest::Client::new();
+    let tools_schema = make_tool_schema_for_lane(thread_context.thread_lane.as_str(), workspace);
+    let client = inference_http_client();
     let auto_approve_key = format!("auto_approve_write_edit::{}", thread_id);
     let mut auto_approve_write_edit = get_ui_state(&conn, &auto_approve_key)
         .ok()
@@ -7135,8 +7957,10 @@ async fn send_turn_messages_agent(
                 )
             };
             final_inference_source = Some(inference_source.to_string());
+            let request_blob_write_started_at = Instant::now();
             let request_blob = blob_store::write_blob(db_path, &request_bytes)
                 .map_err(|e| format!("Request blob write failed: {}", e))?;
+            stream_timing.note_engine_input_blob_write(request_blob_write_started_at);
             let _ = db::record_blob(
                 &conn,
                 &request_blob.id,
@@ -7260,56 +8084,49 @@ async fn send_turn_messages_agent(
                     .body(request_bytes)
                     .send()
             } else {
-                let provider_key = match get_byok_provider_key() {
-                    Ok(value) => value,
-                    Err(message) => {
-                        append_messages_agent_assistant_message(
-                            &conn,
-                            db_path,
-                            thread_id,
-                            &message,
-                            selected_model_id,
-                            &run_id,
-                            &[],
-                            provider_id,
-                            provider_model_ref,
-                            inference_source,
-                            request_max_tokens,
-                            None,
-                            context_community_id,
-                        );
-                        append_run_finished(
-                            &conn,
-                            db_path,
-                            thread_id,
-                            &run_id,
-                            "error",
-                            Some("missing_api_key"),
-                        );
-                        let _ = window.emit(
-                            "openrouter-turn-finished",
-                            SessionIdPayload {
-                                session_id: thread_id.to_string(),
-                            },
-                        );
-                        return Ok(SendTurnResult {
-                            thread_id: thread_id.to_string(),
-                            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                            engine_input_event_id: Some(engine_input_event.id),
-                            engine_input_seq: Some(engine_input_event.seq),
-                            run_id: Some(run_id),
-                        });
-                    }
-                };
-                client
-                    .post("https://api.anthropic.com/v1/messages")
-                    .header("x-api-key", provider_key)
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "text/event-stream")
-                    .header("anthropic-version", "2023-06-01")
-                    .body(request_bytes)
-                    .send()
+                append_messages_agent_assistant_message(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    "Arx AI is unavailable for this run. Use Arx AI quota, ChatGPT sign-in for OpenAI on desktop, or upgrade.",
+                    selected_model_id,
+                    &run_id,
+                    &[],
+                    provider_id,
+                    provider_model_ref,
+                    inference_source,
+                    request_max_tokens,
+                    None,
+                    context_community_id,
+                );
+                append_run_finished(
+                    &conn,
+                    db_path,
+                    thread_id,
+                    &run_id,
+                    "error",
+                    Some("missing_api_key"),
+                );
+                let _ = window.emit(
+                    "openrouter-turn-finished",
+                    SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                    },
+                );
+                return Ok(SendTurnResult {
+                    thread_id: thread_id.to_string(),
+                    engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                    engine_input_event_id: Some(engine_input_event.id),
+                    engine_input_seq: Some(engine_input_event.seq),
+                    run_id: Some(run_id),
+                });
             };
+            let request_start_timeout_ms = if using_platform {
+                INFERENCE_REQUEST_START_TIMEOUT_PLATFORM_MS
+            } else {
+                INFERENCE_REQUEST_START_TIMEOUT_CHATGPT_MS
+            };
+            let request_started_at = Instant::now();
 
             let res = tokio::select! {
               _ = cancel_rx.changed() => {
@@ -7323,7 +8140,63 @@ async fn send_turn_messages_agent(
                   first_engine_input_seq,
                 ));
               }
-              res = send_fut => res,
+              res = timeout(Duration::from_millis(request_start_timeout_ms), send_fut) => {
+                match res {
+                  Ok(res) => res,
+                  Err(_) => {
+                    append_messages_agent_assistant_message(
+                      &conn,
+                      db_path,
+                      thread_id,
+                      &format!(
+                        "Engine error: request timed out before first response bytes ({}ms budget).",
+                        request_start_timeout_ms
+                      ),
+                      selected_model_id,
+                      &run_id,
+                      &[],
+                      provider_id,
+                      provider_model_ref,
+                      inference_source,
+                      request_max_tokens,
+                      None,
+                      context_community_id,
+                    );
+                    emit_run_latency_trace(
+                      thread_id,
+                      run_id.as_str(),
+                      selected_model_id,
+                      Some(inference_source),
+                      turn_started_at,
+                      run_started_at,
+                      &stream_timing,
+                      "error",
+                      Some("provider_request_timeout"),
+                    );
+                    append_run_finished(
+                      &conn,
+                      db_path,
+                      thread_id,
+                      &run_id,
+                      "error",
+                      Some("provider_request_timeout"),
+                    );
+                    let _ = window.emit(
+                      "openrouter-turn-finished",
+                      SessionIdPayload {
+                        session_id: thread_id.to_string(),
+                      },
+                    );
+                    return Ok(SendTurnResult {
+                      thread_id: thread_id.to_string(),
+                      engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                      engine_input_event_id: Some(engine_input_event.id),
+                      engine_input_seq: Some(engine_input_event.seq),
+                      run_id: Some(run_id),
+                    });
+                  }
+                }
+              },
             };
 
             let res = match res {
@@ -7367,6 +8240,12 @@ async fn send_turn_messages_agent(
                     });
                 }
             };
+            stream_timing.note_response_headers(
+                request_started_at,
+                res.headers(),
+                request_attempt,
+                inference_source,
+            );
 
             let status = res.status();
             let content_type = res
@@ -7434,132 +8313,56 @@ async fn send_turn_messages_agent(
                     platform_available_for_run = false;
 
                     if is_platform_inference_quota_exceeded(&resp_bytes) {
-                        let provider_key_ok = get_byok_provider_key().is_ok();
-                        if !provider_key_ok {
-                            append_messages_agent_assistant_message(
-	                &conn,
-	                db_path,
-	                thread_id,
-	                &format!(
-	                  "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
-	                ),
-	                selected_model_id,
-	                &run_id,
-	                &evidence_event_ids,
-	                provider_id,
-	                provider_model_ref,
-                  inference_source,
-	                request_max_tokens,
-	                None,
-	                context_community_id,
-	              );
-                            append_run_finished(
-                                &conn,
-                                db_path,
-                                thread_id,
-                                &run_id,
-                                "error",
-                                Some("platform_quota_exceeded"),
-                            );
-                            let _ = window.emit(
-                                "openrouter-turn-finished",
-                                SessionIdPayload {
-                                    session_id: thread_id.to_string(),
-                                },
-                            );
-                            return Ok(SendTurnResult {
-                                thread_id: thread_id.to_string(),
-                                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                engine_input_event_id: Some(engine_input_event.id),
-                                engine_input_seq: Some(engine_input_event.seq),
-                                run_id: Some(run_id),
-                            });
-                        }
-
-                        if !platform_fallback_notified {
-                            let _ = window.emit(
-                                "inference-fallback",
-                                InferenceFallbackPayload {
-                                    session_id: thread_id.to_string(),
-                                    from: "platform".to_string(),
-                                    to: "user".to_string(),
-                                    reason: "platform_quota_exceeded".to_string(),
-                                },
-                            );
-                            platform_fallback_notified = true;
-                        }
-                        use_platform_for_call = false;
-                        continue;
+                        append_messages_agent_assistant_message(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            "You've used your Arx AI quota for this month. Upgrade to continue with Arx AI.",
+                            selected_model_id,
+                            &run_id,
+                            &evidence_event_ids,
+                            provider_id,
+                            provider_model_ref,
+                            inference_source,
+                            request_max_tokens,
+                            None,
+                            context_community_id,
+                        );
+                        emit_run_latency_trace(
+                            thread_id,
+                            run_id.as_str(),
+                            selected_model_id,
+                            Some(inference_source),
+                            turn_started_at,
+                            run_started_at,
+                            &stream_timing,
+                            "error",
+                            Some("platform_quota_exceeded"),
+                        );
+                        append_run_finished(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            &run_id,
+                            "error",
+                            Some("platform_quota_exceeded"),
+                        );
+                        let _ = window.emit(
+                            "openrouter-turn-finished",
+                            SessionIdPayload {
+                                session_id: thread_id.to_string(),
+                            },
+                        );
+                        return Ok(SendTurnResult {
+                            thread_id: thread_id.to_string(),
+                            engine_id: ENGINE_MESSAGES_AGENT.to_string(),
+                            engine_input_event_id: Some(engine_input_event.id),
+                            engine_input_seq: Some(engine_input_event.seq),
+                            run_id: Some(run_id),
+                        });
                     }
 
                     if is_platform_inference_not_allowed(&resp_bytes) {
-                        use_platform_for_call = false;
-                        continue;
-                    }
-
-                    if get_byok_provider_key().is_ok() {
-                        let approved = await_inference_fallback_approval(
-                            window,
-                            thread_id,
-                            selected_model_id,
-                            model_ref.provider,
-                            "platform_error",
-                            cancel_rx.clone(),
-                        )
-                        .await;
-                        if !approved {
-                            append_messages_agent_assistant_message(
-                                &conn,
-                                db_path,
-                                thread_id,
-                                &format!(
-		                  "Arx AI is temporarily unavailable. Please try again.",
-		                ),
-                                selected_model_id,
-                                &run_id,
-                                &evidence_event_ids,
-                                provider_id,
-                                provider_model_ref,
-                                inference_source,
-                                request_max_tokens,
-                                None,
-                                context_community_id,
-                            );
-                            append_run_finished(
-                                &conn,
-                                db_path,
-                                thread_id,
-                                &run_id,
-                                "error",
-                                Some("platform_fallback_denied"),
-                            );
-                            let _ = window.emit(
-                                "openrouter-turn-finished",
-                                SessionIdPayload {
-                                    session_id: thread_id.to_string(),
-                                },
-                            );
-                            return Ok(SendTurnResult {
-                                thread_id: thread_id.to_string(),
-                                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                                engine_input_event_id: Some(engine_input_event.id),
-                                engine_input_seq: Some(engine_input_event.seq),
-                                run_id: Some(run_id),
-                            });
-                        }
-
-                        if !platform_fallback_notified {
-                            let _ = window.emit(
-                                "inference-fallback",
-                                InferenceFallbackPayload {
-                                    session_id: thread_id.to_string(),
-                                    from: "platform".to_string(),
-                                    to: "user".to_string(),
-                                    reason: "platform_error".to_string(),
-                                },
-                            );
-                            platform_fallback_notified = true;
-                        }
                         use_platform_for_call = false;
                         continue;
                     }
@@ -7602,6 +8405,12 @@ async fn send_turn_messages_agent(
             let mut stream = res.bytes_stream();
             let mut pending = String::new();
             let mut chunk_seq: u64 = 0;
+            let mut chunk_batch_seq_start: Option<u64> = None;
+            let mut chunk_batch_seq_end: u64 = 0;
+            let mut chunk_batch_count: u64 = 0;
+            let mut chunk_batch_lossy = false;
+            let mut chunk_batch_bytes: Vec<u8> = Vec::new();
+            let mut chunk_batch_started_at = Instant::now();
             let mut stream_seq: u64 = 0;
             let mut assistant = String::new();
             let mut blocks: Vec<Option<StreamedBlock>> = Vec::new();
@@ -7611,6 +8420,23 @@ async fn send_turn_messages_agent(
 
             while !saw_message_stop {
                 if *cancel_rx.borrow() {
+                    flush_engine_io_chunk_batch(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        provider_id,
+                        selected_model_id,
+                        provider_model_ref_str.as_str(),
+                        run_id.as_str(),
+                        call_seq,
+                        status.as_u16(),
+                        &mut chunk_batch_seq_start,
+                        &mut chunk_batch_seq_end,
+                        &mut chunk_batch_count,
+                        &mut chunk_batch_lossy,
+                        &mut chunk_batch_bytes,
+                        &mut evidence_event_ids,
+                    );
                     return Ok(finish_cancelled_messages_agent(
                         window,
                         &conn,
@@ -7624,6 +8450,23 @@ async fn send_turn_messages_agent(
 
                 let next = tokio::select! {
                   _ = cancel_rx.changed() => {
+                    flush_engine_io_chunk_batch(
+                      &conn,
+                      db_path,
+                      thread_id,
+                      provider_id,
+                      selected_model_id,
+                      provider_model_ref_str.as_str(),
+                      run_id.as_str(),
+                      call_seq,
+                      status.as_u16(),
+                      &mut chunk_batch_seq_start,
+                      &mut chunk_batch_seq_end,
+                      &mut chunk_batch_count,
+                      &mut chunk_batch_lossy,
+                      &mut chunk_batch_bytes,
+                      &mut evidence_event_ids,
+                    );
                     return Ok(finish_cancelled_messages_agent(
                       window,
                       &conn,
@@ -7641,6 +8484,23 @@ async fn send_turn_messages_agent(
                 let bytes = match next {
                     Ok(bytes) => bytes,
                     Err(err) => {
+                        flush_engine_io_chunk_batch(
+                            &conn,
+                            db_path,
+                            thread_id,
+                            provider_id,
+                            selected_model_id,
+                            provider_model_ref_str.as_str(),
+                            run_id.as_str(),
+                            call_seq,
+                            status.as_u16(),
+                            &mut chunk_batch_seq_start,
+                            &mut chunk_batch_seq_end,
+                            &mut chunk_batch_count,
+                            &mut chunk_batch_lossy,
+                            &mut chunk_batch_bytes,
+                            &mut evidence_event_ids,
+                        );
                         append_messages_agent_assistant_message(
                             &conn,
                             db_path,
@@ -7655,6 +8515,17 @@ async fn send_turn_messages_agent(
                             request_max_tokens,
                             None,
                             context_community_id,
+                        );
+                        emit_run_latency_trace(
+                            thread_id,
+                            run_id.as_str(),
+                            selected_model_id,
+                            Some(inference_source),
+                            turn_started_at,
+                            run_started_at,
+                            &stream_timing,
+                            "error",
+                            Some("provider_stream_error"),
                         );
                         append_run_finished(
                             &conn,
@@ -7679,6 +8550,7 @@ async fn send_turn_messages_agent(
                         });
                     }
                 };
+                stream_timing.note_io_chunk(bytes.len());
 
                 let (chunk_text, chunk_lossy) = match std::str::from_utf8(&bytes) {
                     Ok(s) => (s.to_string(), false),
@@ -7687,63 +8559,14 @@ async fn send_turn_messages_agent(
                 pending.push_str(&chunk_text);
 
                 chunk_seq += 1;
-                let mut chunk_blob_ref: Option<String> = None;
-                let chunk_payload = if chunk_lossy || bytes.len() > IO_BLOB_THRESHOLD_BYTES {
-                    if let Some(blob) = write_blob_and_record(&conn, db_path, bytes.as_ref()) {
-                        chunk_blob_ref = Some(blob.rel_path.clone());
-                        serde_json::json!({
-                          "v": 1,
-                          "engine_id": ENGINE_MESSAGES_AGENT,
-                          "provider_id": provider_id,
-                          "model_id": selected_model_id,
-                          "provider_model_ref": provider_model_ref_str.as_str(),
-                          "run_id": run_id,
-                          "call_seq": call_seq,
-                          "chunk_seq": chunk_seq,
-                          "http_status": status.as_u16(),
-                          "chunk_blob_ref": blob.rel_path,
-                          "chunk_byte_len": blob.byte_len,
-                          "chunk_text_preview": chunk_text,
-                        })
-                    } else {
-                        serde_json::json!({
-                          "v": 1,
-                          "engine_id": ENGINE_MESSAGES_AGENT,
-                          "provider_id": provider_id,
-                          "model_id": selected_model_id,
-                          "provider_model_ref": provider_model_ref_str.as_str(),
-                          "run_id": run_id,
-                          "call_seq": call_seq,
-                          "chunk_seq": chunk_seq,
-                          "http_status": status.as_u16(),
-                          "chunk": chunk_text,
-                        })
-                    }
-                } else {
-                    serde_json::json!({
-                      "v": 1,
-                      "engine_id": ENGINE_MESSAGES_AGENT,
-                      "provider_id": provider_id,
-                      "model_id": selected_model_id,
-                      "provider_model_ref": provider_model_ref_str.as_str(),
-                      "run_id": run_id,
-                      "call_seq": call_seq,
-                      "chunk_seq": chunk_seq,
-                      "http_status": status.as_u16(),
-                      "chunk": chunk_text,
-                    })
-                };
-                if let Ok(evt) = db::append_event(
-                    &conn,
-                    db_path,
-                    thread_id,
-                    "engine_io_chunk",
-                    None,
-                    Some(&chunk_payload.to_string()),
-                    chunk_blob_ref.as_deref(),
-                ) {
-                    evidence_event_ids.push(evt.id);
+                if chunk_batch_seq_start.is_none() {
+                    chunk_batch_seq_start = Some(chunk_seq);
+                    chunk_batch_started_at = Instant::now();
                 }
+                chunk_batch_seq_end = chunk_seq;
+                chunk_batch_count = chunk_batch_count.saturating_add(1);
+                chunk_batch_lossy = chunk_batch_lossy || chunk_lossy;
+                chunk_batch_bytes.extend_from_slice(bytes.as_ref());
 
                 while let Some(idx) = pending.find('\n') {
                     let mut line = pending[..idx].to_string();
@@ -7865,6 +8688,7 @@ async fn send_turn_messages_agent(
                             }
                             assistant.push_str(delta_text);
                             stream_seq += 1;
+                            stream_timing.note_text_delta();
                             let _ = window.emit(
                                 "openrouter-stream",
                                 OpenRouterStreamPayload {
@@ -7874,7 +8698,6 @@ async fn send_turn_messages_agent(
                                     model_id: selected_model_id.to_string(),
                                     inference_source: inference_source.to_string(),
                                     chunk: delta_text.to_string(),
-                                    full_content: assistant.clone(),
                                     seq: stream_seq,
                                     prompt_tokens,
                                     completion_tokens,
@@ -7901,8 +8724,49 @@ async fn send_turn_messages_agent(
                         continue;
                     }
                 }
+
+                let should_flush_batch = chunk_batch_count >= IO_CHUNK_BATCH_MAX_CHUNKS
+                    || chunk_batch_bytes.len() >= IO_CHUNK_BATCH_MAX_BYTES
+                    || chunk_batch_started_at.elapsed().as_millis()
+                        >= u128::from(IO_CHUNK_BATCH_MAX_DELAY_MS);
+                if should_flush_batch {
+                    flush_engine_io_chunk_batch(
+                        &conn,
+                        db_path,
+                        thread_id,
+                        provider_id,
+                        selected_model_id,
+                        provider_model_ref_str.as_str(),
+                        run_id.as_str(),
+                        call_seq,
+                        status.as_u16(),
+                        &mut chunk_batch_seq_start,
+                        &mut chunk_batch_seq_end,
+                        &mut chunk_batch_count,
+                        &mut chunk_batch_lossy,
+                        &mut chunk_batch_bytes,
+                        &mut evidence_event_ids,
+                    );
+                }
             }
 
+            flush_engine_io_chunk_batch(
+                &conn,
+                db_path,
+                thread_id,
+                provider_id,
+                selected_model_id,
+                provider_model_ref_str.as_str(),
+                run_id.as_str(),
+                call_seq,
+                status.as_u16(),
+                &mut chunk_batch_seq_start,
+                &mut chunk_batch_seq_end,
+                &mut chunk_batch_count,
+                &mut chunk_batch_lossy,
+                &mut chunk_batch_bytes,
+                &mut evidence_event_ids,
+            );
             let content_blocks = blocks
                 .into_iter()
                 .filter_map(|block| match block {
@@ -7956,6 +8820,17 @@ async fn send_turn_messages_agent(
                 request_max_tokens,
                 None,
                 context_community_id,
+            );
+            emit_run_latency_trace(
+                thread_id,
+                &run_id,
+                selected_model_id,
+                final_inference_source.as_deref(),
+                turn_started_at,
+                run_started_at,
+                &stream_timing,
+                "error",
+                Some("provider_http_error"),
             );
             append_run_finished(
                 &conn,
@@ -8170,12 +9045,16 @@ async fn send_turn_messages_agent(
                 continue;
             }
             let outcome = execute_agent_tool_call(
-                window,
+                Some(window),
                 &mut conn,
                 db_path,
                 thread_id,
+                thread_context.thread_lane.as_str(),
                 workspace,
+                context_community_id,
                 mode,
+                platform_proxy.as_ref(),
+                cloud_user_id.as_deref(),
                 &run_id,
                 &workspace_scope_id,
                 &tool_use_id,
@@ -8183,6 +9062,7 @@ async fn send_turn_messages_agent(
                 tool_args,
                 &auto_approve_key,
                 &mut auto_approve_write_edit,
+                None,
                 cancel_rx.clone(),
             )
             .await;
@@ -8293,6 +9173,17 @@ async fn send_turn_messages_agent(
             None,
             context_community_id,
         );
+        emit_run_latency_trace(
+            thread_id,
+            &run_id,
+            selected_model_id,
+            final_inference_source.as_deref(),
+            turn_started_at,
+            run_started_at,
+            &stream_timing,
+            "error",
+            Some("empty_response"),
+        );
         append_run_finished(
             &conn,
             db_path,
@@ -8330,6 +9221,17 @@ async fn send_turn_messages_agent(
         DEFAULT_MAX_TOKENS,
         Some(used_personal_memory),
         context_community_id,
+    );
+    emit_run_latency_trace(
+        thread_id,
+        &run_id,
+        selected_model_id,
+        final_inference_source.as_deref(),
+        turn_started_at,
+        run_started_at,
+        &stream_timing,
+        "ok",
+        None,
     );
     append_run_finished(&conn, db_path, thread_id, &run_id, "ok", None);
 
@@ -8370,6 +9272,7 @@ async fn send_turn_cmd_core(
     supabase_access_token: Option<String>,
     cancel_rx: watch::Receiver<bool>,
 ) -> Result<SendTurnResult, String> {
+    let turn_started_at = Instant::now();
     let conn = open_conn(db_path, db_key).map_err(|e| e.to_string())?;
     let mut thread = get_thread_by_id(&conn, thread_id)
         .map_err(|e| e.to_string())?
@@ -8385,27 +9288,32 @@ async fn send_turn_cmd_core(
         thread.engine_id = ENGINE_MESSAGES_AGENT.to_string();
     }
 
-    let platform_proxy = match (
-        supabase_url.as_deref(),
-        supabase_anon_key.as_deref(),
-        supabase_access_token.as_deref(),
-    ) {
-        (Some(url), Some(anon), Some(token)) => {
+    let public_proxy = match (supabase_url.as_deref(), supabase_anon_key.as_deref()) {
+        (Some(url), Some(anon)) => {
             let url = url.trim();
             let anon = anon.trim();
-            let token = token.trim();
-            if url.is_empty() || anon.is_empty() || token.is_empty() {
+            if url.is_empty() || anon.is_empty() {
                 None
             } else if !(url.starts_with("https://") || url.starts_with("http://")) {
                 None
             } else {
-                Some(PlatformProxyConfig {
+                Some(PublicProxyConfig {
                     supabase_url: url.trim_end_matches('/').to_string(),
                     supabase_anon_key: anon.to_string(),
-                    access_token: token.to_string(),
                 })
             }
         }
+        _ => None,
+    };
+    let platform_proxy = match (
+        public_proxy.as_ref(),
+        supabase_access_token.as_deref().map(str::trim),
+    ) {
+        (Some(proxy), Some(token)) if !token.is_empty() => Some(PlatformProxyConfig {
+            supabase_url: proxy.supabase_url.clone(),
+            supabase_anon_key: proxy.supabase_anon_key.clone(),
+            access_token: token.to_string(),
+        }),
         _ => None,
     };
 
@@ -8417,6 +9325,19 @@ async fn send_turn_cmd_core(
         .filter(|p| !p.is_empty())
         .filter(|p| std::path::Path::new(p).is_absolute())
         .unwrap_or("");
+    let resolved_workspace_fingerprint =
+        workspace_identity::resolve_thread_workspace_fingerprint(&conn, &thread);
+    if thread.workspace_fingerprint.is_none() && resolved_workspace_fingerprint.is_some() {
+        let _ = set_thread_workspace_path(
+            &conn,
+            thread_id,
+            thread.workspace_path.as_deref(),
+            resolved_workspace_fingerprint.as_deref(),
+        );
+        thread.workspace_fingerprint = resolved_workspace_fingerprint.clone();
+    }
+    let workspace_scope_id =
+        workspace_identity::workspace_scope_id(workspace, resolved_workspace_fingerprint.as_deref());
 
     let run_mode = get_ui_state(&conn, &format!("agent_mode::{}", thread_id))
         .ok()
@@ -8436,43 +9357,152 @@ async fn send_turn_cmd_core(
         .and_then(|cfg| jwt_string_claim(&cfg.access_token, "sub"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let cloud_personal_memory_items_json =
-        if let (Some(proxy), Some(user_id)) = (platform_proxy.as_ref(), cloud_user_id.as_deref())
-        {
-            fetch_cloud_personal_memory_items_json(proxy, user_id).await
-        } else {
-            None
-        };
+    let thread_context = ThreadContextSnapshot::from_thread(&thread);
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let preflight_timeout = Duration::from_millis(PREFLIGHT_REMOTE_TIMEOUT_MS);
+    let has_cloud_identity = platform_proxy.is_some() && cloud_user_id.is_some();
+    let has_cloud_community_binding = has_cloud_identity && thread_context.community_id.is_some();
+    let (community_query_redacted, _community_query_report) = context::redact_secrets(input);
 
-    // Shared memory injection. Prefer cloud-canonical items if provided.
-    let used_personal_memory = if let Some(json) = cloud_personal_memory_items_json.as_deref() {
-        context_builder::build_used_personal_memory_from_cloud_json(workspace, json)
-            .or_else(|_| context_builder::build_turn_handoff_prefix(&conn, workspace))
-            .map_err(|e| e.to_string())?
+    let (
+        cloud_entitlement_result,
+        cloud_personal_memory_items_json,
+        cloud_community_system_prompt_speculative,
+        cloud_community_context_result_speculative,
+    ) = if let (Some(proxy), Some(user_id)) = (platform_proxy.as_ref(), cloud_user_id.as_deref()) {
+        let entitlement_fut = async {
+            if let Some(community_id) = thread_context.community_id.as_deref() {
+                timeout(
+                    preflight_timeout,
+                    community_context::fetch_cloud_user_has_active_entitlement(
+                        proxy,
+                        user_id,
+                        community_id,
+                    ),
+                )
+                .await
+                .ok()
+            } else {
+                None
+            }
+        };
+        let personal_memory_fut = async {
+            timeout(
+                preflight_timeout,
+                fetch_cloud_personal_memory_items_json(proxy, user_id),
+            )
+            .await
+            .ok()
+            .flatten()
+        };
+        // Run community prompt/context fetches in parallel with entitlement and gate usage after join.
+        let community_system_prompt_fut = async {
+            if let Some(community_id) = thread_context.community_id.as_deref() {
+                timeout(
+                    preflight_timeout,
+                    community_context::fetch_active_community_system_prompt(
+                        proxy,
+                        user_id,
+                        community_id,
+                    ),
+                )
+                .await
+                .ok()
+                .flatten()
+            } else {
+                None
+            }
+        };
+        let community_context_fut = async {
+            if let Some(community_id) = thread_context.community_id.as_deref() {
+                timeout(
+                    preflight_timeout,
+                    community_context::fetch_cloud_community_context_prompt(
+                        proxy,
+                        user_id,
+                        community_id,
+                        community_query_redacted.as_str(),
+                    ),
+                )
+                .await
+                .ok()
+            } else {
+                None
+            }
+        };
+        tokio::join!(
+            entitlement_fut,
+            personal_memory_fut,
+            community_system_prompt_fut,
+            community_context_fut
+        )
     } else {
-        context_builder::build_turn_handoff_prefix(&conn, workspace).map_err(|e| e.to_string())?
+        (None, None, None, None)
     };
 
-    let cloud_community_system_prompt = if let (Some(proxy), Some(user_id), Some(community_id)) = (
-        platform_proxy.as_ref(),
-        cloud_user_id.as_deref(),
-        thread.community_id.as_deref(),
+    let cloud_entitled_community_id = match (
+        thread_context.community_id.as_deref(),
+        cloud_entitlement_result,
     ) {
-        fetch_active_community_system_prompt(proxy, user_id, community_id).await
+        (Some(community_id), Some(true)) => Some(community_id.to_string()),
+        _ => None,
+    };
+
+    // Cloud-only personal memory injection:
+    // if cloud memory is unavailable or malformed, inject none (no local fallback).
+    let used_personal_memory = match cloud_personal_memory_items_json.as_deref() {
+        Some(json) => context_builder::build_used_personal_memory_from_cloud_json(workspace, json)
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+
+    let cloud_community_system_prompt = if cloud_entitled_community_id.is_some() {
+        cloud_community_system_prompt_speculative
     } else {
         None
     };
+    let cloud_community_context = if cloud_entitled_community_id.is_some() {
+        if let Some(outcome) = cloud_community_context_result_speculative {
+            outcome
+        } else {
+            community_context::CommunityContextFetchOutcome::skipped_with_failure("timeout")
+        }
+    } else {
+        let failure_class =
+            if has_cloud_community_binding && cloud_entitlement_result == Some(false) {
+                "not_entitled"
+            } else if has_cloud_community_binding && cloud_entitlement_result.is_none() {
+                "timeout"
+            } else if thread_context.community_id.is_some()
+                && cloud_entitled_community_id.is_none()
+                && has_cloud_identity
+            {
+                "not_entitled"
+            } else {
+                "not_attempted"
+            };
+        community_context::CommunityContextFetchOutcome::skipped_with_failure(failure_class)
+    };
+    let cloud_community_context_prompt = cloud_community_context.prompt.clone();
+    let community_context_diagnostics =
+        community_context::build_community_context_diagnostics(&cloud_community_context);
+    let community_evidence_used_payload = community_context::build_community_evidence_used_payload(
+        &cloud_community_context.evidence_chat_rows,
+        &cloud_community_context.evidence_resource_rows,
+    );
 
     let user_system_prompt = get_ui_state(&conn, "system_prompt").ok().flatten();
     let atom_system_prompt = build_atom_system_prompt(
         workspace,
         &used_personal_memory,
-        thread.community_id.as_deref(),
+        thread_context.community_id.as_deref(),
+        cloud_community_context_prompt.as_deref(),
         user_system_prompt.as_deref(),
         cloud_community_system_prompt.as_deref(),
     );
-    let retrieval_payload = serde_json::json!({
+    let mut retrieval_payload = serde_json::json!({
           "v": 1,
+          "run_id": run_id.as_str(),
           "workspace_path": workspace,
           "personal_memory": {
         "budget_chars": 2000,
@@ -8485,8 +9515,24 @@ async fn send_turn_cmd_core(
           "updated_at": it.updated_at,
           "redacted": it.redacted
         })).collect::<Vec<_>>()
-      }
+      },
+      "thread_context": {
+        "thread_lane": thread_context.thread_lane.as_str(),
+        "project_id": thread_context.project_id.as_deref(),
+        "community_id": thread_context.community_id.as_deref(),
+        "context_version": thread_context.context_version
+      },
+      "community_context": community_context::build_community_context_payload(
+        thread_context.community_id.as_deref(),
+        cloud_community_context_prompt.is_some(),
+        &community_context_diagnostics
+      )
     });
+    if let Some(evidence) = community_evidence_used_payload {
+        if let Some(obj) = retrieval_payload.as_object_mut() {
+            obj.insert("community_evidence_used_v1".to_string(), evidence);
+        }
+    }
     let _ = db::append_event(
         &conn,
         db_path,
@@ -8510,16 +9556,22 @@ async fn send_turn_cmd_core(
             conn,
             db_path,
             thread_id,
+            run_id,
             workspace,
+            &workspace_scope_id,
             run_mode,
             selected_model_id,
             input,
             &atom_system_prompt,
+            cloud_community_context_prompt.clone(),
             &used_personal_memory,
             None,
             platform_proxy,
+            public_proxy,
+            cloud_user_id.clone(),
             cancel_rx,
-            thread.community_id.clone(),
+            thread_context,
+            turn_started_at,
         )
         .await;
     }
@@ -8527,891 +9579,6 @@ async fn send_turn_cmd_core(
     Err(format!("Unsupported engine_id: {}", thread.engine_id))
 }
 
-#[tauri::command]
-async fn send_turn_cmd(
-    window: tauri::Window,
-    state: tauri::State<'_, DbState>,
-    thread_id: String,
-    _cwd: String,
-    input: String,
-    supabase_url: Option<String>,
-    supabase_anon_key: Option<String>,
-    supabase_access_token: Option<String>,
-) -> Result<SendTurnResult, String> {
-    let _thread_lock = lock_thread_run(&thread_id).await;
-    let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
-    send_turn_cmd_core(
-        &window,
-        &state.db_path,
-        &state.key,
-        &thread_id,
-        &input,
-        supabase_url,
-        supabase_anon_key,
-        supabase_access_token,
-        cancel_rx,
-    )
-    .await
-}
-
-#[tauri::command]
-async fn submit_turn_cmd(
-    window: tauri::Window,
-    state: tauri::State<'_, DbState>,
-    thread_id: String,
-    _cwd: String,
-    input: String,
-    user_content_json: String,
-    supabase_url: Option<String>,
-    supabase_anon_key: Option<String>,
-    supabase_access_token: Option<String>,
-) -> Result<SendTurnResult, String> {
-    let db_path = state.db_path.clone();
-    let db_key = state.key.clone();
-    let _thread_lock = lock_thread_run(&thread_id).await;
-    let (_cancel_reg, cancel_rx) = CancelRegistration::register(thread_id.trim()).await;
-
-    {
-        let conn = open_conn(&db_path, &db_key).map_err(|e| e.to_string())?;
-        add_message(&conn, &thread_id, "user", &user_content_json).map_err(|e| e.to_string())?;
-    }
-
-    match send_turn_cmd_core(
-        &window,
-        &db_path,
-        &db_key,
-        &thread_id,
-        &input,
-        supabase_url,
-        supabase_anon_key,
-        supabase_access_token,
-        cancel_rx,
-    )
-    .await
-    {
-        Ok(result) => Ok(result),
-        Err(err) => {
-            let fallback_content = serde_json::json!({
-                "text": format!("Engine error: {}", err),
-            })
-            .to_string();
-            if let Ok(conn) = open_conn(&db_path, &db_key) {
-                let _ = add_message(&conn, &thread_id, "assistant", &fallback_content);
-            }
-
-            let _ = window.emit(
-                "agent-status",
-                AgentStatusPayload {
-                    session_id: thread_id.clone(),
-                    status: "idle".to_string(),
-                    tool_name: None,
-                    tool_args_preview: None,
-                },
-            );
-            let _ = window.emit(
-                "openrouter-turn-finished",
-                SessionIdPayload {
-                    session_id: thread_id.clone(),
-                },
-            );
-
-            Ok(SendTurnResult {
-                thread_id,
-                engine_id: ENGINE_MESSAGES_AGENT.to_string(),
-                engine_input_event_id: None,
-                engine_input_seq: None,
-                run_id: None,
-            })
-        }
-    }
-}
-
-/// Legacy alias for backward compatibility
-#[tauri::command]
-async fn engine_send_turn_cmd(
-    window: tauri::Window,
-    state: tauri::State<'_, DbState>,
-    thread_id: String,
-    cwd: String,
-    input: String,
-    supabase_url: Option<String>,
-    supabase_anon_key: Option<String>,
-    supabase_access_token: Option<String>,
-) -> Result<SendTurnResult, String> {
-    send_turn_cmd(
-        window,
-        state,
-        thread_id,
-        cwd,
-        input,
-        supabase_url,
-        supabase_anon_key,
-        supabase_access_token,
-    )
-    .await
-}
-
-fn normalize_git_remote(value: &str) -> String {
-    value.trim().to_string()
-}
-
-fn compute_project_identity(path: &Path) -> Result<ProjectIdentity, String> {
-    let canonical = match path.canonicalize() {
-        Ok(path) => path,
-        Err(_) => path.to_path_buf(),
-    };
-    let root_path = canonical.to_string_lossy().to_string();
-    let name = canonical
-        .file_name()
-        .map(|value| value.to_string_lossy().to_string());
-
-    let git_root = run_git(&canonical, &["rev-parse", "--show-toplevel"]);
-    let git_remote = git_root
-        .as_deref()
-        .and_then(|root| run_git(Path::new(root), &["config", "--get", "remote.origin.url"]))
-        .map(|value| normalize_git_remote(&value));
-
-    let fingerprint = if let Some(root) = git_root.as_deref() {
-        let root_pathbuf = Path::new(root);
-        let rel = canonical
-            .strip_prefix(root_pathbuf)
-            .unwrap_or_else(|_| Path::new(""));
-        let rel_str = rel
-            .to_string_lossy()
-            .trim_start_matches(std::path::MAIN_SEPARATOR)
-            .to_string();
-        let repo_id = git_remote
-            .clone()
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| root.to_string());
-        if rel_str.is_empty() {
-            format!("git:{}::.", repo_id)
-        } else {
-            format!("git:{}::{}", repo_id, rel_str)
-        }
-    } else {
-        format!("path:{}", root_path)
-    };
-
-    Ok(ProjectIdentity {
-        name,
-        root_path,
-        git_root,
-        git_remote,
-        fingerprint,
-    })
-}
-
-#[tauri::command]
-fn create_thread_cmd(
-    state: tauri::State<DbState>,
-    title: String,
-    engine_id: Option<String>,
-    model_id: Option<String>,
-) -> Result<db::ThreadRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let engine_id = engine_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(ENGINE_MESSAGES_AGENT);
-    let engine_id = if engine_id == ENGINE_LEGACY_OPENROUTER_CHAT
-        || engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
-    {
-        ENGINE_MESSAGES_AGENT
-    } else {
-        engine_id
-    };
-
-    let model_id = model_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-
-    if engine_id == ENGINE_MESSAGES_AGENT && model_id.is_none() {
-        return Err("Model is required".to_string());
-    }
-
-    let thread = create_thread(&conn, &title, engine_id, model_id).map_err(|e| e.to_string())?;
-    Ok(thread)
-}
-
-#[tauri::command]
-fn upsert_thread_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    title: Option<String>,
-    engine_id: Option<String>,
-    model_id: Option<String>,
-    community_id: Option<String>,
-    created_at: Option<i64>,
-    updated_at: Option<i64>,
-) -> Result<db::ThreadRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let cleaned_engine_id = engine_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(ENGINE_MESSAGES_AGENT);
-    let cleaned_engine_id = if cleaned_engine_id == ENGINE_LEGACY_OPENROUTER_CHAT
-        || cleaned_engine_id == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
-    {
-        ENGINE_MESSAGES_AGENT
-    } else {
-        cleaned_engine_id
-    };
-
-    let cleaned_model_id = model_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-
-    let cleaned_community_id = community_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-
-    let cleaned_title = title.as_deref().map(|v| v.trim()).filter(|v| !v.is_empty());
-
-    db::upsert_thread_from_cloud(
-        &conn,
-        &thread_id,
-        cleaned_title,
-        cleaned_engine_id,
-        cleaned_model_id,
-        cleaned_community_id,
-        created_at,
-        updated_at,
-    )
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_threads_cmd(state: tauri::State<DbState>) -> Result<Vec<db::ThreadRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_threads(&conn).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_thread_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-) -> Result<Option<db::ThreadRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_thread_by_id(&conn, &thread_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_events_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    limit: usize,
-) -> Result<Vec<db::EventRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_events(&conn, &thread_id, limit).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_events_since_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    after_seq: i64,
-    limit: usize,
-    include_engine_io_chunk: Option<bool>,
-) -> Result<Vec<db::EventRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_events_since(
-        &conn,
-        &thread_id,
-        after_seq,
-        limit,
-        include_engine_io_chunk.unwrap_or(false),
-    )
-    .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_tool_calls_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    limit: usize,
-) -> Result<Vec<db::ToolCallRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_tool_calls(&conn, &thread_id, limit).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_event_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    event_id: String,
-) -> Result<Option<db::EventRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    db::get_event_by_id(&conn, &thread_id, &event_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_turns_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    limit: usize,
-) -> Result<Vec<db::TurnRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    db::list_turns(&conn, &thread_id, limit).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn gc_blobs_cmd(state: tauri::State<DbState>) -> Result<db::BlobGcReport, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    db::gc_blobs(&conn, &state.db_path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn rebuild_projections_cmd(state: tauri::State<DbState>) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    db::rebuild_projections(&conn).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn reset_local_db_cmd(state: tauri::State<DbState>) -> Result<(), String> {
-    // Best-effort local reset: delete the SQLite file and blobs, then recreate schema.
-    // Cloud is canonical for cognition; this is a cache/evidence store for the desktop operator.
-    let _ = std::fs::remove_dir_all(blob_store::blob_root(&state.db_path));
-    let _ = std::fs::remove_file(&state.db_path);
-    db::init_db_at(&state.db_path, &state.key)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn delete_thread_cmd(state: tauri::State<DbState>, thread_id: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    delete_thread(&conn, &thread_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_thread_workspace_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    workspace_path: Option<String>,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let cleaned = workspace_path
-        .as_deref()
-        .map(|p| p.trim())
-        .filter(|p| !p.is_empty());
-    if let Some(path) = cleaned {
-        if !std::path::Path::new(path).is_absolute() {
-            return Err("workspace_path must be an absolute path".to_string());
-        }
-    }
-    let scope_id = cleaned.map(|p| {
-        std::path::Path::new(p)
-            .canonicalize()
-            .ok()
-            .map(|v| v.to_string_lossy().to_string())
-            .unwrap_or_else(|| p.to_string())
-    });
-
-    // Contract primitive: device-local binding for workspace scope enforcement.
-    let _ = upsert_workspace_binding(&conn, &thread_id, cleaned, scope_id.as_deref());
-
-    // Legacy metadata (kept for backwards compatibility with the current UI).
-    set_thread_workspace_path(&conn, &thread_id, cleaned).map_err(|e| e.to_string())?;
-    let payload = serde_json::json!({
-      "v": 1,
-      "workspace_path": cleaned,
-    });
-    let _ = db::append_event(
-        &conn,
-        &state.db_path,
-        &thread_id,
-        "thread_metadata_changed",
-        Some("workspace_path"),
-        Some(&payload.to_string()),
-        None,
-    );
-    Ok(())
-}
-
-#[tauri::command]
-fn set_thread_community_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    community_id: Option<String>,
-) -> Result<db::ThreadRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let cleaned = community_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-    set_thread_community_id(&conn, &thread_id, cleaned).map_err(|e| e.to_string())?;
-    let payload = serde_json::json!({
-      "v": 1,
-      "community_id": cleaned,
-    });
-    let _ = db::append_event(
-        &conn,
-        &state.db_path,
-        &thread_id,
-        "thread_metadata_changed",
-        Some("community_id"),
-        Some(&payload.to_string()),
-        None,
-    );
-
-    get_thread_by_id(&conn, &thread_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "thread not found".to_string())
-}
-
-#[tauri::command]
-fn set_thread_engine_cmd(
-    state: tauri::State<DbState>,
-    thread_id: String,
-    engine_id: String,
-    model_id: Option<String>,
-) -> Result<db::ThreadRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let cleaned_engine = engine_id.trim();
-    if cleaned_engine.is_empty() {
-        return Err("engine_id is required".to_string());
-    }
-    let cleaned_engine = if cleaned_engine == ENGINE_LEGACY_OPENROUTER_CHAT
-        || cleaned_engine == ENGINE_LEGACY_OPENROUTER_MESSAGES_AGENT
-    {
-        ENGINE_MESSAGES_AGENT
-    } else {
-        cleaned_engine
-    };
-    let cleaned_model = model_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty());
-    let requires_model = cleaned_engine == ENGINE_MESSAGES_AGENT;
-    let final_model = if requires_model {
-        cleaned_model.ok_or_else(|| "model_id is required".to_string())?
-    } else {
-        ""
-    };
-
-    set_thread_engine_model(
-        &conn,
-        &thread_id,
-        cleaned_engine,
-        if requires_model {
-            Some(final_model)
-        } else {
-            None
-        },
-    )
-    .map_err(|e| e.to_string())?;
-
-    let payload = serde_json::json!({
-      "v": 1,
-      "engine_id": cleaned_engine,
-      "model_id": if requires_model { Some(final_model) } else { None },
-    });
-    let _ = db::append_event(
-        &conn,
-        &state.db_path,
-        &thread_id,
-        "thread_metadata_changed",
-        Some("engine"),
-        Some(&payload.to_string()),
-        None,
-    );
-
-    get_thread_by_id(&conn, &thread_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "thread not found".to_string())
-}
-
-#[tauri::command]
-fn get_workspace_root_cmd(state: tauri::State<DbState>) -> Result<String, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let value = get_ui_state(&conn, "workspace_root")
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "workspace root not set".to_string())?;
-    Ok(value)
-}
-
-#[tauri::command]
-fn set_workspace_root_cmd(state: tauri::State<DbState>, path: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let cleaned = path.trim();
-    if cleaned.is_empty() {
-        return Err("workspace root is required".to_string());
-    }
-    if !std::path::Path::new(cleaned).is_absolute() {
-        return Err("workspace root must be an absolute path".to_string());
-    }
-    std::fs::create_dir_all(cleaned).map_err(|e| e.to_string())?;
-    set_ui_state(&conn, "workspace_root", cleaned).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn is_path_within_workspace_cmd(
-    state: tauri::State<DbState>,
-    path: String,
-) -> Result<bool, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let workspace_root = get_ui_state(&conn, "workspace_root")
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "workspace root not set".to_string())?;
-    let resolved = resolve_path_under_root(&workspace_root, &path);
-    Ok(is_within_root(
-        &workspace_root,
-        resolved.to_string_lossy().as_ref(),
-    ))
-}
-
-#[tauri::command]
-fn set_active_project_cmd(
-    state: tauri::State<DbState>,
-    project_id: Option<String>,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    match project_id {
-        Some(value) => {
-            let project = get_project_by_id(&conn, &value).map_err(|e| e.to_string())?;
-            if project.is_none() {
-                return Err("project not found".to_string());
-            }
-            set_ui_state(&conn, "active_project_id", &value).map_err(|e| e.to_string())?;
-            let _ = delete_ui_state(&conn, "active_project_path");
-            Ok(())
-        }
-        None => {
-            delete_ui_state(&conn, "active_project_id").map_err(|e| e.to_string())?;
-            delete_ui_state(&conn, "active_project_path").map_err(|e| e.to_string())
-        }
-    }
-}
-
-#[tauri::command]
-fn get_active_project_cmd(
-    state: tauri::State<DbState>,
-) -> Result<Option<db::ProjectRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    if let Some(project_id) = get_ui_state(&conn, "active_project_id").map_err(|e| e.to_string())? {
-        if let Some(project) = get_project_by_id(&conn, &project_id).map_err(|e| e.to_string())? {
-            return Ok(Some(project));
-        }
-    }
-
-    if let Some(path) = get_ui_state(&conn, "active_project_path").map_err(|e| e.to_string())? {
-        let identity = compute_project_identity(Path::new(&path))?;
-        let project = upsert_project(
-            &conn,
-            identity.name.as_deref(),
-            &identity.root_path,
-            identity.git_root.as_deref(),
-            identity.git_remote.as_deref(),
-            &identity.fingerprint,
-        )
-        .map_err(|e| e.to_string())?;
-
-        return Ok(Some(project));
-    }
-
-    Ok(None)
-}
-
-#[tauri::command]
-fn list_projects_cmd(state: tauri::State<DbState>) -> Result<Vec<db::ProjectRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    db::list_projects(&conn).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn create_project_cmd(
-    state: tauri::State<DbState>,
-    path: String,
-) -> Result<db::ProjectRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("path required".to_string());
-    }
-    let root = get_ui_state(&conn, "workspace_root")
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "workspace root not set".to_string())?;
-    let path = std::path::Path::new(&root).join(trimmed);
-    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    let identity = compute_project_identity(&path)?;
-    let record = upsert_project(
-        &conn,
-        identity.name.as_deref(),
-        &identity.root_path,
-        identity.git_root.as_deref(),
-        identity.git_remote.as_deref(),
-        &identity.fingerprint,
-    )
-    .map_err(|e| e.to_string())?;
-
-    Ok(record)
-}
-
-#[tauri::command]
-fn add_message_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-    role: String,
-    content_json: String,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    add_message(&conn, &session_id, &role, &content_json).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn list_messages_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-) -> Result<Vec<db::MessageRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_messages(&conn, &session_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn create_personal_memory_item_cmd(
-    state: tauri::State<DbState>,
-    thread_id: Option<String>,
-    content: String,
-    scope: String,
-    scope_id: Option<String>,
-    pinned: Option<bool>,
-    provenance_event_id: Option<String>,
-) -> Result<db::PersonalMemoryItemRecord, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let record = create_personal_memory_item(
-        &conn,
-        &content,
-        &scope,
-        scope_id.as_deref(),
-        pinned.unwrap_or(false),
-        provenance_event_id.as_deref(),
-    )
-    .map_err(|e| e.to_string())?;
-
-    let thread_id = thread_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(db::SYSTEM_THREAD_ID);
-    let _ = db::ensure_system_thread(&conn);
-    append_memory_write_event(
-        &conn,
-        &state.db_path,
-        thread_id,
-        "create",
-        &record,
-        provenance_event_id.as_deref(),
-    );
-
-    Ok(record)
-}
-
-#[tauri::command]
-fn list_personal_memory_items_cmd(
-    state: tauri::State<DbState>,
-    scope: Option<String>,
-    scope_id: Option<String>,
-    limit: usize,
-) -> Result<Vec<db::PersonalMemoryItemRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    list_personal_memory_items(&conn, scope.as_deref(), scope_id.as_deref(), limit)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn search_personal_memory_items_cmd(
-    state: tauri::State<DbState>,
-    query: String,
-    limit: usize,
-) -> Result<Vec<db::PersonalMemoryItemRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    search_personal_memory_items(&conn, &query, limit).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_personal_memory_item_pinned_cmd(
-    state: tauri::State<DbState>,
-    thread_id: Option<String>,
-    id: String,
-    pinned: bool,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    set_personal_memory_item_pinned(&conn, &id, pinned).map_err(|e| e.to_string())?;
-    let thread_id = thread_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(db::SYSTEM_THREAD_ID);
-    let _ = db::ensure_system_thread(&conn);
-    if let Ok(Some(item)) = db::get_personal_memory_item_by_id(&conn, &id) {
-        append_memory_write_event(&conn, &state.db_path, thread_id, "pin", &item, None);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn delete_personal_memory_item_cmd(
-    state: tauri::State<DbState>,
-    thread_id: Option<String>,
-    id: String,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let before = db::get_personal_memory_item_by_id(&conn, &id).map_err(|e| e.to_string())?;
-    delete_personal_memory_item(&conn, &id).map_err(|e| e.to_string())?;
-    let thread_id = thread_id
-        .as_deref()
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .unwrap_or(db::SYSTEM_THREAD_ID);
-    let _ = db::ensure_system_thread(&conn);
-    if let Some(item) = before {
-        append_memory_write_event(&conn, &state.db_path, thread_id, "delete", &item, None);
-    }
-    Ok(())
-}
-
-#[derive(Serialize, Deserialize)]
-struct ModelToggle {
-    id: String,
-    label: String,
-    enabled: bool,
-}
-
-fn default_model_toggles() -> Vec<ModelToggle> {
-    vec![
-        ModelToggle {
-            id: "gpt-5.2".to_string(),
-            label: "GPT 5.2".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "sonnet-4.5".to_string(),
-            label: "Sonnet 4.5".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "opus-4.5".to_string(),
-            label: "Opus 4.5".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "opus-4.6".to_string(),
-            label: "Opus 4.6".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "gemini-3-flash".to_string(),
-            label: "Gemini 3 Flash".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "gemini-3-pro".to_string(),
-            label: "Gemini 3 Pro".to_string(),
-            enabled: true,
-        },
-        ModelToggle {
-            id: "grok-4.1".to_string(),
-            label: "Grok 4.1".to_string(),
-            enabled: true,
-        },
-    ]
-}
-
-#[tauri::command]
-fn get_model_toggles_cmd(state: tauri::State<DbState>) -> Result<Vec<ModelToggle>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let value = get_ui_state(&conn, "model_toggles")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "[]".to_string());
-    let mut parsed: Vec<ModelToggle> = serde_json::from_str(&value).unwrap_or_default();
-    if parsed.is_empty() {
-        parsed = default_model_toggles();
-        // Persist defaults for a stable first-run UX after DB resets.
-        if let Ok(serialized) = serde_json::to_string(&parsed) {
-            let _ = set_ui_state(&conn, "model_toggles", &serialized);
-        }
-    }
-    Ok(parsed)
-}
-
-#[tauri::command]
-fn set_model_toggles_cmd(
-    state: tauri::State<DbState>,
-    toggles: Vec<ModelToggle>,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let value = serde_json::to_string(&toggles).map_err(|e| e.to_string())?;
-    set_ui_state(&conn, "model_toggles", &value).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_provider_key_cmd(provider: String, key: String) -> Result<(), String> {
-    let entry = Entry::new("com.arx.app", &provider).map_err(|e| e.to_string())?;
-    entry.set_password(&key).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn clear_provider_key_cmd(provider: String) -> Result<(), String> {
-    let entry = Entry::new("com.arx.app", &provider).map_err(|e| e.to_string())?;
-    entry.delete_password().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn has_provider_key_cmd(provider: String) -> Result<bool, String> {
-    let entry = Entry::new("com.arx.app", &provider).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(_) => Ok(true),
-        Err(keyring::Error::NoEntry) => Ok(false),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-#[tauri::command]
-fn get_provider_key_cmd(provider: String) -> Result<Option<String>, String> {
-    let entry = Entry::new("com.arx.app", &provider).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-#[derive(Clone, Serialize)]
-struct SecretScanRedaction {
-    kind: String,
-    count: usize,
-}
-
-#[derive(Clone, Serialize)]
-struct SecretScanResult {
-    redacted: String,
-    blocked: bool,
-    redactions: Vec<SecretScanRedaction>,
-}
-
-#[tauri::command]
-fn scan_publish_content_cmd(text: String) -> Result<SecretScanResult, String> {
-    let (redacted, report) = context::redact_secrets(&text);
-    // Publish is fail-closed: any detected secret blocks egress (even if redaction is possible).
-    let blocked = !report.redactions.is_empty();
-    Ok(SecretScanResult {
-        redacted,
-        blocked,
-        redactions: report
-            .redactions
-            .into_iter()
-            .map(|(kind, count)| SecretScanRedaction { kind, count })
-            .collect(),
-    })
-}
-
-const KEYCHAIN_SUPABASE_SESSION: &str = "supabase_session";
 const KEYCHAIN_CHATGPT_AUTH_V1: &str = "chatgpt_auth_v1";
 const CHATGPT_OAUTH_ISSUER: &str = "https://auth.openai.com";
 const CHATGPT_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -9427,13 +9594,6 @@ struct ChatgptAuthV1 {
     refresh_token: String,
     account_id: Option<String>,
     email: Option<String>,
-    access_token_expires_at: Option<i64>,
-}
-
-#[derive(Clone, Serialize)]
-struct ChatgptAuthSummary {
-    email: Option<String>,
-    account_id: Option<String>,
     access_token_expires_at: Option<i64>,
 }
 
@@ -9525,14 +9685,6 @@ fn clear_chatgpt_auth_v1() -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(err.to_string()),
-    }
-}
-
-fn summarize_chatgpt_auth(value: &ChatgptAuthV1) -> ChatgptAuthSummary {
-    ChatgptAuthSummary {
-        email: value.email.clone(),
-        account_id: value.account_id.clone(),
-        access_token_expires_at: value.access_token_expires_at,
     }
 }
 
@@ -9710,6 +9862,18 @@ async fn get_chatgpt_auth_for_inference() -> Result<Option<ChatgptAuthV1>, Strin
     }
 }
 
+async fn get_chatgpt_auth_for_inference_with_timeout(timeout_ms: u64) -> Option<ChatgptAuthV1> {
+    match timeout(
+        Duration::from_millis(timeout_ms),
+        get_chatgpt_auth_for_inference(),
+    )
+    .await
+    {
+        Ok(Ok(auth)) => auth,
+        _ => None,
+    }
+}
+
 async fn wait_for_chatgpt_oauth_callback(
     listener: TcpListener,
     expected_state: &str,
@@ -9842,532 +10006,7 @@ async fn bind_chatgpt_callback_listener() -> Result<TcpListener, String> {
     }
 }
 
-#[tauri::command]
-fn get_chatgpt_auth_summary_cmd() -> Result<Option<ChatgptAuthSummary>, String> {
-    Ok(load_chatgpt_auth_v1()?.map(|value| summarize_chatgpt_auth(&value)))
-}
-
-#[tauri::command]
-fn clear_chatgpt_auth_cmd() -> Result<(), String> {
-    clear_chatgpt_auth_v1()
-}
-
-#[tauri::command]
-async fn chatgpt_login_cmd() -> Result<ChatgptAuthSummary, String> {
-    // Use Codex's fixed localhost callback port. The OAuth client is typically
-    // registered with a single redirect URI, so random ports can fail.
-    let listener = bind_chatgpt_callback_listener().await?;
-    let redirect_uri = format!(
-        "http://localhost:{}/auth/callback",
-        CHATGPT_OAUTH_CALLBACK_PORT
-    );
-
-    let (code_verifier, code_challenge) = generate_chatgpt_pkce();
-    let state = generate_chatgpt_state();
-    let auth_url = build_chatgpt_authorize_url(&redirect_uri, &code_challenge, &state)?;
-
-    // Launch browser for the OAuth consent/login flow.
-    open::that(&auth_url).map_err(|e| e.to_string())?;
-
-    let code = wait_for_chatgpt_oauth_callback(listener, &state).await?;
-    let (id_token, access_token, refresh_token) =
-        exchange_chatgpt_code_for_tokens(&code, &redirect_uri, &code_verifier).await?;
-
-    let account_id = extract_chatgpt_account_id_from_token(&id_token)
-        .or_else(|| extract_chatgpt_account_id_from_token(&access_token));
-    let email = jwt_string_claim(&id_token, "email");
-    let access_token_expires_at = jwt_i64_claim(&access_token, "exp");
-
-    let stored = ChatgptAuthV1 {
-        id_token,
-        access_token,
-        refresh_token,
-        account_id,
-        email,
-        access_token_expires_at,
-    };
-    save_chatgpt_auth_v1(&stored)?;
-    Ok(summarize_chatgpt_auth(&stored))
-}
-
-#[tauri::command]
-fn get_supabase_session_cmd() -> Result<Option<String>, String> {
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-#[tauri::command]
-fn set_supabase_session_cmd(session_json: String) -> Result<(), String> {
-    let cleaned = session_json.trim();
-    if cleaned.is_empty() {
-        return Err("session_json is empty".to_string());
-    }
-    if cleaned.len() > 64 * 1024 {
-        return Err("session_json too large".to_string());
-    }
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
-    entry.set_password(cleaned).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn clear_supabase_session_cmd() -> Result<(), String> {
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
-    match entry.delete_password() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-#[tauri::command]
-fn open_external_url_cmd(url: String) -> Result<(), String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Err("url is empty".to_string());
-    }
-    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
-        return Err("url must start with http:// or https://".to_string());
-    }
-    open::that(trimmed).map_err(|e| e.to_string())
-}
-
-const UI_STATE_PENDING_INVITES_V1: &str = "pending_invites_v1";
-const MAX_INVITE_KEY_LEN: usize = 128;
-
-#[derive(Clone, Serialize, Deserialize)]
-struct PendingInviteRecord {
-    invite_key: String,
-    status: String, // pending | dismissed | joined | expired
-    first_seen_at: i64,
-    updated_at: i64,
-    dismissed_at: Option<i64>,
-    join_intent_at: Option<i64>,
-    joined_at: Option<i64>,
-    expired_at: Option<i64>,
-    community_id: Option<String>,
-    community_name: Option<String>,
-    source: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct PendingInvitesEnvelope {
-    v: i32,
-    invites: Vec<PendingInviteRecord>,
-}
-
-fn load_pending_invites(conn: &rusqlite::Connection) -> Vec<PendingInviteRecord> {
-    let Some(raw) = get_ui_state(conn, UI_STATE_PENDING_INVITES_V1)
-        .ok()
-        .flatten()
-    else {
-        return Vec::new();
-    };
-    let Ok(parsed) = serde_json::from_str::<PendingInvitesEnvelope>(&raw) else {
-        return Vec::new();
-    };
-    if parsed.v != 1 {
-        return Vec::new();
-    }
-    parsed.invites
-}
-
-fn save_pending_invites(
-    conn: &rusqlite::Connection,
-    invites: Vec<PendingInviteRecord>,
-) -> Result<(), String> {
-    let envelope = PendingInvitesEnvelope { v: 1, invites };
-    let value = serde_json::to_string(&envelope).map_err(|e| e.to_string())?;
-    set_ui_state(conn, UI_STATE_PENDING_INVITES_V1, &value).map_err(|e| e.to_string())
-}
-
-fn normalize_invite_key(input: &str) -> Option<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed.len() > MAX_INVITE_KEY_LEN {
-        return None;
-    }
-    Some(trimmed.to_string())
-}
-
-#[tauri::command]
-fn list_pending_invites_cmd(
-    state: tauri::State<DbState>,
-) -> Result<Vec<PendingInviteRecord>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    Ok(load_pending_invites(&conn))
-}
-
-#[tauri::command]
-fn upsert_pending_invite_cmd(
-    state: tauri::State<DbState>,
-    invite_key: String,
-    source: Option<String>,
-) -> Result<(), String> {
-    let Some(invite_key) = normalize_invite_key(&invite_key) else {
-        return Err("invite_key is required".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let now = db::now_ts();
-
-    let mut invites = load_pending_invites(&conn);
-    if let Some(existing) = invites
-        .iter_mut()
-        .find(|item| item.invite_key == invite_key)
-    {
-        if existing.status != "joined" {
-            existing.status = "pending".to_string();
-            existing.dismissed_at = None;
-            existing.expired_at = None;
-        }
-        existing.updated_at = now;
-        if existing.source.is_none() {
-            existing.source = source;
-        }
-    } else {
-        invites.push(PendingInviteRecord {
-            invite_key,
-            status: "pending".to_string(),
-            first_seen_at: now,
-            updated_at: now,
-            dismissed_at: None,
-            join_intent_at: None,
-            joined_at: None,
-            expired_at: None,
-            community_id: None,
-            community_name: None,
-            source,
-        });
-    }
-
-    save_pending_invites(&conn, invites)
-}
-
-#[tauri::command]
-fn dismiss_pending_invite_cmd(
-    state: tauri::State<DbState>,
-    invite_key: String,
-) -> Result<(), String> {
-    let Some(invite_key) = normalize_invite_key(&invite_key) else {
-        return Err("invite_key is required".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let now = db::now_ts();
-
-    let mut invites = load_pending_invites(&conn);
-    if let Some(existing) = invites
-        .iter_mut()
-        .find(|item| item.invite_key == invite_key)
-    {
-        if existing.status != "joined" {
-            existing.status = "dismissed".to_string();
-        }
-        existing.dismissed_at = Some(now);
-        existing.join_intent_at = None;
-        existing.updated_at = now;
-    } else {
-        invites.push(PendingInviteRecord {
-            invite_key,
-            status: "dismissed".to_string(),
-            first_seen_at: now,
-            updated_at: now,
-            dismissed_at: Some(now),
-            join_intent_at: None,
-            joined_at: None,
-            expired_at: None,
-            community_id: None,
-            community_name: None,
-            source: None,
-        });
-    }
-
-    save_pending_invites(&conn, invites)
-}
-
-#[tauri::command]
-fn request_join_pending_invite_cmd(
-    state: tauri::State<DbState>,
-    invite_key: String,
-) -> Result<(), String> {
-    let Some(invite_key) = normalize_invite_key(&invite_key) else {
-        return Err("invite_key is required".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let now = db::now_ts();
-
-    let mut invites = load_pending_invites(&conn);
-    if let Some(existing) = invites
-        .iter_mut()
-        .find(|item| item.invite_key == invite_key)
-    {
-        if existing.status != "joined" {
-            existing.status = "pending".to_string();
-        }
-        existing.dismissed_at = None;
-        existing.expired_at = None;
-        existing.join_intent_at = Some(now);
-        existing.updated_at = now;
-    } else {
-        invites.push(PendingInviteRecord {
-            invite_key,
-            status: "pending".to_string(),
-            first_seen_at: now,
-            updated_at: now,
-            dismissed_at: None,
-            join_intent_at: Some(now),
-            joined_at: None,
-            expired_at: None,
-            community_id: None,
-            community_name: None,
-            source: None,
-        });
-    }
-
-    save_pending_invites(&conn, invites)
-}
-
-#[tauri::command]
-fn mark_pending_invite_joined_cmd(
-    state: tauri::State<DbState>,
-    invite_key: String,
-    community_id: Option<String>,
-    community_name: Option<String>,
-) -> Result<(), String> {
-    let Some(invite_key) = normalize_invite_key(&invite_key) else {
-        return Err("invite_key is required".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let now = db::now_ts();
-
-    let mut invites = load_pending_invites(&conn);
-    if let Some(existing) = invites
-        .iter_mut()
-        .find(|item| item.invite_key == invite_key)
-    {
-        existing.status = "joined".to_string();
-        existing.joined_at = Some(now);
-        existing.dismissed_at = None;
-        existing.expired_at = None;
-        existing.join_intent_at = None;
-        existing.updated_at = now;
-        if existing.community_id.is_none() {
-            existing.community_id = community_id;
-        }
-        if existing.community_name.is_none() {
-            existing.community_name = community_name;
-        }
-    } else {
-        invites.push(PendingInviteRecord {
-            invite_key,
-            status: "joined".to_string(),
-            first_seen_at: now,
-            updated_at: now,
-            dismissed_at: None,
-            join_intent_at: None,
-            joined_at: Some(now),
-            expired_at: None,
-            community_id,
-            community_name,
-            source: None,
-        });
-    }
-
-    save_pending_invites(&conn, invites)
-}
-
-#[tauri::command]
-fn mark_pending_invite_expired_cmd(
-    state: tauri::State<DbState>,
-    invite_key: String,
-) -> Result<(), String> {
-    let Some(invite_key) = normalize_invite_key(&invite_key) else {
-        return Err("invite_key is required".to_string());
-    };
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let now = db::now_ts();
-
-    let mut invites = load_pending_invites(&conn);
-    if let Some(existing) = invites
-        .iter_mut()
-        .find(|item| item.invite_key == invite_key)
-    {
-        if existing.status != "joined" {
-            existing.status = "expired".to_string();
-        }
-        existing.expired_at = Some(now);
-        existing.join_intent_at = None;
-        existing.updated_at = now;
-    } else {
-        invites.push(PendingInviteRecord {
-            invite_key,
-            status: "expired".to_string(),
-            first_seen_at: now,
-            updated_at: now,
-            dismissed_at: None,
-            join_intent_at: None,
-            joined_at: None,
-            expired_at: Some(now),
-            community_id: None,
-            community_name: None,
-            source: None,
-        });
-    }
-
-    save_pending_invites(&conn, invites)
-}
-
-#[tauri::command]
-fn get_exec_policy_rules_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_ui_state(&conn, "exec_policy_rules").map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_system_prompt_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_ui_state(&conn, "system_prompt").map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_system_prompt_cmd(state: tauri::State<DbState>, prompt: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    if prompt.len() > 20000 {
-        return Err("prompt too large".to_string());
-    }
-    set_ui_state(&conn, "system_prompt", &prompt).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_approval_mode_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_ui_state(&conn, "approval_mode").map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_approval_mode_cmd(state: tauri::State<DbState>, mode: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    set_ui_state(&conn, "approval_mode", &mode).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn detect_test_commands_cmd(
-    state: tauri::State<DbState>,
-    cwd: String,
-) -> Result<Vec<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let workspace_root = get_ui_state(&conn, "workspace_root")
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "workspace root not set".to_string())?;
-    if !is_within_root(&workspace_root, &cwd) {
-        return Err("cwd outside workspace root".to_string());
-    }
-    let root = Path::new(&cwd);
-    if !root.exists() {
-        return Err("cwd does not exist".to_string());
-    }
-
-    let mut commands = Vec::new();
-    if root.join("Cargo.toml").exists() {
-        commands.push("cargo test -q".to_string());
-    }
-    if root.join("package.json").exists() {
-        commands.push("npm test".to_string());
-    }
-    if root.join("pyproject.toml").exists() || root.join("pytest.ini").exists() {
-        commands.push("pytest".to_string());
-    }
-    if root.join("go.mod").exists() {
-        commands.push("go test ./...".to_string());
-    }
-    if root.join("Makefile").exists() || root.join("makefile").exists() {
-        commands.push("make test".to_string());
-    }
-
-    Ok(commands)
-}
-
-#[tauri::command]
-fn get_session_exec_policy_rules_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-) -> Result<Option<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    let key = format!("exec_policy_session_rules::{}", session_id);
-    get_ui_state(&conn, &key).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_exec_policy_rules_cmd(state: tauri::State<DbState>, rules: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    if rules.len() > 10000 {
-        return Err("rules too large".to_string());
-    }
-    set_ui_state(&conn, "exec_policy_rules", &rules).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_session_exec_policy_rules_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-    rules: String,
-) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    if rules.len() > 10000 {
-        return Err("rules too large".to_string());
-    }
-    let key = format!("exec_policy_session_rules::{}", session_id);
-    set_ui_state(&conn, &key, &rules).map_err(|e| e.to_string())
-}
-
-#[derive(Serialize)]
-struct ExecPolicyDecision {
-    decision: String,
-    reason: String,
-    matched_rule: Option<String>,
-}
-
-#[tauri::command]
-fn classify_command_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-    command: String,
-) -> Result<ExecPolicyDecision, String> {
-    let _ = (state, session_id, command);
-    Ok(ExecPolicyDecision {
-        decision: "prompt".to_string(),
-        reason: "Internal command classification is disabled in MVP; use the engine terminal."
-            .to_string(),
-        matched_rule: None,
-    })
-}
-
-#[tauri::command]
-fn get_session_resume_cmd(
-    state: tauri::State<DbState>,
-    session_id: String,
-) -> Result<db::SessionResume, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_session_resume(&conn, &session_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_active_model_cmd(state: tauri::State<DbState>) -> Result<Option<String>, String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    get_ui_state(&conn, "active_model").map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_active_model_cmd(state: tauri::State<DbState>, model_id: String) -> Result<(), String> {
-    let conn = open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
-    set_ui_state(&conn, "active_model", &model_id).map_err(|e| e.to_string())
-}
-
-fn is_within_root(root: &str, cwd: &str) -> bool {
+pub(crate) fn is_within_root(root: &str, cwd: &str) -> bool {
     let root_path = std::path::Path::new(root);
     let cwd_path = std::path::Path::new(cwd);
     let root_canon = match root_path.canonicalize() {
@@ -10404,7 +10043,7 @@ fn is_within_root(root: &str, cwd: &str) -> bool {
     }
 }
 
-fn resolve_path_under_root(root: &str, path: &str) -> std::path::PathBuf {
+pub(crate) fn resolve_path_under_root(root: &str, path: &str) -> std::path::PathBuf {
     let path_buf = std::path::PathBuf::from(path);
     if path_buf.is_absolute() {
         path_buf
@@ -10413,707 +10052,12 @@ fn resolve_path_under_root(root: &str, path: &str) -> std::path::PathBuf {
     }
 }
 
-#[derive(Serialize)]
-struct AttachmentResult {
-    id: String,
-    path: String,
-    name: String,
-    file_type: String, // "image" or "file"
-    size: u64,
-    preview_data_url: Option<String>,
-}
-
-#[tauri::command]
-fn ingest_attachment_cmd(path: String) -> Result<AttachmentResult, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-    use std::fs;
-
-    let file_path = Path::new(&path);
-    if !file_path.exists() {
-        return Err(format!("File not found: {}", path));
-    }
-
-    let metadata = fs::metadata(&file_path).map_err(|e| e.to_string())?;
-    if !metadata.is_file() {
-        return Err("Path is not a file".to_string());
-    }
-
-    let size = metadata.len();
-    let name = file_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    // Determine file type based on extension
-    let extension = file_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    let image_extensions = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"];
-    let is_image = image_extensions.contains(&extension.as_str());
-    let file_type = if is_image { "image" } else { "file" };
-
-    // Generate preview for images (max 256KB for thumbnail)
-    let preview_data_url = if is_image && size <= 5 * 1024 * 1024 {
-        let bytes = fs::read(&file_path).ok();
-        bytes.and_then(|data| {
-            let preview_bytes = if data.len() > 256 * 1024 {
-                &data[..256 * 1024]
-            } else {
-                &data[..]
-            };
-            let mime = match extension.as_str() {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "gif" => "image/gif",
-                "webp" => "image/webp",
-                "svg" => "image/svg+xml",
-                "bmp" => "image/bmp",
-                "ico" => "image/x-icon",
-                _ => "application/octet-stream",
-            };
-            if data.len() <= 256 * 1024 {
-                Some(format!(
-                    "data:{};base64,{}",
-                    mime,
-                    STANDARD.encode(preview_bytes)
-                ))
-            } else {
-                None
-            }
-        })
-    } else {
-        None
-    };
-
-    let id = format!(
-        "att_{}",
-        uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string()
-    );
-
-    Ok(AttachmentResult {
-        id,
-        path: path.clone(),
-        name,
-        file_type: file_type.to_string(),
-        size,
-        preview_data_url,
-    })
-}
-
-const NATIVE_VOICE_TARGET_SAMPLE_RATE_HZ: u32 = 16_000;
-
-struct NativeVoiceCaptureSession {
-    stream: cpal::Stream,
-    samples_mono_i16: Arc<StdMutex<Vec<i16>>>,
-    input_sample_rate_hz: u32,
-    started_at: Instant,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct NativeVoiceSignalMetrics {
-    rms: f32,
-    peak: i16,
-    speech_ratio: f32,
-}
-
-#[derive(Serialize)]
-struct NativeVoiceCaptureStarted {
-    input_sample_rate_hz: u32,
-}
-
-#[derive(Serialize)]
-struct NativeVoiceCaptureStopped {
-    audio_base64: String,
-    mime_type: String,
-    sample_rate_hz: u32,
-    duration_ms: u64,
-    rms: f32,
-    peak: i16,
-    speech_ratio: f32,
-    speech_detected: bool,
-}
-
-enum NativeVoiceWorkerCommand {
-    Start {
-        reply: std::sync::mpsc::Sender<Result<NativeVoiceCaptureStarted, String>>,
-    },
-    Stop {
-        reply: std::sync::mpsc::Sender<Result<NativeVoiceCaptureStopped, String>>,
-    },
-    Cancel {
-        reply: std::sync::mpsc::Sender<Result<bool, String>>,
-    },
-}
-
-#[derive(Clone)]
-struct NativeVoiceCaptureManager {
-    sender: std::sync::mpsc::Sender<NativeVoiceWorkerCommand>,
-}
-
-impl Default for NativeVoiceCaptureManager {
-    fn default() -> Self {
-        let (sender, receiver) = std::sync::mpsc::channel::<NativeVoiceWorkerCommand>();
-        let _ = std::thread::Builder::new()
-            .name("native-voice-capture".to_string())
-            .spawn(move || native_voice_worker_loop(receiver));
-        Self { sender }
-    }
-}
-
-fn f32_sample_to_i16(sample: f32) -> i16 {
-    let clamped = sample.clamp(-1.0, 1.0);
-    let scaled = if clamped < 0.0 {
-        (clamped * 32768.0).round()
-    } else {
-        (clamped * 32767.0).round()
-    };
-    scaled.clamp(i16::MIN as f32, i16::MAX as f32) as i16
-}
-
-fn mix_frame_f32_to_i16(frame: &[f32]) -> i16 {
-    if frame.is_empty() {
-        return 0;
-    }
-    let mut sum = 0.0f32;
-    for sample in frame {
-        sum += sample.clamp(-1.0, 1.0);
-    }
-    f32_sample_to_i16(sum / frame.len() as f32)
-}
-
-fn mix_frame_i16_to_i16(frame: &[i16]) -> i16 {
-    if frame.is_empty() {
-        return 0;
-    }
-    let sum: i64 = frame.iter().map(|sample| *sample as i64).sum();
-    let avg = (sum as f64 / frame.len() as f64)
-        .round()
-        .clamp(i16::MIN as f64, i16::MAX as f64);
-    avg as i16
-}
-
-fn mix_frame_u16_to_i16(frame: &[u16]) -> i16 {
-    if frame.is_empty() {
-        return 0;
-    }
-    let mut sum = 0i64;
-    for sample in frame {
-        sum += *sample as i64 - 32768;
-    }
-    let avg = (sum as f64 / frame.len() as f64)
-        .round()
-        .clamp(i16::MIN as f64, i16::MAX as f64);
-    avg as i16
-}
-
-#[cfg(test)]
-mod native_voice_capture_tests {
-    use super::{
-        f32_sample_to_i16, mix_frame_f32_to_i16, mix_frame_i16_to_i16, mix_frame_u16_to_i16,
-    };
-
-    #[test]
-    fn f32_conversion_preserves_negative_polarity() {
-        assert!(f32_sample_to_i16(-0.5) < 0);
-        assert!(f32_sample_to_i16(0.5) > 0);
-    }
-
-    #[test]
-    fn f32_mix_down_averages_channels() {
-        // Equal-opposite stereo sample should average to (near) silence.
-        let mixed = mix_frame_f32_to_i16(&[1.0, -1.0]);
-        assert!(mixed.abs() <= 1);
-    }
-
-    #[test]
-    fn i16_mix_down_averages_channels() {
-        let mixed = mix_frame_i16_to_i16(&[2000, -1000, 1000]);
-        assert_eq!(mixed, 667);
-    }
-
-    #[test]
-    fn u16_mix_down_centers_at_32768() {
-        assert_eq!(mix_frame_u16_to_i16(&[32768]), 0);
-        let mixed = mix_frame_u16_to_i16(&[65535, 0]);
-        assert!(mixed.abs() <= 1);
-    }
-}
-
-fn push_mono_i16_from_f32(data: &[f32], channels: usize, sink: &Arc<StdMutex<Vec<i16>>>) {
-    if channels == 0 {
-        return;
-    }
-    if let Ok(mut guard) = sink.lock() {
-        for frame in data.chunks(channels) {
-            guard.push(mix_frame_f32_to_i16(frame));
-        }
-    }
-}
-
-fn push_mono_i16_from_i16(data: &[i16], channels: usize, sink: &Arc<StdMutex<Vec<i16>>>) {
-    if channels == 0 {
-        return;
-    }
-    if let Ok(mut guard) = sink.lock() {
-        for frame in data.chunks(channels) {
-            guard.push(mix_frame_i16_to_i16(frame));
-        }
-    }
-}
-
-fn push_mono_i16_from_u16(data: &[u16], channels: usize, sink: &Arc<StdMutex<Vec<i16>>>) {
-    if channels == 0 {
-        return;
-    }
-    if let Ok(mut guard) = sink.lock() {
-        for frame in data.chunks(channels) {
-            guard.push(mix_frame_u16_to_i16(frame));
-        }
-    }
-}
-
-fn encode_wav_pcm16_mono(samples: &[i16], sample_rate_hz: u32) -> Vec<u8> {
-    let data_size = (samples.len() * std::mem::size_of::<i16>()) as u32;
-    let mut out = Vec::with_capacity(44 + data_size as usize);
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&(36u32 + data_size).to_le_bytes());
-    out.extend_from_slice(b"WAVE");
-    out.extend_from_slice(b"fmt ");
-    out.extend_from_slice(&16u32.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&sample_rate_hz.to_le_bytes());
-    let byte_rate = sample_rate_hz * 2;
-    out.extend_from_slice(&byte_rate.to_le_bytes());
-    out.extend_from_slice(&2u16.to_le_bytes());
-    out.extend_from_slice(&16u16.to_le_bytes());
-    out.extend_from_slice(b"data");
-    out.extend_from_slice(&data_size.to_le_bytes());
-    for sample in samples {
-        out.extend_from_slice(&sample.to_le_bytes());
-    }
-    out
-}
-
-fn resample_linear_mono_i16(input: &[i16], from_rate_hz: u32, to_rate_hz: u32) -> Vec<i16> {
-    if input.is_empty() || from_rate_hz == 0 || to_rate_hz == 0 {
-        return Vec::new();
-    }
-    if from_rate_hz == to_rate_hz {
-        return input.to_vec();
-    }
-    let ratio = from_rate_hz as f64 / to_rate_hz as f64;
-    let out_len = ((input.len() as f64) * (to_rate_hz as f64) / (from_rate_hz as f64))
-        .round()
-        .max(1.0) as usize;
-    let mut out = Vec::with_capacity(out_len);
-    for idx in 0..out_len {
-        let src_pos = idx as f64 * ratio;
-        let left = src_pos.floor() as usize;
-        let right = (left + 1).min(input.len().saturating_sub(1));
-        let frac = (src_pos - left as f64) as f32;
-        let a = input[left] as f32;
-        let b = input[right] as f32;
-        out.push(
-            (a + (b - a) * frac)
-                .round()
-                .clamp(i16::MIN as f32, i16::MAX as f32) as i16,
-        );
-    }
-    out
-}
-
-fn analyze_voice_signal(samples: &[i16]) -> NativeVoiceSignalMetrics {
-    if samples.is_empty() {
-        return NativeVoiceSignalMetrics {
-            rms: 0.0,
-            peak: 0,
-            speech_ratio: 0.0,
-        };
-    }
-    let mut sum_sq = 0.0f64;
-    let mut peak = 0i16;
-    let mut voiced_samples = 0usize;
-    for sample in samples {
-        let normalized = (*sample as f32 / 32768.0).abs();
-        sum_sq += f64::from(normalized * normalized);
-        if normalized > 0.015 {
-            voiced_samples += 1;
-        }
-        let abs_i32 = (*sample as i32).abs();
-        if abs_i32 > peak as i32 {
-            peak = abs_i32.min(i16::MAX as i32) as i16;
-        }
-    }
-    NativeVoiceSignalMetrics {
-        rms: (sum_sq / samples.len() as f64).sqrt() as f32,
-        peak,
-        speech_ratio: voiced_samples as f32 / samples.len() as f32,
-    }
-}
-
-fn detect_speech(samples: &[i16], sample_rate_hz: u32, metrics: NativeVoiceSignalMetrics) -> bool {
-    let min_samples = (sample_rate_hz as usize / 5).max(800);
-    if samples.len() < min_samples {
-        return false;
-    }
-    metrics.rms >= 0.007 || metrics.speech_ratio >= 0.012 || metrics.peak >= 900
-}
-
-fn start_native_capture_session(
-    session: &mut Option<NativeVoiceCaptureSession>,
-) -> Result<NativeVoiceCaptureStarted, String> {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-    use cpal::{SampleFormat, StreamConfig};
-
-    if session.is_some() {
-        return Err("Voice capture is already active.".to_string());
-    }
-
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| "No microphone input device available.".to_string())?;
-    let supported = device
-        .default_input_config()
-        .map_err(|e| format!("Could not read microphone config: {e}"))?;
-
-    let stream_config: StreamConfig = supported.clone().into();
-    let input_channels = stream_config.channels.max(1) as usize;
-    let input_sample_rate_hz = stream_config.sample_rate.0;
-    let samples_mono_i16 = Arc::new(StdMutex::new(Vec::with_capacity(
-        input_sample_rate_hz as usize * 30,
-    )));
-
-    let stream = match supported.sample_format() {
-        SampleFormat::F32 => {
-            let sink = Arc::clone(&samples_mono_i16);
-            device
-                .build_input_stream(
-                    &stream_config,
-                    move |data: &[f32], _| push_mono_i16_from_f32(data, input_channels, &sink),
-                    |error| eprintln!("[voice-native] stream error: {error}"),
-                    None,
-                )
-                .map_err(|e| format!("Could not start microphone stream (f32): {e}"))?
-        }
-        SampleFormat::I16 => {
-            let sink = Arc::clone(&samples_mono_i16);
-            device
-                .build_input_stream(
-                    &stream_config,
-                    move |data: &[i16], _| push_mono_i16_from_i16(data, input_channels, &sink),
-                    |error| eprintln!("[voice-native] stream error: {error}"),
-                    None,
-                )
-                .map_err(|e| format!("Could not start microphone stream (i16): {e}"))?
-        }
-        SampleFormat::U16 => {
-            let sink = Arc::clone(&samples_mono_i16);
-            device
-                .build_input_stream(
-                    &stream_config,
-                    move |data: &[u16], _| push_mono_i16_from_u16(data, input_channels, &sink),
-                    |error| eprintln!("[voice-native] stream error: {error}"),
-                    None,
-                )
-                .map_err(|e| format!("Could not start microphone stream (u16): {e}"))?
-        }
-        _ => return Err("Unsupported microphone sample format.".to_string()),
-    };
-
-    stream
-        .play()
-        .map_err(|e| format!("Could not activate microphone stream: {e}"))?;
-
-    *session = Some(NativeVoiceCaptureSession {
-        stream,
-        samples_mono_i16,
-        input_sample_rate_hz,
-        started_at: Instant::now(),
-    });
-
-    Ok(NativeVoiceCaptureStarted {
-        input_sample_rate_hz,
-    })
-}
-
-fn stop_native_capture_session(
-    session: &mut Option<NativeVoiceCaptureSession>,
-) -> Result<NativeVoiceCaptureStopped, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-
-    let active = session
-        .take()
-        .ok_or_else(|| "Voice capture is not active.".to_string())?;
-    drop(active.stream);
-
-    let raw_samples = {
-        let mut guard = active
-            .samples_mono_i16
-            .lock()
-            .map_err(|_| "Voice capture sample lock error.".to_string())?;
-        std::mem::take(&mut *guard)
-    };
-    if raw_samples.is_empty() {
-        return Err("No audio captured.".to_string());
-    }
-
-    let sample_rate_hz = NATIVE_VOICE_TARGET_SAMPLE_RATE_HZ;
-    let samples =
-        resample_linear_mono_i16(&raw_samples, active.input_sample_rate_hz, sample_rate_hz);
-    if samples.is_empty() {
-        return Err("No audio captured after resampling.".to_string());
-    }
-
-    let metrics = analyze_voice_signal(&samples);
-    let speech_detected = detect_speech(&samples, sample_rate_hz, metrics);
-    if !speech_detected {
-        return Err(format!(
-            "No speech detected. (rms={:.4}, peak={}, speech_ratio={:.3})",
-            metrics.rms, metrics.peak, metrics.speech_ratio
-        ));
-    }
-
-    let duration_ms = ((samples.len() as f64 / sample_rate_hz as f64) * 1000.0).round() as u64;
-    let elapsed_ms = active.started_at.elapsed().as_millis() as u64;
-    let audio_base64 = STANDARD.encode(encode_wav_pcm16_mono(&samples, sample_rate_hz));
-
-    Ok(NativeVoiceCaptureStopped {
-        audio_base64,
-        mime_type: "audio/wav".to_string(),
-        sample_rate_hz,
-        duration_ms: duration_ms.max(elapsed_ms),
-        rms: metrics.rms,
-        peak: metrics.peak,
-        speech_ratio: metrics.speech_ratio,
-        speech_detected,
-    })
-}
-
-fn native_voice_worker_loop(receiver: std::sync::mpsc::Receiver<NativeVoiceWorkerCommand>) {
-    let mut session: Option<NativeVoiceCaptureSession> = None;
-    while let Ok(command) = receiver.recv() {
-        match command {
-            NativeVoiceWorkerCommand::Start { reply } => {
-                let _ = reply.send(start_native_capture_session(&mut session));
-            }
-            NativeVoiceWorkerCommand::Stop { reply } => {
-                let _ = reply.send(stop_native_capture_session(&mut session));
-            }
-            NativeVoiceWorkerCommand::Cancel { reply } => {
-                if let Some(active) = session.take() {
-                    drop(active.stream);
-                }
-                let _ = reply.send(Ok(true));
-            }
-        }
-    }
-}
-
-#[tauri::command]
-fn start_native_voice_capture_cmd(
-    native_voice: tauri::State<NativeVoiceCaptureManager>,
-) -> Result<NativeVoiceCaptureStarted, String> {
-    let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-    native_voice
-        .sender
-        .send(NativeVoiceWorkerCommand::Start { reply: reply_tx })
-        .map_err(|_| "Native voice worker is unavailable.".to_string())?;
-    reply_rx
-        .recv_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| "Native voice worker timed out while starting capture.".to_string())?
-}
-
-#[tauri::command]
-fn stop_native_voice_capture_cmd(
-    native_voice: tauri::State<NativeVoiceCaptureManager>,
-) -> Result<NativeVoiceCaptureStopped, String> {
-    let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-    native_voice
-        .sender
-        .send(NativeVoiceWorkerCommand::Stop { reply: reply_tx })
-        .map_err(|_| "Native voice worker is unavailable.".to_string())?;
-    reply_rx
-        .recv_timeout(std::time::Duration::from_secs(10))
-        .map_err(|_| "Native voice worker timed out while stopping capture.".to_string())?
-}
-
-#[tauri::command]
-fn cancel_native_voice_capture_cmd(
-    native_voice: tauri::State<NativeVoiceCaptureManager>,
-) -> Result<bool, String> {
-    let (reply_tx, reply_rx) = std::sync::mpsc::channel();
-    native_voice
-        .sender
-        .send(NativeVoiceWorkerCommand::Cancel { reply: reply_tx })
-        .map_err(|_| "Native voice worker is unavailable.".to_string())?;
-    reply_rx
-        .recv_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| "Native voice worker timed out while cancelling capture.".to_string())?
-}
-
 fn main() {
     let app = tauri::Builder::default()
-        .setup(|app| {
-            let base_dir = app.path().app_data_dir().map_err(|e| anyhow::anyhow!(e))?;
-            let db_dir = db::db_path(&base_dir);
-            let key = std::env::var("ARX_DB_KEY").unwrap_or_else(|_| "dev-only-key".to_string());
-            let recovery_db_path = db_dir.join(format!("arx.db.recovery.{}", db::now_ts()));
-
-            // Be resilient to DB migration drift: if any setup step fails due to DB state,
-            // back up the DB and retry once with a fresh database.
-            let mut last_err: Option<anyhow::Error> = None;
-            let mut use_recovery_db = false;
-            for attempt in 0..2 {
-                match (|| -> anyhow::Result<db::DbState> {
-                    let state = if use_recovery_db {
-                        db::init_db_at(&recovery_db_path, &key)?
-                    } else {
-                        db::init_db(&db_dir, &key)?
-                    };
-                    let conn = open_conn(&state.db_path, &state.key)?;
-                    // Crash recovery reconciliation: ensure interrupted runs/tool calls are marked as finished.
-                    let _ = db::crash_recovery(&conn, &state.db_path);
-                    if get_ui_state(&conn, "workspace_root")?.is_none() {
-                        // Prefer a sensible dev default (current working directory) so the UI reflects the
-                        // repo being worked on. Fall back to ~/Arx Workspace.
-                        let default_root = if cfg!(debug_assertions) {
-                            std::env::current_dir().ok().unwrap_or_else(|| {
-                                app.path()
-                                    .home_dir()
-                                    .expect("home dir must exist")
-                                    .join("Arx Workspace")
-                            })
-                        } else {
-                            app.path()
-                                .home_dir()
-                                .map_err(|e| anyhow::anyhow!(e))?
-                                .join("Arx Workspace")
-                        };
-                        std::fs::create_dir_all(&default_root)?;
-                        set_ui_state(
-                            &conn,
-                            "workspace_root",
-                            default_root.to_string_lossy().as_ref(),
-                        )?;
-                    }
-                    Ok(state)
-                })() {
-                    Ok(state) => {
-                        app.manage(state);
-                        app.manage(NativeVoiceCaptureManager::default());
-                        last_err = None;
-                        break;
-                    }
-                    Err(err) => {
-                        last_err = Some(err);
-                        if attempt == 0 {
-                            eprintln!("DB setup failed; backing up and retrying: {last_err:?}");
-                            if db::backup_db_files(&db_dir).is_err() {
-                                // If the DB can't be moved aside (e.g., locked), fall back to a recovery DB path
-                                // so the app can still start.
-                                use_recovery_db = true;
-                            }
-                            continue;
-                        }
-                    }
-                }
-            }
-            if let Some(err) = last_err {
-                return Err(err.into());
-            }
-
-            Ok(())
-        })
+        .setup(|app| startup::setup_app(app))
         .plugin(tauri_plugin_decorum::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![
-            initialize_cmd,
-            create_thread_cmd,
-            upsert_thread_cmd,
-            delete_thread_cmd,
-            list_threads_cmd,
-            get_thread_cmd,
-            list_events_cmd,
-            list_events_since_cmd,
-            list_tool_calls_cmd,
-            get_event_cmd,
-            list_turns_cmd,
-            gc_blobs_cmd,
-            rebuild_projections_cmd,
-            reset_local_db_cmd,
-            list_tools_cmd,
-            get_agent_mode_cmd,
-            set_agent_mode_cmd,
-            respond_permission_cmd,
-            decide_tool_call_cmd,
-            decide_inference_fallback_cmd,
-            get_auto_approve_write_edit_cmd,
-            set_auto_approve_write_edit_cmd,
-            cancel_run_cmd,
-            send_turn_cmd,
-            submit_turn_cmd,
-            engine_send_turn_cmd,
-            get_supabase_session_cmd,
-            set_supabase_session_cmd,
-            clear_supabase_session_cmd,
-            get_chatgpt_auth_summary_cmd,
-            clear_chatgpt_auth_cmd,
-            chatgpt_login_cmd,
-            open_external_url_cmd,
-            list_pending_invites_cmd,
-            upsert_pending_invite_cmd,
-            dismiss_pending_invite_cmd,
-            request_join_pending_invite_cmd,
-            mark_pending_invite_joined_cmd,
-            mark_pending_invite_expired_cmd,
-            get_workspace_root_cmd,
-            set_workspace_root_cmd,
-            is_path_within_workspace_cmd,
-            get_active_project_cmd,
-            set_active_project_cmd,
-            list_projects_cmd,
-            create_project_cmd,
-            add_message_cmd,
-            list_messages_cmd,
-            create_personal_memory_item_cmd,
-            list_personal_memory_items_cmd,
-            search_personal_memory_items_cmd,
-            set_personal_memory_item_pinned_cmd,
-            delete_personal_memory_item_cmd,
-            get_model_toggles_cmd,
-            set_model_toggles_cmd,
-            get_active_model_cmd,
-            set_active_model_cmd,
-            set_provider_key_cmd,
-            clear_provider_key_cmd,
-            has_provider_key_cmd,
-            get_provider_key_cmd,
-            scan_publish_content_cmd,
-            get_exec_policy_rules_cmd,
-            get_system_prompt_cmd,
-            get_approval_mode_cmd,
-            detect_test_commands_cmd,
-            set_exec_policy_rules_cmd,
-            set_system_prompt_cmd,
-            set_approval_mode_cmd,
-            get_session_exec_policy_rules_cmd,
-            set_session_exec_policy_rules_cmd,
-            classify_command_cmd,
-            get_session_resume_cmd,
-            ingest_attachment_cmd,
-            start_native_voice_capture_cmd,
-            stop_native_voice_capture_cmd,
-            cancel_native_voice_capture_cmd,
-            set_thread_workspace_cmd,
-            set_thread_community_cmd,
-            set_thread_engine_cmd
-        ])
+        .invoke_handler(invoke_registry::build_handler())
         .on_window_event(|window, event| {
             #[cfg(target_os = "macos")]
             {

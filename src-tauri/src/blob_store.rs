@@ -1,5 +1,5 @@
+use crate::hash_utils::hex_sha256;
 use anyhow::Context as _;
-use sha2::{Digest as _, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -37,15 +37,6 @@ fn validate_blob_rel_path(rel_path: &str) -> anyhow::Result<PathBuf> {
     }
 
     Ok(path.to_path_buf())
-}
-
-fn hex_sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut out = String::with_capacity(digest.len() * 2);
-    for b in digest {
-        out.push_str(&format!("{:02x}", b));
-    }
-    out
 }
 
 pub fn blob_abs_path(db_path: &Path, rel_path: &str) -> anyhow::Result<PathBuf> {

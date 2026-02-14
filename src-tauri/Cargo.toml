@@ -31,7 +31,3 @@ cpal = "0.15"
 
 [dev-dependencies]
 tempfile = "3"
-
-[features]
-# Disabled by default; retains old helper implementations for reference only.
-legacy_orchestrator_helpers = []

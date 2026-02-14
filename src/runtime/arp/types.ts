@@ -36,6 +36,7 @@ export type EventRecord = {
 export type MessageRecord = {
   id: string;
   session_id: ThreadId;
+  seq?: number | null;
   role: string;
   content_json: string;
   created_at: number;
@@ -68,13 +69,28 @@ export type ThreadRecord = {
   title: string | null;
   engine_id: string;
   model_id: string | null;
+  thread_lane: "chat" | "agent";
+  storage_mode: "cloud" | "local";
+  project_id: string | null;
   workspace_path: string | null;
   workspace_fingerprint?: string | null;
   community_id: string | null;
+  context_version?: number;
   created_at: number;
   updated_at: number;
   last_event_at: number | null;
   last_seq?: number;
+};
+
+export type ProjectRecord = {
+  id: string;
+  name: string | null;
+  root_path: string;
+  git_root: string | null;
+  git_remote: string | null;
+  fingerprint: string;
+  created_at: number;
+  updated_at: number;
 };
 
 export type ToolCallRecord = {
@@ -131,7 +147,6 @@ export type OpenRouterStreamNotification = {
   model_id: string;
   inference_source?: string | null;
   chunk: string;
-  full_content: string;
   seq: number;
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
@@ -169,16 +184,6 @@ export type InferenceFallbackNotification = {
   reason: string;
 };
 
-export type PlatformInferenceActionRequiredNotification = {
-  type: "platform_inference_action_required";
-  session_id: ThreadId;
-  approval_id: string;
-  provider_id: string;
-  provider_label: string;
-  model_id: string;
-  reason: string;
-};
-
 export type RuntimeNotification =
   | ToolApprovalRequestedNotification
   | AgentStatusNotification
@@ -189,8 +194,7 @@ export type RuntimeNotification =
   | ToolCallsUpdatedNotification
   | MemoryUpdatedNotification
   | OpenedUrlsNotification
-  | InferenceFallbackNotification
-  | PlatformInferenceActionRequiredNotification;
+  | InferenceFallbackNotification;
 
 export type Unsubscribe = () => void;
 
@@ -234,5 +238,3 @@ export type RunItem = RuntimeItemBase & {
   status?: "ok" | "cancelled" | "error";
   reason?: string | null;
 };
-
-export type RuntimeItem = MessageItem | ToolCallItem | RunItem;

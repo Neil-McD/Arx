@@ -1,12 +1,19 @@
 use anyhow::Context as _;
+use once_cell::sync::Lazy;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::sync::Mutex as StdMutex;
+use std::time::{Duration, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const SYSTEM_THREAD_ID: &str = "system";
+pub const THREAD_LANE_CHAT: &str = "chat";
+pub const THREAD_LANE_AGENT: &str = "agent";
+pub const THREAD_STORAGE_MODE_CLOUD: &str = "cloud";
+pub const THREAD_STORAGE_MODE_LOCAL: &str = "local";
+const LEGACY_DEFAULT_THREAD_TITLE: &str = "untitled thread";
 
 #[derive(Clone)]
 pub struct DbState {
@@ -20,13 +27,22 @@ pub struct ThreadRecord {
     pub title: Option<String>,
     pub engine_id: String,
     pub model_id: Option<String>,
+    pub thread_lane: String,
+    pub storage_mode: String,
+    pub project_id: Option<String>,
     pub workspace_path: Option<String>,
     pub workspace_fingerprint: Option<String>,
     pub community_id: Option<String>,
+    pub context_version: i64,
     pub created_at: i64,
     pub updated_at: i64,
     pub last_event_at: Option<i64>,
     pub last_seq: i64,
+}
+
+pub struct ThreadContextSetResult {
+    pub thread: ThreadRecord,
+    pub changed_fields: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -65,6 +81,7 @@ pub struct ProjectRecord {
 pub struct MessageRecord {
     pub id: String,
     pub session_id: String,
+    pub seq: i64,
     pub role: String,
     pub content_json: String,
     pub created_at: i64,
@@ -102,6 +119,21 @@ pub struct LatestFinishedToolCallByKey {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct BlobGcStats {
+    pub deleted_tracked_blobs: usize,
+    pub deleted_untracked_files: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BlobGcRunOutcome {
+    SkippedNotDue,
+    Ran(BlobGcStats),
+}
+
+pub const BLOB_GC_LAST_RUN_UI_KEY: &str = "blobs_gc_last_run_at";
+static BLOB_GC_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+
 #[derive(serde::Serialize)]
 pub struct TurnRecord {
     pub id: String,
@@ -125,14 +157,6 @@ pub struct PersonalMemoryItemRecord {
     pub provenance_event_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
-}
-
-#[derive(serde::Serialize)]
-pub struct BlobGcReport {
-    pub deleted_temp_files: i64,
-    pub deleted_orphan_files: i64,
-    pub deleted_orphan_rows: i64,
-    pub missing_files: i64,
 }
 
 pub fn init_db(db_dir: &Path, key: &str) -> anyhow::Result<DbState> {
@@ -180,9 +204,16 @@ pub fn ensure_system_thread(conn: &Connection) -> anyhow::Result<()> {
 
     let ts = now_ts();
     conn.execute(
-    "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at, last_seq)
-     VALUES (?1, ?2, ?3, NULL, NULL, NULL, ?4, ?4, NULL, 0)",
-    params![SYSTEM_THREAD_ID, "__system__", "system", ts],
+    "INSERT INTO threads (id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, community_id, context_version, created_at, updated_at, last_event_at, last_seq)
+     VALUES (?1, ?2, ?3, NULL, ?4, ?5, NULL, NULL, NULL, 0, ?6, ?6, NULL, 0)",
+    params![
+      SYSTEM_THREAD_ID,
+      "__system__",
+      "system",
+      THREAD_LANE_AGENT,
+      THREAD_STORAGE_MODE_LOCAL,
+      ts
+    ],
   )?;
     Ok(())
 }
@@ -353,8 +384,6 @@ pub fn backup_db_files(db_dir: &Path) -> anyhow::Result<bool> {
 }
 
 fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
-    migrate_legacy_personal_memory_items(conn)
-        .context("migrations: migrate legacy personal_memory_items schema")?;
     migrate_threads_harness_to_engine(conn)
         .context("migrations: migrate threads harness_id to engine_id/model_id")?;
 
@@ -435,14 +464,27 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
       title TEXT,
       engine_id TEXT NOT NULL,
       model_id TEXT,
+      thread_lane TEXT NOT NULL DEFAULT 'chat',
+      storage_mode TEXT NOT NULL DEFAULT 'cloud',
+      project_id TEXT,
       workspace_path TEXT,
       workspace_fingerprint TEXT,
       community_id TEXT,
+      context_version INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
       updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
       last_event_at INTEGER,
-      last_seq INTEGER NOT NULL DEFAULT 0
+      last_seq INTEGER NOT NULL DEFAULT 0,
+      CHECK (
+        (thread_lane = 'chat' AND storage_mode = 'cloud')
+        OR (thread_lane = 'agent' AND storage_mode = 'local')
+      )
     );
+
+    CREATE INDEX IF NOT EXISTS idx_threads_lane_updated_at
+      ON threads(thread_lane, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_threads_project_lane_updated_at
+      ON threads(project_id, thread_lane, updated_at DESC);
 
     -- Device-local workspace binding (contract primitive in v2.0).
     -- This is intentionally separate from cloud-canonical threads/messages.
@@ -606,6 +648,27 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
             [],
         );
     }
+    if table_exists(conn, "threads")? && !column_exists(conn, "threads", "thread_lane")? {
+        let _ = conn.execute(
+            "ALTER TABLE threads ADD COLUMN thread_lane TEXT NOT NULL DEFAULT 'chat'",
+            [],
+        );
+    }
+    if table_exists(conn, "threads")? && !column_exists(conn, "threads", "project_id")? {
+        let _ = conn.execute("ALTER TABLE threads ADD COLUMN project_id TEXT", []);
+    }
+    if table_exists(conn, "threads")? && !column_exists(conn, "threads", "context_version")? {
+        let _ = conn.execute(
+            "ALTER TABLE threads ADD COLUMN context_version INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+    }
+    if table_exists(conn, "threads")? && !column_exists(conn, "threads", "storage_mode")? {
+        let _ = conn.execute(
+            "ALTER TABLE threads ADD COLUMN storage_mode TEXT NOT NULL DEFAULT 'cloud'",
+            [],
+        );
+    }
     if table_exists(conn, "messages_projection")? {
         if !column_exists(conn, "messages_projection", "engine_id")? {
             let _ = conn.execute(
@@ -627,48 +690,15 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
         let _ = conn.execute("ALTER TABLE blobs ADD COLUMN mime TEXT", []);
     }
 
-    backfill_contract_tables(conn)
-        .context("migrations: backfill threads/events from legacy tables")?;
+    assert_no_unmigrated_legacy_data(conn).context("migrations: legacy DB compatibility check")?;
+    backfill_thread_lane(conn).context("migrations: backfill thread lanes")?;
+    backfill_thread_storage_mode(conn).context("migrations: backfill thread storage modes")?;
+    backfill_thread_project_ids(conn).context("migrations: backfill thread project assignments")?;
     migrate_events_seq(conn).context("migrations: add/backfill events.seq + threads.last_seq")?;
     rebuild_messages_projection(conn).context("migrations: rebuild messages projection")?;
     rebuild_turns_projection(conn).context("migrations: rebuild turns projection")?;
     rebuild_tool_calls_projection(conn).context("migrations: rebuild tool calls projection")?;
     rebuild_events_fts(conn).context("migrations: rebuild events FTS")?;
-
-    Ok(())
-}
-
-fn migrate_legacy_personal_memory_items(conn: &Connection) -> anyhow::Result<()> {
-    if !table_exists(conn, "personal_memory_items")? {
-        return Ok(());
-    }
-
-    let mut stmt = conn.prepare("PRAGMA table_info('personal_memory_items')")?;
-    let cols = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // Contract schema already present.
-    if cols.iter().any(|c| c == "content") {
-        return Ok(());
-    }
-
-    // Known legacy schema (key/value).
-    let has_key = cols.iter().any(|c| c == "key");
-    let has_value = cols.iter().any(|c| c == "value");
-    if !(has_key && has_value) {
-        // Unknown legacy shape; leave untouched.
-        return Ok(());
-    }
-
-    if table_exists(conn, "personal_memory_items_kv")? {
-        return Ok(());
-    }
-
-    conn.execute(
-        "ALTER TABLE personal_memory_items RENAME TO personal_memory_items_kv",
-        [],
-    )?;
 
     Ok(())
 }
@@ -690,6 +720,33 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> anyhow::Result
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(cols.iter().any(|c| c == column))
+}
+
+fn count_rows_if_table_exists(conn: &Connection, table: &str) -> anyhow::Result<i64> {
+    if !table_exists(conn, table)? {
+        return Ok(0);
+    }
+    let sql = format!("SELECT COUNT(1) FROM {}", table);
+    conn.query_row(&sql, [], |row| row.get::<_, i64>(0))
+        .map_err(Into::into)
+}
+
+fn assert_no_unmigrated_legacy_data(conn: &Connection) -> anyhow::Result<()> {
+    let legacy_sessions = count_rows_if_table_exists(conn, "sessions")?;
+    let legacy_messages = count_rows_if_table_exists(conn, "messages")?;
+    if legacy_sessions == 0 && legacy_messages == 0 {
+        return Ok(());
+    }
+
+    let contract_threads = count_rows_if_table_exists(conn, "threads")?;
+    let contract_events = count_rows_if_table_exists(conn, "events")?;
+    if contract_threads > 0 || contract_events > 0 {
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "legacy_local_db_detected: sessions/messages data exists but legacy backfill is removed; reset local DB to continue"
+    );
 }
 
 fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
@@ -718,16 +775,24 @@ fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
         title TEXT,
         engine_id TEXT NOT NULL,
         model_id TEXT,
+        thread_lane TEXT NOT NULL DEFAULT 'chat',
+        storage_mode TEXT NOT NULL DEFAULT 'cloud',
+        project_id TEXT,
         workspace_path TEXT,
         workspace_fingerprint TEXT,
         community_id TEXT,
+        context_version INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
         updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)),
         last_event_at INTEGER,
-        last_seq INTEGER NOT NULL DEFAULT 0
+        last_seq INTEGER NOT NULL DEFAULT 0,
+        CHECK (
+          (thread_lane = 'chat' AND storage_mode = 'cloud')
+          OR (thread_lane = 'agent' AND storage_mode = 'local')
+        )
       );
 
-      INSERT INTO threads_new (id, title, engine_id, model_id, workspace_path, workspace_fingerprint, community_id, created_at, updated_at, last_event_at, last_seq)
+      INSERT INTO threads_new (id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, workspace_fingerprint, community_id, context_version, created_at, updated_at, last_event_at, last_seq)
       SELECT
         id,
         title,
@@ -737,9 +802,13 @@ fn migrate_threads_harness_to_engine(conn: &Connection) -> anyhow::Result<()> {
           ELSE 'messages_agent'
         END,
         model_id,
+        'agent',
+        'local',
+        NULL,
         workspace_path,
         NULL,
         community_id,
+        0,
         created_at,
         updated_at,
         last_event_at,
@@ -1291,152 +1360,207 @@ fn rebuild_events_fts(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn rebuild_projections(conn: &Connection) -> anyhow::Result<()> {
-    rebuild_messages_projection(conn)?;
-    rebuild_turns_projection(conn)?;
-    rebuild_tool_calls_projection(conn)?;
-    rebuild_events_fts(conn)?;
+fn normalize_thread_lane(value: Option<&str>) -> &'static str {
+    match value.map(|raw| raw.trim().to_ascii_lowercase()).as_deref() {
+        Some("agent") => THREAD_LANE_AGENT,
+        Some("chat") => THREAD_LANE_CHAT,
+        _ => THREAD_LANE_CHAT,
+    }
+}
+
+fn storage_mode_for_lane(thread_lane: &str) -> &'static str {
+    if thread_lane.eq_ignore_ascii_case(THREAD_LANE_AGENT) {
+        THREAD_STORAGE_MODE_LOCAL
+    } else {
+        THREAD_STORAGE_MODE_CLOUD
+    }
+}
+
+fn backfill_thread_lane(conn: &Connection) -> anyhow::Result<()> {
+    if !table_exists(conn, "threads")? || !column_exists(conn, "threads", "thread_lane")? {
+        return Ok(());
+    }
+
+    let unknown_lane_predicate =
+        "(thread_lane IS NULL OR TRIM(thread_lane) = '' OR LOWER(thread_lane) NOT IN ('chat', 'agent'))";
+
+    if table_exists(conn, "tool_calls")? {
+        conn.execute(
+            "UPDATE threads
+       SET thread_lane = 'agent'
+       WHERE (thread_lane IS NULL OR TRIM(thread_lane) = '' OR LOWER(thread_lane) NOT IN ('chat', 'agent'))
+         AND id IN (SELECT DISTINCT thread_id FROM tool_calls)",
+            [],
+        )?;
+    }
+
+    if table_exists(conn, "events")? {
+        conn.execute(
+            "UPDATE threads
+       SET thread_lane = 'agent'
+       WHERE (thread_lane IS NULL OR TRIM(thread_lane) = '' OR LOWER(thread_lane) NOT IN ('chat', 'agent'))
+         AND id IN (
+         SELECT DISTINCT thread_id
+         FROM events
+         WHERE type IN ('tool_call_requested','tool_call_started','tool_call_finished')
+       )",
+            [],
+        )?;
+    }
+
+    let chat_backfill_sql = format!(
+        "UPDATE threads
+     SET thread_lane = 'chat'
+     WHERE {}",
+        unknown_lane_predicate
+    );
+    conn.execute(&chat_backfill_sql, [])?;
+
     Ok(())
 }
 
-fn backfill_contract_tables(conn: &Connection) -> anyhow::Result<()> {
-    let has_sessions = table_exists(conn, "sessions")?;
-    let has_messages = table_exists(conn, "messages")?;
-
-    // Threads: 1:1 with legacy sessions (same id), best-effort defaults.
-    if has_sessions {
-        if table_exists(conn, "session_state")? {
-            conn
-        .execute(
-          "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-           SELECT
-             s.id,
-             s.title,
-             'messages_agent',
-             NULL,
-             NULL,
-             NULL,
-             COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-             COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-             COALESCE(ss.last_message_at, COALESCE(s.updated_at, s.created_at))
-           FROM sessions s
-           LEFT JOIN session_state ss ON ss.session_id = s.id
-           WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
-          [],
-        )
-        .context("backfill: insert threads from sessions + session_state")?;
-        } else {
-            conn
-        .execute(
-          "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-           SELECT
-             s.id,
-             s.title,
-             'messages_agent',
-             NULL,
-             NULL,
-             NULL,
-             COALESCE(s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-             COALESCE(s.updated_at, s.created_at, CAST(strftime('%s','now') AS INTEGER)),
-             COALESCE(s.updated_at, s.created_at)
-           FROM sessions s
-           WHERE NOT EXISTS (SELECT 1 FROM threads t WHERE t.id = s.id)",
-          [],
-        )
-        .context("backfill: insert threads from sessions")?;
-        }
+fn backfill_thread_storage_mode(conn: &Connection) -> anyhow::Result<()> {
+    if !table_exists(conn, "threads")?
+        || !column_exists(conn, "threads", "thread_lane")?
+        || !column_exists(conn, "threads", "storage_mode")?
+    {
+        return Ok(());
     }
 
-    // Events: mirror legacy messages. Uses the message id as event id for dedupe.
-    if has_messages {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, session_id, role, content_json, created_at
-       FROM messages
-       ORDER BY created_at ASC",
-            )
-            .context("backfill: prepare legacy messages query")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
-            ))
-        })?;
-
-        for row in rows {
-            let (id, thread_id, role, content_json, created_at) = row?;
-            // Dedupe: if an event already exists with this id, skip.
-            let exists = conn.query_row(
-                "SELECT 1 FROM events WHERE id = ?1 LIMIT 1",
-                params![id],
-                |_r| Ok(true),
-            );
-            if matches!(exists, Ok(true)) {
-                continue;
-            }
-
-            let event_type = match role.trim().to_ascii_lowercase().as_str() {
-                "user" => "user_message",
-                "assistant" => "assistant_message",
-                _ => "engine_io_chunk",
-            };
-
-            let text = extract_text_from_content_json(&content_json);
-            let payload = serde_json::json!({
-              "v": 1,
-              "role": role,
-              "content": serde_json::from_str::<serde_json::Value>(&content_json).unwrap_or(serde_json::Value::Null)
-            });
-            let payload_json = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
-
-            conn.execute(
-        "INSERT INTO events (id, thread_id, seq, type, created_at, text, payload_json, blob_ref)
-         VALUES (?1, ?2, 0, ?3, ?4, ?5, ?6, NULL)",
-        params![id, thread_id, event_type, created_at, text.as_deref(), payload_json],
-      )
-      .with_context(|| format!("backfill: insert event from legacy message {id}"))?;
-        }
-    }
-
-    // Ensure last_event_at is consistent with events.
     conn.execute(
         "UPDATE threads
-     SET last_event_at = (
-       SELECT MAX(created_at) FROM events e WHERE e.thread_id = threads.id
-     )",
+       SET storage_mode = CASE
+         WHEN LOWER(TRIM(COALESCE(thread_lane, ''))) = 'agent' THEN 'local'
+         ELSE 'cloud'
+       END
+       WHERE storage_mode IS NULL
+          OR TRIM(storage_mode) = ''
+          OR LOWER(TRIM(storage_mode)) NOT IN ('cloud', 'local')
+          OR (LOWER(TRIM(COALESCE(thread_lane, ''))) = 'agent' AND LOWER(TRIM(storage_mode)) <> 'local')
+          OR (LOWER(TRIM(COALESCE(thread_lane, ''))) <> 'agent' AND LOWER(TRIM(storage_mode)) <> 'cloud')",
         [],
-    )
-    .context("backfill: set threads.last_event_at from events")?;
-
-    // Some legacy DBs may have NULL timestamps even if columns are now NOT NULL.
-    conn.execute(
-    "UPDATE threads
-     SET created_at = COALESCE(created_at, updated_at, last_event_at, CAST(strftime('%s','now') AS INTEGER))",
-    [],
-  )
-  .context("backfill: heal threads.created_at NULLs")?;
-
-    // Keep updated_at >= last_event_at for sorting/resume semantics.
-    conn.execute(
-    "UPDATE threads
-     SET updated_at = COALESCE(MAX(updated_at, last_event_at), created_at, CAST(strftime('%s','now') AS INTEGER))",
-    [],
-  )
-  .context("backfill: heal threads.updated_at NULLs")?;
+    )?;
 
     Ok(())
 }
 
-fn extract_text_from_content_json(content_json: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(content_json).ok()?;
+fn backfill_thread_project_ids(conn: &Connection) -> anyhow::Result<()> {
+    if !table_exists(conn, "threads")?
+        || !column_exists(conn, "threads", "project_id")?
+        || !table_exists(conn, "projects")?
+    {
+        return Ok(());
+    }
+
+    let mut project_stmt =
+        conn.prepare("SELECT id, root_path FROM projects WHERE TRIM(root_path) <> ''")?;
+    let mut projects = project_stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    projects.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+    if projects.is_empty() {
+        return Ok(());
+    }
+
+    let mut thread_stmt = conn.prepare(
+        "SELECT id, workspace_path
+     FROM threads
+     WHERE (project_id IS NULL OR TRIM(project_id) = '')
+       AND workspace_path IS NOT NULL
+       AND TRIM(workspace_path) <> ''",
+    )?;
+    let thread_rows = thread_stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for (thread_id, workspace_path_raw) in thread_rows {
+        let workspace_path = workspace_path_raw.trim();
+        if workspace_path.is_empty() {
+            continue;
+        }
+        let workspace = Path::new(workspace_path);
+        let matched_project = projects.iter().find_map(|(project_id, root_path)| {
+            let root = Path::new(root_path.trim());
+            if workspace.starts_with(root) {
+                Some(project_id.as_str())
+            } else {
+                None
+            }
+        });
+        if let Some(project_id) = matched_project {
+            conn.execute(
+                "UPDATE threads SET project_id = ?1 WHERE id = ?2",
+                params![project_id, thread_id],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_text_from_payload_json(payload_json: Option<&str>) -> Option<String> {
+    let raw = payload_json?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
     value
-        .get("text")
+        .get("content")
+        .and_then(|content| content.get("text"))
         .and_then(|v| v.as_str())
+        .or_else(|| value.get("text").and_then(|v| v.as_str()))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn normalize_thread_title_for_storage(title: Option<&str>) -> Option<String> {
+    let trimmed = title
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())?;
+    if trimmed.eq_ignore_ascii_case(LEGACY_DEFAULT_THREAD_TITLE) {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn derive_thread_title_from_user_text(text: &str) -> Option<String> {
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    let mut chars = collapsed.chars();
+    let truncated: String = chars.by_ref().take(64).collect();
+    if chars.next().is_none() {
+        return Some(collapsed);
+    }
+    Some(format!("{}...", truncated.trim_end()))
+}
+
+fn maybe_set_derived_thread_title(
+    conn: &Connection,
+    thread_id: &str,
+    user_text: &str,
+) -> anyhow::Result<()> {
+    let Some(next_title) = derive_thread_title_from_user_text(user_text) else {
+        return Ok(());
+    };
+    conn.execute(
+        "UPDATE threads
+     SET title = ?1
+     WHERE id = ?2
+       AND (
+         title IS NULL
+         OR TRIM(title) = ''
+         OR LOWER(TRIM(title)) = ?3
+       )",
+        params![next_title, thread_id, LEGACY_DEFAULT_THREAD_TITLE],
+    )?;
+    Ok(())
 }
 
 fn content_json_from_payload(payload_json: Option<&str>, text: Option<&str>) -> String {
@@ -1462,178 +1586,6 @@ pub fn now_ts() -> i64 {
     now.duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64
-}
-
-pub fn create_personal_memory_item(
-    conn: &Connection,
-    content: &str,
-    scope: &str,
-    scope_id: Option<&str>,
-    pinned: bool,
-    provenance_event_id: Option<&str>,
-) -> anyhow::Result<PersonalMemoryItemRecord> {
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return Err(anyhow::anyhow!("content is required"));
-    }
-    let id = Uuid::new_v4().to_string();
-    let ts = now_ts();
-    conn.execute(
-    "INSERT INTO personal_memory_items (id, content, scope, scope_id, pinned, provenance_event_id, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-    params![
-      id,
-      trimmed,
-      scope.trim(),
-      scope_id,
-      if pinned { 1 } else { 0 },
-      provenance_event_id,
-      ts,
-      ts
-    ],
-  )?;
-
-    Ok(PersonalMemoryItemRecord {
-        id,
-        content: trimmed.to_string(),
-        scope: scope.trim().to_string(),
-        scope_id: scope_id.map(|v| v.to_string()),
-        pinned: if pinned { 1 } else { 0 },
-        provenance_event_id: provenance_event_id.map(|v| v.to_string()),
-        created_at: ts,
-        updated_at: ts,
-    })
-}
-
-pub fn list_personal_memory_items(
-    conn: &Connection,
-    scope: Option<&str>,
-    scope_id: Option<&str>,
-    limit: usize,
-) -> anyhow::Result<Vec<PersonalMemoryItemRecord>> {
-    let mut sql =
-        "SELECT id, content, scope, scope_id, pinned, provenance_event_id, created_at, updated_at
-     FROM personal_memory_items"
-            .to_string();
-    let mut where_clauses: Vec<&str> = Vec::new();
-    if scope.is_some() {
-        where_clauses.push("scope = ?1");
-    }
-    if scope_id.is_some() {
-        where_clauses.push("scope_id = ?2");
-    }
-    if !where_clauses.is_empty() {
-        sql.push_str(" WHERE ");
-        sql.push_str(&where_clauses.join(" AND "));
-    }
-    sql.push_str(" ORDER BY pinned DESC, updated_at DESC LIMIT ?3");
-
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params![scope, scope_id, limit as i64], |row| {
-        Ok(PersonalMemoryItemRecord {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            scope: row.get(2)?,
-            scope_id: row.get(3)?,
-            pinned: row.get(4)?,
-            provenance_event_id: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-        })
-    })?;
-
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
-    }
-    Ok(out)
-}
-
-pub fn search_personal_memory_items(
-    conn: &Connection,
-    query: &str,
-    limit: usize,
-) -> anyhow::Result<Vec<PersonalMemoryItemRecord>> {
-    let q = query.trim();
-    if q.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut stmt = conn.prepare(
-    "SELECT p.id, p.content, p.scope, p.scope_id, p.pinned, p.provenance_event_id, p.created_at, p.updated_at
-     FROM personal_memory_items_fts fts
-     JOIN personal_memory_items p ON p.rowid = fts.rowid
-     WHERE personal_memory_items_fts MATCH ?1
-     ORDER BY p.pinned DESC, p.updated_at DESC
-     LIMIT ?2",
-  )?;
-    let rows = stmt.query_map(params![q, limit as i64], |row| {
-        Ok(PersonalMemoryItemRecord {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            scope: row.get(2)?,
-            scope_id: row.get(3)?,
-            pinned: row.get(4)?,
-            provenance_event_id: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-        })
-    })?;
-
-    let mut out = Vec::new();
-    for row in rows {
-        out.push(row?);
-    }
-    Ok(out)
-}
-
-pub fn set_personal_memory_item_pinned(
-    conn: &Connection,
-    id: &str,
-    pinned: bool,
-) -> anyhow::Result<()> {
-    let ts = now_ts();
-    conn.execute(
-        "UPDATE personal_memory_items SET pinned = ?1, updated_at = ?2 WHERE id = ?3",
-        params![if pinned { 1 } else { 0 }, ts, id],
-    )?;
-    Ok(())
-}
-
-pub fn delete_personal_memory_item(conn: &Connection, id: &str) -> anyhow::Result<()> {
-    conn.execute(
-        "DELETE FROM personal_memory_items WHERE id = ?1",
-        params![id],
-    )?;
-    Ok(())
-}
-
-pub fn get_personal_memory_item_by_id(
-    conn: &Connection,
-    id: &str,
-) -> anyhow::Result<Option<PersonalMemoryItemRecord>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, content, scope, scope_id, pinned, provenance_event_id, created_at, updated_at
-     FROM personal_memory_items
-     WHERE id = ?1",
-    )?;
-    let result = stmt.query_row(params![id], |row| {
-        Ok(PersonalMemoryItemRecord {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            scope: row.get(2)?,
-            scope_id: row.get(3)?,
-            pinned: row.get(4)?,
-            provenance_event_id: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-        })
-    });
-    match result {
-        Ok(value) => Ok(Some(value)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(err) => Err(err.into()),
-    }
 }
 
 pub fn get_ui_state(conn: &Connection, key: &str) -> anyhow::Result<Option<String>> {
@@ -1666,24 +1618,46 @@ pub fn create_thread(
     title: &str,
     engine_id: &str,
     model_id: Option<&str>,
+    thread_lane: Option<&str>,
+    project_id: Option<&str>,
 ) -> anyhow::Result<ThreadRecord> {
     let id = Uuid::new_v4().to_string();
     let ts = now_ts();
+    let normalized_lane = normalize_thread_lane(thread_lane);
+    let storage_mode = storage_mode_for_lane(normalized_lane);
+    let cleaned_project_id = project_id
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let cleaned_title = normalize_thread_title_for_storage(Some(title));
 
     conn.execute(
-    "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-     VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, ?6, NULL)",
-    params![id, title, engine_id, model_id, ts, ts],
+    "INSERT INTO threads (id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9, NULL)",
+    params![
+      id,
+      cleaned_title.as_deref(),
+      engine_id,
+      model_id,
+      normalized_lane,
+      storage_mode,
+      cleaned_project_id,
+      ts,
+      ts
+    ],
   )?;
 
     Ok(ThreadRecord {
         id,
-        title: Some(title.to_string()),
+        title: cleaned_title,
         engine_id: engine_id.to_string(),
         model_id: model_id.map(|s| s.to_string()),
+        thread_lane: normalized_lane.to_string(),
+        storage_mode: storage_mode.to_string(),
+        project_id: cleaned_project_id.map(|value| value.to_string()),
         workspace_path: None,
         workspace_fingerprint: None,
         community_id: None,
+        context_version: 0,
         created_at: ts,
         updated_at: ts,
         last_event_at: None,
@@ -1697,6 +1671,8 @@ pub fn upsert_thread_from_cloud(
     title: Option<&str>,
     engine_id: &str,
     model_id: Option<&str>,
+    thread_lane: Option<&str>,
+    project_id: Option<&str>,
     community_id: Option<&str>,
     created_at: Option<i64>,
     updated_at: Option<i64>,
@@ -1704,17 +1680,37 @@ pub fn upsert_thread_from_cloud(
     let ts = now_ts();
     let created = created_at.unwrap_or(ts);
     let updated = updated_at.unwrap_or(ts);
+    let normalized_lane = normalize_thread_lane(thread_lane);
+    let storage_mode = storage_mode_for_lane(normalized_lane);
+    let cleaned_project_id = project_id
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let cleaned_title = normalize_thread_title_for_storage(title);
 
     conn.execute(
-    "INSERT INTO threads (id, title, engine_id, model_id, workspace_path, community_id, created_at, updated_at, last_event_at)
-     VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, NULL)
+    "INSERT INTO threads (id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, community_id, created_at, updated_at, last_event_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, NULL)
      ON CONFLICT(id) DO UPDATE SET
        title = COALESCE(excluded.title, threads.title),
        engine_id = COALESCE(NULLIF(excluded.engine_id, ''), threads.engine_id),
        model_id = COALESCE(excluded.model_id, threads.model_id),
+       thread_lane = COALESCE(NULLIF(excluded.thread_lane, ''), threads.thread_lane),
+       storage_mode = COALESCE(NULLIF(excluded.storage_mode, ''), threads.storage_mode),
+       project_id = COALESCE(excluded.project_id, threads.project_id),
        community_id = COALESCE(excluded.community_id, threads.community_id),
        updated_at = MAX(threads.updated_at, excluded.updated_at)",
-    params![thread_id, title, engine_id, model_id, community_id, created, updated],
+    params![
+      thread_id,
+      cleaned_title.as_deref(),
+      engine_id,
+      model_id,
+      normalized_lane,
+      storage_mode,
+      cleaned_project_id,
+      community_id,
+      created,
+      updated
+    ],
   )?;
 
     get_thread_by_id(conn, thread_id)?
@@ -1826,80 +1822,22 @@ pub fn list_projects(conn: &Connection) -> anyhow::Result<Vec<ProjectRecord>> {
     Ok(out)
 }
 
-pub fn add_message(
+pub fn update_project_name(
     conn: &Connection,
-    session_id: &str,
-    role: &str,
-    content_json: &str,
-) -> anyhow::Result<()> {
-    let id = Uuid::new_v4().to_string();
+    project_id: &str,
+    name: Option<&str>,
+) -> anyhow::Result<ProjectRecord> {
     let ts = now_ts();
-
-    // Projection source: device-local events. Update projections transactionally.
-    let event_type = match role.trim().to_ascii_lowercase().as_str() {
-        "user" => "user_message",
-        "assistant" => "assistant_message",
-        _ => "engine_io_chunk",
-    };
-    let text = extract_text_from_content_json(content_json);
-    let payload = serde_json::json!({
-      "v": 1,
-      "role": role,
-      "content": serde_json::from_str::<serde_json::Value>(content_json).unwrap_or(serde_json::Value::Null)
-    });
-    let payload_json = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
-
-    // Deterministic order: allocate seq transactionally.
-    conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result = (|| -> anyhow::Result<()> {
-        let next_seq: i64 = conn.query_row(
-            "SELECT COALESCE(last_seq, 0) + 1 FROM threads WHERE id = ?1",
-            params![session_id],
-            |row| row.get(0),
-        )?;
-
-        conn.execute(
-            "UPDATE threads
-       SET last_seq = ?1, updated_at = ?2, last_event_at = ?2
-       WHERE id = ?3",
-            params![next_seq, ts, session_id],
-        )?;
-
-        conn.execute(
-      "INSERT INTO events (id, thread_id, seq, type, created_at, text, payload_json, blob_ref)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
-      params![id, session_id, next_seq, event_type, ts, text.as_deref(), payload_json],
+    let cleaned_name = name
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    conn.execute(
+        "UPDATE projects
+     SET name = ?1, updated_at = ?2
+     WHERE id = ?3",
+        params![cleaned_name, ts, project_id],
     )?;
-
-        if event_type == "user_message" || event_type == "assistant_message" {
-            let role = if event_type == "user_message" {
-                "user"
-            } else {
-                "assistant"
-            };
-            let content_json = content_json_from_payload(Some(&payload_json), text.as_deref());
-            let (engine_id, model_id, run_id) = meta_fields_from_payload(Some(&payload_json));
-            conn.execute(
-        "INSERT OR REPLACE INTO messages_projection (id, thread_id, role, content_json, engine_id, model_id, run_id, created_at, seq)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![id, session_id, role, content_json, engine_id, model_id, run_id, ts, next_seq],
-      )?;
-        }
-
-        apply_turns_projection(conn, session_id, event_type, &id, next_seq, ts)?;
-
-        Ok(())
-    })();
-
-    match result {
-        Ok(()) => conn.execute_batch("COMMIT")?,
-        Err(err) => {
-            let _ = conn.execute_batch("ROLLBACK");
-            return Err(err);
-        }
-    }
-
-    Ok(())
+    get_project_by_id(conn, project_id)?.ok_or_else(|| anyhow::anyhow!("project not found"))
 }
 
 pub fn append_event(
@@ -1930,6 +1868,15 @@ pub fn append_event(
        WHERE id = ?3",
             params![next_seq, ts, thread_id],
         )?;
+
+        if event_type == "user_message" {
+            let user_title_candidate = text
+                .map(|value| value.to_string())
+                .or_else(|| extract_text_from_payload_json(payload_json));
+            if let Some(user_text) = user_title_candidate.as_deref() {
+                maybe_set_derived_thread_title(conn, thread_id, user_text)?;
+            }
+        }
 
         if event_type == "assistant_message" {
             validate_assistant_message_provenance(conn, thread_id, next_seq, payload_json)?;
@@ -2295,6 +2242,171 @@ pub fn record_blob(
     Ok(())
 }
 
+fn collect_blob_bin_files(dir: &Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_blob_bin_files(&path, out)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|v| v.to_str())
+            .map(|v| v.eq_ignore_ascii_case("bin"))
+            .unwrap_or(false)
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn file_modified_ts(path: &Path) -> Option<i64> {
+    let metadata = fs::metadata(path).ok()?;
+    let modified = metadata.modified().ok()?;
+    let duration = modified.duration_since(UNIX_EPOCH).ok()?;
+    Some(duration.as_secs() as i64)
+}
+
+pub fn sweep_orphan_blobs(
+    conn: &Connection,
+    db_path: &Path,
+    min_age_secs: i64,
+    max_deletes: usize,
+) -> anyhow::Result<BlobGcStats> {
+    if !table_exists(conn, "events")? || !table_exists(conn, "blobs")? {
+        return Ok(BlobGcStats::default());
+    }
+
+    let min_age_secs = min_age_secs.max(0);
+    let max_deletes = if max_deletes == 0 {
+        usize::MAX
+    } else {
+        max_deletes
+    };
+    let now = now_ts();
+    let cutoff_ts = now.saturating_sub(min_age_secs);
+
+    let mut live_refs: HashSet<String> = HashSet::new();
+    {
+        let mut stmt = conn.prepare("SELECT blob_ref, payload_json FROM events")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        })?;
+        for row in rows {
+            let (blob_ref, payload_json) = row?;
+            if let Some(blob_ref) = blob_ref {
+                let cleaned = blob_ref.trim();
+                if !cleaned.is_empty() {
+                    live_refs.insert(cleaned.to_string());
+                }
+            }
+            if let Some(payload_json) = payload_json {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&payload_json) {
+                    let mut refs = Vec::new();
+                    collect_blob_refs_from_json(&value, &mut refs);
+                    for rel in refs {
+                        let cleaned = rel.trim();
+                        if !cleaned.is_empty() {
+                            live_refs.insert(cleaned.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut tracked_rows: Vec<(String, String, i64)> = Vec::new();
+    {
+        let mut stmt = conn.prepare("SELECT id, rel_path, created_at FROM blobs")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            tracked_rows.push(row?);
+        }
+    }
+
+    let mut tracked_refs: HashSet<String> = HashSet::new();
+    let mut stale_tracked_rows: Vec<(String, String)> = Vec::new();
+    for (blob_id, rel_path, created_at) in tracked_rows {
+        tracked_refs.insert(rel_path.clone());
+        if live_refs.contains(&rel_path) {
+            continue;
+        }
+        if created_at > cutoff_ts {
+            continue;
+        }
+        stale_tracked_rows.push((blob_id, rel_path));
+    }
+
+    let mut stats = BlobGcStats::default();
+    for (blob_id, rel_path) in stale_tracked_rows {
+        if stats.deleted_tracked_blobs + stats.deleted_untracked_files >= max_deletes {
+            break;
+        }
+        if let Ok(abs_path) = crate::blob_store::blob_abs_path(db_path, &rel_path) {
+            let _ = fs::remove_file(abs_path);
+        }
+        conn.execute("DELETE FROM blobs WHERE id = ?1", params![blob_id])?;
+        tracked_refs.remove(&rel_path);
+        stats.deleted_tracked_blobs += 1;
+    }
+
+    let blob_root = crate::blob_store::blob_root(db_path);
+    let db_root = db_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut disk_blob_paths = Vec::new();
+    collect_blob_bin_files(&blob_root, &mut disk_blob_paths)?;
+    for abs_path in disk_blob_paths {
+        if stats.deleted_tracked_blobs + stats.deleted_untracked_files >= max_deletes {
+            break;
+        }
+        let Ok(rel_path) = abs_path.strip_prefix(db_root) else {
+            continue;
+        };
+        let rel_str = rel_path.to_string_lossy().replace('\\', "/");
+        if crate::blob_store::blob_id_from_rel_path(&rel_str).is_err() {
+            continue;
+        }
+        if tracked_refs.contains(&rel_str) || live_refs.contains(&rel_str) {
+            continue;
+        }
+        if min_age_secs > 0 {
+            let Some(modified_ts) = file_modified_ts(&abs_path) else {
+                continue;
+            };
+            if modified_ts > cutoff_ts {
+                continue;
+            }
+        }
+
+        match fs::remove_file(&abs_path) {
+            Ok(()) => {
+                stats.deleted_untracked_files += 1;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {}
+        }
+    }
+
+    Ok(stats)
+}
+
 fn apply_turns_projection(
     conn: &Connection,
     thread_id: &str,
@@ -2391,122 +2503,9 @@ fn meta_fields_from_payload(
     (engine_id, model_id, run_id)
 }
 
-fn collect_files_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let path = entry.path();
-        if file_type.is_dir() {
-            collect_files_recursive(&path, out)?;
-        } else if file_type.is_file() {
-            out.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn file_age_secs(path: &Path, now_ts: i64) -> Option<i64> {
-    let meta = fs::metadata(path).ok()?;
-    let modified = meta.modified().ok()?;
-    let modified_secs = modified
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .ok()?
-        .as_secs() as i64;
-    Some(std::cmp::max(0, now_ts - modified_secs))
-}
-
-pub fn gc_blobs(conn: &Connection, db_path: &Path) -> anyhow::Result<BlobGcReport> {
-    let db_dir = db_path.parent().unwrap_or_else(|| Path::new("."));
-    let blob_root = crate::blob_store::blob_root(db_path);
-    if !blob_root.exists() {
-        return Ok(BlobGcReport {
-            deleted_temp_files: 0,
-            deleted_orphan_files: 0,
-            deleted_orphan_rows: 0,
-            missing_files: 0,
-        });
-    }
-
-    let mut referenced: HashSet<String> = HashSet::new();
-    if table_exists(conn, "events")? {
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT blob_ref
-       FROM events
-       WHERE blob_ref IS NOT NULL AND TRIM(blob_ref) <> ''",
-        )?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        for row in rows {
-            referenced.insert(row?);
-        }
-    }
-
-    let mut deleted_temp_files: i64 = 0;
-    let mut deleted_orphan_files: i64 = 0;
-
-    // Avoid racing with in-flight blob writes by only deleting older files.
-    let now_ts = now_ts();
-    const TEMP_DELETE_AFTER_SECS: i64 = 60 * 5;
-    const ORPHAN_DELETE_AFTER_SECS: i64 = 60 * 60;
-
-    let mut files: Vec<PathBuf> = Vec::new();
-    collect_files_recursive(&blob_root, &mut files)
-        .with_context(|| format!("scan blobs dir: {}", blob_root.display()))?;
-    for abs_path in files {
-        let file_name = abs_path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        let age_secs = file_age_secs(&abs_path, now_ts).unwrap_or(i64::MAX);
-
-        // Safe to delete: temp files are never referenced by events.
-        if file_name.contains(".tmp.") {
-            if age_secs >= TEMP_DELETE_AFTER_SECS && fs::remove_file(&abs_path).is_ok() {
-                deleted_temp_files += 1;
-            }
-            continue;
-        }
-
-        // Orphan cleanup: any blob file not referenced by events can be removed.
-        let rel = abs_path
-            .strip_prefix(db_dir)
-            .unwrap_or(&abs_path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if !referenced.contains(&rel) {
-            if age_secs >= ORPHAN_DELETE_AFTER_SECS && fs::remove_file(&abs_path).is_ok() {
-                deleted_orphan_files += 1;
-            }
-        }
-    }
-
-    let mut missing_files: i64 = 0;
-    for rel in referenced.iter() {
-        let abs = db_dir.join(rel);
-        if !abs.exists() {
-            missing_files += 1;
-        }
-    }
-
-    let deleted_orphan_rows = if table_exists(conn, "blobs")? {
-        conn.execute(
-            "DELETE FROM blobs
-       WHERE rel_path NOT IN (
-         SELECT blob_ref FROM events WHERE blob_ref IS NOT NULL AND TRIM(blob_ref) <> ''
-       )",
-            [],
-        )? as i64
-    } else {
-        0
-    };
-
-    Ok(BlobGcReport {
-        deleted_temp_files,
-        deleted_orphan_files,
-        deleted_orphan_rows,
-        missing_files,
-    })
-}
-
 pub fn list_threads(conn: &Connection) -> anyhow::Result<Vec<ThreadRecord>> {
     let mut stmt = conn.prepare(
-    "SELECT id, title, engine_id, model_id, workspace_path, workspace_fingerprint, community_id, created_at, updated_at, last_event_at, COALESCE(last_seq, 0)
+    "SELECT id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, workspace_fingerprint, community_id, COALESCE(context_version, 0), created_at, updated_at, last_event_at, COALESCE(last_seq, 0)
      FROM threads ORDER BY COALESCE(last_event_at, updated_at) DESC",
   )?;
     let rows = stmt.query_map([], |row| {
@@ -2515,13 +2514,17 @@ pub fn list_threads(conn: &Connection) -> anyhow::Result<Vec<ThreadRecord>> {
             title: row.get(1)?,
             engine_id: row.get(2)?,
             model_id: row.get(3)?,
-            workspace_path: row.get(4)?,
-            workspace_fingerprint: row.get(5)?,
-            community_id: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
-            last_event_at: row.get(9)?,
-            last_seq: row.get(10)?,
+            thread_lane: row.get(4)?,
+            storage_mode: row.get(5)?,
+            project_id: row.get(6)?,
+            workspace_path: row.get(7)?,
+            workspace_fingerprint: row.get(8)?,
+            community_id: row.get(9)?,
+            context_version: row.get(10)?,
+            created_at: row.get(11)?,
+            updated_at: row.get(12)?,
+            last_event_at: row.get(13)?,
+            last_seq: row.get(14)?,
         })
     })?;
     let mut out = Vec::new();
@@ -2536,7 +2539,7 @@ pub fn get_thread_by_id(
     thread_id: &str,
 ) -> anyhow::Result<Option<ThreadRecord>> {
     let mut stmt = conn.prepare(
-    "SELECT id, title, engine_id, model_id, workspace_path, workspace_fingerprint, community_id, created_at, updated_at, last_event_at, COALESCE(last_seq, 0)
+    "SELECT id, title, engine_id, model_id, thread_lane, storage_mode, project_id, workspace_path, workspace_fingerprint, community_id, COALESCE(context_version, 0), created_at, updated_at, last_event_at, COALESCE(last_seq, 0)
      FROM threads WHERE id = ?1",
   )?;
     let result = stmt.query_row(params![thread_id], |row| {
@@ -2545,13 +2548,17 @@ pub fn get_thread_by_id(
             title: row.get(1)?,
             engine_id: row.get(2)?,
             model_id: row.get(3)?,
-            workspace_path: row.get(4)?,
-            workspace_fingerprint: row.get(5)?,
-            community_id: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
-            last_event_at: row.get(9)?,
-            last_seq: row.get(10)?,
+            thread_lane: row.get(4)?,
+            storage_mode: row.get(5)?,
+            project_id: row.get(6)?,
+            workspace_path: row.get(7)?,
+            workspace_fingerprint: row.get(8)?,
+            community_id: row.get(9)?,
+            context_version: row.get(10)?,
+            created_at: row.get(11)?,
+            updated_at: row.get(12)?,
+            last_event_at: row.get(13)?,
+            last_seq: row.get(14)?,
         })
     });
     match result {
@@ -2737,14 +2744,18 @@ pub fn set_thread_workspace_path(
     conn: &Connection,
     thread_id: &str,
     workspace_path: Option<&str>,
+    workspace_fingerprint: Option<&str>,
 ) -> anyhow::Result<()> {
     let ts = now_ts();
     let cleaned = workspace_path.map(|p| p.trim()).filter(|p| !p.is_empty());
+    let cleaned_fingerprint = workspace_fingerprint
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
     conn.execute(
         "UPDATE threads
-     SET workspace_path = ?1, updated_at = ?2
-     WHERE id = ?3",
-        params![cleaned, ts, thread_id],
+     SET workspace_path = ?1, workspace_fingerprint = ?2, updated_at = ?3
+     WHERE id = ?4",
+        params![cleaned, cleaned_fingerprint, ts, thread_id],
     )?;
     Ok(())
 }
@@ -2790,19 +2801,163 @@ pub fn set_thread_engine_model(
     Ok(())
 }
 
-pub fn set_thread_community_id(
+pub fn set_thread_title(
     conn: &Connection,
     thread_id: &str,
-    community_id: Option<&str>,
+    title: Option<&str>,
 ) -> anyhow::Result<()> {
     let ts = now_ts();
-    let cleaned = community_id.map(|v| v.trim()).filter(|v| !v.is_empty());
+    let cleaned_title = normalize_thread_title_for_storage(title);
     conn.execute(
         "UPDATE threads
-     SET community_id = ?1, updated_at = ?2
+     SET title = ?1, updated_at = ?2
      WHERE id = ?3",
-        params![cleaned, ts, thread_id],
+        params![cleaned_title.as_deref(), ts, thread_id],
     )?;
+    Ok(())
+}
+
+pub fn set_thread_context(
+    conn: &Connection,
+    thread_id: &str,
+    thread_lane: Option<&str>,
+    project_id: Option<Option<&str>>,
+    community_id: Option<Option<&str>>,
+    expected_context_version: Option<i64>,
+) -> anyhow::Result<ThreadContextSetResult> {
+    let current =
+        get_thread_by_id(conn, thread_id)?.ok_or_else(|| anyhow::anyhow!("thread not found"))?;
+
+    if let Some(expected) = expected_context_version {
+        if current.context_version != expected {
+            return Err(anyhow::anyhow!(
+                "thread context version conflict: expected {}, found {}",
+                expected,
+                current.context_version
+            ));
+        }
+    }
+
+    let next_lane = match thread_lane {
+        Some(value) => normalize_thread_lane(Some(value)).to_string(),
+        None => current.thread_lane.clone(),
+    };
+    let next_storage_mode = storage_mode_for_lane(next_lane.as_str()).to_string();
+
+    let next_project = match project_id {
+        Some(value) => value
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string()),
+        None => current.project_id.clone(),
+    };
+
+    if let Some(ref project_id) = next_project {
+        let exists: Option<i64> = conn
+            .query_row(
+                "SELECT 1 FROM projects WHERE id = ?1 LIMIT 1",
+                params![project_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if exists.is_none() {
+            return Err(anyhow::anyhow!("project not found"));
+        }
+    }
+
+    let next_community = match community_id {
+        Some(value) => value
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string()),
+        None => current.community_id.clone(),
+    };
+
+    let mut changed_fields: Vec<String> = Vec::new();
+    if current.thread_lane != next_lane {
+        changed_fields.push("thread_lane".to_string());
+    }
+    if current.storage_mode != next_storage_mode {
+        changed_fields.push("storage_mode".to_string());
+    }
+    if current.project_id != next_project {
+        changed_fields.push("project_id".to_string());
+    }
+    if current.community_id != next_community {
+        changed_fields.push("community_id".to_string());
+    }
+
+    if changed_fields.is_empty() {
+        return Ok(ThreadContextSetResult {
+            thread: current,
+            changed_fields,
+        });
+    }
+
+    let ts = now_ts();
+    let rows = if let Some(expected) = expected_context_version {
+        conn.execute(
+            "UPDATE threads
+       SET thread_lane = ?1, storage_mode = ?2, project_id = ?3, community_id = ?4, context_version = context_version + 1, updated_at = ?5
+       WHERE id = ?6 AND context_version = ?7",
+            params![
+                next_lane,
+                next_storage_mode,
+                next_project,
+                next_community,
+                ts,
+                thread_id,
+                expected
+            ],
+        )?
+    } else {
+        conn.execute(
+            "UPDATE threads
+       SET thread_lane = ?1, storage_mode = ?2, project_id = ?3, community_id = ?4, context_version = context_version + 1, updated_at = ?5
+       WHERE id = ?6",
+            params![
+                next_lane,
+                next_storage_mode,
+                next_project,
+                next_community,
+                ts,
+                thread_id
+            ],
+        )?
+    };
+    if rows == 0 {
+        let latest = get_thread_by_id(conn, thread_id)?
+            .ok_or_else(|| anyhow::anyhow!("thread not found"))?;
+        if let Some(expected) = expected_context_version {
+            return Err(anyhow::anyhow!(
+                "thread context version conflict: expected {}, found {}",
+                expected,
+                latest.context_version
+            ));
+        }
+        return Err(anyhow::anyhow!("thread not found"));
+    }
+
+    let updated =
+        get_thread_by_id(conn, thread_id)?.ok_or_else(|| anyhow::anyhow!("thread not found"))?;
+
+    Ok(ThreadContextSetResult {
+        thread: updated,
+        changed_fields,
+    })
+}
+
+pub fn delete_project(conn: &Connection, project_id: &str) -> anyhow::Result<()> {
+    let ts = now_ts();
+    conn.execute(
+        "UPDATE threads
+     SET project_id = NULL,
+         context_version = context_version + 1,
+         updated_at = ?2
+     WHERE project_id = ?1",
+        params![project_id, ts],
+    )?;
+    conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
     Ok(())
 }
 
@@ -2842,7 +2997,7 @@ pub fn get_session_resume(conn: &Connection, session_id: &str) -> anyhow::Result
 
 pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<MessageRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, thread_id, role, content_json, created_at, engine_id, model_id, run_id
+        "SELECT id, thread_id, seq, role, content_json, created_at, engine_id, model_id, run_id
      FROM messages_projection
      WHERE thread_id = ?1
      ORDER BY seq ASC",
@@ -2852,12 +3007,13 @@ pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<
         Ok(MessageRecord {
             id: row.get(0)?,
             session_id: row.get(1)?,
-            role: row.get(2)?,
-            content_json: row.get(3)?,
-            created_at: row.get(4)?,
-            engine_id: row.get(5)?,
-            model_id: row.get(6)?,
-            run_id: row.get(7)?,
+            seq: row.get(2)?,
+            role: row.get(3)?,
+            content_json: row.get(4)?,
+            created_at: row.get(5)?,
+            engine_id: row.get(6)?,
+            model_id: row.get(7)?,
+            run_id: row.get(8)?,
         })
     })?;
 
@@ -2865,6 +3021,85 @@ pub fn list_messages(conn: &Connection, session_id: &str) -> anyhow::Result<Vec<
     for row in rows {
         out.push(row?);
     }
+
+    Ok(out)
+}
+
+pub fn list_messages_tail(
+    conn: &Connection,
+    session_id: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<MessageRecord>> {
+    let clamped = std::cmp::min(std::cmp::max(limit, 1), 2000);
+    let mut stmt = conn.prepare(
+        "SELECT id, thread_id, seq, role, content_json, created_at, engine_id, model_id, run_id
+     FROM messages_projection
+     WHERE thread_id = ?1
+     ORDER BY seq DESC
+     LIMIT ?2",
+    )?;
+
+    let rows = stmt.query_map(params![session_id, clamped as i64], |row| {
+        Ok(MessageRecord {
+            id: row.get(0)?,
+            session_id: row.get(1)?,
+            seq: row.get(2)?,
+            role: row.get(3)?,
+            content_json: row.get(4)?,
+            created_at: row.get(5)?,
+            engine_id: row.get(6)?,
+            model_id: row.get(7)?,
+            run_id: row.get(8)?,
+        })
+    })?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    out.reverse();
+
+    Ok(out)
+}
+
+pub fn list_messages_before_seq(
+    conn: &Connection,
+    session_id: &str,
+    before_seq: i64,
+    limit: usize,
+) -> anyhow::Result<Vec<MessageRecord>> {
+    if before_seq <= 1 {
+        return Ok(Vec::new());
+    }
+    let clamped = std::cmp::min(std::cmp::max(limit, 1), 2000);
+    let mut stmt = conn.prepare(
+        "SELECT id, thread_id, seq, role, content_json, created_at, engine_id, model_id, run_id
+     FROM messages_projection
+     WHERE thread_id = ?1
+       AND seq < ?2
+     ORDER BY seq DESC
+     LIMIT ?3",
+    )?;
+
+    let rows = stmt.query_map(params![session_id, before_seq, clamped as i64], |row| {
+        Ok(MessageRecord {
+            id: row.get(0)?,
+            session_id: row.get(1)?,
+            seq: row.get(2)?,
+            role: row.get(3)?,
+            content_json: row.get(4)?,
+            created_at: row.get(5)?,
+            engine_id: row.get(6)?,
+            model_id: row.get(7)?,
+            run_id: row.get(8)?,
+        })
+    })?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    out.reverse();
 
     Ok(out)
 }
@@ -3258,6 +3493,90 @@ pub fn db_path(base_dir: &Path) -> PathBuf {
     base_dir.join("arx")
 }
 
+pub fn resolve_db_key_for_mode(
+    is_debug_build: bool,
+    configured_key: Option<&str>,
+) -> anyhow::Result<String> {
+    configured_key
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .map(|v| v.to_string())
+        .or_else(|| is_debug_build.then(|| "dev-only-key".to_string()))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "ARX_DB_KEY is required for non-debug runtime. Set ARX_DB_KEY to a non-empty value."
+            )
+        })
+}
+
+pub fn resolve_db_key() -> anyhow::Result<String> {
+    let configured = std::env::var("ARX_DB_KEY").ok();
+    resolve_db_key_for_mode(cfg!(debug_assertions), configured.as_deref())
+}
+
+pub fn run_blob_gc_if_due(
+    db_path: &Path,
+    key: &str,
+    min_age_secs: i64,
+    min_interval_secs: i64,
+    max_deletes: usize,
+) -> anyhow::Result<BlobGcRunOutcome> {
+    let _guard = match BLOB_GC_MUTEX.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    let conn = open_conn(db_path, key)?;
+    let now = now_ts();
+    let min_interval_secs = min_interval_secs.max(0);
+    let last_run_at = get_ui_state(&conn, BLOB_GC_LAST_RUN_UI_KEY)?
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(0);
+    if last_run_at > 0 && now.saturating_sub(last_run_at) < min_interval_secs {
+        return Ok(BlobGcRunOutcome::SkippedNotDue);
+    }
+
+    let stats = sweep_orphan_blobs(&conn, db_path, min_age_secs, max_deletes)?;
+    set_ui_state(&conn, BLOB_GC_LAST_RUN_UI_KEY, &now.to_string())?;
+    Ok(BlobGcRunOutcome::Ran(stats))
+}
+
+pub fn spawn_blob_gc_if_due(
+    db_path: PathBuf,
+    key: String,
+    min_age_secs: i64,
+    min_interval_secs: i64,
+    max_deletes: usize,
+) {
+    std::thread::spawn(move || {
+        match run_blob_gc_if_due(&db_path, &key, min_age_secs, min_interval_secs, max_deletes) {
+            Ok(BlobGcRunOutcome::SkippedNotDue) => {}
+            Ok(BlobGcRunOutcome::Ran(stats)) => {
+                if stats.deleted_tracked_blobs > 0 || stats.deleted_untracked_files > 0 {
+                    eprintln!(
+                        "[blob-gc] cleaned tracked={} untracked={}",
+                        stats.deleted_tracked_blobs, stats.deleted_untracked_files
+                    );
+                }
+            }
+            Err(err) => {
+                eprintln!("[blob-gc] failed: {err:#}");
+            }
+        }
+    });
+}
+
+pub fn spawn_default_blob_gc(db_path: PathBuf, key: String) {
+    spawn_blob_gc_if_due(db_path, key, 24 * 60 * 60, 24 * 60 * 60, 256);
+}
+
+pub fn is_db_key_mismatch_error(err: &anyhow::Error) -> bool {
+    let lower = format!("{err:#}").to_ascii_lowercase();
+    lower.contains("file is encrypted or is not a database")
+        || lower.contains("wrong key")
+        || lower.contains("file is not a database")
+}
+
 pub fn open_conn(db_path: &Path, key: &str) -> anyhow::Result<Connection> {
     let conn = Connection::open(db_path)?;
     conn.pragma_update(None, "key", key)?;
@@ -3272,6 +3591,7 @@ pub fn open_conn(db_path: &Path, key: &str) -> anyhow::Result<Connection> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     fn setup_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory sqlite");
@@ -3285,14 +3605,805 @@ mod tests {
         assert!(table_exists(&conn, "workspace_policies").expect("workspace_policies table exists"));
         assert!(column_exists(&conn, "threads", "workspace_fingerprint")
             .expect("threads.workspace_fingerprint exists"));
+        assert!(column_exists(&conn, "threads", "context_version")
+            .expect("threads.context_version exists"));
         assert!(column_exists(&conn, "blobs", "mime").expect("blobs.mime exists"));
+    }
+
+    #[test]
+    fn resolve_db_key_for_release_requires_non_empty_env_value() {
+        let missing = resolve_db_key_for_mode(false, None);
+        assert!(missing.is_err(), "release mode should reject missing key");
+
+        let blank = resolve_db_key_for_mode(false, Some("   "));
+        assert!(blank.is_err(), "release mode should reject blank key");
+    }
+
+    #[test]
+    fn resolve_db_key_for_release_accepts_configured_env_value() {
+        let key = resolve_db_key_for_mode(false, Some("release-key"));
+        assert_eq!(key.expect("release key resolves"), "release-key");
+    }
+
+    #[test]
+    fn resolve_db_key_for_debug_uses_dev_fallback_when_missing() {
+        let key = resolve_db_key_for_mode(true, None);
+        assert_eq!(key.expect("debug key resolves"), "dev-only-key");
+    }
+
+    #[test]
+    fn release_startup_bootstrap_rejects_missing_db_key() {
+        let err = resolve_db_key_for_mode(false, None).expect_err("missing key should fail");
+        assert!(
+            err.to_string()
+                .contains("ARX_DB_KEY is required for non-debug runtime"),
+            "error should explain non-debug key requirement"
+        );
+    }
+
+    #[test]
+    fn release_startup_bootstrap_succeeds_with_explicit_db_key() {
+        let tmp = tempdir().expect("create temp dir");
+        let db_dir = db_path(tmp.path());
+        let key = resolve_db_key_for_mode(false, Some("release-startup-key"))
+            .expect("release mode should accept explicit key");
+
+        let state = init_db(&db_dir, &key).expect("initialize database");
+        let conn = open_conn(&state.db_path, &state.key).expect("open db connection");
+        crash_recovery(&conn, &state.db_path).expect("crash recovery");
+
+        if get_ui_state(&conn, "workspace_root")
+            .expect("workspace_root lookup")
+            .is_none()
+        {
+            set_ui_state(
+                &conn,
+                "workspace_root",
+                tmp.path().to_string_lossy().as_ref(),
+            )
+            .expect("set workspace_root");
+        }
+
+        let workspace_root = get_ui_state(&conn, "workspace_root")
+            .expect("workspace_root read")
+            .unwrap_or_default();
+        assert!(
+            !workspace_root.trim().is_empty(),
+            "workspace_root should be configured during bootstrap"
+        );
+
+        let outcome = run_blob_gc_if_due(&state.db_path, &state.key, 0, 0, 16)
+            .expect("background gc runnable during startup");
+        assert!(
+            matches!(outcome, BlobGcRunOutcome::Ran(_)),
+            "startup gc call should run when interval is zero"
+        );
+    }
+
+    #[test]
+    fn sweep_orphan_blobs_removes_unreferenced_blobs_and_keeps_referenced_evidence() {
+        let tmp = tempdir().expect("create temp dir");
+        let db_path = tmp.path().join("arx.db");
+        let state = init_db_at(&db_path, "test-key").expect("init db at path");
+        let conn = open_conn(&state.db_path, &state.key).expect("open conn");
+
+        let thread = create_thread(
+            &conn,
+            "blob-gc",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            None,
+        )
+        .expect("create thread");
+
+        let referenced_blob =
+            crate::blob_store::write_blob(&state.db_path, b"referenced evidence blob")
+                .expect("write referenced blob");
+        append_event(
+            &conn,
+            &state.db_path,
+            &thread.id,
+            "engine_io_chunk",
+            None,
+            Some(
+                &serde_json::json!({
+                  "v": 1,
+                  "run_id": "run-blob-gc",
+                  "engine_id": "messages_agent",
+                  "stream": "assistant",
+                  "chunk_blob_ref": referenced_blob.rel_path
+                })
+                .to_string(),
+            ),
+            None,
+        )
+        .expect("append referenced engine chunk");
+
+        let orphan_tracked_blob =
+            crate::blob_store::write_blob(&state.db_path, b"orphan tracked blob")
+                .expect("write tracked orphan blob");
+        record_blob(
+            &conn,
+            &orphan_tracked_blob.id,
+            &orphan_tracked_blob.rel_path,
+            orphan_tracked_blob.byte_len,
+        )
+        .expect("record tracked orphan blob");
+
+        let orphan_untracked_blob =
+            crate::blob_store::write_blob(&state.db_path, b"orphan untracked blob")
+                .expect("write untracked orphan blob");
+
+        let referenced_abs =
+            crate::blob_store::blob_abs_path(&state.db_path, &referenced_blob.rel_path)
+                .expect("referenced abs path");
+        let tracked_orphan_abs =
+            crate::blob_store::blob_abs_path(&state.db_path, &orphan_tracked_blob.rel_path)
+                .expect("tracked orphan abs path");
+        let untracked_orphan_abs =
+            crate::blob_store::blob_abs_path(&state.db_path, &orphan_untracked_blob.rel_path)
+                .expect("untracked orphan abs path");
+        assert!(
+            referenced_abs.exists(),
+            "referenced blob should exist before sweep"
+        );
+        assert!(
+            tracked_orphan_abs.exists(),
+            "tracked orphan should exist before sweep"
+        );
+        assert!(
+            untracked_orphan_abs.exists(),
+            "untracked orphan should exist before sweep"
+        );
+
+        let stats = sweep_orphan_blobs(&conn, &state.db_path, 0, 128).expect("sweep blobs");
+        assert_eq!(stats.deleted_tracked_blobs, 1);
+        assert_eq!(stats.deleted_untracked_files, 1);
+
+        assert!(
+            referenced_abs.exists(),
+            "referenced blob should be retained"
+        );
+        assert!(
+            !tracked_orphan_abs.exists(),
+            "tracked orphan blob should be removed"
+        );
+        assert!(
+            !untracked_orphan_abs.exists(),
+            "untracked orphan blob should be removed"
+        );
+
+        let referenced_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM blobs WHERE id = ?1",
+                params![referenced_blob.id],
+                |row| row.get(0),
+            )
+            .expect("count referenced rows");
+        let tracked_orphan_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM blobs WHERE id = ?1",
+                params![orphan_tracked_blob.id],
+                |row| row.get(0),
+            )
+            .expect("count tracked orphan rows");
+        assert_eq!(referenced_rows, 1, "referenced blob row should stay");
+        assert_eq!(
+            tracked_orphan_rows, 0,
+            "tracked orphan blob row should be removed"
+        );
+    }
+
+    #[test]
+    fn sweep_orphan_blobs_respects_max_deletes_per_run() {
+        let tmp = tempdir().expect("create temp dir");
+        let db_path = tmp.path().join("arx.db");
+        let state = init_db_at(&db_path, "test-key").expect("init db at path");
+        let conn = open_conn(&state.db_path, &state.key).expect("open conn");
+
+        let orphan_a =
+            crate::blob_store::write_blob(&state.db_path, b"orphan-a").expect("write orphan a");
+        let orphan_b =
+            crate::blob_store::write_blob(&state.db_path, b"orphan-b").expect("write orphan b");
+        record_blob(&conn, &orphan_a.id, &orphan_a.rel_path, orphan_a.byte_len)
+            .expect("record orphan a");
+        record_blob(&conn, &orphan_b.id, &orphan_b.rel_path, orphan_b.byte_len)
+            .expect("record orphan b");
+
+        let stats = sweep_orphan_blobs(&conn, &state.db_path, 0, 1).expect("sweep with cap");
+        assert_eq!(
+            stats.deleted_tracked_blobs + stats.deleted_untracked_files,
+            1,
+            "exactly one blob should be removed under max_deletes=1"
+        );
+
+        let remaining_rows: i64 = conn
+            .query_row("SELECT COUNT(1) FROM blobs", [], |row| row.get(0))
+            .expect("count remaining blobs");
+        assert_eq!(remaining_rows, 1, "one tracked orphan should remain");
+    }
+
+    #[test]
+    fn run_blob_gc_if_due_skips_when_recently_run() {
+        let tmp = tempdir().expect("create temp dir");
+        let db_path = tmp.path().join("arx.db");
+        let state = init_db_at(&db_path, "test-key").expect("init db at path");
+
+        let first =
+            run_blob_gc_if_due(&state.db_path, &state.key, 0, 60, 128).expect("first gc outcome");
+        assert!(
+            matches!(first, BlobGcRunOutcome::Ran(_)),
+            "first run should execute"
+        );
+
+        let second =
+            run_blob_gc_if_due(&state.db_path, &state.key, 0, 60, 128).expect("second gc outcome");
+        assert!(
+            matches!(second, BlobGcRunOutcome::SkippedNotDue),
+            "second run should skip due to interval"
+        );
+    }
+
+    #[test]
+    fn set_thread_context_updates_multiple_fields_atomically() {
+        let conn = setup_conn();
+        let project = upsert_project(
+            &conn,
+            Some("Project A"),
+            "/tmp/arx/project-a",
+            None,
+            None,
+            "fingerprint::project-a",
+        )
+        .expect("create project");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let result = set_thread_context(
+            &conn,
+            &thread.id,
+            Some("agent"),
+            Some(Some(project.id.as_str())),
+            Some(Some("community-a")),
+            None,
+        )
+        .expect("set thread context");
+
+        assert_eq!(
+            result.changed_fields,
+            vec![
+                "thread_lane".to_string(),
+                "storage_mode".to_string(),
+                "project_id".to_string(),
+                "community_id".to_string()
+            ]
+        );
+        assert_eq!(result.thread.thread_lane, THREAD_LANE_AGENT);
+        assert_eq!(result.thread.storage_mode, THREAD_STORAGE_MODE_LOCAL);
+        assert_eq!(
+            result.thread.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(result.thread.community_id.as_deref(), Some("community-a"));
+        assert_eq!(result.thread.context_version, 1);
+    }
+
+    #[test]
+    fn set_thread_context_can_clear_community_without_touching_other_fields() {
+        let conn = setup_conn();
+        let project = upsert_project(
+            &conn,
+            Some("Project B"),
+            "/tmp/arx/project-b",
+            None,
+            None,
+            "fingerprint::project-b",
+        )
+        .expect("create project");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let _ = set_thread_context(
+            &conn,
+            &thread.id,
+            Some("agent"),
+            Some(Some(project.id.as_str())),
+            Some(Some("community-a")),
+            None,
+        )
+        .expect("prime thread context");
+
+        let cleared = set_thread_context(&conn, &thread.id, None, None, Some(None), None)
+            .expect("clear community context");
+        assert_eq!(cleared.changed_fields, vec!["community_id".to_string()]);
+        assert_eq!(cleared.thread.thread_lane, THREAD_LANE_AGENT);
+        assert_eq!(cleared.thread.storage_mode, THREAD_STORAGE_MODE_LOCAL);
+        assert_eq!(
+            cleared.thread.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(cleared.thread.community_id, None);
+        assert_eq!(cleared.thread.context_version, 2);
+    }
+
+    #[test]
+    fn set_thread_context_rejects_unknown_project() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let result = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some("missing-project")),
+            None,
+            None,
+        );
+        assert!(result.is_err(), "missing project should fail");
+        let err = result.err().expect("error");
+        assert!(err.to_string().contains("project not found"));
+    }
+
+    #[test]
+    fn set_thread_context_lane_switches_preserve_project_and_community() {
+        let conn = setup_conn();
+        let project = upsert_project(
+            &conn,
+            Some("Project C"),
+            "/tmp/arx/project-c",
+            None,
+            None,
+            "fingerprint::project-c",
+        )
+        .expect("create project");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let primed = set_thread_context(
+            &conn,
+            &thread.id,
+            Some("agent"),
+            Some(Some(project.id.as_str())),
+            Some(Some("community-a")),
+            Some(0),
+        )
+        .expect("prime thread context");
+        assert_eq!(primed.thread.context_version, 1);
+        assert_eq!(primed.thread.thread_lane, THREAD_LANE_AGENT);
+        assert_eq!(
+            primed.thread.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(primed.thread.community_id.as_deref(), Some("community-a"));
+
+        let to_chat = set_thread_context(&conn, &thread.id, Some("chat"), None, None, Some(1))
+            .expect("switch lane to chat");
+        assert_eq!(
+            to_chat.changed_fields,
+            vec!["thread_lane".to_string(), "storage_mode".to_string()]
+        );
+        assert_eq!(to_chat.thread.context_version, 2);
+        assert_eq!(to_chat.thread.thread_lane, THREAD_LANE_CHAT);
+        assert_eq!(to_chat.thread.storage_mode, THREAD_STORAGE_MODE_CLOUD);
+        assert_eq!(
+            to_chat.thread.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(to_chat.thread.community_id.as_deref(), Some("community-a"));
+
+        let back_to_agent =
+            set_thread_context(&conn, &thread.id, Some("agent"), None, None, Some(2))
+                .expect("switch lane back to agent");
+        assert_eq!(
+            back_to_agent.changed_fields,
+            vec!["thread_lane".to_string(), "storage_mode".to_string()]
+        );
+        assert_eq!(back_to_agent.thread.context_version, 3);
+        assert_eq!(back_to_agent.thread.thread_lane, THREAD_LANE_AGENT);
+        assert_eq!(back_to_agent.thread.storage_mode, THREAD_STORAGE_MODE_LOCAL);
+        assert_eq!(
+            back_to_agent.thread.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+        assert_eq!(
+            back_to_agent.thread.community_id.as_deref(),
+            Some("community-a")
+        );
+    }
+
+    #[test]
+    fn set_thread_context_allows_repeated_community_switches_with_monotonic_version() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            None,
+        )
+        .expect("create thread");
+
+        let mut expected_version = thread.context_version;
+        let sequence: Vec<Option<&str>> = vec![
+            Some("community-a"),
+            Some("community-b"),
+            Some("community-a"),
+            None,
+            Some("community-c"),
+        ];
+
+        for expected_community in sequence {
+            let updated = set_thread_context(
+                &conn,
+                &thread.id,
+                None,
+                None,
+                Some(expected_community),
+                Some(expected_version),
+            )
+            .expect("apply community lens patch");
+            expected_version += 1;
+            assert_eq!(updated.thread.context_version, expected_version);
+            assert_eq!(updated.thread.community_id.as_deref(), expected_community);
+        }
+    }
+
+    #[test]
+    fn set_thread_context_updates_do_not_bleed_across_threads() {
+        let conn = setup_conn();
+        let thread_a = create_thread(
+            &conn,
+            "thread_a",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            None,
+        )
+        .expect("create thread a");
+        let thread_b = create_thread(
+            &conn,
+            "thread_b",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("chat"),
+            None,
+        )
+        .expect("create thread b");
+
+        let _ = set_thread_context(
+            &conn,
+            &thread_a.id,
+            None,
+            None,
+            Some(Some("community-a")),
+            Some(0),
+        )
+        .expect("set community on thread a");
+        let _ = set_thread_context(
+            &conn,
+            &thread_a.id,
+            None,
+            None,
+            Some(Some("community-b")),
+            Some(1),
+        )
+        .expect("switch community on thread a");
+
+        let updated_a = get_thread_by_id(&conn, &thread_a.id)
+            .expect("lookup thread a")
+            .expect("thread a exists");
+        let updated_b = get_thread_by_id(&conn, &thread_b.id)
+            .expect("lookup thread b")
+            .expect("thread b exists");
+
+        assert_eq!(updated_a.community_id.as_deref(), Some("community-b"));
+        assert_eq!(updated_a.context_version, 2);
+        assert_eq!(updated_b.community_id, None);
+        assert_eq!(updated_b.context_version, 0);
+        assert_eq!(updated_b.thread_lane, THREAD_LANE_CHAT);
+    }
+
+    #[test]
+    fn set_thread_context_project_patch_preserves_community_lens() {
+        let conn = setup_conn();
+        let project_a = upsert_project(
+            &conn,
+            Some("Project A"),
+            "/tmp/arx/project-a",
+            None,
+            None,
+            "fingerprint::project-a",
+        )
+        .expect("create project a");
+        let project_b = upsert_project(
+            &conn,
+            Some("Project B"),
+            "/tmp/arx/project-b",
+            None,
+            None,
+            "fingerprint::project-b",
+        )
+        .expect("create project b");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            None,
+        )
+        .expect("create thread");
+
+        let primed = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some(project_a.id.as_str())),
+            Some(Some("community-a")),
+            Some(0),
+        )
+        .expect("prime thread context");
+        assert_eq!(primed.thread.context_version, 1);
+        assert_eq!(
+            primed.thread.project_id.as_deref(),
+            Some(project_a.id.as_str())
+        );
+        assert_eq!(primed.thread.community_id.as_deref(), Some("community-a"));
+
+        let moved = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some(project_b.id.as_str())),
+            None,
+            Some(1),
+        )
+        .expect("switch project");
+        assert_eq!(moved.thread.context_version, 2);
+        assert_eq!(
+            moved.thread.project_id.as_deref(),
+            Some(project_b.id.as_str())
+        );
+        assert_eq!(moved.thread.community_id.as_deref(), Some("community-a"));
+        assert_eq!(moved.thread.thread_lane, THREAD_LANE_AGENT);
+    }
+
+    #[test]
+    fn set_thread_context_increments_context_version() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+        assert_eq!(thread.context_version, 0);
+
+        let updated = set_thread_context(
+            &conn,
+            &thread.id,
+            Some("agent"),
+            None,
+            Some(Some("community-a")),
+            Some(0),
+        )
+        .expect("set context with expected version");
+        assert_eq!(updated.thread.context_version, 1);
+        assert_eq!(updated.thread.thread_lane, THREAD_LANE_AGENT);
+        assert_eq!(updated.thread.community_id.as_deref(), Some("community-a"));
+    }
+
+    #[test]
+    fn set_thread_context_rejects_stale_expected_version() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let _ = set_thread_context(
+            &conn,
+            &thread.id,
+            Some("agent"),
+            None,
+            Some(Some("community-a")),
+            Some(0),
+        )
+        .expect("prime context with expected version");
+
+        let stale = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            None,
+            Some(Some("community-b")),
+            Some(0),
+        );
+        assert!(stale.is_err(), "stale context version should fail");
+        let err = stale.err().expect("stale version error");
+        assert!(err.to_string().contains("thread context version conflict"));
+
+        let fresh = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            None,
+            Some(Some("community-b")),
+            Some(1),
+        )
+        .expect("fresh context version should apply");
+        assert_eq!(fresh.thread.context_version, 2);
+        assert_eq!(fresh.thread.community_id.as_deref(), Some("community-b"));
+    }
+
+    #[test]
+    fn set_thread_context_rejects_stale_expected_version_for_project_patch() {
+        let conn = setup_conn();
+        let project_a = upsert_project(
+            &conn,
+            Some("Project A"),
+            "/tmp/arx/project-a",
+            None,
+            None,
+            "fingerprint::project-a",
+        )
+        .expect("create project a");
+        let project_b = upsert_project(
+            &conn,
+            Some("Project B"),
+            "/tmp/arx/project-b",
+            None,
+            None,
+            "fingerprint::project-b",
+        )
+        .expect("create project b");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let _ = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some(project_a.id.as_str())),
+            None,
+            Some(0),
+        )
+        .expect("prime context with project a");
+
+        let stale = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some(project_b.id.as_str())),
+            None,
+            Some(0),
+        );
+        assert!(stale.is_err(), "stale project context version should fail");
+        let err = stale.err().expect("stale project version error");
+        assert!(err.to_string().contains("thread context version conflict"));
+
+        let fresh = set_thread_context(
+            &conn,
+            &thread.id,
+            None,
+            Some(Some(project_b.id.as_str())),
+            None,
+            Some(1),
+        )
+        .expect("fresh project context version should apply");
+        assert_eq!(
+            fresh.thread.project_id.as_deref(),
+            Some(project_b.id.as_str())
+        );
+        assert_eq!(fresh.thread.context_version, 2);
+    }
+
+    #[test]
+    fn delete_project_clears_thread_project_and_bumps_context_version() {
+        let conn = setup_conn();
+        let project = upsert_project(
+            &conn,
+            Some("Project A"),
+            "/tmp/arx/project-a",
+            None,
+            None,
+            "fingerprint::project-a",
+        )
+        .expect("create project");
+        let thread_in_project = create_thread(
+            &conn,
+            "in_project",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            Some(project.id.as_str()),
+        )
+        .expect("create thread in project");
+        let thread_other = create_thread(
+            &conn,
+            "other",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("chat"),
+            None,
+        )
+        .expect("create thread outside project");
+
+        delete_project(&conn, &project.id).expect("delete project");
+
+        let updated_in_project = get_thread_by_id(&conn, &thread_in_project.id)
+            .expect("lookup in-project thread")
+            .expect("in-project thread exists");
+        let updated_other = get_thread_by_id(&conn, &thread_other.id)
+            .expect("lookup other thread")
+            .expect("other thread exists");
+
+        assert_eq!(updated_in_project.project_id, None);
+        assert_eq!(
+            updated_in_project.context_version,
+            thread_in_project.context_version + 1
+        );
+        assert_eq!(updated_other.context_version, thread_other.context_version);
     }
 
     #[test]
     fn list_events_since_respects_engine_chunk_filter() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
 
         append_event(
             &conn,
@@ -3347,8 +4458,15 @@ mod tests {
     #[test]
     fn list_tool_calls_reconstructs_lifecycle_from_events() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
         let thread_id = thread.id.clone();
 
         let requested = serde_json::json!({
@@ -3470,8 +4588,15 @@ mod tests {
     #[test]
     fn append_event_contract_rejects_missing_contract_version() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
 
         let payload_without_v = serde_json::json!({
           "run_id": "run-1",
@@ -3494,8 +4619,15 @@ mod tests {
     #[test]
     fn append_event_contract_rejects_missing_run_id_for_engine_chunk() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
 
         let payload = serde_json::json!({
           "v": 1,
@@ -3519,8 +4651,15 @@ mod tests {
     #[test]
     fn append_event_contract_accepts_assistant_run_id_in_meta() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
 
         let chunk = append_event(
             &conn,
@@ -3554,8 +4693,15 @@ mod tests {
     #[test]
     fn find_latest_successful_tool_call_by_key_prefers_latest_ok() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
         let thread_id = thread.id.clone();
         let key = "same-logical-call";
 
@@ -3737,8 +4883,15 @@ mod tests {
     #[test]
     fn rebuild_tool_calls_projection_matches_incremental_state() {
         let conn = setup_conn();
-        let thread = create_thread(&conn, "t", "messages_agent", Some("openai/gpt-5"))
-            .expect("create thread");
+        let thread = create_thread(
+            &conn,
+            "t",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
         let thread_id = thread.id.clone();
 
         let requested = serde_json::json!({
@@ -3818,5 +4971,72 @@ mod tests {
             assert_eq!(a.stderr_excerpt, b.stderr_excerpt);
             assert_eq!(a.output_summary_json, b.output_summary_json);
         }
+    }
+
+    #[test]
+    fn append_event_derives_thread_title_once_from_first_user_message() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            Some("agent"),
+            None,
+        )
+        .expect("create thread");
+        assert!(thread.title.is_none(), "thread should start untitled");
+
+        let first_payload = serde_json::json!({
+          "v": 1,
+          "role": "user",
+          "content": { "text": "Build a local-first desktop runbook" }
+        })
+        .to_string();
+
+        append_event(
+            &conn,
+            std::path::Path::new("."),
+            &thread.id,
+            "user_message",
+            Some("Build a local-first desktop runbook"),
+            Some(&first_payload),
+            None,
+        )
+        .expect("append first user message");
+        let after_first = get_thread_by_id(&conn, &thread.id)
+            .expect("get thread")
+            .expect("thread exists");
+        assert_eq!(
+            after_first.title.as_deref(),
+            Some("Build a local-first desktop runbook")
+        );
+
+        set_thread_title(&conn, &thread.id, Some("Pinned manual title")).expect("set manual title");
+        let second_payload = serde_json::json!({
+          "v": 1,
+          "role": "user",
+          "content": { "text": "A later message should not overwrite manual title" }
+        })
+        .to_string();
+
+        append_event(
+            &conn,
+            std::path::Path::new("."),
+            &thread.id,
+            "user_message",
+            Some("A later message should not overwrite manual title"),
+            Some(&second_payload),
+            None,
+        )
+        .expect("append second user message");
+        let after_second = get_thread_by_id(&conn, &thread.id)
+            .expect("get thread")
+            .expect("thread exists");
+        assert_eq!(
+            after_second.title.as_deref(),
+            Some("Pinned manual title"),
+            "manual title must remain authoritative"
+        );
     }
 }

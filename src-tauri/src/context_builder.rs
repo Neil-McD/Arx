@@ -1,10 +1,8 @@
 use crate::context;
 use crate::db;
-use rusqlite::Connection;
 use serde::Deserialize;
 
 const PERSONAL_MEMORY_BUDGET_CHARS: usize = 2000;
-const PERSONAL_MEMORY_FETCH_LIMIT: usize = 100;
 
 #[derive(Clone, Debug)]
 pub struct UsedPersonalMemoryItem {
@@ -111,55 +109,5 @@ pub fn build_used_personal_memory_from_cloud_json(
         });
     }
 
-    Ok(used)
-}
-
-pub fn build_turn_handoff_prefix(
-    conn: &Connection,
-    workspace_path: &str,
-) -> anyhow::Result<Vec<UsedPersonalMemoryItem>> {
-    let global =
-        db::list_personal_memory_items(conn, Some("global"), None, PERSONAL_MEMORY_FETCH_LIMIT)?;
-    let workspace = db::list_personal_memory_items(
-        conn,
-        Some("workspace"),
-        Some(workspace_path),
-        PERSONAL_MEMORY_FETCH_LIMIT,
-    )?;
-    let ranked = merge_and_rank_personal_memory(global, workspace);
-
-    let mut used = Vec::new();
-    let mut used_chars: usize = 0;
-
-    for item in ranked {
-        let (redacted, report) = context::redact_secrets(&item.content);
-        if report.blocked {
-            continue;
-        }
-        let line = format!("- {}", redacted.trim());
-        if line.trim() == "-" {
-            continue;
-        }
-
-        // Budget applies to just the memory bullets, not the whole prefix.
-        let next_len = if used.is_empty() {
-            line.len()
-        } else {
-            1 + line.len()
-        };
-        if used_chars + next_len > PERSONAL_MEMORY_BUDGET_CHARS {
-            break;
-        }
-        used_chars += next_len;
-        used.push(UsedPersonalMemoryItem {
-            id: item.id,
-            content: redacted,
-            scope: item.scope,
-            scope_id: item.scope_id,
-            pinned: item.pinned,
-            updated_at: item.updated_at,
-            redacted: !report.redactions.is_empty(),
-        });
-    }
     Ok(used)
 }
