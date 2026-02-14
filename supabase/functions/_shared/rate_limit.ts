@@ -1,4 +1,5 @@
 import { supabaseAdminFetch } from "./supabase_admin.ts";
+import { jsonResponse } from "./http.ts";
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for") ?? "";
@@ -32,3 +33,16 @@ export async function edgeRateLimitAllow(params: {
   return Boolean(data);
 }
 
+export async function enforceEdgeRateLimit(params: {
+  req: Request;
+  key: string;
+  windowSeconds: number;
+  limit: number;
+  headers: Record<string, string>;
+}): Promise<Response | null> {
+  const allowed = await edgeRateLimitAllow(params);
+  if (!allowed) {
+    return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers: params.headers });
+  }
+  return null;
+}

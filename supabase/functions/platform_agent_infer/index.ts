@@ -1,157 +1,30 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
-import { getEnv } from "../_shared/env.ts";
+import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
-
-type PlatformProvider = "openai" | "anthropic" | "google" | "x-ai";
-type PlatformModelRef = { provider: PlatformProvider; model: string; ref: string };
-
-type ModelRegistryRow = {
-  id: string;
-  provider: string;
-  provider_model: string | null;
-  enabled: boolean;
-  platform_enabled: boolean;
-  byok_enabled: boolean;
-  display_name: string | null;
-  sort_order: number | null;
-};
+import { type PlatformModelRef } from "../_shared/platform_model_routing.ts";
+import {
+  clampMaxTokens,
+  consumePlatformInferenceStandard,
+  edgeRateLimitAllowKey,
+  platformOpenAiCompatibleBaseUrl,
+  platformProviderEnvKey,
+  resolvePlatformModelForAliasOrRegistry,
+} from "../_shared/platform_inference_core.ts";
 
 type PlatformAgentInferInput = {
   model_id: string;
   request: Record<string, unknown>;
 };
 
-function isTruthyEnv(value: string): boolean {
-  const v = (value ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
-}
-
-function normalizePlatformProvider(input: string): PlatformProvider {
-  const raw = (input ?? "").trim().toLowerCase();
-  if (raw === "openai") return "openai";
-  if (raw === "anthropic") return "anthropic";
-  if (raw === "google") return "google";
-  if (raw === "xai" || raw === "x-ai") return "x-ai";
-  throw new Error("Unsupported platform model provider");
-}
-
-function parsePlatformModelRef(ref: string): PlatformModelRef {
-  const raw = (ref ?? "").trim();
-  const idx = raw.indexOf("/");
-  if (idx <= 0) throw new Error("Invalid platform model mapping");
-  const provider = normalizePlatformProvider(raw.slice(0, idx));
-  const model = raw.slice(idx + 1).trim();
-  if (!model) throw new Error("Invalid platform model mapping");
-  return { provider, model, ref: `${provider}/${model}` };
-}
-
-async function loadModelRegistryRow(modelId: string): Promise<ModelRegistryRow | null> {
-  const id = (modelId ?? "").trim();
-  if (!id) return null;
-  const res = await supabaseAdminFetch(
-    `/rest/v1/model_registry?select=id,provider,provider_model,enabled,platform_enabled,byok_enabled,display_name,sort_order&id=eq.${encodeURIComponent(
-      id,
-    )}&limit=1`,
-    { method: "GET" },
-  );
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<Partial<ModelRegistryRow>>;
-  const row = rows[0];
-  if (!row || typeof row.id !== "string") return null;
-  return {
-    id: row.id,
-    provider: String(row.provider ?? "").trim(),
-    provider_model: typeof row.provider_model === "string" ? row.provider_model : null,
-    enabled: row.enabled !== false,
-    platform_enabled: row.platform_enabled !== false,
-    byok_enabled: row.byok_enabled !== false,
-    display_name: typeof row.display_name === "string" ? row.display_name : null,
-    sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
-  };
-}
-
-let cachedPlatformModelMap: { raw: string; parsed: Record<string, string> } | null = null;
-
-function loadPlatformModelMap(): Record<string, string> {
-  const raw = getEnv("PLATFORM_MODEL_MAP_JSON");
-  if (!raw) return {};
-  if (cachedPlatformModelMap?.raw === raw) return cachedPlatformModelMap.parsed;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
-  }
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof value !== "string") continue;
-    const id = String(key ?? "").trim();
-    const ref = value.trim();
-    if (!id || !ref) continue;
-    out[id] = ref;
-  }
-  cachedPlatformModelMap = { raw, parsed: out };
-  return out;
-}
-
-function resolvePlatformModelForAlias(aliasModelId: string): PlatformModelRef {
-  const map = loadPlatformModelMap();
-  const cleanedAlias = (aliasModelId ?? "").trim();
-  if (!cleanedAlias) throw new Error("model_id is required");
-  if (Object.keys(map).length > 0) {
-    const raw = map[cleanedAlias];
-    if (!raw) throw new Error(`Platform model not configured for '${cleanedAlias}'`);
-    return parsePlatformModelRef(raw);
-  }
-  throw new Error("Missing PLATFORM_MODEL_MAP_JSON");
-}
-
-async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
-  const cleanedAlias = (aliasModelId ?? "").trim();
-  if (!cleanedAlias) throw new Error("model_id is required");
-
-  const row = await loadModelRegistryRow(cleanedAlias);
-  if (row) {
-    if (!row.enabled || !row.platform_enabled) {
-      throw new Error("platform_inference_not_allowed");
-    }
-    const provider = normalizePlatformProvider(row.provider);
-    const providerModel = String(row.provider_model ?? "").trim();
-    if (providerModel) return { provider, model: providerModel, ref: `${provider}/${providerModel}` };
-    // Transition fallback: allow legacy env mapping until provider_model is populated.
-  }
-
-  return resolvePlatformModelForAlias(cleanedAlias);
-}
-
 async function readJsonBounded<T>(req: Request, maxChars = 512_000): Promise<T> {
   const text = await req.text();
   if (!text) throw new Error("Missing JSON body");
   if (text.length > maxChars) throw new Error("request_too_large");
   return JSON.parse(text) as T;
-}
-
-async function edgeRateLimitAllowKey(params: { key: string; windowSeconds: number; limit: number }): Promise<boolean> {
-  const res = await supabaseAdminFetch("/rest/v1/rpc/edge_rate_limit_allow", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      p_key: params.key,
-      p_window_seconds: params.windowSeconds,
-      p_limit: params.limit,
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = (await res.json()) as unknown;
-  if (typeof data === "boolean") return data;
-  return Boolean(data);
 }
 
 async function loadUserBuilderTier(userId: string): Promise<"free" | "builder" | "pro"> {
@@ -165,46 +38,28 @@ async function loadUserBuilderTier(userId: string): Promise<"free" | "builder" |
   return raw === "pro" || raw === "builder" ? raw : "free";
 }
 
-async function consumePlatformInferenceStandard(userId: string, units = 1): Promise<number> {
-  const res = await supabaseAdminFetch("/rest/v1/rpc/consume_platform_inference_standard", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId, p_units: units }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = (await res.json()) as unknown;
-  const remaining = Number(data);
-  if (!Number.isFinite(remaining) || remaining < 0) return 0;
-  return Math.floor(remaining);
-}
-
-function clampMaxTokens(input: unknown, cap: number): number {
-  const raw = Number(input);
-  const requested = Number.isFinite(raw) ? Math.floor(raw) : cap;
-  return Math.max(64, Math.min(cap, requested));
-}
-
-function platformOpenAiCompatibleBaseUrl(provider: PlatformProvider): string | null {
-  if (provider === "openai") return "https://api.openai.com/v1";
-  if (provider === "google") return "https://generativelanguage.googleapis.com/v1beta/openai";
-  if (provider === "x-ai") return "https://api.x.ai/v1";
-  return null;
-}
-
-function platformProviderEnvKey(provider: PlatformProvider): string {
-  if (provider === "openai") return "OPENAI_API_KEY";
-  if (provider === "anthropic") return "ANTHROPIC_API_KEY";
-  if (provider === "google") return "GOOGLE_API_KEY";
-  return "XAI_API_KEY";
-}
-
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {
+    const requestStartedAt = performance.now();
+    const inputStartedAt = performance.now();
+    const inputPromise = readJsonBounded<PlatformAgentInferInput>(req).then((value) => ({
+      value,
+      ms: Math.round(performance.now() - inputStartedAt),
+    }));
+
+    const authStartedAt = performance.now();
     const userId = await requireVerifiedUserId(req);
+    const authMs = Math.round(performance.now() - authStartedAt);
 
     const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
     // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
@@ -221,7 +76,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const builderTier = await loadUserBuilderTier(userId);
+    const builderTierStartedAt = performance.now();
+    const builderTierPromise = loadUserBuilderTier(userId).then((value) => ({
+      value,
+      ms: Math.round(performance.now() - builderTierStartedAt),
+    }));
+    const [{ value: builderTier, ms: builderTierMs }, { value: input, ms: inputMs }] = await Promise.all([
+      builderTierPromise,
+      inputPromise,
+    ]);
     if (builderTier === "free") {
       return jsonResponse(
         {
@@ -233,8 +96,6 @@ Deno.serve(async (req: Request) => {
         { status: 403, headers },
       );
     }
-
-    const input = await readJsonBounded<PlatformAgentInferInput>(req);
     const aliasModelId = String(input?.model_id ?? "").trim();
     if (!aliasModelId) throw new Error("model_id_required");
 
@@ -243,26 +104,48 @@ Deno.serve(async (req: Request) => {
       throw new Error("invalid_request");
     }
 
-    const userRlAllowed = await edgeRateLimitAllowKey({
+    const userRlStartedAt = performance.now();
+    const userRlPromise = edgeRateLimitAllowKey({
       key: `platform_agent_infer:user:${userId}`,
       windowSeconds: 60,
       limit: 60,
-    });
-    if (!userRlAllowed) throw new Error("rate_limited");
+    }).then((value) => ({ value, ms: Math.round(performance.now() - userRlStartedAt) }));
 
-    const ipRlAllowed = await edgeRateLimitAllow({
+    const ipRlStartedAt = performance.now();
+    const ipRlPromise = edgeRateLimitAllow({
       req,
       key: "platform_agent_infer",
       windowSeconds: 60,
       limit: 240,
-    });
+    }).then((value) => ({ value, ms: Math.round(performance.now() - ipRlStartedAt) }));
+
+    const modelResolveStartedAt = performance.now();
+    const modelResolutionPromise = resolvePlatformModelForAliasOrRegistry(aliasModelId)
+      .then((value) => ({
+        ok: true as const,
+        value,
+        ms: Math.round(performance.now() - modelResolveStartedAt),
+      }))
+      .catch((error) => ({
+        ok: false as const,
+        error,
+        ms: Math.round(performance.now() - modelResolveStartedAt),
+      }));
+
+    const [
+      { value: userRlAllowed, ms: userRlMs },
+      { value: ipRlAllowed, ms: ipRlMs },
+      modelResolution,
+    ] = await Promise.all([userRlPromise, ipRlPromise, modelResolutionPromise]);
+
+    if (!userRlAllowed) throw new Error("rate_limited");
     if (!ipRlAllowed) throw new Error("rate_limited");
 
-    let platformModel: PlatformModelRef;
-    try {
-      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    const modelResolveMs = modelResolution.ms;
+    if (!modelResolution.ok) {
+      const message = modelResolution.error instanceof Error
+        ? modelResolution.error.message
+        : String(modelResolution.error);
       if (message.toLowerCase().includes("platform_inference_not_allowed")) {
         return jsonResponse(
           {
@@ -285,6 +168,7 @@ Deno.serve(async (req: Request) => {
         { status: 503, headers },
       );
     }
+    const platformModel: PlatformModelRef = modelResolution.value;
 
     const providerEnvKey = platformProviderEnvKey(platformModel.provider);
     const platformProviderKey = getEnv(providerEnvKey);
@@ -304,8 +188,11 @@ Deno.serve(async (req: Request) => {
 
     // Charge quota per model call (1 unit). The desktop agent loop may call repeatedly.
     let platformRemaining: number | null = null;
+    let quotaMs: number | null = null;
     try {
+      const quotaStartedAt = performance.now();
       platformRemaining = await consumePlatformInferenceStandard(userId, 1);
+      quotaMs = Math.round(performance.now() - quotaStartedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Must be stable for desktop to detect platform quota exhaustion.
@@ -340,8 +227,8 @@ Deno.serve(async (req: Request) => {
     const platformMaxTokensRaw =
       getEnv("ARX_PLATFORM_INFERENCE_MAX_TOKENS") || getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
     const platformMaxTokens = Number.isFinite(Number(platformMaxTokensRaw))
-      ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
-      : 512;
+      ? Math.max(64, Math.min(4096, Math.floor(Number(platformMaxTokensRaw))))
+      : 2048;
 
     // Copy request so we can override model + clamp tokens without mutating caller-owned objects.
     const request: Record<string, unknown> = { ...(requestObj as Record<string, unknown>) };
@@ -360,8 +247,21 @@ Deno.serve(async (req: Request) => {
       request.max_tokens = clamped;
     }
 
+    const preflightMs = Math.round(performance.now() - requestStartedAt);
+    const preflightHeaders = {
+      "x-arx-platform-preflight-ms": String(preflightMs),
+      "x-arx-platform-auth-ms": String(authMs),
+      "x-arx-platform-json-ms": String(inputMs),
+      "x-arx-platform-tier-ms": String(builderTierMs),
+      "x-arx-platform-user-rl-ms": String(userRlMs),
+      "x-arx-platform-ip-rl-ms": String(ipRlMs),
+      "x-arx-platform-model-ms": String(modelResolveMs),
+      ...(quotaMs !== null ? { "x-arx-platform-quota-ms": String(quotaMs) } : null),
+    };
+
     const acceptHeaders = {
       ...headers,
+      ...preflightHeaders,
       "Content-Type": "text/event-stream; charset=utf-8",
       Connection: "keep-alive",
     };
@@ -383,7 +283,7 @@ Deno.serve(async (req: Request) => {
         const body = await upstream.text();
         return jsonResponse(
           { ok: false, error: `Platform model error ${upstream.status}: ${body}` },
-          { status: upstream.status, headers },
+          { status: upstream.status, headers: { ...headers, ...preflightHeaders } },
         );
       }
       if (!upstream.body) throw new Error("Missing model stream");
@@ -409,7 +309,10 @@ Deno.serve(async (req: Request) => {
     });
     if (!upstream.ok) {
       const body = await upstream.text();
-      return jsonResponse({ ok: false, error: `Anthropic error ${upstream.status}: ${body}` }, { status: upstream.status, headers });
+      return jsonResponse(
+        { ok: false, error: `Anthropic error ${upstream.status}: ${body}` },
+        { status: upstream.status, headers: { ...headers, ...preflightHeaders } },
+      );
     }
     if (!upstream.body) throw new Error("Missing model stream");
     return new Response(upstream.body, {
@@ -422,6 +325,13 @@ Deno.serve(async (req: Request) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const lower = message.toLowerCase();
+    if (lower.includes("invalid bearer token") || lower.includes("missing bearer token")) {
+      return jsonResponse(
+        { ok: false, error: "invalid_jwt", code: "invalid_jwt", message },
+        { status: 401, headers },
+      );
+    }
     if (message.toLowerCase().includes("rate_limited")) {
       return jsonResponse(
         { ok: false, error: "rate_limited", code: "rate_limited", message: "Too many requests. Try again soon." },

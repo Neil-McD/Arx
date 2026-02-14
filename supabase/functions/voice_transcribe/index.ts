@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
-import { getEnv } from "../_shared/env.ts";
+import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 
 type VoiceTranscribeInput = {
@@ -26,11 +26,6 @@ const DEFAULT_FALLBACK_MODEL = "whisper-large-v3-turbo";
 const DEFAULT_FALLBACK_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions";
 const DEFAULT_TRANSCRIBE_PROMPT =
   "Transcribe spoken words verbatim. If speech is unclear or absent, return an empty transcript.";
-
-function isTruthyEnv(value: string): boolean {
-  const v = (value ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
-}
 
 function looksLikeApiKey(value: string): boolean {
   const v = value.trim();

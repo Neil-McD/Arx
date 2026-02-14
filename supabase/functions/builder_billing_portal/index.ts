@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
@@ -43,8 +43,14 @@ async function loadStripeCustomerId(userId: string): Promise<string | null> {
 type StripeBillingPortalSession = { id: string; url: string | null };
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {

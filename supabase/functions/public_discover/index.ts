@@ -1,8 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, withCors } from "../_shared/http.ts";
+import { handleCorsPreflightAndMethod, jsonResponse, withCors } from "../_shared/http.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
-import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+import { enforceEdgeRateLimit } from "../_shared/rate_limit.ts";
+import { toCanonicalCommunityVisibility } from "../_shared/community_visibility.ts";
 
 type CommunityRow = {
   id: string;
@@ -72,7 +73,7 @@ function buildSearchOrClause(query: string): string {
 async function loadCommunities(params: { limit: number; q: string | null }): Promise<CommunityRow[]> {
   const base =
     `/rest/v1/communities?select=id,slug,name,description,avatar_url,banner_url,visibility,created_at,updated_at` +
-    `&visibility=in.(public,private)&order=updated_at.desc&limit=${params.limit}`;
+    `&visibility=in.(published,public)&order=updated_at.desc&limit=${params.limit}`;
   const endpoint = params.q ? `${base}&or=${encodeURIComponent(buildSearchOrClause(params.q))}` : base;
   const res = await supabaseAdminFetch(endpoint, { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
@@ -83,9 +84,9 @@ async function loadActivePlans(communityIds: string[]): Promise<Record<string, P
   if (communityIds.length === 0) return {};
   const list = communityIds.map((id) => `"${id}"`).join(",");
   const res = await supabaseAdminFetch(
-    `/rest/v1/plans?select=id,community_id,name,description,amount_base_units,currency,currency_decimals,billing_period,visibility,is_active` +
+      `/rest/v1/plans?select=id,community_id,name,description,amount_base_units,currency,currency_decimals,billing_period,visibility,is_active` +
       `&community_id=in.(${encodeURIComponent(list)})` +
-      `&is_active=eq.true&visibility=in.(public,unlisted)` +
+      `&is_active=eq.true&visibility=in.(published,public,unlisted)` +
       `&billing_period=in.(monthly,yearly)`,
     { method: "GET" },
   );
@@ -125,14 +126,18 @@ Deno.serve(async (req: Request) => {
     },
     req,
   );
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
-  if (req.method !== "GET") {
-    return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
-  }
+  const methodResponse = handleCorsPreflightAndMethod(req, headers, "GET");
+  if (methodResponse) return methodResponse;
 
   try {
-    const allowed = await edgeRateLimitAllow({ req, key: "public_discover", windowSeconds: 60, limit: 120 });
-    if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
+    const rateLimitResponse = await enforceEdgeRateLimit({
+      req,
+      key: "public_discover",
+      windowSeconds: 60,
+      limit: 120,
+      headers,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const url = new URL(req.url);
     const limit = clampLimit(url.searchParams.get("limit"));
@@ -146,7 +151,7 @@ Deno.serve(async (req: Request) => {
       description: community.description ?? null,
       avatar_url: community.avatar_url ?? null,
       banner_url: community.banner_url ?? null,
-      visibility: community.visibility,
+      visibility: toCanonicalCommunityVisibility(community.visibility, "unlisted"),
       created_at: community.created_at,
       updated_at: community.updated_at,
       active_plan: planByCommunityId[community.id] ?? null,

@@ -1,10 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { handleCorsPreflightAndMethod, jsonResponse, noStoreHeaders, parseBearerToken, withCors } from "../_shared/http.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
-import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+import { enforceEdgeRateLimit } from "../_shared/rate_limit.ts";
 import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
+import { sanitizePublicSlug } from "../_shared/public_funnel.ts";
 
 type CheckoutStartInput = {
   community_id?: string;
@@ -30,13 +31,6 @@ function sanitizeUuid(value: string): string {
   return v;
 }
 
-function sanitizeSlug(value: unknown): string {
-  const v = String(value ?? "").trim().toLowerCase();
-  if (!v) throw new Error("community_slug is required");
-  if (v.length > 128) throw new Error("community_slug too long");
-  return v;
-}
-
 function sanitizeOptionalUuid(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const v = String(value).trim();
@@ -51,21 +45,12 @@ function sanitizeBillingPeriod(value: unknown): "one_time" | "monthly" | "yearly
   throw new Error("Invalid billing_period");
 }
 
-function extractBearerToken(header: string | null): string | null {
-  const value = (header ?? "").trim();
-  if (!value) return null;
-  const lower = value.toLowerCase();
-  if (!lower.startsWith("bearer ")) return null;
-  const token = value.slice(7).trim();
-  return token ? token : null;
-}
-
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function getAuthUserId(req: Request): Promise<string | null> {
-  const token = extractBearerToken(req.headers.get("Authorization"));
+  const token = parseBearerToken(req.headers.get("Authorization"));
   if (!token) return null;
   try {
     const res = await supabaseAdminFetch(`/auth/v1/user`, {
@@ -125,15 +110,21 @@ async function loadActivePlanForCommunity(
   billingPeriod: PlanRow["billing_period"],
 ): Promise<PlanRow> {
   const res = await supabaseAdminFetch(
-    `/rest/v1/plans?select=id,community_id,name,amount_base_units,currency,currency_decimals,billing_period,stripe_price_id,is_active,visibility` +
+      `/rest/v1/plans?select=id,community_id,name,amount_base_units,currency,currency_decimals,billing_period,stripe_price_id,is_active,visibility` +
       `&community_id=eq.${encodeURIComponent(communityId)}` +
       `&billing_period=eq.${encodeURIComponent(billingPeriod)}` +
-      `&is_active=eq.true&visibility=in.(public,unlisted)`,
+      `&is_active=eq.true&visibility=in.(published,public,unlisted)`,
     { method: "GET" },
   );
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as PlanRow[];
-  const preferred = rows.find((row) => (row.visibility ?? "").trim() === "public") ?? rows[0] ?? null;
+  const preferred =
+    rows.find((row) => {
+      const visibility = String(row.visibility ?? "").trim().toLowerCase();
+      return visibility === "published" || visibility === "public";
+    }) ??
+    rows[0] ??
+    null;
   if (!preferred) throw new Error("Plan not found");
   if (!preferred.is_active) throw new Error("Plan is not active");
   return preferred;
@@ -315,12 +306,18 @@ async function createStripeCheckoutSession(
 
 Deno.serve(async (req: Request) => {
   const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
-  if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
+  const methodResponse = handleCorsPreflightAndMethod(req, headers, "POST");
+  if (methodResponse) return methodResponse;
 
   try {
-    const allowed = await edgeRateLimitAllow({ req, key: "checkout_start", windowSeconds: 60, limit: 15 });
-    if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
+    const rateLimitResponse = await enforceEdgeRateLimit({
+      req,
+      key: "checkout_start",
+      windowSeconds: 60,
+      limit: 15,
+      headers,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const input = await readJson<CheckoutStartInput>(req);
     const successUrl = requireAllowedRedirectUrl(input.success_url, "success_url");
@@ -340,7 +337,7 @@ Deno.serve(async (req: Request) => {
           return loaded;
         })()
       : await (async () => {
-          const slug = sanitizeSlug(rawCommunitySlug);
+          const slug = sanitizePublicSlug(rawCommunitySlug);
           const billingPeriod = sanitizeBillingPeriod(input.billing_period);
           const communityId = await loadCommunityIdBySlug(slug);
           return loadActivePlanForCommunity(communityId, billingPeriod);

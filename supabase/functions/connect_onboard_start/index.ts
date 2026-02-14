@@ -1,11 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
+import { loadAuthAdminUserEmail } from "../_shared/auth_admin.ts";
 
 type ConnectOnboardStartInput = {
   return_url: string;
@@ -43,16 +44,6 @@ async function upsertConnectedAccountId(userId: string, accountId: string): Prom
   if (!res.ok) throw new Error(await res.text());
 }
 
-type AuthAdminUser = { email?: string | null };
-
-async function loadUserEmail(userId: string): Promise<string | null> {
-  const res = await supabaseAdminFetch(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "GET" });
-  if (!res.ok) return null;
-  const data = (await res.json()) as AuthAdminUser;
-  const email = String(data?.email ?? "").trim();
-  return email ? email : null;
-}
-
 type StripeAccountCreate = { id: string };
 type StripeAccountLinkCreate = { url: string | null };
 
@@ -61,7 +52,7 @@ async function ensureConnectAccount(userId: string): Promise<string> {
   const current = String(existing?.stripe_connected_account_id ?? "").trim();
   if (current) return current;
 
-  const email = await loadUserEmail(userId);
+  const email = await loadAuthAdminUserEmail(userId);
   const account = await stripeRequest<StripeAccountCreate>("POST", "/accounts", {
     type: "express",
     ...(email ? { email } : null),
@@ -75,8 +66,14 @@ async function ensureConnectAccount(userId: string): Promise<string> {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {

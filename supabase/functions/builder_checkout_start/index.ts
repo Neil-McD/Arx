@@ -1,12 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
 import { requireEnv } from "../_shared/env.ts";
 import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { stripeRequest } from "../_shared/stripe.ts";
+import { loadAuthAdminUserEmail } from "../_shared/auth_admin.ts";
 
 type BuilderTier = "builder" | "pro";
 
@@ -24,7 +25,7 @@ async function readJson<T>(req: Request): Promise<T> {
 
 function normalizeTier(value: string): BuilderTier {
   const v = (value ?? "").trim().toLowerCase();
-  if (v === "pro") return "pro";
+  if (v === "pro" || v === "architect") return "pro";
   if (v === "builder") return "builder";
   throw new Error("Invalid tier");
 }
@@ -44,16 +45,6 @@ async function loadBuilderAccount(userId: string): Promise<BuilderAccountRow | n
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as BuilderAccountRow[];
   return rows[0] ?? null;
-}
-
-type AuthAdminUser = { email?: string | null };
-
-async function loadUserEmail(userId: string): Promise<string | null> {
-  const res = await supabaseAdminFetch(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "GET" });
-  if (!res.ok) return null;
-  const data = (await res.json()) as AuthAdminUser;
-  const email = String(data?.email ?? "").trim();
-  return email ? email : null;
 }
 
 type StripeSessionCreate = { id: string; url: string | null };
@@ -94,8 +85,14 @@ async function createBuilderCheckoutSession(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {
@@ -110,7 +107,7 @@ Deno.serve(async (req: Request) => {
     const cancelUrl = requireAllowedRedirectUrl(input.cancel_url, "cancel_url");
 
     const account = await loadBuilderAccount(userId);
-    const email = await loadUserEmail(userId);
+    const email = await loadAuthAdminUserEmail(userId);
     const session = await createBuilderCheckoutSession({
       userId,
       tier,

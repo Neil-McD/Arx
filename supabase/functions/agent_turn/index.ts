@@ -1,17 +1,59 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
-import { getEnv } from "../_shared/env.ts";
+import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
+import { consumeSseEvents, encodeSse } from "../_shared/sse.ts";
+import {
+  type PlatformModelRef,
+  type PlatformProvider,
+  normalizePlatformProvider,
+} from "../_shared/platform_model_routing.ts";
+import {
+  consumePlatformInferenceStandard,
+  edgeRateLimitAllowKey,
+  loadModelRegistryRow,
+  platformOpenAiCompatibleBaseUrl,
+  platformProviderEnvKey,
+  resolvePlatformModelForAliasOrRegistry as resolvePlatformModelForAliasOrRegistryShared,
+  type ModelRegistryRow,
+} from "../_shared/platform_inference_core.ts";
+import {
+  COMMUNITY_CONTEXT_BUNDLE_V1,
+  buildCommunityEvidenceUsedV1,
+  buildCommunityEvidenceUserMessage,
+  buildCommunityContextDiagnostics,
+  buildCommunityContextSystemPrompt,
+  normalizeCompiledCommunityRows,
+} from "./community_context_bundle_v1.mjs";
+
+const COMMUNITY_RPC = Object.freeze({
+  activeCommunitySystemPrompt: "get_active_community_agent_system_prompt",
+  entitlementCheck: "user_has_active_entitlement",
+  compiledContextSearch: "search_compiled_community_context",
+  chatSnippetSearch: "search_community_chat_snippets",
+  resourceSnippetSearch: "search_community_resource_snippets",
+  memorySearch: "search_community_memory_items",
+  memoryCandidatePropose: "community_memory_candidate_propose",
+});
+const COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID = "community_harness_capabilities_v3";
+const COMMUNITY_HARNESS_RUNTIME_TOOLS = Object.freeze([
+  "community_context_search",
+  "community_memory_search",
+  "community_memory_candidate_propose",
+] as const);
+
+function communityHarnessRuntimeTools(): string[] {
+  return [...COMMUNITY_HARNESS_RUNTIME_TOOLS];
+}
 
 type AgentTurnInput = {
   thread_id: string;
   max_tokens?: number;
   stream?: boolean;
   mode?: "respond" | "regenerate";
-  inference_source?: "user" | "platform";
 };
 
 type ApiError = Error & {
@@ -42,18 +84,6 @@ function isApiError(error: unknown): error is ApiError {
       typeof (error as { code?: unknown }).code === "string" &&
       typeof (error as { status?: unknown }).status === "number",
   );
-}
-
-function isTruthyEnv(value: string): boolean {
-  const v = (value ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
-}
-
-function normalizeInferenceSource(value: unknown): "user" | "platform" | null {
-  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (v === "user") return "user";
-  if (v === "platform") return "platform";
-  return null;
 }
 
 function sanitizeUuid(value: string): string {
@@ -101,30 +131,6 @@ type PersonalMemoryRow = {
 
 type BuilderTier = "free" | "builder" | "pro";
 
-type InferenceSource = "user" | "platform";
-
-type InferenceFallbackReason = "platform_quota_exceeded";
-
-type InferenceFallback = {
-  from: InferenceSource;
-  to: InferenceSource;
-  reason: InferenceFallbackReason;
-};
-
-type PlatformProvider = "openai" | "anthropic" | "google" | "x-ai";
-type PlatformModelRef = { provider: PlatformProvider; model: string; ref: string };
-
-type ModelRegistryRow = {
-  id: string;
-  provider: string;
-  provider_model: string | null;
-  enabled: boolean;
-  platform_enabled: boolean;
-  byok_enabled: boolean;
-  display_name: string | null;
-  sort_order: number | null;
-};
-
 function isPlatformQuotaExceededErrorMessage(message: string): boolean {
   const raw = String(message ?? "");
   return raw.toLowerCase().includes("platform_inference_quota_exceeded");
@@ -135,121 +141,20 @@ function isPlatformModelRoutingMisconfiguredMessage(message: string): boolean {
   if (!raw) return false;
   return (
     raw.includes("platform_model_map_json") ||
+    raw.includes("platform model not configured for") ||
     raw.includes("platform model not configured") ||
     raw.includes("invalid platform model mapping") ||
     raw.includes("unsupported platform model provider")
   );
 }
 
-function normalizePlatformProvider(input: string): PlatformProvider {
-  const raw = (input ?? "").trim().toLowerCase();
-  if (raw === "openai") return "openai";
-  if (raw === "anthropic") return "anthropic";
-  if (raw === "google") return "google";
-  if (raw === "xai" || raw === "x-ai") return "x-ai";
-  throw new Error("Unsupported platform model provider");
-}
-
-function formatProviderLabel(provider: PlatformProvider): string {
-  switch (provider) {
-    case "openai":
-      return "OpenAI";
-    case "anthropic":
-      return "Anthropic";
-    case "google":
-      return "Google";
-    case "x-ai":
-      return "xAI";
-    default:
-      return provider;
-  }
-}
-
-function parsePlatformModelRef(ref: string): PlatformModelRef {
-  const raw = (ref ?? "").trim();
-  const idx = raw.indexOf("/");
-  if (idx <= 0) throw new Error("Invalid platform model mapping");
-  const provider = normalizePlatformProvider(raw.slice(0, idx));
-  const model = raw.slice(idx + 1).trim();
-  if (!model) throw new Error("Invalid platform model mapping");
-  return { provider, model, ref: `${provider}/${model}` };
-}
-
-async function loadModelRegistryRow(modelId: string): Promise<ModelRegistryRow | null> {
-  const id = (modelId ?? "").trim();
-  if (!id) return null;
-  const res = await supabaseAdminFetch(
-    `/rest/v1/model_registry?select=id,provider,provider_model,enabled,platform_enabled,byok_enabled,display_name,sort_order&id=eq.${encodeURIComponent(
-      id,
-    )}&limit=1`,
-    { method: "GET" },
-  );
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<Partial<ModelRegistryRow>>;
-  const row = rows[0];
-  if (!row || typeof row.id !== "string") return null;
-  return {
-    id: row.id,
-    provider: String(row.provider ?? "").trim(),
-    provider_model: typeof row.provider_model === "string" ? row.provider_model : null,
-    enabled: row.enabled !== false,
-    platform_enabled: row.platform_enabled !== false,
-    byok_enabled: row.byok_enabled !== false,
-    display_name: typeof row.display_name === "string" ? row.display_name : null,
-    sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
-  };
-}
-
-let cachedPlatformModelMap: { raw: string; parsed: Record<string, string> } | null = null;
-
-function loadPlatformModelMap(): Record<string, string> {
-  const raw = getEnv("PLATFORM_MODEL_MAP_JSON");
-  if (!raw) return {};
-  if (cachedPlatformModelMap?.raw === raw) return cachedPlatformModelMap.parsed;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Invalid PLATFORM_MODEL_MAP_JSON");
-  }
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof value !== "string") continue;
-    const id = String(key ?? "").trim();
-    const ref = value.trim();
-    if (!id || !ref) continue;
-    out[id] = ref;
-  }
-  cachedPlatformModelMap = { raw, parsed: out };
-  return out;
-}
-
-function resolvePlatformModelForAliasLegacy(aliasModelId: string): PlatformModelRef {
-  const map = loadPlatformModelMap();
-  const cleanedAlias = (aliasModelId ?? "").trim();
-  if (Object.keys(map).length > 0) {
-    const raw = map[cleanedAlias];
-    if (!raw) throw new Error(`Platform model not configured for '${cleanedAlias}'`);
-    return parsePlatformModelRef(raw);
-  }
-
-  // Back-compat: if a single platform model is configured (legacy), use it.
-  const fallback = getEnv("ARX_PLATFORM_MODEL_REF") || getEnv("OPENROUTER_PLATFORM_MODEL_ID");
-  if (fallback) return parsePlatformModelRef(fallback);
-
-  throw new Error("Missing PLATFORM_MODEL_MAP_JSON");
-}
-
 async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
   const cleanedAlias = (aliasModelId ?? "").trim();
-  if (!cleanedAlias) throw new Error("model_id is required");
-
-  const row = await loadModelRegistryRow(cleanedAlias);
-  if (row) {
-    if (!row.enabled || !row.platform_enabled) {
+  try {
+    return await resolvePlatformModelForAliasOrRegistryShared(cleanedAlias);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.toLowerCase().includes("platform_inference_not_allowed")) {
       throw createApiError(
         "platform_inference_not_allowed",
         "Arx platform inference isn't available for this model.",
@@ -257,33 +162,8 @@ async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Pro
         { model_id: cleanedAlias },
       );
     }
-    const provider = normalizePlatformProvider(row.provider);
-    const providerModel = String(row.provider_model ?? "").trim();
-    if (providerModel) return { provider, model: providerModel, ref: `${provider}/${providerModel}` };
-    // Transition fallback: allow legacy env mapping until provider_model is populated.
+    throw error;
   }
-
-  return resolvePlatformModelForAliasLegacy(cleanedAlias);
-}
-
-async function resolveByokModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
-  const cleanedAlias = (aliasModelId ?? "").trim();
-  if (!cleanedAlias) throw new Error("model_id is required");
-
-  const row = await loadModelRegistryRow(cleanedAlias);
-  if (row) {
-    if (!row.enabled || !row.byok_enabled) {
-      throw createApiError("byok_inference_not_allowed", "BYOK is not available for this model.", 403, {
-        model_id: cleanedAlias,
-      });
-    }
-    const provider = normalizePlatformProvider(row.provider);
-    const providerModel = String(row.provider_model ?? "").trim();
-    if (providerModel) return { provider, model: providerModel, ref: `${provider}/${providerModel}` };
-    // Transition fallback: allow legacy env mapping until provider_model is populated.
-  }
-
-  return resolvePlatformModelForAliasLegacy(cleanedAlias);
 }
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
@@ -305,7 +185,7 @@ async function loadCommunityAgentSystemPrompt(params: {
   const communityId = (params.communityId ?? "").trim();
   if (!communityId) return null;
   try {
-    const res = await supabaseAdminFetch("/rest/v1/rpc/get_active_community_agent_system_prompt", {
+    const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.activeCommunitySystemPrompt}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ p_user_id: params.userId, p_community_id: communityId }),
@@ -327,7 +207,7 @@ async function userHasActiveEntitlement(params: { userId: string; communityId: s
   const communityId = (params.communityId ?? "").trim();
   if (!userId || !communityId) return false;
   try {
-    const res = await supabaseAdminFetch("/rest/v1/rpc/user_has_active_entitlement", {
+    const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.entitlementCheck}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ p_user_id: userId, p_community_id: communityId }),
@@ -348,7 +228,9 @@ async function loadUserBuilderTier(userId: string): Promise<BuilderTier> {
   if (!res.ok) return "free";
   const rows = (await res.json()) as Array<{ builder_tier?: unknown }>;
   const raw = String(rows[0]?.builder_tier ?? "free").trim().toLowerCase();
-  return raw === "pro" || raw === "builder" ? raw : "free";
+  if (raw === "builder") return "builder";
+  if (raw === "pro" || raw === "architect") return "pro";
+  return "free";
 }
 
 async function loadUserMemorySettings(userId: string): Promise<UserMemorySettingsRow> {
@@ -401,6 +283,57 @@ type HistorySnippetRow = {
   snippet: string;
 };
 
+type CommunityChatSnippetRow = {
+  thread_id: string;
+  message_id: string;
+  sender_id: string | null;
+  sender_display: string;
+  created_at: string;
+  snippet: string;
+};
+
+type CommunityResourceSnippetRow = {
+  resource_id: string;
+  resource_type: string;
+  title: string;
+  created_at: string;
+  pinned: boolean;
+  snippet: string;
+  url: string | null;
+  file_key: string | null;
+};
+
+type CompiledCommunityContextRow = {
+  community_id: string;
+  source_type: string;
+  source_id: string;
+  thread_id: string | null;
+  sender_id: string | null;
+  sender_display: string | null;
+  title: string | null;
+  snippet: string;
+  url: string | null;
+  pinned: boolean;
+  source_created_at: string | null;
+  source_updated_at: string;
+  rank_score: number | null;
+  compile_version: number | string | null;
+};
+
+type CommunityContextBundle = {
+  chatRows: CommunityChatSnippetRow[];
+  resourceRows: CommunityResourceSnippetRow[];
+  compiledAttempted: boolean;
+  compiledFetchOk: boolean;
+  compiledItemsUsed: number;
+  compileVersion: number | null;
+  fallbackUsed: boolean;
+  chatFetchOk: boolean | null;
+  resourceFetchOk: boolean | null;
+  retrievalLatencyMs: number | null;
+  failureClass: string | null;
+};
+
 async function loadHistorySnippets(params: {
   userId: string;
   query: string;
@@ -421,6 +354,139 @@ async function loadHistorySnippets(params: {
   });
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as HistorySnippetRow[];
+}
+
+async function loadCommunityChatSnippets(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+  limit?: number;
+}): Promise<CommunityChatSnippetRow[]> {
+  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.chatSnippetSearch}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_community_id: params.communityId,
+      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
+      p_limit: Math.max(
+        0,
+        Math.min(20, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit)),
+      ),
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as CommunityChatSnippetRow[];
+}
+
+async function loadCommunityResourceSnippets(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+  limit?: number;
+}): Promise<CommunityResourceSnippetRow[]> {
+  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.resourceSnippetSearch}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_community_id: params.communityId,
+      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
+      p_limit: Math.max(
+        0,
+        Math.min(20, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)),
+      ),
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as CommunityResourceSnippetRow[];
+}
+
+async function loadCompiledCommunityContextRows(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+  limit?: number;
+}): Promise<CompiledCommunityContextRow[]> {
+  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.compiledContextSearch}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_user_id: params.userId,
+      p_community_id: params.communityId,
+      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
+      p_limit: Math.max(0, Math.min(40, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit))),
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as CompiledCommunityContextRow[];
+}
+
+async function loadCommunityContextBundle(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+}): Promise<CommunityContextBundle> {
+  const startedAt = Date.now();
+  try {
+    const compiledRows = await loadCompiledCommunityContextRows({
+      userId: params.userId,
+      communityId: params.communityId,
+      query: params.query,
+      limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit,
+    });
+    const normalized = normalizeCompiledCommunityRows(compiledRows, params.communityId);
+
+    return {
+      chatRows: normalized.chatRows as CommunityChatSnippetRow[],
+      resourceRows: normalized.resourceRows as CommunityResourceSnippetRow[],
+      compiledAttempted: true,
+      compiledFetchOk: true,
+      compiledItemsUsed: normalized.compiledItemsUsed,
+      compileVersion: normalized.compileVersion,
+      fallbackUsed: false,
+      chatFetchOk: true,
+      resourceFetchOk: true,
+      retrievalLatencyMs: Math.max(0, Date.now() - startedAt),
+      failureClass: null,
+    };
+  } catch {
+    const [chatResult, resourceResult] = await Promise.allSettled([
+      loadCommunityChatSnippets({
+        userId: params.userId,
+        communityId: params.communityId,
+        query: params.query,
+        limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit,
+      }),
+      loadCommunityResourceSnippets({
+        userId: params.userId,
+        communityId: params.communityId,
+        query: params.query,
+        limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit,
+      }),
+    ]);
+    const chatFetchOk = chatResult.status === "fulfilled";
+    const resourceFetchOk = resourceResult.status === "fulfilled";
+    let failureClass = "compiled_fetch_failed_fallback_partial";
+    if (chatFetchOk && resourceFetchOk) {
+      failureClass = "compiled_fetch_failed_fallback_ok";
+    } else if (!chatFetchOk && !resourceFetchOk) {
+      failureClass = "compiled_fetch_failed_fallback_failed";
+    }
+    return {
+      chatRows: chatFetchOk ? chatResult.value : [],
+      resourceRows: resourceFetchOk ? resourceResult.value : [],
+      compiledAttempted: true,
+      compiledFetchOk: false,
+      compiledItemsUsed: 0,
+      compileVersion: null,
+      fallbackUsed: true,
+      chatFetchOk,
+      resourceFetchOk,
+      retrievalLatencyMs: Math.max(0, Date.now() - startedAt),
+      failureClass,
+    };
+  }
 }
 
 type MessageRow = {
@@ -868,101 +934,6 @@ async function writeAssistantReply(params: {
     }
   }
   return { status: "duplicate" };
-}
-
-type UserProviderKeyRpcRow = { has_key?: unknown; api_key?: unknown };
-
-async function readUserProviderKeySecret(params: {
-  userId: string;
-  provider: PlatformProvider;
-  reveal: boolean;
-}): Promise<{ hasKey: boolean; key: string | null }> {
-  const res = await supabaseAdminFetch("/rest/v1/rpc/read_user_provider_key_secret", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: params.userId, p_provider: params.provider, p_reveal: params.reveal }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as UserProviderKeyRpcRow[];
-  const row = rows[0] ?? {};
-  const hasKey = Boolean(row.has_key);
-  const key = typeof row.api_key === "string" ? row.api_key.trim() : "";
-  return { hasKey, key: key ? key : null };
-}
-
-async function edgeRateLimitAllowKey(params: {
-  key: string;
-  windowSeconds: number;
-  limit: number;
-}): Promise<boolean> {
-  const res = await supabaseAdminFetch("/rest/v1/rpc/edge_rate_limit_allow", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      p_key: params.key,
-      p_window_seconds: params.windowSeconds,
-      p_limit: params.limit,
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = (await res.json()) as unknown;
-  if (typeof data === "boolean") return data;
-  return Boolean(data);
-}
-
-async function consumePlatformInferenceStandard(userId: string, units = 1): Promise<number> {
-  const res = await supabaseAdminFetch("/rest/v1/rpc/consume_platform_inference_standard", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId, p_units: units }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = (await res.json()) as unknown;
-  const remaining = Number(data);
-  if (!Number.isFinite(remaining) || remaining < 0) return 0;
-  return Math.floor(remaining);
-}
-
-function encodeSse(event: string, data: unknown): Uint8Array {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  return new TextEncoder().encode(payload);
-}
-
-async function consumeSseEvents(params: {
-  reader: ReadableStreamDefaultReader<Uint8Array>;
-  onData: (data: string) => boolean | void;
-}): Promise<void> {
-  const decoder = new TextDecoder();
-  let lineBuffer = "";
-  let dataBuffer = "";
-
-  const flush = (): boolean => {
-    const raw = dataBuffer.trim();
-    dataBuffer = "";
-    if (!raw) return false;
-    return Boolean(params.onData(raw));
-  };
-
-  while (true) {
-    const { value, done } = await params.reader.read();
-    if (done) break;
-    lineBuffer += decoder.decode(value, { stream: true });
-    while (true) {
-      const idx = lineBuffer.indexOf("\n");
-      if (idx < 0) break;
-      let line = lineBuffer.slice(0, idx);
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-      lineBuffer = lineBuffer.slice(idx + 1);
-      if (line === "") {
-        if (flush()) return;
-        continue;
-      }
-      if (line.startsWith("data:")) {
-        dataBuffer += line.slice(5).trim();
-      }
-    }
-  }
-  flush();
 }
 
 function truncateUtf8(input: string, maxChars: number): string {
@@ -1445,15 +1416,21 @@ async function insertPersonalMemoryItems(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {
     const userId = await requireVerifiedUserId(req);
     const input = await readJson<AgentTurnInput>(req);
     const threadId = sanitizeUuid(input.thread_id);
-    const maxTokens = Number.isFinite(input.max_tokens) ? Math.max(1, Math.min(2048, Number(input.max_tokens))) : 1024;
+    const maxTokens = Number.isFinite(input.max_tokens) ? Math.max(1, Math.min(4096, Number(input.max_tokens))) : 2048;
     const wantsStream = Boolean(input.stream);
 
     const thread = await loadThread(threadId);
@@ -1496,15 +1473,12 @@ Deno.serve(async (req: Request) => {
     const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
     // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
     const platformEnabled = platformEnabledRaw ? isTruthyEnv(platformEnabledRaw) : true;
-    const requestedInferenceSource = normalizeInferenceSource(input.inference_source);
-
     const modelRegistryRow: ModelRegistryRow | null =
       modelRegistryResult.status === "fulfilled" ? modelRegistryResult.value : null;
     if (modelRegistryRow && !modelRegistryRow.enabled) {
       throw new Error("Model is not available.");
     }
 
-    const byokAllowed = modelRegistryRow?.byok_enabled !== false;
     let providerHint: PlatformProvider | null = null;
     if (modelRegistryRow?.provider) {
       try {
@@ -1514,57 +1488,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Default behavior:
-    // - Free: BYOK only.
-    // - Paid: use platform-provided inference first (BYOK only on explicit request or when platform is unavailable for this model).
-    let inferenceSource: InferenceSource = builderTier !== "free" ? "platform" : "user";
-    if (requestedInferenceSource) {
-      if (requestedInferenceSource === "platform" && builderTier === "free") {
-        throw createApiError(
-          "platform_inference_not_allowed",
-          "Arx platform inference is not included in your plan.",
-          403,
-          { model_id: aliasModelId, provider: providerHint, byok_allowed: byokAllowed },
-        );
-      }
-      inferenceSource = requestedInferenceSource;
-    }
-    let inferenceFallback: InferenceFallback | null = null;
+    const inferenceSource = "platform" as const;
 
-    if (inferenceSource === "platform" && !platformEnabled) {
-      const byokKey = providerHint
-        ? await readUserProviderKeySecret({ userId, provider: providerHint, reveal: false }).catch(() => ({
-            hasKey: false,
-            key: null,
-          }))
-        : { hasKey: false, key: null };
+    if (!platformEnabled) {
       throw createApiError("platform_inference_disabled", "Arx AI is temporarily unavailable.", 503, {
         model_id: aliasModelId,
         provider: providerHint,
-        byok_allowed: byokAllowed,
-        has_byok_key: byokKey.hasKey,
       });
     }
 
-    // Model-level gating: avoid silently falling back to BYOK (which can spend user credits).
-    if (inferenceSource === "platform" && modelRegistryRow?.platform_enabled === false) {
-      const byokKey = providerHint
-        ? await readUserProviderKeySecret({ userId, provider: providerHint, reveal: false }).catch(() => ({
-            hasKey: false,
-            key: null,
-          }))
-        : { hasKey: false, key: null };
+    // Model-level gating: if platform inference is disabled for this model, fail cleanly.
+    if (modelRegistryRow?.platform_enabled === false) {
       throw createApiError("platform_inference_not_allowed", "Arx AI isn't available for this model.", 403, {
         model_id: aliasModelId,
         provider: providerHint,
-        byok_allowed: byokAllowed,
-        has_byok_key: byokKey.hasKey,
-      });
-    }
-
-    if (inferenceSource === "user" && modelRegistryRow?.byok_enabled === false) {
-      throw createApiError("byok_inference_not_allowed", "BYOK is not available for this model.", 403, {
-        model_id: aliasModelId,
       });
     }
 
@@ -1590,7 +1527,8 @@ Deno.serve(async (req: Request) => {
 
     const hasCommunityContextEntitlement: boolean =
       contextEntitlementResult.status === "fulfilled" ? Boolean(contextEntitlementResult.value) : false;
-    const contextCommunityId: string | null = hasCommunityContextEntitlement ? (thread.community_id ?? null) : null;
+    const threadCommunityId: string | null = thread.community_id ?? null;
+    const contextCommunityId: string | null = hasCommunityContextEntitlement ? threadCommunityId : null;
 
     const latest = rowsDesc[0];
     if (latest.role !== "user") {
@@ -1637,7 +1575,7 @@ Deno.serve(async (req: Request) => {
     const userRlAllowed = await edgeRateLimitAllowKey({
       key: `agent_turn:user:${userId}`,
       windowSeconds: 60,
-      limit: inferenceSource === "platform" ? 20 : 60,
+      limit: 20,
     });
     if (!userRlAllowed) {
       throw createApiError("rate_limited", "Too many requests. Try again soon.", 429, {
@@ -1647,9 +1585,9 @@ Deno.serve(async (req: Request) => {
 
     const ipRlAllowed = await edgeRateLimitAllow({
       req,
-      key: inferenceSource === "platform" ? "agent_turn_platform" : "agent_turn",
+      key: "agent_turn_platform",
       windowSeconds: 60,
-      limit: inferenceSource === "platform" ? 120 : 240,
+      limit: 120,
     });
     if (!ipRlAllowed) {
       throw createApiError("rate_limited", "Too many requests. Try again soon.", 429, {
@@ -1661,172 +1599,79 @@ Deno.serve(async (req: Request) => {
     const platformMaxTokensRaw =
       getEnv("ARX_PLATFORM_INFERENCE_MAX_TOKENS") || getEnv("OPENROUTER_PLATFORM_MAX_TOKENS");
     const platformMaxTokens = Number.isFinite(Number(platformMaxTokensRaw))
-      ? Math.max(64, Math.min(1024, Math.floor(Number(platformMaxTokensRaw))))
-      : 512;
+      ? Math.max(64, Math.min(4096, Math.floor(Number(platformMaxTokensRaw))))
+      : 2048;
 
     let platformModel: PlatformModelRef | null = null;
     let platformProviderKey: string | null = null;
-    let platformOpenAiCompatibleBaseUrl: string | null = null;
+    let platformOpenAiBaseUrl: string | null = null;
 
-    let byokModel: PlatformModelRef | null = null;
-    let byokProviderKey: string | null = null;
-    let byokOpenAiCompatibleBaseUrl: string | null = null;
-
-    if (inferenceSource === "platform") {
-      let providerHint: PlatformProvider | null = null;
-      if (modelRegistryRow?.provider) {
-        try {
-          providerHint = normalizePlatformProvider(modelRegistryRow.provider);
-        } catch {
-          providerHint = null;
-        }
+    try {
+      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isPlatformModelRoutingMisconfiguredMessage(message)) {
+        throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for this model.", 503, {
+          model_id: aliasModelId,
+          provider: providerHint ?? null,
+          misconfig: "model_routing",
+        });
       }
-
-      try {
-        platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (isPlatformModelRoutingMisconfiguredMessage(message)) {
-          const provider = providerHint;
-          const byokKey = provider
-            ? await readUserProviderKeySecret({ userId, provider, reveal: false }).catch(() => ({ hasKey: false, key: null }))
-            : { hasKey: false, key: null };
-          throw createApiError(
-            "platform_inference_misconfigured",
-            "Arx AI isn't configured yet for this model.",
-            503,
-            {
-              model_id: aliasModelId,
-              provider: provider ?? null,
-              byok_allowed: byokAllowed,
-              has_byok_key: byokKey.hasKey,
-              misconfig: "model_routing",
-            },
-          );
-        }
+      throw error;
+    }
+    const providerEnvKey = platformProviderEnvKey(platformModel.provider);
+    platformProviderKey = getEnv(providerEnvKey);
+    platformOpenAiBaseUrl = platformOpenAiCompatibleBaseUrl(platformModel.provider);
+    if (!platformProviderKey) {
+      const providerDisplayName = platformModel.provider === "x-ai"
+        ? "xAI"
+        : platformModel.provider === "openai"
+        ? "OpenAI"
+        : platformModel.provider === "anthropic"
+        ? "Anthropic"
+        : "Google";
+      throw createApiError(
+        "platform_inference_misconfigured",
+        `Arx AI isn't configured yet for ${providerDisplayName}.`,
+        503,
+        {
+          model_id: aliasModelId,
+          provider: platformModel.provider,
+          misconfig: "missing_secret",
+          missing_secret: providerEnvKey,
+        },
+      );
+    }
+    if ((platformModel.provider === "openai" || platformModel.provider === "x-ai") && !platformOpenAiBaseUrl) {
+      throw createApiError(
+        "platform_inference_misconfigured",
+        "Arx AI isn't configured yet for this model.",
+        503,
+        {
+          model_id: aliasModelId,
+          provider: platformModel.provider,
+          misconfig: "model_routing",
+        },
+      );
+    }
+    try {
+      platformRemaining = await consumePlatformInferenceStandard(userId, 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isPlatformQuotaExceededErrorMessage(message)) {
+        return jsonResponse(
+          {
+            ok: false,
+            code: "platform_inference_quota_exceeded",
+            provider: platformModel.provider,
+            model_id: aliasModelId,
+            message: "You've used your Arx AI quota for this month.",
+          },
+          { status: 403, headers },
+        );
+      } else {
         throw error;
       }
-      switch (platformModel.provider) {
-        case "openai": {
-          platformProviderKey = getEnv("OPENAI_API_KEY");
-          platformOpenAiCompatibleBaseUrl = "https://api.openai.com/v1";
-          if (!platformProviderKey) {
-            const byokKey = await readUserProviderKeySecret({ userId, provider: "openai", reveal: false }).catch(() => ({
-              hasKey: false,
-              key: null,
-            }));
-            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for OpenAI.", 503, {
-              model_id: aliasModelId,
-              provider: "openai",
-              byok_allowed: byokAllowed,
-              has_byok_key: byokKey.hasKey,
-              misconfig: "missing_secret",
-              missing_secret: "OPENAI_API_KEY",
-            });
-          }
-          break;
-        }
-        case "x-ai": {
-          platformProviderKey = getEnv("XAI_API_KEY");
-          platformOpenAiCompatibleBaseUrl = "https://api.x.ai/v1";
-          if (!platformProviderKey) {
-            const byokKey = await readUserProviderKeySecret({ userId, provider: "x-ai", reveal: false }).catch(() => ({
-              hasKey: false,
-              key: null,
-            }));
-            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for xAI.", 503, {
-              model_id: aliasModelId,
-              provider: "x-ai",
-              byok_allowed: byokAllowed,
-              has_byok_key: byokKey.hasKey,
-              misconfig: "missing_secret",
-              missing_secret: "XAI_API_KEY",
-            });
-          }
-          break;
-        }
-        case "anthropic": {
-          platformProviderKey = getEnv("ANTHROPIC_API_KEY");
-          if (!platformProviderKey) {
-            const byokKey = await readUserProviderKeySecret({ userId, provider: "anthropic", reveal: false }).catch(() => ({
-              hasKey: false,
-              key: null,
-            }));
-            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for Anthropic.", 503, {
-              model_id: aliasModelId,
-              provider: "anthropic",
-              byok_allowed: byokAllowed,
-              has_byok_key: byokKey.hasKey,
-              misconfig: "missing_secret",
-              missing_secret: "ANTHROPIC_API_KEY",
-            });
-          }
-          break;
-        }
-        case "google": {
-          platformProviderKey = getEnv("GOOGLE_API_KEY");
-          if (!platformProviderKey) {
-            const byokKey = await readUserProviderKeySecret({ userId, provider: "google", reveal: false }).catch(() => ({
-              hasKey: false,
-              key: null,
-            }));
-            throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for Google.", 503, {
-              model_id: aliasModelId,
-              provider: "google",
-              byok_allowed: byokAllowed,
-              has_byok_key: byokKey.hasKey,
-              misconfig: "missing_secret",
-              missing_secret: "GOOGLE_API_KEY",
-            });
-          }
-          break;
-        }
-        default:
-          throw new Error("Unsupported platform model provider");
-      }
-      try {
-        platformRemaining = await consumePlatformInferenceStandard(userId, 1);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (isPlatformQuotaExceededErrorMessage(message)) {
-          const byokKey = await readUserProviderKeySecret({
-            userId,
-            provider: platformModel.provider,
-            reveal: false,
-          }).catch(() => ({ hasKey: false, key: null }));
-          return jsonResponse(
-            {
-              ok: false,
-              code: "platform_inference_quota_exceeded",
-              provider: platformModel.provider,
-              has_byok_key: byokKey.hasKey,
-              byok_allowed: byokAllowed,
-              model_id: aliasModelId,
-              message: "You've used your Arx AI quota for this month.",
-            },
-            { status: 403, headers },
-          );
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    if (inferenceSource === "user") {
-      byokModel = await resolveByokModelForAliasOrRegistry(aliasModelId);
-      const keyRow = await readUserProviderKeySecret({
-        userId,
-        provider: byokModel.provider,
-        reveal: true,
-      });
-      const key = (keyRow.key ?? "").trim();
-      if (!key) {
-        throw new Error(`Missing ${formatProviderLabel(byokModel.provider)} API key. Add it in Settings → Models.`);
-      }
-      byokProviderKey = key;
-
-      if (byokModel.provider === "openai") byokOpenAiCompatibleBaseUrl = "https://api.openai.com/v1";
-      if (byokModel.provider === "x-ai") byokOpenAiCompatibleBaseUrl = "https://api.x.ai/v1";
     }
 
     const latestUserText = extractTextFromContentJson(latest.content_json);
@@ -1841,22 +1686,60 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const [resolvedModelResult, historyRowsResult] = await Promise.allSettled([
-      Promise.resolve(inferenceSource === "platform" ? platformModel!.ref : byokModel!.ref),
-      loadHistorySnippets({
-        userId,
-        query: latestUserText,
-        excludeThreadId: threadId,
-        limit: 4,
-      }),
-    ]);
+    const [resolvedModelResult, historyRowsResult, communityContextBundleResult] =
+      await Promise.allSettled([
+        Promise.resolve(platformModel!.ref),
+        loadHistorySnippets({
+          userId,
+          query: latestUserText,
+          excludeThreadId: threadId,
+          limit: 4,
+        }),
+        contextCommunityId
+          ? loadCommunityContextBundle({
+              userId,
+              communityId: contextCommunityId,
+              query: latestUserText,
+            })
+          : Promise.resolve({
+              chatRows: [] as CommunityChatSnippetRow[],
+              resourceRows: [] as CommunityResourceSnippetRow[],
+              compiledAttempted: false,
+              compiledFetchOk: false,
+              compiledItemsUsed: 0,
+              compileVersion: null,
+              fallbackUsed: false,
+              chatFetchOk: null,
+              resourceFetchOk: null,
+              retrievalLatencyMs: null,
+              failureClass: threadCommunityId && !hasCommunityContextEntitlement ? "not_entitled" : "not_attempted",
+            } satisfies CommunityContextBundle),
+      ]);
 
     if (resolvedModelResult.status !== "fulfilled") throw resolvedModelResult.reason;
     const resolvedModelId = resolvedModelResult.value;
 
     const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
+    const communityContextBundle: CommunityContextBundle =
+      communityContextBundleResult.status === "fulfilled"
+        ? communityContextBundleResult.value
+        : {
+            chatRows: [],
+            resourceRows: [],
+            compiledAttempted: Boolean(contextCommunityId),
+            compiledFetchOk: false,
+            compiledItemsUsed: 0,
+            compileVersion: null,
+            fallbackUsed: Boolean(contextCommunityId),
+            chatFetchOk: null,
+            resourceFetchOk: null,
+            retrievalLatencyMs: null,
+            failureClass: contextCommunityId ? "compiled_fetch_failed_fallback_failed" : "not_attempted",
+          };
+    const communityChatRows: CommunityChatSnippetRow[] = communityContextBundle.chatRows;
+    const communityResourceRows: CommunityResourceSnippetRow[] = communityContextBundle.resourceRows;
 
-    const memoryExtractorModelId = inferenceSource === "platform" ? platformModel!.model : byokModel!.model;
+    const memoryExtractorModelId = platformModel!.model;
 
     const shouldExtractMemory =
       memorySettings.memory_mode === "suggest" || memorySettings.memory_mode === "auto"
@@ -1868,77 +1751,41 @@ Deno.serve(async (req: Request) => {
         : false;
 
     const memoryCandidatesPromise: Promise<MemoryCandidate[]> = shouldExtractMemory
-      ? inferenceSource === "platform"
-        ? (async () => {
-            switch (platformModel!.provider) {
-              case "openai":
-                return extractMemoryCandidatesViaOpenAi({
-                  openaiKey: platformProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "x-ai":
-                return extractMemoryCandidatesViaOpenAi({
-                  openaiKey: platformProviderKey!,
-                  baseUrl: platformOpenAiCompatibleBaseUrl!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "anthropic":
-                return extractMemoryCandidatesViaAnthropic({
-                  apiKey: platformProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "google":
-                return extractMemoryCandidatesViaGoogle({
-                  apiKey: platformProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              default:
-                return [];
-            }
-          })().catch(() => [])
-        : (async () => {
-            switch (byokModel!.provider) {
-              case "openai":
-                return extractMemoryCandidatesViaOpenAi({
-                  openaiKey: byokProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "x-ai":
-                return extractMemoryCandidatesViaOpenAi({
-                  openaiKey: byokProviderKey!,
-                  baseUrl: byokOpenAiCompatibleBaseUrl!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "anthropic":
-                return extractMemoryCandidatesViaAnthropic({
-                  apiKey: byokProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              case "google":
-                return extractMemoryCandidatesViaGoogle({
-                  apiKey: byokProviderKey!,
-                  model: memoryExtractorModelId,
-                  userText: latestUserText,
-                  priorAssistantText,
-                });
-              default:
-                return [];
-            }
-          })().catch(() => [])
+      ? (async () => {
+          switch (platformModel!.provider) {
+            case "openai":
+              return extractMemoryCandidatesViaOpenAi({
+                openaiKey: platformProviderKey!,
+                model: memoryExtractorModelId,
+                userText: latestUserText,
+                priorAssistantText,
+              });
+            case "x-ai":
+              return extractMemoryCandidatesViaOpenAi({
+                openaiKey: platformProviderKey!,
+                baseUrl: platformOpenAiBaseUrl!,
+                model: memoryExtractorModelId,
+                userText: latestUserText,
+                priorAssistantText,
+              });
+            case "anthropic":
+              return extractMemoryCandidatesViaAnthropic({
+                apiKey: platformProviderKey!,
+                model: memoryExtractorModelId,
+                userText: latestUserText,
+                priorAssistantText,
+              });
+            case "google":
+              return extractMemoryCandidatesViaGoogle({
+                apiKey: platformProviderKey!,
+                model: memoryExtractorModelId,
+                userText: latestUserText,
+                priorAssistantText,
+              });
+            default:
+              return [];
+          }
+        })().catch(() => [])
       : Promise.resolve([]);
 
     const selectedMemory = selectPersonalMemoryForPrompt(memoryRows);
@@ -1959,6 +1806,25 @@ Deno.serve(async (req: Request) => {
       created_at: row.created_at,
       snippet: truncateUtf8(row.snippet, 280),
     }));
+    const communityContextPrompt =
+      contextCommunityId && (communityChatRows.length > 0 || communityResourceRows.length > 0)
+        ? buildCommunityContextSystemPrompt({
+            communityId: contextCommunityId,
+            chatItems: communityChatRows,
+            resourceItems: communityResourceRows,
+          }).prompt
+        : null;
+    const communityEvidenceUsedV1 = buildCommunityEvidenceUsedV1(
+      communityChatRows,
+      communityResourceRows,
+    );
+    const communityContextDiagnostics = threadCommunityId
+      ? buildCommunityContextDiagnostics(
+          communityContextBundle,
+          communityChatRows.length,
+          communityResourceRows.length,
+        )
+      : null;
 
     const history = [...rowsDesc].reverse();
     const messages: OpenRouterChatMessage[] = [];
@@ -1972,6 +1838,13 @@ Deno.serve(async (req: Request) => {
     if (communityAgentPrompt?.systemPrompt) {
       messages.push({ role: "system", content: truncateUtf8(communityAgentPrompt.systemPrompt, 6000) });
     }
+    const communityEvidenceUserMessage = buildCommunityEvidenceUserMessage(communityContextPrompt);
+    if (communityEvidenceUserMessage) {
+      messages.push({
+        role: "user",
+        content: communityEvidenceUserMessage,
+      });
+    }
     if (memoryPrompt) {
       messages.push({ role: "system", content: memoryPrompt });
     }
@@ -1984,78 +1857,45 @@ Deno.serve(async (req: Request) => {
       if (row.role === "user" || row.role === "assistant" || row.role === "system") {
         messages.push({
           role: row.role,
-          content: inferenceSource === "platform" ? truncateUtf8(content, 2000) : content,
+          content: truncateUtf8(content, 2000),
         });
       }
     }
 
     if (!wantsStream) {
       const requested = maxTokens;
-      const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
-      const { text, usage } =
-        inferenceSource === "platform"
-          ? await (async () => {
-              switch (platformModel!.provider) {
-                case "openai":
-                  return openAiChatCompletion(platformProviderKey!, platformModel!.model, messages, effectiveMaxTokens);
-                case "x-ai":
-                  return openAiCompatibleChatCompletion({
-                    apiKey: platformProviderKey!,
-                    baseUrl: platformOpenAiCompatibleBaseUrl!,
-                    model: platformModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                  });
-                case "anthropic":
-                  return anthropicChatCompletion({
-                    apiKey: platformProviderKey!,
-                    model: platformModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                    stream: false,
-                  });
-                case "google":
-                  return googleGenerateContent({
-                    apiKey: platformProviderKey!,
-                    model: platformModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                  });
-                default:
-                  throw new Error("Unsupported platform model provider");
-              }
-            })()
-          : await (async () => {
-              switch (byokModel!.provider) {
-                case "openai":
-                  return openAiChatCompletion(byokProviderKey!, byokModel!.model, messages, effectiveMaxTokens);
-                case "x-ai":
-                  return openAiCompatibleChatCompletion({
-                    apiKey: byokProviderKey!,
-                    baseUrl: byokOpenAiCompatibleBaseUrl!,
-                    model: byokModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                  });
-                case "anthropic":
-                  return anthropicChatCompletion({
-                    apiKey: byokProviderKey!,
-                    model: byokModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                    stream: false,
-                  });
-                case "google":
-                  return googleGenerateContent({
-                    apiKey: byokProviderKey!,
-                    model: byokModel!.model,
-                    messages,
-                    maxTokens: effectiveMaxTokens,
-                  });
-                default:
-                  throw new Error("Unsupported BYOK model provider");
-              }
-            })();
+      const effectiveMaxTokens = Math.min(requested, platformMaxTokens);
+      const { text, usage } = await (async () => {
+        switch (platformModel!.provider) {
+          case "openai":
+            return openAiChatCompletion(platformProviderKey!, platformModel!.model, messages, effectiveMaxTokens);
+          case "x-ai":
+            return openAiCompatibleChatCompletion({
+              apiKey: platformProviderKey!,
+              baseUrl: platformOpenAiBaseUrl!,
+              model: platformModel!.model,
+              messages,
+              maxTokens: effectiveMaxTokens,
+            });
+          case "anthropic":
+            return anthropicChatCompletion({
+              apiKey: platformProviderKey!,
+              model: platformModel!.model,
+              messages,
+              maxTokens: effectiveMaxTokens,
+              stream: false,
+            });
+          case "google":
+            return googleGenerateContent({
+              apiKey: platformProviderKey!,
+              model: platformModel!.model,
+              messages,
+              maxTokens: effectiveMaxTokens,
+            });
+          default:
+            throw new Error("Unsupported platform model provider");
+        }
+      })();
 
       const memoryCandidates = await memoryCandidatesPromise;
 
@@ -2071,19 +1911,20 @@ Deno.serve(async (req: Request) => {
       const meta: Record<string, unknown> = {};
       if (contextCommunityId) meta.context_community_id = contextCommunityId;
       meta.inference_source = inferenceSource;
-      if (inferenceFallback) meta.inference_fallback = inferenceFallback;
+      meta.community_harness_capability_contract_id = COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID;
+      meta.community_harness_runtime_tools = communityHarnessRuntimeTools();
       if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
-      if (inferenceSource === "platform") {
-        meta.platform_standard_remaining = platformRemaining;
-        meta.platform_provider = platformModel!.provider;
-        meta.platform_model = platformModel!.model;
-      } else {
-        meta.byok_provider = byokModel!.provider;
-        meta.byok_model = byokModel!.model;
-      }
+      meta.platform_standard_remaining = platformRemaining;
+      meta.platform_provider = platformModel!.provider;
+      meta.platform_model = platformModel!.model;
       if (usage && typeof usage === "object") {
-        if (inferenceSource === "platform") meta.platform_usage = usage;
-        else meta.byok_usage = usage;
+        meta.platform_usage = usage;
+      }
+      if (communityEvidenceUsedV1) {
+        meta.community_evidence_used_v1 = communityEvidenceUsedV1;
+      }
+      if (communityContextDiagnostics) {
+        meta.community_context_diagnostics = communityContextDiagnostics;
       }
       if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
       if (historyUsed.length > 0) meta.history_used = historyUsed;
@@ -2108,8 +1949,11 @@ Deno.serve(async (req: Request) => {
           reply_to_id: replyToId,
           run_id: runId,
           inference_source: inferenceSource,
-          inference_fallback: inferenceFallback,
           platform_standard_remaining: platformRemaining,
+          community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
+          community_harness_runtime_tools: communityHarnessRuntimeTools(),
+          community_evidence_used_v1: communityEvidenceUsedV1,
+          community_context_diagnostics: communityContextDiagnostics,
           memory_used: memoryUsed,
           history_used: historyUsed,
           memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
@@ -2139,21 +1983,23 @@ Deno.serve(async (req: Request) => {
             model_id: aliasModelId,
             resolved_model_id: resolvedModelId,
             inference_source: inferenceSource,
-            inference_fallback: inferenceFallback,
+            community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
+            community_harness_runtime_tools: communityHarnessRuntimeTools(),
             platform_standard_remaining: platformRemaining,
+            community_evidence_used_v1: communityEvidenceUsedV1,
+            community_context_diagnostics: communityContextDiagnostics,
             memory_used: memoryUsed,
             history_used: historyUsed,
           });
 
           const requested = maxTokens;
-          const effectiveMaxTokens = inferenceSource === "platform" ? Math.min(requested, platformMaxTokens) : requested;
+          const effectiveMaxTokens = Math.min(requested, platformMaxTokens);
           let fullContent = "";
           let usage: unknown | null = null;
 
-	          if (inferenceSource === "platform") {
-	            switch (platformModel!.provider) {
+          switch (platformModel!.provider) {
 	              case "openai": {
-	                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
 	                const streamingResponse = await fetch(url, {
 	                  method: "POST",
 	                  headers: {
@@ -2188,13 +2034,13 @@ Deno.serve(async (req: Request) => {
                     const delta = extractStreamDelta(parsed);
                     if (!delta) return;
                     fullContent += delta;
-                    emit("delta", { delta, full_content: fullContent });
+                    emit("delta", { delta });
                   },
 	                });
 	                break;
 	              }
 	              case "x-ai": {
-	                const url = `${platformOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+	                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
 	                const streamingResponse = await fetch(url, {
 	                  method: "POST",
 	                  headers: {
@@ -2229,7 +2075,7 @@ Deno.serve(async (req: Request) => {
 	                    const delta = extractStreamDelta(parsed);
 	                    if (!delta) return;
 	                    fullContent += delta;
-	                    emit("delta", { delta, full_content: fullContent });
+		                    emit("delta", { delta });
 	                  },
 	                });
 	                break;
@@ -2284,7 +2130,7 @@ Deno.serve(async (req: Request) => {
                     const deltaText = typeof deltaObj?.text === "string" ? String(deltaObj.text) : "";
                     if (!deltaText) return;
                     fullContent += deltaText;
-                    emit("delta", { delta: deltaText, full_content: fullContent });
+                    emit("delta", { delta: deltaText });
                   },
                 });
                 break;
@@ -2334,217 +2180,20 @@ Deno.serve(async (req: Request) => {
                       const delta = nextText.slice(fullContent.length);
                       if (!delta) return;
                       fullContent = nextText;
-                      emit("delta", { delta, full_content: fullContent });
+                      emit("delta", { delta });
                       return;
                     }
                     // Fallback: emit the entire nextText if the stream is non-monotonic.
                     fullContent = nextText;
-                    emit("delta", { delta: nextText, full_content: fullContent });
+                    emit("delta", { delta: nextText });
                   },
                 });
                 break;
               }
               default:
-	                throw new Error("Unsupported platform model provider");
-	            }
-	          } else {
-	            switch (byokModel!.provider) {
-	              case "openai": {
-	                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-	                const streamingResponse = await fetch(url, {
-	                  method: "POST",
-	                  headers: {
-	                    Authorization: `Bearer ${byokProviderKey!}`,
-	                    "Content-Type": "application/json",
-	                  },
-	                  body: JSON.stringify({
-	                    model: byokModel!.model,
-	                    messages,
-	                    max_completion_tokens: effectiveMaxTokens,
-	                    stream: true,
-	                  }),
-	                });
-	                if (!streamingResponse.ok) {
-	                  const body = await streamingResponse.text();
-	                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
-	                }
-	                const reader = streamingResponse.body?.getReader();
-                if (!reader) throw new Error("Missing model stream");
-
-                await consumeSseEvents({
-                  reader,
-                  onData: (raw) => {
-                    if (raw === "[DONE]") return true;
-                    let parsed: OpenRouterStreamChunk | null = null;
-                    try {
-                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
-                    } catch {
-                      return;
-                    }
-                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
-                    const delta = extractStreamDelta(parsed);
-                    if (!delta) return;
-                    fullContent += delta;
-                    emit("delta", { delta, full_content: fullContent });
-                  },
-	                });
-	                break;
-	              }
-	              case "x-ai": {
-	                const url = `${byokOpenAiCompatibleBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-	                const streamingResponse = await fetch(url, {
-	                  method: "POST",
-	                  headers: {
-	                    Authorization: `Bearer ${byokProviderKey!}`,
-	                    "Content-Type": "application/json",
-	                  },
-	                  body: JSON.stringify({
-	                    model: byokModel!.model,
-	                    messages,
-	                    max_tokens: effectiveMaxTokens,
-	                    stream: true,
-	                  }),
-	                });
-	                if (!streamingResponse.ok) {
-	                  const body = await streamingResponse.text();
-	                  throw new Error(`BYOK model error ${streamingResponse.status}: ${body}`);
-	                }
-	                const reader = streamingResponse.body?.getReader();
-	                if (!reader) throw new Error("Missing model stream");
-
-	                await consumeSseEvents({
-	                  reader,
-	                  onData: (raw) => {
-	                    if (raw === "[DONE]") return true;
-	                    let parsed: OpenRouterStreamChunk | null = null;
-	                    try {
-	                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
-	                    } catch {
-	                      return;
-	                    }
-	                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
-	                    const delta = extractStreamDelta(parsed);
-	                    if (!delta) return;
-	                    fullContent += delta;
-	                    emit("delta", { delta, full_content: fullContent });
-	                  },
-	                });
-	                break;
-	              }
-	              case "anthropic": {
-	                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
-	                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
-	                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-api-key": byokProviderKey!,
-                    "anthropic-version": getEnv("ANTHROPIC_VERSION") || "2023-06-01",
-                  },
-                  body: JSON.stringify({
-                    model: byokModel!.model,
-                    max_tokens: effectiveMaxTokens,
-                    stream: true,
-                    ...(system ? { system } : {}),
-                    messages: anthropicMessages,
-                  }),
-                });
-                if (!streamingResponse.ok) {
-                  const body = await streamingResponse.text();
-                  throw new Error(`Anthropic error ${streamingResponse.status}: ${body}`);
-                }
-                const reader = streamingResponse.body?.getReader();
-                if (!reader) throw new Error("Missing model stream");
-
-                await consumeSseEvents({
-                  reader,
-                  onData: (raw) => {
-                    if (raw === "[DONE]") return true;
-                    let parsed: Record<string, unknown> | null = null;
-                    try {
-                      parsed = JSON.parse(raw) as Record<string, unknown>;
-                    } catch {
-                      return;
-                    }
-                    if (parsed && typeof parsed.usage === "object" && parsed.usage) usage = parsed.usage;
-                    const type = String(parsed?.type ?? "").trim();
-                    if (type === "message_stop") return true;
-                    if (type === "error") {
-                      const err = parsed?.error;
-                      const msg =
-                        err && typeof err === "object" && typeof (err as any).message === "string"
-                          ? String((err as any).message)
-                          : "Anthropic stream error";
-                      throw new Error(msg);
-                    }
-                    if (type !== "content_block_delta") return;
-                    const deltaObj = parsed?.delta as any;
-                    const deltaText = typeof deltaObj?.text === "string" ? String(deltaObj.text) : "";
-                    if (!deltaText) return;
-                    fullContent += deltaText;
-                    emit("delta", { delta: deltaText, full_content: fullContent });
-                  },
-                });
-                break;
-              }
-              case "google": {
-                const { system, contents } = toGeminiSystemAndContents(messages);
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-                  byokModel!.model,
-                )}:streamGenerateContent?alt=sse`;
-                const streamingResponse = await fetch(url, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": byokProviderKey!,
-                  },
-                  body: JSON.stringify({
-                    ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-                    contents,
-                    generationConfig: { maxOutputTokens: effectiveMaxTokens },
-                  }),
-                });
-                if (!streamingResponse.ok) {
-                  const body = await streamingResponse.text();
-                  throw new Error(`Google error ${streamingResponse.status}: ${body}`);
-                }
-                const reader = streamingResponse.body?.getReader();
-                if (!reader) throw new Error("Missing model stream");
-
-                await consumeSseEvents({
-                  reader,
-                  onData: (raw) => {
-                    if (raw === "[DONE]") return true;
-                    let parsed: GeminiResponse | null = null;
-                    try {
-                      parsed = JSON.parse(raw) as GeminiResponse;
-                    } catch {
-                      return;
-                    }
-                    if (parsed?.usageMetadata && typeof parsed.usageMetadata === "object") usage = parsed.usageMetadata;
-                    const parts = parsed?.candidates?.[0]?.content?.parts ?? [];
-                    const nextText = parts
-                      .map((p) => (typeof p?.text === "string" ? p.text : ""))
-                      .join("")
-                      .trim();
-                    if (!nextText) return;
-                    if (nextText.startsWith(fullContent)) {
-                      const delta = nextText.slice(fullContent.length);
-                      if (!delta) return;
-                      fullContent = nextText;
-                      emit("delta", { delta, full_content: fullContent });
-                      return;
-                    }
-                    // Fallback: emit the entire nextText if the stream is non-monotonic.
-                    fullContent = nextText;
-                    emit("delta", { delta: nextText, full_content: fullContent });
-                  },
-                });
-                break;
-              }
-              default:
-                throw new Error("Unsupported BYOK model provider");
+                throw new Error("Unsupported platform model provider");
             }
-          }
+
 
 	          const finalText = fullContent.trim();
 	          if (!finalText) throw new Error("Model returned an empty response");
@@ -2563,19 +2212,20 @@ Deno.serve(async (req: Request) => {
             const meta: Record<string, unknown> = {};
             if (contextCommunityId) meta.context_community_id = contextCommunityId;
             meta.inference_source = inferenceSource;
-            if (inferenceFallback) meta.inference_fallback = inferenceFallback;
+            meta.community_harness_capability_contract_id = COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID;
+            meta.community_harness_runtime_tools = communityHarnessRuntimeTools();
             if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
-            if (inferenceSource === "platform") {
-              meta.platform_standard_remaining = platformRemaining;
-              meta.platform_provider = platformModel!.provider;
-              meta.platform_model = platformModel!.model;
-            } else {
-              meta.byok_provider = byokModel!.provider;
-              meta.byok_model = byokModel!.model;
-            }
+            meta.platform_standard_remaining = platformRemaining;
+            meta.platform_provider = platformModel!.provider;
+            meta.platform_model = platformModel!.model;
             if (usage && typeof usage === "object") {
-              if (inferenceSource === "platform") meta.platform_usage = usage;
-              else meta.byok_usage = usage;
+              meta.platform_usage = usage;
+            }
+            if (communityEvidenceUsedV1) {
+              meta.community_evidence_used_v1 = communityEvidenceUsedV1;
+            }
+            if (communityContextDiagnostics) {
+              meta.community_context_diagnostics = communityContextDiagnostics;
             }
             if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
             if (historyUsed.length > 0) meta.history_used = historyUsed;
@@ -2600,8 +2250,11 @@ Deno.serve(async (req: Request) => {
               reply_to_id: replyToId,
               run_id: runId,
               inference_source: inferenceSource,
-              inference_fallback: inferenceFallback,
+              community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
+              community_harness_runtime_tools: communityHarnessRuntimeTools(),
               platform_standard_remaining: platformRemaining,
+              community_evidence_used_v1: communityEvidenceUsedV1,
+              community_context_diagnostics: communityContextDiagnostics,
               memory_used: memoryUsed,
               history_used: historyUsed,
               memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],

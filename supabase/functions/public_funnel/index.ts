@@ -1,12 +1,29 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import {
+  handleCorsPreflightAndMethod,
+  jsonResponse,
+  noStoreHeaders,
+  parseBearerToken,
+  withCors,
+} from "../_shared/http.ts";
 import { getEnv } from "../_shared/env.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
-import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+import { enforceEdgeRateLimit } from "../_shared/rate_limit.ts";
 import { requireAllowedRedirectUrl } from "../_shared/redirects.ts";
+import {
+  loadPublicFunnelBySlug,
+  type PublicFunnelRow,
+  sanitizePublicSlug,
+  toPublicCommunitySummary,
+} from "../_shared/public_funnel.ts";
+import {
+  parsePublicRecurringPlans,
+  requireRecurringBillingPeriod,
+  type PublicRecurringPlan,
+} from "../_shared/public_plan.ts";
 
-type PublicFunnelIntent = "resolve" | "capture_email" | "checkout";
+type PublicFunnelIntent = "resolve" | "checkout";
 type CommunityJoinMode = "join_free" | "request_access" | "checkout";
 
 type PublicFunnelInput = {
@@ -15,56 +32,12 @@ type PublicFunnelInput = {
   billing_period?: unknown;
   success_url?: unknown;
   cancel_url?: unknown;
-  email?: unknown;
-  full_name?: unknown;
-  source?: unknown;
-  metadata?: unknown;
   tracking?: {
     brandos_aid?: unknown;
   } | null;
 };
 
-type PublicFunnelRow = {
-  community_id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  avatar_url: string | null;
-  banner_url: string | null;
-  visibility: string;
-  free_join_requires_approval: boolean;
-  join_mode: string;
-  active_plans: unknown;
-  updated_at: string;
-  created_at: string;
-};
-
-type PublicPlanSummary = {
-  id?: string;
-  name: string;
-  description: string | null;
-  amount_base_units: string;
-  currency: string;
-  currency_decimals: number;
-  billing_period: "monthly" | "yearly";
-};
-
-type PublicFunnelConfigRow = {
-  community_id: string;
-  slug: string;
-  is_enabled: boolean;
-  schema_json: unknown;
-  updated_at: string;
-};
-
-type CaptureLeadRow = {
-  community_id: string;
-  community_slug: string;
-  email: string;
-  first_seen_at: string;
-  last_seen_at: string;
-  capture_count: number;
-};
+type PublicPlanSummary = PublicRecurringPlan;
 
 type CheckoutStartOutput = {
   ok?: boolean;
@@ -74,38 +47,12 @@ type CheckoutStartOutput = {
   error?: string;
 };
 
-function readAuthBearer(req: Request): string | null {
-  const value = (req.headers.get("Authorization") ?? "").trim();
-  if (!value) return null;
-  const lower = value.toLowerCase();
-  if (!lower.startsWith("bearer ")) return null;
-  const token = value.slice(7).trim();
-  return token || null;
-}
-
-function sanitizeSlug(raw: unknown): string {
-  const value = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (!value) throw new Error("community_slug is required");
-  if (value.length > 128) throw new Error("community_slug too long");
-  return value;
-}
-
 function sanitizeIntent(raw: unknown): PublicFunnelIntent {
   const value = String(raw ?? "resolve")
     .trim()
     .toLowerCase();
-  if (value === "resolve" || value === "capture_email" || value === "checkout") return value;
+  if (value === "resolve" || value === "checkout") return value;
   throw new Error("invalid_intent");
-}
-
-function sanitizeBillingPeriod(raw: unknown): "monthly" | "yearly" {
-  const value = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (value === "monthly" || value === "yearly") return value;
-  throw new Error("invalid_billing_period");
 }
 
 function sanitizeOptionalUuid(raw: unknown): string | null {
@@ -116,33 +63,6 @@ function sanitizeOptionalUuid(raw: unknown): string | null {
   return value;
 }
 
-function sanitizeEmail(raw: unknown): string {
-  const value = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (!value) throw new Error("email is required");
-  if (!/^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$/i.test(value)) {
-    throw new Error("invalid_email");
-  }
-  return value;
-}
-
-function sanitizeOptionalText(raw: unknown, max = 200): string | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  if (value.length <= max) return value;
-  return value.slice(0, max);
-}
-
-function sanitizeSource(raw: unknown): string {
-  const value = String(raw ?? "public_funnel")
-    .trim()
-    .toLowerCase();
-  if (!value) return "public_funnel";
-  if (value.length <= 64) return value;
-  return value.slice(0, 64);
-}
-
 function normalizeJoinMode(raw: string, fallback: CommunityJoinMode): CommunityJoinMode {
   const value = String(raw ?? "")
     .trim()
@@ -151,107 +71,11 @@ function normalizeJoinMode(raw: string, fallback: CommunityJoinMode): CommunityJ
   return fallback;
 }
 
-function toPlan(raw: unknown): PublicPlanSummary | null {
-  if (!raw || typeof raw !== "object") return null;
-  const row = raw as Record<string, unknown>;
-  const billingPeriod = String(row.billing_period ?? "")
-    .trim()
-    .toLowerCase();
-  if (billingPeriod !== "monthly" && billingPeriod !== "yearly") return null;
-  const name = String(row.name ?? "").trim();
-  const amountBaseUnits = String(row.amount_base_units ?? "").trim();
-  const currency = String(row.currency ?? "").trim();
-  const currencyDecimals = Number(row.currency_decimals);
-  if (!name || !amountBaseUnits || !currency || !Number.isFinite(currencyDecimals)) return null;
-  return {
-    id: typeof row.id === "string" ? row.id : undefined,
-    name,
-    description: typeof row.description === "string" ? row.description : null,
-    amount_base_units: amountBaseUnits,
-    currency,
-    currency_decimals: currencyDecimals,
-    billing_period: billingPeriod,
-  };
-}
-
-function parsePlans(raw: unknown): PublicPlanSummary[] {
-  if (!Array.isArray(raw)) return [];
-  const plans: PublicPlanSummary[] = [];
-  for (const item of raw) {
-    const plan = toPlan(item);
-    if (!plan) continue;
-    plans.push(plan);
-  }
-  plans.sort((a, b) => {
-    const ar = a.billing_period === "monthly" ? 0 : 1;
-    const br = b.billing_period === "monthly" ? 0 : 1;
-    return ar - br;
-  });
-  return plans;
-}
-
 async function readJsonBounded<T>(req: Request, maxChars = 128_000): Promise<T> {
   const text = await req.text();
   if (!text) return {} as T;
   if (text.length > maxChars) throw new Error("request_too_large");
   return JSON.parse(text) as T;
-}
-
-async function loadPublicFunnelBySlug(slug: string): Promise<PublicFunnelRow> {
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/get_public_community_funnel_by_slug`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_community_slug: slug }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as PublicFunnelRow[];
-  const row = rows[0] ?? null;
-  if (!row) throw new Error("community_not_found");
-  return row;
-}
-
-async function loadPublicFunnelConfigBySlug(slug: string): Promise<PublicFunnelConfigRow | null> {
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/get_public_community_funnel_config_by_slug`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_community_slug: slug }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as PublicFunnelConfigRow[];
-  return rows[0] ?? null;
-}
-
-function normalizeFunnelSchema(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  return raw as Record<string, unknown>;
-}
-
-async function captureLeadBySlug(input: {
-  slug: string;
-  email: string;
-  fullName: string | null;
-  source: string;
-  metadata: unknown;
-  brandosAid: string | null;
-}): Promise<CaptureLeadRow> {
-  const body = {
-    p_community_slug: input.slug,
-    p_email: input.email,
-    p_full_name: input.fullName,
-    p_source: input.source,
-    p_brandos_aid: input.brandosAid,
-    p_metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
-  };
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/capture_community_funnel_lead_by_slug`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const rows = (await res.json()) as CaptureLeadRow[];
-  const row = rows[0] ?? null;
-  if (!row) throw new Error("lead_capture_failed");
-  return row;
 }
 
 async function startCheckoutViaCanonicalFunction(params: {
@@ -266,7 +90,7 @@ async function startCheckoutViaCanonicalFunction(params: {
   const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) throw new Error("supabase_env_missing");
 
-  const authBearer = readAuthBearer(params.req);
+  const authBearer = parseBearerToken(params.req.headers.get("Authorization"));
   const response = await fetch(`${supabaseUrl}/functions/v1/checkout_start`, {
     method: "POST",
     headers: {
@@ -293,21 +117,25 @@ async function startCheckoutViaCanonicalFunction(params: {
 
 Deno.serve(async (req: Request) => {
   const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
-  if (req.method !== "POST") {
-    return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
-  }
+  const methodResponse = handleCorsPreflightAndMethod(req, headers, "POST");
+  if (methodResponse) return methodResponse;
 
   try {
-    const allowed = await edgeRateLimitAllow({ req, key: "public_funnel", windowSeconds: 60, limit: 90 });
-    if (!allowed) return jsonResponse({ ok: false, error: "rate_limited" }, { status: 429, headers });
+    const rateLimitResponse = await enforceEdgeRateLimit({
+      req,
+      key: "public_funnel",
+      windowSeconds: 60,
+      limit: 90,
+      headers,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const body = await readJsonBounded<PublicFunnelInput>(req);
-    const slug = sanitizeSlug(body.community_slug);
+    const slug = sanitizePublicSlug(body.community_slug);
     const intent = sanitizeIntent(body.intent);
 
-    const [funnel, funnelConfig] = await Promise.all([loadPublicFunnelBySlug(slug), loadPublicFunnelConfigBySlug(slug)]);
-    const activePlans = parsePlans(funnel.active_plans);
+    const funnel = await loadPublicFunnelBySlug(slug);
+    const activePlans = parsePublicRecurringPlans(funnel.active_plans, { includeId: true });
     // `join_mode` comes from the canonical SQL contract; fail closed if missing/invalid.
     const resolvedJoinMode = normalizeJoinMode(funnel.join_mode, "request_access");
     const preferredPlan =
@@ -321,16 +149,8 @@ Deno.serve(async (req: Request) => {
           ok: true,
           intent,
           community: {
-            slug: funnel.slug,
-            name: funnel.name,
-            description: funnel.description ?? null,
-            avatar_url: funnel.avatar_url ?? null,
-            banner_url: funnel.banner_url ?? null,
-            visibility: funnel.visibility,
-            free_join_requires_approval: Boolean(funnel.free_join_requires_approval),
+            ...toPublicCommunitySummary(funnel),
             join_mode: resolvedJoinMode,
-            created_at: funnel.created_at,
-            updated_at: funnel.updated_at,
           },
           active_plan: preferredPlan,
           active_plans: activePlans,
@@ -338,39 +158,6 @@ Deno.serve(async (req: Request) => {
             can_join_free: resolvedJoinMode === "join_free",
             can_request_access: resolvedJoinMode === "request_access",
             can_checkout: resolvedJoinMode === "checkout" && activePlans.length > 0,
-          },
-          funnel: {
-            enabled: Boolean(funnelConfig?.is_enabled),
-            schema_json: normalizeFunnelSchema(funnelConfig?.schema_json),
-            updated_at: funnelConfig?.updated_at ?? null,
-          },
-        },
-        { status: 200, headers },
-      );
-    }
-
-    if (intent === "capture_email") {
-      const email = sanitizeEmail(body.email);
-      const fullName = sanitizeOptionalText(body.full_name);
-      const source = sanitizeSource(body.source);
-      const brandosAid = sanitizeOptionalUuid(body.tracking?.brandos_aid ?? null);
-      const lead = await captureLeadBySlug({
-        slug,
-        email,
-        fullName,
-        source,
-        metadata: body.metadata,
-        brandosAid,
-      });
-      return jsonResponse(
-        {
-          ok: true,
-          intent,
-          lead,
-          community: {
-            slug: funnel.slug,
-            name: funnel.name,
-            join_mode: resolvedJoinMode,
           },
         },
         { status: 200, headers },
@@ -381,7 +168,10 @@ Deno.serve(async (req: Request) => {
       throw new Error("checkout_not_available");
     }
 
-    const billingPeriod = sanitizeBillingPeriod(body.billing_period ?? preferredPlan?.billing_period ?? "monthly");
+    const billingPeriod = requireRecurringBillingPeriod(
+      body.billing_period ?? preferredPlan?.billing_period ?? "monthly",
+      "invalid_billing_period",
+    );
     if (!activePlans.some((plan) => plan.billing_period === billingPeriod)) {
       throw new Error("billing_period_not_available");
     }

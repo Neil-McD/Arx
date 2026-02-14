@@ -1,8 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
-import { getEnv } from "../_shared/env.ts";
+import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
+import { consumeSseEvents, encodeSse } from "../_shared/sse.ts";
 
 type PublicRole = "user" | "assistant" | "system";
 type PublicChatMessage = { role: PublicRole; content: string };
@@ -11,6 +12,7 @@ type PublicTurnInput = {
   model_id?: string;
   messages?: PublicChatMessage[];
   stream?: boolean;
+  max_tokens?: number;
 };
 
 type OpenRouterStreamChunk = {
@@ -34,16 +36,6 @@ type OpenRouterErrorEnvelope = {
   code?: string | number;
 };
 
-function isTruthyEnv(value: string): boolean {
-  const v = (value ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
-}
-
-function encodeSse(event: string, data: unknown): Uint8Array {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  return new TextEncoder().encode(payload);
-}
-
 async function readJsonBounded<T>(req: Request, maxChars = 256_000): Promise<T> {
   const text = await req.text();
   if (!text) throw new Error("Missing JSON body");
@@ -57,43 +49,6 @@ function extractStreamDelta(chunk: OpenRouterStreamChunk): string {
   const fromText = typeof choice?.text === "string" ? choice.text : null;
   const fromMessage = choice?.message && typeof choice.message.content === "string" ? choice.message.content : null;
   return (fromDelta ?? fromText ?? fromMessage ?? "").toString();
-}
-
-async function consumeSseEvents(params: {
-  reader: ReadableStreamDefaultReader<Uint8Array>;
-  onData: (data: string) => boolean | void;
-}): Promise<void> {
-  const decoder = new TextDecoder();
-  let lineBuffer = "";
-  let dataBuffer = "";
-
-  const flush = (): boolean => {
-    const raw = dataBuffer.trim();
-    dataBuffer = "";
-    if (!raw) return false;
-    return Boolean(params.onData(raw));
-  };
-
-  while (true) {
-    const { value, done } = await params.reader.read();
-    if (done) break;
-    lineBuffer += decoder.decode(value, { stream: true });
-    while (true) {
-      const idx = lineBuffer.indexOf("\n");
-      if (idx < 0) break;
-      let line = lineBuffer.slice(0, idx);
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-      lineBuffer = lineBuffer.slice(idx + 1);
-      if (line === "") {
-        if (flush()) return;
-        continue;
-      }
-      if (line.startsWith("data:")) {
-        dataBuffer += line.slice(5).trim();
-      }
-    }
-  }
-  flush();
 }
 
 function normalizePublicModelMap(): Record<string, string> {
@@ -251,8 +206,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const maxTokensCap = 512;
-    const maxTokens = clampMaxTokens((input as any)?.max_tokens, maxTokensCap);
+    const maxTokensCap = 2048;
+    const maxTokens = clampMaxTokens(input.max_tokens, maxTokensCap);
 
     const openrouterUrl = "https://openrouter.ai/api/v1/chat/completions";
     if (!wantsStream) {
@@ -357,7 +312,7 @@ Deno.serve(async (req: Request) => {
               const delta = extractStreamDelta(parsed);
               if (!delta) return;
               fullContent += delta;
-              emit("delta", { delta, full_content: fullContent });
+              emit("delta", { delta });
             },
           });
 
