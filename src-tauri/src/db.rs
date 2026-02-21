@@ -132,6 +132,8 @@ pub enum BlobGcRunOutcome {
 }
 
 pub const BLOB_GC_LAST_RUN_UI_KEY: &str = "blobs_gc_last_run_at";
+const EVENTS_MUTATION_MODE_UI_KEY: &str = "__events_mutation_mode_v1";
+const EVENTS_MUTATION_MODE_MIGRATION: &str = "migration";
 static BLOB_GC_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
 
 #[derive(serde::Serialize)]
@@ -575,6 +577,8 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
     DROP TRIGGER IF EXISTS events_au;
     DROP TRIGGER IF EXISTS events_au_del;
     DROP TRIGGER IF EXISTS events_au_ins;
+    DROP TRIGGER IF EXISTS events_bu_immutable;
+    DROP TRIGGER IF EXISTS events_bd_immutable;
 
     CREATE TRIGGER events_ai AFTER INSERT ON events
     WHEN new.type IN ('user_message','assistant_message','handoff_summary','thread_metadata_changed')
@@ -602,6 +606,21 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
     BEGIN
       INSERT INTO events_fts(rowid, text, thread_id)
       VALUES (new.rowid, new.text, new.thread_id);
+    END;
+
+    -- Contract hardening: events are append-only canonical evidence.
+    -- UPDATE/DELETE are only allowed in explicit migration mode.
+    CREATE TRIGGER events_bu_immutable BEFORE UPDATE ON events
+    WHEN COALESCE((SELECT value FROM ui_state WHERE key = '__events_mutation_mode_v1'), '') != 'migration'
+    BEGIN
+      SELECT RAISE(ABORT, 'events_immutable_update');
+    END;
+
+    CREATE TRIGGER events_bd_immutable BEFORE DELETE ON events
+    WHEN COALESCE((SELECT value FROM ui_state WHERE key = '__events_mutation_mode_v1'), '') != 'migration'
+      AND EXISTS (SELECT 1 FROM threads t WHERE t.id = old.thread_id)
+    BEGIN
+      SELECT RAISE(ABORT, 'events_immutable_delete');
     END;
 
       ",
@@ -823,6 +842,8 @@ fn migrate_events_seq(conn: &Connection) -> anyhow::Result<()> {
         .unwrap_or(0);
 
     if needs_backfill > 0 {
+        set_events_mutation_mode(conn, Some(EVENTS_MUTATION_MODE_MIGRATION))
+            .context("events immutability: enter migration mode")?;
         conn.execute_batch("BEGIN IMMEDIATE")?;
         let result = (|| -> anyhow::Result<()> {
             let mut thread_stmt = conn.prepare("SELECT DISTINCT thread_id FROM events")?;
@@ -857,9 +878,11 @@ fn migrate_events_seq(conn: &Connection) -> anyhow::Result<()> {
             Ok(()) => conn.execute_batch("COMMIT")?,
             Err(err) => {
                 let _ = conn.execute_batch("ROLLBACK");
+                let _ = set_events_mutation_mode(conn, None);
                 return Err(err);
             }
         }
+        set_events_mutation_mode(conn, None).context("events immutability: exit migration mode")?;
     }
 
     // Heal threads.last_seq for all rows (including threads with no events).
@@ -880,6 +903,32 @@ fn migrate_events_seq(conn: &Connection) -> anyhow::Result<()> {
         [],
     );
 
+    Ok(())
+}
+
+fn set_events_mutation_mode(conn: &Connection, mode: Option<&str>) -> anyhow::Result<()> {
+    match mode.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    }) {
+        Some(value) => {
+            conn.execute(
+                "INSERT INTO ui_state (key, value, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                params![EVENTS_MUTATION_MODE_UI_KEY, value, now_ts()],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "DELETE FROM ui_state WHERE key = ?1",
+                params![EVENTS_MUTATION_MODE_UI_KEY],
+            )?;
+        }
+    }
     Ok(())
 }
 
@@ -4422,6 +4471,86 @@ mod tests {
             list_events_since(&conn, &thread.id, 0, 20, true).expect("list events (with chunks)");
         assert_eq!(with_chunks.len(), 3);
         assert_eq!(with_chunks[1].r#type, "engine_io_chunk");
+    }
+
+    #[test]
+    fn events_are_immutable_for_direct_update_and_delete() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "immutable-thread",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let evt = append_event(
+            &conn,
+            Path::new("/tmp/arx-tests"),
+            &thread.id,
+            "user_message",
+            Some("hello"),
+            Some(r#"{"v":1}"#),
+            None,
+        )
+        .expect("append user event");
+
+        let update_err = conn
+            .execute(
+                "UPDATE events SET text = ?1 WHERE id = ?2",
+                params!["mutated", evt.id.as_str()],
+            )
+            .expect_err("direct event update must fail");
+        assert!(
+            update_err.to_string().contains("events_immutable_update"),
+            "unexpected update error: {update_err}"
+        );
+
+        let delete_err = conn
+            .execute("DELETE FROM events WHERE id = ?1", params![evt.id.as_str()])
+            .expect_err("direct event delete must fail");
+        assert!(
+            delete_err.to_string().contains("events_immutable_delete"),
+            "unexpected delete error: {delete_err}"
+        );
+    }
+
+    #[test]
+    fn events_can_be_deleted_via_thread_cascade() {
+        let conn = setup_conn();
+        let thread = create_thread(
+            &conn,
+            "cascade-thread",
+            "messages_agent",
+            Some("openai/gpt-5"),
+            None,
+            None,
+        )
+        .expect("create thread");
+
+        let evt = append_event(
+            &conn,
+            Path::new("/tmp/arx-tests"),
+            &thread.id,
+            "user_message",
+            Some("hello"),
+            Some(r#"{"v":1}"#),
+            None,
+        )
+        .expect("append user event");
+
+        delete_thread(&conn, &thread.id).expect("thread delete should cascade events");
+
+        let remaining_events: i64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM events WHERE id = ?1",
+                params![evt.id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("count events");
+        assert_eq!(remaining_events, 0);
     }
 
     #[test]

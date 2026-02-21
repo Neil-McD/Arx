@@ -1,24 +1,27 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { RuntimeClient } from "../../runtime/arp/client";
 import type { EventRecord, MessageRecord, ThreadRecord, ToolCallRecord } from "../../runtime/arp/types";
 import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
-
-const MESSAGE_PAGE_SIZE = 200;
-const DELTA_EVENTS_PAGE_SIZE = 300;
-const TOOL_CALL_PAGE_SIZE = 120;
-const TOOL_CALLS_MIN_RELOAD_INTERVAL_MS = 400;
-
-type CloudThreadMessageRow = {
-  id: string;
-  thread_id: string;
-  seq: number;
-  role: string;
-  content_json: unknown;
-  engine_id: string | null;
-  model_id: string | null;
-  run_id: string | null;
-  created_at: string | number | null;
-};
+import {
+  DELTA_EVENTS_PAGE_SIZE,
+  MESSAGE_PAGE_SIZE,
+  TOOL_CALL_PAGE_SIZE,
+  TOOL_CALLS_MIN_RELOAD_INTERVAL_MS,
+  eventToMessageRecord,
+  findOldestThreadMessageSeq,
+  mergeMessagesWithDelta,
+  sameToolCallList,
+  toMessageRecordFromCloud,
+  type CloudThreadMessageRow,
+} from "./desktopThreadFeedCore";
 
 type UseDesktopThreadFeedControllerArgs = {
   activeThreadId: string | null;
@@ -38,82 +41,6 @@ type UseDesktopThreadFeedControllerArgs = {
   ) => Promise<Response>;
   readSupabaseError: (response: Response) => Promise<string>;
 };
-
-function toUnixSecondsFromIso(value: string | null): number | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  if (!Number.isFinite(ms)) return null;
-  return Math.floor(ms / 1000);
-}
-
-function serializeCloudContentJson(content: unknown): string {
-  if (content && typeof content === "object") {
-    return JSON.stringify(content);
-  }
-  if (typeof content === "string") {
-    const trimmed = content.trim();
-    if (!trimmed) return JSON.stringify({ text: "" });
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === "object") {
-        return JSON.stringify(parsed);
-      }
-    } catch {
-      // Keep as plain text payload.
-    }
-    return JSON.stringify({ text: content });
-  }
-  if (typeof content === "number" || typeof content === "boolean") {
-    return JSON.stringify({ text: String(content) });
-  }
-  return JSON.stringify({ text: "" });
-}
-
-function toMessageRecordFromCloud(row: CloudThreadMessageRow): MessageRecord {
-  const createdAt =
-    typeof row.created_at === "number" && Number.isFinite(row.created_at)
-      ? row.created_at
-      : toUnixSecondsFromIso(typeof row.created_at === "string" ? row.created_at : null) ??
-        Math.floor(Date.now() / 1000);
-  return {
-    id: row.id,
-    session_id: row.thread_id,
-    seq: typeof row.seq === "number" && Number.isFinite(row.seq) ? row.seq : null,
-    role: row.role,
-    content_json: serializeCloudContentJson(row.content_json),
-    created_at: createdAt,
-    engine_id: row.engine_id ?? null,
-    model_id: row.model_id ?? null,
-    run_id: row.run_id ?? null,
-  };
-}
-
-function normalizeContentJson(raw: string): string {
-  try {
-    return JSON.stringify(JSON.parse(raw));
-  } catch {
-    return raw;
-  }
-}
-
-function sameToolCallList(prev: ToolCallRecord[], next: ToolCallRecord[]): boolean {
-  if (prev === next) return true;
-  if (prev.length !== next.length) return false;
-  for (let i = 0; i < prev.length; i += 1) {
-    const a = prev[i];
-    const b = next[i];
-    if (
-      a.id !== b.id ||
-      a.status !== b.status ||
-      a.updated_at !== b.updated_at ||
-      a.run_id !== b.run_id ||
-      a.tool_name !== b.tool_name
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
 
 export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControllerArgs) {
   const {
@@ -147,7 +74,7 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
   >({});
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeThreadIdRef.current = activeThreadId;
     setIsLoadingOlderMessages(false);
   }, [activeThreadId]);
@@ -307,60 +234,6 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
         return;
       }
 
-      const eventToMessage = (evt: EventRecord): MessageRecord | null => {
-        const evtType = (evt.type ?? "").trim();
-        const role =
-          evtType === "user_message"
-            ? "user"
-            : evtType === "assistant_message"
-              ? "assistant"
-              : null;
-        if (!role) return null;
-
-        let contentJson: string | null = null;
-        let engineId: string | null = null;
-        let modelId: string | null = null;
-        let runId: string | null = null;
-        if (evt.payload_json) {
-          try {
-            const parsed = JSON.parse(evt.payload_json) as { content?: unknown; meta?: unknown };
-            if (parsed && typeof parsed === "object" && "content" in parsed) {
-              contentJson = JSON.stringify(
-                (parsed as { content: unknown }).content ?? { text: evt.text ?? "" },
-              );
-            }
-            const meta = (parsed as { meta?: unknown }).meta;
-            if (meta && typeof meta === "object") {
-              const metaObj = meta as {
-                engine_id?: unknown;
-                model_id?: unknown;
-                run_id?: unknown;
-              };
-              engineId = typeof metaObj.engine_id === "string" ? metaObj.engine_id : null;
-              modelId = typeof metaObj.model_id === "string" ? metaObj.model_id : null;
-              runId = typeof metaObj.run_id === "string" ? metaObj.run_id : null;
-            }
-          } catch {
-            // Ignore malformed payloads.
-          }
-        }
-        if (!contentJson) {
-          contentJson = JSON.stringify({ text: evt.text ?? "" });
-        }
-
-        return {
-          id: evt.id,
-          session_id: evt.thread_id,
-          seq: evt.seq,
-          role,
-          content_json: contentJson,
-          created_at: evt.created_at,
-          engine_id: engineId,
-          model_id: modelId,
-          run_id: runId,
-        };
-      };
-
       const cursorResumeDisabledForThread = Boolean(
         cursorResumeDisabledByThreadRef.current[sessionId],
       );
@@ -395,35 +268,16 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
             eventCursorByThreadRef.current[sessionId] = nextCursor;
 
             const mappedDelta = deltaEvents
-              .map(eventToMessage)
+              .map(eventToMessageRecord)
               .filter(Boolean) as MessageRecord[];
             if (mappedDelta.length > 0) {
-              const canonicalUserPayloads = new Set(
-                mappedDelta
-                  .filter((message) => message.role === "user")
-                  .map((message) => normalizeContentJson(message.content_json)),
+              setMessages((prev) =>
+                mergeMessagesWithDelta({
+                  prev,
+                  sessionId,
+                  mappedDelta,
+                }),
               );
-              setMessages((prev) => {
-                if (prev.length === 0 || prev[0]?.session_id !== sessionId) {
-                  return mappedDelta;
-                }
-                let next = [...prev];
-                if (canonicalUserPayloads.size > 0) {
-                  next = next.filter((message) => {
-                    if (message.role !== "user") return true;
-                    if (!message.id.startsWith("optimistic-user-")) return true;
-                    const payload = normalizeContentJson(message.content_json);
-                    return !canonicalUserPayloads.has(payload);
-                  });
-                }
-                const seen = new Set(next.map((message) => message.id));
-                for (const message of mappedDelta) {
-                  if (seen.has(message.id)) continue;
-                  next.push(message);
-                  seen.add(message.id);
-                }
-                return next;
-              });
             }
 
             const hasToolCallEvents = deltaEvents.some((evt) =>
@@ -468,7 +322,7 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
             const fallbackEvents = await runtimeClient.listEvents(sessionId, MESSAGE_PAGE_SIZE * 4);
             if (!isCurrentRequest()) return;
             const fallbackMessages = fallbackEvents
-              .map(eventToMessage)
+              .map(eventToMessageRecord)
               .filter(Boolean) as MessageRecord[];
             if (fallbackMessages.length > 0) {
               setMessages(fallbackMessages);
@@ -510,12 +364,7 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
     if (isLoadingOlderMessages) return;
     if (!hasOlderMessagesByThreadId[threadId]) return;
 
-    const oldestSeq = messages.reduce<number | null>((acc, message) => {
-      if (message.session_id !== threadId) return acc;
-      const seq = typeof message.seq === "number" && Number.isFinite(message.seq) ? message.seq : null;
-      if (seq === null || seq <= 0) return acc;
-      return acc === null ? seq : Math.min(acc, seq);
-    }, null);
+    const oldestSeq = findOldestThreadMessageSeq(messages, threadId);
     if (!oldestSeq || oldestSeq <= 1) {
       setHasOlderMessages(threadId, false);
       return;

@@ -8,7 +8,7 @@ export type PublicRecurringPlan = {
   billing_period: "monthly" | "yearly";
 };
 
-export function sanitizeRecurringBillingPeriod(value: unknown): "monthly" | "yearly" | null {
+function sanitizeRecurringBillingPeriod(value: unknown): "monthly" | "yearly" | null {
   const billingPeriod = String(value ?? "").trim().toLowerCase();
   if (billingPeriod === "monthly" || billingPeriod === "yearly") return billingPeriod;
   return null;
@@ -23,7 +23,7 @@ export function requireRecurringBillingPeriod(
   return normalized;
 }
 
-export function toPublicRecurringPlan(
+function toPublicRecurringPlan(
   raw: unknown,
   opts?: { includeId?: boolean },
 ): PublicRecurringPlan | null {

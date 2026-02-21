@@ -367,6 +367,7 @@ export class TauriRuntimeClient implements RuntimeClient {
     cwd: string;
     input: string;
     user_content_json: string;
+    community_name?: string | null;
     supabase_url?: string | null;
     supabase_anon_key?: string | null;
     supabase_access_token?: string | null;
@@ -382,6 +383,7 @@ export class TauriRuntimeClient implements RuntimeClient {
       cwd: args.cwd,
       input: args.input,
       userContentJson: args.user_content_json,
+      communityName: args.community_name ?? null,
       supabaseUrl: args.supabase_url ?? null,
       supabaseAnonKey: args.supabase_anon_key ?? null,
       supabaseAccessToken: args.supabase_access_token ?? null,

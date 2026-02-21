@@ -2,7 +2,7 @@ import { requireEnv } from "./env.ts";
 
 type StripeConfig = { secretKey: string };
 
-export function getStripeConfig(): StripeConfig {
+function getStripeConfig(): StripeConfig {
   return { secretKey: requireEnv("STRIPE_SECRET_KEY") };
 }
 

@@ -1,72 +1,30 @@
-import type { ReactNode, RefObject } from "react";
-import type { ThreadLane } from "../../shared/threadSidebarSelectors";
-
-type ProjectLike = {
-  id: string;
-  name: string | null;
-  root_path: string;
-};
-
-type ChatThreadGroup<TThread> = {
-  label: string;
-  threads: TThread[];
-};
-
-type ProjectThreadGroup<TProject, TThread> = {
-  project: TProject;
-  threads: TThread[];
-};
+import type {
+  ProjectLike,
+  ThreadSidebarPanelActions,
+  ThreadSidebarPanelState,
+} from "./threadSidebarContracts";
 
 type ThreadSidebarPanelProps<TThread, TProject extends ProjectLike> = {
-  threadSearchQuery: string;
-  onThreadSearchQueryChange: (value: string) => void;
-  threadLaneFilter: ThreadLane;
-  onSelectChatLane: () => void;
-  onSelectAgentLane: () => void;
-  onAddProject: () => void | Promise<void>;
-  normalizedThreadSearch: string;
-  threadSearchResults: TThread[];
-  projectThreadGroups: Array<ProjectThreadGroup<TProject, TThread>>;
-  projectExpandedById: Record<string, boolean>;
-  onToggleProjectExpanded: (projectId: string) => void;
-  onStartDraftInProject: (project: TProject) => void;
-  onToggleProjectMenu: (projectId: string) => void;
-  projectMenuProjectId: string | null;
-  projectMenuRef: RefObject<HTMLDivElement>;
-  onRenameProject: (project: TProject) => void | Promise<void>;
-  onRemoveProject: (project: TProject) => void | Promise<void>;
-  generalThreads: TThread[];
-  laneThreadsCount: number;
-  chatThreadGroups: Array<ChatThreadGroup<TThread>>;
-  renderSessionItem: (thread: TThread, opts?: { showProjectHint?: boolean }) => ReactNode;
+  state: ThreadSidebarPanelState<TThread, TProject>;
+  actions: ThreadSidebarPanelActions<TThread, TProject>;
 };
 
 export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
   props: ThreadSidebarPanelProps<TThread, TProject>,
 ) {
+  const { state, actions } = props;
   const {
     threadSearchQuery,
-    onThreadSearchQueryChange,
     threadLaneFilter,
-    onSelectChatLane,
-    onSelectAgentLane,
-    onAddProject,
     normalizedThreadSearch,
     threadSearchResults,
     projectThreadGroups,
     projectExpandedById,
-    onToggleProjectExpanded,
-    onStartDraftInProject,
-    onToggleProjectMenu,
     projectMenuProjectId,
-    projectMenuRef,
-    onRenameProject,
-    onRemoveProject,
     generalThreads,
     laneThreadsCount,
     chatThreadGroups,
-    renderSessionItem,
-  } = props;
+  } = state;
 
   return (
     <>
@@ -77,10 +35,10 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         </svg>
         <input
           value={threadSearchQuery}
-          onChange={(event) => onThreadSearchQueryChange(event.target.value)}
+          onChange={(event) => actions.onThreadSearchQueryChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
-              onThreadSearchQueryChange("");
+              actions.onThreadSearchQueryChange("");
             }
           }}
           placeholder="Search threads…"
@@ -90,7 +48,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
           <button
             type="button"
             className="session-search-clear"
-            onClick={() => onThreadSearchQueryChange("")}
+            onClick={() => actions.onThreadSearchQueryChange("")}
             aria-label="Clear search"
             title="Clear"
           >
@@ -107,7 +65,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         <button
           type="button"
           className={`thread-lane-switch-button${threadLaneFilter === "chat" ? " active" : ""}`}
-          onClick={onSelectChatLane}
+          onClick={actions.onSelectChatLane}
           aria-pressed={threadLaneFilter === "chat"}
         >
           Chat
@@ -115,7 +73,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         <button
           type="button"
           className={`thread-lane-switch-button${threadLaneFilter === "agent" ? " active" : ""}`}
-          onClick={onSelectAgentLane}
+          onClick={actions.onSelectAgentLane}
           aria-pressed={threadLaneFilter === "agent"}
         >
           Agent
@@ -127,7 +85,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
           <button
             type="button"
             className="project-toolbar-add"
-            onClick={() => void onAddProject()}
+            onClick={() => void actions.onAddProject()}
             title="Add project folder"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -143,7 +101,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
             <div className="empty-state">No matching threads.</div>
           ) : (
             threadSearchResults.map((thread) =>
-              renderSessionItem(thread, { showProjectHint: threadLaneFilter === "chat" }),
+              actions.renderSessionItem(thread, { showProjectHint: threadLaneFilter === "chat" }),
             )
           )
         ) : threadLaneFilter === "agent" ? (
@@ -157,7 +115,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                     <button
                       type="button"
                       className="project-group-label"
-                      onClick={() => onToggleProjectExpanded(project.id)}
+                      onClick={() => actions.onToggleProjectExpanded(project.id)}
                       aria-expanded={expanded}
                       title={expanded ? "Collapse project" : "Expand project"}
                     >
@@ -174,7 +132,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                     <button
                       type="button"
                       className="project-group-new"
-                      onClick={() => onStartDraftInProject(project)}
+                      onClick={() => actions.onStartDraftInProject(project)}
                       title="Start a new thread in this project"
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -187,7 +145,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                       className="project-group-menu-trigger"
                       onClick={(event) => {
                         event.stopPropagation();
-                        onToggleProjectMenu(project.id);
+                        actions.onToggleProjectMenu(project.id);
                       }}
                       aria-haspopup="menu"
                       aria-expanded={projectMenuProjectId === project.id}
@@ -200,12 +158,12 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                       </svg>
                     </button>
                     {projectMenuProjectId === project.id && (
-                      <div className="project-group-menu" role="menu" ref={projectMenuRef}>
+                      <div className="project-group-menu" role="menu" ref={actions.projectMenuRef}>
                         <button
                           type="button"
                           className="project-group-menu-item"
                           role="menuitem"
-                          onClick={() => void onRenameProject(project)}
+                          onClick={() => void actions.onRenameProject(project)}
                         >
                           Rename
                         </button>
@@ -213,7 +171,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           type="button"
                           className="project-group-menu-item danger"
                           role="menuitem"
-                          onClick={() => void onRemoveProject(project)}
+                          onClick={() => void actions.onRemoveProject(project)}
                         >
                           Remove
                         </button>
@@ -223,7 +181,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                   {expanded && (
                     <div className="project-group-threads">
                       {threads.length > 0 ? (
-                        threads.map((thread) => renderSessionItem(thread))
+                        threads.map((thread) => actions.renderSessionItem(thread))
                       ) : (
                         <div className="project-group-empty">No threads yet.</div>
                       )}
@@ -235,7 +193,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
             {generalThreads.length > 0 && (
               <div className="session-group">
                 <div className="session-group-label">Unassigned</div>
-                {generalThreads.map((thread) => renderSessionItem(thread))}
+                {generalThreads.map((thread) => actions.renderSessionItem(thread))}
               </div>
             )}
             {laneThreadsCount === 0 && (
@@ -247,7 +205,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
             {chatThreadGroups.map((group) => (
               <div key={group.label} className="session-group">
                 <div className="session-group-label">{group.label}</div>
-                {group.threads.map((thread) => renderSessionItem(thread))}
+                {group.threads.map((thread) => actions.renderSessionItem(thread))}
               </div>
             ))}
             {laneThreadsCount === 0 && (

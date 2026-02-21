@@ -2,7 +2,7 @@ function normalizeTrimmed(value: string | null | undefined): string {
   return String(value ?? "").trim();
 }
 
-export function buildDefaultCommunitySystemPrompt(params: {
+function buildDefaultCommunitySystemPrompt(params: {
   communityId: string;
   communityName?: string | null;
 }): string {
@@ -20,7 +20,7 @@ export function buildDefaultCommunitySystemPrompt(params: {
   ].join("\n");
 }
 
-export function resolveEffectiveCommunitySystemPrompt(params: {
+function resolveEffectiveCommunitySystemPrompt(params: {
   communityId: string | null | undefined;
   communityName?: string | null;
   customSystemPrompt?: string | null;
@@ -35,14 +35,14 @@ export function resolveEffectiveCommunitySystemPrompt(params: {
   });
 }
 
-export function buildDefaultNonCommunityScopePrompt(): string {
+function buildDefaultNonCommunityScopePrompt(): string {
   return [
     "Active community context: none.",
     "No specific community context is currently active.",
   ].join("\n");
 }
 
-export function buildCloudBaseSystemPrompt(): string {
+function buildCloudBaseSystemPrompt(): string {
   return [
     "You are the AI chat agent of PolyNet.",
     "",

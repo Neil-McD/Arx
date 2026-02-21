@@ -1,8 +1,8 @@
-import { useCallback, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import {
-  readAvatarFileAsSquareDataUrl,
-  readBannerFileAsWideDataUrlWithinLimit,
-} from "../../../shared/imageTransforms";
+  useSettingsImageUploadControllerCore,
+  type UseSettingsImageUploadControllerCoreResult,
+} from "../../../shared/useSettingsImageUploadControllerCore";
 
 type UseDesktopSettingsImageUploadControllerArgs = {
   setIsSettingsBannerDragOver: Dispatch<SetStateAction<boolean>>;
@@ -20,133 +20,28 @@ type UseDesktopSettingsImageUploadControllerArgs = {
   setAuthError: Dispatch<SetStateAction<string | null>>;
 };
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return fallback;
-}
-
 export function useDesktopSettingsImageUploadController(
   args: UseDesktopSettingsImageUploadControllerArgs,
-): {
-  handleSettingsBannerDrop: (event: DragEvent<HTMLDivElement>) => void;
-  handleSettingsAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
-  handleCommunityAvatarUpload: (file: File | null) => Promise<void>;
-  handleCommunityBannerUpload: (file: File | null) => Promise<void>;
-  handleProfileAvatarUpload: (file: File | null) => Promise<void>;
-  handleProfileAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
-} {
-  const {
-    setIsSettingsBannerDragOver,
-    setIsSettingsAvatarDragOver,
-    setIsProfileAvatarDragOver,
-    setCommunitySettingsAvatarUrl,
-    setCommunitySettingsBannerUrl,
-    setCommunitySettingsError,
-    setCommunitySettingsBannerUploadError,
-    setIsProcessingCommunitySettingsBanner,
-    markCommunitySettingsDirty,
-    isLikelyDesktopImageFile,
-    maxCommunityImageDataUrlChars,
-    setProfileAvatarUrl,
-    setAuthError,
-  } = args;
-
-  const handleCommunityAvatarUpload = useCallback(
-    async (file: File | null) => {
-      if (!file) return;
-      try {
-        const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
-        setCommunitySettingsAvatarUrl(dataUrl);
-        markCommunitySettingsDirty();
-      } catch (error) {
-        setCommunitySettingsError(getErrorMessage(error, "Failed to load image."));
-      }
-    },
-    [markCommunitySettingsDirty, setCommunitySettingsAvatarUrl, setCommunitySettingsError],
-  );
-
-  const handleCommunityBannerUpload = useCallback(
-    async (file: File | null) => {
-      if (!file) return;
-      if (!isLikelyDesktopImageFile(file)) {
-        setCommunitySettingsBannerUploadError("Banner must be an image file.");
-        return;
-      }
-      setCommunitySettingsBannerUploadError(null);
-      setIsProcessingCommunitySettingsBanner(true);
-      try {
-        const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, maxCommunityImageDataUrlChars);
-        setCommunitySettingsBannerUrl(dataUrl);
-        markCommunitySettingsDirty();
-      } catch (error) {
-        setCommunitySettingsBannerUploadError(getErrorMessage(error, "Failed to load banner."));
-      } finally {
-        setIsProcessingCommunitySettingsBanner(false);
-      }
-    },
-    [
-      isLikelyDesktopImageFile,
-      markCommunitySettingsDirty,
-      maxCommunityImageDataUrlChars,
-      setCommunitySettingsBannerUploadError,
-      setCommunitySettingsBannerUrl,
-      setIsProcessingCommunitySettingsBanner,
-    ],
-  );
-
-  const handleProfileAvatarUpload = useCallback(
-    async (file: File | null) => {
-      if (!file) return;
-      try {
-        const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
-        setProfileAvatarUrl(dataUrl);
-      } catch (error) {
-        setAuthError(getErrorMessage(error, "Failed to load image."));
-      }
-    },
-    [setAuthError, setProfileAvatarUrl],
-  );
-
-  const handleSettingsBannerDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setIsSettingsBannerDragOver(false);
-      const file = event.dataTransfer.files?.[0] ?? null;
-      if (file) void handleCommunityBannerUpload(file);
-    },
-    [handleCommunityBannerUpload, setIsSettingsBannerDragOver],
-  );
-
-  const handleSettingsAvatarDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setIsSettingsAvatarDragOver(false);
-      const file = event.dataTransfer.files?.[0] ?? null;
-      if (file) void handleCommunityAvatarUpload(file);
-    },
-    [handleCommunityAvatarUpload, setIsSettingsAvatarDragOver],
-  );
-
-  const handleProfileAvatarDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setIsProfileAvatarDragOver(false);
-      const file = event.dataTransfer.files?.[0] ?? null;
-      if (file) void handleProfileAvatarUpload(file);
-    },
-    [handleProfileAvatarUpload, setIsProfileAvatarDragOver],
-  );
-
-  return {
-    handleSettingsBannerDrop,
-    handleSettingsAvatarDrop,
-    handleCommunityAvatarUpload,
-    handleCommunityBannerUpload,
-    handleProfileAvatarUpload,
-    handleProfileAvatarDrop,
-  };
+): UseSettingsImageUploadControllerCoreResult {
+  return useSettingsImageUploadControllerCore({
+    setIsSettingsBannerDragOver: args.setIsSettingsBannerDragOver,
+    setIsSettingsAvatarDragOver: args.setIsSettingsAvatarDragOver,
+    setIsProfileAvatarDragOver: args.setIsProfileAvatarDragOver,
+    setCommunitySettingsAvatarUrl: args.setCommunitySettingsAvatarUrl,
+    setCommunitySettingsBannerUrl: args.setCommunitySettingsBannerUrl,
+    setCommunitySettingsError: args.setCommunitySettingsError,
+    setCommunitySettingsBannerUploadError: args.setCommunitySettingsBannerUploadError,
+    setIsProcessingCommunitySettingsBanner: args.setIsProcessingCommunitySettingsBanner,
+    markCommunitySettingsDirty: args.markCommunitySettingsDirty,
+    isLikelyCommunityBannerImageFile: args.isLikelyDesktopImageFile,
+    maxCommunityImageDataUrlChars: args.maxCommunityImageDataUrlChars,
+    setProfileAvatarUrl: args.setProfileAvatarUrl,
+    setAuthError: args.setAuthError,
+    enforceCommunityAvatarDataUrlLimit: false,
+    communityAvatarReadErrorFallback: "Failed to load image.",
+    communityBannerReadErrorFallback: "Failed to load banner.",
+    settingsDropStopPropagation: true,
+    settingsDropRequireFile: true,
+    profileDropStopPropagation: true,
+  });
 }

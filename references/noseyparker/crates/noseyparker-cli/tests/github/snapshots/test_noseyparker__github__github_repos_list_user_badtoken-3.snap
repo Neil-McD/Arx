@@ -1,0 +1,6 @@
+---
+source: crates/noseyparker-cli/tests/github/mod.rs
+expression: stderr
+---
+Error: Failed to enumerate GitHub repositories: error making request: HTTP status client error (401 Unauthorized) for url (https://api.github.com/rate_limit): HTTP status client error (401 Unauthorized) for url (https://api.github.com/rate_limit)
+

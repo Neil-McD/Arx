@@ -3,6 +3,8 @@ import type {
   ShellAttachmentResult,
   DesktopShellClient,
   NativeVoiceCaptureStopped,
+  ShellChatgptCloudTurnMessage,
+  ShellChatgptCloudTurnResult,
   ShellChatgptAuthSummary,
   ShellModelToggle,
   ShellPendingInviteRecord,
@@ -44,6 +46,18 @@ export class TauriDesktopShellClient implements DesktopShellClient {
 
   async clearChatgptAuth(): Promise<void> {
     await invoke("clear_chatgpt_auth_cmd");
+  }
+
+  async chatgptCloudTurn(args: {
+    model_id: string;
+    messages: ShellChatgptCloudTurnMessage[];
+    max_tokens?: number | null;
+  }): Promise<ShellChatgptCloudTurnResult> {
+    return invoke<ShellChatgptCloudTurnResult>("chatgpt_cloud_turn_cmd", {
+      modelId: args.model_id,
+      messages: args.messages,
+      maxTokens: args.max_tokens ?? null,
+    });
   }
 
   async getExecPolicyRules(): Promise<string | null> {

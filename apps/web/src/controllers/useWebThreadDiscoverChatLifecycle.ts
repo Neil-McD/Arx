@@ -1,15 +1,13 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-
-type PageLike = string;
-type TabLike = string;
+import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 
 export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(params: {
   supabaseSession: SessionT | null;
   activeThreadId: string | null;
   guestThreadId: string;
-  activePage: PageLike;
+  activePage: AppPage;
   activeCommunityId: string | null;
-  communityTab: TabLike;
+  communityTab: CommunityTab;
   isLoadingThreadRef: MutableRefObject<boolean>;
   autoScrollEnabledRef: MutableRefObject<boolean>;
   lastWorkspaceScrollTopRef: MutableRefObject<number>;

@@ -1,6 +1,13 @@
+import {
+  hasBuilderTierPaidAccess,
+  isBuilderTierArchitect,
+  isBuilderTierBuilder,
+  isBuilderTierFree,
+} from "./builderBilling";
+
 export type AccessSurface = "web" | "desktop";
 export type AccessAuthState = "anonymous" | "authenticated";
-export type BuilderTier = "free" | "builder" | "architect" | "pro" | "unknown";
+export type BuilderTier = "free" | "builder" | "pro" | "unknown";
 export type ThreadMode = "single_guest" | "multi_local" | "multi_cloud";
 
 export type UserAccessPolicy = {
@@ -17,18 +24,15 @@ export type UserAccessPolicy = {
   allowPersonalMemory: boolean;
 };
 
-export function normalizeBuilderTier(value: string | null | undefined): BuilderTier {
-  const raw = String(value ?? "")
-    .trim()
-    .toLowerCase();
-  if (raw === "architect" || raw === "pro") return "architect";
-  if (raw === "builder" || raw === "free") return raw;
+function normalizeBuilderTier(value: string | null | undefined): BuilderTier {
+  if (isBuilderTierArchitect(value)) return "pro";
+  if (isBuilderTierBuilder(value)) return "builder";
+  if (isBuilderTierFree(value)) return "free";
   return "unknown";
 }
 
-export function isPaidBuilderTier(value: string | null | undefined): boolean {
-  const tier = normalizeBuilderTier(value);
-  return tier === "builder" || tier === "architect" || tier === "pro";
+function isPaidBuilderTier(value: string | null | undefined): boolean {
+  return hasBuilderTierPaidAccess(value);
 }
 
 export function resolveUserAccessPolicy(input: {

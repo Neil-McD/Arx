@@ -6,7 +6,7 @@ export type ParsedEmbed =
   | { provider: "youtube"; id: string; src: string; thumbnailUrl: string }
   | { provider: "wistia"; id: string; src: string };
 
-export function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
+function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
   let url = candidate;
   let trailing = "";
   while (url.length > 0) {
@@ -60,7 +60,7 @@ export function renderTextWithLinks(
   return nodes.length > 0 ? <>{nodes}</> : text;
 }
 
-export function parseTimeToSeconds(value: string): number | null {
+function parseTimeToSeconds(value: string): number | null {
   const trimmed = value.trim().toLowerCase();
   if (!trimmed) return null;
   if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
@@ -79,7 +79,7 @@ export function parseTimeToSeconds(value: string): number | null {
   return matched ? seconds : null;
 }
 
-export function normalizeExternalUrl(raw: string): URL | null {
+function normalizeExternalUrl(raw: string): URL | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   try {
@@ -93,7 +93,7 @@ export function normalizeExternalUrl(raw: string): URL | null {
   }
 }
 
-export function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } | null {
+function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } | null {
   const host = url.hostname.toLowerCase();
   const parts = url.pathname.split("/").filter(Boolean);
 
@@ -117,7 +117,7 @@ export function parseYouTubeId(url: URL): { id: string; startSeconds: number | n
   return { id, startSeconds };
 }
 
-export function parseWistiaId(url: URL): string | null {
+function parseWistiaId(url: URL): string | null {
   const host = url.hostname.toLowerCase();
   if (!host.includes("wistia.com") && !host.includes("wistia.net")) return null;
 

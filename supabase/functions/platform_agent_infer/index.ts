@@ -2,17 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { requireVerifiedUserId } from "../_shared/auth.ts";
-import { getEnv, isTruthyEnv } from "../_shared/env.ts";
+import { getEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
-import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { type PlatformModelRef } from "../_shared/platform_model_routing.ts";
 import {
   clampMaxTokens,
   consumePlatformInferenceStandard,
   edgeRateLimitAllowKey,
-  platformOpenAiCompatibleBaseUrl,
-  platformProviderEnvKey,
-  resolvePlatformModelForAliasOrRegistry,
+  evaluatePlatformInferenceEntitlement,
+  loadUserBuilderTierForPlatformInference,
+  resolvePlatformInferenceTarget,
 } from "../_shared/platform_inference_core.ts";
 
 type PlatformAgentInferInput = {
@@ -25,17 +24,6 @@ async function readJsonBounded<T>(req: Request, maxChars = 512_000): Promise<T> 
   if (!text) throw new Error("Missing JSON body");
   if (text.length > maxChars) throw new Error("request_too_large");
   return JSON.parse(text) as T;
-}
-
-async function loadUserBuilderTier(userId: string): Promise<"free" | "builder" | "pro"> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/profiles?select=builder_tier&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
-    { method: "GET" },
-  );
-  if (!res.ok) return "free";
-  const rows = (await res.json()) as Array<{ builder_tier?: unknown }>;
-  const raw = String(rows[0]?.builder_tier ?? "free").trim().toLowerCase();
-  return raw === "pro" || raw === "builder" ? raw : "free";
 }
 
 Deno.serve(async (req: Request) => {
@@ -61,10 +49,16 @@ Deno.serve(async (req: Request) => {
     const userId = await requireVerifiedUserId(req);
     const authMs = Math.round(performance.now() - authStartedAt);
 
-    const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
-    // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
-    const platformEnabled = platformEnabledRaw ? isTruthyEnv(platformEnabledRaw) : true;
-    if (!platformEnabled) {
+    const builderTierStartedAt = performance.now();
+    const entitlementPromise = loadUserBuilderTierForPlatformInference(userId).then((tier) => ({
+      value: evaluatePlatformInferenceEntitlement(tier),
+      ms: Math.round(performance.now() - builderTierStartedAt),
+    }));
+    const [{ value: entitlement, ms: builderTierMs }, { value: input, ms: inputMs }] = await Promise.all([
+      entitlementPromise,
+      inputPromise,
+    ]);
+    if (!entitlement.allowed && entitlement.reason === "platform_inference_disabled") {
       return jsonResponse(
         {
           ok: false,
@@ -75,17 +69,7 @@ Deno.serve(async (req: Request) => {
         { status: 403, headers },
       );
     }
-
-    const builderTierStartedAt = performance.now();
-    const builderTierPromise = loadUserBuilderTier(userId).then((value) => ({
-      value,
-      ms: Math.round(performance.now() - builderTierStartedAt),
-    }));
-    const [{ value: builderTier, ms: builderTierMs }, { value: input, ms: inputMs }] = await Promise.all([
-      builderTierPromise,
-      inputPromise,
-    ]);
-    if (builderTier === "free") {
+    if (!entitlement.allowed && entitlement.reason === "platform_inference_not_allowed") {
       return jsonResponse(
         {
           ok: false,
@@ -120,71 +104,41 @@ Deno.serve(async (req: Request) => {
     }).then((value) => ({ value, ms: Math.round(performance.now() - ipRlStartedAt) }));
 
     const modelResolveStartedAt = performance.now();
-    const modelResolutionPromise = resolvePlatformModelForAliasOrRegistry(aliasModelId)
-      .then((value) => ({
-        ok: true as const,
-        value,
-        ms: Math.round(performance.now() - modelResolveStartedAt),
-      }))
-      .catch((error) => ({
-        ok: false as const,
-        error,
-        ms: Math.round(performance.now() - modelResolveStartedAt),
-      }));
+    const modelTargetPromise = resolvePlatformInferenceTarget(aliasModelId).then((value) => ({
+      value,
+      ms: Math.round(performance.now() - modelResolveStartedAt),
+    }));
 
     const [
       { value: userRlAllowed, ms: userRlMs },
       { value: ipRlAllowed, ms: ipRlMs },
-      modelResolution,
-    ] = await Promise.all([userRlPromise, ipRlPromise, modelResolutionPromise]);
+      { value: modelTarget, ms: modelResolveMs },
+    ] = await Promise.all([userRlPromise, ipRlPromise, modelTargetPromise]);
 
     if (!userRlAllowed) throw new Error("rate_limited");
     if (!ipRlAllowed) throw new Error("rate_limited");
 
-    const modelResolveMs = modelResolution.ms;
-    if (!modelResolution.ok) {
-      const message = modelResolution.error instanceof Error
-        ? modelResolution.error.message
-        : String(modelResolution.error);
-      if (message.toLowerCase().includes("platform_inference_not_allowed")) {
-        return jsonResponse(
-          {
-            ok: false,
-            error: "platform_inference_not_allowed",
-            code: "platform_inference_not_allowed",
-            model_id: aliasModelId,
-          },
-          { status: 403, headers },
-        );
-      }
+    if (!modelTarget.ok) {
+      const strictRegistryMessage =
+        modelTarget.code === "platform_inference_misconfigured"
+          ? `platform model not configured for '${modelTarget.model_id}'`
+          : modelTarget.message;
       return jsonResponse(
         {
           ok: false,
-          error: "platform_inference_misconfigured",
-          code: "platform_inference_misconfigured",
-          model_id: aliasModelId,
-          message,
+          error: modelTarget.code,
+          code: modelTarget.code,
+          model_id: modelTarget.model_id,
+          provider: modelTarget.provider ?? undefined,
+          message: strictRegistryMessage,
+          ...(modelTarget.details ? { details: modelTarget.details } : null),
         },
-        { status: 503, headers },
+        { status: modelTarget.status, headers },
       );
     }
-    const platformModel: PlatformModelRef = modelResolution.value;
-
-    const providerEnvKey = platformProviderEnvKey(platformModel.provider);
-    const platformProviderKey = getEnv(providerEnvKey);
-    if (!platformProviderKey) {
-      return jsonResponse(
-        {
-          ok: false,
-          error: "platform_inference_misconfigured",
-          code: "platform_inference_misconfigured",
-          provider: platformModel.provider,
-          model_id: aliasModelId,
-          message: `Missing env var: ${providerEnvKey}`,
-        },
-        { status: 503, headers },
-      );
-    }
+    const platformModel: PlatformModelRef = modelTarget.platform_model;
+    const platformProviderKey = modelTarget.provider_key;
+    const platformOpenAiBaseUrl = modelTarget.openai_compatible_base_url;
 
     // Charge quota per model call (1 unit). The desktop agent loop may call repeatedly.
     let platformRemaining: number | null = null;
@@ -267,9 +221,8 @@ Deno.serve(async (req: Request) => {
     };
 
     if (platformModel.provider !== "anthropic") {
-      const base = platformOpenAiCompatibleBaseUrl(platformModel.provider);
-      if (!base) throw new Error("unsupported_provider");
-      const url = `${base.replace(/\/+$/, "")}/chat/completions`;
+      if (!platformOpenAiBaseUrl) throw new Error("unsupported_provider");
+      const url = `${platformOpenAiBaseUrl.replace(/\/+$/, "")}/chat/completions`;
       const upstream = await fetch(url, {
         method: "POST",
         headers: {

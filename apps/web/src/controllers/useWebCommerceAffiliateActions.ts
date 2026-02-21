@@ -46,7 +46,6 @@ type UseWebCommerceAffiliateActionsArgs = {
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   openCommunityWorkspace: (communityId: string) => void;
   loadCommunities: (session: SupabaseSession) => Promise<void>;
-  isArxOwnerAccount: (user: SupabaseSession["user"]) => boolean;
   clearPendingPurchaseClaimToken: () => void;
   storePendingPurchaseClaimToken: (token: string) => void;
   setCheckoutClaimToken: Dispatch<SetStateAction<string | null>>;
@@ -61,10 +60,6 @@ type UseWebCommerceAffiliateActionsArgs = {
   setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setBuilderBillingStatus: Dispatch<SetStateAction<BuilderBillingStatus | null>>;
-  isDevSettingBuilderTier: boolean;
-  setIsDevSettingBuilderTier: Dispatch<SetStateAction<boolean>>;
-  setDevSetBuilderTierError: Dispatch<SetStateAction<string | null>>;
-  resetOwnerProCaches: () => void;
   redeemPendingPurchasesInFlightRef: { current: boolean };
 };
 
@@ -196,47 +191,6 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
     [args],
   );
 
-  const handleDevSetBuilderTier = useCallback(
-    async (nextTier: "free" | "builder" | "architect" | "pro"): Promise<void> => {
-      const session = args.getSession();
-      const url = session ? args.getSupabaseUrl() : null;
-      if (!session || !url) return;
-
-      if (!args.isArxOwnerAccount(session.user)) return;
-      if (args.isDevSettingBuilderTier) return;
-
-      args.setIsDevSettingBuilderTier(true);
-      args.setDevSetBuilderTierError(null);
-      try {
-        const rpcTier = nextTier === "architect" ? "pro" : nextTier;
-        const response = await args.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_builder_tier: rpcTier }),
-          },
-          session,
-        );
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-
-        await loadBuilderBillingStatus(session);
-        args.resetOwnerProCaches();
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to update builder tier.";
-        args.setDevSetBuilderTierError(message);
-      } finally {
-        args.setIsDevSettingBuilderTier(false);
-      }
-    },
-    [args, loadBuilderBillingStatus],
-  );
-
   const redeemPendingPurchases = useCallback(
     async (opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> => {
       const session = args.getSession();
@@ -299,7 +253,6 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
     redeemPurchaseClaim,
     loadPendingPurchaseClaims,
     loadBuilderBillingStatus,
-    handleDevSetBuilderTier,
     redeemPendingPurchases,
   };
 }

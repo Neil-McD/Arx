@@ -1,7 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BuilderUpgradeContextValue } from "./builderBilling";
 
-export type BuilderCheckoutTier = "builder" | "architect" | "pro";
+export type BuilderCheckoutTier = "builder" | "pro";
 export type BuilderCheckoutRequestTier = "builder" | "pro";
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
 

@@ -9,7 +9,7 @@ function emptyDraft(): LocalProfileDraft {
   return { name: "", username: "", bio: "", avatarUrl: null };
 }
 
-export function profileStorageKeysForUser(userId: string | null | undefined): {
+function profileStorageKeysForUser(userId: string | null | undefined): {
   name: string;
   username: string;
   bio: string;

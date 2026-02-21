@@ -250,7 +250,7 @@ function appendUniqueStrings(into: string[], values: string[]): void {
   }
 }
 
-export function buildCommunityDeepResearchPassPlan(query: string, maxPassesRaw?: number): string[] {
+function buildCommunityDeepResearchPassPlan(query: string, maxPassesRaw?: number): string[] {
   const maxPasses = normalizeDeepResearchMaxPasses(maxPassesRaw);
   const primary = normalizeCommunitySearchQuery(query);
   if (!primary) return [""];
@@ -262,7 +262,7 @@ export function buildCommunityDeepResearchPassPlan(query: string, maxPassesRaw?:
   return out.slice(0, maxPasses);
 }
 
-export function buildCommunityResearchQueryPlan(query: string): string[] {
+function buildCommunityResearchQueryPlan(query: string): string[] {
   const primary = normalizeCommunitySearchQuery(query);
   if (!primary) return [""];
 
@@ -276,7 +276,7 @@ export function buildCommunityResearchQueryPlan(query: string): string[] {
   return out.slice(0, COMMUNITY_MULTI_QUERY_MAX);
 }
 
-export function isCommunityMetaDiscoveryQuery(query: string | null | undefined): boolean {
+function isCommunityMetaDiscoveryQuery(query: string | null | undefined): boolean {
   const raw = String(query ?? "").trim().toLowerCase();
   if (!raw) return true;
   if (COMMUNITY_META_DISCOVERY_HINTS.some((hint) => raw.includes(hint))) return true;

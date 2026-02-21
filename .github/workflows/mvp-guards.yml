@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  required-community-core:
-    name: Required Community Core
+  foundation-baseline:
+    name: Foundation Baseline
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,59 +28,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            sqlite3 \
-            libasound2-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
 
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run community core regression guard
-        run: bash scripts/community_core_check.sh
-
-  required-ratchets:
-    name: Required Ratchets
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Setup Supabase CLI (pinned contract line)
+        uses: supabase/setup-cli@v1
         with:
-          fetch-depth: 0
+          version: 2.75.0
 
-      - name: Run app shell boundary guard
-        run: bash scripts/app_shell_boundary_check.sh
+      - name: Run foundation baseline gate (canonical)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: bash scripts/foundation_baseline_gate.sh
 
-      - name: Run app shell shared helpers regression guard
-        run: bash scripts/app_shell_shared_helpers_regression_check.sh
-
-      - name: Run app hook budget guard
-        run: bash scripts/app_hook_budget_check.sh
-
-      - name: Run monolith LOC ratchet guard
-        run: bash scripts/monolith_ratchet_check.sh
-
-      - name: Run web app init-order guard
-        run: bash scripts/web_app_init_order_guard.sh
-
-  extended-mvp-guards:
-    name: Extended MVP Guards
-    needs:
-      - required-community-core
-      - required-ratchets
+  reliability-smoke:
+    name: Reliability Smoke
     runs-on: ubuntu-latest
+    needs:
+      - foundation-baseline
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,154 +58,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            sqlite3 \
-            libasound2-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
 
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run private edge CORS guard
-        run: bash scripts/private_edge_cors_guard.sh
-
-      - name: Run main.rs budget guard
-        run: bash scripts/main_rs_budget_check.sh
-
-      - name: Run main.rs startup boundary guard
-        run: bash scripts/main_rs_startup_boundary_check.sh
-
-      - name: Run main.rs invoke boundary guard
-        run: bash scripts/main_rs_invoke_boundary_check.sh
-
-      - name: Run main.rs command-cluster boundary guard
-        run: bash scripts/main_rs_command_cluster_boundary_check.sh
-
-      - name: Run main.rs runtime/thread cluster boundary guard
-        run: bash scripts/main_rs_runtime_thread_cluster_boundary_check.sh
-
-      - name: Run main.rs message/settings cluster boundary guard
-        run: bash scripts/main_rs_message_settings_cluster_boundary_check.sh
-
-      - name: Run main.rs thread-metadata cluster boundary guard
-        run: bash scripts/main_rs_thread_metadata_cluster_boundary_check.sh
-
-      - name: Run main.rs attachment cluster boundary guard
-        run: bash scripts/main_rs_attachment_cluster_boundary_check.sh
-
-      - name: Run main.rs workspace/project cluster boundary guard
-        run: bash scripts/main_rs_workspace_project_cluster_boundary_check.sh
-
-      - name: Run main.rs command allowlist guard
-        run: bash scripts/main_rs_command_definition_allowlist_check.sh
-
-      - name: Run release startup smoke guard
-        run: bash scripts/release_startup_smoke_check.sh
-
-      - name: Run release startup missing-key guard
-        run: bash scripts/release_startup_missing_key_check.sh
-
-      - name: Run release DB key contract guard
-        run: bash scripts/release_db_key_contract_check.sh
-
-  release-confidence:
-    name: Release Confidence Gate
-    needs:
-      - required-community-core
-      - required-ratchets
-      - extended-mvp-guards
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            sqlite3 \
-            libasound2-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Verify apps/web lockfile exists
-        run: test -f apps/web/package-lock.json
-
-      - name: Install apps/web dependencies
-        run: npm ci --prefix apps/web
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run alpha hardening gate (canonical)
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          bash scripts/alpha_hardening_gate.sh 2>&1 | tee artifacts/alpha-hardening-gate.log
-
-      - name: Upload alpha hardening gate log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: alpha-hardening-gate-log-${{ github.run_id }}
-          path: artifacts/alpha-hardening-gate.log
-          if-no-files-found: warn
-
-      - name: Run web bundle budget guard
-        run: WEB_BUNDLE_BUDGET_SKIP_BUILD=1 bash scripts/web_bundle_budget_check.sh apps/web
-
-      - name: Run thread/event perf smoke guard
-        run: bash scripts/thread_event_perf_smoke_check.sh
-
-      - name: Run Rust tests
-        run: (cd src-tauri && cargo test -q)
-
-      - name: Run harness failure matrix
-        run: bash scripts/harness_failure_matrix_check.sh
-
-      - name: Run workspace identity guard
-        run: bash scripts/workspace_identity_contract_guard.sh
-
-      - name: Run DB write-path guard
-        run: bash scripts/db_write_path_contract_guard.sh
-
-      - name: Run Supabase CLI contract guard
-        run: bash scripts/supabase_cli_contract_check.sh
-
-      - name: Run Supabase migration filename guard
-        run: bash scripts/supabase_migration_filename_guard.sh
-
-      - name: Security audit (root prod deps)
-        run: npm audit --omit=dev --audit-level=high
-
-      - name: Security audit (apps/web prod deps)
-        run: npm audit --omit=dev --audit-level=high --prefix apps/web
+      - name: Run reliability smoke gate
+        run: bash scripts/reliability_smoke_gate.sh

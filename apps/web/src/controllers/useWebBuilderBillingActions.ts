@@ -1,7 +1,8 @@
 import { type Dispatch, type SetStateAction } from "react";
 import {
-  buildBuilderBillingRedirectUrls,
-  normalizeBuilderCheckoutTier,
+  buildBuilderCheckoutRequestPayload,
+  buildBuilderConnectRequestPayload,
+  buildBuilderPortalRequestPayload,
 } from "../../../../shared/builderBilling";
 import type { PendingAuthIntentInput } from "../../../../shared/supabaseAuthIntent";
 import type { SupabaseSession } from "../supabase";
@@ -54,33 +55,24 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     }: {
       tier: BuilderCheckoutTier;
       context: BuilderUpgradeContext;
-    }) => {
-      const urls = buildBuilderBillingRedirectUrls({
+    }) =>
+      buildBuilderCheckoutRequestPayload({
         origin: window.location.origin,
         source: "web",
         context,
-      });
-      return {
-        tier: normalizeBuilderCheckoutTier(tier),
-        successUrl: urls.successUrl,
-        cancelUrl: urls.cancelUrl,
-      };
-    },
-    buildPortalPayload: ({ context }: { context: BuilderUpgradeContext }) => {
-      const returnUrl = buildBuilderBillingRedirectUrls({
+        tier,
+      }),
+    buildPortalPayload: ({ context }: { context: BuilderUpgradeContext }) =>
+      buildBuilderPortalRequestPayload({
         origin: window.location.origin,
         source: "web",
         context,
-      }).returnUrl;
-      return { returnUrl };
-    },
-    buildConnectPayload: () => {
-      const origin = window.location.origin.replace(/\/+$/, "");
-      return {
-        returnUrl: `${origin}/?payouts=done`,
-        refreshUrl: `${origin}/?payouts=refresh`,
-      };
-    },
+      }),
+    buildConnectPayload: () =>
+      buildBuilderConnectRequestPayload({
+        origin: window.location.origin,
+        returnStatus: "done",
+      }),
     openUrl: (_kind, url) => {
       args.navigateToUrl(url);
       return true;

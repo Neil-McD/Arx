@@ -37,8 +37,8 @@ pub(crate) fn add_message_cmd(
 ) -> Result<(), String> {
     let conn = crate::db::open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
     let role_normalized = role.trim().to_ascii_lowercase();
-    let content_value = serde_json::from_str::<serde_json::Value>(&content_json)
-        .unwrap_or(serde_json::Value::Null);
+    let content_value =
+        serde_json::from_str::<serde_json::Value>(&content_json).unwrap_or(serde_json::Value::Null);
     let message_text = extract_message_text(&content_json);
 
     let (event_type, payload_json) = match role_normalized.as_str() {
@@ -170,6 +170,21 @@ fn default_model_toggles() -> Vec<ModelToggle> {
         ModelToggle {
             id: "grok-4.1".to_string(),
             label: "Grok 4.1".to_string(),
+            enabled: true,
+        },
+        ModelToggle {
+            id: "kimi-k2".to_string(),
+            label: "Kimi K2".to_string(),
+            enabled: true,
+        },
+        ModelToggle {
+            id: "glm-4.7".to_string(),
+            label: "GLM 4.7".to_string(),
+            enabled: true,
+        },
+        ModelToggle {
+            id: "deepseek-v3.2".to_string(),
+            label: "DeepSeek V3.2".to_string(),
             enabled: true,
         },
     ]
@@ -351,4 +366,38 @@ pub(crate) fn set_active_model_cmd(
 ) -> Result<(), String> {
     let conn = crate::db::open_conn(&state.db_path, &state.key).map_err(|e| e.to_string())?;
     crate::db::set_ui_state(&conn, "active_model", &model_id).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scan_publish_content_cmd;
+
+    #[test]
+    fn secret_redaction_publish_blocks_when_any_secret_detected() {
+        let result = scan_publish_content_cmd("api_key: abcdefghijklmnopQRSTUVWX".to_string())
+            .expect("scan should succeed");
+
+        assert!(result.blocked, "publish must fail closed on any detection");
+        assert!(
+            result.redacted.contains("[REDACTED]"),
+            "detected content should be redacted"
+        );
+        assert!(
+            result
+                .redactions
+                .iter()
+                .any(|entry| entry.kind == "generic_api_key" && entry.count >= 1),
+            "expected generic_api_key finding"
+        );
+    }
+
+    #[test]
+    fn secret_redaction_publish_allows_clean_content() {
+        let result = scan_publish_content_cmd("clean publish payload".to_string())
+            .expect("scan should succeed");
+
+        assert!(!result.blocked, "clean content must not be blocked");
+        assert!(result.redactions.is_empty(), "clean content must have no findings");
+        assert_eq!(result.redacted, "clean publish payload");
+    }
 }

@@ -25,7 +25,9 @@ pub fn resolve_thread_workspace_fingerprint(
     conn: &Connection,
     thread: &db::ThreadRecord,
 ) -> Option<String> {
-    if let Some(fingerprint) = normalize_workspace_fingerprint(thread.workspace_fingerprint.as_deref()) {
+    if let Some(fingerprint) =
+        normalize_workspace_fingerprint(thread.workspace_fingerprint.as_deref())
+    {
         return Some(fingerprint);
     }
     let project_id = thread
@@ -37,10 +39,7 @@ pub fn resolve_thread_workspace_fingerprint(
     normalize_workspace_fingerprint(Some(project.fingerprint.as_str()))
 }
 
-pub fn workspace_scope_id(
-    workspace_path: &str,
-    workspace_fingerprint: Option<&str>,
-) -> String {
+pub fn workspace_scope_id(workspace_path: &str, workspace_fingerprint: Option<&str>) -> String {
     if let Some(fingerprint) = normalize_workspace_fingerprint(workspace_fingerprint) {
         return fingerprint;
     }
@@ -49,9 +48,7 @@ pub fn workspace_scope_id(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        canonical_workspace_path, normalize_workspace_fingerprint, workspace_scope_id,
-    };
+    use super::{canonical_workspace_path, normalize_workspace_fingerprint, workspace_scope_id};
 
     #[test]
     fn workspace_scope_prefers_fingerprint() {

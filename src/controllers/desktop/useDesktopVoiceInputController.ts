@@ -100,13 +100,16 @@ export function useDesktopVoiceInputController(params: {
       | "busy";
     title: string;
   } {
+    if (!params.supabaseSession) {
+      return {
+        mode: "sign_in",
+        title:
+          surface === "community"
+            ? "Sign in to use voice input in community chat."
+            : "Sign in to use voice input.",
+      };
+    }
     if (surface === "community") {
-      if (!params.supabaseSession) {
-        return {
-          mode: "sign_in",
-          title: "Sign in to use voice input in community chat.",
-        };
-      }
       if (!params.activeCommunity) {
         return {
           mode: "select_community",
@@ -141,7 +144,7 @@ export function useDesktopVoiceInputController(params: {
     return {
       mode: "start_recording",
       title:
-        params.normalizedBuilderTier === "architect"
+        params.normalizedBuilderTier === "pro"
           ? "Start voice input ($100 plan)."
           : params.normalizedBuilderTier === "builder"
             ? "Start voice input ($20 plan)."
@@ -209,21 +212,16 @@ export function useDesktopVoiceInputController(params: {
       surface,
     });
     const session = params.supabaseSessionRef.current ?? params.supabaseSession;
-    const response = session
-      ? await params.fetchWithSupabaseAuth(
-          `${url}/functions/v1/voice_transcribe`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: payload,
-          },
-          session,
-        )
-      : await params.fetchWithSupabasePublic(`${url}/functions/v1/voice_transcribe`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
-        });
+    if (!session) throw new Error("Sign in to use voice input.");
+    const response = await params.fetchWithSupabaseAuth(
+      `${url}/functions/v1/voice_transcribe`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      },
+      session,
+    );
     if (!response.ok) throw new Error(await readSupabaseError(response));
     const data = (await response.json()) as { text?: unknown };
     return typeof data?.text === "string" ? data.text.trim() : "";

@@ -1,0 +1,25 @@
+---
+source: crates/noseyparker-cli/tests/help/mod.rs
+expression: stdout
+---
+Summarize scan findings
+
+Usage: noseyparker summarize [OPTIONS]
+
+Options:
+  -d, --datastore <PATH>  Use the specified datastore [env: NP_DATASTORE=] [default: datastore.np]
+  -h, --help              Print help (see more with '--help')
+
+Output Options:
+  -o, --output <PATH>    Write output to the specified path
+  -f, --format <FORMAT>  Write output in the specified format [default: human] [possible values:
+                         human, json, jsonl]
+
+Global Options:
+  -v, --verbose...       Enable verbose output
+  -q, --quiet            Suppress non-error feedback messages
+      --color <MODE>     Enable or disable colored output [default: auto] [possible values: auto,
+                         never, always]
+      --progress <MODE>  Enable or disable progress bars [default: auto] [possible values: auto,
+                         never, always]
+      --ignore-certs     Ignore validation of TLS certificates

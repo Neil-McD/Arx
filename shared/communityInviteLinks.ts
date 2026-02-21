@@ -18,7 +18,7 @@ export function generateInviteCode(length = 10): string {
   return out;
 }
 
-export function buildDesktopWebInviteLink(args: {
+function buildDesktopWebInviteLink(args: {
   shareBaseUrl: string | null;
   communityId?: string | null;
   inviteCode: string;
@@ -29,7 +29,7 @@ export function buildDesktopWebInviteLink(args: {
   return `${args.shareBaseUrl}${communityPath}?invite=${code}`;
 }
 
-export function buildDesktopDeepInviteLink(inviteCode: string): string {
+function buildDesktopDeepInviteLink(inviteCode: string): string {
   const code = encodeURIComponent(normalizeInviteCode(inviteCode));
   return `arx://join?invite=${code}`;
 }
@@ -44,7 +44,7 @@ export function buildDesktopBestInviteLink(args: {
   return { kind: "app", link: buildDesktopDeepInviteLink(args.inviteCode) };
 }
 
-export function buildCommunityShareLink(origin: string, communitySlug: string): string {
+function buildCommunityShareLink(origin: string, communitySlug: string): string {
   const slug = (communitySlug ?? "").trim().toLowerCase();
   const normalizedOrigin = (origin ?? "").trim().replace(/\/+$/, "");
   if (!slug) return normalizedOrigin;

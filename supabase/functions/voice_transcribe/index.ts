@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
+import { isAuthApiError, requireVerifiedUserId } from "../_shared/auth.ts";
+import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
 import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 
@@ -255,8 +256,12 @@ async function transcribeWithGroqFallback(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  const cors = withStrictCors(noStoreHeaders(), req);
+  if (req.method === "OPTIONS") return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  if (!cors.allowed) {
+    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+  }
+  const headers = cors.headers;
   if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
 
   try {
@@ -272,9 +277,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const userId = await requireVerifiedUserId(req);
+
     const rlAllowed = await edgeRateLimitAllow({
       req,
-      key: "voice_transcribe",
+      key: `voice_transcribe:user:${userId}`,
       windowSeconds: 60,
       limit: 20,
     });
@@ -379,6 +386,17 @@ Deno.serve(async (req: Request) => {
       { status: 502, headers },
     );
   } catch (error) {
+    if (isAuthApiError(error)) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: error.code,
+          code: error.code,
+          message: error.message,
+        },
+        { status: error.status, headers },
+      );
+    }
     const message = error instanceof Error ? error.message : String(error);
     const code = message === "request_too_large" ? "request_too_large" : "internal_error";
     const status = message === "request_too_large" ? 413 : 500;

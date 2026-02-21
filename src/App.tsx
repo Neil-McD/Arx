@@ -1,11 +1,10 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import "highlight.js/styles/github-dark.css";
 import { TauriRuntimeClient } from "./runtime/arp/tauriClient";
 import type { RuntimeClient } from "./runtime/arp/client";
 import {
   ARP_PROTOCOL_VERSION,
-  type EventRecord as ArpEventRecord,
   type MessageRecord as ArpMessageRecord,
   type ProjectRecord as ArpProjectRecord,
   type SessionResume as ArpSessionResume,
@@ -20,7 +19,6 @@ import {
   type AgentMode,
 } from "./features/harness/runPhase";
 import { useStreamingState } from "./features/harness/useStreamingState";
-import { CommunityChatMessageRow } from "../shared/CommunityChatMessageRow";
 import { useLastClickWinsController } from "../shared/useLastClickWinsController";
 import { useCommunityChatRealtime } from "../shared/useCommunityChatRealtime";
 import { useCommunityChatViewport } from "../shared/useCommunityChatViewport";
@@ -42,14 +40,16 @@ import { useCommunityAgentDraftController } from "../shared/useCommunityAgentDra
 import { useCommunitySettingsGovernanceController } from "../shared/useCommunitySettingsGovernanceController";
 import { useCommunitySettingsDataController } from "../shared/useCommunitySettingsDataController";
 import { useCommunitySettingsFormController } from "../shared/useCommunitySettingsFormController";
-import { useCommunityAdminAnalyticsAutomationsLifecycle } from "../shared/useCommunityAdminAnalyticsAutomationsLifecycle";
+import { useCommunityAdminAnalyticsLifecycle } from "../shared/useCommunityAdminAnalyticsLifecycle";
+import { useCommunityAgentLandingLifecycle } from "../shared/useCommunityAgentLandingLifecycle";
+import { useCommunityAgentMembersLifecycle } from "../shared/useCommunityAgentMembersLifecycle";
+import { useCommunityMembersTabLifecycle } from "../shared/useCommunityMembersTabLifecycle";
+import { useCommunityResourcesTabLifecycle } from "../shared/useCommunityResourcesTabLifecycle";
+import { useCommunitySettingsAccessLifecycle } from "../shared/useCommunitySettingsAccessLifecycle";
 import { createThreadContextController } from "../shared/threadContextController";
 import {
-  extractCommunityEvidenceUsedV1,
   type CommunityEvidenceItem,
 } from "../shared/communityEvidence";
-import { CommunityEvidenceCitations } from "../shared/CommunityEvidenceCitations";
-import { partitionCommunityAttachments } from "../shared/communityAttachmentUi";
 import {
   buildReplyPrefix,
   extractTextFromContentJson,
@@ -75,9 +75,6 @@ import {
   extractModelIdFromMessageContent,
   formatModelAttributionLabel,
 } from "../shared/modelAttributionUi";
-import {
-  formatCommunityEvidenceTypeLabel,
-} from "../shared/communityEvidenceUi";
 import {
   captureBrandosAidFromLocation,
   clearPendingPurchaseClaimToken,
@@ -117,8 +114,6 @@ import {
   createDesktopCloudLensSync,
 } from "./services/thread";
 import {
-  getArxOwnerEmailSet,
-  getArxOwnerUserIdSet,
   isUuid,
 } from "../shared/appIdentity";
 import {
@@ -129,13 +124,6 @@ import {
   readTextAttachmentPreview,
   type ImageFileDetectionOptions,
 } from "../shared/attachmentHelpers";
-import {
-  anthropicLogo,
-  googleLogo,
-  openAiLogo,
-  openRouterLogo,
-  xAiLogo,
-} from "../shared/providerLogos";
 import { useDesktopThreadSidebarState } from "./controllers/desktop/useDesktopThreadSidebarState";
 import { useDesktopThreadPanelActions } from "./controllers/desktop/useDesktopThreadPanelActions";
 import { useDesktopThreadTitleViewModel } from "./controllers/desktop/useDesktopThreadTitleViewModel";
@@ -185,11 +173,14 @@ import {
   parseContentRangeTotal,
 } from "../shared/contentFormatting";
 import {
+  formatBuilderTierLabel,
+  hasBuilderTierPaidAccess,
+  isBuilderTierFree,
+  normalizeBuilderTierForUi,
   formatPlanPrice,
   parseBuilderBillingReturn,
   type BuilderBillingReturn,
 } from "../shared/builderBilling";
-import { AnalyticsLineChart } from "../shared/AnalyticsLineChart";
 import {
   copyTextToClipboard,
   downloadTextFile,
@@ -199,17 +190,58 @@ import {
   getAvatarColor,
   getInitials,
   shortId,
-  shouldShowDateSeparator,
 } from "../shared/chatUi";
+import {
+  type AppPage,
+  type AppView,
+  type CommunityTab,
+  isCommunityRouteManagedTab,
+  type SettingsPage,
+  settingsGroupForPage,
+} from "../shared/appShellNavigation";
+import type {
+  AnalyticsChartMode as SharedAnalyticsChartMode,
+  AnalyticsPoint as SharedAnalyticsPoint,
+  AnalyticsRange as SharedAnalyticsRange,
+  ChatLightboxImage as SharedChatLightboxImage,
+  CommunityAccess as SharedCommunityAccess,
+  CommunityAgentDraft as SharedCommunityAgentDraft,
+  CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
+  CommunityChatMessage as SharedCommunityChatMessage,
+  CommunityPricingMode as SharedCommunityPricingMode,
+  DiscoverCommunity as SharedDiscoverCommunity,
+  MessageReaction as SharedMessageReaction,
+  UserProfile as SharedUserProfile,
+  UserProfileDetail as SharedUserProfileDetail,
+} from "../shared/communityTypes";
+import {
+  deriveCommunityAccessCapabilities,
+  deriveCommunityActionGuards,
+  deriveCommunityNavVisibility,
+} from "../shared/communityAccessViewModel";
+import {
+  deriveBackFromWorkspaceSettingsFallbackTransition,
+  deriveBackToWorkspaceFallbackTransition,
+  deriveOpenCommunityTabTransition,
+  deriveOpenDiscoverTransition,
+  deriveToggleWorkspaceSettingsTransition,
+} from "../shared/appNavTransitions";
+import {
+  formatBackTargetLabel as formatBackTargetLabelShared,
+  popNavSnapshot,
+  pushUniqueNavSnapshot,
+} from "../shared/navSnapshot";
 import {
   parseEmbedUrl,
   renderTextWithLinks as renderTextWithLinksShared,
 } from "../shared/linkEmbedUi";
+import { communityInitials } from "../shared/messageMetadataUi";
 import { renderMarkdown } from "../shared/markdownUi";
 import {
   readAvatarFileAsSquareDataUrl,
   readBannerFileAsWideDataUrlWithinLimit,
 } from "../shared/imageTransforms";
+import { confirmDiscardUnsavedCommunitySettingsDesktop } from "../shared/communityUnsavedGuard";
 import {
   decodeJwtPayload,
   ensureSupabaseSessionForAuthenticatedSend,
@@ -244,9 +276,22 @@ import {
 import { resetDesktopSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { DesktopCommunityRail } from "./components/DesktopCommunityRail";
 import { DesktopTopbar } from "./components/DesktopTopbar";
+import { CommunityMemberList } from "./components/CommunityMemberList";
+import { DesktopCommunitySecondaryTabs } from "./components/DesktopCommunitySecondaryTabs";
+import type { CommunityResource as CommunityResourceContract } from "./components/communityResourcesContracts";
 import { ThreadSidebarPanel } from "./components/ThreadSidebarPanel";
 import { ThreadSidebarSessionItem } from "./components/ThreadSidebarSessionItem";
+import { DesktopCommunityChatTab } from "./components/DesktopCommunityChatTab";
+import { DesktopModelPickerPopover } from "./components/DesktopModelPickerPopover";
+import { DesktopTeachCandidateModal } from "./components/DesktopTeachCandidateModal";
+import { DesktopSourcesUsedModal } from "./components/DesktopSourcesUsedModal";
+import { DesktopCommunitySettingsTab } from "./components/DesktopCommunitySettingsTab";
+import { DesktopCommunityAiAgentTab } from "./components/DesktopCommunityAiAgentTab";
 import { resolveUserAccessPolicy } from "../shared/capabilities";
+import { CommunityNav } from "../shared/CommunityNav";
+import { BuilderUpgradeModal } from "../shared/BuilderUpgradeModal";
+import { DiscoverCommunityCard } from "../shared/DiscoverCommunityCard";
+import { SettingsNavList } from "../shared/SettingsNavList";
 import {
   DEFAULT_ACTIVE_MODEL_ID,
   FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
@@ -299,7 +344,6 @@ type RunningTool = {
 
 type MessageRecord = ArpMessageRecord;
 type TurnRecord = ArpTurnRecord;
-type EventRecord = ArpEventRecord;
 type SessionResume = ArpSessionResume;
 
 type PersonalMemoryItemRecord = {
@@ -413,42 +457,9 @@ type PublicCommunityRecord = {
   updated_at: string;
 };
 
-type PublicPlanSummary = {
-  name: string;
-  description: string | null;
-  amount_base_units: string;
-  currency: string;
-  currency_decimals: number;
-  billing_period: string;
-};
-
-type DiscoverCommunity = PublicCommunityRecord & {
-  active_plan?: PublicPlanSummary | null;
-};
-
-type CommunityChatMessage = {
-  id: string;
-  community_id: string;
-  sender_id: string;
-  body: string;
-  attachments?: MessageAttachment[];
-  reply_to_id?: string | null;
-  created_at: string;
-  seq: number;
-};
-
-type ChatLightboxImage = {
-  url: string;
-  name: string;
-};
-
-type MessageReaction = {
-  id: string;
-  message_id: string;
-  user_id: string;
-  emoji: string;
-  created_at: string;
-};
+type DiscoverCommunity = SharedDiscoverCommunity<PublicCommunityRecord>;
+type ChatLightboxImage = SharedChatLightboxImage;
+type MessageReaction = SharedMessageReaction;
 
 type Attachment = {
   id: string;
@@ -460,6 +471,7 @@ type Attachment = {
 };
 
 type MessageAttachment = CommunityMessageAttachment;
+type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
@@ -539,16 +551,9 @@ const APPROVAL_PRESETS: Record<
   }
 };
 
-type CommunityResource = {
-  id: string;
+type CommunityResource = CommunityResourceContract & {
   community_id: string;
-  type: "post" | "embed" | "link" | "file";
-  title: string;
-  body_md: string | null;
-  url: string | null;
   file_key: string | null;
-  pinned: boolean;
-  created_at: string;
 };
 
 type CommunityMember = {
@@ -562,29 +567,7 @@ type CommunityMember = {
   access_status?: string;
 };
 
-type CommunityAccess = {
-  community_id: string;
-  user_id: string;
-  is_owner: boolean;
-  is_entitled: boolean;
-  entitlement_role: string | null;
-  entitlement_ends_at: string | null;
-  effective_role: string | null;
-  can_view: boolean;
-  can_post_message: boolean;
-  can_create_resource: boolean;
-  can_manage_resources: boolean;
-  can_invite: boolean;
-  can_manage_members: boolean;
-};
-
-type TeachCandidateStatus = {
-  status: "submitting" | "submitted" | "error";
-  candidateId?: string | null;
-  routerState?: string | null;
-  promotedMemoryId?: string | null;
-  error?: string | null;
-};
+type CommunityAccess = SharedCommunityAccess;
 
 type TeachCandidateDraft = {
   communityId: string;
@@ -594,46 +577,15 @@ type TeachCandidateDraft = {
   evidenceItems: CommunityEvidenceItem[];
 };
 
-type CommunityAgentDraft = {
-  id: string;
-  community_id: string;
-  slot: number;
-  name: string | null;
-  landing_json: unknown;
-  system_prompt: string;
-  is_active: boolean;
-  updated_at: string;
-};
+type CommunityAgentDraft = SharedCommunityAgentDraft;
 
-type CommunityAnalyticsSummary = {
-  total_members: number | null;
-  new_members_window: number | null;
-  active_members_window: number | null;
-  retention_window: number | null;
-  total_resources: number | null;
-  resources_added_window: number | null;
-};
-
-type AnalyticsPoint = {
-  label: string;
-  value: number;
-};
-
-type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
-
-type AnalyticsChartMode = "members" | "revenue";
-
-type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
-
-type UserProfile = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-};
-
-type UserProfileDetail = UserProfile & {
-  bio: string | null;
-};
+type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
+type AnalyticsPoint = SharedAnalyticsPoint;
+type AnalyticsRange = SharedAnalyticsRange;
+type AnalyticsChartMode = SharedAnalyticsChartMode;
+type CommunityPricingMode = SharedCommunityPricingMode;
+type UserProfile = SharedUserProfile;
+type UserProfileDetail = SharedUserProfileDetail;
 
 type CommunityInviteRecord = {
   id: string;
@@ -647,22 +599,6 @@ type CommunityInviteRecord = {
   communities?: CommunityRecord;
 };
 
-type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
-type SettingsGroup = "account" | "agent" | "appearance";
-
-type AppPage = "workspace" | "community" | "discover";
-
-type AppView = "home" | "settings";
-
-type CommunityTab =
-  | "chat"
-  | "library"
-  | "resources"
-  | "members"
-  | "settings"
-  | "ai_agent"
-  | "analytics";
-
 type NavSnapshot = {
   page: AppPage;
   view: AppView;
@@ -675,29 +611,6 @@ type NavSnapshot = {
 const desktopShellClientSingleton: DesktopShellClient = new TauriDesktopShellClient();
 
 function App() {
-  const arxOwnerEmailSet = useMemo(
-    () =>
-      getArxOwnerEmailSet({
-        ownerEmailsCsv: (import.meta.env.VITE_ARX_OWNER_EMAILS as string | undefined) ?? "",
-        ownerEmail: (import.meta.env.VITE_ARX_OWNER_EMAIL as string | undefined) ?? "",
-      }),
-    [],
-  );
-  const arxOwnerUserIdSet = useMemo(
-    () =>
-      getArxOwnerUserIdSet({
-        ownerUserIdsCsv: (import.meta.env.VITE_ARX_OWNER_USER_IDS as string | undefined) ?? "",
-        ownerUserId: (import.meta.env.VITE_ARX_OWNER_USER_ID as string | undefined) ?? "",
-      }),
-    [],
-  );
-  const isArxOwnerAccount = (user: { id?: string | null; email?: string | null } | null | undefined): boolean => {
-    if (!user) return false;
-    const userId = String(user.id ?? "").trim();
-    if (userId && arxOwnerUserIdSet.has(userId)) return true;
-    const email = String(user.email ?? "").trim().toLowerCase();
-    return Boolean(email && arxOwnerEmailSet.has(email));
-  };
   const runtimeClient = useMemo<RuntimeClient>(() => new TauriRuntimeClient(), []);
   const shellClient = useMemo<DesktopShellClient>(() => desktopShellClientSingleton, []);
   const [runtimeSupportsCursorResume, setRuntimeSupportsCursorResume] = useState(false);
@@ -754,7 +667,7 @@ function App() {
   const sendInFlightRef = useRef(false);
   const sendStartedAtRef = useRef<number | null>(null);
   const [, setSendElapsedSec] = useState(0);
-  const [activeView, setActiveView] = useState<"home" | "settings">("home");
+  const [activeView, setActiveView] = useState<AppView>("home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
@@ -762,10 +675,8 @@ function App() {
     if (stored) return stored;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
-  const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
-  const [communityTab, setCommunityTab] = useState<
-    "chat" | "library" | "resources" | "members" | "settings" | "ai_agent" | "analytics"
-  >("chat");
+  const [activePage, setActivePage] = useState<AppPage>("workspace");
+  const [communityTab, setCommunityTab] = useState<CommunityTab>("chat");
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const [modelProviderById, setModelProviderById] = useState<Record<string, ProviderKey["id"]>>({});
@@ -816,8 +727,6 @@ function App() {
       const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
       const [, setIsLoadingBuilderBilling] = useState(false);
       const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
-      const [isDevSettingBuilderTier, setIsDevSettingBuilderTier] = useState(false);
-      const [devSetBuilderTierError, setDevSetBuilderTierError] = useState<string | null>(null);
 	      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
 	      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
 	      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
@@ -886,19 +795,9 @@ function App() {
         communityTab,
         threadId: activeThreadId,
       });
-      const navSnapshotsEqual = (a: NavSnapshot, b: NavSnapshot): boolean =>
-        a.page === b.page &&
-        a.view === b.view &&
-        a.settingsPage === b.settingsPage &&
-        a.communityId === b.communityId &&
-        a.communityTab === b.communityTab &&
-        a.threadId === b.threadId;
       const pushNavSnapshot = () => {
         const snapshot = takeNavSnapshot();
-        const stack = navStackRef.current;
-        const last = stack[stack.length - 1] ?? null;
-        if (last && navSnapshotsEqual(last, snapshot)) return;
-        stack.push(snapshot);
+        pushUniqueNavSnapshot(navStackRef.current, snapshot);
       };
       const restoreNavSnapshot = (snapshot: NavSnapshot) => {
         setActivePage(snapshot.page);
@@ -909,14 +808,47 @@ function App() {
         setActiveThreadId(snapshot.threadId);
       };
       const goBack = (): boolean => {
-        const stack = navStackRef.current;
-        const snapshot = stack.pop() ?? null;
+        const snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
         if (!snapshot) return false;
         restoreNavSnapshot(snapshot);
         return true;
       };
+      const openCommunityTab = (
+        nextCommunityId: string,
+        nextCommunityTab: CommunityTab,
+        opts?: { pushSnapshot?: boolean; clearUnread?: boolean },
+      ) => {
+        const transition = deriveOpenCommunityTabTransition(
+          {
+            activePage,
+            activeView,
+            communityTab,
+            activeCommunityId: activeCommunityId ?? null,
+          },
+          nextCommunityId,
+          nextCommunityTab,
+        );
+        if ((opts?.pushSnapshot ?? false) && transition.shouldPushSnapshot) pushNavSnapshot();
+        setActiveView(transition.nextView);
+        setActivePage(transition.nextPage);
+        setCommunityTab(transition.nextCommunityTab);
+        if (opts?.clearUnread) setUnreadCount(0);
+        setActiveCommunityId(transition.nextCommunityId);
+      };
 		  const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
 		  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
+      const communityAccessCapabilities = useMemo(
+        () => deriveCommunityAccessCapabilities(activeCommunityAccess),
+        [activeCommunityAccess],
+      );
+      const communityNavVisibility = useMemo(
+        () => deriveCommunityNavVisibility(communityAccessCapabilities),
+        [communityAccessCapabilities],
+      );
+      const communityActionGuards = useMemo(
+        () => deriveCommunityActionGuards(communityAccessCapabilities),
+        [communityAccessCapabilities],
+      );
 		  const [, setIsLoadingCommunityAccess] = useState(false);
 		  const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
 		  const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
@@ -988,7 +920,6 @@ function App() {
   const [communityAgentDraftsError, setCommunityAgentDraftsError] = useState<string | null>(null);
   const communityAgentDraftsLoadedCommunityIdRef = useRef<string | null>(null);
 
-  const [communityAgentSelectedSlot, setCommunityAgentSelectedSlot] = useState(1);
   const [communityAgentDraftName, setCommunityAgentDraftName] = useState("");
   const [communityAgentDraftLanding, setCommunityAgentDraftLanding] = useState<CommunityAgentLanding>(
     DEFAULT_EMPTY_THREAD_LANDING,
@@ -1006,24 +937,8 @@ function App() {
   const [isSavingCommunityAgentDraft, setIsSavingCommunityAgentDraft] = useState(false);
   const [communityAgentDraftSaveError, setCommunityAgentDraftSaveError] = useState<string | null>(null);
   const communityAgentDraftDirtyRef = useRef(false);
-  const [isCommunityAgentTemplateMenuOpen, setIsCommunityAgentTemplateMenuOpen] = useState(false);
-  const [communityAgentRenamingSlot, setCommunityAgentRenamingSlot] = useState<number | null>(null);
-  const [communityAgentRenamingValue, setCommunityAgentRenamingValue] = useState("");
-  const [communityAgentSavedSlot, setCommunityAgentSavedSlot] = useState<number | null>(null);
-  const communityAgentSavedTimerRef = useRef<number | null>(null);
-  const communityAgentTemplatePickerRef = useRef<HTMLDivElement | null>(null);
   const markCommunityAgentDraftDirty = () => {
     communityAgentDraftDirtyRef.current = true;
-  };
-  const flashCommunityAgentTemplateSaved = (slot: number) => {
-    setCommunityAgentSavedSlot(slot);
-    if (communityAgentSavedTimerRef.current) {
-      window.clearTimeout(communityAgentSavedTimerRef.current);
-    }
-    communityAgentSavedTimerRef.current = window.setTimeout(() => {
-      setCommunityAgentSavedSlot(null);
-      communityAgentSavedTimerRef.current = null;
-    }, 1200);
   };
 
   const beginCommunityAgentLandingEdit = (edit: CommunityAgentLandingEdit, value: string) => {
@@ -1088,7 +1003,6 @@ function App() {
   const [resourceSuccess, setResourceSuccess] = useState(false);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
-  const [teachStatusByMessageId, setTeachStatusByMessageId] = useState<Record<string, TeachCandidateStatus>>({});
   const [teachCandidateDraft, setTeachCandidateDraft] = useState<TeachCandidateDraft | null>(null);
   const [teachCandidateTitleInput, setTeachCandidateTitleInput] = useState("");
   const [teachCandidateMemoryInput, setTeachCandidateMemoryInput] = useState("");
@@ -1187,7 +1101,6 @@ function App() {
   const [runningToolCallId, setRunningToolCallId] = useState<string | null>(null);
   const toolCallsRef = useRef<ToolCallRecord[]>([]);
   const activeModelIdRef = useRef<string | null>(null);
-  const autoExecutedToolCallsRef = useRef<Set<string>>(new Set());
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
   const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
@@ -1384,8 +1297,6 @@ function App() {
   const {
     loadPendingInvites,
     consumeInviteQueryParam,
-    handleDismissInvite,
-    handleJoinInvite,
     handleInviteGateJoin,
     handleInviteGateDismiss,
     maybeAutoJoinPendingInvites,
@@ -1402,9 +1313,7 @@ function App() {
     loadCommunities,
     handleSignIn,
     onJoinSuccess: (joined) => {
-      setActiveCommunityId(joined.id);
-      setActivePage("community");
-      setCommunityTab("chat");
+      openCommunityTab(joined.id, "chat");
     },
     setPendingInvites,
     setInviteJoinError,
@@ -1443,9 +1352,7 @@ function App() {
     getBrandosAidForCommunitySlug,
     isUuid,
     onJoinSuccess: (joinedId) => {
-      setActiveCommunityId(joinedId);
-      setActivePage("community");
-      setCommunityTab("chat");
+      openCommunityTab(joinedId, "chat");
     },
     setJoiningDiscoverCommunityId,
     setDiscoverError,
@@ -1530,7 +1437,7 @@ function App() {
     dateKeyLocal,
     ensureCommunityChatThread,
     confirmAction: (message) => window.confirm(message),
-    getMemberRefreshIncludeStatus: () => Boolean(activeCommunityAccess?.can_manage_members),
+    getMemberRefreshIncludeStatus: () => communityNavVisibility.canManageMembers,
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: loadCommunityAccess,
     getProfileSaveSession: () => supabaseSessionRef.current ?? supabaseSession,
@@ -1575,7 +1482,6 @@ function App() {
   const {
     loadCommunityAgentDrafts,
     handleSaveCommunityAgentDraft,
-    persistCommunityAgentTemplateName,
     handleSetLiveCommunityAgentDraft,
   } = useCommunityAgentDraftController<SupabaseSession, CommunityAgentLanding, CommunityAgentDraft>({
     activeCommunityId,
@@ -1583,7 +1489,6 @@ function App() {
     getSupabaseUrl,
     fetchWithSupabaseAuth,
     readSupabaseError,
-    communityAgentSelectedSlot,
     communityAgentDraftName,
     communityAgentDraftLanding,
     communityAgentDraftSystemPrompt,
@@ -1604,7 +1509,6 @@ function App() {
     saveValidationErrorMessage: "Add at least one tab with a label and one prompt.",
     loadFailureMessage: "Failed to load AI agent drafts.",
     saveFailureMessage: "Failed to save AI agent draft.",
-    renameFailureMessage: "Failed to rename template.",
     setLiveFailureMessage: "Failed to set live draft.",
   });
 
@@ -2688,10 +2592,10 @@ function App() {
 			            if (cancelled) return;
 			            const status = await loadBuilderBillingStatus(supabaseSession);
 			            lastStatus = status;
-			            const tier = (status?.builder_tier ?? "free").toLowerCase();
-			            const max = status?.max_communities ?? 0;
-			            const hasCapacity = tier !== "free" && max > 0 && ownedCount < max;
-			            if (tier !== "free" && (!wantsCreate || hasCapacity)) break;
+				            const tier = status?.builder_tier ?? "free";
+				            const max = status?.max_communities ?? 0;
+				            const hasCapacity = !isBuilderTierFree(tier) && max > 0 && ownedCount < max;
+				            if (!isBuilderTierFree(tier) && (!wantsCreate || hasCapacity)) break;
 			            if (builderBillingReturn.status !== "success" && !wantsCreate) break;
 			            await new Promise((resolve) => window.setTimeout(resolve, 1000));
 			          }
@@ -2709,12 +2613,12 @@ function App() {
 			            setFinalizeCreateCommunityError("Draft belongs to a different account. Re-open Create community to continue.");
 			            return;
 			          }
-			          const tier = (lastStatus?.builder_tier ?? builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-			          const max = lastStatus?.max_communities ?? builderBillingStatus?.max_communities ?? 0;
-			          if (tier === "free") {
-			            setFinalizeCreateCommunityError("Still finalizing your plan. Wait a moment and try again.");
-			            return;
-			          }
+				          const tier = lastStatus?.builder_tier ?? builderBillingStatus?.builder_tier ?? "free";
+				          const max = lastStatus?.max_communities ?? builderBillingStatus?.max_communities ?? 0;
+				          if (isBuilderTierFree(tier)) {
+				            setFinalizeCreateCommunityError("Still finalizing your plan. Wait a moment and try again.");
+				            return;
+				          }
 			          if (max > 0 && ownedCount >= max) {
 			            setFinalizeCreateCommunityError("You've reached your plan limit. Upgrade your plan to create more communities.");
 			            return;
@@ -2766,212 +2670,80 @@ function App() {
 		    }
 		  }, [activeCommunityId, clearPendingPrependAnchor, resetCommunityChatDataState]);
 
-					  useEffect(() => {
-					    syncCommunitySettingsSelection({
-					      activeCommunityId,
-					      communities,
-					    });
-				  }, [activeCommunityId, communities, syncCommunitySettingsSelection]);
+  useCommunitySettingsAccessLifecycle<SupabaseSession, CommunityRecord>({
+    activePage,
+    communityTab,
+    supabaseSession,
+    activeCommunityId,
+    activeCommunityAccess,
+    communities,
+    syncCommunitySettingsSelection,
+    loadCommunityMemberSettings,
+    loadCommunityPricing,
+    loadCommunityAccess,
+    setCommunityMemberMuted,
+    setCommunitySettingsMonthlyPlanId,
+    setCommunitySettingsYearlyPlanId,
+    setCommunitySettingsPricingMode,
+    setCommunitySettingsPriceUsdMonthly,
+    setCommunitySettingsPriceUsdYearly,
+    setActiveCommunityAccess,
+    setIsLoadingCommunityAccess,
+  });
 
-      useEffect(() => {
-        if (activePage !== "community" || communityTab !== "settings") return;
-        if (!supabaseSession || !activeCommunityId) {
-          setCommunityMemberMuted(false);
-          return;
-        }
-        if (!activeCommunityAccess?.can_view) return;
-        if (activeCommunityAccess.is_owner || activeCommunityAccess.can_manage_members) return;
-        void loadCommunityMemberSettings({
-          communityId: activeCommunityId,
-          session: supabaseSession,
-        });
-      }, [
-        activePage,
-        communityTab,
-        supabaseSession,
-        activeCommunityId,
-        activeCommunityAccess?.can_view,
-        activeCommunityAccess?.is_owner,
-        activeCommunityAccess?.can_manage_members,
-        loadCommunityMemberSettings,
-      ]);
+  useCommunityAgentLandingLifecycle<SupabaseSession>({
+    supabaseSession,
+    activeCommunityId,
+    canViewCommunity: communityActionGuards.canViewCommunity,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    activeCommunityIdRef,
+    activeCommunityAgentLandingCommunityIdRef,
+    communityAgentLandingFetchSeqRef,
+    setActiveCommunityAgentLanding,
+  });
 
-		      useEffect(() => {
-	        if (activePage !== "community" || communityTab !== "settings") return;
-	        if (!supabaseSession || !activeCommunityId) {
-	          setCommunitySettingsMonthlyPlanId(null);
-	          setCommunitySettingsYearlyPlanId(null);
-	          setCommunitySettingsPricingMode("free");
-	          setCommunitySettingsPriceUsdMonthly("");
-	          setCommunitySettingsPriceUsdYearly("");
-	          return;
-	        }
-	        if (!activeCommunityAccess?.can_manage_members) return;
+  useCommunityAgentMembersLifecycle<SupabaseSession, CommunityAgentDraft>({
+    activePage,
+    communityTab,
+    supabaseSession,
+    activeCommunityId,
+    canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
+    activeCommunityOwnerIsPro,
+    getSupabaseUrl,
+    fetchWithSupabaseAuth,
+    setActiveCommunityOwnerIsPro,
+    activeCommunityOwnerIsProLoadedCommunityIdRef,
+    loadCommunityAgentDrafts,
+    communityAgentDraftsLoadedCommunityIdRef,
+    setCommunityAgentDrafts,
+    setCommunityAgentDraftsError,
+    loadCommunityMembers,
+    enforceProDraftGate: false,
+  });
 
-	        let cancelled = false;
-	        const communityId = activeCommunityId;
-	        void loadCommunityPricing({
-	          communityId,
-	          session: supabaseSession,
-	          shouldIgnore: () => cancelled,
-	        });
-	        return () => {
-	          cancelled = true;
-	        };
-	      }, [
-	        activePage,
-	        communityTab,
-	        supabaseSession,
-	        activeCommunityId,
-	        activeCommunityAccess?.can_manage_members,
-	        loadCommunityPricing,
-	      ]);
+  useCommunityMembersTabLifecycle<SupabaseSession, CommunityInviteRecord, CommunityMemoryCandidateRow>({
+    activePage,
+    communityTab,
+    supabaseSession,
+    activeCommunityId,
+    canInviteActiveCommunity: communityActionGuards.canInvite,
+    canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
+    loadCommunityInvites,
+    setCommunityInvites,
+    loadCommunityMemoryCandidates,
+    setCommunityMemoryCandidates,
+    setCommunityMemoryCandidatesError,
+  });
 
-	  useEffect(() => {
-	    if (!supabaseSession || !activeCommunityId) {
-	      setActiveCommunityAccess(null);
-	      setIsLoadingCommunityAccess(false);
-	      return;
-	    }
-	    void loadCommunityAccess(activeCommunityId, supabaseSession);
-	  }, [supabaseSession, activeCommunityId]);
-
-	  useEffect(() => {
-	    const session = supabaseSession;
-	    const communityId = activeCommunityId;
-	    const canView = activeCommunityAccess ? activeCommunityAccess.can_view : true;
-	    if (!session || !communityId || !canView) {
-	      setActiveCommunityAgentLanding(null);
-	      activeCommunityAgentLandingCommunityIdRef.current = null;
-	      return;
-	    }
-	    if (activeCommunityAgentLandingCommunityIdRef.current === communityId) return;
-
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-
-	    communityAgentLandingFetchSeqRef.current += 1;
-	    const fetchSeq = communityAgentLandingFetchSeqRef.current;
-
-	    void (async () => {
-	      try {
-	        const response = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/rpc/get_active_community_agent_landing`,
-	          {
-	            method: "POST",
-	            headers: { "Content-Type": "application/json" },
-	            body: JSON.stringify({ p_community_id: communityId }),
-	          },
-	          session,
-	        );
-	        const data = response.ok ? ((await response.json()) as unknown) : null;
-	        if (communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
-	        if (activeCommunityIdRef.current !== communityId) return;
-	        setActiveCommunityAgentLanding(data ?? null);
-	        activeCommunityAgentLandingCommunityIdRef.current = communityId;
-	      } catch {
-	        if (communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
-	        if (activeCommunityIdRef.current !== communityId) return;
-	        setActiveCommunityAgentLanding(null);
-	        activeCommunityAgentLandingCommunityIdRef.current = communityId;
-	      }
-	    })();
-	  }, [supabaseSession, activeCommunityId, activeCommunityAccess?.can_view]);
-
-    useEffect(() => {
-      if (!supabaseSession || !activeCommunityId || !activeCommunityAccess?.can_manage_members) {
-        setActiveCommunityOwnerIsPro(null);
-        activeCommunityOwnerIsProLoadedCommunityIdRef.current = null;
-        return;
-      }
-      if (activeCommunityOwnerIsProLoadedCommunityIdRef.current === activeCommunityId) return;
-      activeCommunityOwnerIsProLoadedCommunityIdRef.current = activeCommunityId;
-
-      const url = getSupabaseUrl();
-      if (!url) return;
-
-      void (async () => {
-        try {
-          const response = await fetchWithSupabaseAuth(
-            `${url}/rest/v1/rpc/community_owner_is_pro`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ p_community_id: activeCommunityId }),
-            },
-            supabaseSession,
-          );
-          if (!response.ok) {
-            setActiveCommunityOwnerIsPro(null);
-            return;
-          }
-          const data = (await response.json()) as unknown;
-          setActiveCommunityOwnerIsPro(typeof data === "boolean" ? data : null);
-        } catch {
-          setActiveCommunityOwnerIsPro(null);
-        }
-      })();
-    }, [supabaseSession, activeCommunityId, activeCommunityAccess?.can_manage_members]);
-
-    useEffect(() => {
-      if (activePage !== "community" || communityTab !== "ai_agent") return;
-      const canManage = Boolean(activeCommunityAccess?.can_manage_members);
-      if (!supabaseSession || !activeCommunityId || !canManage) {
-        setCommunityAgentDrafts([]);
-        setCommunityAgentDraftsError(null);
-        communityAgentDraftsLoadedCommunityIdRef.current = null;
-        return;
-      }
-      if (communityAgentDraftsLoadedCommunityIdRef.current === activeCommunityId) return;
-      void loadCommunityAgentDrafts(activeCommunityId, supabaseSession);
-    }, [
-      activePage,
-      communityTab,
-      supabaseSession,
-      activeCommunityId,
-      activeCommunityAccess?.can_manage_members,
-    ]);
-
-	  useEffect(() => {
-	    if (activePage !== "community" || communityTab !== "members") return;
-	    if (!supabaseSession || !activeCommunityId) {
-	      setCommunityInvites([]);
-	      return;
-	    }
-	    if (!activeCommunityAccess?.can_invite) {
-	      setCommunityInvites([]);
-	      return;
-	    }
-	    void loadCommunityInvites(activeCommunityId, supabaseSession);
-	  }, [activePage, communityTab, supabaseSession, activeCommunityId, activeCommunityAccess?.can_invite]);
-
-	  useEffect(() => {
-	    if (activePage !== "community" || communityTab !== "members") return;
-	    if (!supabaseSession || !activeCommunityId) {
-	      setCommunityMemoryCandidates([]);
-	      setCommunityMemoryCandidatesError(null);
-	      return;
-	    }
-	    if (!activeCommunityAccess?.can_manage_members) {
-	      setCommunityMemoryCandidates([]);
-	      setCommunityMemoryCandidatesError(null);
-	      return;
-	    }
-	    void loadCommunityMemoryCandidates(activeCommunityId, supabaseSession);
-	  }, [activePage, communityTab, supabaseSession, activeCommunityId, activeCommunityAccess?.can_manage_members]);
-
-  useEffect(() => {
-    if (!supabaseSession || !activeCommunityId) return;
-    if (communityTab !== "resources" && communityTab !== "library") return;
-    void loadCommunityResources(activeCommunityId, supabaseSession);
-  }, [supabaseSession, activeCommunityId, communityTab]);
-
-  useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || activePage !== "community") return;
-    void loadCommunityMembers(activeCommunityId, supabaseSession, {
-      includeStatus: Boolean(activeCommunityAccess?.can_manage_members),
-    });
-  }, [supabaseSession, activeCommunityId, activePage, activeCommunityAccess?.can_manage_members]);
+  useCommunityResourcesTabLifecycle<SupabaseSession>({
+    activePage,
+    communityTab,
+    supabaseSession,
+    activeCommunityId,
+    loadCommunityResources,
+    requireCommunityPage: false,
+  });
 
   useEffect(() => {
     if (communityTab !== "library") return;
@@ -3591,50 +3363,6 @@ function App() {
     }
   }
 
-  async function handleTeachCommunityFromTurn(params: {
-    messageId: string;
-    turnId: string | null;
-    turnContent: string;
-    communityEvidence: ReturnType<typeof extractCommunityEvidenceUsedV1> | null;
-  }): Promise<void> {
-    const threadId = (activeThread?.id ?? "").trim();
-    if (!threadId) {
-      setMemoryToast("Select a thread before teaching community memory.");
-      return;
-    }
-    const communityId = (activeThread?.community_id ?? "").trim();
-    if (!communityId) {
-      setMemoryToast("Enable a community lens before teaching community memory.");
-      return;
-    }
-    if (teachStatusByMessageId[params.messageId]?.status === "submitting") return;
-
-    const session = supabaseSessionRef.current ?? supabaseSession;
-    if (!session) {
-      setMemoryToast("Sign in to teach community memory.");
-      await handleSignIn();
-      return;
-    }
-
-    const memoryText = buildTeachMemoryText(params.turnContent);
-    if (!memoryText) {
-      setMemoryToast("No response content to teach yet.");
-      return;
-    }
-    const evidenceItems = params.communityEvidence?.items ?? [];
-    const draftTitle = deriveTeachCandidateTitle(memoryText) ?? "";
-    setTeachCandidateDraft({
-      communityId,
-      threadId,
-      messageId: params.messageId,
-      turnId: params.turnId,
-      evidenceItems,
-    });
-    setTeachCandidateTitleInput(draftTitle);
-    setTeachCandidateMemoryInput(memoryText);
-    setTeachCandidateSubmitError(null);
-  }
-
   function closeTeachCandidateModal(): void {
     if (isSubmittingTeachCandidate) return;
     setTeachCandidateDraft(null);
@@ -3659,10 +3387,6 @@ function App() {
     const draft = teachCandidateDraft;
     setIsSubmittingTeachCandidate(true);
     setTeachCandidateSubmitError(null);
-    setTeachStatusByMessageId((prev) => ({
-      ...prev,
-      [draft.messageId]: { status: "submitting" },
-    }));
     try {
       const session = supabaseSessionRef.current ?? supabaseSession;
       if (!session) {
@@ -3703,36 +3427,17 @@ function App() {
         fetchWithSupabaseAuth,
         readSupabaseError,
       });
-      const candidateId = (row.candidate_id ?? "").trim();
       const routerState = (row.router_state ?? "queued").trim().toLowerCase();
       const routerReason = (row.router_reason ?? "").trim();
       const promotedMemoryId = (row.promoted_memory_id ?? null) ? String(row.promoted_memory_id) : null;
 
       if (routerState === "rejected") {
         const reason = routerReason ? `Candidate rejected (${routerReason}).` : "Candidate rejected.";
-        setTeachStatusByMessageId((prev) => ({
-          ...prev,
-          [draft.messageId]: {
-            status: "error",
-            candidateId,
-            routerState,
-            error: reason,
-          },
-        }));
         setTeachCandidateSubmitError(reason);
         setMemoryToast(reason);
         return;
       }
 
-      setTeachStatusByMessageId((prev) => ({
-        ...prev,
-        [draft.messageId]: {
-          status: "submitted",
-          candidateId,
-          routerState,
-          promotedMemoryId,
-        },
-      }));
       setTeachCandidateDraft(null);
       setTeachCandidateTitleInput("");
       setTeachCandidateMemoryInput("");
@@ -3761,13 +3466,6 @@ function App() {
           : error instanceof Error
             ? error.message
             : "Failed to teach community memory.";
-      setTeachStatusByMessageId((prev) => ({
-        ...prev,
-        [draft.messageId]: {
-          status: "error",
-          error: message,
-        },
-      }));
       setTeachCandidateSubmitError(message);
       setMemoryToast(message);
     } finally {
@@ -3873,9 +3571,7 @@ function App() {
       clearPendingPurchaseClaimToken();
 
       await loadCommunities(session);
-      setActivePage("community");
-      setActiveCommunityId(communityId);
-      setCommunityTab("chat");
+      openCommunityTab(communityId, "chat");
     } catch (error) {
       const message =
         typeof error === "string"
@@ -3966,43 +3662,6 @@ function App() {
 	    }
 	  }
 
-  async function handleDevSetBuilderTier(nextTier: "free" | "builder" | "architect" | "pro") {
-	    const session = supabaseSessionRef.current;
-	    const url = session ? getSupabaseUrl() : null;
-	    if (!session || !url) return;
-
-	    // Defense-in-depth: the RPC is also server-guarded.
-	    if (!isArxOwnerAccount(session.user)) return;
-
-	    if (isDevSettingBuilderTier) return;
-	    setIsDevSettingBuilderTier(true);
-	    setDevSetBuilderTierError(null);
-	    try {
-	      const rpcTier = nextTier === "architect" ? "pro" : nextTier;
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
-	        {
-	          method: "POST",
-	          headers: { "Content-Type": "application/json" },
-	          body: JSON.stringify({ p_builder_tier: rpcTier }),
-	        },
-	        session,
-	      );
-	      if (!response.ok) throw new Error(await readSupabaseError(response));
-	      await loadBuilderBillingStatus(session);
-	    } catch (error) {
-	      const message =
-	        typeof error === "string"
-	          ? error
-	          : error instanceof Error
-	            ? error.message
-	            : "Failed to update builder tier.";
-	      setDevSetBuilderTierError(message);
-	    } finally {
-	      setIsDevSettingBuilderTier(false);
-    }
-  }
-
   const openExternalUrl = useCallback(async (url: string): Promise<boolean> => {
     const trimmed = url.trim();
     if (!trimmed) return false;
@@ -4071,9 +3730,7 @@ function App() {
     },
     onCommunityCreated: (community) => {
       setCommunities((prev) => [community, ...prev]);
-      setActiveCommunityId(community.id);
-      setActivePage("community");
-      setCommunityTab("chat");
+      openCommunityTab(community.id, "chat");
     },
     onDraftCreatedCommunitySuccess: () => {
       setBuilderBillingReturn(null);
@@ -4152,9 +3809,7 @@ function App() {
       setPendingPurchaseClaims([]);
 
       if (claimedCommunityId && opts?.navigate !== false) {
-        setActivePage("community");
-        setActiveCommunityId(claimedCommunityId);
-        setCommunityTab("chat");
+        openCommunityTab(claimedCommunityId, "chat");
       }
       return rows.length;
     } catch (error) {
@@ -4322,16 +3977,14 @@ function App() {
 	    }
 	  }
 
-        function hydrateCommunityAgentEditor(slot: number, drafts: CommunityAgentDraft[]) {
-          const safeSlot = Math.max(1, Math.min(3, Math.floor(slot)));
-          const row = drafts.find((d) => d.slot === safeSlot) ?? null;
+        function hydrateCommunityAgentEditor(_slot: number, drafts: CommunityAgentDraft[]) {
+          const row = drafts.find((d) => d.slot === 1) ?? null;
           const communityName =
             activeCommunityId ? (communities.find((c) => c.id === activeCommunityId)?.name ?? "").trim() : "";
           const fallbackLanding = communityName
             ? buildDefaultCommunityEmptyThreadLanding(communityName)
             : DEFAULT_EMPTY_THREAD_LANDING;
           const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? fallbackLanding;
-          setCommunityAgentSelectedSlot(safeSlot);
           setCommunityAgentDraftName(row?.name ?? "");
           setCommunityAgentDraftLanding(landing);
           setCommunityAgentDraftSystemPrompt(row?.system_prompt ?? "");
@@ -4439,22 +4092,18 @@ function App() {
   }, [isSending]);
 
 		  const activeCommunity = communities.find((item) => item.id === activeCommunityId) ?? null;
-		  const canInviteActiveCommunity = Boolean(activeCommunityAccess?.can_invite);
-		  const isActiveCommunityOwner = Boolean(activeCommunityAccess?.is_owner);
-			  const canViewActiveCommunitySettings = Boolean(activeCommunityAccess?.can_view);
-			  const canPostMessagesActiveCommunity = Boolean(activeCommunityAccess?.can_post_message);
-			  const canCreateResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_create_resource);
-			  const canManageResourcesActiveCommunity = Boolean(activeCommunityAccess?.can_manage_resources);
-			  const canManageMembersActiveCommunity = Boolean(activeCommunityAccess?.can_manage_members);
-			  const canViewActiveCommunityAnalytics = canManageMembersActiveCommunity;
-			  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(() => {
-			    const raw = String(builderBillingStatus?.builder_tier ?? "free")
-			      .trim()
-			      .toLowerCase();
-			    if (raw === "builder") return "builder";
-          if (raw === "pro" || raw === "architect") return "architect";
-			    return "free";
-			  }, [builderBillingStatus?.builder_tier]);
+		  const canInviteActiveCommunity = communityActionGuards.canInvite;
+		  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
+			  const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
+			  const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
+			  const canCreateResourcesActiveCommunity = communityActionGuards.canCreateResources;
+			  const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
+			  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
+			  const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
+      const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
+        () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
+        [builderBillingStatus?.builder_tier],
+      );
 		  const userAccessPolicy = useMemo(
 		    () =>
 		      resolveUserAccessPolicy({
@@ -4570,7 +4219,7 @@ function App() {
           !activeThreadId &&
             supabaseSession &&
             activeCommunityId &&
-            (activeCommunityAccess ? activeCommunityAccess.can_view : true) &&
+            communityActionGuards.canViewCommunity &&
             activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
         );
 
@@ -4582,12 +4231,12 @@ function App() {
             ? normalizeCommunityAgentLanding(activeCommunityAgentLanding)
             : null;
           if (communityLanding) return communityLanding;
-          const canViewCommunity = activeCommunityAccess ? activeCommunityAccess.can_view : true;
+          const canViewCommunity = communityActionGuards.canViewCommunity;
           if (activeCommunity && canViewCommunity) {
             return buildDefaultCommunityEmptyThreadLanding(activeCommunity.name);
           }
           return DEFAULT_EMPTY_THREAD_LANDING;
-        }, [activeCommunity, activeCommunityAccess?.can_view, activeCommunityAgentLanding, activeCommunityId]);
+        }, [activeCommunity, communityActionGuards.canViewCommunity, activeCommunityAgentLanding, activeCommunityId]);
 
         useDesktopUiLifecycleEffects({
           isModelPickerOpen,
@@ -4599,12 +4248,9 @@ function App() {
           setEmptyThreadSection,
           communityAgentDraftLanding,
           setCommunityAgentPreviewTabId,
-          isCommunityAgentTemplateMenuOpen,
-          communityAgentTemplatePickerRef,
-          setIsCommunityAgentTemplateMenuOpen,
         });
 
-  useCommunityAdminAnalyticsAutomationsLifecycle({
+  useCommunityAdminAnalyticsLifecycle({
     activePage,
     communityTab,
     supabaseSession,
@@ -4864,20 +4510,6 @@ function App() {
 	    setThreads,
 	  });
 
-  function communityInitials(name: string): string {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return "?";
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
-
-  function confirmDiscardUnsavedCommunitySettings(nextCommunityId: string): boolean {
-    if (!communitySettingsDirtyRef.current) return true;
-    if (!activeCommunityId) return true;
-    if (nextCommunityId === activeCommunityId) return true;
-    return window.confirm("You have unsaved community settings. Discard changes?");
-  }
-
   type WorkspaceLensTarget = {
     threadId: string;
     fromCommunityId: string | null;
@@ -5086,7 +4718,16 @@ function App() {
     desktopThreadContextController.ensureLensBeforeSend(threadId);
 
   function handleSelectActiveCommunity(next: string) {
-    if (!confirmDiscardUnsavedCommunitySettings(next)) return;
+    if (
+      !confirmDiscardUnsavedCommunitySettingsDesktop({
+        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+        activeCommunityId,
+        nextCommunityId: next,
+        confirmDiscard: (message) => window.confirm(message),
+      })
+    ) {
+      return;
+    }
     setActiveCommunityId(next);
     // Desktop community rail is a context selector. We only retarget the *active
     // personal thread* lens while the user is on the AI workspace page, to match Web.
@@ -5150,23 +4791,6 @@ function App() {
       avatarUrl: profileAvatarUrl,
     });
   }, [profileStorageUserId, profileName, profileUsername, profileBio, profileAvatarUrl]);
-
-  function settingsGroupForPage(page: SettingsPage): SettingsGroup {
-    if (page === "appearance") return "appearance";
-    if (page === "account") return "account";
-    return "agent";
-  }
-
-  function settingsGroupLabel(group: SettingsGroup): string {
-    switch (group) {
-      case "account":
-        return "Account";
-      case "agent":
-        return "Agent";
-      case "appearance":
-        return "Appearance";
-    }
-  }
 
   async function loadWorkspaceRoot() {
     try {
@@ -5656,10 +5280,6 @@ function App() {
     setExpandedToolGroupIds(new Set());
   }, [activeThreadId]);
 
-  useEffect(() => {
-    setTeachStatusByMessageId({});
-  }, [activeThreadId]);
-
   async function handleCopyMessage(messageId: string, content: string) {
     try {
       await navigator.clipboard.writeText(content);
@@ -5669,13 +5289,6 @@ function App() {
       console.error("Failed to copy:", err);
     }
   }
-
-  const formatCommunitySourceStatus = (ok: boolean | null, usedCount: number): string => {
-    if (ok === null) return "Unavailable";
-    if (!ok) return "Failed";
-    const count = Math.max(0, usedCount);
-    return `OK (${count} item${count === 1 ? "" : "s"})`;
-  };
 
   function toggleOutputExpanded(toolCallId: string) {
     setExpandedOutputIds((prev) => {
@@ -5732,81 +5345,61 @@ function App() {
     );
   };
 
-  const formatBackTargetLabel = (snapshot: NavSnapshot): string => {
-    if (snapshot.page === "discover") return "discover";
-    if (snapshot.page === "community") {
-      return "community";
-    }
-    if (snapshot.page === "workspace") {
-      if (snapshot.view === "settings") {
-        return "settings";
-      }
-      return "workspace";
-    }
-    return "workspace";
-  };
   const defaultBackLabel = "workspace";
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
-  const backTargetLabel = backTargetSnapshot ? formatBackTargetLabel(backTargetSnapshot) : null;
+  const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
   const handleTopbarBackFromWorkspaceSettings = () => {
     if (goBack()) return;
-    setActiveView("home");
+    const transition = deriveBackFromWorkspaceSettingsFallbackTransition();
+    setActiveView(transition.nextView);
   };
   const handleTopbarToggleThreadsPanel = () => {
     setUserWantsSessions((prev) => !prev);
   };
   const handleTopbarBackToWorkspace = () => {
     if (goBack()) return;
-    setActivePage("workspace");
+    const transition = deriveBackToWorkspaceFallbackTransition({ activeView });
+    setActivePage(transition.nextPage);
+    setActiveView(transition.nextView);
   };
   const handleTopbarOpenCommunity = () => {
     if (!activeCommunity) return;
     const nextCommunityId = activeCommunityId ?? activeCommunity.id;
-    const willChange =
-      activeView !== "home" ||
-      activePage !== "community" ||
-      communityTab !== "chat" ||
-      (activeCommunityId ?? null) !== nextCommunityId;
-    if (willChange) pushNavSnapshot();
-
-    if (activeView === "settings") {
-      setActiveView("home");
-    }
-
-    setActiveView("home");
-    setActivePage("community");
-    setCommunityTab("chat");
-    setUnreadCount(0); // Clear unread when opening community
-    setActiveCommunityId(nextCommunityId);
+    openCommunityTab(nextCommunityId, "chat", { pushSnapshot: true, clearUnread: true });
   };
   const handleRailOpenDiscover = () => {
-    if (activePage !== "discover") pushNavSnapshot();
-    setActiveView("home");
-    setActivePage("discover");
+    const transition = deriveOpenDiscoverTransition({ activePage });
+    if (transition.shouldPushSnapshot) pushNavSnapshot();
+    setActiveView(transition.nextView);
+    setActivePage(transition.nextPage);
   };
   const handleRailToggleSettings = () => {
-    const nextView: AppView = activePage === "workspace" && activeView === "settings" ? "home" : "settings";
-    if (nextView === "settings") pushNavSnapshot();
-    setActivePage("workspace");
-    setActiveView(nextView);
+    const transition = deriveToggleWorkspaceSettingsTransition({ activePage, activeView });
+    if (transition.shouldPushSnapshot) pushNavSnapshot();
+    setActivePage(transition.nextPage);
+    setActiveView(transition.nextView);
   };
 
   return (
     <div className="app-root desktop-root">
       <DesktopTopbar
-        activePage={activePage}
-        activeView={activeView}
-        userWantsSessions={userWantsSessions}
-        backTargetLabel={backTargetLabel}
-        defaultBackLabel={defaultBackLabel}
-        activeCommunity={activeCommunity}
-        unreadCount={unreadCount}
-        getCommunityInitials={communityInitials}
-        onBackFromWorkspaceSettings={handleTopbarBackFromWorkspaceSettings}
-        onToggleThreadsPanel={handleTopbarToggleThreadsPanel}
-        onNewThread={enterDraftThread}
-        onBackToWorkspace={handleTopbarBackToWorkspace}
-        onOpenCommunity={handleTopbarOpenCommunity}
+        state={{
+          activePage,
+          activeView,
+          userWantsSessions,
+          backTargetLabel,
+          defaultBackLabel,
+          activeCommunity,
+          unreadCount,
+        }}
+        actions={{
+          getCommunityInitials: communityInitials,
+          onBackFromWorkspaceSettings: handleTopbarBackFromWorkspaceSettings,
+          onToggleThreadsPanel: handleTopbarToggleThreadsPanel,
+          onNewThread: enterDraftThread,
+          onBackToWorkspace: handleTopbarBackToWorkspace,
+          onOpenCommunity: handleTopbarOpenCommunity,
+        }}
       />
       {appToast && (
         <div className="app-toast" role="status" aria-live="polite">
@@ -5818,17 +5411,21 @@ function App() {
       >
       {showCommunityRail && (
         <DesktopCommunityRail
-          activePage={activePage}
-          activeView={activeView}
-          communities={railCommunities}
-          activeCommunityId={activeCommunityId}
-          emptyMessage={communityRailEmptyMessage}
-          getCommunityInitials={communityInitials}
-          onOpenDiscover={handleRailOpenDiscover}
-          onSelectCommunity={handleSelectActiveCommunity}
-          onMoveCommunityToIndex={handleReorderCommunityRail}
-          onOpenCreateCommunity={openCreateCommunityModal}
-          onToggleSettings={handleRailToggleSettings}
+          state={{
+            activePage,
+            activeView,
+            communities: railCommunities,
+            activeCommunityId,
+            emptyMessage: communityRailEmptyMessage,
+          }}
+          actions={{
+            getCommunityInitials: communityInitials,
+            onOpenDiscover: handleRailOpenDiscover,
+            onSelectCommunity: handleSelectActiveCommunity,
+            onMoveCommunityToIndex: handleReorderCommunityRail,
+            onOpenCreateCommunity: openCreateCommunityModal,
+            onToggleSettings: handleRailToggleSettings,
+          }}
         />
       )}
       {activePage === "workspace" && (
@@ -5837,206 +5434,61 @@ function App() {
             <>
               <div className="panel-title">Settings</div>
               <div className="session-list">
-                {([
-                  { id: "account", label: settingsGroupLabel("account"), page: "account" as const,
-                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></span> },
-                  { id: "agent", label: settingsGroupLabel("agent"), page: "models" as const,
-                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 9h6M9 13h6M9 17h4" /></svg></span> },
-                  { id: "appearance", label: settingsGroupLabel("appearance"), page: "appearance" as const,
-                    icon: <span className="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" /></svg></span> },
-                ] as { id: string; label: string; page: SettingsPage; icon: React.ReactNode }[]).map((group) => (
-                  <button
-                    key={group.id}
-                    className={settingsGroup === group.id ? "nav-item active" : "nav-item"}
-                    onClick={() => setSettingsPage(group.page)}
-                    type="button"
-                  >
-                    {group.icon}
-                    {group.label}
-                  </button>
-                ))}
+                <SettingsNavList settingsGroup={settingsGroup} onSelectPage={setSettingsPage} />
               </div>
             </>
 	          ) : (
 	            <>
-	              <ThreadSidebarPanel
-	                threadSearchQuery={threadSearchQuery}
-	                onThreadSearchQueryChange={setThreadSearchQuery}
-	                threadLaneFilter={threadLaneFilter}
-	                onSelectChatLane={threadPanelController.setChatLane}
-	                onSelectAgentLane={threadPanelController.setAgentLane}
-	                onAddProject={handleAddProjectFromFolderPicker}
-	                normalizedThreadSearch={normalizedThreadSearch}
-	                threadSearchResults={threadSearchResults}
-	                projectThreadGroups={projectThreadGroups}
-	                projectExpandedById={projectExpandedById}
-	                onToggleProjectExpanded={threadPanelController.toggleProjectExpanded}
-	                onStartDraftInProject={threadPanelController.startDraftInProject}
-	                onToggleProjectMenu={threadPanelController.toggleProjectMenu}
-	                projectMenuProjectId={projectMenuProjectId}
-	                projectMenuRef={projectMenuRef}
-	                onRenameProject={handleRenameProject}
-	                onRemoveProject={handleRemoveProject}
-	                generalThreads={generalThreads}
-	                laneThreadsCount={laneThreads.length}
-	                chatThreadGroups={chatThreadGroups}
-	                renderSessionItem={renderSessionItem}
-	              />
+		              <ThreadSidebarPanel
+		                state={{
+		                  threadSearchQuery,
+		                  threadLaneFilter,
+		                  normalizedThreadSearch,
+		                  threadSearchResults,
+		                  projectThreadGroups,
+		                  projectExpandedById,
+		                  projectMenuProjectId,
+		                  generalThreads,
+		                  laneThreadsCount: laneThreads.length,
+		                  chatThreadGroups,
+		                }}
+		                actions={{
+		                  onThreadSearchQueryChange: setThreadSearchQuery,
+		                  onSelectChatLane: threadPanelController.setChatLane,
+		                  onSelectAgentLane: threadPanelController.setAgentLane,
+		                  onAddProject: handleAddProjectFromFolderPicker,
+		                  onToggleProjectExpanded: threadPanelController.toggleProjectExpanded,
+		                  onStartDraftInProject: threadPanelController.startDraftInProject,
+		                  onToggleProjectMenu: threadPanelController.toggleProjectMenu,
+		                  projectMenuRef,
+		                  onRenameProject: handleRenameProject,
+		                  onRemoveProject: handleRemoveProject,
+		                  renderSessionItem,
+		                }}
+		              />
             </>
           )}
         </aside>
       )}
       {activePage === "community" && (
-        <aside className="community-nav">
-          <div className="community-nav-header">
-            <div
-              className={`community-nav-banner${activeCommunity?.banner_url ? " has-image" : ""}`}
-              style={
-                activeCommunity?.banner_url
-                  ? { backgroundImage: `url(${activeCommunity.banner_url})` }
-                  : undefined
+        <CommunityNav
+          activeCommunity={activeCommunity}
+          communityTab={communityTab}
+          canViewActiveCommunitySettings={canViewActiveCommunitySettings}
+          canManageMembersActiveCommunity={canManageMembersActiveCommunity}
+          canViewActiveCommunityAnalytics={canViewActiveCommunityAnalytics}
+          activeCommunityOwnerIsPro={activeCommunityOwnerIsPro}
+          onSelectTab={(tab) => {
+            if (isCommunityRouteManagedTab(tab)) {
+              const nextCommunityId = activeCommunityId ?? activeCommunity?.id ?? null;
+              if (nextCommunityId) {
+                openCommunityTab(nextCommunityId, tab);
+                return;
               }
-            >
-              <div className="community-nav-banner-overlay" />
-              <div className="community-nav-name">
-                {activeCommunity?.name ?? "Community"}
-              </div>
-            </div>
-          </div>
-          <button
-            className={communityTab === "chat" ? "nav-item active" : "nav-item"}
-            onClick={() => setCommunityTab("chat")}
-          >
-            <span className="nav-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-              </svg>
-            </span>
-            Chat
-          </button>
-          <button
-            className={communityTab === "library" ? "nav-item active" : "nav-item"}
-            onClick={() => setCommunityTab("library")}
-          >
-            <span className="nav-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
-                <path d="M4 5.5V19.5" />
-              </svg>
-            </span>
-            Library
-          </button>
-          <button
-            className={communityTab === "resources" ? "nav-item active" : "nav-item"}
-            onClick={() => setCommunityTab("resources")}
-          >
-            <span className="nav-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-                <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-              </svg>
-            </span>
-            Resources
-          </button>
-          <button
-            className={communityTab === "members" ? "nav-item active" : "nav-item"}
-            onClick={() => setCommunityTab("members")}
-          >
-            <span className="nav-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </span>
-            Members
-          </button>
-	          {canViewActiveCommunitySettings && (
-	            <>
-	              <div className="community-nav-divider" />
-	              <button
-	                className={communityTab === "settings" ? "nav-item active" : "nav-item"}
-                onClick={() => {
-                  setActivePage("community");
-                  setActiveView("home");
-                  setCommunityTab("settings");
-                }}
-              >
-                <span className="nav-icon">
-                  <svg
-                    viewBox="0 0 24 24"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ strokeWidth: 1.5 }}
-                  >
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-	                </span>
-	                Settings
-	              </button>
-                {canManageMembersActiveCommunity && (
-                  <button
-                    className={`${communityTab === "ai_agent" ? "nav-item active" : "nav-item"}${
-                      activeCommunityOwnerIsPro === false ? " premium-locked" : ""
-                    }`}
-                    onClick={() => {
-                      setActivePage("community");
-                      setActiveView("home");
-                      setCommunityTab("ai_agent");
-                    }}
-                    title={activeCommunityOwnerIsPro === false ? "AI Agent (Architect)" : "AI Agent"}
-                  >
-                    <span className="nav-icon">
-                      <svg viewBox="0 0 24 24">
-                        <circle cx="6" cy="7" r="2" />
-                        <circle cx="6" cy="17" r="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <circle cx="18" cy="7" r="2" />
-                        <circle cx="18" cy="17" r="2" />
-                        <path d="M7.5 8.3L10.5 10.7" />
-                        <path d="M7.5 15.7L10.5 13.3" />
-                        <path d="M13.5 10.7L16.5 8.3" />
-                        <path d="M13.5 13.3L16.5 15.7" />
-                      </svg>
-                    </span>
-                    AI Agent
-                    {activeCommunityOwnerIsPro === false && (
-                      <span className="nav-premium-badge" aria-hidden="true">
-                        <svg viewBox="0 0 24 24">
-                          <path d="M4 7l4 4 4-6 4 6 4-4-2 13H6L4 7z" />
-                        </svg>
-                      </span>
-                    )}
-                  </button>
-                )}
-	              {canViewActiveCommunityAnalytics && (
-	                <>
-	                  <button
-	                    className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
-	                    onClick={() => {
-	                      setActivePage("community");
-	                      setActiveView("home");
-	                      setCommunityTab("analytics");
-	                    }}
-	                  >
-	                    <span className="nav-icon">
-	                      <svg viewBox="0 0 24 24">
-	                        <path d="M4 19V5" />
-	                        <path d="M4 19h16" />
-	                        <path d="M8 15v-5" />
-	                        <path d="M12 15v-8" />
-	                        <path d="M16 15v-3" />
-	                      </svg>
-	                    </span>
-	                    Analytics
-	                  </button>
-	                </>
-	              )}
-	            </>
-	          )}
-        </aside>
+            }
+            setCommunityTab(tab);
+          }}
+        />
       )}
       <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
           {isCommunityChatLightboxOpen && communityChatLightboxImages.length > 0 && (() => {
@@ -6095,154 +5547,22 @@ function App() {
               </div>
             );
 	          })()}
-		        {supabaseSession && isBuilderUpgradeOpen && (
-		          <div className="modal-overlay" onClick={() => setIsBuilderUpgradeOpen(false)}>
-		            <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
-		              <div className="modal-header">
-		                <div className="modal-title">Upgrade plan</div>
-	                <button className="modal-close" onClick={() => setIsBuilderUpgradeOpen(false)} title="Close">
-	                  ×
-	                </button>
-	              </div>
-	              <div className="modal-body" ref={builderUpgradeModalBodyRef} onScroll={updateBuilderUpgradeScrollHint}>
-	                <div className="model-note" style={{ marginBottom: 12 }}>
-	                  {builderUpgradeContext === "create_community"
-	                    ? "Choose a builder plan to create your community."
-	                    : "Choose a builder plan to create communities and start earning."}
-	                </div>
-	                {builderUpgradeContext === "create_community" && (
-	                  <div className="model-note" style={{ marginBottom: 12 }}>
-	                    After checkout, we'll create your community automatically.
-	                  </div>
-	                )}
-	                {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-		                {(() => {
-		                  const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-		                  const freeIsCurrent = tier === "free";
-			                  const builderIsCurrent = tier === "builder";
-			                  const architectIsCurrent = tier === "pro" || tier === "architect";
-		                  const feature = (included: boolean, label: string) => (
-		                    <li className={`plan-feature${included ? " on" : " off"}`}>
-		                      <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
-		                        {included ? "✓" : "×"}
-		                      </span>
-		                      <span className="plan-feature-text">{label}</span>
-		                    </li>
-		                  );
-		                  return (
-		                    <div className="plan-grid">
-		                      <div className={`plan-card${freeIsCurrent ? " current" : ""}`}>
-		                        <div className="plan-card-header">
-		                          <div className="plan-name">Free</div>
-		                          {freeIsCurrent && <div className="plan-badge">Current</div>}
-		                        </div>
-		                        <div className="plan-price">
-		                          <span className="plan-price-amount">$0</span>
-		                          <span className="plan-price-period">/mo</span>
-		                        </div>
-		                        <div className="plan-subtitle">0 communities</div>
-		                        <ul className="plan-features plan-features-checks">
-		                          {feature(true, "AI chats (250MB cloud history)")}
-		                          {feature(true, "Access all included models")}
-		                          {feature(true, "Desktop app & local tools")}
-		                          {feature(true, "Cloud sync")}
-		                          {feature(false, "Agent memory")}
-		                          {feature(false, "Create communities")}
-		                          {feature(false, "Stripe payouts")}
-		                          {feature(false, "Analytics")}
-		                          {feature(false, "Automations")}
-		                          {feature(false, "Early feature access")}
-		                        </ul>
-		                        <button type="button" className="plan-cta" disabled>
-		                          {freeIsCurrent ? "Current plan" : "Free"}
-		                        </button>
-		                      </div>
-
-			                      <div className={`plan-card${builderIsCurrent ? " current" : ""}`}>
-			                        <div className="plan-card-header">
-			                          <div className="plan-name">Builder</div>
-			                          {builderIsCurrent && <div className="plan-badge">Current</div>}
-			                        </div>
-		                        <div className="plan-price">
-		                          <span className="plan-price-amount">$20</span>
-		                          <span className="plan-price-period">/mo</span>
-		                        </div>
-		                        <div className="plan-subtitle">10% take · 1 community</div>
-		                        <ul className="plan-features plan-features-checks">
-		                          {feature(true, "AI chats (5GB cloud history)")}
-		                          {feature(true, "Access all included models")}
-		                          {feature(true, "Desktop app & local tools")}
-		                          {feature(true, "Cloud sync")}
-		                          {feature(true, "Agent memory")}
-		                          {feature(true, "Create 1 community")}
-		                          {feature(true, "Stripe payouts")}
-		                          {feature(false, "Analytics")}
-		                          {feature(false, "Automations")}
-		                          {feature(false, "Early feature access")}
-		                        </ul>
-		                        <button
-		                          type="button"
-		                          className="plan-cta"
-		                          onClick={() => {
-		                            void startBuilderPlanCheckout("builder", { context: builderUpgradeContext });
-		                          }}
-			                          disabled={isStartingBuilderCheckout || builderIsCurrent}
-			                        >
-			                          {builderIsCurrent
-			                            ? "Current plan"
-			                            : isStartingBuilderCheckout
-			                              ? "Starting…"
-			                              : "Get Builder"}
-			                        </button>
-			                      </div>
-			
-			                      <div className={`plan-card${architectIsCurrent ? " current" : ""}`}>
-			                        <div className="plan-card-header">
-			                          <div className="plan-name">Architect</div>
-			                          {architectIsCurrent && <div className="plan-badge">Current</div>}
-			                        </div>
-		                        <div className="plan-price">
-		                          <span className="plan-price-amount">$100</span>
-		                          <span className="plan-price-period">/mo</span>
-		                        </div>
-		                        <div className="plan-subtitle">3% take · 3 communities</div>
-		                        <ul className="plan-features plan-features-checks">
-		                          {feature(true, "AI chats (25GB cloud history)")}
-		                          {feature(true, "Access all included models")}
-		                          {feature(true, "Desktop app & local tools")}
-		                          {feature(true, "Cloud sync")}
-		                          {feature(true, "Agent memory")}
-		                          {feature(true, "Create 3 communities")}
-		                          {feature(true, "Stripe payouts")}
-		                          {feature(true, "Analytics")}
-		                          {feature(true, "Automations")}
-		                          {feature(true, "Early feature access")}
-		                        </ul>
-		                        <button
-		                          type="button"
-		                          className="plan-cta"
-		                          onClick={() => {
-		                            void startBuilderPlanCheckout("architect", { context: builderUpgradeContext });
-		                          }}
-			                        disabled={isStartingBuilderCheckout || architectIsCurrent}
-			                      >
-			                        {architectIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Architect"}
-			                      </button>
-			                    </div>
-		                  </div>
-		                );
-		              })()}
-	                <div className={`modal-scroll-hint${showBuilderUpgradeScrollHint ? " show" : ""}`} aria-hidden="true">
-	                  <div className="modal-scroll-hint-icon">
-	                    <svg viewBox="0 0 24 24">
-	                      <path d="M6 9l6 6 6-6" />
-	                    </svg>
-	                  </div>
-	                </div>
-		              </div>
-	            </div>
-	          </div>
-	        )}
+		        {supabaseSession && (
+              <BuilderUpgradeModal
+                isOpen={isBuilderUpgradeOpen}
+                builderUpgradeContext={builderUpgradeContext}
+                builderTier={builderBillingStatus?.builder_tier}
+                isStartingBuilderCheckout={isStartingBuilderCheckout}
+                builderBillingError={builderBillingError}
+                showBuilderUpgradeScrollHint={showBuilderUpgradeScrollHint}
+                builderUpgradeModalBodyRef={builderUpgradeModalBodyRef}
+                onClose={() => setIsBuilderUpgradeOpen(false)}
+                onModalBodyScroll={updateBuilderUpgradeScrollHint}
+                onStartBuilderPlanCheckout={(tier) => {
+                  void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
+                }}
+              />
+            )}
 	        {showCreateCommunityModal && (
 	          <div className="modal-overlay" onClick={closeCreateCommunityModal}>
 	            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
@@ -6380,11 +5700,11 @@ function App() {
             <div className="modal-footer">
               <div className="create-community-actions">
                 {(() => {
-		                  const tier = (builderBillingStatus?.builder_tier ?? "unknown").toLowerCase();
-		                  const max = builderBillingStatus?.max_communities ?? 0;
-		                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
-		                  const needsPlan = Boolean(supabaseSession && tier === "free");
-		                  const limitReached = Boolean(supabaseSession && tier !== "free" && max > 0 && ownedCount >= max);
+			                  const tier = builderBillingStatus?.builder_tier ?? "unknown";
+			                  const max = builderBillingStatus?.max_communities ?? 0;
+			                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
+			                  const needsPlan = Boolean(supabaseSession && isBuilderTierFree(tier));
+			                  const limitReached = Boolean(supabaseSession && !isBuilderTierFree(tier) && max > 0 && ownedCount >= max);
 	                  if (!supabaseSession) {
 	                    return (
 	                      <button className="create-community-primary" onClick={() => void handleSignIn()}>
@@ -6600,250 +5920,21 @@ function App() {
 	            </div>
 	          </div>
 	        )}
-	        {teachCandidateDraft && (
-	          <div className="modal-overlay" onClick={closeTeachCandidateModal}>
-	            <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
-	              <div className="modal-header">
-	                <div className="modal-title">Teach community</div>
-	                <button
-	                  className="modal-close"
-	                  onClick={closeTeachCandidateModal}
-	                  title="Close"
-	                  disabled={isSubmittingTeachCandidate}
-	                >
-	                  ×
-	                </button>
-	              </div>
-	              <div className="modal-body">
-	                <div className="resource-form">
-	                  <input
-	                    type="text"
-	                    placeholder="Memory title (optional)"
-	                    value={teachCandidateTitleInput}
-	                    onChange={(event) => setTeachCandidateTitleInput(event.target.value)}
-	                    disabled={isSubmittingTeachCandidate}
-	                  />
-	                  <textarea
-	                    placeholder="Memory text"
-	                    value={teachCandidateMemoryInput}
-	                    onChange={(event) => setTeachCandidateMemoryInput(event.target.value)}
-	                    disabled={isSubmittingTeachCandidate}
-	                  />
-	                  <div className="resource-meta">
-	                    <span>Evidence items</span>
-	                    <span>{teachCandidateDraft.evidenceItems.length}</span>
-	                  </div>
-	                  {teachCandidateDraft.evidenceItems.length > 0 ? (
-	                    <CommunityEvidenceCitations items={teachCandidateDraft.evidenceItems.slice(0, 6)} />
-	                  ) : (
-	                    <div className="create-community-hint">
-	                      No evidence captured on this turn. This candidate will go to community review.
-	                    </div>
-	                  )}
-	                  {teachCandidateSubmitError && <div className="auth-error">{teachCandidateSubmitError}</div>}
-	                </div>
-	              </div>
-	              <div className="modal-footer">
-	                <div className="resource-modal-actions">
-	                  <button
-	                    onClick={() => void handleSubmitTeachCommunityCandidate()}
-	                    disabled={isSubmittingTeachCandidate || teachCandidateMemoryInput.trim().length === 0}
-	                  >
-	                    {isSubmittingTeachCandidate ? "Teaching..." : "Teach community"}
-	                  </button>
-	                  <button className="secondary" onClick={closeTeachCandidateModal} disabled={isSubmittingTeachCandidate}>
-	                    Cancel
-	                  </button>
-	                </div>
-	              </div>
-	            </div>
-	          </div>
-	        )}
-	        {sourcesUsed.open && (
-	          <div className="modal-overlay" onClick={() => setSourcesUsed({ open: false })}>
-	            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title">Sources used</div>
-                <button className="modal-close" onClick={() => setSourcesUsed({ open: false })} title="Close">
-                  ×
-                </button>
-              </div>
-              <div className="modal-body">
-                {sourcesUsed.isLoading && <div className="chat-loading"><div className="loading-spinner" /><span>Loading…</span></div>}
-                {!sourcesUsed.isLoading && sourcesUsed.error && (
-                  <div className="auth-error">{sourcesUsed.error}</div>
-                )}
-                {!sourcesUsed.isLoading && !sourcesUsed.error && (
-                  <>
-                    {sourcesUsed.workspacePath && (
-                      <div className="resource-meta">
-                        <span>Workspace</span>
-                        <span>{sourcesUsed.workspacePath}</span>
-                      </div>
-                    )}
-                    {sourcesUsed.threadContext && (
-                      <>
-                        <div className="panel-title">Thread context</div>
-                        <div className="resource-meta">
-                          <span>Lane</span>
-                          <span>{sourcesUsed.threadContext.threadLane ?? "unknown"}</span>
-                        </div>
-                        <div className="resource-meta">
-                          <span>Project</span>
-                          <span>{sourcesUsed.threadContext.projectId ?? "none"}</span>
-                        </div>
-                        <div className="resource-meta">
-                          <span>Community lens</span>
-                          <span>{sourcesUsed.threadContext.communityId ?? "none"}</span>
-                        </div>
-                        <div className="resource-meta">
-                          <span>Context version</span>
-                          <span>
-                            {typeof sourcesUsed.threadContext.contextVersion === "number"
-                              ? sourcesUsed.threadContext.contextVersion
-                              : "unknown"}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    {(sourcesUsed.communityContext || sourcesUsed.threadContext?.communityId) && (
-                      <>
-                        <div className="panel-title">Community retrieval</div>
-                        <div className="resource-meta">
-                          <span>Community</span>
-                          <span>
-                            {sourcesUsed.communityContext?.communityId ??
-                              sourcesUsed.threadContext?.communityId ??
-                              "none"}
-                          </span>
-                        </div>
-                        <div className="resource-meta">
-                          <span>Injected into prompt</span>
-                          <span>{sourcesUsed.communityContext?.injected ? "Yes" : "No"}</span>
-                        </div>
-                        <div className="resource-meta">
-                          <span>Attempted retrieval</span>
-                          <span>{sourcesUsed.communityContext?.attempted ? "Yes" : "No"}</span>
-                        </div>
-                        {sourcesUsed.communityContext?.failureClass && (
-                          <div className="resource-meta">
-                            <span>Failure class</span>
-                            <span>{sourcesUsed.communityContext.failureClass}</span>
-                          </div>
-                        )}
-                        {sourcesUsed.communityContext?.attempted && (
-                          <>
-                            <div className="resource-meta">
-                              <span>Compiled source</span>
-                              <span>
-                                {formatCommunitySourceStatus(
-                                  sourcesUsed.communityContext.compiledFetchOk,
-                                  sourcesUsed.communityContext.compiledItemsUsed,
-                                )}
-                              </span>
-                            </div>
-                            <div className="resource-meta">
-                              <span>Compile version</span>
-                              <span>
-                                {typeof sourcesUsed.communityContext.compileVersion === "number"
-                                  ? sourcesUsed.communityContext.compileVersion
-                                  : "unknown"}
-                              </span>
-                            </div>
-                            <div className="resource-meta">
-                              <span>Fallback used</span>
-                              <span>
-                                {sourcesUsed.communityContext.fallbackUsed === null
-                                  ? "Unknown"
-                                  : sourcesUsed.communityContext.fallbackUsed
-                                    ? "Yes"
-                                    : "No"}
-                              </span>
-                            </div>
-                            <div className="resource-meta">
-                              <span>Quality</span>
-                              <span>
-                                {sourcesUsed.communityContext.qualityBand
-                                  ? `${sourcesUsed.communityContext.qualityBand}${
-                                      typeof sourcesUsed.communityContext.qualityScore === "number"
-                                        ? ` (${Math.round(sourcesUsed.communityContext.qualityScore)})`
-                                        : ""
-                                    }`
-                                  : "Unknown"}
-                              </span>
-                            </div>
-                            <div className="resource-meta">
-                              <span>Latency</span>
-                              <span>
-                                {typeof sourcesUsed.communityContext.retrievalLatencyMs === "number"
-                                  ? `${Math.max(0, Math.round(sourcesUsed.communityContext.retrievalLatencyMs))} ms`
-                                  : "Unknown"}
-                              </span>
-                            </div>
-                            {sourcesUsed.communityContext.contractId && (
-                              <div className="resource-meta">
-                                <span>Observability contract</span>
-                                <span>{sourcesUsed.communityContext.contractId}</span>
-                              </div>
-                            )}
-                            <div className="resource-meta">
-                              <span>Chat source</span>
-                              <span>
-                                {formatCommunitySourceStatus(
-                                  sourcesUsed.communityContext.chatFetchOk,
-                                  sourcesUsed.communityContext.chatItemsUsed,
-                                )}
-                              </span>
-                            </div>
-                            <div className="resource-meta">
-                              <span>Resource source</span>
-                              <span>
-                                {formatCommunitySourceStatus(
-                                  sourcesUsed.communityContext.resourceFetchOk,
-                                  sourcesUsed.communityContext.resourceItemsUsed,
-                                )}
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
-                    {sourcesUsed.communityEvidence && sourcesUsed.communityEvidence.items.length > 0 && (
-                      <>
-                        <div className="panel-title">Community evidence</div>
-                        {sourcesUsed.communityEvidence.items.map((item) => (
-                          <div
-                            key={`${item.source_type}:${item.source_id}:${item.rank}`}
-                            className="resource-meta"
-                          >
-                            <span>{formatCommunityEvidenceTypeLabel(item.source_type)}</span>
-                            <span>
-                              {item.title}
-                              {item.snippet ? `: ${item.snippet}` : ""}
-                              {item.url ? ` (${item.url})` : ""}
-                            </span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                    <div className="panel-title">Personal memory</div>
-                    {sourcesUsed.personalMemory.length === 0 ? (
-                      <div className="chat-empty">No personal memory injected for this turn.</div>
-                    ) : (
-                      <div className="model-list">
-                        {sourcesUsed.personalMemory.map((item) => (
-                          <div key={item.id} className="model-toggle">
-                            <span>{item.content}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <DesktopTeachCandidateModal
+          draft={teachCandidateDraft}
+          titleInput={teachCandidateTitleInput}
+          memoryInput={teachCandidateMemoryInput}
+          submitError={teachCandidateSubmitError}
+          isSubmitting={isSubmittingTeachCandidate}
+          onClose={closeTeachCandidateModal}
+          onSubmit={handleSubmitTeachCommunityCandidate}
+          onChangeTitle={setTeachCandidateTitleInput}
+          onChangeMemory={setTeachCandidateMemoryInput}
+        />
+        <DesktopSourcesUsedModal
+          sourcesUsed={sourcesUsed}
+          onClose={() => setSourcesUsed({ open: false })}
+        />
         {activeView === "settings" ? (
           <div className="settings-panel">
             {settingsGroup === "account" && (
@@ -6984,15 +6075,13 @@ function App() {
                   <div className="settings-section">
                     {(() => {
                       const status = builderBillingStatus;
-                      const tier = (status?.builder_tier ?? "free").toLowerCase();
+	                      const tier = status?.builder_tier ?? "free";
                       const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
                       const max = status?.max_communities ?? 0;
                       const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
                       const communitiesLabel =
                         max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
-                      const tierLabel =
-                        tier === "pro" || tier === "architect" ? "Architect" : tier === "builder" ? "Builder" : "Free";
-                      const isArxOwner = isArxOwnerAccount(supabaseSession.user);
+	                      const tierLabel = formatBuilderTierLabel(tier);
                       return (
                         <>
                           <div className="account-row">
@@ -7003,7 +6092,7 @@ function App() {
                               </strong>
                             </div>
                             <div className="auth-actions">
-	                              {tier === "free" ? (
+		                              {isBuilderTierFree(tier) ? (
 	                                <button
 	                                  type="button"
 	                                  className="secondary"
@@ -7023,53 +6112,13 @@ function App() {
                                 >
                                   {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
                                 </button>
-                              )}
+	                              )}
                             </div>
                           </div>
-                          {isArxOwner && (
-                            <>
-                              <div className="model-note" style={{ marginTop: 10 }}>
-                                Owner dev: temporarily override your builder tier to test gated features.
-                              </div>
-                              <div className="account-row">
-                                <div className="account-identity">
-                                  <span>Dev tier override</span>
-                                  <strong>{tierLabel}</strong>
-                                </div>
-                                <div className="auth-actions">
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    disabled={isDevSettingBuilderTier || tier === "free"}
-                                    onClick={() => void handleDevSetBuilderTier("free")}
-                                  >
-                                    Free
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    disabled={isDevSettingBuilderTier || tier === "builder"}
-                                    onClick={() => void handleDevSetBuilderTier("builder")}
-                                  >
-                                    Builder
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    disabled={isDevSettingBuilderTier || tier === "pro" || tier === "architect"}
-                                    onClick={() => void handleDevSetBuilderTier("architect")}
-                                  >
-                                    Architect
-                                  </button>
-                                </div>
-                              </div>
-                            </>
-                          )}
                         </>
                       );
                     })()}
                     {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-                    {devSetBuilderTierError && <div className="auth-error">{devSetBuilderTierError}</div>}
                   </div>
                 )}
 
@@ -7113,15 +6162,21 @@ function App() {
 	                              </div>
 	                              <div className="invite-actions">
 		                                <button
-		                                  type="button"
-		                                  onClick={() => {
-		                                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-		                                    setActiveView("home");
-		                                    setActivePage("community");
-		                                    setActiveCommunityId(community.id);
-		                                    setCommunityTab("settings");
-		                                  }}
-		                                >
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      !confirmDiscardUnsavedCommunitySettingsDesktop({
+                                        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+                                        activeCommunityId,
+                                        nextCommunityId: community.id,
+                                        confirmDiscard: (message) => window.confirm(message),
+                                      })
+                                    ) {
+                                      return;
+                                    }
+                                    openCommunityTab(community.id, "settings");
+                                  }}
+                                >
                                   Open settings
                                 </button>
                               </div>
@@ -7313,10 +6368,10 @@ function App() {
               <>
                 <div className="panel-title">Memory</div>
                 <div className="memory-panel">
-                  {personalMemoryError &&
-                    (builderBillingStatus?.builder_tier ?? "free").toLowerCase() !== "free" && (
-                      <div className="memory-error">{personalMemoryError}</div>
-                    )}
+	                  {personalMemoryError &&
+	                    !isBuilderTierFree(builderBillingStatus?.builder_tier ?? "free") && (
+	                      <div className="memory-error">{personalMemoryError}</div>
+	                    )}
 
 		                  <div className="settings-section">
 			                    <div className="settings-section-title">
@@ -7354,10 +6409,10 @@ function App() {
                     </div>
                   </div>
 
-                  {(() => {
-                    const tier = (builderBillingStatus?.builder_tier ?? "free").toLowerCase();
-                    const hasPersonalMemoryAccess = tier === "builder" || tier === "pro" || tier === "architect";
-                    if (!supabaseSession) return null;
+	                  {(() => {
+	                    const tier = builderBillingStatus?.builder_tier ?? "free";
+	                    const hasPersonalMemoryAccess = hasBuilderTierPaidAccess(tier);
+	                    if (!supabaseSession) return null;
                     if (!hasPersonalMemoryAccess) {
                       return (
                         <div className="settings-section">
@@ -7818,27 +6873,7 @@ function App() {
                           if (toolCall.status === "started" || toolCall.status === "requested") return "⏳";
                           return "•";
                         })();
-                        const artifacts: any[] = Array.isArray(summary?.artifacts) ? summary.artifacts : [];
-                        const artifactLines = artifacts
-                          .map((artifact) => {
-                            if (!artifact || typeof artifact !== "object") return null;
-                            const type = typeof (artifact as any).type === "string" ? (artifact as any).type : "artifact";
-                            const artifactPath =
-                              typeof (artifact as any).path === "string" ? (artifact as any).path : "(unknown)";
-                            if (type === "file_edit" || type === "file_write" || type === "file_patch") {
-                              const before =
-                                typeof (artifact as any).before_sha256 === "string" ? (artifact as any).before_sha256 : null;
-                              const after =
-                                typeof (artifact as any).after_sha256 === "string" ? (artifact as any).after_sha256 : null;
-                              return `${type}: ${artifactPath}${before && after ? `\n  ${before} → ${after}` : ""}`;
-                            }
-                            if (type === "file_hash") {
-                              const sha = typeof (artifact as any).sha256 === "string" ? (artifact as any).sha256 : null;
-                              return `file_hash: ${artifactPath}${sha ? `\n  ${sha}` : ""}`;
-                            }
-                            return `${type}: ${artifactPath}`;
-                          })
-                          .filter(Boolean) as string[];
+                        const artifactLines = formatToolArtifactLines(summary, { includeFilePatchHashes: true });
 
                         const output = [toolCall.stdout_excerpt, toolCall.stderr_excerpt].filter(Boolean).join("\n");
                         const isExpanded = expandedOutputIds.has(toolCall.id);
@@ -7951,25 +6986,7 @@ function App() {
                     return "•";
                   })();
 
-                  const artifacts: any[] = Array.isArray(summary?.artifacts) ? summary.artifacts : [];
-                  const artifactLines = artifacts
-                    .map((artifact) => {
-                      if (!artifact || typeof artifact !== "object") return null;
-                      const type = typeof (artifact as any).type === "string" ? (artifact as any).type : "artifact";
-                      const artifactPath =
-                        typeof (artifact as any).path === "string" ? (artifact as any).path : "(unknown)";
-                      if (type === "file_edit" || type === "file_write") {
-                        const before = typeof (artifact as any).before_sha256 === "string" ? (artifact as any).before_sha256 : null;
-                        const after = typeof (artifact as any).after_sha256 === "string" ? (artifact as any).after_sha256 : null;
-                        return `${type}: ${artifactPath}${before && after ? `\n  ${before} → ${after}` : ""}`;
-                      }
-                      if (type === "file_hash") {
-                        const sha = typeof (artifact as any).sha256 === "string" ? (artifact as any).sha256 : null;
-                        return `file_hash: ${artifactPath}${sha ? `\n  ${sha}` : ""}`;
-                      }
-                      return `${type}: ${artifactPath}`;
-                    })
-                    .filter(Boolean) as string[];
+                  const artifactLines = formatToolArtifactLines(summary);
 
                   const output = [toolCall.stdout_excerpt, toolCall.stderr_excerpt].filter(Boolean).join("\n");
                   const isExpanded = expandedOutputIds.has(toolCall.id);
@@ -8377,209 +7394,27 @@ function App() {
               <button className="toolbar-icon" title="Add files" onClick={handleAddAttachment}>
                 <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
               </button>
-	              <div className="ask-model" ref={modelPickerRef}>
-	                <button
-	                  className="ask-model-btn"
-	                  type="button"
-	                  aria-haspopup="dialog"
-	                  aria-expanded={isModelPickerOpen}
-	                  onClick={() => (isModelPickerOpen ? closeModelPicker() : openModelPicker())}
-	                  disabled={curatedPickerModels.length === 0}
-	                  title="Model"
-	                >
-	                  <span className="ask-model-label">{selectedModelLabel}</span>
-	                  <svg className="ask-model-chevron" viewBox="0 0 24 24" aria-hidden="true">
-	                    <path d="M6 9l6 6 6-6" />
-	                  </svg>
-	                </button>
-	                {isModelPickerOpen && (
-	                  <div className="model-picker-popover" role="dialog" aria-label="Choose a model">
-	                    <div className="model-picker-modal">
-	                      <div className="model-picker-search-row">
-	                        <input
-	                          ref={modelPickerSearchRef}
-	                          className="model-picker-search"
-	                          type="text"
-	                          placeholder="Search models…"
-	                          value={modelPickerQuery}
-	                          onChange={(event) => setModelPickerQuery(event.target.value)}
-	                        />
-	                        <button
-	                          className="model-picker-close"
-	                          type="button"
-	                          onClick={closeModelPicker}
-	                          aria-label="Close model picker"
-	                          title="Close"
-	                        >
-	                          <svg viewBox="0 0 24 24" aria-hidden="true">
-	                            <path d="M18 6L6 18M6 6l12 12" />
-	                          </svg>
-	                        </button>
-	                      </div>
-	                      <div className="model-picker-body">
-	                        <nav className="model-picker-nav" aria-label="Model sections">
-	                          {(
-	                            [
-	                              {
-	                                id: "all",
-	                                label: "All",
-	                                icon: (
-	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-	                                    <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
-	                                  </svg>
-	                                ),
-	                              },
-	                              {
-	                                id: "free",
-	                                label: "Free",
-	                                icon: (
-	                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-	                                    <path d="M20 12v10H4V12" />
-	                                    <path d="M2 7h20v5H2z" />
-	                                    <path d="M12 22V7" />
-	                                    <path d="M12 7c-2.2 0-4-1.8-4-4 2.2 0 4 1.8 4 4z" />
-	                                    <path d="M12 7c2.2 0 4-1.8 4-4-2.2 0-4 1.8-4 4z" />
-	                                  </svg>
-	                                ),
-	                              },
-	                              {
-	                                id: "openai",
-	                                label: "OpenAI",
-	                                icon: (
-	                                  <span className="model-picker-nav-logo">
-	                                    <img className="model-picker-nav-logo-img monochrome" src={openAiLogo} alt="" />
-	                                  </span>
-	                                ),
-	                              },
-	                              {
-	                                id: "anthropic",
-	                                label: "Anthropic",
-	                                icon: (
-	                                  <span className="model-picker-nav-logo">
-	                                    <img className="model-picker-nav-logo-img monochrome" src={anthropicLogo} alt="" />
-	                                  </span>
-	                                ),
-	                              },
-	                              {
-	                                id: "google",
-	                                label: "Google",
-	                                icon: (
-	                                  <span className="model-picker-nav-logo">
-	                                    <img className="model-picker-nav-logo-img monochrome" src={googleLogo} alt="" />
-	                                  </span>
-	                                ),
-	                              },
-	                              {
-	                                id: "x-ai",
-	                                label: "xAI",
-	                                icon: (
-	                                  <span className="model-picker-nav-logo">
-	                                    <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" />
-	                                  </span>
-	                                ),
-	                              },
-	                              {
-	                                id: "openrouter",
-	                                label: "OpenRouter",
-	                                icon: (
-	                                  <span className="model-picker-nav-logo">
-	                                    <img className="model-picker-nav-logo-img monochrome" src={openRouterLogo} alt="" />
-	                                  </span>
-	                                ),
-	                              },
-	                            ] as Array<{ id: ModelSectionId; label: string; icon: ReactNode }>
-	                          ).map((section) => (
-	                            <button
-	                              key={section.id}
-	                              className={
-	                                modelPickerSection === section.id
-	                                  ? "model-picker-nav-btn active"
-	                                  : "model-picker-nav-btn"
-	                              }
-	                              type="button"
-	                              aria-pressed={modelPickerSection === section.id}
-	                              aria-label={section.label}
-	                              title={section.label}
-	                              onClick={() => setModelPickerSection(section.id)}
-	                            >
-	                              <span className="model-picker-nav-icon" aria-hidden="true">
-	                                {section.icon}
-	                              </span>
-	                            </button>
-	                          ))}
-	                        </nav>
-	                        <div className="model-picker-list" role="list">
-	                          {(() => {
-	                            const sectionLabels: Record<string, string> = {
-	                              free: "Free", openai: "OpenAI", anthropic: "Anthropic",
-	                              google: "Google", "x-ai": "xAI", openrouter: "OpenRouter",
-	                            };
-	                            let lastSection = "";
-	                            return visiblePickerModels.map((model) => {
-	                              const isSelected = model.id === (activeModelId ?? "").trim();
-	                              const selectable = canSelectPickerModel(model);
-	                              const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
-	                              const showPremiumCrown = model.access === "paid" && !hasPaidAccess;
-	                              const providerId = providerIdForModelId(model.id);
-	                              const lockedLabel = model.access === "free"
-	                                ? "Free"
-	                                : !showPremiumCrown && !isModelEnabled
-	                                  ? "Soon"
-	                                  : !showPremiumCrown && providerId === "openai" && !chatgptAuthSummary
-	                                    ? "Sign in"
-	                                    : null;
-	                              const showGroupHeader = modelPickerSection === "all" && model.section !== lastSection && sectionLabels[model.section];
-	                              if (model.section !== lastSection) lastSection = model.section;
-	                              return (
-	                                <Fragment key={model.id}>
-	                                  {showGroupHeader && (
-	                                    <div className="model-picker-group-header">{sectionLabels[model.section]}</div>
-	                                  )}
-	                                  <div
-	                                    className={
-	                                      "model-picker-row" +
-	                                      (isSelected ? " selected" : "") +
-	                                      (!selectable ? " locked" : "")
-	                                    }
-	                                  >
-	                                    <button
-	                                      className="model-picker-row-main"
-	                                      type="button"
-	                                      onClick={() => void handleSelectPickerModel(model)}
-	                                      aria-current={isSelected ? "true" : undefined}
-	                                    >
-	                                      <div className="model-picker-row-info">
-	                                        <div className="model-picker-row-title">
-	                                          {model.label}
-	                                          {showPremiumCrown && (
-	                                            <span className="model-picker-row-crown" title="Premium model" aria-label="Premium model">
-	                                              <svg viewBox="0 0 24 24" aria-hidden="true">
-	                                                <path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 13H5L3 7z" />
-	                                                <path d="M8 17h8" />
-	                                              </svg>
-	                                            </span>
-	                                          )}
-	                                          {lockedLabel && <span className="model-picker-row-pill">{lockedLabel}</span>}
-	                                        </div>
-	                                        {model.description && (
-	                                          <div className="model-picker-row-subtitle">{model.description}</div>
-	                                        )}
-	                                      </div>
-	                                      <span className="model-picker-row-check" aria-hidden="true">
-	                                        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
-	                                      </span>
-	                                    </button>
-	                                  </div>
-	                                </Fragment>
-	                              );
-	                            });
-	                          })()}
-	                        </div>
-	                      </div>
-	                    </div>
-	                  </div>
-	                )}
-	              </div>
+              <DesktopModelPickerPopover
+                modelPickerRef={modelPickerRef}
+                modelPickerSearchRef={modelPickerSearchRef}
+                isOpen={isModelPickerOpen}
+                curatedPickerModels={curatedPickerModels}
+                selectedModelLabel={selectedModelLabel}
+                modelPickerQuery={modelPickerQuery}
+                setModelPickerQuery={setModelPickerQuery}
+                modelPickerSection={modelPickerSection}
+                setModelPickerSection={setModelPickerSection}
+                visiblePickerModels={visiblePickerModels}
+                activeModelId={activeModelId}
+                canSelectPickerModel={canSelectPickerModel}
+                onSelectModel={handleSelectPickerModel}
+                modelToggles={modelToggles}
+                hasPaidAccess={hasPaidAccess}
+                hasChatgptAuth={Boolean(chatgptAuthSummary)}
+                providerIdForModelId={providerIdForModelId}
+                onOpen={openModelPicker}
+                onClose={closeModelPicker}
+              />
             </div>
 		            <div className="ask-toolbar-right">
 			              <VoiceInputButton
@@ -8687,2432 +7522,329 @@ function App() {
 	                              ? community.description
 	                              : "No description yet.";
                             const canActivate = alreadyMember || Boolean(community.slug);
-	                          return (
-	                            <div
-	                              key={community.slug}
-	                              className={`discover-card${canActivate ? " clickable" : ""}`}
-	                              role={canActivate ? "button" : undefined}
-	                              tabIndex={canActivate ? 0 : -1}
-	                              aria-label={
-	                                canActivate
-	                                  ? alreadyMember
-	                                    ? `Open ${community.name}`
-	                                    : isJoinable && supabaseSession
-	                                      ? `Join ${community.name}`
-	                                      : `View ${community.name}`
-	                                  : undefined
-	                              }
-		                              onClick={() => {
-		                                if (!canActivate) return;
-		                                if (alreadyMember) {
-		                                  if (!memberCommunity) return;
-		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
-                                      pushNavSnapshot();
-		                                  setActiveCommunityId(memberCommunity.id);
-		                                  setActivePage("community");
-		                                  setCommunityTab("chat");
+		                          return (
+		                            <DiscoverCommunityCard
+		                              key={community.slug}
+		                              name={community.name}
+		                              slug={community.slug}
+		                              description={description}
+		                              avatarUrl={community.avatar_url}
+		                              bannerUrl={community.banner_url}
+		                              priceLabel={priceLabel}
+		                              visibilityClass={community.visibility ?? "private"}
+		                              visibilityLabel={visibilityLabel}
+		                              isPublishedVisibility={community.visibility === "public"}
+		                              clickable={canActivate}
+		                              ariaLabel={
+		                                canActivate
+		                                  ? alreadyMember
+		                                    ? `Open ${community.name}`
+		                                    : isJoinable && supabaseSession
+		                                      ? `Join ${community.name}`
+		                                      : `View ${community.name}`
+		                                  : undefined
+		                              }
+                                onActivate={() => {
+                                  if (!canActivate) return;
+                                  if (alreadyMember) {
+                                    if (!memberCommunity) return;
+                                    if (
+                                      !confirmDiscardUnsavedCommunitySettingsDesktop({
+                                        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+                                        activeCommunityId,
+                                        nextCommunityId: memberCommunity.id,
+                                        confirmDiscard: (message) => window.confirm(message),
+                                      })
+                                    ) {
+                                      return;
+                                    }
+                                    openCommunityTab(memberCommunity.id, "chat", { pushSnapshot: true });
+                                    return;
+                                  }
+		                                if (isJoinable && supabaseSession && !isJoining) {
+		                                  void handleJoinDiscoverCommunity(community);
 		                                  return;
-	                                }
-	                                if (isJoinable && supabaseSession && !isJoining) {
-	                                  void handleJoinDiscoverCommunity(community);
-	                                  return;
-	                                }
-	                                void openCommunityLandingExternal(community);
-	                              }}
-		                              onKeyDown={(event) => {
-		                                if (!canActivate) return;
-		                                if (event.key !== "Enter" && event.key !== " ") return;
-		                                event.preventDefault();
-		                                if (alreadyMember) {
-		                                  if (!memberCommunity) return;
-		                                  if (!confirmDiscardUnsavedCommunitySettings(memberCommunity.id)) return;
-                                      pushNavSnapshot();
-		                                  setActiveCommunityId(memberCommunity.id);
-		                                  setActivePage("community");
-		                                  setCommunityTab("chat");
-		                                  return;
-	                                }
-	                                if (isJoinable && supabaseSession && !isJoining) {
-	                                  void handleJoinDiscoverCommunity(community);
-	                                  return;
-	                                }
-	                                void openCommunityLandingExternal(community);
-	                              }}
-	                            >
-	                              <div className="discover-card-banner">
-	                                {community.banner_url ? (
-	                                  <img
-	                                    className="discover-card-banner-img"
-	                                    src={community.banner_url}
-	                                    alt=""
-	                                    loading="lazy"
-	                                    decoding="async"
-	                                  />
-	                                ) : null}
-	                              </div>
-	                              <div className="discover-card-body">
-	                                <div className="discover-card-header">
-	                                  {community.avatar_url ? (
-	                                    <img
-	                                      className="discover-card-avatar"
-	                                      src={community.avatar_url}
-	                                      alt={community.name}
-	                                      loading="lazy"
-	                                    />
-	                                  ) : (
-	                                    <div className="discover-card-avatar fallback">{communityInitials(community.name)}</div>
-	                                  )}
-	                                  <div className="discover-card-meta">
-	                                    <div className="discover-card-name-row">
-	                                      <div className="discover-card-name">{community.name}</div>
-	                                      <span className="discover-tag price">{priceLabel}</span>
-	                                      <span className={`discover-visibility-icon ${community.visibility ?? "private"}`} title={visibilityLabel}>
-	                                        {community.visibility === "public" ? (
-	                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-	                                            <circle cx="12" cy="12" r="10" />
-	                                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-	                                          </svg>
-	                                        ) : (
-	                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-	                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-	                                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-	                                          </svg>
-	                                        )}
-	                                      </span>
-	                                    </div>
-	                                    {community.slug && <div className="discover-card-slug">/{community.slug}</div>}
-	                                  </div>
-	                                </div>
-	                                <div className="discover-card-desc">{description}</div>
-	                              </div>
-	                            </div>
-	                          );
-	                        })}
+		                                }
+		                                void openCommunityLandingExternal(community);
+		                              }}
+		                            />
+		                          );
+		                        })}
 	                    </div>
 	                  </div>
 	                </div>
               </div>
             )}
-	            {activePage === "community" && communityTab === "chat" && (
-	              <div className="community-chat">
-                <div className="workspace-body chat-feed">
-                  <div
-                    className="chat-messages"
-                    ref={communityChatListRef}
-                    onScroll={handleChatScroll}
-                  >
-                    {!supabaseSession && (
-                      <div className="chat-empty">Sign in to access community chat.</div>
-                    )}
-                    {supabaseSession && !activeCommunity && (
-                      <div className="chat-empty">Select a community to start chatting.</div>
-                    )}
-                    {activeCommunity && isLoadingChat && (
-                      <div className="chat-loading">
-                        <div className="loading-spinner" />
-                        <span>Loading messages...</span>
-                      </div>
-                    )}
-	                    {activeCommunity && !isLoadingChat && communityMessages.length === 0 && (
-	                      <div className="chat-empty-state">
-                        <div className="chat-empty-icon">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                          </svg>
-                        </div>
-                        <div className="chat-empty-title">Welcome to {activeCommunity.name}</div>
-                        <div className="chat-empty-text">This is the beginning of your community chat. Say hello!</div>
-	                      </div>
-	                    )}
-	                    {activeCommunity && !isLoadingChat && isLoadingMoreChat && (
-	                      <div className="chat-loading">
-	                        <div className="loading-spinner" />
-	                        <span>Loading earlier messages...</span>
-	                      </div>
-	                    )}
-	                    {activeCommunity && !isLoadingChat && !communityChatHasMore && communityMessages.length > 0 && (
-	                      <div className="chat-date-separator">
-	                        <span>Start</span>
-	                      </div>
-	                    )}
-	                    {activeCommunity &&
-	                      !isLoadingChat &&
-	                      communityMessages.map((message, index) => {
-                        const isOwn = message.sender_id === supabaseSession?.user.id;
-                        const isPending = message.id.startsWith("pending-");
-                        const showMeta = shouldShowSender(communityMessages, index);
-                        const dateSeparator = shouldShowDateSeparator(communityMessages, index);
-                        const senderLabel = displayName(message.sender_id);
-                        const avatarUrl = isOwn ? profileAvatarUrl : profilesByUserId[message.sender_id]?.avatar_url ?? null;
-                        const avatarColor = getAvatarColor(message.sender_id);
-                        const shortTime = new Date(message.created_at).toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        });
-                        const replyToId = message.reply_to_id ?? null;
-                        const replyTarget = replyToId ? (communityMessageById.get(replyToId) ?? null) : null;
-                        return (
-                          <CommunityChatMessageRow
-                            key={message.id}
-                            message={message}
-                            dateSeparator={dateSeparator}
-                            isPending={isPending}
-                            showMeta={showMeta}
-                            isOwn={isOwn}
-                            senderLabel={senderLabel}
-                            avatarUrl={avatarUrl}
-                            avatarColor={avatarColor}
-                            shortTime={shortTime}
-                            formattedTime={formatChatTime(message.created_at)}
-                            editingMessageId={editingMessageId}
-                            editingMessageText={editingMessageText}
-                            reactionPickerMessageId={reactionPickerMessageId}
-                            messageReactions={messageReactions}
-                            supabaseUserId={supabaseSession?.user.id}
-                            replyToId={replyToId}
-                            replyTarget={replyTarget}
-                            reactionEmojis={REACTION_EMOJIS}
-                            getInitials={getInitials}
-                            displayName={displayName}
-                            parseReplyPrefix={parseReplyPrefix}
-                            truncateReplyPreview={truncateReplyPreview}
-                            renderTextWithLinks={renderTextWithLinks}
-                            onScrollToReplyMessage={scrollToCommunityMessage}
-                            onOpenCommunityChatLightbox={openCommunityChatLightbox}
-                            onToggleReaction={handleToggleReaction}
-                            onSetReactionPickerMessageId={setReactionPickerMessageId}
-                            onStartReply={handleStartReply}
-                            onCopyMessage={copyTextToClipboard}
-                            onStartEdit={handleStartEdit}
-                            onDeleteMessage={handleDeleteMessage}
-                            onEditingMessageTextChange={setEditingMessageText}
-                            onSaveEdit={handleSaveEdit}
-                            onCancelEdit={handleCancelEdit}
-                          />
-                        );
-                      })}
-                  </div>
-                  {!isUserAtBottom && (
-                    <button
-                      className="scroll-to-bottom workspace"
-                      type="button"
-                      onClick={() => {
-                        setIsUserAtBottom(true);
-                        isUserAtBottomRef.current = true;
-                        setUnreadCount(0);
-                        communityChatListRef.current?.scrollTo({
-                          top: communityChatListRef.current.scrollHeight,
-                          behavior: "smooth"
-                        });
-                      }}
-                      aria-label="Scroll to bottom"
-                      title="Scroll to bottom"
-                    >
-                      {unreadCount > 0 && (
-                        <span className="scroll-badge" aria-hidden="true">
-                          {unreadCount > 99 ? "99+" : unreadCount}
-                        </span>
-                      )}
-                      ↓
-                    </button>
-                  )}
-                </div>
-                {replyingToMessage && (
-                  <div className="chat-replying-bar">
-                    <div className="chat-replying-content">
-                      <span className="chat-replying-label">Replying to</span>
-                      <span className="chat-replying-sender">{displayName(replyingToMessage.sender_id)}</span>
-                      <span className="chat-replying-preview">{truncateReplyPreview(replyingToMessage.body)}</span>
-                    </div>
-                    <button
-                      className="chat-replying-cancel"
-                      type="button"
-                      onClick={() => setReplyingToMessage(null)}
-                      title="Cancel reply"
-                      aria-label="Cancel reply"
-                    >
-                      <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                )}
-                {communityTypingUserIds.length > 0 && (
-                  <div className="chat-typing-indicator" aria-live="polite">
-                    {communityTypingUserIds.length === 1
-                      ? `${displayName(communityTypingUserIds[0])} is typing…`
-                      : communityTypingUserIds.length === 2
-                        ? `${displayName(communityTypingUserIds[0])} and ${displayName(
-                            communityTypingUserIds[1],
-                          )} are typing…`
-                        : `${displayName(communityTypingUserIds[0])} and ${
-                            communityTypingUserIds.length - 1
-                          } others are typing…`}
-                  </div>
-                )}
-                {communityAttachments.length > 0 && (() => {
-                  const { imageAttachments, fileAttachments } =
-                    partitionCommunityAttachments(communityAttachments);
-                  const gridCount = Math.min(Math.max(imageAttachments.length, 1), 4);
-                  return (
-                    <>
-                      {imageAttachments.length > 0 && (
-                        <div className={`chat-media-grid count-${gridCount} chat-media-grid-composer`}>
-                          {imageAttachments.map((item) => (
-                            <div key={item.attachment.id} className="chat-media-item chat-media-item-static">
-                              <img src={item.url} alt={item.name} />
-                              <button
-                                type="button"
-                                className="chat-media-remove"
-                                onClick={() => removeCommunityAttachment(item.attachment.id)}
-                                title="Remove"
-                                aria-label={`Remove ${item.name}`}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {fileAttachments.length > 0 && (
-                        <div className="attachments-preview chat-attachments-preview">
-                          {fileAttachments.map((att) => (
-                            <div key={att.id} className="attachment-item" title={att.name}>
-                              <div className="attachment-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24">
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <path d="M14 2v6h6" />
-                                  <path d="M16 13H8" />
-                                  <path d="M16 17H8" />
-                                  <path d="M10 9H8" />
-                                </svg>
-                              </div>
-                              <span className="attachment-name">{att.name}</span>
-                              <button
-                                className="attachment-remove"
-                                type="button"
-                                onClick={() => removeCommunityAttachment(att.id)}
-                                title="Remove"
-                                aria-label={`Remove ${att.name}`}
-                              >
-                                <svg viewBox="0 0 24 24">
-                                  <path d="M18 6L6 18M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-                <div className="chat-input-bar">
-                  <button
-                    className="ask-icon-btn ask-plus"
-                    type="button"
-                    onClick={() => communityFileInputRef.current?.click()}
-                    disabled={
-                      !activeCommunity ||
-                      !canPostMessagesActiveCommunity ||
-                      isSendingCommunityMessage
-                    }
-                    aria-label="Attach files"
-                    title="Attach files"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                  </button>
-                  <input
-                    ref={communityFileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml"
-                    style={{ display: "none" }}
-                    onChange={handleCommunityFileInputChange}
-                  />
-                  <textarea
-                    ref={chatInputRef}
-                    className="chat-input"
-	                    placeholder={
-	                      !activeCommunity
-	                        ? "Select a community to chat..."
-	                        : !canPostMessagesActiveCommunity
-	                          ? "Join this community to chat..."
-	                          : "Message the community..."
-	                    }
-                    value={communityMessageInput}
-                    onChange={(event) => {
-                      setCommunityMessageInput(event.target.value);
-                      maybeBroadcastCommunityTyping(event.target.value);
-                      // Auto-resize
-                      event.target.style.height = "auto";
-                      event.target.style.height = Math.min(event.target.scrollHeight, 120) + "px";
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void handleSendCommunityMessage();
-                      }
-                    }}
-	                    disabled={!activeCommunity || !canPostMessagesActiveCommunity}
-	                    rows={1}
-	                  />
-			                  <VoiceInputButton
-			                    state={communityVoiceUiState}
-			                    title={communityVoiceIntent.title}
-			                    onClick={() => void handleVoiceInputClick("community")}
-			                  />
-                  <button
-	                    className="chat-send ask-send-btn"
-                      type="button"
-                      aria-label="Send"
-                      title="Send"
-	                    onClick={() => void handleSendCommunityMessage()}
-	                    disabled={
-	                      !activeCommunity ||
-	                      !canPostMessagesActiveCommunity ||
-	                      isSendingCommunityMessage
-                        || (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
-	                    }
-	                  >
-                    <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
-                  </button>
-                </div>
-                {communityChatError && (
-                  <div className="auth-error">{communityChatError}</div>
-                )}
-              </div>
-            )}
-	            {activePage === "community" && communityTab === "settings" && (
-	              <div className="settings-panel community-settings-panel">
-		                {!activeCommunity ? (
-		                  <div className="chat-empty">Select a community to view settings.</div>
-		                ) : !supabaseSession ? (
-		                  <div className="chat-empty">Sign in to view community settings.</div>
-		                ) : !canViewActiveCommunitySettings ? (
-		                  <div className="chat-empty">Join this community to view settings.</div>
-		                ) : canManageMembersActiveCommunity ? (
-		                  <>
-		                    <div className="create-community-form community-settings-form">
-		                      <div className="settings-section">
-			                        <div className="settings-section-title">Branding</div>
-			                      <div
-			                        className={`create-community-banner${isSettingsBannerDragOver ? " drag-over" : ""}`}
-			                        aria-busy={isProcessingCommunitySettingsBanner || undefined}
-			                        onDragOver={(event) => {
-			                          event.preventDefault();
-	                          setIsSettingsBannerDragOver(true);
-	                        }}
-                        onDragLeave={() => setIsSettingsBannerDragOver(false)}
-                        onDrop={handleSettingsBannerDrop}
-                      >
-                        {communitySettingsBannerUrl ? (
-                          <img src={communitySettingsBannerUrl} alt="Community banner preview" />
-	                        ) : (
-	                          <div className="create-community-banner-placeholder">Banner preview</div>
-	                        )}
-	                        <label className={`create-banner-btn${isProcessingCommunitySettingsBanner ? " disabled" : ""}`}>
-	                          Upload banner
-	                          <input
-	                            type="file"
-	                            accept="image/*"
-	                            disabled={isProcessingCommunitySettingsBanner}
-	                            onChange={(event) => {
-	                              const file = event.target.files?.[0] ?? null;
-	                              event.target.value = "";
-	                              void handleCommunityBannerUpload(file);
-	                            }}
-	                          />
-	                        </label>
-	                        {communitySettingsBannerUrl && (
-	                          <button
-	                            className="create-banner-remove"
-	                            type="button"
-	                            disabled={isProcessingCommunitySettingsBanner}
-	                            onClick={() => {
-	                              setCommunitySettingsBannerUrl(null);
-	                              setCommunitySettingsBannerUploadError(null);
-	                              markCommunitySettingsDirty();
-	                            }}
-	                          >
-	                            Remove
-			                          </button>
-			                        )}
-	                        {isProcessingCommunitySettingsBanner && (
-	                          <div className="create-upload-status">Processing banner…</div>
-	                        )}
-	                        {communitySettingsBannerUploadError && (
-	                          <div className="auth-error">{communitySettingsBannerUploadError}</div>
-	                        )}
-			                      </div>
-		                      <div className="create-community-avatar-row">
-                        <div
-                          className={`create-community-avatar${isSettingsAvatarDragOver ? " drag-over" : ""}`}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            setIsSettingsAvatarDragOver(true);
-                          }}
-                          onDragLeave={() => setIsSettingsAvatarDragOver(false)}
-                          onDrop={handleSettingsAvatarDrop}
-                        >
-                          {communitySettingsAvatarUrl ? (
-                            <img src={communitySettingsAvatarUrl} alt="Community avatar preview" />
-                          ) : (
-                            <span>{communityInitials(communitySettingsName || activeCommunity?.name || "Community")}</span>
-                          )}
-                        </div>
-                        <div className="create-community-avatar-actions">
-                          <label className="create-avatar-btn">
-                            Upload avatar
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(event) =>
-                                void handleCommunityAvatarUpload(event.target.files?.[0] ?? null)
-                              }
-                            />
-                          </label>
-                          {communitySettingsAvatarUrl && (
-                            <button
-                              className="create-avatar-remove"
-                              type="button"
-                              onClick={() => {
-                                setCommunitySettingsAvatarUrl(null);
-                                markCommunitySettingsDirty();
-                              }}
-                            >
-                              Remove
-                            </button>
-		                          )}
-		                        </div>
-		                      </div>
-		                      <label className="create-community-field">
-		                        <span>Name</span>
-		                        <input
-		                          type="text"
-		                          placeholder="Community name"
-		                          value={communitySettingsName}
-		                          onChange={(event) => {
-		                            setCommunitySettingsName(event.target.value);
-		                            markCommunitySettingsDirty();
-		                          }}
-		                        />
-		                      </label>
-		                      <label className="create-community-field">
-		                        <span>Slug</span>
-			                        <input
-			                          type="text"
-			                          placeholder="your-community"
-			                          value={communitySettingsSlug}
-			                          maxLength={32}
-			                          onChange={(event) => {
-			                            setCommunitySettingsSlug(slugifyCommunityName(event.target.value));
-			                            markCommunitySettingsDirty();
-			                          }}
-			                        />
-		                        <span className="create-community-hint">
-		                          {`arx.com/c/${communitySettingsSlug.trim() || "your-community"}`}
-		                        </span>
-		                      </label>
-		                    </div>
+	            <DesktopCommunityChatTab
+                showChat={activePage === "community" && communityTab === "chat"}
+                supabaseSession={supabaseSession}
+                activeCommunity={activeCommunity}
+                isLoadingChat={isLoadingChat}
+                communityMessages={communityMessages}
+                communityChatListRef={communityChatListRef}
+                handleChatScroll={handleChatScroll}
+                isLoadingMoreChat={isLoadingMoreChat}
+                communityChatHasMore={communityChatHasMore}
+                shouldShowCommunitySenderMeta={shouldShowCommunitySenderMeta}
+                shouldShowDateSeparator={shouldShowDateSeparator}
+                displayName={displayName}
+                profileAvatarUrl={profileAvatarUrl}
+                profilesByUserId={profilesByUserId}
+                getAvatarColor={getAvatarColor}
+                communityMessageById={communityMessageById}
+                editingMessageId={editingMessageId}
+                editingMessageText={editingMessageText}
+                reactionPickerMessageId={reactionPickerMessageId}
+                messageReactions={messageReactions}
+                REACTION_EMOJIS={REACTION_EMOJIS}
+                getInitials={getInitials}
+                parseReplyPrefix={parseReplyPrefix}
+                truncateReplyPreview={truncateReplyPreview}
+                renderTextWithLinks={renderTextWithLinks}
+                scrollToCommunityMessage={scrollToCommunityMessage}
+                openCommunityChatLightbox={openCommunityChatLightbox}
+                handleToggleReaction={handleToggleReaction}
+                setReactionPickerMessageId={setReactionPickerMessageId}
+                handleStartReply={handleStartReply}
+                copyTextToClipboard={copyTextToClipboard}
+                handleStartEdit={handleStartEdit}
+                handleDeleteMessage={handleDeleteMessage}
+                setEditingMessageText={setEditingMessageText}
+                handleSaveEdit={handleSaveEdit}
+                handleCancelEdit={handleCancelEdit}
+                formatChatTime={formatChatTime}
+                isUserAtBottom={isUserAtBottom}
+                setIsUserAtBottom={setIsUserAtBottom}
+                isUserAtBottomRef={isUserAtBottomRef}
+                setUnreadCount={setUnreadCount}
+                unreadCount={unreadCount}
+                replyingToMessage={replyingToMessage}
+                setReplyingToMessage={setReplyingToMessage}
+                communityTypingUserIds={communityTypingUserIds}
+                communityAttachments={communityAttachments}
+                removeCommunityAttachment={removeCommunityAttachment}
+                communityFileInputRef={communityFileInputRef}
+                canPostMessagesActiveCommunity={canPostMessagesActiveCommunity}
+                isSendingCommunityMessage={isSendingCommunityMessage}
+                handleCommunityFileInputChange={handleCommunityFileInputChange}
+                chatInputRef={chatInputRef}
+                communityMessageInput={communityMessageInput}
+                setCommunityMessageInput={setCommunityMessageInput}
+                maybeBroadcastCommunityTyping={maybeBroadcastCommunityTyping}
+                handleSendCommunityMessage={handleSendCommunityMessage}
+                communityVoiceUiState={communityVoiceUiState}
+                communityVoiceIntent={communityVoiceIntent}
+                handleVoiceInputClick={handleVoiceInputClick}
+                communityChatError={communityChatError}
+              />
 
-		                    <div className="settings-section">
-		                      <label className="create-community-field">
-		                        <span>Description</span>
-		                        <textarea
-		                          placeholder="Optional description for your community page"
-		                          rows={3}
-		                          value={communitySettingsDescription}
-		                          onChange={(event) => {
-		                            setCommunitySettingsDescription(event.target.value);
-		                            markCommunitySettingsDirty();
-		                          }}
-		                        />
-		                      </label>
-		                    </div>
+              <DesktopCommunitySettingsTab
+                showSettings={activePage === "community" && communityTab === "settings"}
+                activeCommunity={activeCommunity}
+                hasSession={Boolean(supabaseSession)}
+                canViewSettings={canViewActiveCommunitySettings}
+                canManageMembers={canManageMembersActiveCommunity}
+                isActiveCommunityOwner={isActiveCommunityOwner}
+                activeCommunityAccess={activeCommunityAccess}
+                isSettingsBannerDragOver={isSettingsBannerDragOver}
+                isSettingsAvatarDragOver={isSettingsAvatarDragOver}
+                isProcessingCommunitySettingsBanner={isProcessingCommunitySettingsBanner}
+                communitySettingsBannerUrl={communitySettingsBannerUrl}
+                communitySettingsBannerUploadError={communitySettingsBannerUploadError}
+                communitySettingsAvatarUrl={communitySettingsAvatarUrl}
+                communitySettingsName={communitySettingsName}
+                communitySettingsSlug={communitySettingsSlug}
+                communitySettingsDescription={communitySettingsDescription}
+                communitySettingsVisibility={communitySettingsVisibility}
+                communitySettingsPricingMode={communitySettingsPricingMode}
+                communitySettingsPriceUsdMonthly={communitySettingsPriceUsdMonthly}
+                communitySettingsPriceUsdYearly={communitySettingsPriceUsdYearly}
+                communitySettingsError={communitySettingsError}
+                isSavingCommunitySettings={isSavingCommunitySettings}
+                communityMemberMuted={communityMemberMuted}
+                isLoadingCommunityMemberSettings={isLoadingCommunityMemberSettings}
+                isLeavingCommunity={isLeavingCommunity}
+                communityMemberSettingsError={communityMemberSettingsError}
+                hasPayouts={Boolean(builderBillingStatus?.has_payouts)}
+                isStartingConnectOnboarding={isStartingConnectOnboarding}
+                onSetIsSettingsBannerDragOver={setIsSettingsBannerDragOver}
+                onSetIsSettingsAvatarDragOver={setIsSettingsAvatarDragOver}
+                onSettingsBannerDrop={handleSettingsBannerDrop}
+                onSettingsAvatarDrop={handleSettingsAvatarDrop}
+                onCommunityBannerUpload={handleCommunityBannerUpload}
+                onCommunityAvatarUpload={handleCommunityAvatarUpload}
+                onSetCommunitySettingsBannerUrl={setCommunitySettingsBannerUrl}
+                onSetCommunitySettingsBannerUploadError={setCommunitySettingsBannerUploadError}
+                onSetCommunitySettingsAvatarUrl={setCommunitySettingsAvatarUrl}
+                onSetCommunitySettingsName={setCommunitySettingsName}
+                onSetCommunitySettingsSlug={setCommunitySettingsSlug}
+                onSetCommunitySettingsDescription={setCommunitySettingsDescription}
+                onSetCommunitySettingsVisibility={setCommunitySettingsVisibility}
+                onSetCommunitySettingsPricingMode={setCommunitySettingsPricingMode}
+                onSetCommunitySettingsPriceUsdMonthly={setCommunitySettingsPriceUsdMonthly}
+                onSetCommunitySettingsPriceUsdYearly={setCommunitySettingsPriceUsdYearly}
+                onMarkCommunitySettingsDirty={markCommunitySettingsDirty}
+                onMarkCommunityPricingDirty={() => {
+                  communityPricingDirtyRef.current = true;
+                  markCommunitySettingsDirty();
+                }}
+                onStartConnectOnboarding={startConnectOnboarding}
+                onSaveCommunitySettings={handleSaveCommunitySettings}
+                onOpenDeleteCommunityModal={openDeleteCommunityModal}
+                onToggleCommunityMute={handleToggleCommunityMute}
+                onLeaveCommunity={handleLeaveCommunity}
+                formatChatTime={formatChatTime}
+                slugifyCommunityName={slugifyCommunityName}
+              />
 
-		                    <div className="settings-section">
-		                      <div className="settings-section-title">Access</div>
-		                      <label className="create-community-field">
-		                        <span>Visibility</span>
-		                        <select
-		                          className="select-styled"
-		                          value={communitySettingsVisibility}
-		                          onChange={(event) => {
-		                            setCommunitySettingsVisibility(event.target.value);
-		                            markCommunitySettingsDirty();
-		                          }}
-		                        >
-		                          <option value="private">Private</option>
-		                          <option value="unlisted">Unlisted</option>
-		                          <option value="public">Public</option>
-		                        </select>
-			                        <span className="create-community-hint">
-			                          {communitySettingsVisibility === "public"
-			                            ? "Discoverable. Anyone can preview chat and join to participate."
-			                            : communitySettingsVisibility === "unlisted"
-			                              ? "Not listed in discovery. Share the link when you're ready."
-			                              : "Discoverable, but chat is gated until you join."}
-			                        </span>
-			                      </label>
-		                      <div className="create-community-field">
-		                        <span>Pricing</span>
-		                        <div className="analytics-range-toggle" role="tablist" aria-label="Pricing options">
-		                          {(
-		                            [
-		                              { key: "free", label: "Free" },
-		                              { key: "monthly", label: "Monthly" },
-		                              { key: "yearly", label: "Annual" },
-		                              { key: "both", label: "Both" },
-		                            ] as Array<{ key: CommunityPricingMode; label: string }>
-		                          ).map((opt) => (
-		                            <button
-		                              key={opt.key}
-		                              type="button"
-		                              className={`analytics-range-btn${
-		                                communitySettingsPricingMode === opt.key ? " active" : ""
-		                              }`}
-			                              onClick={() => {
-			                                setCommunitySettingsPricingMode(opt.key);
-			                                communityPricingDirtyRef.current = true;
-			                                markCommunitySettingsDirty();
-			                              }}
-			                            >
-		                              {opt.label}
-		                            </button>
-		                          ))}
-		                        </div>
-		                        <span className="create-community-hint">
-		                          Choose what billing options members see at checkout.
-		                        </span>
-		                      </div>
-		                      {(communitySettingsPricingMode === "monthly" ||
-		                        communitySettingsPricingMode === "both") && (
-		                        <label className="create-community-field">
-		                          <span>Monthly price (USD)</span>
-		                          <input
-		                            type="text"
-		                            inputMode="decimal"
-		                            placeholder="29"
-		                            value={communitySettingsPriceUsdMonthly}
-			                            onChange={(event) => {
-			                              setCommunitySettingsPriceUsdMonthly(event.target.value);
-			                              communityPricingDirtyRef.current = true;
-			                              markCommunitySettingsDirty();
-			                            }}
-			                          />
-		                          <span className="create-community-hint">Billed monthly.</span>
-		                        </label>
-		                      )}
-		                      {(communitySettingsPricingMode === "yearly" ||
-		                        communitySettingsPricingMode === "both") && (
-		                        <label className="create-community-field">
-		                          <span>Annual price (USD)</span>
-		                          <input
-		                            type="text"
-		                            inputMode="decimal"
-		                            placeholder="290"
-		                            value={communitySettingsPriceUsdYearly}
-			                            onChange={(event) => {
-			                              setCommunitySettingsPriceUsdYearly(event.target.value);
-			                              communityPricingDirtyRef.current = true;
-			                              markCommunitySettingsDirty();
-			                            }}
-			                          />
-		                          <span className="create-community-hint">Billed yearly.</span>
-		                        </label>
-		                      )}
-                          <div className="create-community-field">
-                            <span>Payouts</span>
-                            <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                              {builderBillingStatus?.has_payouts ? (
-                                <button type="button" className="secondary" disabled>
-                                  Payouts connected
-                                </button>
-	                              ) : (
-	                                <button
-	                                  type="button"
-	                                  onClick={() => void startConnectOnboarding()}
-	                                  disabled={isStartingConnectOnboarding}
-	                                  className="stripe-connect-btn"
-	                                >
-	                                  <svg
-	                                    className="stripe-connect-icon"
-	                                    viewBox="0 0 24 24"
-	                                    aria-hidden="true"
-	                                    focusable="false"
-	                                  >
-	                                    <rect x="2" y="2" width="20" height="20" rx="6" fill="#635BFF" />
-	                                    <path
-	                                      fill="#FFFFFF"
-	                                      d="M14.85 9.14c-.84-.44-1.82-.66-2.78-.66-1.44 0-2.24.54-2.24 1.25 0 .78.84 1.12 2.35 1.46 2.2.5 3.34 1.24 3.34 2.9 0 1.76-1.5 2.95-4.03 2.95-1.38 0-2.66-.34-3.64-.93l.66-1.56c.98.58 2.04.88 3.06.88 1.5 0 2.34-.54 2.34-1.37 0-.78-.74-1.16-2.36-1.52-2.18-.5-3.33-1.24-3.33-2.87 0-1.66 1.5-2.87 3.9-2.87 1.3 0 2.5.28 3.48.74l-.7 1.6z"
-	                                    />
-	                                  </svg>
-	                                  <span>{isStartingConnectOnboarding ? "Opening…" : "Connect with Stripe"}</span>
-	                                </button>
-	                              )}
-                            </div>
-                            <span className="create-community-hint">
-                              Connect Stripe to receive payouts from paid memberships.
-                            </span>
-                          </div>
-		                    </div>
+              <DesktopCommunityAiAgentTab
+                showAiAgent={activePage === "community" && communityTab === "ai_agent"}
+                activeCommunity={activeCommunity}
+                supabaseSession={supabaseSession}
+                canManageMembersActiveCommunity={canManageMembersActiveCommunity}
+                isLoadingCommunityAgentDrafts={isLoadingCommunityAgentDrafts}
+                communityAgentDraftsError={communityAgentDraftsError}
+                isActiveCommunityOwner={isActiveCommunityOwner}
+                setBuilderUpgradeContext={setBuilderUpgradeContext}
+                setIsBuilderUpgradeOpen={setIsBuilderUpgradeOpen}
+                communityAgentDrafts={communityAgentDrafts}
+                communityAgentDraftLanding={communityAgentDraftLanding}
+                communityAgentPreviewTabId={communityAgentPreviewTabId}
+                setCommunityAgentPreviewTabId={setCommunityAgentPreviewTabId}
+                communityAgentDraftDirtyRef={communityAgentDraftDirtyRef}
+                markCommunityAgentDraftDirty={markCommunityAgentDraftDirty}
+                communityAgentDraftSaveError={communityAgentDraftSaveError}
+                communityAgentLandingEdit={communityAgentLandingEdit}
+                communityAgentLandingEditValue={communityAgentLandingEditValue}
+                setCommunityAgentLandingEditValue={setCommunityAgentLandingEditValue}
+                setCommunityAgentDraftLanding={setCommunityAgentDraftLanding}
+                clearCommunityAgentLandingEdit={clearCommunityAgentLandingEdit}
+                beginCommunityAgentLandingEdit={beginCommunityAgentLandingEdit}
+                handleSaveCommunityAgentDraft={handleSaveCommunityAgentDraft}
+                isSavingCommunityAgentDraft={isSavingCommunityAgentDraft}
+                handleSetLiveCommunityAgentDraft={handleSetLiveCommunityAgentDraft}
+                communityAgentDraftSystemPrompt={communityAgentDraftSystemPrompt}
+                setCommunityAgentDraftSystemPrompt={setCommunityAgentDraftSystemPrompt}
+              />
 
-		                    {communitySettingsError && <div className="auth-error">{communitySettingsError}</div>}
-			                    <div className="create-community-actions">
-			                      <button
-			                        onClick={() => void handleSaveCommunitySettings()}
-			                        disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
-			                      >
-			                        {isSavingCommunitySettings
-			                          ? "Saving..."
-			                          : isProcessingCommunitySettingsBanner
-			                            ? "Processing banner…"
-			                            : "Save changes"}
-			                      </button>
-			                    </div>
-                          {isActiveCommunityOwner && (
-                            <div className="settings-section" style={{ marginTop: 18 }}>
-                              <div className="settings-section-title">Danger zone</div>
-                              <div className="settings-section-desc">
-                                Permanently delete this community and all associated data.
-                              </div>
-                              <button
-                                type="button"
-                                className="danger delete-community-btn"
-                                onClick={openDeleteCommunityModal}
-                                disabled={isSavingCommunitySettings || isProcessingCommunitySettingsBanner}
-                              >
-                                Delete community
-                              </button>
-                            </div>
-                          )}
-		                    </div>
-		                  </>
-		                ) : (
-		                  <>
-	                    <div className="panel-title">Community</div>
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">Access</div>
-	                      <div className="settings-section-desc">
-	                        Your role and entitlement status for this community.
-	                      </div>
-	                      <div className="model-list analytics-kpis">
-	                        {[
-	                          {
-	                            label: "Role",
-	                            value: activeCommunityAccess?.effective_role
-	                              ? activeCommunityAccess.effective_role
-	                              : "member",
-	                          },
-	                          {
-	                            label: "Entitlement ends",
-	                            value: activeCommunityAccess?.entitlement_ends_at
-	                              ? formatChatTime(activeCommunityAccess.entitlement_ends_at)
-	                              : "—",
-	                          },
-	                        ].map((row) => (
-	                          <div key={row.label} className="model-toggle analytics-kpi">
-	                            <span>{row.label}</span>
-	                            <span className="analytics-kpi-value">{row.value}</span>
-	                          </div>
-	                        ))}
-	                      </div>
-	                      <div className="model-note">
-	                        Only owners and admins can edit community details right now.
-	                      </div>
-	                    </div>
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">About</div>
-	                      <div className="model-list analytics-kpis">
-	                        {[
-	                          { label: "Name", value: activeCommunity.name },
-	                          { label: "Slug", value: activeCommunity.slug },
-	                          { label: "Visibility", value: activeCommunity.visibility },
-	                        ].map((row) => (
-	                          <div key={row.label} className="model-toggle analytics-kpi">
-	                            <span>{row.label}</span>
-	                            <span className="analytics-kpi-value">{row.value}</span>
-	                          </div>
-	                        ))}
-	                      </div>
-	                      {activeCommunity.description && (
-	                        <div className="model-note">{activeCommunity.description}</div>
-	                      )}
-	                    </div>
-	                    <div className="settings-section">
-	                      <div className="settings-section-title">You</div>
-	                      <div className="model-list">
-	                        <label className="model-toggle">
-	                          <span>Mute community</span>
-	                          <input
-	                            type="checkbox"
-	                            checked={communityMemberMuted}
-	                            disabled={isLoadingCommunityMemberSettings || isLeavingCommunity}
-	                            onChange={(event) => void handleToggleCommunityMute(event.target.checked)}
-	                          />
-	                        </label>
-	                      </div>
-	                      <div className="model-note">
-	                        Muted communities won't send notifications (when notifications ship).
-	                      </div>
-	                      {!activeCommunityAccess?.is_owner && (
-	                        <div className="create-community-actions" style={{ marginTop: 12 }}>
-	                          <button
-	                            className="danger"
-	                            type="button"
-	                            disabled={isLeavingCommunity || isLoadingCommunityMemberSettings}
-	                            onClick={() => void handleLeaveCommunity()}
-	                          >
-	                            {isLeavingCommunity ? "Leaving…" : "Leave community"}
-	                          </button>
-	                        </div>
-	                      )}
-	                      {communityMemberSettingsError && (
-	                        <div className="auth-error" style={{ marginTop: 10 }}>
-	                          {communityMemberSettingsError}
-	                        </div>
-	                      )}
-	                    </div>
-	                  </>
-	                )}
-	              </div>
-	            )}
-
-              {activePage === "community" && communityTab === "ai_agent" && (
-                <div className="settings-panel community-settings-panel">
-                  {!activeCommunity ? (
-                    <div className="chat-empty">Select a community to configure the AI agent.</div>
-                  ) : !supabaseSession ? (
-                    <div className="chat-empty">Sign in to configure the AI agent.</div>
-                  ) : !canManageMembersActiveCommunity ? (
-                    <div className="chat-empty">Only owners and admins can configure the AI agent.</div>
-                  ) : isLoadingCommunityAgentDrafts ? (
-                    <div className="chat-empty">Loading…</div>
-                  ) : communityAgentDraftsError &&
-                    communityAgentDraftsError.toLowerCase().includes("pro_plan_required") ? (
-                    <>
-                      {(() => {
-                        const previewLanding = DEFAULT_EMPTY_THREAD_LANDING;
-                        const previewTab = previewLanding.tabs[0];
-                        const previewPrompts = previewTab?.prompts ?? [];
-
-                        return (
-                          <div className="premium-gate-shell">
-                            <div className="premium-gate-blur" aria-hidden="true">
-                              <div className="agent-editor-grid">
-                                <div className="settings-section">
-                                  <div className="settings-section-title">Templates</div>
-                                  <label className="create-community-field" style={{ marginTop: 10 }}>
-                                    <span>Template</span>
-                                    <select className="select-styled" disabled>
-                                      <option>Template 1 (Live)</option>
-                                      <option>Template 2</option>
-                                      <option>Template 3</option>
-                                    </select>
-                                  </label>
-                                  <div className="model-note" style={{ marginTop: 12 }}>
-                                    Set your empty-thread landing prompts and a community system prompt.
-                                  </div>
-                                  <div className="model-list" style={{ marginTop: 12 }}>
-                                    <label className="model-field">
-                                      <span>System prompt</span>
-                                      <textarea value={"You are the community assistant."} readOnly rows={3} />
-                                    </label>
-                                  </div>
-                                </div>
-
-                                <div className="agent-editor-preview">
-                                  <div className="agent-preview-shell" aria-label="Preview">
-                                    <div className="web-empty-thread-title">{previewLanding.title}</div>
-                                    <div className="web-empty-thread-subtitle">{previewLanding.subtitle}</div>
-                                    {previewLanding.tabs.length > 1 && (
-                                      <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
-                                        {previewLanding.tabs.map((tab) => (
-                                          <button
-                                            key={tab.id}
-                                            type="button"
-                                            className={`web-starter-tab${tab.id === previewTab?.id ? " active" : ""}`}
-                                            aria-pressed={tab.id === previewTab?.id}
-                                          >
-                                            {tab.label}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                    <div className="web-starter-list" role="list">
-                                      {previewPrompts.map((prompt) => (
-                                        <div key={prompt} className="web-starter-row is-preview" role="listitem">
-                                          <span className="web-starter-row-text">{prompt}</span>
-                                          <span className="web-starter-row-arrow" aria-hidden="true">
-                                            <svg viewBox="0 0 24 24">
-                                              <path d="M9 18l6-6-6-6" />
-                                            </svg>
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="premium-gate-overlay">
-                              <div className="premium-gate-card">
-                                <div className="premium-gate-eyebrow">ARCHITECT</div>
-                                <div className="premium-gate-title">For Architect members only</div>
-                                <div className="model-note" style={{ marginTop: 8 }}>
-                                  Upgrade to Architect ($100/mo) to customize the empty-thread landing page and a
-                                  community system prompt.
-                                </div>
-                                {isActiveCommunityOwner ? (
-                                  <div className="create-community-actions" style={{ marginTop: 12 }}>
-                                    <button
-                                      className="premium-gate-cta"
-                                      type="button"
-                                      onClick={() => {
-                                        setBuilderUpgradeContext("builder");
-                                        setIsBuilderUpgradeOpen(true);
-                                      }}
-                                    >
-                                      Upgrade to Architect
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="model-note" style={{ marginTop: 12 }}>
-                                    Ask the community owner to upgrade to Architect.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </>
-                  ) : communityAgentDraftsError ? (
-                    <div className="auth-error">{communityAgentDraftsError}</div>
-                  ) : (
-                    <>
-                      {(() => {
-                        const savedRow =
-                          communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot) ?? null;
-                        const canSetLive = Boolean(savedRow && !savedRow.is_active);
-                        const previewLanding = communityAgentDraftLanding;
-                        const previewTitle = previewLanding.title.trim()
-                          ? previewLanding.title
-                          : DEFAULT_EMPTY_THREAD_LANDING.title;
-                        const previewSubtitle = previewLanding.subtitle.trim()
-                          ? previewLanding.subtitle
-                          : DEFAULT_EMPTY_THREAD_LANDING.subtitle;
-                        const previewTabs = previewLanding.tabs.length
-                          ? previewLanding.tabs
-                          : DEFAULT_EMPTY_THREAD_LANDING.tabs;
-                        const previewActiveTab =
-                          previewTabs.find((t) => t.id === communityAgentPreviewTabId) ??
-                          previewTabs[0];
-                        const previewPrompts = previewActiveTab?.prompts ?? [];
-
-                        return (
-                          <>
-                            <div className="agent-header-row">
-                              <div className="model-note">
-                                Customize what members see on a fresh chat (no messages) and set a community-wide
-                                system prompt.
-                              </div>
-
-                              {(() => {
-                                const usedSlots = new Set(communityAgentDrafts.map((d) => d.slot));
-                                const selectedSlotHasSavedRow = Boolean(savedRow);
-                                const reservedSlots = new Set(usedSlots);
-                                if (!selectedSlotHasSavedRow) reservedSlots.add(communityAgentSelectedSlot);
-                                const nextAvailableSlot =
-                                  [1, 2, 3].find((slot) => !reservedSlots.has(slot)) ?? null;
-
-                                return (
-                                  <div className="agent-template-picker" ref={communityAgentTemplatePickerRef}>
-                                    {(() => {
-                                      const selectedLabel =
-                                        communityAgentDraftName.trim() ||
-                                        communityAgentDrafts
-                                          .find((d) => d.slot === communityAgentSelectedSlot)
-                                          ?.name?.trim() ||
-                                        `Template ${communityAgentSelectedSlot}`;
-                                      const selectedIsLive = Boolean(
-                                        communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot)
-                                          ?.is_active,
-                                      );
-
-                                      const menuSlots = Array.from(
-                                        new Set([
-                                          ...communityAgentDrafts.map((d) => d.slot),
-                                          communityAgentSelectedSlot,
-                                        ]),
-                                      ).sort((a, b) => a - b);
-
-                                      const confirmDiscard = () => {
-                                        if (!communityAgentDraftDirtyRef.current) return true;
-                                        return window.confirm("Discard unsaved changes?");
-                                      };
-
-                                      const selectSlot = (slot: number) => {
-                                        if (slot === communityAgentSelectedSlot) return;
-                                        if (!confirmDiscard()) return;
-                                        hydrateCommunityAgentEditor(slot, communityAgentDrafts);
-                                      };
-
-                                      return (
-                                        <>
-                                          <button
-                                            className="agent-template-btn"
-                                            type="button"
-                                            aria-haspopup="listbox"
-                                            aria-expanded={isCommunityAgentTemplateMenuOpen}
-                                            onClick={() =>
-                                              setIsCommunityAgentTemplateMenuOpen((prev) => !prev)
-                                            }
-                                          >
-                                            <span className="agent-template-btn-text">
-                                              {selectedLabel}
-                                              {selectedIsLive ? " · Live" : ""}
-                                            </span>
-                                            <svg
-                                              className="agent-template-chevron"
-                                              viewBox="0 0 24 24"
-                                              aria-hidden="true"
-                                            >
-                                              <path d="M6 9l6 6 6-6" />
-                                            </svg>
-                                          </button>
-
-                                          {isCommunityAgentTemplateMenuOpen && (
-                                            <div
-                                              className="agent-template-menu"
-                                              role="listbox"
-                                              aria-label="Templates"
-                                            >
-                                              {menuSlots.map((slot) => {
-                                                const row =
-                                                  communityAgentDrafts.find((d) => d.slot === slot) ?? null;
-                                                const isSelected = slot === communityAgentSelectedSlot;
-                                                const isLive = Boolean(row?.is_active);
-                                                const displayName =
-                                                  (
-                                                    isSelected
-                                                      ? communityAgentDraftName
-                                                      : (row?.name ?? "")
-                                                  )?.trim() || `Template ${slot}`;
-                                                const isEditing = communityAgentRenamingSlot === slot;
-                                                const isSaved = communityAgentSavedSlot === slot;
-
-                                                return (
-                                                  <div
-                                                    key={slot}
-                                                    role="option"
-                                                    aria-selected={isSelected}
-                                                    tabIndex={0}
-                                                    className={`agent-template-option${isSelected ? " active" : ""}${
-                                                      isEditing ? " editing" : ""
-                                                    }`}
-                                                    onClick={() => {
-                                                      if (isEditing) return;
-                                                      selectSlot(slot);
-                                                      setIsCommunityAgentTemplateMenuOpen(false);
-                                                    }}
-                                                    onKeyDown={(event) => {
-                                                      if (event.key === "Enter" || event.key === " ") {
-                                                        event.preventDefault();
-                                                        if (isEditing) return;
-                                                        selectSlot(slot);
-                                                        setIsCommunityAgentTemplateMenuOpen(false);
-                                                      }
-                                                    }}
-                                                  >
-                                                    <div className="agent-template-option-main">
-                                                      <span className="agent-template-slot" aria-hidden="true">
-                                                        {slot}
-                                                      </span>
-                                                      {isEditing ? (
-                                                        <input
-                                                          className="agent-template-name"
-                                                          type="text"
-                                                          value={communityAgentRenamingValue}
-                                                          placeholder={displayName}
-                                                          autoFocus
-                                                          onClick={(event) => event.stopPropagation()}
-                                                          onChange={(event) =>
-                                                            setCommunityAgentRenamingValue(event.target.value)
-                                                          }
-                                                          onKeyDown={(event) => {
-                                                            if (event.key === "Enter") {
-                                                              event.preventDefault();
-                                                              event.stopPropagation();
-                                                              void (async () => {
-                                                                const next = communityAgentRenamingValue.trim();
-                                                                const rowExists = Boolean(row);
-
-                                                                if (isSelected) {
-                                                                  setCommunityAgentDraftName(next);
-                                                                  if (!rowExists) {
-                                                                    markCommunityAgentDraftDirty();
-                                                                    setCommunityAgentRenamingSlot(null);
-                                                                    setCommunityAgentRenamingValue("");
-                                                                    return;
-                                                                  }
-                                                                  const ok =
-                                                                    await persistCommunityAgentTemplateName(
-                                                                      slot,
-                                                                      next,
-                                                                    );
-                                                                  if (!ok) return;
-                                                                } else {
-                                                                  setCommunityAgentDrafts((prev) =>
-                                                                    prev.map((d) =>
-                                                                      d.slot === slot
-                                                                        ? { ...d, name: next ? next : null }
-                                                                        : d,
-                                                                    ),
-                                                                  );
-                                                                  const ok =
-                                                                    await persistCommunityAgentTemplateName(
-                                                                      slot,
-                                                                      next,
-                                                                    );
-                                                                  if (!ok) return;
-                                                                }
-
-                                                                flashCommunityAgentTemplateSaved(slot);
-                                                                setCommunityAgentRenamingSlot(null);
-                                                                setCommunityAgentRenamingValue("");
-                                                              })();
-                                                            }
-                                                            if (event.key === "Escape") {
-                                                              event.preventDefault();
-                                                              event.stopPropagation();
-                                                              setCommunityAgentRenamingSlot(null);
-                                                              setCommunityAgentRenamingValue("");
-                                                            }
-                                                          }}
-                                                        />
-                                                      ) : (
-                                                        <span
-                                                          className="agent-template-name-text"
-                                                          title={displayName}
-                                                        >
-                                                          {displayName}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                    <div className="agent-template-option-right">
-                                                      <div className="agent-template-badges" aria-hidden="true">
-                                                        {isLive && (
-                                                          <span className="agent-template-badge">LIVE</span>
-                                                        )}
-                                                      </div>
-                                                      <div className="agent-template-actions">
-                                                        {isEditing ? (
-                                                          <button
-                                                            type="button"
-                                                            className="agent-template-save"
-                                                            onClick={(event) => {
-                                                              event.stopPropagation();
-                                                              void (async () => {
-                                                                const next =
-                                                                  communityAgentRenamingValue.trim();
-                                                                const rowExists = Boolean(row);
-
-                                                                if (isSelected) {
-                                                                  setCommunityAgentDraftName(next);
-                                                                  if (!rowExists) {
-                                                                    markCommunityAgentDraftDirty();
-                                                                    setCommunityAgentRenamingSlot(null);
-                                                                    setCommunityAgentRenamingValue("");
-                                                                    return;
-                                                                  }
-                                                                  const ok =
-                                                                    await persistCommunityAgentTemplateName(
-                                                                      slot,
-                                                                      next,
-                                                                    );
-                                                                  if (!ok) return;
-                                                                } else {
-                                                                  setCommunityAgentDrafts((prev) =>
-                                                                    prev.map((d) =>
-                                                                      d.slot === slot
-                                                                        ? { ...d, name: next ? next : null }
-                                                                        : d,
-                                                                    ),
-                                                                  );
-                                                                  const ok =
-                                                                    await persistCommunityAgentTemplateName(
-                                                                      slot,
-                                                                      next,
-                                                                    );
-                                                                  if (!ok) return;
-                                                                }
-
-                                                                flashCommunityAgentTemplateSaved(slot);
-                                                                setCommunityAgentRenamingSlot(null);
-                                                                setCommunityAgentRenamingValue("");
-                                                              })();
-                                                            }}
-                                                          >
-                                                            Save
-                                                          </button>
-                                                        ) : isSaved ? (
-                                                          <span className="agent-template-saved" aria-label="Saved">
-                                                            Saved
-                                                          </span>
-                                                        ) : (
-                                                          <button
-                                                            type="button"
-                                                            className="agent-template-action"
-                                                            title="Rename"
-                                                            onClick={(event) => {
-                                                              event.stopPropagation();
-                                                              setCommunityAgentRenamingSlot(slot);
-                                                              setCommunityAgentRenamingValue(
-                                                                (isSelected
-                                                                  ? communityAgentDraftName
-                                                                  : (row?.name ?? "")) ?? "",
-                                                              );
-                                                            }}
-                                                          >
-                                                            <svg viewBox="0 0 24 24">
-                                                              <path d="M12 20h9" />
-                                                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                                                            </svg>
-                                                          </button>
-                                                        )}
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                              {nextAvailableSlot && (
-                                                <button
-                                                  type="button"
-                                                  className="agent-template-new"
-                                                  onClick={() => {
-                                                    if (!confirmDiscard()) return;
-                                                    hydrateCommunityAgentEditor(nextAvailableSlot, communityAgentDrafts);
-                                                    setIsCommunityAgentTemplateMenuOpen(false);
-                                                  }}
-                                                >
-                                                  + New template
-                                                </button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-
-                            {communityAgentDraftSaveError && (
-                              <div className="auth-error" style={{ marginTop: 10 }}>
-                                {communityAgentDraftSaveError}
-                              </div>
-                            )}
-
-                            <div className="settings-section">
-                              <div className="settings-section-title">Landing page (empty chat)</div>
-                              <div className="agent-preview-editor">
-                                <div className="agent-preview-actions">
-                                  {(() => {
-                                    const row =
-                                      communityAgentDrafts.find((d) => d.slot === communityAgentSelectedSlot) ??
-                                      null;
-                                    const isUnsaved = !row || communityAgentDraftDirtyRef.current;
-                                    if (!isUnsaved) return null;
-                                    return <span className="agent-unsaved-badge">UNSAVED</span>;
-                                  })()}
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleSaveCommunityAgentDraft()}
-                                    disabled={isSavingCommunityAgentDraft}
-                                  >
-                                    {isSavingCommunityAgentDraft ? "Saving…" : "Save draft"}
-                                  </button>
-                                  <button
-                                    className="secondary"
-                                    type="button"
-                                    disabled={!savedRow || !canSetLive || isSavingCommunityAgentDraft}
-                                    onClick={() => {
-                                      const ok = window.confirm("Set this draft live for all members?");
-                                      if (!ok) return;
-                                      void handleSetLiveCommunityAgentDraft();
-                                    }}
-                                  >
-                                    {savedRow?.is_active ? "Live" : "Set live"}
-                                  </button>
-                                </div>
-
-                                <div
-                                  className="agent-preview-shell agent-preview-shell-editable"
-                                  aria-label="Preview"
-                                >
-                                  {communityAgentLandingEdit?.kind === "title" ? (
-                                    <input
-                                      className="web-empty-thread-title-input"
-                                      type="text"
-                                      autoFocus
-                                      value={communityAgentLandingEditValue}
-                                      placeholder={DEFAULT_EMPTY_THREAD_LANDING.title}
-                                      onChange={(event) =>
-                                        setCommunityAgentLandingEditValue(event.target.value)
-                                      }
-                                      onBlur={() => {
-                                        const next = communityAgentLandingEditValue;
-                                        if (next !== previewLanding.title) {
-                                          setCommunityAgentDraftLanding((prev) => ({
-                                            ...prev,
-                                            title: next,
-                                          }));
-                                          markCommunityAgentDraftDirty();
-                                        }
-                                        clearCommunityAgentLandingEdit();
-                                      }}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                          event.preventDefault();
-                                          (event.currentTarget as HTMLInputElement).blur();
-                                        }
-                                        if (event.key === "Escape") {
-                                          event.preventDefault();
-                                          clearCommunityAgentLandingEdit();
-                                        }
-                                      }}
-                                    />
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className={`web-empty-thread-title web-empty-thread-editable${
-                                        previewLanding.title.trim() ? "" : " is-placeholder"
-                                      }`}
-                                      title="Click to edit"
-                                      onClick={() =>
-                                        beginCommunityAgentLandingEdit({ kind: "title" }, previewLanding.title)
-                                      }
-                                    >
-                                      {previewTitle}
-                                    </button>
-                                  )}
-
-                                  {communityAgentLandingEdit?.kind === "subtitle" ? (
-                                    <input
-                                      className="web-empty-thread-subtitle-input"
-                                      type="text"
-                                      autoFocus
-                                      value={communityAgentLandingEditValue}
-                                      placeholder={DEFAULT_EMPTY_THREAD_LANDING.subtitle}
-                                      onChange={(event) =>
-                                        setCommunityAgentLandingEditValue(event.target.value)
-                                      }
-                                      onBlur={() => {
-                                        const next = communityAgentLandingEditValue;
-                                        if (next !== previewLanding.subtitle) {
-                                          setCommunityAgentDraftLanding((prev) => ({
-                                            ...prev,
-                                            subtitle: next,
-                                          }));
-                                          markCommunityAgentDraftDirty();
-                                        }
-                                        clearCommunityAgentLandingEdit();
-                                      }}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                          event.preventDefault();
-                                          (event.currentTarget as HTMLInputElement).blur();
-                                        }
-                                        if (event.key === "Escape") {
-                                          event.preventDefault();
-                                          clearCommunityAgentLandingEdit();
-                                        }
-                                      }}
-                                    />
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      className={`web-empty-thread-subtitle web-empty-thread-editable${
-                                        previewLanding.subtitle.trim() ? "" : " is-placeholder"
-                                      }`}
-                                      title="Click to edit"
-                                      onClick={() =>
-                                        beginCommunityAgentLandingEdit(
-                                          { kind: "subtitle" },
-                                          previewLanding.subtitle,
-                                        )
-                                      }
-                                    >
-                                      {previewSubtitle}
-                                    </button>
-                                  )}
-
-                                  <div className="web-starter-tabs" role="tablist" aria-label="Preview tabs">
-                                    {previewTabs.map((tab, index) => {
-                                      const isActive = communityAgentPreviewTabId === tab.id;
-                                      const isEditingLabel =
-                                        communityAgentLandingEdit?.kind === "tab_label" &&
-                                        communityAgentLandingEdit.tabId === tab.id;
-                                      const labelText = tab.label.trim() ? tab.label : `Tab ${index + 1}`;
-
-                                      return (
-                                        <button
-                                          key={tab.id}
-                                          type="button"
-                                          className={`web-starter-tab${isActive ? " active" : ""}`}
-                                          aria-pressed={isActive}
-                                          onClick={() => {
-                                            if (isEditingLabel) return;
-                                            if (!isActive) {
-                                              setCommunityAgentPreviewTabId(tab.id);
-                                              return;
-                                            }
-                                            beginCommunityAgentLandingEdit(
-                                              { kind: "tab_label", tabId: tab.id },
-                                              tab.label,
-                                            );
-                                          }}
-                                        >
-                                          {isEditingLabel ? (
-                                            <input
-                                              className="web-starter-tab-input"
-                                              type="text"
-                                              autoFocus
-                                              value={communityAgentLandingEditValue}
-                                              placeholder={labelText}
-                                              onClick={(event) => event.stopPropagation()}
-                                              onChange={(event) =>
-                                                setCommunityAgentLandingEditValue(event.target.value)
-                                              }
-                                              onBlur={() => {
-                                                const next = communityAgentLandingEditValue.trim();
-                                                if (next && next !== tab.label.trim()) {
-                                                  setCommunityAgentDraftLanding((prev) => ({
-                                                    ...prev,
-                                                    tabs: prev.tabs.map((t, idx) =>
-                                                      t.id === tab.id ? { ...t, label: next || `Tab ${idx + 1}` } : t,
-                                                    ),
-                                                  }));
-                                                  markCommunityAgentDraftDirty();
-                                                }
-                                                clearCommunityAgentLandingEdit();
-                                              }}
-                                              onKeyDown={(event) => {
-                                                if (event.key === "Enter") {
-                                                  event.preventDefault();
-                                                  (event.currentTarget as HTMLInputElement).blur();
-                                                }
-                                                if (event.key === "Escape") {
-                                                  event.preventDefault();
-                                                  clearCommunityAgentLandingEdit();
-                                                }
-                                              }}
-                                            />
-                                          ) : (
-                                            <>
-                                              <span className="web-starter-tab-label">{labelText}</span>
-                                              {previewTabs.length > 1 && (
-                                                <span
-                                                  role="button"
-                                                  tabIndex={0}
-                                                  className="web-starter-tab-remove"
-                                                  aria-label="Remove tab"
-                                                  onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    setCommunityAgentDraftLanding((prev) => ({
-                                                      ...prev,
-                                                      tabs: prev.tabs.filter((t) => t.id !== tab.id),
-                                                    }));
-                                                    markCommunityAgentDraftDirty();
-                                                    clearCommunityAgentLandingEdit();
-                                                  }}
-                                                  onKeyDown={(event) => {
-                                                    if (event.key !== "Enter" && event.key !== " ") return;
-                                                    event.preventDefault();
-                                                    event.stopPropagation();
-                                                    setCommunityAgentDraftLanding((prev) => ({
-                                                      ...prev,
-                                                      tabs: prev.tabs.filter((t) => t.id !== tab.id),
-                                                    }));
-                                                    markCommunityAgentDraftDirty();
-                                                    clearCommunityAgentLandingEdit();
-                                                  }}
-                                                >
-                                                  ×
-                                                </span>
-                                              )}
-                                            </>
-                                          )}
-                                        </button>
-                                      );
-                                    })}
-                                    {previewTabs.length < 4 && (
-                                      <button
-                                        type="button"
-                                        className="web-starter-tab web-starter-tab-add"
-                                        title="Add tab"
-                                        onClick={() => {
-                                          const nextId = crypto.randomUUID();
-                                          const nextLabel = `Tab ${previewTabs.length + 1}`;
-                                          setCommunityAgentDraftLanding((prev) => ({
-                                            ...prev,
-                                            tabs:
-                                              prev.tabs.length >= 4
-                                                ? prev.tabs
-                                                : [...prev.tabs, { id: nextId, label: nextLabel, prompts: [] }],
-                                          }));
-                                          markCommunityAgentDraftDirty();
-                                          setCommunityAgentPreviewTabId(nextId);
-                                          beginCommunityAgentLandingEdit(
-                                            { kind: "tab_label", tabId: nextId },
-                                            nextLabel,
-                                          );
-                                        }}
-                                      >
-                                        +
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  <div className="web-starter-list web-starter-list-editable" role="list">
-                                    {previewPrompts.map((prompt, idx) => {
-                                      const isEditingPrompt =
-                                        communityAgentLandingEdit?.kind === "prompt" &&
-                                        communityAgentLandingEdit.tabId === previewActiveTab?.id &&
-                                        communityAgentLandingEdit.index === idx;
-
-                                      return (
-                                        <div
-                                          key={`${previewActiveTab?.id ?? "tab"}:${idx}`}
-                                          className="web-starter-row is-preview web-starter-row-editable"
-                                          role="listitem"
-                                          onClick={() => {
-                                            if (!previewActiveTab) return;
-                                            beginCommunityAgentLandingEdit(
-                                              { kind: "prompt", tabId: previewActiveTab.id, index: idx },
-                                              prompt,
-                                            );
-                                          }}
-                                        >
-                                          {isEditingPrompt ? (
-                                            <input
-                                              className="web-starter-row-input"
-                                              type="text"
-                                              autoFocus
-                                              value={communityAgentLandingEditValue}
-                                              placeholder={prompt}
-                                              onClick={(event) => event.stopPropagation()}
-                                              onChange={(event) =>
-                                                setCommunityAgentLandingEditValue(event.target.value)
-                                              }
-                                              onBlur={() => {
-                                                if (!previewActiveTab) return;
-                                                const next = communityAgentLandingEditValue.trim();
-                                                if (next && next !== prompt.trim()) {
-                                                  setCommunityAgentDraftLanding((prev) => ({
-                                                    ...prev,
-                                                    tabs: prev.tabs.map((t) =>
-                                                      t.id === previewActiveTab.id
-                                                        ? {
-                                                            ...t,
-                                                            prompts: t.prompts.map((p, i) =>
-                                                              i === idx ? next : p,
-                                                            ),
-                                                          }
-                                                        : t,
-                                                    ),
-                                                  }));
-                                                  markCommunityAgentDraftDirty();
-                                                }
-                                                clearCommunityAgentLandingEdit();
-                                              }}
-                                              onKeyDown={(event) => {
-                                                if (event.key === "Enter") {
-                                                  event.preventDefault();
-                                                  (event.currentTarget as HTMLInputElement).blur();
-                                                }
-                                                if (event.key === "Escape") {
-                                                  event.preventDefault();
-                                                  clearCommunityAgentLandingEdit();
-                                                }
-                                              }}
-                                            />
-                                          ) : (
-                                            <>
-                                              <span className="web-starter-row-text">{prompt}</span>
-                                              <span className="web-starter-row-actions" aria-hidden="true">
-                                                <button
-                                                  type="button"
-                                                  className="web-starter-row-delete"
-                                                  aria-label="Remove prompt"
-                                                  onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    if (!previewActiveTab) return;
-                                                    setCommunityAgentDraftLanding((prev) => ({
-                                                      ...prev,
-                                                      tabs: prev.tabs.map((t) =>
-                                                        t.id === previewActiveTab.id
-                                                          ? {
-                                                              ...t,
-                                                              prompts: t.prompts.filter((_, i) => i !== idx),
-                                                            }
-                                                          : t,
-                                                      ),
-                                                    }));
-                                                    markCommunityAgentDraftDirty();
-                                                    clearCommunityAgentLandingEdit();
-                                                  }}
-                                                >
-                                                  ×
-                                                </button>
-                                                <span className="web-starter-row-arrow" aria-hidden="true">
-                                                  <svg viewBox="0 0 24 24">
-                                                    <path d="M9 18l6-6-6-6" />
-                                                  </svg>
-                                                </span>
-                                              </span>
-                                            </>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
-
-                                    {(() => {
-                                      const tabId = previewActiveTab?.id ?? "";
-                                      const isAdding =
-                                        communityAgentLandingEdit?.kind === "add_prompt" &&
-                                        communityAgentLandingEdit.tabId === tabId;
-
-                                      if (isAdding) {
-                                        return (
-                                          <div
-                                            className="web-starter-row is-preview web-starter-row-editable"
-                                            role="listitem"
-                                          >
-                                            <input
-                                              className="web-starter-row-input"
-                                              type="text"
-                                              autoFocus
-                                              value={communityAgentLandingEditValue}
-                                              placeholder="New prompt…"
-                                              onChange={(event) =>
-                                                setCommunityAgentLandingEditValue(event.target.value)
-                                              }
-                                              onBlur={() => {
-                                                const next = communityAgentLandingEditValue.trim();
-                                                if (next && previewActiveTab) {
-                                                  setCommunityAgentDraftLanding((prev) => ({
-                                                    ...prev,
-                                                    tabs: prev.tabs.map((t) =>
-                                                      t.id === previewActiveTab.id
-                                                        ? { ...t, prompts: [...t.prompts, next] }
-                                                        : t,
-                                                    ),
-                                                  }));
-                                                  markCommunityAgentDraftDirty();
-                                                }
-                                                clearCommunityAgentLandingEdit();
-                                              }}
-                                              onKeyDown={(event) => {
-                                                if (event.key === "Enter") {
-                                                  event.preventDefault();
-                                                  (event.currentTarget as HTMLInputElement).blur();
-                                                }
-                                                if (event.key === "Escape") {
-                                                  event.preventDefault();
-                                                  clearCommunityAgentLandingEdit();
-                                                }
-                                              }}
-                                            />
-                                          </div>
-                                        );
-                                      }
-
-                                      return (
-                                        <div
-                                          className="web-starter-row is-preview web-starter-row-add"
-                                          role="listitem"
-                                          onClick={() => {
-                                            if (!previewActiveTab) return;
-                                            beginCommunityAgentLandingEdit(
-                                              { kind: "add_prompt", tabId: previewActiveTab.id },
-                                              "",
-                                            );
-                                          }}
-                                        >
-                                          <span className="web-starter-row-text">+ Add prompt</span>
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
-
-                                <div className="model-note" style={{ marginTop: 10 }}>
-                                  The "Download desktop app" card is always shown by Arx when desktop isn't installed.
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="settings-section agent-system-prompt">
-                              <div className="settings-section-title">System prompt (community-wide)</div>
-                              <textarea
-                                className="system-prompt-input"
-                                placeholder="Optional. This applies to every chat in this community."
-                                value={communityAgentDraftSystemPrompt}
-                                onChange={(event) => {
-                                  setCommunityAgentDraftSystemPrompt(event.target.value);
-                                  markCommunityAgentDraftDirty();
-                                }}
-                                rows={6}
-                              />
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </>
-                  )}
-                </div>
-              )}
-
-	            {activePage === "community" && communityTab === "analytics" && (
-	              <div className="settings-panel community-settings-panel">
-	                {!activeCommunity ? (
-	                  <div className="chat-empty">Select a community to view analytics.</div>
-	                ) : !supabaseSession ? (
-	                  <div className="chat-empty">Sign in to view community analytics.</div>
-	                ) : !canViewActiveCommunityAnalytics ? (
-	                  <div className="chat-empty">Only owners and admins can view community analytics.</div>
-		                ) : (
-		                  <>
-		                    <div className="analytics-header-row">
-		                      <div className="panel-title">Community Analytics</div>
-		                      <div className="analytics-range-toggle" role="tablist" aria-label="Time range">
-		                        {(["7d", "30d", "90d", "1y", "all"] as AnalyticsRange[]).map((value) => (
-		                          <button
-		                            key={value}
-		                            className={
-		                              value === communityAnalyticsRange
-		                                ? "analytics-range-btn active"
-		                                : "analytics-range-btn"
-		                            }
-		                            type="button"
-		                            onClick={() => setCommunityAnalyticsRange(value)}
-		                            aria-pressed={value === communityAnalyticsRange}
-		                          >
-		                            {value}
-		                          </button>
-		                        ))}
-		                      </div>
-		                    </div>
-	                    <div className="settings-section">
-	                      {isLoadingCommunityAnalytics && (
-	                        <div className="chat-loading">
-	                          <div className="loading-spinner" />
-	                          <span>Loading analytics...</span>
-	                        </div>
-	                      )}
-	                      {communityAnalyticsError && <div className="auth-error">{communityAnalyticsError}</div>}
-	                      <div className="analytics-kpi-strip" aria-label="Key performance indicators">
-	                        {[
-	                          { label: "Members", value: formatCount(communityAnalyticsSummary.total_members) },
-	                          { label: "MRR", value: "—" },
-	                          { label: "Conversion", value: "—" },
-	                          { label: "Retention", value: formatPercent(communityAnalyticsSummary.retention_window) },
-	                        ].map((kpi) => (
-	                          <div key={kpi.label} className="analytics-kpi-tile">
-	                            <div className="analytics-kpi-value-big">{kpi.value}</div>
-	                            <div className="analytics-kpi-label">{kpi.label}</div>
-	                          </div>
-	                        ))}
-	                      </div>
-	                    </div>
-
-		                    <div className="settings-section">
-		                      <div className="analytics-chart-card">
-		                        <div className="analytics-chart-header">
-		                          <div className="analytics-range-toggle analytics-mode-toggle" role="tablist" aria-label="Metric">
-		                            {(["members", "revenue"] as AnalyticsChartMode[]).map((value) => (
-		                              <button
-		                                key={value}
-		                                className={
-		                                  value === communityAnalyticsChartMode
-		                                    ? "analytics-range-btn active"
-		                                    : "analytics-range-btn"
-		                                }
-		                                type="button"
-		                                onClick={() => setCommunityAnalyticsChartMode(value)}
-		                                aria-pressed={value === communityAnalyticsChartMode}
-		                              >
-		                                {value === "members" ? "Members" : "Revenue"}
-		                              </button>
-		                            ))}
-		                          </div>
-		                          <div className="analytics-chart-stat">
-		                            {communityAnalyticsChartMode === "members"
-		                              ? communityAnalyticsSeries.length === 0
-		                                ? "—"
-		                                : formatCount(
-		                                    communityAnalyticsSeries.reduce((sum, point) => sum + point.value, 0)
-		                                  )
-		                              : !communityRevenueMeta || communityRevenueSeries.length === 0
-		                                ? "—"
-		                                : formatMoneyBaseUnits(
-		                                    communityRevenueSeries.reduce((sum, point) => sum + point.value, 0),
-		                                    communityRevenueMeta.currency,
-		                                    communityRevenueMeta.currency_decimals
-		                                  )}
-		                          </div>
-		                        </div>
-		                        {communityAnalyticsChartMode === "members" ? (
-		                          <AnalyticsLineChart points={communityAnalyticsSeries} />
-		                        ) : (
-		                          <AnalyticsLineChart
-		                            points={communityRevenueSeries}
-		                            valueFormatter={
-		                              communityRevenueMeta
-		                                ? (value) =>
-		                                    formatMoneyBaseUnits(
-		                                      value,
-		                                      communityRevenueMeta.currency,
-		                                      communityRevenueMeta.currency_decimals
-		                                    )
-		                                : undefined
-		                            }
-		                          />
-		                        )}
-		                        {communityAnalyticsChartMode === "revenue" && communityRevenueError && (
-		                          <div className="analytics-chart-note">
-		                            {communityRevenueError.includes("schema cache")
-		                              ? "Revenue is still syncing. Refresh in a moment."
-		                              : communityRevenueError}
-		                          </div>
-		                        )}
-		                      </div>
-		                    </div>
-		                  </>
-		                )}
-		              </div>
-		            )}
-
-	            {activePage === "community" && communityTab === "library" && (
-	              <div className="community-panel library-panel">
-	                {!activeCommunity && "Select a community."}
-	                {activeCommunity && (
-                    <>
-                      {isLoadingResources ? (
-                        <div className="chat-loading">
-                          <div className="loading-spinner" />
-                          <span>Loading library...</span>
-                        </div>
-                      ) : libraryResources.length === 0 ? (
-                        <div className="chat-empty-state">
-                          <div className="chat-empty-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                              <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
-                              <path d="M4 5.5V19.5" />
-                            </svg>
-                          </div>
-                          <div className="chat-empty-title">Welcome to the library</div>
-                          <div className="chat-empty-text">Pin resources to add them here.</div>
-                        </div>
-                      ) : (
-                        <div className="library-layout">
-                          <div className="library-column">
-                            <div className="resources-header">Library</div>
-                            <div className="library-list">
-                              {libraryResources.map((resource) => (
-                                <button
-                                  key={resource.id}
-                                  className={
-                                    resource.id === selectedLibraryResourceId
-                                      ? "library-item active"
-                                      : "library-item"
-                                  }
-                                  onClick={() => setSelectedLibraryResourceId(resource.id)}
-                                >
-                                  <div className="library-item-title">{resource.title}</div>
-                                  <div className="library-item-meta">
-                                    <span>{resource.type}</span>
-                                    <span>{formatChatTime(resource.created_at)}</span>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="library-column">
-                            <div className="resources-header">Preview</div>
-                            <div className="library-versions">
-                              {!selectedLibraryResource && (
-                                <div className="chat-empty">Select a library item.</div>
-                              )}
-                              {selectedLibraryResource && (
-                                <div className="library-version">
-                                  <div className="library-version-meta">
-                                    <span>{formatChatTime(selectedLibraryResource.created_at)}</span>
-                                    <span>{selectedLibraryResource.url ? "link" : selectedLibraryResource.type}</span>
-                                  </div>
-                                  {selectedLibraryResource.url && (
-                                    <div className="resource-body">
-                                      <a href={selectedLibraryResource.url} target="_blank" rel="noreferrer">
-                                        {selectedLibraryResource.url}
-                                      </a>
-                                    </div>
-                                  )}
-                                  <div className="library-version-body">
-                                    {selectedLibraryResource.body_md ? (
-                                      renderMarkdown(selectedLibraryResource.body_md, {
-                                        onCopyCode: copyTextToClipboard,
-                                      })
-                                    ) : (
-                                      <div className="chat-empty">No content.</div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </>
-	                )}
-	              </div>
-	            )}
-	            {activePage === "community" && communityTab === "resources" && (
-	              <div className="community-panel resources-panel">
-	                <div className="resources-header-row">
-	                  <div className="resources-header">Resources</div>
-		                  {activeCommunity && canCreateResourcesActiveCommunity && (
-		                    <button className="resources-add-btn" onClick={openNewResourceModal} title="Add resource">
-		                      +
-		                    </button>
-		                  )}
-	                </div>
-                {resourceSuccess && (
-                  <div className="success-toast">Resource saved successfully!</div>
-                )}
-                <div
-                  className={
-                    !isLoadingResources && communityResources.length === 0
-                      ? "resource-list resource-list-empty"
-                      : "resource-list"
-                  }
-                >
-                  {isLoadingResources && (
-                    <div className="chat-loading">
-                      <div className="loading-spinner" />
-                      <span>Loading resources...</span>
-                    </div>
-                  )}
-                  {!isLoadingResources && communityResources.length === 0 && (
-                    <div className="chat-empty-state">
-                      <div className="chat-empty-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-                          <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-                        </svg>
-                      </div>
-                      <div className="chat-empty-title">
-                        Welcome to {activeCommunity ? activeCommunity.name : "your"} resources
-                      </div>
-                      <div className="chat-empty-text">
-                        Share links, posts, and videos with your members. Add your first resource to get started.
-                      </div>
-                    </div>
-                  )}
-                  {!isLoadingResources && communityResources.map((resource) => (
-                    <div key={resource.id} className="resource-item">
-                      {(() => {
-                        const embedInfo = resource.url ? parseEmbedUrl(resource.url) : null;
-                        const isEmbedOpen = openResourceEmbedId === resource.id;
-                        const metaLabel = embedInfo
-                          ? `embed • ${embedInfo.provider}`
-                          : resource.url
-                            ? "link"
-                            : "post";
-                        return (
-                          <>
-                      <div className="resource-title">
-                        {resource.pinned && <span className="resource-pin-tag">Pinned</span>}
-                        {resource.title}
-                      </div>
-                      <div className="resource-meta">
-                        <span>{metaLabel}</span>
-                        <span>{formatChatTime(resource.created_at)}</span>
-                      </div>
-                      {embedInfo && resource.url && (
-                        <div className="resource-embed">
-                          {isEmbedOpen ? (
-                            <div className="resource-embed-thumb open">
-                              <button
-                                type="button"
-                                className="resource-embed-close"
-                                onClick={() => setOpenResourceEmbedId(null)}
-                                title="Hide preview"
-                              >
-                                ×
-                              </button>
-                              <iframe
-                                src={embedInfo.src}
-                                title={`${resource.title} embed`}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                                allowFullScreen
-                                loading="lazy"
-                              />
-                            </div>
-                          ) : embedInfo.provider === "youtube" ? (
-                            <button
-                              type="button"
-                              className="resource-embed-thumb"
-                              onClick={() => setOpenResourceEmbedId(resource.id)}
-                              title="Preview"
-                            >
-                              <img src={embedInfo.thumbnailUrl} alt="YouTube thumbnail" loading="lazy" />
-                              <div className="resource-embed-play">▶</div>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="resource-embed-thumb placeholder"
-                              onClick={() => setOpenResourceEmbedId(resource.id)}
-                              title="Preview"
-                            >
-                              <div className="resource-embed-provider">
-                                {embedInfo.provider === "wistia" ? "Wistia" : "Embed"}
-                              </div>
-                              <div className="resource-embed-play">▶</div>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {!embedInfo && resource.url && (
-                        <a className="resource-link" href={resource.url} target="_blank" rel="noreferrer">
-                          {resource.url}
-                        </a>
-                      )}
-                      {resource.body_md && (
-                        <div className="resource-body">{resource.body_md}</div>
-                      )}
-	                      {canManageResourcesActiveCommunity && (
-	                        <div className="resource-actions">
-	                          <button
-	                            className="secondary"
-	                            onClick={() => handleEditResource(resource)}
-	                          >
-	                            Edit
-	                          </button>
-	                          <button
-	                            className="danger"
-	                            onClick={() => void handleDeleteResource(resource.id)}
-	                          >
-	                            Delete
-	                          </button>
-	                        </div>
-	                      )}
-	                          </>
-	                        );
-	                      })()}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-	            {activePage === "community" && communityTab === "members" && (
-	              <div className="community-panel members-panel">
-		                <div className={`members-layout${(canInviteActiveCommunity || canManageMembersActiveCommunity) ? " with-invites" : ""}`}>
-	                  <section className="members-section">
-                    <div className="members-header-row">
-                      <div className="members-header">Members</div>
-                      <div className="members-count">{communityMembers.length}</div>
-                    </div>
-                    <div className="members-list">
-                      {communityMembers.length === 0 ? (
-                        <div className="members-empty">No members yet.</div>
-	                      ) : (
-		                        communityMembers.map((member) => {
-		                          const profile = profilesByUserId[member.user_id] ?? null;
-		                          const avatarUrl = profile?.avatar_url ?? null;
-		                          const initials = profile?.display_name
-		                            ? communityInitials(profile.display_name)
-		                            : getInitials(member.user_id);
-		                          const memberIsOwner = Boolean(
-		                            (activeCommunity && activeCommunity.owner_id === member.user_id) ||
-		                              member.role === "owner"
-		                          );
-			                          const viewerIsOwner = isActiveCommunityOwner;
-		                          const viewerIsAdmin = canManageMembersActiveCommunity && !viewerIsOwner;
-		                          const memberIsAdmin = member.role === "admin";
-		                          const canEditThisMember = viewerIsOwner || !memberIsAdmin;
-		                          const canRemoveThisMember =
-		                            viewerIsOwner || (viewerIsAdmin && !memberIsAdmin && !memberIsOwner);
-		                          const roleOptions = viewerIsOwner
-		                            ? ["member", "mod", "admin"]
-		                            : memberIsAdmin
-		                              ? ["admin"]
-		                              : ["member", "mod"];
-		                          return (
-		                            <div key={member.id} className="member-item">
-		                              <div
-		                                className="member-avatar"
-		                                style={{ backgroundColor: getAvatarColor(member.user_id) }}
-	                              >
-	                                {avatarUrl ? (
-	                                  <img src={avatarUrl} alt={displayName(member.user_id)} />
-	                                ) : (
-	                                  initials
-		                                )}
-		                              </div>
-		                              <div className="member-info">
-		                                <span className="member-name">
-                                      {displayName(member.user_id)}
-                                      {canManageMembersActiveCommunity && member.access_status === "declined" ? " (declined)" : ""}
-                                    </span>
-		                                {!canManageMembersActiveCommunity || memberIsOwner ? (
-		                                  <span className="member-role">{member.role}</span>
-		                                ) : (
-		                                  <div className="member-controls">
-		                                    <select
-		                                      className="select-styled"
-		                                      value={member.role}
-		                                      disabled={!canEditThisMember}
-		                                      onChange={(event) => {
-		                                        const next = event.target.value;
-		                                        if (next === member.role) return;
-		                                        void handleSetCommunityMemberRole(member.user_id, next);
-		                                      }}
-		                                    >
-		                                      {roleOptions.map((role) => (
-		                                        <option key={role} value={role}>
-		                                          {role}
-		                                        </option>
-		                                      ))}
-		                                    </select>
-		                                    {canRemoveThisMember && (
-		                                      <button
-		                                        className="danger"
-		                                        type="button"
-		                                        onClick={() => void handleRemoveCommunityMember(member.user_id)}
-		                                      >
-		                                        Remove
-		                                      </button>
-		                                    )}
-		                                  </div>
-		                                )}
-		                              </div>
-		                            </div>
-		                          );
-		                        })
-	                      )}
-	                    </div>
-	                  </section>
-
-	                  {activeCommunity && supabaseSession && (canInviteActiveCommunity || canManageMembersActiveCommunity) && (
-	                    <section className="invites-section">
-	                      {canManageMembersActiveCommunity && (
-	                        <>
-	                          <div className="members-header-row">
-	                            <div className="members-header">Memory review</div>
-	                            <div className="members-count">{pendingCommunityMemoryCandidates.length}</div>
-	                          </div>
-	                          <div className="invites-card">
-	                            {isLoadingCommunityMemoryCandidates ? (
-	                              <div className="chat-empty">Loading memory candidates…</div>
-	                            ) : communityMemoryCandidatesError ? (
-	                              <div className="auth-error">{communityMemoryCandidatesError}</div>
-		                            ) : pendingCommunityMemoryCandidates.length === 0 ? (
-		                              <div className="chat-empty">No memory candidates waiting for review.</div>
-		                            ) : (
-			                              <div className="invite-list">
-			                                {pendingCommunityMemoryCandidates.map((candidate) => {
-                                      const candidateEvidence = extractCommunityEvidenceUsedV1(candidate.evidence_json);
-                                      const rejectReason = communityMemoryRejectReasonById[candidate.id] ?? "";
-                                      return (
-		                                  <div key={candidate.id} className="invite-row community-memory-review-row">
-		                                    <div className="invite-main">
-		                                      <div className="invite-code">
-		                                        {(candidate.title ?? "").trim() || "Untitled candidate"}
-		                                      </div>
-		                                      <div className="invite-status">
-		                                        by {displayName(candidate.proposer_user_id)} • score {candidate.signal_score}
-		                                      </div>
-		                                      <div className="create-community-hint">
-		                                        {previewText(candidate.memory_text, 180)}
-		                                      </div>
-                                      {candidateEvidence && candidateEvidence.items.length > 0 && (
-                                        <div className="community-memory-evidence-preview">
-                                          <CommunityEvidenceCitations items={candidateEvidence.items.slice(0, 3)} />
-                                        </div>
-                                      )}
-                                      <input
-                                        className="community-memory-reject-reason"
-                                        type="text"
-                                        placeholder="Reject reason (optional)"
-                                        value={rejectReason}
-                                        onChange={(event) => {
-                                          const value = event.target.value;
-                                          setCommunityMemoryRejectReasonById((prev) => ({
-                                            ...prev,
-                                            [candidate.id]: value,
-                                          }));
-                                        }}
-                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
-                                      />
-		                                    </div>
-		                                    <div className="invite-actions">
-		                                      <button
-		                                        className="secondary"
-		                                        onClick={() => void handlePromoteCommunityMemoryCandidate(candidate.id)}
-	                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
-	                                      >
-	                                        {reviewingCommunityMemoryCandidateId === candidate.id ? "Saving…" : "Promote"}
-	                                      </button>
-		                                      <button
-		                                        className="danger"
-		                                        onClick={() =>
-                                          void handleRejectCommunityMemoryCandidate(
-                                            candidate.id,
-                                            rejectReason.trim() ? rejectReason.trim() : null,
-                                          )
-                                        }
-		                                        disabled={reviewingCommunityMemoryCandidateId === candidate.id}
-		                                      >
-		                                        Reject
-		                                      </button>
-		                                    </div>
-		                                  </div>
-		                                );
-                                    })}
-			                              </div>
-			                            )}
-		                          </div>
-		                          <div className="members-header-row">
-		                            <div className="members-header">Review history</div>
-		                            <div className="members-count">{reviewedCommunityMemoryCandidates.length}</div>
-		                          </div>
-		                          <div className="invites-card">
-		                            {isLoadingCommunityMemoryCandidates ? (
-		                              <div className="chat-empty">Loading review history…</div>
-		                            ) : communityMemoryCandidatesError ? (
-		                              <div className="auth-error">{communityMemoryCandidatesError}</div>
-		                            ) : reviewedCommunityMemoryCandidates.length === 0 ? (
-		                              <div className="chat-empty">No reviewed memory candidates yet.</div>
-		                            ) : (
-		                              <>
-		                                <div className="invite-list">
-			                                  {reviewedCommunityMemoryCandidates.slice(0, 20).map((candidate) => {
-			                                    const routerState = candidate.router_state.trim().toLowerCase();
-			                                    const stateLabel =
-			                                      routerState === "rejected"
-			                                        ? "Rejected"
-			                                        : routerState === "promoted"
-			                                          ? "Promoted"
-			                                          : routerState === "auto_promoted"
-			                                            ? "Auto-promoted"
-			                                          : routerState === "published"
-			                                            ? "Published"
-			                                            : routerState === "approved"
-			                                              ? "Approved"
-			                                              : routerState.replace(/_/g, " ");
-		                                    const reviewedAt = candidate.reviewed_at
-		                                      ? formatChatTime(candidate.reviewed_at)
-		                                      : formatChatTime(candidate.updated_at);
-		                                    const reviewedByLabel = candidate.reviewed_by
-		                                      ? displayName(candidate.reviewed_by)
-		                                      : "router";
-		                                    const routerReason = (candidate.router_reason ?? "").trim();
-		                                    return (
-		                                      <div key={candidate.id} className="invite-row community-memory-review-row">
-		                                        <div className="invite-main">
-		                                          <div className="invite-code">
-		                                            {(candidate.title ?? "").trim() || "Untitled candidate"}
-		                                          </div>
-		                                          <div className="community-memory-review-history-meta">
-		                                            <span className={`community-memory-review-state ${routerState}`}>
-		                                              {stateLabel}
-		                                            </span>
-		                                            <span className="invite-status">
-		                                              by {displayName(candidate.proposer_user_id)} • score {candidate.signal_score}
-		                                            </span>
-		                                            <span className="invite-status">
-		                                              reviewed {reviewedAt} by {reviewedByLabel}
-		                                            </span>
-		                                          </div>
-		                                          <div className="create-community-hint">
-		                                            {previewText(candidate.memory_text, 180)}
-		                                          </div>
-		                                          {routerState === "rejected" && (
-		                                            <div className="community-memory-review-reason">
-		                                              Reject reason: {routerReason || "not provided"}
-		                                            </div>
-		                                          )}
-		                                        </div>
-		                                      </div>
-		                                    );
-		                                  })}
-		                                </div>
-		                                {reviewedCommunityMemoryCandidates.length > 20 && (
-		                                  <div className="community-memory-review-history-note">
-		                                    Showing latest 20 reviewed candidates.
-		                                  </div>
-		                                )}
-		                                {rejectedReviewedCommunityMemoryCandidates.length > 0 && (
-		                                  <div className="community-memory-review-history-note">
-		                                    Rejected: {rejectedReviewedCommunityMemoryCandidates.length}
-		                                  </div>
-		                                )}
-		                              </>
-		                            )}
-		                          </div>
-		                        </>
-		                      )}
-	                      {canInviteActiveCommunity && (
-	                        <>
-	                          <div className="members-header-row">
-	                            <div className="members-header">Invites</div>
-	                          </div>
-	                          <div className="invites-card">
-	                            <div className="invite-create-row invite-create-row-cta">
-	                              <label className="invite-field">
-	                                <span>Max uses</span>
-	                                <select
-	                                  className="select-styled"
-	                                  value={inviteMaxUsesPreset}
-	                                  onChange={(event) => setInviteMaxUsesPreset(event.target.value)}
-	                                >
-	                                  <option value="unlimited">Unlimited</option>
-	                                  <option value="1">1 use</option>
-	                                  <option value="5">5 uses</option>
-	                                  <option value="10">10 uses</option>
-	                                  <option value="25">25 uses</option>
-	                                  <option value="100">100 uses</option>
-	                                  <option value="custom">Custom…</option>
-	                                </select>
-	                              </label>
-	                              <label className="invite-field">
-	                                <span>Expires</span>
-	                                <select
-	                                  className="select-styled"
-	                                  value={inviteExpiryPreset}
-	                                  onChange={(event) => setInviteExpiryPreset(event.target.value)}
-	                                >
-	                                  <option value="never">Never</option>
-	                                  <option value="24h">24 hours</option>
-	                                  <option value="7d">7 days</option>
-	                                  <option value="30d">30 days</option>
-	                                  <option value="90d">90 days</option>
-	                                  <option value="custom">Custom…</option>
-	                                </select>
-	                              </label>
-	                              <button
-	                                className="invite-create-btn"
-	                                onClick={() => void handleCreateInvite()}
-	                                disabled={isCreatingInvite}
-	                              >
-	                                {isCreatingInvite ? "Creating…" : "Create"}
-	                              </button>
-	                            </div>
-	                            {(inviteMaxUsesPreset === "custom" || inviteExpiryPreset === "custom") && (
-	                              <div className="invite-create-row invite-create-row-custom">
-	                                {inviteMaxUsesPreset === "custom" && (
-	                                  <input
-	                                    type="text"
-	                                    inputMode="numeric"
-	                                    placeholder="Custom max uses"
-	                                    value={inviteMaxUsesCustom}
-	                                    onChange={(event) => setInviteMaxUsesCustom(event.target.value)}
-	                                  />
-	                                )}
-	                                {inviteExpiryPreset === "custom" && (
-	                                  <input
-	                                    type="text"
-	                                    inputMode="numeric"
-	                                    placeholder="Custom expiry (days)"
-	                                    value={inviteExpiryCustom}
-	                                    onChange={(event) => setInviteExpiryCustom(event.target.value)}
-	                                  />
-	                                )}
-	                              </div>
-	                            )}
-	                            {inviteCreateError && <div className="auth-error">{inviteCreateError}</div>}
-	                            <div className="invite-list">
-	                              {isLoadingCommunityInvites ? (
-	                                <div className="chat-empty">Loading invites…</div>
-	                              ) : communityInvites.length === 0 ? (
-	                                <div className="chat-empty">No invites yet.</div>
-	                              ) : (
-	                                communityInvites.map((invite) => {
-	                                  const revoked = Boolean(invite.revoked_at);
-	                                  const expired = Boolean(
-	                                    invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()
-	                                  );
-	                                  const status = revoked ? "revoked" : expired ? "expired" : "active";
-	                                  const bestInviteLink = buildDesktopBestInviteLink({
-	                                    shareBaseUrl: getPublicShareBaseUrl(),
-	                                    communityId: activeCommunity?.id ?? null,
-	                                    inviteCode: invite.code,
-	                                  });
-	                                  return (
-	                                    <div key={invite.id} className="invite-row">
-	                                      <div className="invite-main">
-	                                        <div className="invite-code">{invite.code}</div>
-	                                        <div className={`invite-status ${status}`}>
-	                                          {status}
-	                                          {invite.max_uses ? ` • max ${invite.max_uses}` : ""}
-	                                          {invite.expires_at
-	                                            ? ` • exp ${new Date(invite.expires_at).toLocaleDateString()}`
-	                                            : ""}
-	                                        </div>
-	                                      </div>
-	                                      <div className="invite-actions">
-	                                        <button
-	                                          className="secondary"
-	                                          onClick={() =>
-	                                            void copyTextToClipboard(
-	                                              bestInviteLink.link
-	                                            )
-	                                          }
-	                                          title={bestInviteLink.kind === "web" ? "Copy web join link" : "Copy app link"}
-	                                        >
-	                                          Copy link
-	                                        </button>
-	                                        <button
-	                                          className="secondary"
-	                                          onClick={() => void copyTextToClipboard(invite.code)}
-	                                          title="Copy invite code"
-	                                        >
-	                                          Copy code
-	                                        </button>
-	                                        <button
-	                                          className="secondary"
-	                                          onClick={() => void handleRevokeInvite(invite.id)}
-	                                          disabled={revoked}
-	                                          title="Revoke invite"
-	                                        >
-	                                          Revoke
-	                                        </button>
-	                                        <button
-	                                          className="danger"
-	                                          onClick={() => void handleDeleteInvite(invite.id)}
-	                                          title="Delete invite"
-	                                        >
-	                                          Delete
-	                                        </button>
-	                                      </div>
-	                                    </div>
-	                                  );
-	                                })
-	                              )}
-	                            </div>
-	                          </div>
-	                        </>
-	                      )}
-	                    </section>
-	                  )}
-	                </div>
-	              </div>
-            )}
+            <DesktopCommunitySecondaryTabs
+              showAnalytics={activePage === "community" && communityTab === "analytics"}
+              showLibrary={activePage === "community" && communityTab === "library"}
+              showResources={activePage === "community" && communityTab === "resources"}
+              showMembers={activePage === "community" && communityTab === "members"}
+              analyticsPanelProps={{
+                capabilities: {
+                  hasActiveCommunity: Boolean(activeCommunity),
+                  hasSession: Boolean(supabaseSession),
+                  canViewActiveCommunityAnalytics,
+                },
+                state: {
+                  communityAnalyticsRange,
+                  isLoadingCommunityAnalytics,
+                  communityAnalyticsError,
+                  communityAnalyticsSummary,
+                  communityAnalyticsChartMode,
+                  communityAnalyticsSeries,
+                  communityRevenueMeta,
+                  communityRevenueSeries,
+                  communityRevenueError,
+                },
+                actions: {
+                  setCommunityAnalyticsRange,
+                  setCommunityAnalyticsChartMode,
+                },
+              }}
+              libraryPanelProps={{
+                capabilities: {
+                  hasActiveCommunity: Boolean(activeCommunity),
+                },
+                state: {
+                  isLoadingResources,
+                  libraryResources,
+                  selectedLibraryResourceId,
+                  selectedLibraryResource,
+                },
+                actions: {
+                  setSelectedLibraryResourceId,
+                },
+              }}
+              resourcesPanelProps={{
+                capabilities: {
+                  hasActiveCommunity: Boolean(activeCommunity),
+                  activeCommunityName: activeCommunity?.name ?? null,
+                  canCreateResources: canCreateResourcesActiveCommunity,
+                  canManageResources: canManageResourcesActiveCommunity,
+                },
+                state: {
+                  isLoadingResources,
+                  resourceSuccess,
+                  resources: communityResources,
+                  openResourceEmbedId,
+                },
+                actions: {
+                  setOpenResourceEmbedId,
+                  openNewResourceModal,
+                  handleEditResource,
+                  handleDeleteResource,
+                },
+              }}
+              membersPanelProps={{
+                capabilities: {
+                  hasActiveCommunity: Boolean(activeCommunity),
+                  hasSession: Boolean(supabaseSession),
+                  isActiveCommunityOwner,
+                  canInvite: canInviteActiveCommunity,
+                  canManageMembers: canManageMembersActiveCommunity,
+                },
+                state: {
+                  activeCommunityOwnerId: activeCommunity?.owner_id ?? null,
+                  communityMembers,
+                  profilesByUserId,
+                  memoryReview: {
+                    pendingCommunityMemoryCandidates,
+                    reviewedCommunityMemoryCandidates,
+                    rejectedReviewedCommunityMemoryCandidatesCount: rejectedReviewedCommunityMemoryCandidates.length,
+                    isLoadingCommunityMemoryCandidates,
+                    communityMemoryCandidatesError,
+                    communityMemoryRejectReasonById,
+                    reviewingCommunityMemoryCandidateId,
+                  },
+                  invites: {
+                    activeCommunityId: activeCommunity?.id ?? null,
+                    inviteMaxUsesPreset,
+                    inviteExpiryPreset,
+                    isCreatingInvite,
+                    inviteMaxUsesCustom,
+                    inviteExpiryCustom,
+                    inviteCreateError,
+                    isLoadingCommunityInvites,
+                    communityInvites,
+                  },
+                },
+                actions: {
+                  displayName,
+                  handleSetCommunityMemberRole,
+                  handleRemoveCommunityMember,
+                  memoryReview: {
+                    setCommunityMemoryRejectReasonById,
+                    handlePromoteCommunityMemoryCandidate,
+                    handleRejectCommunityMemoryCandidate,
+                    displayName,
+                    previewText,
+                  },
+                  invites: {
+                    setInviteMaxUsesPreset,
+                    setInviteExpiryPreset,
+                    handleCreateInvite,
+                    setInviteMaxUsesCustom,
+                    setInviteExpiryCustom,
+                    getPublicShareBaseUrl,
+                    handleRevokeInvite,
+                    handleDeleteInvite,
+                  },
+                },
+              }}
+            />
           </div>
         )}
       </main>
@@ -11125,39 +7857,14 @@ function App() {
           <div className="panel-title">
             Members
           </div>
-	          <div className="member-list">
-	            {communityMembers.length === 0 && (
-	              <div className="member-empty">No members yet.</div>
-	            )}
-	            {communityMembers.map((member) => {
-	              const profile = profilesByUserId[member.user_id] ?? null;
-	              const avatarUrl = profile?.avatar_url ?? null;
-	              const initials = profile?.display_name
-	                ? communityInitials(profile.display_name)
-	                : getInitials(member.user_id);
-	              return (
-	                <div key={member.id} className="member-item">
-	                  <div
-	                    className="member-avatar"
-	                    style={{ backgroundColor: getAvatarColor(member.user_id) }}
-	                  >
-	                    {avatarUrl ? (
-	                      <img src={avatarUrl} alt={displayName(member.user_id)} />
-	                    ) : (
-	                      initials
-	                    )}
-	                  </div>
-	                  <div className="member-info">
-	                    <span className="member-name">
-                        {displayName(member.user_id)}
-                        {canManageMembersActiveCommunity && member.access_status === "declined" ? " (declined)" : ""}
-                      </span>
-	                    <span className="member-role">{member.role}</span>
-	                  </div>
-	                </div>
-	              );
-	            })}
-	          </div>
+          <CommunityMemberList
+            members={communityMembers}
+            profilesByUserId={profilesByUserId}
+            displayName={displayName}
+            canManageMembers={canManageMembersActiveCommunity}
+            containerClassName="member-list"
+            emptyClassName="member-empty"
+          />
 	        </aside>
 	      )}
       </div>
@@ -11477,6 +8184,34 @@ function previewText(value: string, limit = 160): string {
   return `${normalized.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
+function formatToolArtifactLines(
+  summary: any,
+  opts?: { includeFilePatchHashes?: boolean },
+): string[] {
+  const includeFilePatchHashes = opts?.includeFilePatchHashes ?? false;
+  const artifacts: any[] = Array.isArray(summary?.artifacts) ? summary.artifacts : [];
+  return artifacts
+    .map((artifact) => {
+      if (!artifact || typeof artifact !== "object") return null;
+      const type = typeof (artifact as any).type === "string" ? (artifact as any).type : "artifact";
+      const artifactPath =
+        typeof (artifact as any).path === "string" ? (artifact as any).path : "(unknown)";
+      const treatAsEditArtifact =
+        type === "file_edit" || type === "file_write" || (includeFilePatchHashes && type === "file_patch");
+      if (treatAsEditArtifact) {
+        const before = typeof (artifact as any).before_sha256 === "string" ? (artifact as any).before_sha256 : null;
+        const after = typeof (artifact as any).after_sha256 === "string" ? (artifact as any).after_sha256 : null;
+        return `${type}: ${artifactPath}${before && after ? `\n  ${before} → ${after}` : ""}`;
+      }
+      if (type === "file_hash") {
+        const sha = typeof (artifact as any).sha256 === "string" ? (artifact as any).sha256 : null;
+        return `file_hash: ${artifactPath}${sha ? `\n  ${sha}` : ""}`;
+      }
+      return `${type}: ${artifactPath}`;
+    })
+    .filter(Boolean) as string[];
+}
+
 function parseMessageContent(contentJson: string): { text: string; format: string | null } {
   try {
     const parsed = JSON.parse(contentJson) as { text?: string; format?: string };
@@ -11623,30 +8358,6 @@ function openExternalUrlBestEffort(url: string): void {
 
 function renderTextWithLinks(text: string): ReactNode {
   return renderTextWithLinksShared(text, { onOpenUrl: openExternalUrlBestEffort });
-}
-
-function shouldShowSender(
-  messages: { sender_id: string; created_at: string; reply_to_id?: string | null }[],
-  index: number
-): boolean {
-  if (index === 0) return true;
-  const prev = messages[index - 1];
-  const curr = messages[index];
-  if (prev.sender_id !== curr.sender_id) return true;
-  // Break grouping across date separators (day boundary).
-  if (new Date(prev.created_at).toDateString() !== new Date(curr.created_at).toDateString()) return true;
-  // Break grouping when replies target different messages.
-  if ((prev.reply_to_id ?? null) !== (curr.reply_to_id ?? null)) return true;
-  // Show sender if more than 2 minutes apart
-  const prevTime = new Date(prev.created_at).getTime();
-  const currTime = new Date(curr.created_at).getTime();
-  if (currTime - prevTime > 2 * 60 * 1000) return true;
-  // Force meta on last message before a date separator (so it doesn't look orphaned).
-  const next = messages[index + 1];
-  if (next && new Date(curr.created_at).toDateString() !== new Date(next.created_at).toDateString()) {
-    return true;
-  }
-  return false;
 }
 
 function formatSecretScanError(scan: SecretScanResult): string {

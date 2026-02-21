@@ -24,7 +24,6 @@ create table if not exists public.community_context_items (
   updated_at timestamptz not null default now(),
   primary key (source_type, source_id)
 );
-
 create index if not exists idx_community_context_items_community_updated
   on public.community_context_items (community_id, source_updated_at desc);
 create index if not exists idx_community_context_items_community_type_updated
@@ -32,7 +31,6 @@ create index if not exists idx_community_context_items_community_type_updated
 create index if not exists idx_community_context_items_search_doc
   on public.community_context_items
   using gin (search_doc);
-
 create table if not exists public.community_context_state (
   community_id uuid primary key references public.communities(id) on delete cascade,
   compile_version bigint not null default 0,
@@ -41,7 +39,6 @@ create table if not exists public.community_context_state (
   chat_count integer not null default 0,
   resource_count integer not null default 0
 );
-
 create or replace function public.community_context_build_search_doc(
   p_title text,
   p_snippet text,
@@ -57,7 +54,6 @@ as $$
     coalesce(p_title, '') || ' ' || coalesce(p_snippet, '') || ' ' || coalesce(p_url, '')
   );
 $$;
-
 create or replace function public.bump_community_context_state(p_community_id uuid)
 returns void
 language plpgsql
@@ -105,7 +101,6 @@ begin
     resource_count = excluded.resource_count;
 end;
 $$;
-
 create or replace function public.sync_community_context_from_message()
 returns trigger
 language plpgsql
@@ -222,7 +217,6 @@ begin
   return new;
 end;
 $$;
-
 create or replace function public.sync_community_context_from_resource()
 returns trigger
 language plpgsql
@@ -314,7 +308,6 @@ begin
   return new;
 end;
 $$;
-
 -- One-time compile/backfill from existing community chat and resources.
 insert into public.community_context_items (
   source_type,
@@ -374,7 +367,6 @@ do update set
   source_updated_at = excluded.source_updated_at,
   search_doc = excluded.search_doc,
   updated_at = now();
-
 insert into public.community_context_items (
   source_type,
   source_id,
@@ -420,7 +412,6 @@ do update set
   source_updated_at = excluded.source_updated_at,
   search_doc = excluded.search_doc,
   updated_at = now();
-
 insert into public.community_context_state (
   community_id,
   compile_version,
@@ -445,19 +436,16 @@ do update set
   last_error = null,
   chat_count = excluded.chat_count,
   resource_count = excluded.resource_count;
-
 drop trigger if exists trg_sync_community_context_messages on public.messages;
 create trigger trg_sync_community_context_messages
 after insert or update or delete on public.messages
 for each row
 execute function public.sync_community_context_from_message();
-
 drop trigger if exists trg_sync_community_context_resources on public.community_resources;
 create trigger trg_sync_community_context_resources
 after insert or update or delete on public.community_resources
 for each row
 execute function public.sync_community_context_from_resource();
-
 create or replace function public.search_compiled_community_context(
   p_user_id uuid,
   p_community_id uuid,
@@ -570,7 +558,6 @@ as $$
     r.source_updated_at desc
   limit (select lim from qry);
 $$;
-
 revoke all on function public.search_compiled_community_context(uuid, uuid, text, int) from public;
 revoke all on function public.search_compiled_community_context(uuid, uuid, text, int) from anon;
 revoke all on function public.search_compiled_community_context(uuid, uuid, text, int) from authenticated;

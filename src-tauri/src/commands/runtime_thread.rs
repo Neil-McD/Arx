@@ -333,6 +333,7 @@ pub(crate) async fn submit_turn_cmd(
     _cwd: String,
     input: String,
     user_content_json: String,
+    community_name: Option<String>,
     supabase_url: Option<String>,
     supabase_anon_key: Option<String>,
     supabase_access_token: Option<String>,
@@ -353,6 +354,7 @@ pub(crate) async fn submit_turn_cmd(
         &db_key,
         &thread_id,
         &input,
+        community_name,
         supabase_url,
         supabase_anon_key,
         supabase_access_token,
@@ -367,8 +369,13 @@ pub(crate) async fn submit_turn_cmd(
             })
             .to_string();
             if let Ok(conn) = crate::db::open_conn(&db_path, &db_key) {
-                let _ =
-                    append_local_message_event(&conn, &db_path, &thread_id, "assistant", &fallback_content);
+                let _ = append_local_message_event(
+                    &conn,
+                    &db_path,
+                    &thread_id,
+                    "assistant",
+                    &fallback_content,
+                );
             }
 
             let _ = window.emit(

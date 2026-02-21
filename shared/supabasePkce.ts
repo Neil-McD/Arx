@@ -1,7 +1,7 @@
 import { bytesToBase64 } from "./voiceCapture";
 
-export const SUPABASE_PKCE_STORAGE_KEY = "arx_supabase_pkce_v1";
-export const SUPABASE_PKCE_TTL_MS = 10 * 60 * 1000;
+const SUPABASE_PKCE_STORAGE_KEY = "arx_supabase_pkce_v1";
+const SUPABASE_PKCE_TTL_MS = 10 * 60 * 1000;
 
 type SupabasePkceState = {
   v: 1;

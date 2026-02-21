@@ -2,6 +2,7 @@ export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "desktop" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
+export type BuilderTierUi = "free" | "builder" | "architect";
 
 export type BuilderBillingReturn = {
   status: BuilderBillingStatus;
@@ -50,11 +51,49 @@ export function formatSubscriptionPrice(args: {
   return `${value.toFixed(0)} ${currency}${suffix}`;
 }
 
-export function normalizeBuilderCheckoutTier(tier: "builder" | "architect" | "pro"): "builder" | "pro" {
+function normalizeBuilderCheckoutTier(
+  tier: "builder" | "pro" | "architect",
+): "builder" | "pro" {
   return tier === "architect" ? "pro" : tier;
 }
 
-export function buildBuilderBillingRedirectUrls(args: {
+function normalizeBuilderTierRaw(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
+  const raw = normalizeBuilderTierRaw(value);
+  if (raw === "builder") return "builder";
+  if (raw === "pro" || raw === "architect") return "architect";
+  return "free";
+}
+
+export function isBuilderTierFree(value: string | null | undefined): boolean {
+  return normalizeBuilderTierRaw(value) === "free";
+}
+
+export function isBuilderTierBuilder(value: string | null | undefined): boolean {
+  return normalizeBuilderTierRaw(value) === "builder";
+}
+
+export function isBuilderTierArchitect(value: string | null | undefined): boolean {
+  const raw = normalizeBuilderTierRaw(value);
+  return raw === "pro" || raw === "architect";
+}
+
+export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
+  return isBuilderTierBuilder(value) || isBuilderTierArchitect(value);
+}
+
+export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" | "Architect" {
+  if (isBuilderTierArchitect(value)) return "Architect";
+  if (isBuilderTierBuilder(value)) return "Builder";
+  return "Free";
+}
+
+function buildBuilderBillingRedirectUrls(args: {
   origin: string;
   source: "web" | "desktop";
   context: BuilderUpgradeContextValue;
@@ -65,6 +104,48 @@ export function buildBuilderBillingRedirectUrls(args: {
     successUrl: `${base}/?billing=success&billing_source=${args.source}&billing_context=${encodedContext}`,
     cancelUrl: `${base}/?billing=cancel&billing_source=${args.source}&billing_context=${encodedContext}`,
     returnUrl: `${base}/?billing=return&billing_source=${args.source}&billing_context=${encodedContext}`,
+  };
+}
+
+export function buildBuilderCheckoutRequestPayload(args: {
+  origin: string;
+  source: "web" | "desktop";
+  context: BuilderUpgradeContextValue;
+  tier: "builder" | "pro" | "architect";
+}): { tier: "builder" | "pro"; successUrl: string; cancelUrl: string } {
+  const urls = buildBuilderBillingRedirectUrls({
+    origin: args.origin,
+    source: args.source,
+    context: args.context,
+  });
+  return {
+    tier: normalizeBuilderCheckoutTier(args.tier),
+    successUrl: urls.successUrl,
+    cancelUrl: urls.cancelUrl,
+  };
+}
+
+export function buildBuilderPortalRequestPayload(args: {
+  origin: string;
+  source: "web" | "desktop";
+  context: BuilderUpgradeContextValue;
+}): { returnUrl: string } {
+  const returnUrl = buildBuilderBillingRedirectUrls({
+    origin: args.origin,
+    source: args.source,
+    context: args.context,
+  }).returnUrl;
+  return { returnUrl };
+}
+
+export function buildBuilderConnectRequestPayload(args: {
+  origin: string;
+  returnStatus: "done" | "return";
+}): { returnUrl: string; refreshUrl: string } {
+  const base = args.origin.replace(/\/+$/, "");
+  return {
+    returnUrl: `${base}/?payouts=${args.returnStatus}`,
+    refreshUrl: `${base}/?payouts=refresh`,
   };
 }
 

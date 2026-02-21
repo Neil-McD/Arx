@@ -38,8 +38,7 @@
     "bash",
     "community_chat_post",
     "community_resource_publish",
-    "community_artifact_publish",
-    "community_automation_trigger"
+    "community_artifact_publish"
   ],
   "capability_status_values": [
     "active"

@@ -49,7 +49,8 @@ export async function revokeSupabaseSessionRemote(accessToken: string | null | u
   if (!url || !apiKey) return;
 
   try {
-    await fetch(`${url}/auth/v1/logout`, {
+    // Local scope prevents one surface (web/desktop) from revoking all sessions.
+    await fetch(`${url}/auth/v1/logout?scope=local`, {
       method: "POST",
       headers: {
         apikey: apiKey,

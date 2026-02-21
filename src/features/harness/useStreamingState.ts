@@ -15,6 +15,8 @@ export type StreamingMeta = {
 export type UseStreamingStateResult = {
   streamingContent: string | null;
   setStreamingContent: Dispatch<SetStateAction<string | null>>;
+  streamingRunId: string | null;
+  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
   streamingRenderedContent: string | null;
   streamingTokens: StreamingTokens | null;
   setStreamingTokens: Dispatch<SetStateAction<StreamingTokens | null>>;
@@ -31,6 +33,7 @@ export type UseStreamingStateResult = {
 
 export function useStreamingState(): UseStreamingStateResult {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
   const [streamingRenderedContent, setStreamingRenderedContent] = useState<string | null>(null);
   const [streamingTokens, setStreamingTokens] = useState<StreamingTokens | null>(null);
   const [streamingMeta, setStreamingMeta] = useState<StreamingMeta | null>(null);
@@ -69,6 +72,7 @@ export function useStreamingState(): UseStreamingStateResult {
   const clearStreamingState = useCallback(() => {
     clearStreamingRefs();
     setStreamingContent(null);
+    setStreamingRunId(null);
     setStreamingRenderedContent(null);
     setStreamingTokens(null);
     setStreamingMeta(null);
@@ -128,6 +132,8 @@ export function useStreamingState(): UseStreamingStateResult {
   return {
     streamingContent,
     setStreamingContent,
+    streamingRunId,
+    setStreamingRunId,
     streamingRenderedContent,
     streamingTokens,
     setStreamingTokens,

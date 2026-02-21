@@ -32,8 +32,9 @@ export function getOAuthRedirectUrl(): string {
 
 export async function readSupabaseError(response: Response): Promise<string> {
   try {
-    const json = (await response.clone().json()) as { message?: unknown };
+    const json = (await response.clone().json()) as { message?: unknown; error?: unknown };
     if (typeof json?.message === "string" && json.message.trim()) return json.message;
+    if (typeof json?.error === "string" && json.error.trim()) return json.error;
   } catch {
     // ignore
   }
@@ -125,31 +126,64 @@ export async function exchangeSupabasePkceCodeForSession(
   };
 }
 
-export async function isSupabaseJwtExpired(response: Response): Promise<boolean> {
+type SupabaseSurface = "auth_or_rest" | "functions" | "unknown" | "other";
+
+function classifySupabaseSurface(responseUrl: string): SupabaseSurface {
+  const lower = (responseUrl ?? "").trim().toLowerCase();
+  if (!lower) return "unknown"; // Fail closed when the surface cannot be determined.
+  if (lower.includes("/auth/v1/") || lower.includes("/rest/v1/")) return "auth_or_rest";
+  if (lower.includes("/functions/v1/")) return "functions";
+  return "other";
+}
+
+function includesJwtFailureText(value: string): boolean {
+  const lower = (value ?? "").toLowerCase();
+  if (!lower) return false;
+  if (lower.includes("jwt expired")) return true;
+  if (lower.includes("invalid jwt")) return true;
+  if (lower.includes("jwt malformed")) return true;
+  if (lower.includes("failed to decode jwt")) return true;
+  return false;
+}
+
+function isBearerTokenFailureText(value: string): boolean {
+  const lower = (value ?? "").trim().toLowerCase();
+  if (!lower) return false;
+  return lower === "invalid bearer token" || lower === "missing bearer token";
+}
+
+export async function isSupabaseJwtExpired(response: Response, requestUrl?: string): Promise<boolean> {
   if (response.ok) return false;
   if (response.status !== 400 && response.status !== 401 && response.status !== 403) return false;
+  const surface = classifySupabaseSurface(requestUrl ?? response.url);
+  const isAuthOrRestSurface = surface === "auth_or_rest" || surface === "unknown";
+  const isFunctionsSurface = surface === "functions";
+  // Never force-expire a session purely from Functions responses. Functions can
+  // fail with auth-like codes for non-session reasons (misconfig, verifier drift).
+  if (isFunctionsSurface) return false;
   try {
-    const data = (await response.clone().json()) as { code?: unknown; message?: unknown };
-    const code = typeof data?.code === "string" ? data.code : "";
-    const message = typeof data?.message === "string" ? data.message : "";
-    const lower = message.toLowerCase();
+    const data = (await response.clone().json()) as { code?: unknown; message?: unknown; error?: unknown };
+    const code = typeof data?.code === "string" ? data.code : typeof data?.code === "number" ? String(data.code) : "";
     if (code === "PGRST303" || code === "PGRST301") return true;
-    if (lower.includes("jwt expired")) return true;
-    if (lower.includes("invalid jwt")) return true;
-    if (lower.includes("jwt malformed")) return true;
-    if (lower.includes("failed to decode jwt")) return true;
-    if (lower.includes("invalid bearer token")) return true;
-    if (lower.includes("missing bearer token")) return true;
+    const message = typeof data?.message === "string" ? data.message : "";
+    const error = typeof data?.error === "string" ? data.error : "";
+    if (
+      isAuthOrRestSurface &&
+      (includesJwtFailureText(message) || includesJwtFailureText(error))
+    ) {
+      return true;
+    }
+    if (
+      isAuthOrRestSurface &&
+      (isBearerTokenFailureText(message) || isBearerTokenFailureText(error))
+    ) {
+      return true;
+    }
   } catch {
     try {
       const text = await response.clone().text();
-      const lower = text.toLowerCase();
-      if (lower.includes("jwt expired")) return true;
-      if (lower.includes("invalid jwt")) return true;
-      if (lower.includes("jwt malformed")) return true;
-      if (lower.includes("failed to decode jwt")) return true;
-      if (lower.includes("invalid bearer token")) return true;
-      if (lower.includes("missing bearer token")) return true;
+      if (isAuthOrRestSurface && includesJwtFailureText(text)) return true;
+      if (isAuthOrRestSurface && isBearerTokenFailureText(text)) return true;
     } catch {
       // ignore
     }
@@ -171,6 +205,44 @@ export async function ensureSupabaseSessionForRequest(
   const now = Math.floor(Date.now() / 1000);
   if (session.expires_at > now + 60) return session;
   return await refreshLocked(session.refresh_token);
+}
+
+export async function ensureSupabaseSessionForAuthenticatedSend(params: {
+  session: SupabaseSession;
+  sessionRef?: SupabaseSessionRef;
+  refreshLocked: (refreshToken: string) => Promise<SupabaseSession | null>;
+}): Promise<SupabaseSession | null> {
+  const { session, sessionRef, refreshLocked } = params;
+  const sameSession = (a: SupabaseSession | null | undefined, b: SupabaseSession | null | undefined): boolean => {
+    if (!a || !b) return false;
+    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+  };
+
+  // Step 1: ensure not expiring imminently.
+  const base = sessionRef?.current ?? session;
+  let current = await ensureSupabaseSessionForRequest(base, refreshLocked);
+  if (!current) return null;
+
+  // Step 2: verify the bearer is accepted by Auth.
+  const firstUser = await fetchSupabaseUser(current.access_token);
+  if (firstUser?.id) return current;
+
+  // Step 3: if another concurrent path already rotated session, try it.
+  const latest = sessionRef?.current ?? null;
+  if (latest && !sameSession(latest, current)) {
+    const latestUser = await fetchSupabaseUser(latest.access_token);
+    if (latestUser?.id) return latest;
+    current = latest;
+  }
+
+  // Step 4: one locked refresh + one verification retry.
+  const refreshToken = (sessionRef?.current?.refresh_token ?? current.refresh_token ?? "").trim();
+  if (!refreshToken) return null;
+  const refreshed = await refreshLocked(refreshToken);
+  if (!refreshed) return null;
+  const refreshedUser = await fetchSupabaseUser(refreshed.access_token);
+  if (!refreshedUser?.id) return null;
+  return refreshed;
 }
 
 export async function fetchSupabaseUser(accessToken: string): Promise<SupabaseUser | null> {
@@ -241,12 +313,6 @@ export async function fetchWithSupabaseAuthShared(params: {
     throw new Error(sessionExpiredMessage);
   };
 
-  const ensureOrFail = async (current: SupabaseSession): Promise<SupabaseSession> => {
-    const fresh = await ensureSupabaseSessionForRequest(current, refreshLocked);
-    if (fresh) return fresh;
-    return await expireSession();
-  };
-
   const doFetch = async (current: SupabaseSession): Promise<Response> => {
     const headers = new Headers(init.headers);
     headers.set("apikey", apiKey);
@@ -254,16 +320,65 @@ export async function fetchWithSupabaseAuthShared(params: {
     return await fetch(url, { ...init, headers });
   };
 
-  const baseSession = sessionRef.current ?? session;
-  const fresh = await ensureOrFail(baseSession);
-  const first = await doFetch(fresh);
-  if (!(await isSupabaseJwtExpired(first))) return first;
+  const isSameSession = (a: SupabaseSession | null | undefined, b: SupabaseSession | null | undefined): boolean => {
+    if (!a || !b) return false;
+    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+  };
 
-  const refreshed = await refreshLocked(fresh.refresh_token);
-  if (!refreshed) return await expireSession();
-  const second = await doFetch(refreshed);
-  if (await isSupabaseJwtExpired(second)) return await expireSession();
-  return second;
+  const tryFetchWithLatestSession = async (): Promise<Response | null> => {
+    const latest = sessionRef.current;
+    if (!latest || isSameSession(latest, requestSession)) return null;
+    requestSession = latest;
+    return await doFetch(latest);
+  };
+
+  const tryRefreshAndFetch = async (): Promise<Response | null> => {
+    const refreshToken = (sessionRef.current?.refresh_token ?? requestSession.refresh_token ?? "").trim();
+    if (!refreshToken) return null;
+    const refreshed = await refreshLocked(refreshToken);
+    if (!refreshed) return null;
+    requestSession = refreshed;
+    return await doFetch(refreshed);
+  };
+
+  const isFunctionsRequest = classifySupabaseSurface(url) === "functions";
+  const isAuthSurfaceRequest = (url ?? "").toLowerCase().includes("/auth/v1/");
+  const isFunctionsAuthFailure = (response: Response): boolean =>
+    isFunctionsRequest && (response.status === 401 || response.status === 403);
+
+  const baseSession = sessionRef.current ?? session;
+  let requestSession = baseSession;
+  const opportunisticRefresh = await ensureSupabaseSessionForRequest(baseSession, refreshLocked);
+  if (opportunisticRefresh) {
+    requestSession = opportunisticRefresh;
+  }
+
+  const first = await doFetch(requestSession);
+  if (isFunctionsAuthFailure(first)) {
+    const latestAttempt = await tryFetchWithLatestSession();
+    if (latestAttempt && !isFunctionsAuthFailure(latestAttempt)) return latestAttempt;
+
+    const refreshedAttempt = await tryRefreshAndFetch();
+    if (refreshedAttempt) {
+      return refreshedAttempt;
+    }
+
+    const finalFailure = latestAttempt ?? first;
+    return finalFailure;
+  }
+  if (!(await isSupabaseJwtExpired(first, url))) return first;
+
+  const latestAttempt = await tryFetchWithLatestSession();
+  if (latestAttempt && !(await isSupabaseJwtExpired(latestAttempt, url))) return latestAttempt;
+
+  const refreshedAttempt = await tryRefreshAndFetch();
+  if (!refreshedAttempt) {
+    const finalFailure = latestAttempt ?? first;
+    if (isAuthSurfaceRequest && (await isSupabaseJwtExpired(finalFailure, url))) return await expireSession();
+    return finalFailure;
+  }
+  if (isAuthSurfaceRequest && (await isSupabaseJwtExpired(refreshedAttempt, url))) return await expireSession();
+  return refreshedAttempt;
 }
 
 export async function fetchWithSupabasePublicShared(url: string, init: RequestInit = {}): Promise<Response> {

@@ -985,12 +985,27 @@ type ProviderEventRow = {
   processed_at: string | null;
 };
 
+async function getProviderEvent(providerEventId: string): Promise<ProviderEventRow | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/payment_provider_events?provider=eq.stripe&provider_event_id=eq.${encodeURIComponent(providerEventId)}&select=id,processed_at&limit=1`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as ProviderEventRow[];
+  return rows[0] ?? null;
+}
+
 async function upsertProviderEvent(event: StripeEvent): Promise<ProviderEventRow> {
   const res = await supabaseAdminFetch("/rest/v1/payment_provider_events?on_conflict=provider,provider_event_id", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=representation",
+      Prefer: "resolution=ignore-duplicates,return=representation",
     },
     body: JSON.stringify({
       provider: "stripe",
@@ -1001,9 +1016,12 @@ async function upsertProviderEvent(event: StripeEvent): Promise<ProviderEventRow
   });
   if (!res.ok) throw new Error(await res.text());
   const rows = (await res.json()) as ProviderEventRow[];
-  const row = rows[0];
-  if (!row?.id) throw new Error("Failed to upsert payment_provider_events row");
-  return row;
+  const inserted = rows[0];
+  if (inserted?.id) return inserted;
+
+  const existing = await getProviderEvent(event.id);
+  if (!existing?.id) throw new Error("Failed to resolve payment_provider_events row");
+  return existing;
 }
 
 async function markProviderEventProcessed(id: string): Promise<void> {

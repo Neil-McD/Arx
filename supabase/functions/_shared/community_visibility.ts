@@ -16,6 +16,6 @@ export function toCanonicalCommunityVisibility(
   return fallback;
 }
 
-export function isPublishedCommunityVisibility(raw: unknown): boolean {
+function isPublishedCommunityVisibility(raw: unknown): boolean {
   return toCanonicalCommunityVisibility(raw) === "published";
 }

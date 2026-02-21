@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { applyAppThemeAttributes, parseAppTheme, type AppTheme } from "../shared/theme";
 
 type ErrorBoundaryState = { error: Error | null };
 
@@ -57,6 +58,18 @@ class ErrorBoundary extends React.Component<
       </div>
     );
   }
+}
+
+function resolveInitialDesktopTheme(): AppTheme {
+  const stored = parseAppTheme(localStorage.getItem("arx-theme"));
+  if (stored) return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+try {
+  applyAppThemeAttributes(resolveInitialDesktopTheme(), document.documentElement);
+} catch {
+  applyAppThemeAttributes("dark", document.documentElement);
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

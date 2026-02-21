@@ -1,0 +1,69 @@
+---
+source: crates/noseyparker-cli/tests/scan/snippet_length/mod.rs
+expression: json_output
+---
+[
+  {
+    "comment": null,
+    "finding_id": "d551329ba5578559646aa49467be47e9d496578d",
+    "groups": [
+      "Z2hwX1hJeEI3S01OZEFyM3pxV3RRcWhFOTRxZ2xIcU96bjFEMXN0Zw=="
+    ],
+    "matches": [
+      {
+        "blob_id": "96add51d102b68a8eb16cd104f6a79edc27bb61d",
+        "blob_metadata": {
+          "charset": null,
+          "id": "96add51d102b68a8eb16cd104f6a79edc27bb61d",
+          "mime_essence": "text/plain",
+          "num_bytes": 1448
+        },
+        "comment": null,
+        "groups": [
+          "Z2hwX1hJeEI3S01OZEFyM3pxV3RRcWhFOTRxZ2xIcU96bjFEMXN0Zw=="
+        ],
+        "location": {
+          "offset_span": {
+            "end": 775,
+            "start": 735
+          },
+          "source_span": {
+            "end": {
+              "column": 51,
+              "line": 30
+            },
+            "start": {
+              "column": 12,
+              "line": 30
+            }
+          }
+        },
+        "provenance": [
+          {
+            "kind": "file",
+            "path": "<ROOT>/input.txt"
+          }
+        ],
+        "redundant_to": [],
+        "rule_name": "GitHub Personal Access Token",
+        "rule_structural_id": "f6c4fca24a1c7f275d51d2718a1585ca6e4ae664",
+        "rule_text_id": "np.github.1",
+        "score": null,
+        "snippet": {
+          "after": "\n\nfunction lorem(ipsum, dolor = ",
+          "before": "ta\nUSERNAME=the_dude\nGITHUB_KEY=",
+          "matching": "ghp_XIxB7KMNdAr3zqWtQqhE94qglHqOzn1D1stg"
+        },
+        "status": null,
+        "structural_id": "02f264f3a42f38d96d0069e4b91e3d3e66bf8b08"
+      }
+    ],
+    "mean_score": null,
+    "num_matches": 1,
+    "num_redundant_matches": 0,
+    "rule_name": "GitHub Personal Access Token",
+    "rule_structural_id": "f6c4fca24a1c7f275d51d2718a1585ca6e4ae664",
+    "rule_text_id": "np.github.1",
+    "statuses": []
+  }
+]

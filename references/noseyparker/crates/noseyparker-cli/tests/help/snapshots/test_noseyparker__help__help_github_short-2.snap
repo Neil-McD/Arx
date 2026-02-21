@@ -1,0 +1,26 @@
+---
+source: crates/noseyparker-cli/tests/help/mod.rs
+assertion_line: 140
+expression: stdout
+---
+Interact with GitHub
+
+Usage: noseyparker github [OPTIONS] <COMMAND>
+
+Commands:
+  repos  Interact with GitHub repositories
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --github-api-url <URL>  Use the specified URL for GitHub API access [default:
+                              https://api.github.com/] [aliases: --api-url]
+  -h, --help                  Print help (see more with '--help')
+
+Global Options:
+  -v, --verbose...       Enable verbose output
+  -q, --quiet            Suppress non-error feedback messages
+      --color <MODE>     Enable or disable colored output [default: auto] [possible values: auto,
+                         never, always]
+      --progress <MODE>  Enable or disable progress bars [default: auto] [possible values: auto,
+                         never, always]
+      --ignore-certs     Ignore validation of TLS certificates

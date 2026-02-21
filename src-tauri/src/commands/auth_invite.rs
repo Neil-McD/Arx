@@ -68,6 +68,319 @@ pub(crate) async fn chatgpt_login_cmd() -> Result<ChatgptAuthSummary, String> {
     Ok(summarize_chatgpt_auth(&stored))
 }
 
+#[derive(Clone, Deserialize)]
+pub(crate) struct ChatgptCloudTurnMessageInput {
+    role: String,
+    content: String,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct ChatgptCloudTurnResult {
+    text: String,
+    model_id: String,
+    inference_source: String,
+}
+
+fn normalize_chatgpt_cloud_turn_request(
+    model_id: &str,
+    messages: Vec<ChatgptCloudTurnMessageInput>,
+) -> Result<(Option<String>, Vec<serde_json::Value>), String> {
+    if model_id.is_empty() {
+        return Err("model_id is required".to_string());
+    }
+    if model_id.len() > 128 {
+        return Err("model_id is too long".to_string());
+    }
+    if messages.is_empty() {
+        return Err("messages are required".to_string());
+    }
+    if messages.len() > 80 {
+        return Err("messages exceed max count".to_string());
+    }
+
+    let mut instructions_parts: Vec<String> = Vec::new();
+    let mut input_items: Vec<serde_json::Value> = Vec::new();
+    let mut total_chars: usize = 0;
+
+    for msg in messages {
+        let role = msg.role.trim().to_lowercase();
+        let content = msg.content.trim();
+        if content.is_empty() {
+            continue;
+        }
+        total_chars = total_chars.saturating_add(content.len());
+        if total_chars > 250_000 {
+            return Err("messages exceed size budget".to_string());
+        }
+
+        match role.as_str() {
+            "system" => instructions_parts.push(content.to_string()),
+            "user" => input_items.push(serde_json::json!({
+                "role": "user",
+                "content": [{ "type": "input_text", "text": content }]
+            })),
+            "assistant" => input_items.push(serde_json::json!({
+                "role": "assistant",
+                "content": [{ "type": "output_text", "text": content }]
+            })),
+            _ => return Err("messages contain unsupported role".to_string()),
+        }
+    }
+
+    if input_items.is_empty() {
+        return Err("messages must include at least one user/assistant item".to_string());
+    }
+
+    let instructions = if instructions_parts.is_empty() {
+        None
+    } else {
+        Some(instructions_parts.join("\n\n"))
+    };
+
+    Ok((instructions, input_items))
+}
+
+fn parse_chatgpt_cloud_turn_response_bytes(
+    bytes: &[u8],
+    content_type: &str,
+) -> Result<(String, Option<String>), String> {
+    if content_type.contains("text/event-stream") {
+        let body = String::from_utf8_lossy(bytes);
+        let mut text = String::new();
+        let mut saw_delta = false;
+        let mut saw_done_text = false;
+        let mut model_id: Option<String> = None;
+
+        for raw_line in body.lines() {
+            let line = raw_line.trim();
+            if line.is_empty() || !line.starts_with("data:") {
+                continue;
+            }
+            let data = line.trim_start_matches("data:").trim();
+            if data == "[DONE]" {
+                break;
+            }
+
+            let parsed: serde_json::Value = match serde_json::from_str(data) {
+                Ok(value) => value,
+                Err(_) => continue,
+            };
+
+            if model_id.is_none() {
+                model_id = parsed
+                    .get("response")
+                    .and_then(|v| v.get("model"))
+                    .and_then(|v| v.as_str())
+                    .map(|v| v.to_string())
+                    .or_else(|| {
+                        parsed
+                            .get("model")
+                            .and_then(|v| v.as_str())
+                            .map(|v| v.to_string())
+                    });
+            }
+
+            let kind = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            if kind == "error" {
+                let message = parsed
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        parsed
+                            .get("error")
+                            .and_then(|v| v.get("message"))
+                            .and_then(|v| v.as_str())
+                    })
+                    .unwrap_or("ChatGPT inference failed.");
+                return Err(message.to_string());
+            }
+
+            if kind == "response.output_text.delta" {
+                if let Some(delta) = parsed.get("delta").and_then(|v| v.as_str()) {
+                    if !delta.is_empty() {
+                        saw_delta = true;
+                        text.push_str(delta);
+                    }
+                }
+                continue;
+            }
+
+            if kind == "response.output_text.done" && !saw_delta && !saw_done_text {
+                if let Some(done_text) = parsed.get("text").and_then(|v| v.as_str()) {
+                    if !done_text.trim().is_empty() {
+                        saw_done_text = true;
+                        text.push_str(done_text);
+                    }
+                }
+                continue;
+            }
+
+            if kind == "response.output_item.done" && !saw_delta && !saw_done_text {
+                let Some(item) = parsed.get("item") else {
+                    continue;
+                };
+                let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if item_type != "message" {
+                    continue;
+                }
+                let Some(content_items) = item.get("content").and_then(|v| v.as_array()) else {
+                    continue;
+                };
+                let mut done_text = String::new();
+                for part in content_items {
+                    let part_type = part.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if part_type != "output_text" {
+                        continue;
+                    }
+                    if let Some(value) = part.get("text").and_then(|v| v.as_str()) {
+                        if !value.is_empty() {
+                            done_text.push_str(value);
+                        }
+                    }
+                }
+                if !done_text.trim().is_empty() {
+                    saw_done_text = true;
+                    text.push_str(&done_text);
+                }
+            }
+        }
+
+        return Ok((text, model_id));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "ChatGPT returned invalid JSON".to_string())?;
+    let model_id = parsed
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+        .or_else(|| {
+            parsed
+                .get("response")
+                .and_then(|v| v.get("model"))
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+        });
+
+    if let Some(error_message) = parsed
+        .get("error")
+        .and_then(|v| v.get("message"))
+        .and_then(|v| v.as_str())
+    {
+        return Err(error_message.to_string());
+    }
+
+    let text = parsed
+        .get("output_text")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+        .or_else(|| {
+            parsed
+                .get("output")
+                .and_then(|v| v.as_array())
+                .and_then(|items| items.first())
+                .and_then(|item| item.get("content"))
+                .and_then(|v| v.as_array())
+                .and_then(|parts| parts.first())
+                .and_then(|part| part.get("text"))
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string())
+        })
+        .unwrap_or_default();
+
+    Ok((text, model_id))
+}
+
+#[tauri::command]
+pub(crate) async fn chatgpt_cloud_turn_cmd(
+    model_id: String,
+    messages: Vec<ChatgptCloudTurnMessageInput>,
+    max_tokens: Option<i64>,
+) -> Result<ChatgptCloudTurnResult, String> {
+    let model_id = model_id.trim().to_string();
+    let (instructions, input_items) = normalize_chatgpt_cloud_turn_request(&model_id, messages)?;
+    let max_tokens = max_tokens.filter(|value| *value > 0);
+
+    let mut request_body = serde_json::json!({
+        "model": model_id,
+        "store": false,
+        "stream": true,
+        "input": input_items,
+    });
+    if let Some(value) = instructions {
+        request_body["instructions"] = serde_json::Value::String(value);
+    }
+    if let Some(value) = max_tokens {
+        request_body["max_output_tokens"] = serde_json::json!(value);
+    }
+    let request_bytes =
+        serde_json::to_vec(&request_body).map_err(|e| format!("Request serialization failed: {}", e))?;
+
+    let mut first_failure: Option<String> = None;
+    for attempt in 0..2 {
+        let auth = crate::get_chatgpt_auth_for_inference_with_timeout(
+            crate::CHATGPT_AUTH_PREFETCH_TIMEOUT_MS,
+        )
+        .await
+        .ok_or_else(|| "ChatGPT session not available. Sign in again.".to_string())?;
+
+        let mut request = reqwest::Client::new()
+            .post(crate::CHATGPT_CODEX_RESPONSES_URL)
+            .header("Authorization", format!("Bearer {}", auth.access_token))
+            .header("User-Agent", "codex-cli")
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream");
+        if let Some(account_id) = auth.account_id.as_deref().filter(|value| !value.trim().is_empty()) {
+            request = request.header("ChatGPT-Account-Id", account_id.trim());
+        }
+
+        let response = request
+            .body(request_bytes.clone())
+            .send()
+            .await
+            .map_err(|e| format!("ChatGPT request failed: {}", e))?;
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let body = response
+            .bytes()
+            .await
+            .map_err(|e| format!("ChatGPT response read failed: {}", e))?;
+
+        if !status.is_success() {
+            let detail = String::from_utf8_lossy(&body).trim().to_string();
+            let failure = if detail.is_empty() {
+                format!("ChatGPT inference failed (HTTP {}).", status.as_u16())
+            } else {
+                format!("ChatGPT inference failed (HTTP {}): {}", status.as_u16(), detail)
+            };
+            if attempt == 0 {
+                first_failure = Some(failure);
+                continue;
+            }
+            return Err(first_failure.unwrap_or(failure));
+        }
+
+        let (text, resolved_model_id) =
+            parse_chatgpt_cloud_turn_response_bytes(&body, content_type.as_str())?;
+        let text = text.trim().to_string();
+        if text.is_empty() {
+            return Err("ChatGPT returned an empty response.".to_string());
+        }
+        return Ok(ChatgptCloudTurnResult {
+            text,
+            model_id: resolved_model_id.unwrap_or_else(|| model_id.clone()),
+            inference_source: "chatgpt".to_string(),
+        });
+    }
+
+    Err(first_failure.unwrap_or_else(|| "ChatGPT inference failed.".to_string()))
+}
+
 #[tauri::command]
 pub(crate) fn get_supabase_session_cmd() -> Result<Option<String>, String> {
     let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;

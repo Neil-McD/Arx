@@ -1,0 +1,18 @@
+{
+  "active_functions": [
+    { "slug": "agent_turn", "verify_jwt": true },
+    { "slug": "builder_billing_portal", "verify_jwt": true },
+    { "slug": "builder_checkout_start", "verify_jwt": true },
+    { "slug": "checkout_finalize", "verify_jwt": false },
+    { "slug": "checkout_start", "verify_jwt": false },
+    { "slug": "community_research", "verify_jwt": true },
+    { "slug": "connect_onboard_start", "verify_jwt": true },
+    { "slug": "platform_agent_infer", "verify_jwt": true },
+    { "slug": "public_discover", "verify_jwt": false },
+    { "slug": "public_funnel", "verify_jwt": false },
+    { "slug": "public_turn", "verify_jwt": false },
+    { "slug": "stripe_webhook", "verify_jwt": false },
+    { "slug": "voice_transcribe", "verify_jwt": true }
+  ],
+  "inactive_functions": []
+}

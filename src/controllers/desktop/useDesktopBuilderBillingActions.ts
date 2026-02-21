@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import {
-  buildBuilderBillingRedirectUrls,
-  normalizeBuilderCheckoutTier,
+  buildBuilderCheckoutRequestPayload,
+  buildBuilderConnectRequestPayload,
+  buildBuilderPortalRequestPayload,
 } from "../../../shared/builderBilling";
 import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
 import {
@@ -56,34 +57,31 @@ export function useDesktopBuilderBillingActions(args: UseDesktopBuilderBillingAc
       if (!origin) {
         throw new Error("Missing public app URL. Set VITE_PUBLIC_APP_URL to enable billing links.");
       }
-      const urls = buildBuilderBillingRedirectUrls({
+      return buildBuilderCheckoutRequestPayload({
         origin,
         source: "desktop",
         context,
+        tier,
       });
-      return {
-        tier: normalizeBuilderCheckoutTier(tier),
-        successUrl: urls.successUrl,
-        cancelUrl: urls.cancelUrl,
-      };
     },
     buildPortalPayload: ({ context }: { context: BuilderUpgradeContext }) => {
       const origin = args.getPublicAppBaseUrl();
-      const returnUrl = origin
-        ? buildBuilderBillingRedirectUrls({
+      return origin
+        ? buildBuilderPortalRequestPayload({
             origin,
             source: "desktop",
             context,
-          }).returnUrl
-        : window.location.href;
-      return { returnUrl };
+          })
+        : { returnUrl: window.location.href };
     },
     buildConnectPayload: () => {
       const origin = args.getPublicAppBaseUrl();
-      return {
-        returnUrl: origin ? `${origin}/?payouts=return` : window.location.href,
-        refreshUrl: origin ? `${origin}/?payouts=refresh` : window.location.href,
-      };
+      return origin
+        ? buildBuilderConnectRequestPayload({
+            origin,
+            returnStatus: "return",
+          })
+        : { returnUrl: window.location.href, refreshUrl: window.location.href };
     },
     openUrl: (_kind, url) => args.openExternalUrl(url),
   });

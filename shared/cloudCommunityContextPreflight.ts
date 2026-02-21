@@ -94,7 +94,7 @@ export type CloudCommunityContextPreflightResult = {
   communityContextDiagnostics: Record<string, unknown> | null;
 };
 
-export function getCommunityContextFailureClass(
+function getCommunityContextFailureClass(
   diagnostics: Record<string, unknown> | null | undefined,
 ): string | null {
   if (!diagnostics || typeof diagnostics !== "object" || Array.isArray(diagnostics)) return null;

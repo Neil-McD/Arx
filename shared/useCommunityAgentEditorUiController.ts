@@ -27,7 +27,6 @@ type UseCommunityAgentEditorUiControllerArgs<
   buildDefaultCommunityLanding: (communityName: string) => LandingT;
   normalizeCommunityAgentLanding: (input: unknown) => LandingT | null;
 
-  setCommunityAgentSelectedSlot: Dispatch<SetStateAction<number>>;
   setCommunityAgentDraftName: Dispatch<SetStateAction<string>>;
   setCommunityAgentDraftLanding: Dispatch<SetStateAction<LandingT>>;
   setCommunityAgentDraftSystemPrompt: Dispatch<SetStateAction<string>>;
@@ -35,11 +34,11 @@ type UseCommunityAgentEditorUiControllerArgs<
   setCommunityAgentPreviewTabId: Dispatch<SetStateAction<string>>;
   setCommunityAgentLandingEdit: Dispatch<SetStateAction<EditT | null>>;
   setCommunityAgentLandingEditValue: Dispatch<SetStateAction<string>>;
-  setCommunityAgentSavedSlot: Dispatch<SetStateAction<number | null>>;
 
   communityAgentDraftDirtyRef: MutableRefObject<boolean>;
-  communityAgentSavedTimerRef: MutableRefObject<number | null>;
 };
+
+const COMMUNITY_AGENT_PRIMARY_SLOT = 1;
 
 export function useCommunityAgentEditorUiController<
   LandingT extends LandingLike,
@@ -51,18 +50,6 @@ export function useCommunityAgentEditorUiController<
 
   const markCommunityAgentDraftDirty = useCallback(() => {
     argsRef.current.communityAgentDraftDirtyRef.current = true;
-  }, []);
-
-  const flashCommunityAgentTemplateSaved = useCallback((slot: number) => {
-    const current = argsRef.current;
-    current.setCommunityAgentSavedSlot(slot);
-    if (current.communityAgentSavedTimerRef.current) {
-      window.clearTimeout(current.communityAgentSavedTimerRef.current);
-    }
-    current.communityAgentSavedTimerRef.current = window.setTimeout(() => {
-      current.setCommunityAgentSavedSlot(null);
-      current.communityAgentSavedTimerRef.current = null;
-    }, 1200);
   }, []);
 
   const beginCommunityAgentLandingEdit = useCallback((edit: EditT, value: string) => {
@@ -77,10 +64,9 @@ export function useCommunityAgentEditorUiController<
     current.setCommunityAgentLandingEditValue("");
   }, []);
 
-  const hydrateCommunityAgentEditor = useCallback((slot: number, drafts: DraftT[]) => {
+  const hydrateCommunityAgentEditor = useCallback((_slot: number, drafts: DraftT[]) => {
     const current = argsRef.current;
-    const safeSlot = Math.max(1, Math.min(3, Math.floor(slot)));
-    const row = drafts.find((draft) => draft.slot === safeSlot) ?? null;
+    const row = drafts.find((draft) => draft.slot === COMMUNITY_AGENT_PRIMARY_SLOT) ?? null;
     const communityName = current.activeCommunityId
       ? (current.communities.find((community) => community.id === current.activeCommunityId)?.name ?? "").trim()
       : "";
@@ -88,7 +74,6 @@ export function useCommunityAgentEditorUiController<
       ? current.buildDefaultCommunityLanding(communityName)
       : current.defaultLanding;
     const landing = current.normalizeCommunityAgentLanding(row?.landing_json) ?? fallbackLanding;
-    current.setCommunityAgentSelectedSlot(safeSlot);
     current.setCommunityAgentDraftName(row?.name ?? "");
     current.setCommunityAgentDraftLanding(landing);
     current.setCommunityAgentDraftSystemPrompt(row?.system_prompt ?? "");
@@ -101,7 +86,6 @@ export function useCommunityAgentEditorUiController<
 
   return {
     markCommunityAgentDraftDirty,
-    flashCommunityAgentTemplateSaved,
     beginCommunityAgentLandingEdit,
     clearCommunityAgentLandingEdit,
     hydrateCommunityAgentEditor,

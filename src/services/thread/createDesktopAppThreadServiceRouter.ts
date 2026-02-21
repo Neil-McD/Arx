@@ -38,7 +38,6 @@ type CreateDesktopAppThreadServiceRouterDeps = {
     session: SupabaseSession;
     sendPolicySnapshot?: {
       selectedModelId?: string | null;
-      hasChatgptAuth?: boolean;
     };
     onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
   }) => Promise<void>;

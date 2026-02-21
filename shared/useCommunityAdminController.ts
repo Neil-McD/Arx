@@ -1,41 +1,19 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-
-type SessionLike = {
-  user: {
-    id: string;
-  };
-};
-
-type CommunityMemberLike = {
-  user_id: string;
-};
-
-type UserProfileLike = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-};
-
-type UserProfileDetailLike = UserProfileLike & {
-  bio: string | null;
-};
-
-type AnalyticsSummaryLike = {
-  total_members: number | null;
-  new_members_window: number | null;
-  active_members_window: number | null;
-  retention_window: number | null;
-  total_resources: number | null;
-  resources_added_window: number | null;
-};
-
-type AnalyticsPointLike = {
-  label: string;
-  value: number;
-};
-
-type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
-type AnalyticsBucket = "day" | "week" | "month";
+import {
+  type AnalyticsPointLike,
+  type AnalyticsRange,
+  type AnalyticsSummaryLike,
+  type CommunityMemberLike,
+  type SessionLike,
+  type UserProfileDetailLike,
+  type UserProfileLike,
+  analyticsBucketLabel,
+  buildAnalyticsSeries,
+  emptyAnalyticsSummary,
+  resolveAnalyticsBucket,
+  resolveAnalyticsWindowStart,
+  trimProfileFields,
+} from "./communityAdminCore";
 
 type UseCommunityAdminControllerArgs<
   SessionT extends SessionLike,
@@ -209,8 +187,7 @@ export function useCommunityAdminController<
       return;
     }
 
-    const trimmedName = current.profileName.trim();
-    const trimmedBio = current.profileBio.trim();
+    const { trimmedName, trimmedBio } = trimProfileFields(current.profileName, current.profileBio);
     if (trimmedName !== current.profileName) current.setProfileName(trimmedName);
     if (trimmedBio !== current.profileBio) current.setProfileBio(trimmedBio);
 
@@ -285,30 +262,13 @@ export function useCommunityAdminController<
     current.setCommunityRevenueError(null);
 
     const now = Date.now();
-    const rangeToWindowStart = (): Date | null => {
-      switch (range) {
-        case "7d":
-          return new Date(now - 7 * 86400000);
-        case "30d":
-          return new Date(now - 30 * 86400000);
-        case "90d":
-          return new Date(now - 90 * 86400000);
-        case "1y":
-          return new Date(now - 365 * 86400000);
-        case "all": {
-          if (!communityCreatedAt) return null;
-          const created = new Date(communityCreatedAt);
-          return Number.isNaN(created.getTime()) ? null : created;
-        }
-        default:
-          return new Date(now - 30 * 86400000);
-      }
-    };
-
-    const windowStart = rangeToWindowStart();
+    const windowStart = resolveAnalyticsWindowStart({
+      range,
+      nowMs: now,
+      communityCreatedAt,
+    });
     const sinceWindowIso = windowStart ? windowStart.toISOString() : null;
-    const chartBucket: AnalyticsBucket =
-      range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
+    const chartBucket = resolveAnalyticsBucket(range);
 
     const fetchCount = async (queryUrl: string): Promise<number | null> => {
       let response: Response;
@@ -348,60 +308,6 @@ export function useCommunityAdminController<
       } catch {
         return null;
       }
-    };
-
-    const startOfBucket = (date: Date, bucket: AnalyticsBucket): Date => {
-      if (bucket === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
-      if (bucket === "week") {
-        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const day = d.getDay();
-        const diff = (day + 6) % 7;
-        d.setDate(d.getDate() - diff);
-        return d;
-      }
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    };
-
-    const addBucket = (date: Date, bucket: AnalyticsBucket): Date => {
-      if (bucket === "month") return new Date(date.getFullYear(), date.getMonth() + 1, 1);
-      if (bucket === "week") return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 7);
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    };
-
-    const bucketKey = (date: Date, bucket: AnalyticsBucket): string => {
-      if (bucket === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      return current.dateKeyLocal(date);
-    };
-
-    const bucketLabel = (date: Date, bucket: AnalyticsBucket): string => {
-      if (bucket === "month") return date.toLocaleDateString([], { month: "short", year: "2-digit" });
-      return date.toLocaleDateString([], { month: "short", day: "numeric" });
-    };
-
-    const buildSeries = (
-      rows: Array<{ created_at: string }>,
-      start: Date,
-      bucket: AnalyticsBucket,
-    ): AnalyticsPointLike[] => {
-      const end = new Date();
-      const startBucket = startOfBucket(start, bucket);
-      const endBucket = startOfBucket(end, bucket);
-
-      const counts = new Map<string, number>();
-      for (const row of rows) {
-        const created = new Date(row.created_at);
-        if (Number.isNaN(created.getTime())) continue;
-        if (created < startBucket) continue;
-        const key = bucketKey(startOfBucket(created, bucket), bucket);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-
-      const points: AnalyticsPointLike[] = [];
-      for (let cursor = startBucket; cursor <= endBucket; cursor = addBucket(cursor, bucket)) {
-        const key = bucketKey(cursor, bucket);
-        points.push({ label: bucketLabel(cursor, bucket), value: counts.get(key) ?? 0 });
-      }
-      return points;
     };
 
     try {
@@ -486,7 +392,12 @@ export function useCommunityAdminController<
         resources_added_window: resourcesAddedWindow ?? totalResources,
       });
       current.setCommunityAnalyticsSeries(
-        buildSeries(memberJoinsWindow, windowStart ?? new Date(now - 30 * 86400000), chartBucket),
+        buildAnalyticsSeries({
+          rows: memberJoinsWindow,
+          start: windowStart ?? new Date(now - 30 * 86400000),
+          bucket: chartBucket,
+          dateKeyLocal: current.dateKeyLocal,
+        }),
       );
 
       try {
@@ -503,7 +414,12 @@ export function useCommunityAdminController<
           const message = await current.readSupabaseError(response);
           if (message.includes("schema cache")) {
             current.setCommunityRevenueSeries(
-              buildSeries([], windowStart ?? new Date(now - 30 * 86400000), chartBucket),
+              buildAnalyticsSeries({
+                rows: [],
+                start: windowStart ?? new Date(now - 30 * 86400000),
+                bucket: chartBucket,
+                dateKeyLocal: current.dateKeyLocal,
+              }),
             );
             current.setCommunityRevenueMeta(null);
             current.setCommunityRevenueError(null);
@@ -530,7 +446,7 @@ export function useCommunityAdminController<
             rows.map((row) => {
               const date = new Date(row.bucket_start);
               return {
-                label: bucketLabel(date, chartBucket),
+                label: analyticsBucketLabel(date, chartBucket),
                 value: Number(row.net_base_units ?? 0) || 0,
               };
             }),
@@ -555,14 +471,7 @@ export function useCommunityAdminController<
 
   const resetCommunityAnalytics = useCallback(() => {
     const current = argsRef.current;
-    current.setCommunityAnalyticsSummary({
-      total_members: null,
-      new_members_window: null,
-      active_members_window: null,
-      retention_window: null,
-      total_resources: null,
-      resources_added_window: null,
-    });
+    current.setCommunityAnalyticsSummary(emptyAnalyticsSummary());
     current.setCommunityAnalyticsSeries([]);
     current.setCommunityRevenueSeries([]);
     current.setCommunityRevenueMeta(null);
@@ -571,39 +480,61 @@ export function useCommunityAdminController<
     current.setIsLoadingCommunityAnalytics(false);
   }, []);
 
+  const refreshCommunityMembershipViews = useCallback(async (communityId: string, session: SessionT) => {
+    const current = argsRef.current;
+    await loadCommunityMembers(communityId, session, { includeStatus: current.getMemberRefreshIncludeStatus() });
+    await current.reloadCommunities(session);
+    await current.reloadCommunityAccess(communityId, session);
+  }, [loadCommunityMembers]);
+
+  const runCommunityMemberMutation = useCallback(async (params: {
+    session: SessionT;
+    rpcName: "set_member_role" | "remove_member";
+    payload: Record<string, unknown>;
+    warnLabel: string;
+  }): Promise<void> => {
+    const current = argsRef.current;
+    const url = current.getSupabaseUrl();
+    if (!url) return;
+    try {
+      const response = await current.fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/${params.rpcName}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params.payload),
+        },
+        params.session,
+      );
+      if (!response.ok) {
+        const message = await current.readSupabaseError(response);
+        console.warn(`${params.warnLabel}:`, message);
+      }
+    } catch (error) {
+      console.warn(`${params.warnLabel}:`, error);
+    }
+  }, []);
+
   const handleSetCommunityMemberRole = useCallback(async (userId: string, role: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
     const session = current.supabaseSession;
     if (!session || !communityId) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/set_member_role`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_user_id: userId,
-            p_role: role,
-          }),
-        },
+      await runCommunityMemberMutation({
         session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        console.warn("Failed to set member role:", message);
-      }
-    } catch (error) {
-      console.warn("Failed to set member role:", error);
+        rpcName: "set_member_role",
+        payload: {
+          p_community_id: communityId,
+          p_user_id: userId,
+          p_role: role,
+        },
+        warnLabel: "Failed to set member role",
+      });
     } finally {
-      await loadCommunityMembers(communityId, session, { includeStatus: current.getMemberRefreshIncludeStatus() });
-      await current.reloadCommunities(session);
-      await current.reloadCommunityAccess(communityId, session);
+      await refreshCommunityMembershipViews(communityId, session);
     }
-  }, [loadCommunityMembers]);
+  }, [refreshCommunityMembershipViews, runCommunityMemberMutation]);
 
   const handleRemoveCommunityMember = useCallback(async (userId: string) => {
     const current = argsRef.current;
@@ -614,33 +545,20 @@ export function useCommunityAdminController<
       ? current.confirmAction("Remove this member?")
       : window.confirm("Remove this member?");
     if (!confirmed) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/remove_member`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_user_id: userId,
-          }),
-        },
+      await runCommunityMemberMutation({
         session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        console.warn("Failed to remove member:", message);
-      }
-    } catch (error) {
-      console.warn("Failed to remove member:", error);
+        rpcName: "remove_member",
+        payload: {
+          p_community_id: communityId,
+          p_user_id: userId,
+        },
+        warnLabel: "Failed to remove member",
+      });
     } finally {
-      await loadCommunityMembers(communityId, session, { includeStatus: current.getMemberRefreshIncludeStatus() });
-      await current.reloadCommunities(session);
-      await current.reloadCommunityAccess(communityId, session);
+      await refreshCommunityMembershipViews(communityId, session);
     }
-  }, [loadCommunityMembers]);
+  }, [refreshCommunityMembershipViews, runCommunityMemberMutation]);
 
   return {
     loadCommunityMembers,

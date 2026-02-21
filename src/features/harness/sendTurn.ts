@@ -1,3 +1,5 @@
+import type { ThreadServiceTurnStreamEvent } from "../../../shared/threadService";
+
 export type SendMessageAttachment = {
   path: string;
   name: string;
@@ -19,6 +21,7 @@ type SendTurnParams = {
   supabase_url: string;
   supabase_anon_key: string;
   supabase_access_token: string;
+  onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
 
 type SendMessageFlowDeps<TSession> = {
@@ -40,7 +43,8 @@ type SendMessageFlowDeps<TSession> = {
   appendOptimisticUserMessage: (threadId: string, contentJson: string) => void;
   touchThreadForOptimisticMessage: (threadId: string, userText: string) => void;
   ensureThreadReadyForSend: (threadId: string, session: TSession) => Promise<boolean>;
-  clearStreamingRefs: () => void;
+  prepareSessionForSend?: (session: TSession, threadId: string) => Promise<TSession>;
+  clearStreamingState: () => void;
   scheduleStreamingUpdate: () => void;
   sendTurn: (params: SendTurnParams) => Promise<void>;
   getSupabaseUrl: () => string | null;
@@ -125,17 +129,26 @@ export async function executeSendMessageFlow<TSession>(
 
     const ensured = await deps.ensureThreadReadyForSend(threadId, session);
     if (!ensured) {
+      deps.traceThreadContext?.("send_turn_blocked_not_ready", {
+        thread_id: threadId,
+      });
       deps.setCommandInput(userText);
       deps.setAttachments(currentAttachments);
       await deps.loadMessages(threadId);
       return;
     }
 
+    // Read the latest auth state after readiness preflight. Readiness may refresh
+    // and rotate tokens; using a pre-refresh captured session here can send stale JWTs.
+    session = deps.getSession();
+    if (deps.prepareSessionForSend) {
+      session = await deps.prepareSessionForSend(session, threadId);
+    }
+
     deps.appendOptimisticUserMessage(threadId, contentJson);
     deps.touchThreadForOptimisticMessage(threadId, userText);
 
-    deps.clearStreamingRefs();
-    deps.scheduleStreamingUpdate();
+    deps.clearStreamingState();
 
     const cwd = deps.effectiveCwd || "";
     const supabase_url = deps.getSupabaseUrl() ?? "";
@@ -162,6 +175,7 @@ export async function executeSendMessageFlow<TSession>(
 
     await deps.loadMessages(threadId);
   } catch (error) {
+    deps.clearStreamingState();
     const message = getErrorMessage(error);
     const targetThreadId = threadId ?? deps.activeThreadId;
     deps.traceThreadContext?.("send_turn_error", {
@@ -173,13 +187,16 @@ export async function executeSendMessageFlow<TSession>(
       return;
     }
 
-    await deps.addMessage({
-      thread_id: targetThreadId,
-      role: "assistant",
-      content_json: JSON.stringify({ text: `Engine error: ${message}` }),
-    });
-
-    await deps.loadMessages(targetThreadId);
+    try {
+      await deps.addMessage({
+        thread_id: targetThreadId,
+        role: "assistant",
+        content_json: JSON.stringify({ text: `Engine error: ${message}` }),
+      });
+      await deps.loadMessages(targetThreadId);
+    } catch {
+      deps.setMemoryToast(`Failed to send message: ${message}`);
+    }
   } finally {
     deps.traceThreadContext?.("send_turn_finalize", {
       thread_id: threadId ?? deps.activeThreadId,

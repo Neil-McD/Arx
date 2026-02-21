@@ -1,9 +1,9 @@
-export const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
-export const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
-export const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
-export const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
-export const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
-export const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
+const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
+const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
+const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
+const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
+const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
+const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
@@ -208,7 +208,7 @@ export class SupabaseRpcError extends Error {
   }
 }
 
-export function isSupabaseRpcError(error: unknown): error is SupabaseRpcError {
+function isSupabaseRpcError(error: unknown): error is SupabaseRpcError {
   return error instanceof SupabaseRpcError;
 }
 

@@ -16,11 +16,8 @@ type CreateDesktopCloudLensSyncDeps = {
   fetchWithSupabaseAuth: FetchWithSupabaseAuth;
   readSupabaseError: (response: Response) => Promise<string>;
   toUnixSecondsFromIso: (value: string | null | undefined) => number | null;
+  getThreads: () => ThreadRecord[];
   setThreads: (updater: (prev: ThreadRecord[]) => ThreadRecord[]) => void;
-  getCloudThreadRecord: (
-    threadId: string,
-    session: SupabaseSession,
-  ) => Promise<ThreadRecord | null>;
 };
 
 type SetThreadCommunityLensInCloudParams = {
@@ -144,6 +141,18 @@ export function createDesktopCloudLensSync(deps: CreateDesktopCloudLensSyncDeps)
     ) {
       throw new Error("Thread not found.");
     }
-    return deps.getCloudThreadRecord(params.threadId, params.session);
+
+    const current = deps.getThreads().find((thread) => thread.id === params.threadId) ?? null;
+    if (!current) return null;
+    if (!updated) return current;
+
+    const updatedAt = deps.toUnixSecondsFromIso(updated.updated_at) ?? current.updated_at;
+    return {
+      ...current,
+      community_id: updated.community_id ?? null,
+      context_version: updated.context_version,
+      updated_at: updatedAt,
+      last_event_at: Math.max(current.last_event_at ?? 0, updatedAt),
+    };
   };
 }

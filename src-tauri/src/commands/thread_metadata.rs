@@ -6,7 +6,9 @@ fn resolve_workspace_fingerprint_for_binding(
     let cleaned_path = workspace_path
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())?;
-    let thread = crate::db::get_thread_by_id(conn, thread_id).ok().flatten()?;
+    let thread = crate::db::get_thread_by_id(conn, thread_id)
+        .ok()
+        .flatten()?;
 
     if let Some(project_id) = thread
         .project_id
@@ -14,17 +16,21 @@ fn resolve_workspace_fingerprint_for_binding(
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
     {
-        if let Some(project) = crate::db::get_project_by_id(conn, project_id).ok().flatten() {
-            if let Some(fingerprint) =
-                crate::workspace_identity::normalize_workspace_fingerprint(Some(project.fingerprint.as_str()))
-            {
+        if let Some(project) = crate::db::get_project_by_id(conn, project_id)
+            .ok()
+            .flatten()
+        {
+            if let Some(fingerprint) = crate::workspace_identity::normalize_workspace_fingerprint(
+                Some(project.fingerprint.as_str()),
+            ) {
                 return Some(fingerprint);
             }
         }
     }
 
-    let existing_fingerprint =
-        crate::workspace_identity::normalize_workspace_fingerprint(thread.workspace_fingerprint.as_deref())?;
+    let existing_fingerprint = crate::workspace_identity::normalize_workspace_fingerprint(
+        thread.workspace_fingerprint.as_deref(),
+    )?;
     let existing_path = thread
         .workspace_path
         .as_deref()
@@ -55,7 +61,8 @@ pub(crate) fn set_thread_workspace_cmd(
             return Err("workspace_path must be an absolute path".to_string());
         }
     }
-    let workspace_fingerprint = resolve_workspace_fingerprint_for_binding(&conn, &thread_id, cleaned);
+    let workspace_fingerprint =
+        resolve_workspace_fingerprint_for_binding(&conn, &thread_id, cleaned);
     let scope_id = cleaned
         .map(|path| {
             crate::workspace_identity::workspace_scope_id(path, workspace_fingerprint.as_deref())

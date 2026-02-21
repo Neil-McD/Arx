@@ -128,7 +128,7 @@ export function useCommunityCreateController<
     const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
-    if ((tier === "pro" || tier === "architect") && max > 0 && ownedCount >= max) {
+    if (tier === "pro" && max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
       return;
     }

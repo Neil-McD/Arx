@@ -1,35 +1,30 @@
-type CommunityRailCommunity = {
-  id: string;
-  name: string;
-  avatar_url?: string | null;
-};
+import { useMemo } from "react";
+import { useRailPointerReorder } from "../../shared/useRailPointerReorder";
+import type { DesktopCommunityRailActions, DesktopCommunityRailState } from "./desktopCommunityRailContracts";
 
 type DesktopCommunityRailProps = {
-  activePage: "workspace" | "community" | "discover";
-  activeView: "home" | "settings";
-  communities: CommunityRailCommunity[];
-  activeCommunityId: string | null;
-  emptyMessage: string | null;
-  getCommunityInitials: (name: string) => string;
-  onOpenDiscover: () => void;
-  onSelectCommunity: (communityId: string) => void;
-  onOpenCreateCommunity: () => void;
-  onToggleSettings: () => void;
+  state: DesktopCommunityRailState;
+  actions: DesktopCommunityRailActions;
 };
 
 export function DesktopCommunityRail(props: DesktopCommunityRailProps) {
+  const { state, actions } = props;
   const {
     activePage,
     activeView,
     communities,
     activeCommunityId,
     emptyMessage,
-    getCommunityInitials,
-    onOpenDiscover,
-    onSelectCommunity,
-    onOpenCreateCommunity,
-    onToggleSettings,
-  } = props;
+  } = state;
+  const communityIds = useMemo(() => communities.map((community) => community.id), [communities]);
+  const canReorderCommunities = Boolean(actions.onMoveCommunityToIndex && communities.length > 1);
+  const { setContainerElement, getItemBindings, draggingId } = useRailPointerReorder({
+    itemIds: communityIds,
+    enabled: canReorderCommunities,
+    onMoveToIndex: (draggedId, targetIndex) => {
+      actions.onMoveCommunityToIndex?.(draggedId, targetIndex);
+    },
+  });
 
   return (
     <aside className="rail community-rail" aria-label="Communities">
@@ -37,7 +32,7 @@ export function DesktopCommunityRail(props: DesktopCommunityRailProps) {
         <button
           type="button"
           className={`community-rail-button${activePage === "discover" ? " active" : ""}`}
-          onClick={onOpenDiscover}
+          onClick={actions.onOpenDiscover}
           title="Discover communities"
           aria-label="Discover communities"
         >
@@ -48,32 +43,42 @@ export function DesktopCommunityRail(props: DesktopCommunityRailProps) {
           </svg>
         </button>
         <div className="community-rail-divider" />
-        {communities.map((community) => (
-          <button
-            key={community.id}
-            type="button"
-            className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
-            onClick={() => onSelectCommunity(community.id)}
-            title={community.name}
-          >
-            {community.avatar_url ? (
-              <img
-                className="community-rail-avatar"
-                src={community.avatar_url}
-                alt={community.name}
-                loading="lazy"
-              />
-            ) : (
-              <span className="community-rail-initials">{getCommunityInitials(community.name)}</span>
-            )}
-          </button>
-        ))}
+        <div className="community-rail-list" ref={setContainerElement}>
+          {communities.map((community) => {
+            const bindings = getItemBindings(community.id);
+            return (
+              <button
+                key={community.id}
+                type="button"
+                ref={bindings.ref}
+                className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}${draggingId === community.id ? " is-dragging" : ""}${canReorderCommunities ? " reorder-enabled" : ""}`}
+                onClick={() => actions.onSelectCommunity(community.id)}
+                onClickCapture={bindings.onClickCapture}
+                onPointerDown={bindings.onPointerDown}
+                style={bindings.style}
+                title={community.name}
+              >
+                {community.avatar_url ? (
+                  <img
+                    className="community-rail-avatar"
+                    src={community.avatar_url}
+                    alt={community.name}
+                    loading="lazy"
+                    draggable={false}
+                  />
+                ) : (
+                  <span className="community-rail-initials">{actions.getCommunityInitials(community.name)}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
         {emptyMessage && <div className="community-rail-empty">{emptyMessage}</div>}
         <div className="community-rail-divider" />
         <button
           type="button"
           className="community-rail-button community-rail-add"
-          onClick={onOpenCreateCommunity}
+          onClick={actions.onOpenCreateCommunity}
           title="Create community"
           aria-label="Create community"
         >
@@ -84,7 +89,7 @@ export function DesktopCommunityRail(props: DesktopCommunityRailProps) {
         <button
           type="button"
           className={`community-rail-button${activeView === "settings" ? " active" : ""}`}
-          onClick={onToggleSettings}
+          onClick={actions.onToggleSettings}
           title="Settings"
           aria-label="Settings"
         >

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, type Dispatch, type SetStateAction } from "react";
+import { applyAppThemeAttributes, type AppTheme } from "../../../../shared/theme";
 
 type ProfileDraftLike = {
   name: string;
@@ -9,7 +10,7 @@ type ProfileDraftLike = {
 
 export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   communityAnalyticsRange: string;
-  appTheme: string;
+  appTheme: AppTheme;
   profileStorageUserId: string;
   profileName: string;
   profileUsername: string;
@@ -38,7 +39,7 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
 
   useEffect(() => {
     try {
-      document.documentElement.setAttribute("data-theme", params.appTheme);
+      applyAppThemeAttributes(params.appTheme, document.documentElement);
       localStorage.setItem("arx-theme", params.appTheme);
     } catch {
       return;

@@ -7,7 +7,7 @@ type SessionRef<TSession> = {
   current: TSession | null;
 };
 
-export function computeSupabaseRefreshDelayMs(params: {
+function computeSupabaseRefreshDelayMs(params: {
   expiresAtSec: number;
   nowSec?: number;
   leadSec?: number;
@@ -52,7 +52,7 @@ export function scheduleSupabaseRefreshTimer(params: {
   return delayMs;
 }
 
-export async function refreshSupabaseSessionIfNearExpiry(params: {
+async function refreshSupabaseSessionIfNearExpiry(params: {
   session: SupabaseRefreshableSession | null | undefined;
   refreshLocked: (refreshToken: string) => Promise<unknown>;
   nowSec?: number;

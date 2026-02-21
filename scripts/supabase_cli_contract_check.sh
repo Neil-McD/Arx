@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "== Supabase CLI contract checks =="
 
-REQUIRED_PREFIX="${SUPABASE_CLI_REQUIRED_PREFIX:-2.51.}"
+REQUIRED_PREFIX="${SUPABASE_CLI_REQUIRED_PREFIX:-2.75.}"
 
 if ! command -v supabase >/dev/null 2>&1; then
   echo "FAIL: supabase CLI is not installed."

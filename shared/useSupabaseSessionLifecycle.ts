@@ -6,7 +6,7 @@ import {
   scheduleSupabaseRefreshTimer,
 } from "./supabaseSessionRefreshTimer";
 
-type SessionLike = {
+export type SupabaseSessionLike = {
   expires_at: number;
   refresh_token: string;
 };
@@ -14,16 +14,20 @@ type SessionLike = {
 type SessionRef<TSession> = MutableRefObject<TSession | null>;
 type TimeoutRef = MutableRefObject<number | null>;
 
-export function useSupabaseSessionRefSync<TSession>(params: {
+function useLatestRef<TValue>(value: TValue): MutableRefObject<TValue> {
+  const ref = useRef(value);
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref;
+}
+
+function useSupabaseSessionRefSync<TSession>(params: {
   session: TSession | null;
   sessionRef: SessionRef<TSession>;
   onSessionCleared?: () => void;
 }) {
-  const onSessionClearedRef = useRef(params.onSessionCleared);
-
-  useEffect(() => {
-    onSessionClearedRef.current = params.onSessionCleared;
-  }, [params.onSessionCleared]);
+  const onSessionClearedRef = useLatestRef(params.onSessionCleared);
 
   useEffect(() => {
     params.sessionRef.current = params.session;
@@ -33,7 +37,7 @@ export function useSupabaseSessionRefSync<TSession>(params: {
   }, [params.session, params.sessionRef]);
 }
 
-export function useSupabaseSessionAutoRefresh<TSession extends SessionLike>(params: {
+function useSupabaseSessionAutoRefresh<TSession extends SupabaseSessionLike>(params: {
   session: TSession | null;
   sessionRef: SessionRef<TSession>;
   timeoutRef: TimeoutRef;
@@ -41,11 +45,7 @@ export function useSupabaseSessionAutoRefresh<TSession extends SessionLike>(para
   retryDelayMs?: number;
   retryIfNotExpired?: boolean;
 }) {
-  const refreshLockedRef = useRef(params.refreshLocked);
-
-  useEffect(() => {
-    refreshLockedRef.current = params.refreshLocked;
-  }, [params.refreshLocked]);
+  const refreshLockedRef = useLatestRef(params.refreshLocked);
 
   useEffect(() => {
     clearSupabaseRefreshTimer(params.timeoutRef);
@@ -90,22 +90,14 @@ export function useSupabaseSessionAutoRefresh<TSession extends SessionLike>(para
   ]);
 }
 
-export function useSupabaseSessionFocusRefresh<TSession extends SessionLike>(params: {
+function useSupabaseSessionFocusRefresh<TSession extends SupabaseSessionLike>(params: {
   sessionRef: SessionRef<TSession>;
   refreshLocked: (refreshToken: string) => Promise<unknown>;
   onFocusWithSession: (session: TSession) => void;
   thresholdSec?: number;
 }) {
-  const refreshLockedRef = useRef(params.refreshLocked);
-  const onFocusWithSessionRef = useRef(params.onFocusWithSession);
-
-  useEffect(() => {
-    refreshLockedRef.current = params.refreshLocked;
-  }, [params.refreshLocked]);
-
-  useEffect(() => {
-    onFocusWithSessionRef.current = params.onFocusWithSession;
-  }, [params.onFocusWithSession]);
+  const refreshLockedRef = useLatestRef(params.refreshLocked);
+  const onFocusWithSessionRef = useLatestRef(params.onFocusWithSession);
 
   useEffect(() => {
     return bindSupabaseFocusRefresh({
@@ -117,4 +109,68 @@ export function useSupabaseSessionFocusRefresh<TSession extends SessionLike>(par
       },
     });
   }, [params.sessionRef, params.thresholdSec]);
+}
+
+export function useSupabaseAuthSessionLifecycle<TSession extends SupabaseSessionLike>(params: {
+  session: TSession | null;
+  sessionRef: SessionRef<TSession>;
+  refreshTimeoutRef: TimeoutRef;
+  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  onMount: () => void | Promise<void>;
+  onSessionAvailable: (session: TSession) => void;
+  onFocusWithSession: (session: TSession) => void;
+  onSessionMissing?: () => void;
+  onSessionCleared?: () => void;
+  didJustSignInRef?: MutableRefObject<boolean>;
+  onDidJustSignIn?: () => void;
+  autoRefreshRetryDelayMs?: number;
+  autoRefreshRetryIfNotExpired?: boolean;
+  focusThresholdSec?: number;
+}) {
+  const onMountRef = useLatestRef(params.onMount);
+  const onSessionAvailableRef = useLatestRef(params.onSessionAvailable);
+  const onSessionMissingRef = useLatestRef(params.onSessionMissing);
+  const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
+
+  useEffect(() => {
+    void onMountRef.current();
+  }, []);
+
+  useSupabaseSessionRefSync({
+    session: params.session,
+    sessionRef: params.sessionRef,
+    onSessionCleared: params.onSessionCleared,
+  });
+
+  useSupabaseSessionAutoRefresh({
+    session: params.session,
+    sessionRef: params.sessionRef,
+    timeoutRef: params.refreshTimeoutRef,
+    refreshLocked: params.refreshLocked,
+    retryDelayMs: params.autoRefreshRetryDelayMs,
+    retryIfNotExpired: params.autoRefreshRetryIfNotExpired,
+  });
+
+  useSupabaseSessionFocusRefresh({
+    sessionRef: params.sessionRef,
+    refreshLocked: params.refreshLocked,
+    onFocusWithSession: params.onFocusWithSession,
+    thresholdSec: params.focusThresholdSec ?? 60,
+  });
+
+  useEffect(() => {
+    if (!params.session) {
+      onSessionMissingRef.current?.();
+      return;
+    }
+    onSessionAvailableRef.current(params.session);
+  }, [params.session]);
+
+  useEffect(() => {
+    if (!params.session) return;
+    if (!params.didJustSignInRef || !params.onDidJustSignIn) return;
+    if (!params.didJustSignInRef.current) return;
+    params.didJustSignInRef.current = false;
+    onDidJustSignInRef.current?.();
+  }, [params.session, params.didJustSignInRef, params.onDidJustSignIn]);
 }

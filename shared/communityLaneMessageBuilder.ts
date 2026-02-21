@@ -20,7 +20,7 @@ function buildChatgptCommunityEvidenceSystemMessage(evidenceUserMessage: string)
   ].join("\n");
 }
 
-export function buildCommunityPreludeMessages(params: {
+function buildCommunityPreludeMessages(params: {
   systemPrompt?: string | null;
   communityEvidenceUserMessage?: string | null;
 }): CommunityInferenceChatMessage[] {

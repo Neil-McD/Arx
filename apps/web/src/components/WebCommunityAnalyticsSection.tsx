@@ -1,0 +1,53 @@
+import {
+  type CommunityAnalyticsActions,
+  type CommunityAnalyticsState,
+} from "../../../../src/components/communityAnalyticsContracts";
+import { CommunityAnalyticsPanel } from "../../../../src/components/CommunityAnalyticsPanel";
+
+type WebCommunityAnalyticsSectionProps = {
+  hasActiveCommunity: boolean;
+  hasSession: boolean;
+  canViewActiveCommunityAnalytics: boolean;
+  onOpenAuthGate: () => void;
+  state: CommunityAnalyticsState;
+  actions: CommunityAnalyticsActions;
+};
+
+export function WebCommunityAnalyticsSection(props: WebCommunityAnalyticsSectionProps) {
+  const {
+    hasActiveCommunity,
+    hasSession,
+    canViewActiveCommunityAnalytics,
+    onOpenAuthGate,
+    state,
+    actions,
+  } = props;
+
+  return (
+    <div className="settings-panel community-settings-panel">
+      {hasActiveCommunity && !hasSession ? (
+        <div className="chat-empty">
+          <div>Sign in to view community analytics.</div>
+          <button
+            className="secondary"
+            type="button"
+            onClick={onOpenAuthGate}
+            style={{ marginTop: 12 }}
+          >
+            Sign in
+          </button>
+        </div>
+      ) : (
+        <CommunityAnalyticsPanel
+          capabilities={{
+            hasActiveCommunity,
+            hasSession,
+            canViewActiveCommunityAnalytics,
+          }}
+          state={state}
+          actions={actions}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,4 +1,18 @@
-import { useCallback, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
+import {
+  abortAllScopedRequests,
+  beginScopedAbortRequest,
+  finishScopedAbortRequest,
+  isAbortError,
+} from "./communityFetchAbortScope";
 
 type CommunityChatRow = {
   id: string;
@@ -80,8 +94,13 @@ export function useCommunityChatDataController<
   const isLoadingMoreChatRef = useRef(false);
   const communityChatHasMoreRef = useRef(true);
   const communityChatOldestSeqRef = useRef<number | null>(null);
+  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const ensureThreadInFlightByKeyRef = useRef<Map<string, Promise<string>>>(new Map());
+  const ensureThreadCacheByKeyRef = useRef<Map<string, { threadId: string; expiresAt: number }>>(new Map());
   const activeCommunityIdRef = useRef<string | null>(null);
   const loadGenerationRef = useRef(0);
+
+  const COMMUNITY_THREAD_CACHE_TTL_MS = 30_000;
 
   const setIsLoadingChatTracked = useCallback((value: boolean) => {
     isLoadingChatRef.current = value;
@@ -99,6 +118,7 @@ export function useCommunityChatDataController<
   }, []);
 
   const beginCommunityLoadGeneration = useCallback((communityId: string): number => {
+    abortAllScopedRequests(fetchAbortControllersRef.current);
     activeCommunityIdRef.current = communityId;
     loadGenerationRef.current += 1;
     return loadGenerationRef.current;
@@ -136,21 +156,59 @@ export function useCommunityChatDataController<
     async (communityId: string, session: SessionT): Promise<string> => {
       const url = argsRef.current.getSupabaseUrl();
       if (!url) throw new Error("Missing Supabase URL.");
+      const normalizedCommunityId = String(communityId ?? "").trim();
+      if (!normalizedCommunityId) throw new Error("Missing community id.");
 
-      const response = await argsRef.current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/ensure_community_chat_thread`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await argsRef.current.readSupabaseError(response));
-      const rows = (await response.json()) as Array<{ thread_id: string }>;
-      const threadId = (rows[0]?.thread_id ?? "").trim();
-      if (!threadId) throw new Error("Failed to ensure community chat thread.");
-      return threadId;
+      const sessionUserId = (
+        session as { user?: { id?: unknown } } | null
+      )?.user?.id;
+      const normalizedUserId = typeof sessionUserId === "string" ? sessionUserId.trim() : "";
+      const cacheKey = `${normalizedUserId}::${normalizedCommunityId}`;
+      const now = Date.now();
+
+      const cached = ensureThreadCacheByKeyRef.current.get(cacheKey);
+      if (cached && cached.expiresAt > now && cached.threadId) {
+        return cached.threadId;
+      }
+      if (cached && cached.expiresAt <= now) {
+        ensureThreadCacheByKeyRef.current.delete(cacheKey);
+      }
+
+      const inFlight = ensureThreadInFlightByKeyRef.current.get(cacheKey);
+      if (inFlight) {
+        return await inFlight;
+      }
+
+      const request = (async (): Promise<string> => {
+        const response = await argsRef.current.fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/ensure_community_chat_thread`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_community_id: normalizedCommunityId }),
+          },
+          session,
+        );
+        if (!response.ok) throw new Error(await argsRef.current.readSupabaseError(response));
+        const rows = (await response.json()) as Array<{ thread_id: string }>;
+        const threadId = (rows[0]?.thread_id ?? "").trim();
+        if (!threadId) throw new Error("Failed to ensure community chat thread.");
+        ensureThreadCacheByKeyRef.current.set(cacheKey, {
+          threadId,
+          expiresAt: Date.now() + COMMUNITY_THREAD_CACHE_TTL_MS,
+        });
+        return threadId;
+      })();
+
+      ensureThreadInFlightByKeyRef.current.set(cacheKey, request);
+      try {
+        return await request;
+      } finally {
+        const active = ensureThreadInFlightByKeyRef.current.get(cacheKey);
+        if (active === request) {
+          ensureThreadInFlightByKeyRef.current.delete(cacheKey);
+        }
+      }
     },
     [],
   );
@@ -163,16 +221,27 @@ export function useCommunityChatDataController<
     ): Promise<void> => {
       const url = argsRef.current.getSupabaseUrl();
       if (!url || messageIds.length === 0) return;
+      const reactionsFetchController = beginScopedAbortRequest({
+        inFlightByKind: fetchAbortControllersRef.current,
+        kind: "community_chat_reactions",
+      });
       const idsFilter = messageIds.map((id) => `"${id}"`).join(",");
       let response: Response;
       try {
         response = await argsRef.current.fetchWithSupabaseAuth(
           `${url}/rest/v1/message_reactions?select=id,message_id,user_id,emoji,created_at&message_id=in.(${idsFilter})`,
-          {},
+          { signal: reactionsFetchController.signal },
           session,
         );
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) return;
         return;
+      } finally {
+        finishScopedAbortRequest({
+          inFlightByKind: fetchAbortControllersRef.current,
+          kind: "community_chat_reactions",
+          controller: reactionsFetchController,
+        });
       }
       if (!response.ok) return;
       if (isStale(guard.communityId, guard.generation)) return;
@@ -210,17 +279,28 @@ export function useCommunityChatDataController<
         const threadId = await ensureCommunityChatThread(communityId, session);
         if (isStale(communityId, generation)) return;
 
+        const messagesFetchController = beginScopedAbortRequest({
+          inFlightByKind: fetchAbortControllersRef.current,
+          kind: "community_chat_initial",
+        });
         let response: Response;
         try {
           response = await argsRef.current.fetchWithSupabaseAuth(
             `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
               threadId,
             )}&order=seq.desc&limit=${argsRef.current.pageSize}`,
-            { method: "GET" },
+            { method: "GET", signal: messagesFetchController.signal },
             session,
           );
-        } catch {
+        } catch (error) {
+          if (isAbortError(error)) return;
           return;
+        } finally {
+          finishScopedAbortRequest({
+            inFlightByKind: fetchAbortControllersRef.current,
+            kind: "community_chat_initial",
+            controller: messagesFetchController,
+          });
         }
         if (!response.ok) return;
         if (isStale(communityId, generation)) return;
@@ -247,7 +327,7 @@ export function useCommunityChatDataController<
 
         if (rows.length > 0) {
           const messageIds = rows.map((row) => row.id);
-          await loadMessageReactions(messageIds, session, { communityId, generation });
+          void loadMessageReactions(messageIds, session, { communityId, generation });
         }
       } catch {
         // Keep behavior fail-safe: best-effort fetch paths should not crash the shell.
@@ -292,18 +372,29 @@ export function useCommunityChatDataController<
         const threadId = await ensureCommunityChatThread(communityId, session);
         if (isStale(communityId, generation)) return "noop";
 
+        const olderFetchController = beginScopedAbortRequest({
+          inFlightByKind: fetchAbortControllersRef.current,
+          kind: "community_chat_older",
+        });
         let response: Response;
         try {
           response = await argsRef.current.fetchWithSupabaseAuth(
             `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
               threadId,
             )}&seq=lt.${cursor}&order=seq.desc&limit=${argsRef.current.pageSize}`,
-            { method: "GET" },
+            { method: "GET", signal: olderFetchController.signal },
             session,
           );
-        } catch {
+        } catch (error) {
           argsRef.current.clearPendingPrependAnchor();
+          if (isAbortError(error)) return "noop";
           return "error";
+        } finally {
+          finishScopedAbortRequest({
+            inFlightByKind: fetchAbortControllersRef.current,
+            kind: "community_chat_older",
+            controller: olderFetchController,
+          });
         }
         if (!response.ok) {
           argsRef.current.clearPendingPrependAnchor();
@@ -350,7 +441,7 @@ export function useCommunityChatDataController<
 
         if (!appended) return "noop";
 
-        await loadMessageReactions(rows.map((row) => row.id), session, { communityId, generation });
+        void loadMessageReactions(rows.map((row) => row.id), session, { communityId, generation });
         return "appended";
       } catch {
         argsRef.current.clearPendingPrependAnchor();
@@ -371,6 +462,7 @@ export function useCommunityChatDataController<
   );
 
   const resetCommunityChatDataState = useCallback(() => {
+    abortAllScopedRequests(fetchAbortControllersRef.current);
     loadGenerationRef.current += 1;
     activeCommunityIdRef.current = null;
     communityChatOldestSeqRef.current = null;
@@ -378,6 +470,12 @@ export function useCommunityChatDataController<
     setIsLoadingMoreChatTracked(false);
     setCommunityChatHasMoreTracked(true);
   }, [setCommunityChatHasMoreTracked, setIsLoadingChatTracked, setIsLoadingMoreChatTracked]);
+
+  useEffect(() => {
+    return () => {
+      abortAllScopedRequests(fetchAbortControllersRef.current);
+    };
+  }, []);
 
   return {
     isLoadingChat,

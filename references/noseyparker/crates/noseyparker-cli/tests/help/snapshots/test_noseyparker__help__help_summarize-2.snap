@@ -1,0 +1,112 @@
+---
+source: crates/noseyparker-cli/tests/help/mod.rs
+assertion_line: 91
+expression: stdout
+---
+Summarize scan findings
+
+Findings are summarized in tabular form. The default `human` format prints a table of findings with
+one row for each rule that produced findings. The table has several columns:
+
+- Rule: the name of the rule
+
+- Findings: the number of findings, i.e., the number of distinct match group values produced by the
+rule
+
+- Matches: the number of individual matches
+
+- Accepted: the number of findings whose matches have `accept` status
+
+- Rejected: the number of findings whose matches have `reject` status
+
+- Mixed: the number of findings whose matches have a mix of `accept` and `reject` status
+
+- Unlabeled: the number of findings whose matches have no status at all
+
+Usage: noseyparker summarize [OPTIONS]
+
+Options:
+  -d, --datastore <PATH>
+          Use the specified datastore
+          
+          [env: NP_DATASTORE=]
+          [default: datastore.np]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Output Options:
+  -o, --output <PATH>
+          Write output to the specified path
+          
+          If this argument is not provided, stdout will be used.
+
+  -f, --format <FORMAT>
+          Write output in the specified format
+
+          Possible values:
+          - human: A text-based format designed for humans
+          - json:  Pretty-printed JSON format
+          - jsonl: JSON Lines format
+          
+          [default: human]
+
+Global Options:
+  -v, --verbose...
+          Enable verbose output
+          
+          This can be repeated up to 3 times to enable successively more output.
+
+  -q, --quiet
+          Suppress non-error feedback messages
+          
+          This silences WARNING, INFO, DEBUG, and TRACE messages and disables progress bars. This
+          overrides any provided verbosity and progress reporting options.
+
+      --color <MODE>
+          Enable or disable colored output
+          
+          When this is "auto", colors are enabled for stdout and stderr when they are terminals.
+          
+          If the `NO_COLOR` environment variable is set, it takes precedence and is equivalent to
+          `--color=never`.
+          
+          [default: auto]
+          [possible values: auto, never, always]
+
+      --progress <MODE>
+          Enable or disable progress bars
+          
+          When this is "auto", progress bars are enabled when stderr is a terminal.
+          
+          [default: auto]
+          [possible values: auto, never, always]
+
+      --ignore-certs
+          Ignore validation of TLS certificates
+
+Advanced Global Options:
+      --rlimit-nofile <LIMIT>
+          Set the rlimit for number of open files to LIMIT
+          
+          This should not need to be changed from the default unless you run into crashes from
+          running out of file descriptors.
+          
+          [default: 16384]
+
+      --sqlite-cache-size <SIZE>
+          Set the cache size for SQLite connections to SIZE
+          
+          This has the effect of setting SQLite's `pragma cache_size=SIZE`. The default value is set
+          to use a maximum of 1GiB for database cache. See
+          <https://sqlite.org/pragma.html#pragma_cache_size> for more details.
+          
+          [default: -1048576]
+
+      --enable-backtraces <BOOL>
+          Enable or disable backtraces on panic
+          
+          This has the effect of setting the `RUST_BACKTRACE` environment variable to 1.
+          
+          [default: true]
+          [possible values: true, false]

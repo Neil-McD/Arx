@@ -47,10 +47,6 @@ export function hasContextPayload<TMemory, THistory, TSuggestion>(
   );
 }
 
-export function contextActionLabel(hasContext: boolean): "Memory & context" | "No memory/context" {
-  return hasContext ? "Memory & context" : "No memory/context";
-}
-
 export function openMessageContextModal<TMemory, THistory, TSuggestion>(
   payload: MessageContextModalPayload<TMemory, THistory, TSuggestion> | null | undefined,
   setContextModal: (next: MessageContextModalPayload<TMemory, THistory, TSuggestion>) => void,

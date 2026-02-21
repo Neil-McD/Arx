@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { getErrorMessage } from "./pay_first";
 
-type UseDesktopDiscoverControllerArgs<DiscoverCommunityT> = {
+type UseDesktopDiscoverControllerArgs = {
   isDiscoverActive: boolean;
   getSupabaseUrl: () => string | null;
   fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
@@ -18,7 +18,7 @@ type DiscoverCommunitySearchLike = {
 
 export function useDesktopDiscoverController<
   DiscoverCommunityT extends DiscoverCommunitySearchLike,
->(args: UseDesktopDiscoverControllerArgs<DiscoverCommunityT>): {
+>(args: UseDesktopDiscoverControllerArgs): {
   discoverCommunities: DiscoverCommunityT[];
   discoverQuery: string;
   setDiscoverQuery: Dispatch<SetStateAction<string>>;
@@ -28,14 +28,8 @@ export function useDesktopDiscoverController<
   loadDiscoverCommunities: () => Promise<void>;
   filteredDiscoverCommunities: DiscoverCommunityT[];
 } {
-  const {
-    isDiscoverActive,
-    getSupabaseUrl,
-    fetchWithSupabasePublic,
-    readSupabaseError,
-    discoverLimit = 60,
-    loadFailureMessage = "Failed to load communities.",
-  } = args;
+  const argsRef = useRef(args);
+  argsRef.current = args;
 
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunityT[]>([]);
   const [discoverQuery, setDiscoverQuery] = useState("");
@@ -43,33 +37,34 @@ export function useDesktopDiscoverController<
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
 
   const loadDiscoverCommunities = useCallback(async () => {
-    const url = getSupabaseUrl();
+    const current = argsRef.current;
+    const url = current.getSupabaseUrl();
     if (!url) return;
     setIsLoadingDiscover(true);
     setDiscoverError(null);
     try {
-      const limit = Math.max(1, Math.min(200, Math.floor(discoverLimit)));
-      const response = await fetchWithSupabasePublic(
+      const limit = Math.max(1, Math.min(200, Math.floor(current.discoverLimit ?? 60)));
+      const response = await current.fetchWithSupabasePublic(
         `${url}/functions/v1/public_discover?limit=${limit}`,
         { method: "GET" },
       );
       if (!response.ok) {
-        const message = await readSupabaseError(response);
+        const message = await current.readSupabaseError(response);
         throw new Error(message);
       }
       const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunityT[] };
       setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
     } catch (error) {
-      setDiscoverError(getErrorMessage(error, loadFailureMessage));
+      setDiscoverError(getErrorMessage(error, current.loadFailureMessage ?? "Failed to load communities."));
     } finally {
       setIsLoadingDiscover(false);
     }
-  }, [discoverLimit, fetchWithSupabasePublic, getSupabaseUrl, loadFailureMessage, readSupabaseError]);
+  }, []);
 
   useEffect(() => {
-    if (!isDiscoverActive) return;
+    if (!args.isDiscoverActive) return;
     void loadDiscoverCommunities();
-  }, [isDiscoverActive, loadDiscoverCommunities]);
+  }, [args.isDiscoverActive, loadDiscoverCommunities]);
 
   const filteredDiscoverCommunities = useMemo(() => {
     const query = discoverQuery.trim().toLowerCase();

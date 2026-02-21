@@ -4354,47 +4354,12 @@ If relevant community evidence is unavailable after retrieval, state that clearl
     )
 }
 
-#[derive(Clone, Deserialize)]
-struct HistoryOverrideMessage {
-    role: String,
-    content_json: serde_json::Value,
-}
-
 const RECENT_HISTORY_MESSAGE_LIMIT: usize = 20;
 
 fn load_recent_history_messages(
     conn: &rusqlite::Connection,
     thread_id: &str,
-    history_override_json: Option<&str>,
 ) -> Vec<(String, serde_json::Value)> {
-    if let Some(json) = history_override_json {
-        if let Ok(items) = serde_json::from_str::<Vec<HistoryOverrideMessage>>(json) {
-            let mut filtered: Vec<(String, serde_json::Value)> = Vec::new();
-            for item in items {
-                let role = item.role.trim().to_string();
-                if role != "user" && role != "assistant" {
-                    continue;
-                }
-                let value = match item.content_json {
-                    serde_json::Value::String(s) => {
-                        serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
-                    }
-                    other => other,
-                };
-                filtered.push((role, value));
-            }
-            if filtered.len() > RECENT_HISTORY_MESSAGE_LIMIT {
-                filtered = filtered
-                    .into_iter()
-                    .rev()
-                    .take(RECENT_HISTORY_MESSAGE_LIMIT)
-                    .collect::<Vec<_>>();
-                filtered.reverse();
-            }
-            return filtered;
-        }
-    }
-
     if let Ok(history) = list_messages_tail(conn, thread_id, RECENT_HISTORY_MESSAGE_LIMIT) {
         let mut filtered: Vec<(String, serde_json::Value)> = Vec::new();
         for msg in history {
@@ -6097,7 +6062,6 @@ async fn send_turn_messages_agent(
     atom_system_prompt: &str,
     community_context_prompt: Option<String>,
     used_personal_memory: &[context_builder::UsedPersonalMemoryItem],
-    history_messages_json: Option<String>,
     platform_proxy: Option<PlatformProxyConfig>,
     public_proxy: Option<PublicProxyConfig>,
     cloud_user_id: Option<String>,
@@ -6301,9 +6265,7 @@ async fn send_turn_messages_agent(
         // Base conversation: system in messages, then last ~20 user/assistant text messages.
         let mut messages: Vec<serde_json::Value> = Vec::new();
         messages.push(serde_json::json!({ "role": "system", "content": initial_system_prompt }));
-        for (role, value) in
-            load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref())
-        {
+        for (role, value) in load_recent_history_messages(&conn, thread_id) {
             let text = value
                 .get("text")
                 .and_then(|v| v.as_str())
@@ -8562,9 +8524,7 @@ async fn send_turn_messages_agent(
 
     // Base conversation: system in request, then last ~20 user/assistant text messages.
     let mut messages: Vec<serde_json::Value> = Vec::new();
-    for (role, value) in
-        load_recent_history_messages(&conn, thread_id, history_messages_json.as_deref())
-    {
+    for (role, value) in load_recent_history_messages(&conn, thread_id) {
         let text = value
             .get("text")
             .and_then(|v| v.as_str())
@@ -10506,7 +10466,6 @@ async fn send_turn_cmd_core(
             &atom_system_prompt,
             cloud_community_context_prompt.clone(),
             &used_personal_memory,
-            None,
             platform_proxy,
             public_proxy,
             cloud_user_id.clone(),

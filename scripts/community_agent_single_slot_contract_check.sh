@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SINGLE_SLOT_MIGRATION="supabase/migrations/20260221201500_cloud_community_agent_draft_single_slot_contract.sql"
+SINGLE_SLOT_MIGRATION="supabase/migrations/20260221201444_cloud_community_agent_draft_single_slot_contract.sql"
 DRAFT_CONTROLLER="shared/useCommunityAgentDraftController.ts"
 EDITOR_UI_CONTROLLER="shared/useCommunityAgentEditorUiController.ts"
 DESKTOP_AI_AGENT_TAB="src/components/DesktopCommunityAiAgentTab.tsx"

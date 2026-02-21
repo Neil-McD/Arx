@@ -64,6 +64,7 @@ type UseDesktopRunOrchestrationArgs<
   clearStreamingRefs: () => void;
   scheduleStreamingUpdate: () => void;
   setStreamingContent: Dispatch<SetStateAction<string | null>>;
+  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
   setStreamingTokens: Dispatch<SetStateAction<StreamingTokens | null>>;
   setStreamingMeta: Dispatch<SetStateAction<StreamingMeta | null>>;
   streamingContentRef: { current: string | null };
@@ -84,12 +85,14 @@ export function useDesktopRunOrchestration<
   const loadToolCallsRef = useRef(args.loadToolCalls);
   const handleOpenedUrlsRef = useRef(args.handleOpenedUrls);
   const activeThreadIdRef = useRef(args.activeThreadId);
+  const isSendingRef = useRef(args.isSending);
   const dispatchRunPhaseRef = useRef(args.dispatchRunPhase);
   const setPendingToolApprovalRef = useRef(args.setPendingToolApproval);
   const setIsToolApprovalSubmittingRef = useRef(args.setIsToolApprovalSubmitting);
   const setAgentStatusRef = useRef(args.setAgentStatus);
   const setRunningToolsRef = useRef(args.setRunningTools);
   const setStreamingContentRef = useRef(args.setStreamingContent);
+  const setStreamingRunIdRef = useRef(args.setStreamingRunId);
   const setStreamingTokensRef = useRef(args.setStreamingTokens);
   const setStreamingMetaRef = useRef(args.setStreamingMeta);
   const clearStreamingRefsRef = useRef(args.clearStreamingRefs);
@@ -116,6 +119,10 @@ export function useDesktopRunOrchestration<
   }, [args.activeThreadId]);
 
   useEffect(() => {
+    isSendingRef.current = args.isSending;
+  }, [args.isSending]);
+
+  useEffect(() => {
     dispatchRunPhaseRef.current = args.dispatchRunPhase;
   }, [args.dispatchRunPhase]);
 
@@ -138,6 +145,10 @@ export function useDesktopRunOrchestration<
   useEffect(() => {
     setStreamingContentRef.current = args.setStreamingContent;
   }, [args.setStreamingContent]);
+
+  useEffect(() => {
+    setStreamingRunIdRef.current = args.setStreamingRunId;
+  }, [args.setStreamingRunId]);
 
   useEffect(() => {
     setStreamingTokensRef.current = args.setStreamingTokens;
@@ -243,6 +254,7 @@ export function useDesktopRunOrchestration<
           clearStreamingRefsRef.current();
           await loadMessagesRef.current(n.session_id);
           setStreamingContentRef.current(null);
+          setStreamingRunIdRef.current(null);
           setStreamingTokensRef.current(null);
           setStreamingMetaRef.current(null);
         })();
@@ -260,6 +272,7 @@ export function useDesktopRunOrchestration<
           const prior = args.streamingContentRef.current ?? "";
           args.streamingContentRef.current = `${prior}${n.chunk}`;
         }
+        setStreamingRunIdRef.current(n.run_id?.trim() || null);
         args.streamingTokensRef.current = {
           prompt_tokens: n.prompt_tokens ?? undefined,
           completion_tokens: n.completion_tokens ?? undefined,
@@ -289,24 +302,10 @@ export function useDesktopRunOrchestration<
         const from = (n.from ?? "").trim().toLowerCase();
         const to = (n.to ?? "").trim().toLowerCase();
         const message =
-          from === "chatgpt" && to === "platform"
-            ? (() => {
-                const match = reason.match(/chatgpt_http_(\d+)/i);
-                const code = match?.[1] ?? null;
-                const detail = (() => {
-                  const idx = reason.indexOf(":");
-                  if (idx === -1) return null;
-                  const parsed = reason.slice(idx + 1).trim();
-                  return parsed.length ? parsed : null;
-                })();
-                return code
-                  ? detail
-                    ? `ChatGPT unavailable (HTTP ${code}) — ${detail.slice(0, 140)}`
-                    : `ChatGPT unavailable (HTTP ${code}) — using Arx.`
-                  : "ChatGPT unavailable — using Arx.";
-              })()
-            : reason === "platform_quota_exceeded"
-              ? "Arx AI quota reached for this model. Select another model or upgrade."
+          reason === "platform_quota_exceeded"
+            ? "Arx AI quota reached for this model. Select another model or upgrade."
+            : from === "platform" && to === "public"
+              ? "Arx AI is temporarily unavailable for this model. Falling back to free model lane."
               : "Arx AI unavailable for this model. Select another model or upgrade.";
         showMemoryToast(message, 2500);
         return;
@@ -338,7 +337,13 @@ export function useDesktopRunOrchestration<
           dispatchRunPhaseRef.current({ type: "turn_finished" });
           setAgentStatusRef.current(null);
           setRunningToolsRef.current([]);
+          setStreamingRunIdRef.current(null);
         } else {
+          const hasStreamingContent = Boolean((args.streamingContentRef.current ?? "").trim());
+          if (!isSendingRef.current && !hasStreamingContent) {
+            // Ignore stale non-idle statuses after a failed/completed turn has already reset UI state.
+            return;
+          }
           dispatchRunPhaseRef.current({ type: n.status === "working" ? "agent_working" : "agent_thinking" });
           setAgentStatusRef.current({
             session_id: n.session_id,
@@ -404,6 +409,10 @@ export function useDesktopRunOrchestration<
 
     return () => {
       clearStreamingRefsRef.current();
+      setStreamingRunIdRef.current(null);
+      setStreamingContentRef.current(null);
+      setStreamingTokensRef.current(null);
+      setStreamingMetaRef.current(null);
       if (toolCallsReloadTimerRef.current !== null) {
         window.clearTimeout(toolCallsReloadTimerRef.current);
         toolCallsReloadTimerRef.current = null;

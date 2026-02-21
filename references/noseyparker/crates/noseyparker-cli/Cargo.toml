@@ -1,0 +1,103 @@
+[package]
+name = "noseyparker-cli"
+version.workspace = true
+description = "Nosey Parker is a command-line program that finds secrets and sensitive information in textual data and Git history."
+keywords = ["cli", "security", "scanner", "secret"]
+categories = ["command-line-utilities"]
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[features]
+# Enable scan-time per-rule profiling instrumentation
+rule_profiling = ["noseyparker/rule_profiling"]
+# Enable the file content classifier based on `libmagic`
+# Requires a aystem-wide `libmagic` to be available
+libmagic = ["content-guesser/libmagic"]
+# Compile out `trace`-level log and tracing messages in release builds
+disable_trace = ["log/release_max_level_debug", "tracing/release_max_level_debug"]
+# Specialize the build of Vectorscan for the microarchitecture of the build system's CPU.
+# This will result in binary that is not portable to other CPUs.
+vectorscan_cpu_native = ["vectorscan-rs/cpu_native"]
+# Specialize the build of Vectorscan to use available SIMD instructions on the build system's CPU.
+# This will result in binary that is not portable to other CPUs.
+vectorscan_simd_specialization = ["vectorscan-rs/simd_specialization"]
+# Enable all Vectorscan features that can improve speed but break binary portability.
+vectorscan_fast_nonportable = ["vectorscan_cpu_native", "vectorscan_simd_specialization"]
+# Use the mimalloc global allocator
+mimalloc = ["dep:mimalloc"]
+# Use color backtraces
+color_backtrace = ["dep:color-backtrace"]
+# Provide functionality for enumerating and interacting with GitHub.
+# If this is not enabled, no GitHub functionality will be available.
+github = ["noseyparker/github"]
+# Provide functionality for writing output in the Parquet format
+parquet = ["dep:parquet", "dep:arrow-schema", "dep:arrow-array"]
+# Enable features that are desirable in a release build
+release = ["disable_trace", "mimalloc"]
+default = ["mimalloc", "color_backtrace", "github", "parquet"]
+
+[dependencies]
+anyhow = { version = "1.0" }
+bstring-serde = { path = "../bstring-serde" }
+bstr = { version = "1.12" }
+clap = { version = "4.5", features = ["cargo", "derive", "env", "unicode", "wrap_help"] }
+clap_complete = "4.5"
+clap_mangen = "0.2"
+color-backtrace = { version = "0.7", optional = true }
+console = "0.16"
+content-guesser = { path = "../content-guesser" }
+crossbeam-channel = "0.5"
+flate2 = "1.1"
+gix = { version = "0.73", features = ["max-performance", "serde"] }
+glob = "0.3"
+indenter = "0.3"
+indicatif = { version = "0.18", features = ["improved_unicode"] }
+indoc = "2.0"
+input-enumerator = { path = "../input-enumerator" }
+lazy_static = "1.5"
+log = { version = "0.4", optional = true }
+mimalloc = { version = "0.1", optional = true }
+mime = "0.3"
+noseyparker = { path = "../noseyparker" }
+noseyparker-rules = { path = "../noseyparker-rules" }
+prettytable-rs = "0.10"
+progress = { path = "../progress" }
+rayon = "1.11"
+regex = "1.11"
+rlimit = "0.10"
+schemars = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-sarif = "0.7"
+strum = { version = "0.27", features = ["derive"] }
+sysinfo = "0.37"
+tar = "0.4"
+tempfile = "3"
+tracing = "0.1"
+tracing-log = "0.2"
+tracing-subscriber = { version = "0.3", features = ["tracing-log", "ansi", "env-filter", "smallvec", "fmt"], default-features = false }
+url = "2.5"
+vectorscan-rs = { version = "0.0.5" }
+object-pool = "0.6.0"
+parquet = { version = "55", optional = true }
+arrow-schema = { version = "55", optional = true }
+arrow-array = { version = "55", optional = true }
+
+[dev-dependencies]
+assert_cmd = { version = "2.0", features = ["color-auto"] }
+assert_fs = "1.1"
+base64 = "0.22"
+# criterion = "0.4"
+# escargot = "0.5"  # NOTE: much more capable but much slower than assert_cmd for `cargo run` tests
+insta = { version = "1", features = ["filters", "json", "redactions"] }
+predicates = "3.1"
+pretty_assertions = "1.4"
+
+[build-dependencies]
+# Used for embedding compile-time version information into the `noseyparker` CLI
+vergen = { version = "9.0", features = ["build", "cargo", "rustc", "si"] }
+vergen-gitcl = { version = "1.0", features = ["build", "cargo", "rustc", "si"] }

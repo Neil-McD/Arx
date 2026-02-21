@@ -6,7 +6,7 @@ export type ImageFileDetectionOptions = {
 const BASE_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"] as const;
 const MAX_DIRECT_DATA_URL_FILE_BYTES = 2 * 1024 * 1024;
 
-export async function fileToDataUrl(file: File): Promise<string> {
+async function fileToDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));

@@ -1,16 +1,10 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { type MutableRefObject } from "react";
 import {
-  useSupabaseSessionAutoRefresh,
-  useSupabaseSessionFocusRefresh,
-  useSupabaseSessionRefSync,
+  type SupabaseSessionLike,
+  useSupabaseAuthSessionLifecycle,
 } from "../../../shared/useSupabaseSessionLifecycle";
 
-type SessionLike = {
-  expires_at: number;
-  refresh_token: string;
-};
-
-export function useDesktopAuthSessionLifecycle<TSession extends SessionLike>(params: {
+export function useDesktopAuthSessionLifecycle<TSession extends SupabaseSessionLike>(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   threadsHydratedRef: MutableRefObject<boolean>;
@@ -20,47 +14,18 @@ export function useDesktopAuthSessionLifecycle<TSession extends SessionLike>(par
   onSessionAvailable: (session: TSession) => void;
   onFocusWithSession: (session: TSession) => void;
 }) {
-  const onMountBootstrapRef = useRef(params.onMountBootstrap);
-  const onSessionAvailableRef = useRef(params.onSessionAvailable);
-
-  useEffect(() => {
-    onMountBootstrapRef.current = params.onMountBootstrap;
-  }, [params.onMountBootstrap]);
-
-  useEffect(() => {
-    onSessionAvailableRef.current = params.onSessionAvailable;
-  }, [params.onSessionAvailable]);
-
-  useEffect(() => {
-    void onMountBootstrapRef.current();
-  }, []);
-
-  useSupabaseSessionRefSync({
+  useSupabaseAuthSessionLifecycle({
     session: params.session,
     sessionRef: params.sessionRef,
+    refreshTimeoutRef: params.refreshTimeoutRef,
+    refreshLocked: params.refreshLocked,
+    onMount: params.onMountBootstrap,
+    onSessionAvailable: params.onSessionAvailable,
+    onFocusWithSession: params.onFocusWithSession,
     onSessionCleared: () => {
       params.threadsHydratedRef.current = false;
     },
+    autoRefreshRetryDelayMs: 30_000,
+    autoRefreshRetryIfNotExpired: true,
   });
-
-  useSupabaseSessionAutoRefresh({
-    session: params.session,
-    sessionRef: params.sessionRef,
-    timeoutRef: params.refreshTimeoutRef,
-    refreshLocked: params.refreshLocked,
-    retryDelayMs: 30_000,
-    retryIfNotExpired: true,
-  });
-
-  useSupabaseSessionFocusRefresh({
-    sessionRef: params.sessionRef,
-    refreshLocked: params.refreshLocked,
-    onFocusWithSession: params.onFocusWithSession,
-    thresholdSec: 60,
-  });
-
-  useEffect(() => {
-    if (!params.session) return;
-    onSessionAvailableRef.current(params.session);
-  }, [params.session]);
 }

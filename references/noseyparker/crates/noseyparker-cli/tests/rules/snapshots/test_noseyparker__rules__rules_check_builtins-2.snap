@@ -1,0 +1,5 @@
+---
+source: crates/noseyparker-cli/tests/rules/mod.rs
+expression: stdout
+---
+189 rules and 3 rulesets: no issues detected

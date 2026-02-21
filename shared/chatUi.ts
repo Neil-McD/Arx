@@ -55,6 +55,35 @@ export function shouldShowDateSeparator(messages: { created_at: string }[], inde
   return null;
 }
 
+export type CommunitySenderMetaMessage = {
+  sender_id: string;
+  created_at: string;
+  reply_to_id?: string | null;
+};
+
+export function shouldShowCommunitySenderMeta(
+  messages: CommunitySenderMetaMessage[],
+  index: number,
+  opts?: { forceBeforeDateSeparator?: boolean },
+): boolean {
+  if (index === 0) return true;
+  const prev = messages[index - 1];
+  const curr = messages[index];
+  if (prev.sender_id !== curr.sender_id) return true;
+  if (new Date(prev.created_at).toDateString() !== new Date(curr.created_at).toDateString()) return true;
+  if ((prev.reply_to_id ?? null) !== (curr.reply_to_id ?? null)) return true;
+  const prevTime = new Date(prev.created_at).getTime();
+  const currTime = new Date(curr.created_at).getTime();
+  if (currTime - prevTime > 2 * 60 * 1000) return true;
+  if (opts?.forceBeforeDateSeparator) {
+    const next = messages[index + 1];
+    if (next && new Date(curr.created_at).toDateString() !== new Date(next.created_at).toDateString()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function formatDateSeparator(date: Date): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

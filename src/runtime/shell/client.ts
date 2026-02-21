@@ -10,6 +10,17 @@ export type ShellChatgptAuthSummary = {
   access_token_expires_at?: number | null;
 };
 
+export type ShellChatgptCloudTurnMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
+export type ShellChatgptCloudTurnResult = {
+  text: string;
+  model_id: string;
+  inference_source: string;
+};
+
 export type ShellPendingInviteRecord = {
   invite_key: string;
   status: "pending" | "dismissed" | "joined" | "expired" | string;
@@ -68,6 +79,11 @@ export interface DesktopShellClient {
   getChatgptAuthSummary(): Promise<ShellChatgptAuthSummary | null>;
   chatgptLogin(): Promise<ShellChatgptAuthSummary>;
   clearChatgptAuth(): Promise<void>;
+  chatgptCloudTurn(args: {
+    model_id: string;
+    messages: ShellChatgptCloudTurnMessage[];
+    max_tokens?: number | null;
+  }): Promise<ShellChatgptCloudTurnResult>;
 
   getExecPolicyRules(): Promise<string | null>;
   getApprovalMode(): Promise<string | null>;

@@ -1,26 +1,12 @@
-type TopbarCommunity = {
-  id: string;
-  name: string;
-  avatar_url?: string | null;
-};
+import type { DesktopTopbarActions, DesktopTopbarState } from "./desktopTopbarContracts";
 
 type DesktopTopbarProps = {
-  activePage: "workspace" | "community" | "discover";
-  activeView: "home" | "settings";
-  userWantsSessions: boolean;
-  backTargetLabel: string | null;
-  defaultBackLabel: string;
-  activeCommunity: TopbarCommunity | null;
-  unreadCount: number;
-  getCommunityInitials: (name: string) => string;
-  onBackFromWorkspaceSettings: () => void;
-  onToggleThreadsPanel: () => void;
-  onNewThread: () => void;
-  onBackToWorkspace: () => void;
-  onOpenCommunity: () => void;
+  state: DesktopTopbarState;
+  actions: DesktopTopbarActions;
 };
 
 export function DesktopTopbar(props: DesktopTopbarProps) {
+  const { state, actions } = props;
   const {
     activePage,
     activeView,
@@ -29,13 +15,7 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
     defaultBackLabel,
     activeCommunity,
     unreadCount,
-    getCommunityInitials,
-    onBackFromWorkspaceSettings,
-    onToggleThreadsPanel,
-    onNewThread,
-    onBackToWorkspace,
-    onOpenCommunity,
-  } = props;
+  } = state;
 
   return (
     <header className="app-topbar" data-tauri-drag-region>
@@ -45,7 +25,7 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
             <button
               className="back-to-workspace"
               data-tauri-drag-region="false"
-              onClick={onBackFromWorkspaceSettings}
+              onClick={actions.onBackFromWorkspaceSettings}
               title="Back"
             >
               <svg viewBox="0 0 24 24" className="back-icon">
@@ -56,9 +36,9 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
           ) : (
             <>
               <button
-                className={`icon-button${userWantsSessions ? " active" : ""}`}
+                className={`icon-button desktop-topbar-glass${userWantsSessions ? " active" : ""}`}
                 data-tauri-drag-region="false"
-                onClick={onToggleThreadsPanel}
+                onClick={actions.onToggleThreadsPanel}
                 aria-label="Toggle threads panel"
                 title="Toggle threads panel"
               >
@@ -68,9 +48,9 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
                 </svg>
               </button>
               <button
-                className="new-session-header-btn"
+                className="new-session-header-btn desktop-topbar-glass"
                 data-tauri-drag-region="false"
-                onClick={onNewThread}
+                onClick={actions.onNewThread}
                 title="New thread"
               >
                 <svg viewBox="0 0 24 24">
@@ -84,7 +64,7 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
           <button
             className="back-to-workspace"
             data-tauri-drag-region="false"
-            onClick={onBackToWorkspace}
+            onClick={actions.onBackToWorkspace}
             title="Back"
           >
             <svg viewBox="0 0 24 24" className="back-icon">
@@ -97,9 +77,9 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
       <div className="topbar-right" data-tauri-drag-region>
         {activeCommunity && (
           <button
-            className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
+            className={`icon-button community-btn desktop-topbar-glass${activePage === "community" ? " active" : ""}`}
             data-tauri-drag-region="false"
-            onClick={onOpenCommunity}
+            onClick={actions.onOpenCommunity}
             aria-label="Open community"
             title={activeCommunity.name}
           >
@@ -111,7 +91,7 @@ export function DesktopTopbar(props: DesktopTopbarProps) {
                 loading="lazy"
               />
             ) : (
-              <span className="community-btn-initials">{getCommunityInitials(activeCommunity.name)}</span>
+              <span className="community-btn-initials">{actions.getCommunityInitials(activeCommunity.name)}</span>
             )}
             {unreadCount > 0 && activePage !== "community" && (
               <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>

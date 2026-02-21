@@ -1,180 +1,23 @@
-import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { resolveCloudModelSelection } from "./inferenceLaneResolver";
+import { useCallback, useRef } from "react";
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
-import { resolveLatestUserQueryFromThreadMessages } from "./communityLaneMessageBuilder";
 import {
   getCommunityHarnessUnavailableErrorMessage,
   isCommunityHarnessUnavailablePreflight,
 } from "./cloudCommunityContextPreflight";
-
-type ModelToggle = {
-  id: string;
-  enabled: boolean;
-};
-
-type ThreadRecord = {
-  id: string;
-  model_id: string | null;
-  community_id?: string | null;
-  last_seq: number;
-  updated_at: number;
-};
-
-type ThreadMessage = {
-  id: string;
-  thread_id: string;
-  seq: number;
-  role: "user" | "assistant" | "system";
-  content_json: unknown;
-  created_at: string;
-  engine_id: string | null;
-  model_id: string | null;
-  run_id: string | null;
-};
-
-type GuestStoredMessageV1 = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-  run_id?: string | null;
-};
-
-type GuestThreadStorageV1 = {
-  v: 1;
-  model_id: string;
-  messages: GuestStoredMessageV1[];
-};
-
-type CommunityContextPreflightResult = {
-  hasEntitlement: boolean;
-  communityEvidenceUserMessage: string | null;
-  communityEvidenceUsedV1: unknown;
-  communityContextDiagnostics: Record<string, unknown> | null;
-};
-
-type LoadCommunityContextPreflightParams<SessionT> = {
-  threadId: string;
-  communityId: string;
-  query: string;
-  session: SessionT;
-};
-
-type UseWebSendFlowControllerArgs<
-  SessionT,
-  AttachmentT,
-  ThreadRecordT extends ThreadRecord,
-  ThreadMessageT extends ThreadMessage,
-> = {
-  getSession: () => SessionT | null;
-  openAuthGate: (intentInput?: unknown) => void;
-  ensureWorkspaceThreadLensBeforeSend: (threadId: string, session: SessionT) => Promise<void>;
-
-  createThread: (session: SessionT) => Promise<ThreadRecordT | null>;
-  updateThreadModel: (threadId: string, modelId: string, session: SessionT) => Promise<void>;
-  maybeSetThreadTitleFromText: (threadId: string, userText: string, session: SessionT) => Promise<void>;
-  loadEffectiveCommunitySystemPrompt?: (params: {
-    threadId: string;
-    communityId: string;
-    session: SessionT;
-  }) => Promise<string | null>;
-  loadCommunityContextPreflight?: (
-    params: LoadCommunityContextPreflightParams<SessionT>,
-  ) => Promise<CommunityContextPreflightResult | null>;
-  getPersonalSystemPrompt: () => string | null | undefined;
-  getCommunityNameById?: (communityId: string) => string | null;
-  createPersonalMemoryItemDirect: (params: { content: string; pinned: boolean }) => Promise<unknown>;
-  showMemoryToastMessage: (message: string) => void;
-  loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
-
-  runPublicTurn: (params: {
-    modelId: string;
-    threadId: string;
-    runIdHint: string;
-    messages: ThreadMessageT[];
-    systemPrompt?: string | null;
-    communityEvidenceUserMessage?: string | null;
-  }) => Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }>;
-  runAgentTurn: (
-    session: SessionT,
-    threadId: string,
-    params: {
-      preferredModelId: string;
-      mode?: "respond" | "regenerate";
-      runIdHint: string;
-      inferenceSource?: "platform" | "user";
-      replyToId?: string;
-    },
-  ) => Promise<{ cancelled: boolean; error: string | null }>;
-  createThreadMessage: (
-    session: SessionT,
-    params: { id?: string; threadId: string; role: "user" | "assistant" | "system"; content_json: unknown },
-  ) => Promise<string>;
-  createAssistantTextMessage: (
-    session: SessionT,
-    params: {
-      threadId: string;
-      text: string;
-      engineId?: string | null;
-      modelId?: string | null;
-      runId?: string | null;
-      inferenceSource?: string | null;
-      communityEvidenceUsedV1?: unknown;
-      communityContextDiagnostics?: Record<string, unknown> | null;
-    },
-  ) => Promise<string>;
-  deleteThreadMessagesByIds: (session: SessionT, messageIds: string[]) => Promise<void>;
-
-  extractRememberIntent: (input: string) => string | null;
-  extractTextFromContentJson: (value: unknown) => string;
-  storeGuestThreadStorage: (next: GuestThreadStorageV1) => void;
-
-  messageInput: string;
-  workspaceAttachments: AttachmentT[];
-  isSendingMessage: boolean;
-  activeThreadId: string | null;
-  threadMessages: ThreadMessageT[];
-  threads: ThreadRecordT[];
-  activeModelId: string | null;
-  modelToggles: ModelToggle[];
-  userMemoryRememberEnabled: boolean;
-  builderTier: string;
-  hasPaidAccess: boolean;
-  guestThreadId: string;
-  guestModelId: string;
-  guestModelAllowlist: Set<string>;
-  defaultActiveModelId: string;
-  defaultGuestModelId: string;
-
-  workspaceAttachmentsRef: MutableRefObject<AttachmentT[]>;
-  autoScrollEnabledRef: MutableRefObject<boolean>;
-
-  setThreadError: Dispatch<SetStateAction<string | null>>;
-  setIsSendingMessage: Dispatch<SetStateAction<boolean>>;
-  setIsWorkspaceAtBottom: Dispatch<SetStateAction<boolean>>;
-  setWorkspaceWantsNewChatMode: Dispatch<SetStateAction<boolean>>;
-  setActiveThreadId: Dispatch<SetStateAction<string | null>>;
-  setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
-  setMessageInput: Dispatch<SetStateAction<string>>;
-  setWorkspaceAttachments: Dispatch<SetStateAction<AttachmentT[]>>;
-  setThreads: Dispatch<SetStateAction<ThreadRecordT[]>>;
-  setActiveModelId: Dispatch<SetStateAction<string | null>>;
-  setBuilderUpgradeContext: (next: string) => void;
-  setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
-  setIsBuilderUpgradeOpen: Dispatch<SetStateAction<boolean>>;
-};
-
-function toErrorMessage(error: unknown, fallback: string): string {
-  return typeof error === "string" ? error : error instanceof Error ? error.message : fallback;
-}
-
-function getLastThreadMessageId(messages: ThreadMessage[], role: "user" | "assistant" | "system"): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg?.role === role) return msg.id;
-  }
-  return null;
-}
+import {
+  type ThreadRecord,
+  type ThreadMessage,
+  type UseWebSendFlowControllerArgs,
+  getLastThreadMessageId,
+  persistGuestThreadStorageFromMessages,
+  resolveCommunityPreflightForThread,
+  resolvePreferredModelSelectionFromArgs,
+  resolveScopedSystemPromptForThread,
+  runPublicTurnAndPersistAssistant,
+  showBuilderLimitUpgradeIfNeeded,
+  syncThreadModelSelectionInState,
+  toErrorMessage,
+} from "./webSendFlowCore";
 
 export function useWebSendFlowController<
   SessionT,
@@ -186,91 +29,25 @@ export function useWebSendFlowController<
   argsRef.current = args;
 
   const maybeShowBuilderLimitUpgrade = useCallback((message: string): void => {
-    const current = argsRef.current;
-    if (!message.toLowerCase().includes("cloud history limit reached")) return;
-    current.setBuilderUpgradeContext("builder");
-    current.setBuilderBillingError(message);
-    current.setIsBuilderUpgradeOpen(true);
+    showBuilderLimitUpgradeIfNeeded(argsRef.current, message);
   }, []);
 
-  const resolvePreferredModelSelection = useCallback(() => {
-    const current = argsRef.current;
-    const enabled = current.modelToggles.filter((toggle) => toggle.enabled);
-    const preferredModelIdRaw =
-      (current.activeModelId ?? "").trim() ||
-      enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
-      enabled[0]?.id ||
-      current.defaultActiveModelId;
-    return resolveCloudModelSelection({
-      requestedModelId: preferredModelIdRaw,
-      enabledModelIds: enabled.map((toggle) => toggle.id),
-      defaultAuthedModelId: current.defaultActiveModelId,
-      defaultGuestModelId: current.defaultGuestModelId,
-      hasPaidAccess: current.hasPaidAccess,
-      freeModelAllowlist: current.guestModelAllowlist,
-    });
-  }, []);
+  const resolvePreferredModelSelection = useCallback(() => resolvePreferredModelSelectionFromArgs(argsRef.current), []);
 
   const persistGuestFromMessages = useCallback((messages: ThreadMessageT[]): void => {
-    const current = argsRef.current;
-    const stored: GuestThreadStorageV1 = {
-      v: 1,
-      model_id: current.guestModelId,
-      messages: [],
-    };
-    for (const msg of messages) {
-      if (msg.role !== "user" && msg.role !== "assistant") continue;
-      const content = current.extractTextFromContentJson(msg.content_json).trim();
-      if (!content) continue;
-      stored.messages.push({
-        id: msg.id,
-        role: msg.role,
-        content,
-        created_at: msg.created_at,
-        run_id: msg.run_id,
-      });
-    }
-    current.storeGuestThreadStorage(stored);
+    persistGuestThreadStorageFromMessages(argsRef.current, messages);
   }, []);
 
   const syncThreadModelSelection = useCallback(
     (threadId: string, modelId: string, session: SessionT | null): void => {
-      const current = argsRef.current;
-      current.setThreads((prev) =>
-        prev.map((thread) => (thread.id === threadId ? ({ ...thread, model_id: modelId } as ThreadRecordT) : thread)),
-      );
-      if (!session) return;
-      void current.updateThreadModel(threadId, modelId, session).catch((error) => {
-        console.warn("Failed to persist thread model selection:", error);
-      });
+      syncThreadModelSelectionInState(argsRef.current, threadId, modelId, session);
     },
     [],
   );
 
   const resolveScopedSystemPrompt = useCallback(
-    async (threadId: string, session: SessionT): Promise<string | null> => {
-      const current = argsRef.current;
-      const thread = current.threads.find((candidate) => candidate.id === threadId) ?? null;
-      const communityId = String(thread?.community_id ?? "").trim();
-      const communityName =
-        communityId && current.getCommunityNameById ? current.getCommunityNameById(communityId) : null;
-      let customCommunitySystemPrompt: string | null = null;
-      const loader = current.loadEffectiveCommunitySystemPrompt;
-      if (communityId && loader) {
-        try {
-          customCommunitySystemPrompt = await loader({ threadId, communityId, session });
-        } catch {
-          customCommunitySystemPrompt = null;
-        }
-      }
-      const envelope = buildCloudCommunityContextEnvelope({
-        communityId: communityId || null,
-        communityName,
-        customCommunitySystemPrompt,
-        personalSystemPrompt: current.getPersonalSystemPrompt(),
-      });
-      return envelope.scopedSystemPrompt;
-    },
+    async (threadId: string, session: SessionT): Promise<string | null> =>
+      resolveScopedSystemPromptForThread(argsRef.current, threadId, session),
     [],
   );
 
@@ -280,32 +57,7 @@ export function useWebSendFlowController<
       session: SessionT;
       messages: ThreadMessageT[];
       fallbackQuery?: string | null;
-    }): Promise<CommunityContextPreflightResult | null> => {
-      const current = argsRef.current;
-      const loader = current.loadCommunityContextPreflight;
-      if (!loader) return null;
-      const thread = current.threads.find((candidate) => candidate.id === params.threadId) ?? null;
-      const communityId = String(thread?.community_id ?? "").trim();
-      if (!communityId) return null;
-      const query = resolveLatestUserQueryFromThreadMessages({
-        messages: params.messages,
-        fallbackQuery: params.fallbackQuery,
-        getRole: (message) => message.role,
-        getText: (message) => current.extractTextFromContentJson(message.content_json),
-      });
-      try {
-        return (
-          (await loader({
-            threadId: params.threadId,
-            communityId,
-            query,
-            session: params.session,
-          })) ?? null
-        );
-      } catch {
-        return null;
-      }
-    },
+    }) => resolveCommunityPreflightForThread(argsRef.current, params),
     [],
   );
 
@@ -388,7 +140,7 @@ export function useWebSendFlowController<
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
     const hasPersonalMemoryAccess =
-      current.builderTier === "builder" || current.builderTier === "pro" || current.builderTier === "architect";
+      current.builderTier === "builder" || current.builderTier === "pro";
 
     current.setThreadError(null);
     current.setIsSendingMessage(true);
@@ -486,30 +238,15 @@ export function useWebSendFlowController<
         if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
           throw new Error(getCommunityHarnessUnavailableErrorMessage());
         }
-        const turnResult = await current.runPublicTurn({
-          modelId: preferredModelId,
+        await runPublicTurnAndPersistAssistant(current, {
+          session,
           threadId,
+          modelId: preferredModelId,
           runIdHint: `public_web:${messageId}`,
           messages: optimisticThreadMessages,
           systemPrompt,
-          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
+          communityPreflight,
         });
-        if (turnResult.error) throw new Error(turnResult.error);
-        if (!turnResult.cancelled) {
-          const assistantContent = (turnResult.content ?? "").trim();
-          if (assistantContent) {
-            await current.createAssistantTextMessage(session, {
-              threadId,
-              text: assistantContent,
-              engineId: "public_web",
-              modelId: preferredModelId,
-              runId: turnResult.runId ?? null,
-              inferenceSource: "free",
-              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
-              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
-            });
-          }
-        }
       } else {
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
@@ -583,30 +320,15 @@ export function useWebSendFlowController<
         if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
           throw new Error(getCommunityHarnessUnavailableErrorMessage());
         }
-        const turnResult = await current.runPublicTurn({
-          modelId: preferredModelId,
+        await runPublicTurnAndPersistAssistant(current, {
+          session,
           threadId,
+          modelId: preferredModelId,
           runIdHint: `public_web_retry:${lastUserMessageId}:${Date.now()}`,
           messages: currentThreadMessages,
           systemPrompt,
-          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
+          communityPreflight,
         });
-        if (turnResult.error) throw new Error(turnResult.error);
-        if (!turnResult.cancelled) {
-          const assistantContent = (turnResult.content ?? "").trim();
-          if (assistantContent) {
-            await current.createAssistantTextMessage(session, {
-              threadId,
-              text: assistantContent,
-              engineId: "public_web",
-              modelId: preferredModelId,
-              runId: turnResult.runId ?? null,
-              inferenceSource: "free",
-              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
-              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
-            });
-          }
-        }
       } else {
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
@@ -682,30 +404,15 @@ export function useWebSendFlowController<
           throw new Error(getCommunityHarnessUnavailableErrorMessage());
         }
 
-        const turnResult = await current.runPublicTurn({
-          modelId: preferredModelId,
+        await runPublicTurnAndPersistAssistant(current, {
+          session,
           threadId,
+          modelId: preferredModelId,
           runIdHint: `public_web_regen:${lastUserMessageId}:${Date.now()}`,
           messages: messagesForTurn,
           systemPrompt,
-          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
+          communityPreflight,
         });
-        if (turnResult.error) throw new Error(turnResult.error);
-        if (!turnResult.cancelled) {
-          const assistantContent = (turnResult.content ?? "").trim();
-          if (assistantContent) {
-            await current.createAssistantTextMessage(session, {
-              threadId,
-              text: assistantContent,
-              engineId: "public_web",
-              modelId: preferredModelId,
-              runId: turnResult.runId ?? null,
-              inferenceSource: "free",
-              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
-              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
-            });
-          }
-        }
       } else {
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,

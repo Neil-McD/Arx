@@ -132,13 +132,39 @@ export function shouldFallbackFromPlatformErrorToPublic(error: SupabaseFunctionE
   return false;
 }
 
-export function shouldFallbackFromChatgptErrorToPlatform(errorMessage: string): boolean {
-  const lower = String(errorMessage ?? "").trim().toLowerCase();
+export function shouldFallbackFromChatgptErrorToPlatform(message: string): boolean {
+  const lower = String(message ?? "").trim().toLowerCase();
   if (!lower) return true;
-  if (lower.includes("chatgpt_http_")) return true;
-  if (lower.includes("chatgpt session not available")) return true;
-  if (lower.includes("model is not eligible for chatgpt inference")) return true;
-  if (lower.includes("chatgpt request failed")) return true;
-  if (lower.includes("chatgpt stream failed")) return true;
+
+  if (
+    lower.includes("chatgpt session not available") ||
+    lower.includes("sign in again")
+  ) {
+    return true;
+  }
+
+  if (
+    lower.includes("chatgpt request failed") ||
+    lower.includes("chatgpt response read failed") ||
+    lower.includes("chatgpt returned invalid json") ||
+    lower.includes("chatgpt returned an empty response")
+  ) {
+    return true;
+  }
+
+  if (lower.includes("chatgpt inference failed")) return true;
+  if (lower.includes("http 4") || lower.includes("http 5")) return true;
+
+  if (
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("network error") ||
+    lower.includes("connection reset") ||
+    lower.includes("connection refused") ||
+    lower.includes("temporarily unavailable")
+  ) {
+    return true;
+  }
+
   return true;
 }

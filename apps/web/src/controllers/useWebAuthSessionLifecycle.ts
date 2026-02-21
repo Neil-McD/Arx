@@ -1,16 +1,10 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { type MutableRefObject } from "react";
 import {
-  useSupabaseSessionAutoRefresh,
-  useSupabaseSessionFocusRefresh,
-  useSupabaseSessionRefSync,
+  type SupabaseSessionLike,
+  useSupabaseAuthSessionLifecycle,
 } from "../../../../shared/useSupabaseSessionLifecycle";
 
-type SessionLike = {
-  expires_at: number;
-  refresh_token: string;
-};
-
-export function useWebAuthSessionLifecycle<TSession extends SessionLike>(params: {
+export function useWebAuthSessionLifecycle<TSession extends SupabaseSessionLike>(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   refreshTimeoutRef: MutableRefObject<number | null>;
@@ -22,62 +16,16 @@ export function useWebAuthSessionLifecycle<TSession extends SessionLike>(params:
   onSessionMissing: () => void;
   onFocusWithSession: (session: TSession) => void;
 }) {
-  const onMountOAuthBootstrapRef = useRef(params.onMountOAuthBootstrap);
-  const onDidJustSignInRef = useRef(params.onDidJustSignIn);
-  const onSessionAvailableRef = useRef(params.onSessionAvailable);
-  const onSessionMissingRef = useRef(params.onSessionMissing);
-
-  useEffect(() => {
-    onMountOAuthBootstrapRef.current = params.onMountOAuthBootstrap;
-  }, [params.onMountOAuthBootstrap]);
-
-  useEffect(() => {
-    onDidJustSignInRef.current = params.onDidJustSignIn;
-  }, [params.onDidJustSignIn]);
-
-  useEffect(() => {
-    onSessionAvailableRef.current = params.onSessionAvailable;
-  }, [params.onSessionAvailable]);
-
-  useEffect(() => {
-    onSessionMissingRef.current = params.onSessionMissing;
-  }, [params.onSessionMissing]);
-
-  useEffect(() => {
-    void onMountOAuthBootstrapRef.current();
-  }, []);
-
-  useSupabaseSessionRefSync({
+  useSupabaseAuthSessionLifecycle({
     session: params.session,
     sessionRef: params.sessionRef,
-  });
-
-  useSupabaseSessionAutoRefresh({
-    session: params.session,
-    sessionRef: params.sessionRef,
-    timeoutRef: params.refreshTimeoutRef,
+    refreshTimeoutRef: params.refreshTimeoutRef,
     refreshLocked: params.refreshLocked,
-  });
-
-  useSupabaseSessionFocusRefresh({
-    sessionRef: params.sessionRef,
-    refreshLocked: params.refreshLocked,
+    onMount: params.onMountOAuthBootstrap,
+    onSessionAvailable: params.onSessionAvailable,
+    onSessionMissing: params.onSessionMissing,
     onFocusWithSession: params.onFocusWithSession,
-    thresholdSec: 60,
+    didJustSignInRef: params.didJustSignInRef,
+    onDidJustSignIn: params.onDidJustSignIn,
   });
-
-  useEffect(() => {
-    if (!params.session) {
-      onSessionMissingRef.current();
-      return;
-    }
-    onSessionAvailableRef.current(params.session);
-  }, [params.session]);
-
-  useEffect(() => {
-    if (!params.session) return;
-    if (!params.didJustSignInRef.current) return;
-    params.didJustSignInRef.current = false;
-    onDidJustSignInRef.current();
-  }, [params.session, params.didJustSignInRef]);
 }

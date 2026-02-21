@@ -47,6 +47,16 @@ function parseAllowedCorsOrigins(): string[] {
   return Array.from(new Set(out));
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    const hostname = (url.hostname ?? "").trim().toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export function jsonResponse(
   body: unknown,
   init: ResponseInit & { headers?: Record<string, string> } = { status: 200 },
@@ -111,6 +121,12 @@ export function withStrictCors(
 
   const origin = normalizeCorsOrigin(rawOrigin);
   if (!origin) return { headers: baseHeaders, allowed: false };
+  if (isLoopbackOrigin(origin)) {
+    return {
+      headers: { ...baseHeaders, "Access-Control-Allow-Origin": origin },
+      allowed: true,
+    };
+  }
 
   const allowedOrigins = parseAllowedCorsOrigins();
   if (!allowedOrigins.includes(origin)) return { headers: baseHeaders, allowed: false };

@@ -1,4 +1,10 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import {
+  abortAllScopedRequests,
+  beginScopedAbortRequest,
+  finishScopedAbortRequest,
+  isAbortError,
+} from "./communityFetchAbortScope";
 
 type SessionLike = unknown;
 
@@ -53,6 +59,8 @@ export function useCommunityResourceController<
 >(args: UseCommunityResourceControllerArgs<SessionT, ResourceT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
+  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const resourceLoadGenerationRef = useRef(0);
 
   const resetResourceEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
@@ -70,24 +78,43 @@ export function useCommunityResourceController<
     const current = argsRef.current;
     const url = current.getSupabaseUrl();
     if (!url) return;
+    const generation = (resourceLoadGenerationRef.current += 1);
+    const fetchController = beginScopedAbortRequest({
+      inFlightByKind: fetchAbortControllersRef.current,
+      kind: "community_resources_list",
+    });
     current.setIsLoadingResources(true);
     try {
       let response: Response;
       try {
         response = await current.fetchWithSupabaseAuth(
           `${url}/rest/v1/community_resources?select=id,community_id,type,title,body_md,url,file_key,pinned,created_at&community_id=eq.${communityId}&order=pinned.desc,created_at.desc&limit=200`,
-          {},
+          { signal: fetchController.signal },
           session,
         );
-      } catch {
+      } catch (error) {
+        if (isAbortError(error)) return;
         return;
       }
       if (!response.ok) return;
       const rows = (await response.json()) as ResourceT[];
       current.setCommunityResources(rows);
     } finally {
-      current.setIsLoadingResources(false);
+      finishScopedAbortRequest({
+        inFlightByKind: fetchAbortControllersRef.current,
+        kind: "community_resources_list",
+        controller: fetchController,
+      });
+      if (resourceLoadGenerationRef.current === generation) {
+        current.setIsLoadingResources(false);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortAllScopedRequests(fetchAbortControllersRef.current);
+    };
   }, []);
 
   const handleSaveCommunityResource = useCallback(async () => {

@@ -34,7 +34,7 @@ export function buildContextFallbackThreadTitle(params: {
   return `Thread ${params.threadId.slice(0, 6)}`;
 }
 
-export function isThreadContextTraceEnabled(): boolean {
+function isThreadContextTraceEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
     const globalToggle = (window as unknown as { __ARX_TRACE_THREAD_CONTEXT__?: boolean })

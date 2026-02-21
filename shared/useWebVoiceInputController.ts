@@ -31,7 +31,7 @@ type UseWebVoiceInputControllerArgs<SupabaseSessionT> = {
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "request_access" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "builder" | "architect";
+  normalizedBuilderTier: "free" | "builder" | "pro";
   getSupabaseUrl: () => string | null;
   fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSessionT) => Promise<Response>;
   fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
@@ -54,13 +54,16 @@ export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceIn
   const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
 
   function resolveVoiceInputIntent(surface: VoiceSurface): VoiceInputIntent {
+    if (!args.supabaseSession) {
+      return {
+        mode: "sign_in",
+        title:
+          surface === "community"
+            ? "Sign in to use voice input in community chat."
+            : "Sign in to use voice input.",
+      };
+    }
     if (surface === "community") {
-      if (!args.supabaseSession) {
-        return {
-          mode: "sign_in",
-          title: "Sign in to use voice input in community chat.",
-        };
-      }
       if (!args.activeCommunity) {
         return {
           mode: "select_community",
@@ -101,7 +104,7 @@ export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceIn
     return {
       mode: "start_recording",
       title:
-        args.normalizedBuilderTier === "architect"
+        args.normalizedBuilderTier === "pro"
           ? "Start voice input ($100 plan)."
           : args.normalizedBuilderTier === "builder"
             ? "Start voice input ($20 plan)."
@@ -169,21 +172,16 @@ export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceIn
       surface,
     });
     const session = args.supabaseSessionRef.current ?? args.supabaseSession;
-    const response = session
-      ? await args.fetchWithSupabaseAuth(
-          `${url}/functions/v1/voice_transcribe`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: payload,
-          },
-          session,
-        )
-      : await args.fetchWithSupabasePublic(`${url}/functions/v1/voice_transcribe`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
-        });
+    if (!session) throw new Error("Sign in to use voice input.");
+    const response = await args.fetchWithSupabaseAuth(
+      `${url}/functions/v1/voice_transcribe`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      },
+      session,
+    );
     if (!response.ok) throw new Error(await args.readSupabaseError(response));
     const data = (await response.json()) as { text?: unknown };
     return typeof data?.text === "string" ? data.text.trim() : "";

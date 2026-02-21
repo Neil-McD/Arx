@@ -27,7 +27,6 @@ type UseCommunityAgentDraftControllerArgs<
   getSupabaseUrl: () => string | null;
   fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
   readSupabaseError: (response: Response) => Promise<string>;
-  communityAgentSelectedSlot: number;
   communityAgentDraftName: string;
   communityAgentDraftLanding: LandingT;
   communityAgentDraftSystemPrompt: string;
@@ -44,7 +43,6 @@ type UseCommunityAgentDraftControllerArgs<
   saveValidationErrorMessage: string;
   loadFailureMessage: string;
   saveFailureMessage: string;
-  renameFailureMessage: string;
   setLiveFailureMessage: string;
 };
 
@@ -54,6 +52,8 @@ type UpsertDraftResponseRow = {
   is_active: boolean;
   updated_at: string;
 };
+
+const COMMUNITY_AGENT_PRIMARY_SLOT = 1;
 
 export function useCommunityAgentDraftController<
   SessionT extends SessionLike,
@@ -93,8 +93,7 @@ export function useCommunityAgentDraftController<
       rows.sort((a, b) => a.slot - b.slot);
       current.setCommunityAgentDrafts(rows);
       current.setLoadedCommunityId(communityId);
-      const activeSlot = rows.find((draft) => draft.is_active)?.slot ?? 1;
-      current.hydrateDraftEditor(activeSlot, rows);
+      current.hydrateDraftEditor(COMMUNITY_AGENT_PRIMARY_SLOT, rows);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -134,7 +133,7 @@ export function useCommunityAgentDraftController<
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             p_community_id: communityId,
-            p_slot: current.communityAgentSelectedSlot,
+            p_slot: COMMUNITY_AGENT_PRIMARY_SLOT,
             p_name: current.communityAgentDraftName,
             p_landing_json: normalized,
             p_system_prompt: current.communityAgentDraftSystemPrompt,
@@ -183,70 +182,6 @@ export function useCommunityAgentDraftController<
     }
   }, []);
 
-  const persistCommunityAgentTemplateName = useCallback(async (slot: number, nextName: string): Promise<boolean> => {
-    const current = argsRef.current;
-    const session = current.supabaseSession;
-    const communityId = current.activeCommunityId;
-    if (!session || !communityId) return false;
-
-    const row = current.communityAgentDrafts.find((draft) => draft.slot === slot);
-    if (!row) return false;
-
-    const url = current.getSupabaseUrl();
-    if (!url) return false;
-
-    try {
-      const normalized = nextName.trim();
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/upsert_community_agent_draft`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_slot: slot,
-            p_name: normalized ? normalized : null,
-            p_landing_json: row.landing_json ?? {},
-            p_system_prompt: row.system_prompt ?? "",
-          }),
-        },
-        session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        current.setCommunityAgentDraftSaveError(message);
-        return false;
-      }
-
-      const rows = (await response.json()) as UpsertDraftResponseRow[];
-      const updated = rows[0];
-      if (!updated) return false;
-      current.setCommunityAgentDrafts((prev) =>
-        prev.map((draft) =>
-          draft.slot === slot
-            ? {
-                ...draft,
-                id: updated.id,
-                name: normalized ? normalized : null,
-                is_active: updated.is_active,
-                updated_at: updated.updated_at,
-              }
-            : draft,
-        ),
-      );
-      return true;
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : current.renameFailureMessage;
-      current.setCommunityAgentDraftSaveError(message);
-      return false;
-    }
-  }, []);
-
   const handleSetLiveCommunityAgentDraft = useCallback(async () => {
     const current = argsRef.current;
     const session = current.supabaseSession;
@@ -263,7 +198,7 @@ export function useCommunityAgentDraftController<
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId, p_slot: current.communityAgentSelectedSlot }),
+          body: JSON.stringify({ p_community_id: communityId, p_slot: COMMUNITY_AGENT_PRIMARY_SLOT }),
         },
         session,
       );
@@ -274,7 +209,7 @@ export function useCommunityAgentDraftController<
       }
       current.setCommunityAgentDrafts((prev) =>
         prev.map((draft) =>
-          draft.community_id === communityId ? { ...draft, is_active: draft.slot === current.communityAgentSelectedSlot } : draft,
+          draft.community_id === communityId ? { ...draft, is_active: draft.slot === COMMUNITY_AGENT_PRIMARY_SLOT } : draft,
         ),
       );
     } catch (error) {
@@ -293,7 +228,6 @@ export function useCommunityAgentDraftController<
   return {
     loadCommunityAgentDrafts,
     handleSaveCommunityAgentDraft,
-    persistCommunityAgentTemplateName,
     handleSetLiveCommunityAgentDraft,
   };
 }

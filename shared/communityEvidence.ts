@@ -1,6 +1,6 @@
 export const COMMUNITY_EVIDENCE_USED_CONTRACT_ID = "community_evidence_used_v1";
-export const COMMUNITY_EVIDENCE_CHAT_LIMIT = 6;
-export const COMMUNITY_EVIDENCE_RESOURCE_LIMIT = 5;
+const COMMUNITY_EVIDENCE_CHAT_LIMIT = 6;
+const COMMUNITY_EVIDENCE_RESOURCE_LIMIT = 5;
 export const COMMUNITY_EVIDENCE_TOTAL_LIMIT =
   COMMUNITY_EVIDENCE_CHAT_LIMIT + COMMUNITY_EVIDENCE_RESOURCE_LIMIT;
 
@@ -94,7 +94,7 @@ function normalizeItemsArray(value: unknown): CommunityEvidenceItem[] {
   return out;
 }
 
-export function normalizeCommunityEvidenceUsedV1(value: unknown): CommunityEvidenceUsedV1 | null {
+function normalizeCommunityEvidenceUsedV1(value: unknown): CommunityEvidenceUsedV1 | null {
   const record = asRecord(value);
   if (!record) return null;
   const items = normalizeItemsArray(record.items);

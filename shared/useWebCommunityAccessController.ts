@@ -1,4 +1,10 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import {
+  abortAllScopedRequests,
+  beginScopedAbortRequest,
+  finishScopedAbortRequest,
+  isAbortError,
+} from "./communityFetchAbortScope";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, CommunityAccessT, UserProfileT> = {
   getSupabaseUrl: () => string | null;
@@ -28,17 +34,25 @@ export function useWebCommunityAccessController<
 >(args: UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, CommunityAccessT, UserProfileT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
+  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const loadCommunitiesSeqRef = useRef(0);
+  const loadCommunityAccessSeqRef = useRef(0);
 
   const loadCommunities = useCallback(async (session: SessionT): Promise<void> => {
     const current = argsRef.current;
     const url = current.getSupabaseUrl();
     if (!url) return;
+    const seq = (loadCommunitiesSeqRef.current += 1);
+    const fetchController = beginScopedAbortRequest({
+      inFlightByKind: fetchAbortControllersRef.current,
+      kind: "community_access_list",
+    });
     const userId = current.getSupabaseAuthUid(session);
     try {
       current.setIsLoadingCommunities(true);
       const response = await current.fetchWithSupabaseAuth(
         `${url}/rest/v1/community_memberships?select=community_id,role,communities(id,slug,name,owner_id,description,avatar_url,banner_url,visibility,free_join_requires_approval,created_at,updated_at)&user_id=eq.${userId}`,
-        {},
+        { signal: fetchController.signal },
         session,
       );
       if (!response.ok) {
@@ -72,9 +86,17 @@ export function useWebCommunityAccessController<
         current.setActiveCommunityId(list[0].id);
       }
     } catch (error) {
+      if (isAbortError(error)) return;
       console.warn("Failed to load communities:", error);
     } finally {
-      current.setIsLoadingCommunities(false);
+      finishScopedAbortRequest({
+        inFlightByKind: fetchAbortControllersRef.current,
+        kind: "community_access_list",
+        controller: fetchController,
+      });
+      if (loadCommunitiesSeqRef.current === seq) {
+        current.setIsLoadingCommunities(false);
+      }
     }
   }, []);
 
@@ -82,6 +104,11 @@ export function useWebCommunityAccessController<
     const current = argsRef.current;
     const url = current.getSupabaseUrl();
     if (!url) return;
+    const seq = (loadCommunityAccessSeqRef.current += 1);
+    const fetchController = beginScopedAbortRequest({
+      inFlightByKind: fetchAbortControllersRef.current,
+      kind: "community_access_active",
+    });
     current.setIsLoadingCommunityAccess(true);
     try {
       const response = await current.fetchWithSupabaseAuth(
@@ -90,16 +117,25 @@ export function useWebCommunityAccessController<
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ p_community_id: communityId }),
+          signal: fetchController.signal,
         },
         session,
       );
       if (!response.ok) return;
       const rows = (await response.json()) as CommunityAccessT[];
       current.setActiveCommunityAccess(rows[0] ?? null);
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) return;
       // ignore
     } finally {
-      current.setIsLoadingCommunityAccess(false);
+      finishScopedAbortRequest({
+        inFlightByKind: fetchAbortControllersRef.current,
+        kind: "community_access_active",
+        controller: fetchController,
+      });
+      if (loadCommunityAccessSeqRef.current === seq) {
+        current.setIsLoadingCommunityAccess(false);
+      }
     }
   }, []);
 
@@ -129,6 +165,12 @@ export function useWebCommunityAccessController<
     } catch {
       // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      abortAllScopedRequests(fetchAbortControllersRef.current);
+    };
   }, []);
 
   return {

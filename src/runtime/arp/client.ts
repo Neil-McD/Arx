@@ -96,6 +96,7 @@ export interface RuntimeClient {
     cwd: string;
     input: string;
     user_content_json: string;
+    community_name?: string | null;
     supabase_url?: string | null;
     supabase_anon_key?: string | null;
     supabase_access_token?: string | null;

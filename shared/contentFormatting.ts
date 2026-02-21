@@ -91,7 +91,7 @@ export function dateKeyLocal(date: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function csvEscape(value: unknown): string {
+function csvEscape(value: unknown): string {
   const str = value === null || value === undefined ? "" : String(value);
   if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;

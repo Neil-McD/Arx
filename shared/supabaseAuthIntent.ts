@@ -1,6 +1,6 @@
-export const PENDING_AUTH_INTENT_STORAGE_KEY = "arx_pending_auth_intent_v1";
-export const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
-export const AUTH_RETURN_TO_STORAGE_KEY = "arx_auth_return_to_v1";
+const PENDING_AUTH_INTENT_STORAGE_KEY = "arx_pending_auth_intent_v1";
+const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+const AUTH_RETURN_TO_STORAGE_KEY = "arx_auth_return_to_v1";
 
 export type BuilderUpgradeContext = "builder" | "create_community";
 
@@ -45,7 +45,7 @@ export type PendingAuthIntent =
       reason: "start_builder_checkout";
       return_to: string;
       created_at_ms: number;
-      payload: { tier: "builder" | "architect" | "pro"; context: BuilderUpgradeContext };
+      payload: { tier: "builder" | "pro"; context: BuilderUpgradeContext };
     }
   | {
       v: 1;
@@ -158,9 +158,11 @@ function normalizePendingAuthIntent(
   }
 
   if (reason === "start_builder_checkout") {
-    const tier = payload.tier;
+    const rawTier = payload.tier;
     const context = payload.context;
-    if (tier !== "builder" && tier !== "pro" && tier !== "architect") return null;
+    const tier =
+      rawTier === "architect" ? "pro" : rawTier === "builder" || rawTier === "pro" ? rawTier : null;
+    if (!tier) return null;
     if (context !== "builder" && context !== "create_community") return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { tier, context } };
   }
@@ -239,13 +241,11 @@ export function readPendingAuthIntent(nowMs = Date.now()): PendingAuthIntent | n
 }
 
 export function buildPendingAuthIntent(input: PendingAuthIntentInput, returnTo: string, nowMs = Date.now()): PendingAuthIntent {
-  return {
-    v: 1,
-    reason: input.reason,
-    payload: input.payload,
-    return_to: returnTo,
-    created_at_ms: nowMs,
-  } as PendingAuthIntent;
+  const normalized = normalizePendingAuthIntent(input.reason, input.payload, returnTo, nowMs);
+  if (!normalized) {
+    throw new Error("invalid_pending_auth_intent_input");
+  }
+  return normalized;
 }
 
 export function storePendingAuthIntent(intent: PendingAuthIntent): void {

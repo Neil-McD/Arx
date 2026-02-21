@@ -1,0 +1,42 @@
+################################################################################
+# Build `noseyparker`
+#
+# We use the alpine current, since it's smaller than most debian releases.
+################################################################################
+FROM rust:alpine AS builder
+
+# Install dependencies
+RUN apk add --no-cache --no-interactive \
+        boost-dev \
+        build-base \
+        cmake \
+        git \
+        make \
+        musl-dev \
+        openssl \
+        openssl-dev \
+        perl \
+        zsh \
+        && \
+    apk cache clean
+
+WORKDIR "/noseyparker"
+
+COPY . .
+
+RUN ./scripts/create-release.zsh --no-debug && \
+    cp -r release /release
+
+################################################################################
+# Build a smaller image just for running the `noseyparker` binary
+################################################################################
+FROM alpine:latest AS runner
+
+# Add `git` so that noseyparker's git and github integration works
+RUN apk add --no-cache --no-interactive git
+COPY --from=builder /release /usr/local/
+
+# Tip when running: use a volume mount: `-v "$PWD:/scan"` to make for handling of paths on the command line
+WORKDIR "/scan"
+
+ENTRYPOINT ["noseyparker"]

@@ -43,8 +43,18 @@ export function createThreadContextController<TThread extends ThreadContextLike>
       thread_id: threadId,
       desired_community_id: desiredCommunityId,
     });
+    const fromState = deps.findThreadById(threadId);
+    if (fromState && (fromState.community_id ?? null) === desiredCommunityId) {
+      deps.trace?.("send_preflight_lens_noop", {
+        surface: deps.surface,
+        thread_id: threadId,
+        current_community_id: fromState.community_id ?? null,
+      });
+      return;
+    }
+
     const latestThread = await deps.getLatestThreadRecord(threadId).catch(() => null);
-    const thread = latestThread ?? deps.findThreadById(threadId);
+    const thread = latestThread ?? fromState;
     if (!thread) {
       deps.trace?.("send_preflight_lens_missing_thread", {
         surface: deps.surface,

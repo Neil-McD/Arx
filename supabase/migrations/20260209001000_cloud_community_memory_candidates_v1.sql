@@ -20,7 +20,6 @@ create table if not exists public.community_memory_items (
   updated_at timestamptz not null default now(),
   search_doc tsvector not null default ''::tsvector
 );
-
 create index if not exists idx_community_memory_items_community_updated
   on public.community_memory_items (community_id, updated_at desc);
 create index if not exists idx_community_memory_items_community_created
@@ -28,7 +27,6 @@ create index if not exists idx_community_memory_items_community_created
 create index if not exists idx_community_memory_items_search_doc
   on public.community_memory_items
   using gin (search_doc);
-
 create table if not exists public.community_memory_candidates (
   id uuid primary key default gen_random_uuid(),
   community_id uuid not null references public.communities(id) on delete cascade,
@@ -48,7 +46,6 @@ create table if not exists public.community_memory_candidates (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create unique index if not exists uq_community_memory_candidates_request
   on public.community_memory_candidates (community_id, proposer_user_id, request_key)
   where request_key is not null;
@@ -56,10 +53,8 @@ create index if not exists idx_community_memory_candidates_community_state
   on public.community_memory_candidates (community_id, router_state, created_at desc);
 create index if not exists idx_community_memory_candidates_proposer
   on public.community_memory_candidates (proposer_user_id, created_at desc);
-
 alter table public.community_memory_items
   add column if not exists source_candidate_id uuid references public.community_memory_candidates(id) on delete set null;
-
 create or replace function public.community_memory_build_search_doc(
   p_title text,
   p_content_md text
@@ -71,7 +66,6 @@ set search_path = public
 as $$
   select to_tsvector('english', coalesce(p_title, '') || ' ' || coalesce(p_content_md, ''));
 $$;
-
 create or replace function public.community_memory_set_derived_fields()
 returns trigger
 language plpgsql
@@ -85,13 +79,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists trg_community_memory_items_derived_fields on public.community_memory_items;
 create trigger trg_community_memory_items_derived_fields
 before insert or update on public.community_memory_items
 for each row
 execute function public.community_memory_set_derived_fields();
-
 create or replace function public.community_memory_candidates_set_updated_at()
 returns trigger
 language plpgsql
@@ -104,13 +96,11 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists trg_community_memory_candidates_updated_at on public.community_memory_candidates;
 create trigger trg_community_memory_candidates_updated_at
 before update on public.community_memory_candidates
 for each row
 execute function public.community_memory_candidates_set_updated_at();
-
 create or replace function public.derive_community_memory_title(
   p_title text,
   p_memory_text text
@@ -136,7 +126,6 @@ begin
   return left(v_fallback, 160);
 end;
 $$;
-
 create or replace function public.route_community_memory_candidate(
   p_memory_text text
 )
@@ -182,7 +171,6 @@ begin
   return query select 'needs_review'::text, 68::integer, 'requires_admin_review'::text;
 end;
 $$;
-
 create or replace function public.community_memory_candidate_propose(
   p_community_id uuid,
   p_title text default null,
@@ -322,7 +310,6 @@ begin
   select v_candidate_id, v_router_state, coalesce(v_signal_score, 0), v_router_reason, v_promoted_memory_id, v_created_at;
 end;
 $$;
-
 create or replace function public.community_memory_candidate_promote(
   p_candidate_id uuid,
   p_title text default null
@@ -416,7 +403,6 @@ begin
   return query select v_candidate.id, v_memory_id, v_promoted_at, 'admin_promoted'::text;
 end;
 $$;
-
 create or replace function public.search_community_memory_items(
   p_user_id uuid,
   p_community_id uuid,
@@ -492,10 +478,8 @@ as $$
     m.updated_at desc
   limit (select lim from qry);
 $$;
-
 alter table public.community_memory_items enable row level security;
 alter table public.community_memory_candidates enable row level security;
-
 drop policy if exists community_memory_items_select_member on public.community_memory_items;
 create policy community_memory_items_select_member
 on public.community_memory_items
@@ -504,26 +488,22 @@ using (
   public.is_community_member(community_id)
   or public.has_active_entitlement(community_id)
 );
-
 drop policy if exists community_memory_items_write_admin on public.community_memory_items;
 create policy community_memory_items_write_admin
 on public.community_memory_items
 for insert
 with check (public.has_active_entitlement_role(community_id, array['owner','admin','mod']));
-
 drop policy if exists community_memory_items_update_admin on public.community_memory_items;
 create policy community_memory_items_update_admin
 on public.community_memory_items
 for update
 using (public.has_active_entitlement_role(community_id, array['owner','admin','mod']))
 with check (public.has_active_entitlement_role(community_id, array['owner','admin','mod']));
-
 drop policy if exists community_memory_items_delete_admin on public.community_memory_items;
 create policy community_memory_items_delete_admin
 on public.community_memory_items
 for delete
 using (public.has_active_entitlement_role(community_id, array['owner','admin','mod']));
-
 drop policy if exists community_memory_candidates_select_owner_or_admin on public.community_memory_candidates;
 create policy community_memory_candidates_select_owner_or_admin
 on public.community_memory_candidates
@@ -532,7 +512,6 @@ using (
   proposer_user_id = auth.uid()
   or public.has_active_entitlement_role(community_id, array['owner','admin','mod'])
 );
-
 drop policy if exists community_memory_candidates_insert_member on public.community_memory_candidates;
 create policy community_memory_candidates_insert_member
 on public.community_memory_candidates
@@ -541,14 +520,12 @@ with check (
   proposer_user_id = auth.uid()
   and public.has_active_entitlement(community_id)
 );
-
 drop policy if exists community_memory_candidates_update_admin on public.community_memory_candidates;
 create policy community_memory_candidates_update_admin
 on public.community_memory_candidates
 for update
 using (public.has_active_entitlement_role(community_id, array['owner','admin','mod']))
 with check (public.has_active_entitlement_role(community_id, array['owner','admin','mod']));
-
 -- Extend compiled context to ingest promoted community memory items.
 do $$
 begin
@@ -558,7 +535,6 @@ begin
   end if;
 end;
 $$;
-
 create or replace function public.bump_community_context_state(p_community_id uuid)
 returns void
 language plpgsql
@@ -611,7 +587,6 @@ begin
     memory_count = excluded.memory_count;
 end;
 $$;
-
 do $$
 begin
   if to_regclass('public.community_context_items') is null then
@@ -633,7 +608,6 @@ begin
       check (source_type in ('chat_message', 'community_resource', 'community_memory'));
 end;
 $$;
-
 create or replace function public.sync_community_context_from_memory_item()
 returns trigger
 language plpgsql
@@ -740,27 +714,23 @@ begin
   return new;
 end;
 $$;
-
 drop trigger if exists trg_sync_community_context_memory_items on public.community_memory_items;
 create trigger trg_sync_community_context_memory_items
 after insert or update or delete on public.community_memory_items
 for each row
 execute function public.sync_community_context_from_memory_item();
-
 revoke all on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) from public;
 revoke all on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) from anon;
 revoke all on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) from authenticated;
 revoke all on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) from service_role;
 grant execute on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) to authenticated;
 grant execute on function public.community_memory_candidate_propose(uuid, text, text, jsonb, text) to service_role;
-
 revoke all on function public.community_memory_candidate_promote(uuid, text) from public;
 revoke all on function public.community_memory_candidate_promote(uuid, text) from anon;
 revoke all on function public.community_memory_candidate_promote(uuid, text) from authenticated;
 revoke all on function public.community_memory_candidate_promote(uuid, text) from service_role;
 grant execute on function public.community_memory_candidate_promote(uuid, text) to authenticated;
 grant execute on function public.community_memory_candidate_promote(uuid, text) to service_role;
-
 revoke all on function public.search_community_memory_items(uuid, uuid, text, int) from public;
 revoke all on function public.search_community_memory_items(uuid, uuid, text, int) from anon;
 revoke all on function public.search_community_memory_items(uuid, uuid, text, int) from authenticated;

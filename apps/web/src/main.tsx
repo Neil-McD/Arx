@@ -2,12 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 
 try {
-  const savedTheme = localStorage.getItem("arx-theme");
-  document.documentElement.setAttribute("data-theme", savedTheme || "dark");
+  const savedTheme = parseAppTheme(localStorage.getItem("arx-theme"));
+  applyAppThemeAttributes(savedTheme ?? "dark", document.documentElement);
 } catch {
-  document.documentElement.setAttribute("data-theme", "dark");
+  applyAppThemeAttributes("dark", document.documentElement);
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

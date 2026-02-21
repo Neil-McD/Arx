@@ -1,0 +1,502 @@
+package filesystem
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/trufflesecurity/trufflehog/v3/pkg/context"
+	"github.com/trufflesecurity/trufflehog/v3/pkg/pb/source_metadatapb"
+	"github.com/trufflesecurity/trufflehog/v3/pkg/pb/sourcespb"
+	"github.com/trufflesecurity/trufflehog/v3/pkg/sources"
+	"github.com/trufflesecurity/trufflehog/v3/pkg/sourcestest"
+)
+
+func TestSource_Scan(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	type init struct {
+		name       string
+		verify     bool
+		connection *sourcespb.Filesystem
+	}
+	tests := []struct {
+		name               string
+		init               init
+		wantSourceMetadata *source_metadatapb.MetaData
+		wantErr            bool
+	}{
+		{
+			name: "get a chunk",
+			init: init{
+				name: "this repo",
+				connection: &sourcespb.Filesystem{
+					Paths: []string{"."},
+				},
+				verify: true,
+			},
+			wantSourceMetadata: &source_metadatapb.MetaData{
+				Data: &source_metadatapb.MetaData_Filesystem{
+					Filesystem: &source_metadatapb.Filesystem{
+						File: "filesystem.go",
+						Line: 1, // First chunk starts at line 1
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := Source{}
+
+			conn, err := anypb.New(tt.init.connection)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = s.Init(ctx, tt.init.name, 0, 0, tt.init.verify, conn, 5)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Source.Init() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			chunksCh := make(chan *sources.Chunk, 1)
+			// TODO: this is kind of bad, if it errors right away we don't see it as a test failure.
+			// Debugging this usually requires setting a breakpoint on L78 and running test w/ debug.
+			go func() {
+				defer close(chunksCh)
+				err = s.Chunks(ctx, chunksCh)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("Source.Chunks() error = %v, wantErr %v", err, tt.wantErr)
+					return
+				}
+			}()
+			var counter int
+			for chunk := range chunksCh {
+				if chunk.SourceMetadata.GetFilesystem().GetFile() == "filesystem.go" {
+					counter++
+					if diff := cmp.Diff(tt.wantSourceMetadata, chunk.SourceMetadata, protocmp.Transform()); diff != "" {
+						t.Errorf("Source.Chunks() %s metadata mismatch (-want +got):\n%s", tt.name, diff)
+					}
+				}
+			}
+			assert.Equal(t, 1, counter)
+		})
+	}
+}
+
+func TestScanFile(t *testing.T) {
+	chunkSize := sources.DefaultChunkSize
+	secretPart1 := "SECRET"
+	secretPart2 := "SPLIT"
+	// Split the secret into two parts and pad the rest of the chunk with A's.
+	data := strings.Repeat("A", chunkSize-len(secretPart1)) + secretPart1 + secretPart2 + strings.Repeat("A", chunkSize-len(secretPart2))
+
+	tmpfile, cleanup, err := createTempFile("", data)
+	assert.Nil(t, err)
+	defer cleanup()
+
+	source := &Source{}
+	chunksChan := make(chan *sources.Chunk, 2)
+
+	ctx := context.WithLogger(context.Background(), logr.Discard())
+	go func() {
+		defer close(chunksChan)
+		err = source.scanFile(ctx, tmpfile.Name(), chunksChan)
+		assert.Nil(t, err)
+	}()
+
+	// Read from the channel and validate the secrets.
+	foundSecret := ""
+	for chunkCh := range chunksChan {
+		foundSecret += string(chunkCh.Data)
+	}
+
+	assert.Contains(t, foundSecret, secretPart1+secretPart2)
+}
+
+func TestScanBinaryFile(t *testing.T) {
+	tmpfile, err := os.CreateTemp("", "example.bin")
+	require.NoError(t, err)
+	defer os.Remove(tmpfile.Name())
+
+	// binary data that decodes to "TuffleHog"
+	fileContents := []byte{0x54, 0x75, 0x66, 0x66, 0x6C, 0x65, 0x48, 0x6F, 0x67}
+	_, err = tmpfile.Write(fileContents)
+	require.NoError(t, err)
+	require.NoError(t, tmpfile.Close())
+
+	source := &Source{}
+	chunksChan := make(chan *sources.Chunk, 2)
+	errChan := make(chan error, 1)
+
+	ctx := context.WithLogger(context.Background(), logr.Discard())
+
+	go func() {
+		defer close(chunksChan)
+		errChan <- source.scanFile(ctx, tmpfile.Name(), chunksChan)
+	}()
+
+	err = <-errChan
+	require.NoError(t, err)
+
+	var data string
+	for chunk := range chunksChan {
+		require.NotNil(t, chunk)
+		data += string(chunk.Data)
+	}
+
+	assert.Contains(t, data, "TuffleHog")
+}
+
+func TestEnumerate(t *testing.T) {
+	// TODO: refactor to allow a virtual filesystem.
+	t.Parallel()
+	ctx := context.Background()
+
+	// Setup the connection to test enumeration.
+	dir, err := os.MkdirTemp("", "trufflehog-test-enumerate")
+	assert.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	units := []string{
+		"/one", "/two", "/three",
+		"/path/to/dir/", "/path/to/another/dir/",
+	}
+	// Prefix the units with the tempdir and create files on disk.
+	for i, unit := range units {
+		fullPath := filepath.Join(dir, unit)
+		units[i] = fullPath
+		if i < 3 {
+			f, err := os.Create(fullPath)
+			assert.NoError(t, err)
+			f.Close()
+		} else {
+			assert.NoError(t, os.MkdirAll(fullPath, 0755))
+			// Create a file in the directory for enumeration to find.
+			f, err := os.CreateTemp(fullPath, "file")
+			assert.NoError(t, err)
+			units[i] = f.Name()
+			f.Close()
+		}
+	}
+	conn, err := anypb.New(&sourcespb.Filesystem{
+		Paths:       units[0:3],
+		Directories: units[3:],
+	})
+	assert.NoError(t, err)
+
+	// Initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "test enumerate", 0, 0, true, conn, 1)
+	assert.NoError(t, err)
+
+	reporter := sourcestest.TestReporter{}
+	err = s.Enumerate(ctx, &reporter)
+	assert.NoError(t, err)
+
+	assert.Equal(t, len(units), len(reporter.Units))
+	assert.Equal(t, 0, len(reporter.UnitErrs))
+	for _, unit := range reporter.Units {
+		path, _ := unit.SourceUnitID()
+		assert.Contains(t, units, path)
+	}
+	for _, unit := range units {
+		assert.Contains(t, reporter.Units, sources.CommonSourceUnit{ID: unit})
+	}
+}
+
+func TestChunkUnit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Setup test file to chunk.
+	fileContents := "TestChunkUnit"
+	tmpfile, cleanup, err := createTempFile("", fileContents)
+	assert.NoError(t, err)
+	defer cleanup()
+
+	tmpdir, cleanup, err := createTempDir("", "foo", "bar", "baz")
+	assert.NoError(t, err)
+	defer cleanup()
+
+	conn, err := anypb.New(&sourcespb.Filesystem{})
+	assert.NoError(t, err)
+
+	// Initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "test chunk unit", 0, 0, true, conn, 1)
+	assert.NoError(t, err)
+
+	// Happy path single file.
+	reporter := sourcestest.TestReporter{}
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: tmpfile.Name(),
+	}, &reporter)
+	assert.NoError(t, err)
+
+	// Happy path directory.
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: tmpdir,
+	}, &reporter)
+	assert.NoError(t, err)
+
+	// Error path.
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: "/file/not/found",
+	}, &reporter)
+	assert.NoError(t, err)
+
+	assert.Equal(t, 4, len(reporter.Chunks))
+	assert.Equal(t, 1, len(reporter.ChunkErrs))
+	dataFound := make(map[string]struct{}, 4)
+	for _, chunk := range reporter.Chunks {
+		dataFound[string(chunk.Data)] = struct{}{}
+	}
+	assert.Contains(t, dataFound, fileContents)
+	assert.Contains(t, dataFound, "foo")
+	assert.Contains(t, dataFound, "bar")
+	assert.Contains(t, dataFound, "baz")
+}
+
+func TestEnumerateReporterErr(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Setup the connection to test enumeration.
+	units := []string{
+		"/one", "/two", "/three",
+		"/path/to/dir/", "/path/to/another/dir/",
+	}
+	conn, err := anypb.New(&sourcespb.Filesystem{
+		Paths:       units[0:3],
+		Directories: units[3:],
+	})
+	assert.NoError(t, err)
+
+	// Initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "test enumerate", 0, 0, true, conn, 1)
+	assert.NoError(t, err)
+
+	// Enumerate should always return an error if the reporter returns an
+	// error.
+	reporter := sourcestest.ErrReporter{}
+	err = s.Enumerate(ctx, &reporter)
+	assert.Error(t, err)
+}
+
+func TestChunkUnitReporterErr(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Setup test file to chunk.
+	tmpfile, err := os.CreateTemp("", "example.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	fileContents := []byte("TestChunkUnit")
+	_, err = tmpfile.Write(fileContents)
+	assert.NoError(t, err)
+	assert.NoError(t, tmpfile.Close())
+
+	conn, err := anypb.New(&sourcespb.Filesystem{})
+	assert.NoError(t, err)
+
+	// Initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "test chunk unit", 0, 0, true, conn, 1)
+	assert.NoError(t, err)
+
+	// Happy path. ChunkUnit should always return an error if the reporter
+	// returns an error.
+	reporter := sourcestest.ErrReporter{}
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: tmpfile.Name(),
+	}, &reporter)
+	assert.Error(t, err)
+
+	// Error path. ChunkUnit should always return an error if the reporter
+	// returns an error.
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: "/file/not/found",
+	}, &reporter)
+	assert.Error(t, err)
+}
+
+func TestSkipDir(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// create a temp directory with files
+	ignoreDir, cleanupDir, err := createTempDir("", "ignore1", "ignore2", "ignore3")
+	require.NoError(t, err)
+	defer cleanupDir()
+
+	// create an ExcludePathsFile that contains the ignoreDir path
+	excludeFile, cleanupFile, err := createTempFile("", ignoreDir+"\n")
+	require.NoError(t, err)
+	defer cleanupFile()
+
+	conn, err := anypb.New(&sourcespb.Filesystem{
+		ExcludePathsFile: excludeFile.Name(),
+	})
+	require.NoError(t, err)
+
+	// initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "exclude directory", 0, 0, true, conn, 1)
+	require.NoError(t, err)
+
+	reporter := sourcestest.TestReporter{}
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: ignoreDir,
+	}, &reporter)
+	require.NoError(t, err)
+
+	require.Equal(t, 0, len(reporter.Chunks), "Expected no chunks from excluded directory")
+	require.Equal(t, 0, len(reporter.ChunkErrs), "Expected no errors for excluded directory")
+}
+
+func TestScanSubDirFile(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// create a temp directory with files
+	parentDir, cleanupParentDir, err := createTempDir("", "file1")
+	require.NoError(t, err)
+	defer cleanupParentDir()
+
+	childDir, cleanupChildDir, err := createTempDir(parentDir, "file2")
+	require.NoError(t, err)
+	defer cleanupChildDir()
+
+	// create a file in child directory
+	file, cleanupFile, err := createTempFile(childDir, "should scan this file")
+	require.NoError(t, err)
+	defer cleanupFile()
+
+	// create an IncludePathsFile that contains the file path
+	includeFile, cleanupFile, err := createTempFile("", file.Name()+"\n")
+	require.NoError(t, err)
+	defer cleanupFile()
+
+	conn, err := anypb.New(&sourcespb.Filesystem{
+		IncludePathsFile: includeFile.Name(),
+	})
+	require.NoError(t, err)
+
+	// initialize the source.
+	s := Source{}
+	err = s.Init(ctx, "include sub directory file", 0, 0, true, conn, 1)
+	require.NoError(t, err)
+
+	reporter := sourcestest.TestReporter{}
+	err = s.ChunkUnit(ctx, sources.CommonSourceUnit{
+		ID: parentDir,
+	}, &reporter)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, len(reporter.Chunks), "Expected chunks from included file")
+	require.Equal(t, 0, len(reporter.ChunkErrs), "Expected no errors")
+}
+
+func TestSkipBinaries(t *testing.T) {
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "trufflehog_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create a binary file (executable)
+	binaryFile := filepath.Join(tempDir, "test.exe")
+	err = os.WriteFile(binaryFile, []byte{0x4D, 0x5A, 0x90, 0x00}, 0644)
+	require.NoError(t, err)
+
+	// Create a text file
+	textFile := filepath.Join(tempDir, "test.txt")
+	err = os.WriteFile(textFile, []byte("This is a text file"), 0644)
+	require.NoError(t, err)
+
+	// Test with skipBinaries = true
+	source := &Source{
+		paths:        []string{textFile, binaryFile}, // Test individual files
+		skipBinaries: true,
+		log:          logr.Discard(),
+	}
+
+	chunks := make(chan *sources.Chunk, 10)
+	ctx := context.Background()
+
+	// Run the scan
+	go func() {
+		err := source.Chunks(ctx, chunks)
+		require.NoError(t, err)
+		close(chunks)
+	}()
+
+	// Collect chunks
+	var chunkCount int
+	var processedFiles []string
+	for chunk := range chunks {
+		chunkCount++
+		metadata := chunk.SourceMetadata.GetFilesystem()
+		require.NotNil(t, metadata)
+		processedFiles = append(processedFiles, metadata.File)
+	}
+
+	// Should have exactly one chunk from the text file
+	require.Equal(t, 1, chunkCount, "Should have processed exactly one text file")
+	require.Contains(t, processedFiles, textFile, "Should have processed the text file")
+	require.NotContains(t, processedFiles, binaryFile, "Binary file should be skipped")
+}
+
+// createTempFile is a helper function to create a temporary file in the given
+// directory with the provided contents. If dir is "", the operating system's
+// temp directory is used.
+func createTempFile(dir string, contents string) (*os.File, func(), error) {
+	tmpfile, err := os.CreateTemp(dir, "trufflehogtest")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if _, err := tmpfile.Write([]byte(contents)); err != nil {
+		_ = os.Remove(tmpfile.Name())
+		return nil, nil, err
+	}
+	if err := tmpfile.Close(); err != nil {
+		_ = os.Remove(tmpfile.Name())
+		return nil, nil, err
+	}
+	return tmpfile, func() { _ = os.Remove(tmpfile.Name()) }, nil
+}
+
+// createTempDir is a helper function to create a temporary directory in the
+// given directory with files containing the provided contents. If dir is "",
+// the operating system's temp directory is used.
+func createTempDir(dir string, contents ...string) (string, func(), error) {
+	tmpdir, err := os.MkdirTemp(dir, "trufflehogtest")
+	if err != nil {
+		return "", nil, err
+	}
+
+	for _, content := range contents {
+		if _, _, err := createTempFile(tmpdir, content); err != nil {
+			_ = os.RemoveAll(tmpdir)
+			return "", nil, err
+		}
+	}
+	return tmpdir, func() { _ = os.RemoveAll(tmpdir) }, nil
+}

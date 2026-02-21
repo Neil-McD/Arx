@@ -1,123 +1,24 @@
-import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useRef } from "react";
 import {
   formatSupabaseFunctionErrorMessage,
   readSupabaseFunctionError,
 } from "./supabaseFunctionErrors";
-import { prependCommunityPreludeMessages } from "./communityLaneMessageBuilder";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer.mjs";
-
-type PlatformQuotaModalState = {
-  reason: "quota" | "plan" | "misconfigured" | "disabled" | "unavailable";
-  threadId: string;
-  mode: "respond" | "regenerate";
-  message: string | null;
-};
-
-type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
-  engine_id: string;
-  model_id: string | null;
-  inference_source?: string | null;
-  memory_used?: MemoryUsedItemT[];
-  history_used?: HistoryUsedItemT[];
-  community_evidence_used?: CommunityEvidenceUsedT | null;
-};
-
-type UseWebTurnRunnerControllerArgs<
-  SessionT,
-  MemoryUsedItemT,
-  HistoryUsedItemT,
-  CommunityEvidenceUsedT,
-> = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
-
-  extractTextFromContentJson: (value: unknown) => string;
-  parseMemoryUsedArray: (value: unknown) => MemoryUsedItemT[];
-  parseHistoryUsedArray: (value: unknown) => HistoryUsedItemT[];
-  extractCommunityEvidenceUsedV1: (value: unknown) => CommunityEvidenceUsedT | null;
-
-  loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
-  loadThreads: (session: SessionT) => Promise<void>;
-  showMemoryToastMessage: (message: string) => void;
-
-  setPlatformQuotaModal: Dispatch<SetStateAction<PlatformQuotaModalState | null>>;
-  setStreamingContent: Dispatch<SetStateAction<string | null>>;
-  setStreamingThreadId: Dispatch<SetStateAction<string | null>>;
-  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
-  setStreamingMeta: Dispatch<
-    SetStateAction<WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null>
-  >;
-
-  streamingContentRef: MutableRefObject<string | null>;
-  streamingRafRef: MutableRefObject<number | null>;
-  streamingAbortRef: MutableRefObject<AbortController | null>;
-  streamingUserCancelledRef: MutableRefObject<boolean>;
-};
-
-type PublicTurnThreadMessage = {
-  role: "user" | "assistant" | "system";
-  content_json: unknown;
-};
-
-type RunPublicTurnParams<ThreadMessageT extends PublicTurnThreadMessage> = {
-  modelId: string;
-  threadId: string;
-  runIdHint: string;
-  messages: ThreadMessageT[];
-  systemPrompt?: string | null;
-  communityEvidenceUserMessage?: string | null;
-};
-
-type RunAgentTurnParams = {
-  preferredModelId: string;
-  mode?: "respond" | "regenerate";
-  runIdHint: string;
-  inferenceSource?: "platform" | "user";
-  replyToId?: string;
-};
-
-type CreateThreadMessageParams = {
-  id?: string;
-  threadId: string;
-  role: "user" | "assistant" | "system";
-  content_json: unknown;
-  engine_id?: string | null;
-  model_id?: string | null;
-  run_id?: string | null;
-};
-
-type CreateAssistantMessageParams = {
-  threadId: string;
-  text: string;
-  engineId?: string | null;
-  modelId?: string | null;
-  runId?: string | null;
-  inferenceSource?: string | null;
-  communityEvidenceUsedV1?: unknown;
-  communityContextDiagnostics?: Record<string, unknown> | null;
-};
-
-function isAbortError(error: unknown): boolean {
-  if (!error) return false;
-  if (error instanceof DOMException && error.name === "AbortError") return true;
-  if (error instanceof Error && error.name === "AbortError") return true;
-  return false;
-}
-
-function normalizeGuestInferenceError(message: string): string {
-  const raw = (message ?? "").trim();
-  if (!raw) return "Failed to run model.";
-  const lower = raw.toLowerCase();
-  if (
-    lower.includes("no endpoints found matching your data policy") ||
-    (lower.includes("free model publication") && lower.includes("privacy"))
-  ) {
-    return "Guest chat is unavailable because the OpenRouter key blocks free guest models. Enable Free model publication in OpenRouter privacy settings, or map guest models to non-free models.";
-  }
-  return raw;
-}
+import {
+  type CreateAssistantMessageParams,
+  type CreateThreadMessageParams,
+  type PlatformQuotaModalState,
+  type PublicTurnThreadMessage,
+  type RunAgentTurnParams,
+  type RunPublicTurnParams,
+  type UseWebTurnRunnerControllerArgs,
+  buildAssistantTextMessagePayload,
+  buildPublicTurnMessages,
+  isAbortError,
+  mapPlatformFailureReason,
+  normalizeGuestInferenceError,
+  resetStreamingState,
+} from "./webTurnRunnerCore";
 
 export function useWebTurnRunnerController<
   SessionT,
@@ -177,27 +78,6 @@ export function useWebTurnRunnerController<
         });
       };
 
-      const toPublicMessages = (
-        items: ThreadMessageT[],
-        systemPrompt: string | null | undefined,
-        communityEvidenceUserMessage: string | null | undefined,
-      ): Array<{ role: "user" | "assistant" | "system"; content: string }> => {
-        const threadMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
-        for (const msg of items) {
-          if (!msg) continue;
-          const role = msg.role;
-          if (role !== "user" && role !== "assistant" && role !== "system") continue;
-          const content = current.extractTextFromContentJson(msg.content_json).trim();
-          if (!content) continue;
-          threadMessages.push({ role, content });
-        }
-        return prependCommunityPreludeMessages({
-          messages: threadMessages,
-          systemPrompt,
-          communityEvidenceUserMessage,
-        });
-      };
-
       let finalContent = "";
       let runIdFromServer: string | null = null;
       try {
@@ -207,11 +87,12 @@ export function useWebTurnRunnerController<
           body: JSON.stringify({
             model_id: params.modelId,
             stream: true,
-            messages: toPublicMessages(
-              params.messages,
-              params.systemPrompt,
-              params.communityEvidenceUserMessage,
-            ),
+            messages: buildPublicTurnMessages({
+              messages: params.messages,
+              systemPrompt: params.systemPrompt,
+              communityEvidenceUserMessage: params.communityEvidenceUserMessage,
+              extractTextFromContentJson: current.extractTextFromContentJson,
+            }),
           }),
           signal: abort.signal,
         });
@@ -353,17 +234,7 @@ export function useWebTurnRunnerController<
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
         return { cancelled: false, error: normalizeGuestInferenceError(rawMessage), content: "", runId: null };
       } finally {
-        if (current.streamingRafRef.current) {
-          window.cancelAnimationFrame(current.streamingRafRef.current);
-          current.streamingRafRef.current = null;
-        }
-        current.streamingAbortRef.current = null;
-        current.streamingContentRef.current = null;
-        current.setStreamingContent(null);
-        current.setStreamingThreadId(null);
-        current.setStreamingRunId(null);
-        current.setStreamingMeta(null);
-        current.streamingUserCancelledRef.current = false;
+        resetStreamingState(current);
       }
     },
     [],
@@ -442,18 +313,8 @@ export function useWebTurnRunnerController<
             failure.category === "disabled" ||
             failure.category === "plan"
           ) {
-            const reason: PlatformQuotaModalState["reason"] =
-              failure.category === "quota"
-                ? "quota"
-                : failure.category === "plan"
-                ? "plan"
-                : failure.category === "misconfigured"
-                ? "misconfigured"
-                : failure.category === "disabled"
-                ? "disabled"
-                : "unavailable";
             current.setPlatformQuotaModal({
-              reason,
+              reason: mapPlatformFailureReason(failure.category),
               threadId,
               mode: params.mode === "regenerate" ? "regenerate" : "respond",
               message: failure.message.trim() || null,
@@ -569,17 +430,7 @@ export function useWebTurnRunnerController<
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
         return { cancelled: false, error: message };
       } finally {
-        if (current.streamingRafRef.current) {
-          window.cancelAnimationFrame(current.streamingRafRef.current);
-          current.streamingRafRef.current = null;
-        }
-        current.streamingAbortRef.current = null;
-        current.streamingContentRef.current = null;
-        current.setStreamingContent(null);
-        current.setStreamingThreadId(null);
-        current.setStreamingRunId(null);
-        current.setStreamingMeta(null);
-        current.streamingUserCancelledRef.current = false;
+        resetStreamingState(current);
       }
     },
     [],
@@ -620,43 +471,14 @@ export function useWebTurnRunnerController<
 
   const createAssistantTextMessage = useCallback(
     async (session: SessionT, params: CreateAssistantMessageParams): Promise<string> => {
-      const modelId = (params.modelId ?? "").trim();
-      const inferenceSource = (params.inferenceSource ?? "").trim();
-      const safeText = sanitizeUserFacingAssistantText({
-        text: params.text,
-        blockedIds: [params.threadId, params.runId ?? null],
-      });
-      const rawCommunityEvidenceUsed = params.communityEvidenceUsedV1;
-      const hasCommunityEvidenceUsed =
-        rawCommunityEvidenceUsed !== null && rawCommunityEvidenceUsed !== undefined;
-      const communityContextDiagnostics = params.communityContextDiagnostics ?? null;
-      const hasCommunityContextDiagnostics =
-        Boolean(communityContextDiagnostics) &&
-        typeof communityContextDiagnostics === "object" &&
-        !Array.isArray(communityContextDiagnostics);
-      const meta =
-        modelId || inferenceSource || hasCommunityEvidenceUsed || hasCommunityContextDiagnostics
-          ? {
-              ...(modelId ? { model_id: modelId } : null),
-              ...(inferenceSource ? { inference_source: inferenceSource } : null),
-              ...(hasCommunityEvidenceUsed
-                ? { community_evidence_used_v1: rawCommunityEvidenceUsed }
-                : null),
-              ...(hasCommunityContextDiagnostics
-                ? { community_context_diagnostics: communityContextDiagnostics }
-                : null),
-            }
-          : null;
+      const payload = buildAssistantTextMessagePayload(params);
       return await createThreadMessage(session, {
         threadId: params.threadId,
         role: "assistant",
-        content_json: {
-          text: safeText,
-          ...(meta ? { meta } : null),
-        },
-        engine_id: (params.engineId ?? "").trim() || null,
-        model_id: modelId || null,
-        run_id: (params.runId ?? "").trim() || null,
+        content_json: payload.content_json,
+        engine_id: payload.engine_id,
+        model_id: payload.model_id,
+        run_id: payload.run_id,
       });
     },
     [createThreadMessage],

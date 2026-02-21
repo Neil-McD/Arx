@@ -7,6 +7,9 @@
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --web-rail-width: 72px;
+  --web-rail-control-size: 44px;
+  --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
+  --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
   --web-sessions-drawer-width: 240px;
 
   /* Minimal glassmorphism controls (web only). */
@@ -48,9 +51,16 @@
   }
 }
 
-/* Web: default dark rail — opaque to prevent translucent compositing mismatch. */
-:root[data-theme="dark"] .rail {
-  background: #1e1e1e;
+/* Web-only dark rail override, expressed as a surface token assignment. */
+:root[data-theme="dark"] {
+  --surface-rail: #1e1e1e;
+}
+
+/* Web Polynet: use one opaque slab token to prevent rail/workspace compositing drift. */
+:root[data-theme="polynet"] {
+  --bg-workspace: #0d0d10;
+  --surface-workspace: #0d0d10;
+  --surface-rail: #0d0d10;
 }
 
 /* Web light themes: add enough contrast so the selection lip + buttons read on white rails. */
@@ -101,7 +111,7 @@
   left: 0;
   right: 0;
   height: var(--web-topbar-height);
-  padding: 8px 14px 0 calc(var(--web-rail-width) + 14px);
+  padding: 8px 14px 0 calc(var(--web-rail-width) + var(--web-rail-anchor-inset));
   background: transparent;
   border-bottom: 0;
   pointer-events: none;
@@ -201,7 +211,7 @@
 .app-root {
   grid-template-rows: 1fr;
   /* Match the workspace surface so the reserved top spacing doesn't read as a separate bar. */
-  background: var(--bg-workspace, var(--bg-app));
+  background: var(--surface-workspace, var(--surface-app));
 }
 
 /* Web UX: center the chat feed + composer like chat.openai.com */
@@ -224,6 +234,18 @@
   /* On narrow windows, keep the drawer overlayed instead of shrinking the chat column. */
   .app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
     padding-left: 0;
+  }
+}
+
+/* Web AI + Discover: center against the rail control edge (not the rail column edge). */
+@media (min-width: 921px) {
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .message-list-inner,
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .web-empty-thread,
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .ask-bar,
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid {
+    position: relative;
+    left: var(--web-rail-balance-shift);
   }
 }
 
@@ -813,13 +835,6 @@
   max-width: 52ch;
 }
 
-.agent-template-picker {
-  margin-left: auto;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
 .agent-preview-actions {
   display: flex;
   align-items: center;
@@ -850,284 +865,6 @@
 .settings-panel .agent-preview-actions button:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: var(--bg-card);
-}
-
-.agent-template-btn {
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 12px;
-  background-color: var(--bg-card-alt);
-  color: var(--text-primary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 260px;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.agent-template-btn:hover {
-  border-color: var(--border-default);
-  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
-}
-
-.agent-template-btn[aria-expanded="true"] {
-  border-color: var(--border-default);
-  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
-}
-
-.agent-template-btn-text {
-  display: inline-block;
-  max-width: 22ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-template-chevron {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.7;
-}
-
-.agent-template-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(360px, calc(100vw - 64px));
-  background: var(--bg-card-solid, var(--bg-card));
-  border: 1px solid var(--border-default);
-  border-radius: 14px;
-  padding: 8px 0;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
-  z-index: 40;
-  display: grid;
-  gap: 0;
-}
-
-.agent-template-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  transition: color 120ms ease;
-  flex-wrap: wrap;
-}
-
-.agent-template-option + .agent-template-option {
-  border-top: 1px solid var(--border-muted);
-}
-
-.agent-template-option:hover {
-  background: transparent;
-}
-
-.agent-template-option.active {
-  background: transparent;
-}
-
-.agent-template-option.active .agent-template-name-text {
-  font-weight: 600;
-}
-
-.agent-template-option:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-gold) 70%, transparent);
-  outline-offset: 2px;
-}
-
-.agent-template-option-main {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.agent-template-slot {
-  width: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-faint);
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-.agent-template-name {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  padding: 7px 10px;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 12px;
-}
-
-.agent-template-name-text {
-  flex: 1;
-  min-width: 0;
-  display: inline-block;
-  padding: 7px 10px;
-  border-radius: 10px;
-  color: var(--text-primary);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-template-option.active .agent-template-name {
-  border-color: color-mix(in srgb, var(--border-default) 75%, transparent);
-}
-
-.agent-template-name:focus {
-  outline: none;
-  border-color: var(--accent-gold);
-}
-
-.agent-template-badges {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.agent-template-option-right {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.agent-template-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.agent-template-action,
-.agent-template-save {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
-}
-
-.agent-template-save {
-  height: 28px;
-  padding: 0;
-  border-radius: 0;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.agent-template-save:hover {
-  text-decoration: underline;
-}
-
-.agent-template-saved {
-  height: 28px;
-  padding: 0;
-  border-radius: 0;
-  display: inline-flex;
-  align-items: center;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-.agent-template-action {
-  width: 28px;
-  height: 28px;
-  border-radius: 0;
-  color: var(--text-muted);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  padding: 0;
-}
-
-.agent-template-action:hover {
-  color: var(--text-primary);
-}
-
-.agent-template-action:hover,
-.agent-template-action:focus,
-.agent-template-action:active {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.agent-template-action svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.agent-template-badge {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
-  color: var(--text-secondary);
-}
-
-.agent-template-badge.muted {
-  opacity: 0.7;
-}
-
-.agent-template-new {
-  margin-top: 2px;
-  width: 100%;
-  border: 1px dashed var(--border-muted);
-  border-radius: 12px;
-  padding: 10px 12px;
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent !important;
-  box-shadow: none !important;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-}
-
-.agent-template-new:hover {
-  border-color: var(--border-default);
-  background: transparent !important;
-  color: var(--text-primary);
-}
-
-.agent-template-new:focus,
-.agent-template-new:active {
-  background: transparent !important;
-  box-shadow: none !important;
 }
 
 .agent-draft-slot {
@@ -2656,13 +2393,13 @@
   color: var(--text-muted);
 }
 
-:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .auth-actions .profile-save-btn.needs-save {
+:root[data-theme-family="lightlike"] .auth-actions .profile-save-btn.needs-save {
   background: #0f0f0f;
   border-color: #0f0f0f;
   color: #ffffff;
 }
 
-:root:not([data-theme="dark"]):not([data-theme="dark-warm"]) .auth-actions .profile-save-btn.needs-save:hover:not(:disabled) {
+:root[data-theme-family="lightlike"] .auth-actions .profile-save-btn.needs-save:hover:not(:disabled) {
   background: #000000;
   border-color: #000000;
 }

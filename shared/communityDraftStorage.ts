@@ -17,7 +17,7 @@ export type CreateCommunityDraft = {
 const CREATE_COMMUNITY_DRAFT_STORAGE_KEY = "arx_create_community_draft_v1";
 const CREATE_COMMUNITY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function isValidCommunityDraftSlug(value: string): boolean {
+function isValidCommunityDraftSlug(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.length < 3 || trimmed.length > 32) return false;
   return /^(?!-)[a-z0-9-]+(?<!-)$/.test(trimmed);

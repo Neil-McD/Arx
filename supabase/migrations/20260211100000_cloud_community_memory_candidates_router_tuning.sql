@@ -55,7 +55,6 @@ begin
   return query select 'needs_review'::text, 68::integer, 'requires_admin_review'::text;
 end;
 $$;
-
 create or replace function public.community_memory_candidate_reject(
   p_candidate_id uuid,
   p_reason text default null
@@ -120,7 +119,6 @@ begin
   return query select v_candidate.id, coalesce(v_rejected_at, now()), 'rejected'::text;
 end;
 $$;
-
 revoke all on function public.community_memory_candidate_reject(uuid, text) from public;
 revoke all on function public.community_memory_candidate_reject(uuid, text) from anon;
 revoke all on function public.community_memory_candidate_reject(uuid, text) from authenticated;
