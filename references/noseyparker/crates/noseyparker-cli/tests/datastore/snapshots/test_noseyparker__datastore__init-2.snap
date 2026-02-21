@@ -1,5 +1,0 @@
----
-source: crates/noseyparker-cli/tests/datastore/mod.rs
-expression: stdout
----
-

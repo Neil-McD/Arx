@@ -1,7 +1,0 @@
-[extend]
-useDefault = true
-
-[[rules]]
-
-[[rules.allowlists]]
-paths = ['^.*\.(xml|log|json)$']

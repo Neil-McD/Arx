@@ -1,4 +1,0 @@
-[[rules]]
-description = "Python Files"
-id = "python-files-only"
-path = '''.py'''
