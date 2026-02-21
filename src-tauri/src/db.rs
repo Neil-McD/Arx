@@ -390,6 +390,15 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
     conn
     .execute_batch(
       "
+    -- Personal memory is cloud-canonical. Remove legacy local table/fts/triggers.
+    DROP TRIGGER IF EXISTS personal_memory_items_ai;
+    DROP TRIGGER IF EXISTS personal_memory_items_ad;
+    DROP TRIGGER IF EXISTS personal_memory_items_au;
+    DROP TABLE IF EXISTS personal_memory_items_fts;
+    DROP INDEX IF EXISTS idx_personal_memory_items_scope_updated_at;
+    DROP INDEX IF EXISTS idx_personal_memory_items_pinned_updated_at;
+    DROP TABLE IF EXISTS personal_memory_items;
+
     CREATE TABLE IF NOT EXISTS ui_state (
       key TEXT PRIMARY KEY,
       value TEXT,
@@ -397,46 +406,6 @@ fn run_migrations(conn: &Connection) -> anyhow::Result<()> {
     );
 
     -- Legacy internal tool tables removed for MVP (threads/events are the only truth).
-
-    CREATE TABLE IF NOT EXISTS personal_memory_items (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      scope TEXT NOT NULL,
-      scope_id TEXT,
-      pinned INTEGER DEFAULT 0,
-      provenance_event_id TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_personal_memory_items_scope_updated_at
-      ON personal_memory_items(scope, scope_id, updated_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_personal_memory_items_pinned_updated_at
-      ON personal_memory_items(pinned DESC, updated_at DESC);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS personal_memory_items_fts
-    USING fts5(
-      content,
-      content='personal_memory_items',
-      content_rowid='rowid'
-    );
-
-    CREATE TRIGGER IF NOT EXISTS personal_memory_items_ai AFTER INSERT ON personal_memory_items BEGIN
-      INSERT INTO personal_memory_items_fts(rowid, content)
-      VALUES (new.rowid, new.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS personal_memory_items_ad AFTER DELETE ON personal_memory_items BEGIN
-      INSERT INTO personal_memory_items_fts(personal_memory_items_fts, rowid, content)
-      VALUES('delete', old.rowid, old.content);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS personal_memory_items_au AFTER UPDATE ON personal_memory_items BEGIN
-      INSERT INTO personal_memory_items_fts(personal_memory_items_fts, rowid, content)
-      VALUES('delete', old.rowid, old.content);
-      INSERT INTO personal_memory_items_fts(rowid, content)
-      VALUES (new.rowid, new.content);
-    END;
 
     -- Legacy UI feature: workspace/project cache (threads.workspace_path is the contract primitive).
     CREATE TABLE IF NOT EXISTS projects (

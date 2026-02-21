@@ -1,12 +1,8 @@
 import { useCallback, useEffect, type Dispatch, type SetStateAction } from "react";
 import type { RuntimeClient } from "../../runtime/arp/client";
 import type { DesktopShellClient } from "../../runtime/shell/client";
-
-type ModelToggle = {
-  id: string;
-  label: string;
-  enabled: boolean;
-};
+import { type ModelToggle } from "../../../shared/modelCatalog";
+import { resolveCloudInferenceLane } from "../../../shared/inferenceLaneResolver";
 
 type ChatgptAuthSummary = {
   email?: string | null;
@@ -26,6 +22,7 @@ type UseDesktopModelBootstrapControllerArgs = {
   shellClient: DesktopShellClient;
   runtimeClient: RuntimeClient;
   preferredModelId: string;
+  freeModelAllowlist: ReadonlySet<string>;
   defaultModelToggles: ModelToggle[];
   modelToggles: ModelToggle[];
   activeModelId: string | null;
@@ -41,6 +38,7 @@ export function useDesktopModelBootstrapController(args: UseDesktopModelBootstra
     shellClient,
     runtimeClient,
     preferredModelId,
+    freeModelAllowlist,
     defaultModelToggles,
     modelToggles,
     activeModelId,
@@ -93,12 +91,20 @@ export function useDesktopModelBootstrapController(args: UseDesktopModelBootstra
         return;
       }
       const enabledReady = enabled.filter((toggle) => isModelReady(toggle.id));
+      const activeId = (activeModelId ?? "").trim();
+      const isFreeActive =
+        Boolean(activeId) &&
+        resolveCloudInferenceLane({
+          modelId: activeId,
+          freeModelAllowlist,
+        }) === "public";
+      const activeIsEnabled = isFreeActive || enabled.some((toggle) => toggle.id === activeId);
+      const activeIsReady = isFreeActive || enabledReady.some((toggle) => toggle.id === activeId);
 
       const shouldKeepActive =
-        activeModelId &&
-        enabled.some((toggle) => toggle.id === activeModelId) &&
-        (enabledReady.length === 0 ||
-          enabledReady.some((toggle) => toggle.id === activeModelId));
+        Boolean(activeId) &&
+        activeIsEnabled &&
+        (enabledReady.length === 0 || activeIsReady);
 
       if (shouldKeepActive) return;
 
@@ -108,7 +114,7 @@ export function useDesktopModelBootstrapController(args: UseDesktopModelBootstra
       setActiveModelId(fallback);
       await runtimeClient.setActiveModel(fallback);
     },
-    [activeModelId, isModelReady, preferredModelId, runtimeClient, setActiveModelId],
+    [activeModelId, freeModelAllowlist, isModelReady, preferredModelId, runtimeClient, setActiveModelId],
   );
 
   useEffect(() => {

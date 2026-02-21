@@ -1,11 +1,16 @@
 import type { RuntimeClient } from "../../runtime/arp/client";
 import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
-import type { ThreadServiceRouter, ThreadServiceThread } from "../../../shared/threadService";
+import type {
+  ThreadServiceRouter,
+  ThreadServiceThread,
+  ThreadServiceTurnStreamEvent,
+} from "../../../shared/threadService";
 import { createDesktopThreadServiceRouter as createCoreThreadServiceRouter } from "./createDesktopThreadServiceRouter";
 
 type CreateDesktopAppThreadServiceRouterDeps = {
   threads: ThreadServiceThread[];
   runtimeClient: RuntimeClient;
+  getCommunityNameById: (communityId: string) => string | null;
   getSession: () => SupabaseSession | null;
   listCloudChatThreads: (session: SupabaseSession) => Promise<ThreadServiceThread[]>;
   getCloudThreadRecord: (
@@ -31,6 +36,11 @@ type CreateDesktopAppThreadServiceRouterDeps = {
     input: string;
     user_content_json: string;
     session: SupabaseSession;
+    sendPolicySnapshot?: {
+      selectedModelId?: string | null;
+      hasChatgptAuth?: boolean;
+    };
+    onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
   }) => Promise<void>;
   setCloudThreadTitle: (params: {
     thread_id: string;
@@ -99,6 +109,8 @@ export function createDesktopAppThreadServiceRouter(
         input: input.input,
         user_content_json: input.userContentJson,
         session,
+        sendPolicySnapshot: input.sendPolicySnapshot,
+        onStreamEvent: input.onStreamEvent,
       }),
     setCloudThreadTitle: async (threadId, title, session) =>
       deps.setCloudThreadTitle({
@@ -141,16 +153,24 @@ export function createDesktopAppThreadServiceRouter(
         role: input.role,
         content_json: input.contentJson,
       }),
-    sendLocalTurn: async (input) =>
-      deps.runtimeClient.sendTurn({
+    sendLocalTurn: async (input) => {
+      const thread = deps.threads.find((candidate) => candidate.id === input.threadId) ?? null;
+      const communityId = String(thread?.community_id ?? "").trim();
+      const fallbackCommunityName = communityId
+        ? deps.getCommunityNameById(communityId)
+        : null;
+      const communityName = (input.communityName ?? fallbackCommunityName ?? "").trim();
+      await deps.runtimeClient.sendTurn({
         thread_id: input.threadId,
         cwd: input.cwd ?? "",
         input: input.input,
         user_content_json: input.userContentJson,
+        community_name: communityName || null,
         supabase_url: input.supabaseUrl ?? null,
         supabase_anon_key: input.supabaseAnonKey ?? null,
         supabase_access_token: input.supabaseAccessToken ?? "",
-      }),
+      });
+    },
     setLocalThreadTitle: async (threadId, title) =>
       deps.runtimeClient.setThreadTitle(threadId, title),
     setLocalThreadEngine: async (input) =>

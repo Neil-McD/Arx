@@ -9,6 +9,7 @@ export type CommunityEvidenceSourceType = "chat" | "resource" | "memory";
 export type CommunityEvidenceItem = {
   source_type: CommunityEvidenceSourceType;
   source_id: string;
+  internal_source_id?: string;
   title: string;
   snippet: string;
   url: string | null;
@@ -65,10 +66,12 @@ function normalizeEvidenceItem(value: unknown): CommunityEvidenceItem | null {
   if (!sourceType || !sourceId || !title || !snippet || rank === null) return null;
   const rankInt = Math.floor(rank);
   if (!Number.isFinite(rankInt) || rankInt <= 0) return null;
+  const internalSourceId = asTrimmedString(record.internal_source_id);
 
   return {
     source_type: sourceType,
     source_id: sourceId,
+    ...(internalSourceId ? { internal_source_id: internalSourceId } : {}),
     title,
     snippet,
     url: asOptionalString(record.url),

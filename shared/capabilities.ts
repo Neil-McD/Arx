@@ -26,6 +26,11 @@ export function normalizeBuilderTier(value: string | null | undefined): BuilderT
   return "unknown";
 }
 
+export function isPaidBuilderTier(value: string | null | undefined): boolean {
+  const tier = normalizeBuilderTier(value);
+  return tier === "builder" || tier === "architect" || tier === "pro";
+}
+
 export function resolveUserAccessPolicy(input: {
   surface: AccessSurface;
   authState: AccessAuthState;
@@ -33,7 +38,7 @@ export function resolveUserAccessPolicy(input: {
 }): UserAccessPolicy {
   const tier = normalizeBuilderTier(input.builderTier);
   const isAuthenticated = input.authState === "authenticated";
-  const isPaid = isAuthenticated && (tier === "builder" || tier === "architect" || tier === "pro");
+  const isPaid = isAuthenticated && isPaidBuilderTier(tier);
 
   if (!isAuthenticated) {
     if (input.surface === "web") {
@@ -59,7 +64,7 @@ export function resolveUserAccessPolicy(input: {
       threadMode: "multi_local",
       allowMultipleThreads: true,
       allowPlatformInference: false,
-      allowGuestInference: false,
+      allowGuestInference: true,
       allowCommunityJoin: false,
       allowCommunityCreate: false,
       allowPersonalMemory: false,
@@ -74,7 +79,7 @@ export function resolveUserAccessPolicy(input: {
     threadMode: input.surface === "web" ? "multi_cloud" : "multi_local",
     allowMultipleThreads: true,
     allowPlatformInference: isPaid,
-    allowGuestInference: false,
+    allowGuestInference: true,
     allowCommunityJoin: true,
     allowCommunityCreate: isPaid,
     allowPersonalMemory: isPaid,

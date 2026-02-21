@@ -10,11 +10,40 @@ export type ThreadServiceSendTurnInput = {
   threadId: string;
   input: string;
   userContentJson: string;
+  communityName?: string | null;
   cwd?: string | null;
   supabaseUrl?: string | null;
   supabaseAnonKey?: string | null;
   supabaseAccessToken?: string;
+  sendPolicySnapshot?: {
+    selectedModelId?: string | null;
+    hasChatgptAuth?: boolean;
+  };
+  onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
+
+export type ThreadServiceTurnStreamEvent =
+  | {
+      type: "start";
+      runId: string | null;
+      engineId: string | null;
+      modelId: string | null;
+      inferenceSource: string | null;
+      promptTokens: number | null;
+      completionTokens: number | null;
+      maxTokens: number | null;
+    }
+  | {
+      type: "delta";
+      delta: string;
+      fullContent: string | null;
+      promptTokens: number | null;
+      completionTokens: number | null;
+      maxTokens: number | null;
+    }
+  | {
+      type: "done";
+    };
 
 export type ThreadServiceSetLensInput = {
   threadId: string;

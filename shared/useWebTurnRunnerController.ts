@@ -1,7 +1,13 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  formatSupabaseFunctionErrorMessage,
+  readSupabaseFunctionError,
+} from "./supabaseFunctionErrors";
+import { prependCommunityPreludeMessages } from "./communityLaneMessageBuilder";
+import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer.mjs";
 
 type PlatformQuotaModalState = {
-  reason: "quota" | "unavailable";
+  reason: "quota" | "plan" | "misconfigured" | "disabled" | "unavailable";
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
@@ -60,6 +66,8 @@ type RunPublicTurnParams<ThreadMessageT extends PublicTurnThreadMessage> = {
   threadId: string;
   runIdHint: string;
   messages: ThreadMessageT[];
+  systemPrompt?: string | null;
+  communityEvidenceUserMessage?: string | null;
 };
 
 type RunAgentTurnParams = {
@@ -67,6 +75,7 @@ type RunAgentTurnParams = {
   mode?: "respond" | "regenerate";
   runIdHint: string;
   inferenceSource?: "platform" | "user";
+  replyToId?: string;
 };
 
 type CreateThreadMessageParams = {
@@ -74,11 +83,20 @@ type CreateThreadMessageParams = {
   threadId: string;
   role: "user" | "assistant" | "system";
   content_json: unknown;
+  engine_id?: string | null;
+  model_id?: string | null;
+  run_id?: string | null;
 };
 
 type CreateAssistantMessageParams = {
   threadId: string;
   text: string;
+  engineId?: string | null;
+  modelId?: string | null;
+  runId?: string | null;
+  inferenceSource?: string | null;
+  communityEvidenceUsedV1?: unknown;
+  communityContextDiagnostics?: Record<string, unknown> | null;
 };
 
 function isAbortError(error: unknown): boolean {
@@ -149,23 +167,35 @@ export function useWebTurnRunnerController<
         if (current.streamingRafRef.current) return;
         current.streamingRafRef.current = window.requestAnimationFrame(() => {
           current.streamingRafRef.current = null;
-          current.setStreamingContent(current.streamingContentRef.current);
+          const raw = current.streamingContentRef.current ?? "";
+          current.setStreamingContent(
+            sanitizeUserFacingAssistantText({
+              text: raw,
+              blockedIds: [params.threadId, runIdFromServer],
+            }),
+          );
         });
       };
 
       const toPublicMessages = (
         items: ThreadMessageT[],
+        systemPrompt: string | null | undefined,
+        communityEvidenceUserMessage: string | null | undefined,
       ): Array<{ role: "user" | "assistant" | "system"; content: string }> => {
-        const out: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
+        const threadMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
         for (const msg of items) {
           if (!msg) continue;
           const role = msg.role;
           if (role !== "user" && role !== "assistant" && role !== "system") continue;
           const content = current.extractTextFromContentJson(msg.content_json).trim();
           if (!content) continue;
-          out.push({ role, content });
+          threadMessages.push({ role, content });
         }
-        return out;
+        return prependCommunityPreludeMessages({
+          messages: threadMessages,
+          systemPrompt,
+          communityEvidenceUserMessage,
+        });
       };
 
       let finalContent = "";
@@ -177,30 +207,51 @@ export function useWebTurnRunnerController<
           body: JSON.stringify({
             model_id: params.modelId,
             stream: true,
-            messages: toPublicMessages(params.messages),
+            messages: toPublicMessages(
+              params.messages,
+              params.systemPrompt,
+              params.communityEvidenceUserMessage,
+            ),
           }),
           signal: abort.signal,
         });
         if (!turn.ok) {
-          let parsed: any = null;
-          try {
-            parsed = await turn.clone().json();
-          } catch {
-            parsed = null;
+          const failure = await readSupabaseFunctionError(turn);
+          if (failure.category === "rate_limited") {
+            return {
+              cancelled: false,
+              error: formatSupabaseFunctionErrorMessage({
+                ...failure,
+                message: "Too many requests. Try again soon.",
+              }),
+              content: "",
+              runId: null,
+            };
           }
-          const code = typeof parsed?.code === "string" ? parsed.code.trim() : "";
-          if (code === "rate_limited") {
-            return { cancelled: false, error: "Too many requests. Try again soon.", content: "", runId: null };
-          }
-          if (code === "platform_inference_misconfigured") {
-            const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : "";
-            const errorMessage = messageFromServer
-              ? normalizeGuestInferenceError(messageFromServer)
+          if (failure.category === "misconfigured") {
+            const errorMessage = failure.message.trim()
+              ? normalizeGuestInferenceError(failure.message)
               : "Guest chat is temporarily unavailable.";
-            return { cancelled: false, error: errorMessage, content: "", runId: null };
+            return {
+              cancelled: false,
+              error: formatSupabaseFunctionErrorMessage({ ...failure, message: errorMessage }),
+              content: "",
+              runId: null,
+            };
           }
-          const message = await current.readSupabaseError(turn);
-          throw new Error(normalizeGuestInferenceError(message || "Failed to run model."));
+          if (failure.category === "auth") {
+            return {
+              cancelled: false,
+              error: formatSupabaseFunctionErrorMessage(failure),
+              content: "",
+              runId: null,
+            };
+          }
+          throw new Error(
+            normalizeGuestInferenceError(
+              formatSupabaseFunctionErrorMessage(failure),
+            ),
+          );
         }
         const reader = turn.body?.getReader();
         if (!reader) throw new Error("Missing streaming response.");
@@ -290,7 +341,11 @@ export function useWebTurnRunnerController<
           }
         }
         flushEvent();
-        return { cancelled: false, error: null, content: finalContent, runId: runIdFromServer };
+        const sanitizedFinalContent = sanitizeUserFacingAssistantText({
+          text: finalContent,
+          blockedIds: [params.threadId, runIdFromServer],
+        });
+        return { cancelled: false, error: null, content: sanitizedFinalContent, runId: runIdFromServer };
       } catch (error) {
         const cancelled = current.streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
         if (cancelled) return { cancelled: true, error: null, content: "", runId: null };
@@ -336,12 +391,19 @@ export function useWebTurnRunnerController<
         history_used: [],
         community_evidence_used: null,
       });
+      let runIdFromServer: string | null = null;
 
       const scheduleStreamingFlush = () => {
         if (current.streamingRafRef.current) return;
         current.streamingRafRef.current = window.requestAnimationFrame(() => {
           current.streamingRafRef.current = null;
-          current.setStreamingContent(current.streamingContentRef.current);
+          const raw = current.streamingContentRef.current ?? "";
+          current.setStreamingContent(
+            sanitizeUserFacingAssistantText({
+              text: raw,
+              blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
+            }),
+          );
         });
       };
 
@@ -354,49 +416,54 @@ export function useWebTurnRunnerController<
             body: JSON.stringify({
               thread_id: threadId,
               stream: true,
+              model_id: params.preferredModelId,
               ...(params.mode ? { mode: params.mode } : null),
               ...(params.inferenceSource ? { inference_source: params.inferenceSource } : null),
+              ...(params.replyToId ? { reply_to_id: params.replyToId } : null),
             }),
             signal: abort.signal,
           },
           session,
         );
         if (!turn.ok) {
-          let parsed: any = null;
-          try {
-            parsed = await turn.clone().json();
-          } catch {
-            parsed = null;
-          }
-          const code = typeof parsed?.code === "string" ? parsed.code.trim() : "";
-          if (code === "rate_limited") {
-            const retryAfter =
-              typeof parsed?.retry_after_seconds === "number" && Number.isFinite(parsed.retry_after_seconds)
-                ? Math.max(0, Math.floor(parsed.retry_after_seconds))
-                : null;
-            const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : "";
-            const message = retryAfter
-              ? `Too many requests. Try again in ${retryAfter}s.`
-              : messageFromServer || "Too many requests. Try again soon.";
-            return { cancelled: false, error: message };
+          const failure = await readSupabaseFunctionError(turn);
+          if (failure.category === "rate_limited") {
+            return {
+              cancelled: false,
+              error: formatSupabaseFunctionErrorMessage({
+                ...failure,
+                message: "Too many requests. Try again soon.",
+              }),
+            };
           }
           if (
-            code === "platform_inference_quota_exceeded" ||
-            code === "platform_inference_misconfigured" ||
-            code === "platform_inference_disabled" ||
-            code === "platform_inference_not_allowed"
+            failure.category === "quota" ||
+            failure.category === "misconfigured" ||
+            failure.category === "disabled" ||
+            failure.category === "plan"
           ) {
-            const messageFromServer = typeof parsed?.message === "string" ? parsed.message.trim() : null;
+            const reason: PlatformQuotaModalState["reason"] =
+              failure.category === "quota"
+                ? "quota"
+                : failure.category === "plan"
+                ? "plan"
+                : failure.category === "misconfigured"
+                ? "misconfigured"
+                : failure.category === "disabled"
+                ? "disabled"
+                : "unavailable";
             current.setPlatformQuotaModal({
-              reason: code === "platform_inference_quota_exceeded" ? "quota" : "unavailable",
+              reason,
               threadId,
               mode: params.mode === "regenerate" ? "regenerate" : "respond",
-              message: messageFromServer,
+              message: failure.message.trim() || null,
             });
             return { cancelled: false, error: null };
           }
-          const message = await current.readSupabaseError(turn);
-          throw new Error(message || "Failed to run model.");
+          if (failure.category === "auth") {
+            return { cancelled: false, error: formatSupabaseFunctionErrorMessage(failure) };
+          }
+          throw new Error(formatSupabaseFunctionErrorMessage(failure));
         }
         const reader = turn.body?.getReader();
         if (!reader) throw new Error("Missing streaming response.");
@@ -418,7 +485,10 @@ export function useWebTurnRunnerController<
             parsed = { raw };
           }
           if (eventName === "start") {
-            if (typeof parsed?.run_id === "string") current.setStreamingRunId(parsed.run_id);
+            if (typeof parsed?.run_id === "string") {
+              runIdFromServer = parsed.run_id;
+              current.setStreamingRunId(parsed.run_id);
+            }
             if (typeof parsed?.engine_id === "string") {
               const memoryUsed = current.parseMemoryUsedArray(parsed?.memory_used);
               const historyUsed = current.parseHistoryUsedArray(parsed?.history_used);
@@ -532,6 +602,9 @@ export function useWebTurnRunnerController<
             seq: 0,
             role: params.role,
             content_json: params.content_json,
+            ...(params.engine_id ? { engine_id: params.engine_id } : null),
+            ...(params.model_id ? { model_id: params.model_id } : null),
+            ...(params.run_id ? { run_id: params.run_id } : null),
           }),
         },
         session,
@@ -547,10 +620,43 @@ export function useWebTurnRunnerController<
 
   const createAssistantTextMessage = useCallback(
     async (session: SessionT, params: CreateAssistantMessageParams): Promise<string> => {
+      const modelId = (params.modelId ?? "").trim();
+      const inferenceSource = (params.inferenceSource ?? "").trim();
+      const safeText = sanitizeUserFacingAssistantText({
+        text: params.text,
+        blockedIds: [params.threadId, params.runId ?? null],
+      });
+      const rawCommunityEvidenceUsed = params.communityEvidenceUsedV1;
+      const hasCommunityEvidenceUsed =
+        rawCommunityEvidenceUsed !== null && rawCommunityEvidenceUsed !== undefined;
+      const communityContextDiagnostics = params.communityContextDiagnostics ?? null;
+      const hasCommunityContextDiagnostics =
+        Boolean(communityContextDiagnostics) &&
+        typeof communityContextDiagnostics === "object" &&
+        !Array.isArray(communityContextDiagnostics);
+      const meta =
+        modelId || inferenceSource || hasCommunityEvidenceUsed || hasCommunityContextDiagnostics
+          ? {
+              ...(modelId ? { model_id: modelId } : null),
+              ...(inferenceSource ? { inference_source: inferenceSource } : null),
+              ...(hasCommunityEvidenceUsed
+                ? { community_evidence_used_v1: rawCommunityEvidenceUsed }
+                : null),
+              ...(hasCommunityContextDiagnostics
+                ? { community_context_diagnostics: communityContextDiagnostics }
+                : null),
+            }
+          : null;
       return await createThreadMessage(session, {
         threadId: params.threadId,
         role: "assistant",
-        content_json: { text: params.text },
+        content_json: {
+          text: safeText,
+          ...(meta ? { meta } : null),
+        },
+        engine_id: (params.engineId ?? "").trim() || null,
+        model_id: modelId || null,
+        run_id: (params.runId ?? "").trim() || null,
       });
     },
     [createThreadMessage],

@@ -4,9 +4,16 @@
   "failure_classes": [
     "none",
     "not_attempted",
+    "no_active_community",
     "not_entitled",
+    "query_too_broad",
+    "compiled_empty_fallback_ok",
+    "compiled_empty_fallback_partial",
+    "compiled_empty_fallback_empty",
+    "compiled_empty_fallback_failed",
     "compiled_fetch_failed_fallback_ok",
     "compiled_fetch_failed_fallback_partial",
+    "compiled_fetch_failed_fallback_empty",
     "compiled_fetch_failed_fallback_failed"
   ],
   "quality_bands": ["none", "low", "medium", "high"],

@@ -169,6 +169,11 @@ async function assertCommunityHarnessWireContract() {
   const rustCommunityContext = await readText("src-tauri/src/community_context.rs");
   const rustSource = `${rustMain}\n${rustCommunityContext}`;
   const tsIndex = await readText("supabase/functions/agent_turn/index.ts");
+  const tsCommunityResearchOrchestrator = await readText(
+    "supabase/functions/_shared/community_research_orchestrator.ts",
+  );
+  const tsCommunityResearchFunction = await readText("supabase/functions/community_research/index.ts");
+  const tsSource = `${tsIndex}\n${tsCommunityResearchOrchestrator}\n${tsCommunityResearchFunction}`;
 
   const expectedPrefix = wireContract?.community_evidence_user_message_prefix;
   assertEqual(
@@ -215,8 +220,8 @@ async function assertCommunityHarnessWireContract() {
     if (!rustSource.includes(rpcName)) {
       fail(`Rust runtime is missing RPC usage for ${key} (${rpcName})`);
     }
-    if (!tsIndex.includes(rpcName)) {
-      fail(`Cloud agent_turn is missing RPC usage for ${key} (${rpcName})`);
+    if (!tsSource.includes(rpcName)) {
+      fail(`Cloud community harness stack is missing RPC usage for ${key} (${rpcName})`);
     }
   }
 }
@@ -404,8 +409,8 @@ async function assertCapabilityContractV3() {
     ? contract.side_effect_classes
     : [];
   const capabilities = Array.isArray(contract?.capabilities) ? contract.capabilities : [];
-  if (capabilities.length < 3) {
-    fail("community_harness_capabilities_v3.json must define at least 3 capabilities");
+  if (capabilities.length < 2) {
+    fail("community_harness_capabilities_v3.json must define at least 2 capabilities");
   }
 
   const names = new Set();
@@ -430,13 +435,18 @@ async function assertCapabilityContractV3() {
     if (!Array.isArray(capability?.surfaces) || capability.surfaces.length === 0) {
       fail(`community_harness_capabilities_v3 capability ${name} must define surfaces`);
     }
+    if (!capability?.input_schema || String(capability.input_schema.type ?? "").trim() !== "object") {
+      fail(`community_harness_capabilities_v3 capability ${name} must define object input_schema`);
+    }
     if (
-      !capability?.input_schema
-      || String(capability.input_schema.type ?? "").trim() !== "object"
-      || !Array.isArray(capability.input_schema.required)
-      || capability.input_schema.required.length === 0
+      capability.input_schema.required !== undefined
+      && !Array.isArray(capability.input_schema.required)
     ) {
-      fail(`community_harness_capabilities_v3 capability ${name} must define object input_schema with required fields`);
+      fail(`community_harness_capabilities_v3 capability ${name} input_schema.required must be an array when present`);
+    }
+    const properties = capability.input_schema.properties;
+    if (!properties || typeof properties !== "object" || Object.keys(properties).length === 0) {
+      fail(`community_harness_capabilities_v3 capability ${name} must define input_schema.properties`);
     }
     if (!capability?.verification || String(capability.verification.rpc ?? "").trim() === "") {
       fail(`community_harness_capabilities_v3 capability ${name} must define verification.rpc`);
@@ -456,8 +466,7 @@ async function assertCapabilityContractV3() {
   }
 
   const requiredActive = [
-    "community_context_search",
-    "community_memory_search",
+    "community_search",
     "community_memory_candidate_propose",
   ];
   for (const capabilityName of requiredActive) {
@@ -465,6 +474,15 @@ async function assertCapabilityContractV3() {
     if (!capability || capability?.status !== "active") {
       fail(`community_harness_capabilities_v3 missing active capability ${capabilityName}`);
     }
+  }
+  const deprecatedCapabilities = capabilities.filter((item) => item?.status === "deprecated");
+  if (deprecatedCapabilities.length > 0) {
+    fail(
+      `community_harness_capabilities_v3 should not ship deprecated alias capabilities: ${deprecatedCapabilities
+        .map((item) => item?.name)
+        .filter((name) => typeof name === "string")
+        .join(",")}`,
+    );
   }
 
   const activeActions = capabilities.filter(

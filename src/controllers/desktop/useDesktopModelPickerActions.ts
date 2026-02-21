@@ -1,20 +1,7 @@
 import { useCallback, useMemo } from "react";
+import { inferModelSection, isFreeModelId, type ModelSectionId, type ModelToggle, type PremiumModelCatalogEntry } from "../../../shared/modelCatalog";
 
-type ModelToggle = {
-  id: string;
-  label: string;
-  enabled: boolean;
-};
-
-type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
-type ProviderId = "openai" | "anthropic" | "google" | "x-ai";
-
-type PremiumModelCatalogEntry = {
-  id: string;
-  label: string;
-  section: ModelSectionId;
-  description: string;
-};
+type ProviderId = "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 
 export type DesktopCuratedPickerModel = {
   id: string;
@@ -69,18 +56,17 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
   const selectedModelLabel = useMemo(() => {
     const id = (activeModelId ?? "").trim();
     if (!id) return "Model";
+    if (isFreeModelId(id, freeModelAllowlist)) {
+      const freeLabel = (freeModelLabels[id] ?? "").trim();
+      if (freeLabel) return freeLabel;
+    }
     return modelToggles.find((toggle) => toggle.id === id)?.label ?? id;
-  }, [activeModelId, modelToggles]);
+  }, [activeModelId, freeModelAllowlist, freeModelLabels, modelToggles]);
 
   const inferPickerSection = useCallback((modelId: string): ModelSectionId => {
     const provider = providerIdForModelId(modelId);
-    if (provider === "openai") return "openai";
-    if (provider === "anthropic") return "anthropic";
-    if (provider === "google") return "google";
-    if (provider === "x-ai") return "x-ai";
-    if (freeModelAllowlist.has(modelId)) return "free";
-    return "openrouter";
-  }, [freeModelAllowlist, providerIdForModelId]);
+    return inferModelSection(modelId, provider);
+  }, [providerIdForModelId]);
 
   const curatedPickerModels = useMemo(() => {
     const byId = new Map<string, DesktopCuratedPickerModel>();
@@ -88,7 +74,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
       byId.set(id, { id, label, section: "free", access: "free", description: "OpenRouter free tier" });
     }
     for (const toggle of enabledModels) {
-      const isFreeModel = freeModelAllowlist.has(toggle.id);
+      const isFreeModel = isFreeModelId(toggle.id, freeModelAllowlist);
       byId.set(toggle.id, {
         id: toggle.id,
         label: toggle.label,
@@ -104,15 +90,16 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
   }, [enabledModels, freeModelAllowlist, freeModelLabels, inferPickerSection, premiumModelCatalog]);
 
   const canSelectPickerModel = useCallback((model: DesktopCuratedPickerModel): boolean => {
+    if (model.access === "free") return true;
     const isEnabled = modelToggles.some((toggle) => toggle.id === model.id);
     if (!isEnabled) return false;
     return isModelReady(model.id);
   }, [isModelReady, modelToggles]);
 
   const handleSelectPickerModel = useCallback(async (model: DesktopCuratedPickerModel, closeModelPicker: () => void) => {
-    const isEnabled = modelToggles.some((toggle) => toggle.id === model.id);
+    const isEnabled = model.access === "free" || modelToggles.some((toggle) => toggle.id === model.id);
     const providerId = providerIdForModelId(model.id);
-    const ready = isEnabled && isModelReady(model.id);
+    const ready = isEnabled && (model.access === "free" || isModelReady(model.id));
     if (!ready) {
       if (!isEnabled) {
         setMemoryToast("This model is coming soon.");

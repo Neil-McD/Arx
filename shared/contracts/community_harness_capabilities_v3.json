@@ -5,13 +5,11 @@
   "intent": "Define the explicit community harness capability surface for read-first retrieval and governed community-memory curation.",
   "runtime_exposed_tools": {
     "desktop": [
-      "community_context_search",
-      "community_memory_search",
+      "community_search",
       "community_memory_candidate_propose"
     ],
     "web": [
-      "community_context_search",
-      "community_memory_search",
+      "community_search",
       "community_memory_candidate_propose"
     ]
   },
@@ -43,14 +41,24 @@
     "community_artifact_publish",
     "community_automation_trigger"
   ],
-  "capability_status_values": ["active", "deprecated"],
-  "side_effect_classes": ["none", "read", "write", "external"],
+  "capability_status_values": [
+    "active"
+  ],
+  "side_effect_classes": [
+    "none",
+    "read",
+    "write",
+    "external"
+  ],
   "capabilities": [
     {
-      "name": "community_context_search",
+      "name": "community_search",
       "category": "context",
       "status": "active",
-      "surfaces": ["desktop", "web"],
+      "surfaces": [
+        "desktop",
+        "web"
+      ],
       "side_effect_class": "read",
       "approval_policy": {
         "desktop": "never",
@@ -62,71 +70,66 @@
       },
       "input_schema": {
         "type": "object",
-        "required": ["community_id", "query"],
+        "required": [],
         "properties": {
-          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "query": { "type": "string", "minLength": 1, "maxLength": 240 },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 12 }
+          "query": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "source_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "chat",
+                "resource",
+                "memory"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          }
         }
       },
       "verification": {
-        "type": "rpc_response",
-        "rpc": "search_compiled_community_context",
-        "success_condition": "http_2xx_and_json_array"
+        "type": "composite_rpc_response",
+        "rpcs": [
+          "search_compiled_community_context",
+          "search_community_memory_items"
+        ],
+        "success_condition": "http_2xx_and_json_payload",
+        "rpc": "search_compiled_community_context"
       },
       "idempotency": {
         "strategy": "pure_read",
-        "key_fields": ["community_id", "query", "limit"]
+        "key_fields": [
+          "query",
+          "source_types",
+          "limit"
+        ]
       },
       "slo": {
-        "timeout_ms": 8000,
+        "timeout_ms": 9000,
         "max_attempts": 2,
-        "retry_backoff_ms": [100, 300]
-      }
-    },
-    {
-      "name": "community_memory_search",
-      "category": "memory",
-      "status": "active",
-      "surfaces": ["desktop", "web"],
-      "side_effect_class": "read",
-      "approval_policy": {
-        "desktop": "never",
-        "web": "never"
-      },
-      "entitlement": {
-        "auth_required": true,
-        "requires_active_entitlement": true
-      },
-      "input_schema": {
-        "type": "object",
-        "required": ["community_id", "query"],
-        "properties": {
-          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "query": { "type": "string", "minLength": 1, "maxLength": 240 },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 12 }
-        }
-      },
-      "verification": {
-        "type": "rpc_response",
-        "rpc": "search_community_memory_items",
-        "success_condition": "http_2xx_and_json_array"
-      },
-      "idempotency": {
-        "strategy": "pure_read",
-        "key_fields": ["community_id", "query", "limit"]
-      },
-      "slo": {
-        "timeout_ms": 7000,
-        "max_attempts": 2,
-        "retry_backoff_ms": [100, 250]
+        "retry_backoff_ms": [
+          100,
+          300
+        ]
       }
     },
     {
       "name": "community_memory_candidate_propose",
       "category": "action",
       "status": "active",
-      "surfaces": ["desktop", "web"],
+      "surfaces": [
+        "desktop",
+        "web"
+      ],
       "side_effect_class": "write",
       "approval_policy": {
         "desktop": "required",
@@ -138,13 +141,86 @@
       },
       "input_schema": {
         "type": "object",
-        "required": ["community_id", "memory_text"],
+        "required": [
+          "memory_text",
+          "evidence"
+        ],
         "properties": {
-          "community_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "title": { "type": "string", "maxLength": 160 },
-          "memory_text": { "type": "string", "minLength": 1, "maxLength": 32000 },
-          "evidence": { "type": "object" },
-          "request_key": { "type": "string", "maxLength": 128 }
+          "title": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "memory_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32000
+          },
+          "evidence": {
+            "type": "object",
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "v": {
+                "type": "integer"
+              },
+              "contract_id": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source_type",
+                    "source_id"
+                  ],
+                  "properties": {
+                    "source_type": {
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "resource",
+                        "memory"
+                      ]
+                    },
+                    "source_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 240
+                    },
+                    "snippet": {
+                      "type": "string",
+                      "maxLength": 2400
+                    },
+                    "url": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "score": {
+                      "type": "number"
+                    },
+                    "rank": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 128
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "request_key": {
+            "type": "string",
+            "maxLength": 128
+          }
         }
       },
       "verification": {
@@ -154,12 +230,18 @@
       },
       "idempotency": {
         "strategy": "request_key",
-        "key_fields": ["community_id", "memory_text", "request_key"]
+        "key_fields": [
+          "memory_text",
+          "request_key"
+        ]
       },
       "slo": {
         "timeout_ms": 10000,
         "max_attempts": 2,
-        "retry_backoff_ms": [200, 500]
+        "retry_backoff_ms": [
+          200,
+          500
+        ]
       }
     }
   ],

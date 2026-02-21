@@ -30,6 +30,10 @@ type CreateDesktopThreadServiceRouterDeps = {
   addCloudMessage: (input: ThreadServiceMessageInput, session: SupabaseSession) => Promise<void>;
   sendCloudTurn: (input: ThreadServiceSendTurnInput, session: SupabaseSession) => Promise<void>;
   setCloudThreadTitle: (threadId: string, title: string, session: SupabaseSession) => Promise<void>;
+  setCloudThreadEngine: (
+    input: ThreadServiceSetEngineInput,
+    session: SupabaseSession,
+  ) => Promise<ThreadServiceThread | null>;
   listLocalThreads: () => Promise<ThreadServiceThread[]>;
   getLocalThread: (threadId: string) => Promise<ThreadServiceThread | null>;
   createLocalThread: (input: ThreadServiceCreateInput) => Promise<ThreadServiceThread | null>;
@@ -70,6 +74,7 @@ export function createDesktopThreadServiceRouter(
         addCloudMessage: deps.addCloudMessage,
         sendCloudTurn: deps.sendCloudTurn,
         setCloudThreadTitle: deps.setCloudThreadTitle,
+        setCloudThreadEngine: deps.setCloudThreadEngine,
       }),
       createLocalAgentThreadService({
         listLocalThreads: deps.listLocalThreads,

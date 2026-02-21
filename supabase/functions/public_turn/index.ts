@@ -4,6 +4,7 @@ import { jsonResponse, noStoreHeaders, withCors } from "../_shared/http.ts";
 import { getEnv, isTruthyEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { consumeSseEvents, encodeSse } from "../_shared/sse.ts";
+import { getPublicFreeModelMap } from "../../../shared/modelCatalog.ts";
 
 type PublicRole = "user" | "assistant" | "system";
 type PublicChatMessage = { role: PublicRole; content: string };
@@ -71,11 +72,8 @@ function normalizePublicModelMap(): Record<string, string> {
     }
   }
 
-  // Safe default: two free OpenRouter models (override with ARX_PUBLIC_MODEL_MAP_JSON).
-  return {
-    "gpt-oss-120b-free": "openai/gpt-oss-120b:free",
-    "deepseek-r1-free": "deepseek/r1-0528:free",
-  };
+  // Safe default free model map (override with ARX_PUBLIC_MODEL_MAP_JSON).
+  return getPublicFreeModelMap();
 }
 
 function sanitizeMessages(raw: unknown): PublicChatMessage[] {
@@ -168,14 +166,21 @@ function buildOpenRouterBody(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  const headers = withCors(noStoreHeaders(), req);
+  const requestId = crypto.randomUUID();
+  const withRequestId = (body: Record<string, unknown>): Record<string, unknown> => ({
+    ...body,
+    request_id: requestId,
+  });
+  const headers = withCors(noStoreHeaders({ "x-arx-request-id": requestId }), req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
-  if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
+  if (req.method !== "POST") {
+    return jsonResponse(withRequestId({ ok: false, error: "method_not_allowed" }), { status: 405, headers });
+  }
 
   try {
     const allowed = await edgeRateLimitAllow({ req, key: "public_turn", windowSeconds: 60, limit: 20 });
     if (!allowed) {
-      return jsonResponse({ ok: false, error: "rate_limited", code: "rate_limited" }, { status: 429, headers });
+      return jsonResponse(withRequestId({ ok: false, error: "rate_limited", code: "rate_limited" }), { status: 429, headers });
     }
 
     const input = await readJsonBounded<PublicTurnInput>(req);
@@ -188,20 +193,20 @@ Deno.serve(async (req: Request) => {
     const resolvedModelId = modelMap[aliasModelId];
     if (!resolvedModelId) {
       return jsonResponse(
-        { ok: false, error: "model_not_allowed", code: "model_not_allowed", model_id: aliasModelId },
+        withRequestId({ ok: false, error: "model_not_allowed", code: "model_not_allowed", model_id: aliasModelId }),
         { status: 403, headers },
       );
     }
 
     const messages = sanitizeMessages(input.messages);
     if (messages.length === 0 || messages[messages.length - 1]!.role !== "user") {
-      return jsonResponse({ ok: false, error: "no_user_message", code: "no_user_message" }, { status: 400, headers });
+      return jsonResponse(withRequestId({ ok: false, error: "no_user_message", code: "no_user_message" }), { status: 400, headers });
     }
 
     const apiKey = getEnv("OPENROUTER_API_KEY");
     if (!apiKey) {
       return jsonResponse(
-        { ok: false, error: "platform_inference_misconfigured", code: "platform_inference_misconfigured" },
+        withRequestId({ ok: false, error: "platform_inference_misconfigured", code: "platform_inference_misconfigured" }),
         { status: 503, headers },
       );
     }
@@ -227,14 +232,14 @@ Deno.serve(async (req: Request) => {
         const parsed = parseOpenRouterError(text);
         if (isOpenRouterFreeModelPolicyError(parsed.message)) {
           return jsonResponse(
-            {
+            withRequestId({
               ok: false,
               error: "platform_inference_misconfigured",
               code: "platform_inference_misconfigured",
               message: openRouterFreeModelPolicyHint(),
               model_id: aliasModelId,
               resolved_model_id: resolvedModelId,
-            },
+            }),
             { status: 503, headers },
           );
         }
@@ -244,13 +249,13 @@ Deno.serve(async (req: Request) => {
       const parsed = JSON.parse(text) as any;
       const content = String(parsed?.choices?.[0]?.message?.content ?? "").trim();
       return jsonResponse(
-        {
+        withRequestId({
           ok: true,
           model_id: aliasModelId,
           resolved_model_id: resolvedModelId,
           engine_id: "public_openrouter",
           content,
-        },
+        }),
         { status: 200, headers },
       );
     }
@@ -296,6 +301,7 @@ Deno.serve(async (req: Request) => {
             engine_id: "public_openrouter",
             model_id: aliasModelId,
             resolved_model_id: resolvedModelId,
+            request_id: requestId,
           });
 
           let fullContent = "";
@@ -316,10 +322,10 @@ Deno.serve(async (req: Request) => {
             },
           });
 
-          emit("done", { ok: true, run_id: runId, full_content: fullContent });
+          emit("done", { ok: true, run_id: runId, full_content: fullContent, request_id: requestId });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          emit("error", { ok: false, error: message });
+          emit("error", withRequestId({ ok: false, error: message }));
         } finally {
           controller.close();
         }
@@ -329,6 +335,6 @@ Deno.serve(async (req: Request) => {
     return new Response(stream, { status: 200, headers: streamHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return jsonResponse({ ok: false, error: message }, { status: 400, headers });
+    return jsonResponse(withRequestId({ ok: false, error: message }), { status: 400, headers });
   }
 });

@@ -1,8 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { executeSendMessageFlow } from "../../features/harness/sendTurn";
 import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
-import type { ThreadService } from "../../../shared/threadService";
+import type { ThreadService, ThreadServiceTurnStreamEvent } from "../../../shared/threadService";
 import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "../../../shared/threadTitleUi";
+import type { StreamingMeta, StreamingTokens } from "../../features/harness/useStreamingState";
 
 type SendFlowThread = {
   id: string;
@@ -52,13 +53,22 @@ type UseDesktopSendMessageFlowArgs<
   setMessages: Dispatch<SetStateAction<MessageT[]>>;
   setThreads: Dispatch<SetStateAction<ThreadT[]>>;
   ensureThreadReadyForSend: (threadId: string, session: SessionT) => Promise<boolean>;
-  clearStreamingRefs: () => void;
+  prepareSessionForSend?: (session: SessionT, threadId: string) => Promise<SessionT>;
+  clearStreamingState: () => void;
+  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
   scheduleStreamingUpdate: () => void;
+  streamingContentRef: { current: string | null };
+  streamingTokensRef: { current: StreamingTokens | null };
+  streamingMetaRef: { current: StreamingMeta | null };
   getSupabaseUrl: () => string | null;
   getSupabaseAnonKey: () => string | null;
   setMemoryToast: (message: string) => void;
   setAgentStatus: (value: null) => void;
   setRunningTools: (value: []) => void;
+  getSendPolicySnapshot?: (threadId: string) => {
+    selectedModelId?: string | null;
+    hasChatgptAuth?: boolean;
+  } | null;
 };
 
 export function useDesktopSendMessageFlow<
@@ -140,7 +150,8 @@ export function useDesktopSendMessageFlow<
           }
         },
         ensureThreadReadyForSend: args.ensureThreadReadyForSend,
-        clearStreamingRefs: args.clearStreamingRefs,
+        prepareSessionForSend: args.prepareSessionForSend,
+        clearStreamingState: args.clearStreamingState,
         scheduleStreamingUpdate: args.scheduleStreamingUpdate,
         sendTurn: async ({
           thread_id,
@@ -152,6 +163,43 @@ export function useDesktopSendMessageFlow<
           supabase_access_token,
         }) => {
           const service = args.getThreadServiceById(thread_id);
+          const sendPolicySnapshot = args.getSendPolicySnapshot?.(thread_id) ?? undefined;
+          const onStreamEvent = (event: ThreadServiceTurnStreamEvent): void => {
+            if (event.type === "start") {
+              args.setStreamingRunId(event.runId?.trim() || null);
+              args.streamingMetaRef.current = {
+                engine_id: event.engineId ?? "agent_web",
+                model_id: event.modelId ?? "",
+                inference_source: event.inferenceSource ?? null,
+              };
+              args.streamingTokensRef.current = {
+                prompt_tokens: event.promptTokens ?? undefined,
+                completion_tokens: event.completionTokens ?? undefined,
+                max_tokens: event.maxTokens ?? undefined,
+              };
+              args.scheduleStreamingUpdate();
+              return;
+            }
+            if (event.type === "delta") {
+              args.dispatchRunPhase({ type: "stream_chunk" });
+              if (event.fullContent !== null) {
+                args.streamingContentRef.current = event.fullContent;
+              } else if (event.delta.length > 0) {
+                const prior = args.streamingContentRef.current ?? "";
+                args.streamingContentRef.current = `${prior}${event.delta}`;
+              }
+              args.streamingTokensRef.current = {
+                prompt_tokens: event.promptTokens ?? undefined,
+                completion_tokens: event.completionTokens ?? undefined,
+                max_tokens: event.maxTokens ?? undefined,
+              };
+              args.scheduleStreamingUpdate();
+              return;
+            }
+            if (event.type === "done") {
+              args.clearStreamingState();
+            }
+          };
           await service.sendTurn({
             threadId: thread_id,
             cwd: cwd ?? args.effectiveCwd,
@@ -160,6 +208,8 @@ export function useDesktopSendMessageFlow<
             supabaseUrl: supabase_url,
             supabaseAnonKey: supabase_anon_key,
             supabaseAccessToken: supabase_access_token,
+            sendPolicySnapshot,
+            onStreamEvent,
           });
         },
         getSupabaseUrl: args.getSupabaseUrl,

@@ -2,6 +2,7 @@ export type {
   ThreadService,
   ThreadServiceCreateInput,
   ThreadServiceMessageInput,
+  ThreadServiceTurnStreamEvent,
   ThreadServiceSendTurnInput,
   ThreadServiceSetEngineInput,
   ThreadServiceSetLensInput,

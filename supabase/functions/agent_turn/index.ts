@@ -1,59 +1,69 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { jsonResponse, noStoreHeaders, withStrictCors } from "../_shared/http.ts";
-import { requireVerifiedUserId } from "../_shared/auth.ts";
-import { getEnv, isTruthyEnv } from "../_shared/env.ts";
+import { extractBearerToken, isAuthApiError, requireVerifiedUserId } from "../_shared/auth.ts";
+import { getEnv } from "../_shared/env.ts";
 import { edgeRateLimitAllow } from "../_shared/rate_limit.ts";
 import { supabaseAdminFetch } from "../_shared/supabase_admin.ts";
 import { consumeSseEvents, encodeSse } from "../_shared/sse.ts";
-import {
-  type PlatformModelRef,
-  type PlatformProvider,
-  normalizePlatformProvider,
-} from "../_shared/platform_model_routing.ts";
+import { type PlatformModelRef } from "../_shared/platform_model_routing.ts";
 import {
   consumePlatformInferenceStandard,
   edgeRateLimitAllowKey,
-  loadModelRegistryRow,
-  platformOpenAiCompatibleBaseUrl,
-  platformProviderEnvKey,
-  resolvePlatformModelForAliasOrRegistry as resolvePlatformModelForAliasOrRegistryShared,
-  type ModelRegistryRow,
+  evaluatePlatformInferenceEntitlement,
+  loadUserBuilderTierForPlatformInference,
+  resolvePlatformInferenceTarget,
+  type PlatformBuilderTier,
 } from "../_shared/platform_inference_core.ts";
 import {
+  checkCommunityHarnessContract,
+  toCommunityHarnessContractMeta,
+  type CommunityHarnessContractCheckResult,
+} from "../_shared/community_harness_contract_check.ts";
+import {
+  COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX,
   COMMUNITY_CONTEXT_BUNDLE_V1,
   buildCommunityEvidenceUsedV1,
   buildCommunityEvidenceUserMessage,
-  buildCommunityContextDiagnostics,
   buildCommunityContextSystemPrompt,
-  normalizeCompiledCommunityRows,
+  COMMUNITY_CONTEXT_OBSERVABILITY_CONTRACT_ID,
 } from "./community_context_bundle_v1.mjs";
+import {
+  buildCloudCommunityContextEnvelope,
+} from "../../../shared/communityContextEnvelope.ts";
+import {
+  sanitizeUserFacingAssistantText,
+  USER_FACING_INTERNAL_IDENTIFIER_KEYS,
+} from "../../../shared/communityUserFacingOutputSanitizer.mjs";
+import {
+  parseCommunitySearchSourceTypes,
+  runCanonicalCommunitySearch,
+  runCanonicalCommunityDeepResearch,
+  type CommunitySearchSourceType,
+} from "../_shared/community_research_orchestrator.ts";
 
 const COMMUNITY_RPC = Object.freeze({
   activeCommunitySystemPrompt: "get_active_community_agent_system_prompt",
   entitlementCheck: "user_has_active_entitlement",
-  compiledContextSearch: "search_compiled_community_context",
-  chatSnippetSearch: "search_community_chat_snippets",
-  resourceSnippetSearch: "search_community_resource_snippets",
-  memorySearch: "search_community_memory_items",
   memoryCandidatePropose: "community_memory_candidate_propose",
 });
 const COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID = "community_harness_capabilities_v3";
 const COMMUNITY_HARNESS_RUNTIME_TOOLS = Object.freeze([
-  "community_context_search",
-  "community_memory_search",
+  "community_search",
   "community_memory_candidate_propose",
 ] as const);
-
 function communityHarnessRuntimeTools(): string[] {
   return [...COMMUNITY_HARNESS_RUNTIME_TOOLS];
 }
 
 type AgentTurnInput = {
   thread_id: string;
+  reply_to_id?: string;
+  model_id?: string;
   max_tokens?: number;
   stream?: boolean;
   mode?: "respond" | "regenerate";
+  inference_lane_fallbacks?: unknown;
 };
 
 type ApiError = Error & {
@@ -61,6 +71,8 @@ type ApiError = Error & {
   status: number;
   details?: Record<string, unknown>;
 };
+
+const USER_FACING_INTERNAL_IDENTIFIER_KEY_SET = new Set(USER_FACING_INTERNAL_IDENTIFIER_KEYS);
 
 function createApiError(
   code: string,
@@ -84,6 +96,27 @@ function isApiError(error: unknown): error is ApiError {
       typeof (error as { code?: unknown }).code === "string" &&
       typeof (error as { status?: unknown }).status === "number",
   );
+}
+
+function stripInternalIdentifiersForUserFacingValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripInternalIdentifiersForUserFacingValue(item));
+  }
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (USER_FACING_INTERNAL_IDENTIFIER_KEY_SET.has(key)) continue;
+    out[key] = stripInternalIdentifiersForUserFacingValue(raw);
+  }
+  return out;
+}
+
+function sanitizeApiErrorDetails(details: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!details || typeof details !== "object") return {};
+  const sanitized = stripInternalIdentifiersForUserFacingValue(details);
+  return sanitized && typeof sanitized === "object" && !Array.isArray(sanitized)
+    ? (sanitized as Record<string, unknown>)
+    : {};
 }
 
 function sanitizeUuid(value: string): string {
@@ -129,41 +162,9 @@ type PersonalMemoryRow = {
   updated_at: string;
 };
 
-type BuilderTier = "free" | "builder" | "pro";
-
 function isPlatformQuotaExceededErrorMessage(message: string): boolean {
   const raw = String(message ?? "");
   return raw.toLowerCase().includes("platform_inference_quota_exceeded");
-}
-
-function isPlatformModelRoutingMisconfiguredMessage(message: string): boolean {
-  const raw = String(message ?? "").trim().toLowerCase();
-  if (!raw) return false;
-  return (
-    raw.includes("platform_model_map_json") ||
-    raw.includes("platform model not configured for") ||
-    raw.includes("platform model not configured") ||
-    raw.includes("invalid platform model mapping") ||
-    raw.includes("unsupported platform model provider")
-  );
-}
-
-async function resolvePlatformModelForAliasOrRegistry(aliasModelId: string): Promise<PlatformModelRef> {
-  const cleanedAlias = (aliasModelId ?? "").trim();
-  try {
-    return await resolvePlatformModelForAliasOrRegistryShared(cleanedAlias);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.toLowerCase().includes("platform_inference_not_allowed")) {
-      throw createApiError(
-        "platform_inference_not_allowed",
-        "Arx platform inference isn't available for this model.",
-        403,
-        { model_id: cleanedAlias },
-      );
-    }
-    throw error;
-  }
 }
 
 async function loadThread(threadId: string): Promise<ThreadRow> {
@@ -176,6 +177,26 @@ async function loadThread(threadId: string): Promise<ThreadRow> {
   const row = rows[0];
   if (!row) throw new Error("Thread not found");
   return row;
+}
+
+async function loadCommunityDisplayName(communityId: string): Promise<string | null> {
+  const id = String(communityId ?? "").trim();
+  if (!id) return null;
+  try {
+    const res = await supabaseAdminFetch(
+      `/rest/v1/communities?id=eq.${encodeURIComponent(id)}&select=name,slug&limit=1`,
+      { method: "GET" },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ name?: unknown; slug?: unknown }>;
+    const row = rows[0];
+    const name = typeof row?.name === "string" ? row.name.trim() : "";
+    if (name) return name;
+    const slug = typeof row?.slug === "string" ? row.slug.trim() : "";
+    return slug || null;
+  } catch {
+    return null;
+  }
 }
 
 async function loadCommunityAgentSystemPrompt(params: {
@@ -218,19 +239,6 @@ async function userHasActiveEntitlement(params: { userId: string; communityId: s
   } catch {
     return false;
   }
-}
-
-async function loadUserBuilderTier(userId: string): Promise<BuilderTier> {
-  const res = await supabaseAdminFetch(
-    `/rest/v1/profiles?select=builder_tier&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
-    { method: "GET" },
-  );
-  if (!res.ok) return "free";
-  const rows = (await res.json()) as Array<{ builder_tier?: unknown }>;
-  const raw = String(rows[0]?.builder_tier ?? "free").trim().toLowerCase();
-  if (raw === "builder") return "builder";
-  if (raw === "pro" || raw === "architect") return "pro";
-  return "free";
 }
 
 async function loadUserMemorySettings(userId: string): Promise<UserMemorySettingsRow> {
@@ -303,37 +311,6 @@ type CommunityResourceSnippetRow = {
   file_key: string | null;
 };
 
-type CompiledCommunityContextRow = {
-  community_id: string;
-  source_type: string;
-  source_id: string;
-  thread_id: string | null;
-  sender_id: string | null;
-  sender_display: string | null;
-  title: string | null;
-  snippet: string;
-  url: string | null;
-  pinned: boolean;
-  source_created_at: string | null;
-  source_updated_at: string;
-  rank_score: number | null;
-  compile_version: number | string | null;
-};
-
-type CommunityContextBundle = {
-  chatRows: CommunityChatSnippetRow[];
-  resourceRows: CommunityResourceSnippetRow[];
-  compiledAttempted: boolean;
-  compiledFetchOk: boolean;
-  compiledItemsUsed: number;
-  compileVersion: number | null;
-  fallbackUsed: boolean;
-  chatFetchOk: boolean | null;
-  resourceFetchOk: boolean | null;
-  retrievalLatencyMs: number | null;
-  failureClass: string | null;
-};
-
 async function loadHistorySnippets(params: {
   userId: string;
   query: string;
@@ -356,136 +333,443 @@ async function loadHistorySnippets(params: {
   return (await res.json()) as HistorySnippetRow[];
 }
 
-async function loadCommunityChatSnippets(params: {
-  userId: string;
+async function proposeCommunityMemoryCandidate(params: {
   communityId: string;
-  query: string;
-  limit?: number;
-}): Promise<CommunityChatSnippetRow[]> {
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.chatSnippetSearch}`, {
+  userAccessToken: string | null;
+  title?: string | null;
+  memoryText: string;
+  evidence: Record<string, unknown>;
+  requestKey?: string | null;
+}): Promise<CommunityMemoryCandidateProposeRow | null> {
+  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.memoryCandidatePropose}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(params.userAccessToken ? { Authorization: `Bearer ${params.userAccessToken}` } : {}),
+    },
     body: JSON.stringify({
-      p_user_id: params.userId,
       p_community_id: params.communityId,
-      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
-      p_limit: Math.max(
-        0,
-        Math.min(20, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit)),
-      ),
+      p_title: params.title ?? null,
+      p_memory_text: params.memoryText,
+      p_evidence: params.evidence,
+      p_request_key: params.requestKey ?? null,
     }),
   });
   if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as CommunityChatSnippetRow[];
+  const rows = (await res.json()) as CommunityMemoryCandidateProposeRow[] | CommunityMemoryCandidateProposeRow | null;
+  if (Array.isArray(rows)) return rows[0] ?? null;
+  if (rows && typeof rows === "object") return rows;
+  return null;
 }
 
-async function loadCommunityResourceSnippets(params: {
-  userId: string;
-  communityId: string;
-  query: string;
-  limit?: number;
-}): Promise<CommunityResourceSnippetRow[]> {
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.resourceSnippetSearch}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      p_user_id: params.userId,
-      p_community_id: params.communityId,
-      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
-      p_limit: Math.max(
-        0,
-        Math.min(20, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)),
-      ),
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as CommunityResourceSnippetRow[];
-}
-
-async function loadCompiledCommunityContextRows(params: {
-  userId: string;
-  communityId: string;
-  query: string;
-  limit?: number;
-}): Promise<CompiledCommunityContextRow[]> {
-  const res = await supabaseAdminFetch(`/rest/v1/rpc/${COMMUNITY_RPC.compiledContextSearch}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      p_user_id: params.userId,
-      p_community_id: params.communityId,
-      p_query: String(params.query ?? "").slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars),
-      p_limit: Math.max(0, Math.min(40, Math.floor(params.limit ?? COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit))),
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as CompiledCommunityContextRow[];
-}
-
-async function loadCommunityContextBundle(params: {
-  userId: string;
-  communityId: string;
-  query: string;
-}): Promise<CommunityContextBundle> {
-  const startedAt = Date.now();
+function parseToolArguments(raw: string): Record<string, unknown> {
+  const input = String(raw ?? "").trim();
+  if (!input) return {};
   try {
-    const compiledRows = await loadCompiledCommunityContextRows({
+    const parsed = JSON.parse(input) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fallthrough
+  }
+  return {};
+}
+
+function readToolStringArg(args: Record<string, unknown>, key: string): string | null {
+  const value = args[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function readToolLimitArg(
+  args: Record<string, unknown>,
+  fallback = COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit,
+): number {
+  const raw = args.limit;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.max(1, Math.min(12, Math.floor(raw)));
+  }
+  if (typeof raw === "string") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return Math.max(1, Math.min(12, Math.floor(parsed)));
+  }
+  return Math.max(1, Math.min(12, Math.floor(fallback)));
+}
+
+type InferenceLaneFallbackItem = {
+  from: "chatgpt" | "platform" | "public";
+  to: "chatgpt" | "platform" | "public";
+  reason: string;
+};
+
+function normalizeInferenceLaneFallbacks(value: unknown): InferenceLaneFallbackItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: InferenceLaneFallbackItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    const from = String(item.from ?? "").trim().toLowerCase();
+    const to = String(item.to ?? "").trim().toLowerCase();
+    const reason = truncateUtf8(String(item.reason ?? "").trim(), 120);
+    if (
+      (from !== "chatgpt" && from !== "platform" && from !== "public") ||
+      (to !== "chatgpt" && to !== "platform" && to !== "public") ||
+      !reason
+    ) {
+      continue;
+    }
+    const key = `${from}:${to}:${reason}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      from: from as InferenceLaneFallbackItem["from"],
+      to: to as InferenceLaneFallbackItem["to"],
+      reason,
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+const COMMUNITY_MEMORY_EVIDENCE_REQUIRED_REASON_CODE = "evidence_required";
+const COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR =
+  "community_memory_candidate_propose requires evidence.items with at least one provenance item.";
+
+function hasValidCommunityEvidenceProvenanceItem(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  const sourceType = String(item.source_type ?? "").trim().toLowerCase();
+  const sourceId = String(item.source_id ?? "").trim();
+  return (
+    (sourceType === "chat" || sourceType === "resource" || sourceType === "memory")
+    && sourceId.length > 0
+  );
+}
+
+function validateCommunityMemoryProposalEvidence(
+  value: unknown,
+):
+  | { ok: true; evidence: Record<string, unknown> }
+  | { ok: false; reasonCode: typeof COMMUNITY_MEMORY_EVIDENCE_REQUIRED_REASON_CODE; error: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      ok: false,
+      reasonCode: COMMUNITY_MEMORY_EVIDENCE_REQUIRED_REASON_CODE,
+      error: COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR,
+    };
+  }
+  const evidence = value as Record<string, unknown>;
+  const items = Array.isArray(evidence.items) ? evidence.items : [];
+  const hasProvenance = items.some((item) => hasValidCommunityEvidenceProvenanceItem(item));
+  if (!hasProvenance) {
+    return {
+      ok: false,
+      reasonCode: COMMUNITY_MEMORY_EVIDENCE_REQUIRED_REASON_CODE,
+      error: COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR,
+    };
+  }
+  return { ok: true, evidence };
+}
+
+function mergeCommunityEvidenceRows(params: {
+  chatRows: CommunityChatSnippetRow[];
+  resourceRows: CommunityResourceSnippetRow[];
+  nextChatRows: CommunityChatSnippetRow[];
+  nextResourceRows: CommunityResourceSnippetRow[];
+}): { chatRows: CommunityChatSnippetRow[]; resourceRows: CommunityResourceSnippetRow[] } {
+  const chatMap = new Map<string, CommunityChatSnippetRow>();
+  const resourceMap = new Map<string, CommunityResourceSnippetRow>();
+
+  for (const row of params.chatRows) {
+    const key = `${row.thread_id}:${row.message_id}`;
+    if (!chatMap.has(key)) chatMap.set(key, row);
+  }
+  for (const row of params.nextChatRows) {
+    const key = `${row.thread_id}:${row.message_id}`;
+    chatMap.set(key, row);
+  }
+
+  for (const row of params.resourceRows) {
+    const key = `${row.resource_id}:${row.resource_type}`;
+    if (!resourceMap.has(key)) resourceMap.set(key, row);
+  }
+  for (const row of params.nextResourceRows) {
+    const key = `${row.resource_id}:${row.resource_type}`;
+    resourceMap.set(key, row);
+  }
+
+  return {
+    chatRows: Array.from(chatMap.values()).slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit),
+    resourceRows: Array.from(resourceMap.values()).slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit),
+  };
+}
+
+type CommunityContextPrefetchResult = {
+  chatRows: CommunityChatSnippetRow[];
+  resourceRows: CommunityResourceSnippetRow[];
+  diagnostics: Record<string, unknown> | null;
+};
+
+type CanonicalCommunitySearchRuntimeResult =
+  | Awaited<ReturnType<typeof runCanonicalCommunitySearch>>
+  | Awaited<ReturnType<typeof runCanonicalCommunityDeepResearch>>;
+
+async function executeCanonicalCommunitySearch(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+  limit: number;
+  sourceTypes: CommunitySearchSourceType[];
+}): Promise<CanonicalCommunitySearchRuntimeResult> {
+  try {
+    return await runCanonicalCommunityDeepResearch({
       userId: params.userId,
       communityId: params.communityId,
       query: params.query,
-      limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit,
+      limit: params.limit,
+      sourceTypes: params.sourceTypes,
     });
-    const normalized = normalizeCompiledCommunityRows(compiledRows, params.communityId);
-
-    return {
-      chatRows: normalized.chatRows as CommunityChatSnippetRow[],
-      resourceRows: normalized.resourceRows as CommunityResourceSnippetRow[],
-      compiledAttempted: true,
-      compiledFetchOk: true,
-      compiledItemsUsed: normalized.compiledItemsUsed,
-      compileVersion: normalized.compileVersion,
-      fallbackUsed: false,
-      chatFetchOk: true,
-      resourceFetchOk: true,
-      retrievalLatencyMs: Math.max(0, Date.now() - startedAt),
-      failureClass: null,
-    };
   } catch {
-    const [chatResult, resourceResult] = await Promise.allSettled([
-      loadCommunityChatSnippets({
-        userId: params.userId,
-        communityId: params.communityId,
-        query: params.query,
-        limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit,
-      }),
-      loadCommunityResourceSnippets({
-        userId: params.userId,
-        communityId: params.communityId,
-        query: params.query,
-        limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit,
-      }),
-    ]);
-    const chatFetchOk = chatResult.status === "fulfilled";
-    const resourceFetchOk = resourceResult.status === "fulfilled";
-    let failureClass = "compiled_fetch_failed_fallback_partial";
-    if (chatFetchOk && resourceFetchOk) {
-      failureClass = "compiled_fetch_failed_fallback_ok";
-    } else if (!chatFetchOk && !resourceFetchOk) {
-      failureClass = "compiled_fetch_failed_fallback_failed";
-    }
+    return await runCanonicalCommunitySearch({
+      userId: params.userId,
+      communityId: params.communityId,
+      query: params.query,
+      limit: params.limit,
+      sourceTypes: params.sourceTypes,
+    });
+  }
+}
+
+function buildCommunityContextFailureDiagnostics(
+  failureClass: string,
+): Record<string, unknown> {
+  return {
+    attempted: false,
+    compiled_fetch_ok: false,
+    compiled_items_used: 0,
+    compile_version: null,
+    fallback_used: false,
+    chat_fetch_ok: null,
+    resource_fetch_ok: null,
+    chat_items_used: 0,
+    resource_items_used: 0,
+    retrieval_latency_ms: null,
+    failure_class: failureClass,
+    quality_score: 0,
+    quality_band: "none",
+    contract_id: COMMUNITY_CONTEXT_OBSERVABILITY_CONTRACT_ID,
+  };
+}
+
+async function loadCommunityContextViaCanonicalSearch(params: {
+  userId: string;
+  communityId: string;
+  query: string;
+}): Promise<CommunityContextPrefetchResult> {
+  const result = await executeCanonicalCommunitySearch({
+    userId: params.userId,
+    communityId: params.communityId,
+    query: params.query,
+    limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit,
+    sourceTypes: ["chat", "resource", "memory"],
+  });
+  const merged = mergeCommunityEvidenceRows({
+    chatRows: [],
+    resourceRows: [],
+    nextChatRows: result.chatRows,
+    nextResourceRows: result.resourceRows,
+  });
+  const diagnosticsRaw = asRecord(result.diagnostics) ?? {};
+  return {
+    chatRows: merged.chatRows,
+    resourceRows: merged.resourceRows,
+    diagnostics: {
+      ...diagnosticsRaw,
+      ...(result.metaRecentFallbackUsed
+        ? { meta_recent_fallback_used: true, fallback_used: true }
+        : null),
+    },
+  };
+}
+
+async function runCommunityToolCall(params: {
+  toolName: CommunityToolName;
+  rawArguments: string;
+  defaultCommunityId: string | null;
+  defaultCommunityName: string | null;
+  userId: string;
+  userAccessToken: string | null;
+  aliasLookup: CommunityEvidenceAliasLookup;
+}): Promise<CommunityToolLoopCallResult> {
+  const args = parseToolArguments(params.rawArguments);
+  const communityId = String(params.defaultCommunityId ?? "").trim();
+  const communityName = String(params.defaultCommunityName ?? "").trim() || null;
+  const requestedCommunityId = readToolStringArg(args, "community_id");
+  if (!communityId) {
     return {
-      chatRows: chatFetchOk ? chatResult.value : [],
-      resourceRows: resourceFetchOk ? resourceResult.value : [],
-      compiledAttempted: true,
-      compiledFetchOk: false,
-      compiledItemsUsed: 0,
-      compileVersion: null,
-      fallbackUsed: true,
-      chatFetchOk,
-      resourceFetchOk,
-      retrievalLatencyMs: Math.max(0, Date.now() - startedAt),
-      failureClass,
+      payload: {
+        ok: false,
+        tool: params.toolName,
+        reason_code: "no_active_community",
+        error: "community tool calls require an active thread community context.",
+      },
+      chatRows: [],
+      resourceRows: [],
+      aliasLookupUpdates: {},
     };
+  }
+
+  try {
+    switch (params.toolName) {
+      case "community_search": {
+        const query = readToolStringArg(args, "query") ?? "";
+        const limit = readToolLimitArg(args, COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit);
+        const sourceTypes: CommunitySearchSourceType[] = parseCommunitySearchSourceTypes(args);
+        const searchResult = await executeCanonicalCommunitySearch({
+          userId: params.userId,
+          communityId,
+          query,
+          limit,
+          sourceTypes,
+        });
+        const payloadChatRows = sanitizeCommunitySearchPayloadChatRows(searchResult.chatRows);
+        const payloadResourceRows = sanitizeCommunitySearchPayloadResourceRows(searchResult.resourceRows);
+        const payloadMemoryRows = sanitizeCommunitySearchPayloadMemoryRows(searchResult.memoryRows);
+        const toolChatRows = payloadChatRows.map(({ internal_source_id: _internalSourceId, ...row }) => row);
+        const toolResourceRows = payloadResourceRows.map(({ internal_source_id: _internalSourceId, ...row }) => row);
+        const toolMemoryRows = payloadMemoryRows.map(({ internal_source_id: _internalSourceId, ...row }) => row);
+        const aliasLookupUpdates = buildCommunitySearchAliasLookupUpdates({
+          payloadChatRows,
+          payloadResourceRows,
+          payloadMemoryRows,
+          internalChatRows: searchResult.chatRows,
+          internalResourceRows: searchResult.resourceRows,
+          internalMemoryRows: searchResult.memoryRows,
+        });
+        return {
+          payload: {
+            ok: true,
+            tool: params.toolName,
+            canonical_tool: "community_search",
+            community_scope: "thread_context",
+            ...(communityName ? { community_name: communityName } : {}),
+            ...(requestedCommunityId && requestedCommunityId !== communityId
+              ? { requested_community_id_ignored: true }
+              : {}),
+            query,
+            limit,
+            source_types: sourceTypes,
+            query_plan: searchResult.queryPlan,
+            executed_queries: searchResult.executedQueries,
+            ...("deepQueryPlan" in searchResult ? { deep_query_plan: searchResult.deepQueryPlan } : null),
+            ...("passCount" in searchResult ? { pass_count: searchResult.passCount } : null),
+            ...("stopReason" in searchResult ? { stop_reason: searchResult.stopReason } : null),
+            diagnostics: searchResult.diagnostics,
+            meta_recent_fallback_used: searchResult.metaRecentFallbackUsed,
+            rows: {
+              chat: toolChatRows,
+              resources: toolResourceRows,
+              memory: toolMemoryRows,
+            },
+          },
+          chatRows: searchResult.chatRows,
+          resourceRows: searchResult.resourceRows,
+          aliasLookupUpdates,
+        };
+      }
+      case "community_memory_candidate_propose": {
+        const memoryText = readToolStringArg(args, "memory_text");
+        if (!memoryText) {
+          return {
+            payload: { ok: false, tool: params.toolName, error: "memory_text is required." },
+            chatRows: [],
+            resourceRows: [],
+            aliasLookupUpdates: {},
+          };
+        }
+        const title = readToolStringArg(args, "title");
+        const requestKey = readToolStringArg(args, "request_key");
+        const evidenceValidation = validateCommunityMemoryProposalEvidence(args.evidence);
+        if (!evidenceValidation.ok) {
+          return {
+            payload: {
+              ok: false,
+              tool: params.toolName,
+              reason_code: evidenceValidation.reasonCode,
+              error: evidenceValidation.error,
+              community_scope: "thread_context",
+              ...(communityName ? { community_name: communityName } : {}),
+              ...(requestedCommunityId && requestedCommunityId !== communityId
+                ? { requested_community_id_ignored: true }
+                : {}),
+            },
+            chatRows: [],
+            resourceRows: [],
+            aliasLookupUpdates: {},
+          };
+        }
+        const evidence = resolveCommunityProposalEvidenceForRpc({
+          evidence: evidenceValidation.evidence,
+          aliasLookup: params.aliasLookup,
+        });
+        const result = await proposeCommunityMemoryCandidate({
+          communityId,
+          userAccessToken: params.userAccessToken,
+          title,
+          memoryText,
+          evidence,
+          requestKey,
+        });
+        return {
+          payload: {
+            ok: true,
+            tool: params.toolName,
+            community_scope: "thread_context",
+            ...(communityName ? { community_name: communityName } : {}),
+            ...(requestedCommunityId && requestedCommunityId !== communityId
+              ? { requested_community_id_ignored: true }
+              : {}),
+            title: title ?? null,
+            memory_text_preview: truncateUtf8(memoryText, 200),
+            result,
+          },
+          chatRows: [],
+          resourceRows: [],
+          aliasLookupUpdates: {},
+        };
+      }
+      default:
+        return {
+          payload: {
+            ok: false,
+            tool: params.toolName,
+            error: `Unsupported community tool: ${params.toolName}`,
+          },
+          chatRows: [],
+          resourceRows: [],
+          aliasLookupUpdates: {},
+        };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+        payload: {
+          ok: false,
+          tool: params.toolName,
+          community_scope: "thread_context",
+          ...(communityName ? { community_name: communityName } : {}),
+          ...(requestedCommunityId && requestedCommunityId !== communityId
+            ? { requested_community_id_ignored: true }
+            : {}),
+          error: message,
+        },
+        chatRows: [],
+        resourceRows: [],
+        aliasLookupUpdates: {},
+      };
   }
 }
 
@@ -503,6 +787,30 @@ async function loadRecentMessages(threadId: string, limit = 50): Promise<Message
   );
   if (!res.ok) throw new Error(await res.text());
   return (await res.json()) as MessageRow[];
+}
+
+async function loadRecentMessagesUpToSeq(threadId: string, maxSeq: number, limit = 50): Promise<MessageRow[]> {
+  const seq = Number.isFinite(maxSeq) ? Math.max(0, Math.floor(maxSeq)) : 0;
+  const res = await supabaseAdminFetch(
+    `/rest/v1/messages?select=id,role,content_json,seq&thread_id=eq.${encodeURIComponent(
+      threadId,
+    )}&seq=lte.${seq}&order=seq.desc&limit=${limit}`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as MessageRow[];
+}
+
+async function loadMessageById(threadId: string, messageId: string): Promise<MessageRow | null> {
+  const res = await supabaseAdminFetch(
+    `/rest/v1/messages?select=id,role,content_json,seq&thread_id=eq.${encodeURIComponent(
+      threadId,
+    )}&id=eq.${encodeURIComponent(messageId)}&limit=1`,
+    { method: "GET" },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const rows = (await res.json()) as MessageRow[];
+  return rows[0] ?? null;
 }
 
 function extractTextFromContentJson(contentJson: unknown): string {
@@ -576,14 +884,358 @@ function extractTextFromContentJson(contentJson: unknown): string {
   return "";
 }
 
-type OpenRouterChatMessage = { role: "system" | "user" | "assistant"; content: string };
+type OpenRouterChatMessage = { role: "system" | "user" | "assistant" | "tool"; content: string };
+
+type CommunityToolName = (typeof COMMUNITY_HARNESS_RUNTIME_TOOLS)[number];
+
+type CommunityMemorySearchRow = {
+  memory_id: string;
+  community_id: string;
+  title: string | null;
+  snippet: string;
+  source: string | null;
+  created_at: string;
+  updated_at: string;
+  score: number | null;
+};
+
+type CommunityMemoryCandidateProposeRow = {
+  candidate_id?: string;
+  router_state?: string;
+  signal_score?: number | null;
+  router_reason?: string | null;
+  promoted_memory_id?: string | null;
+  created_at?: string;
+  [key: string]: unknown;
+};
+
+type OpenAiToolDefinition = {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+};
 
 type OpenAiUsage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 
+type OpenAiToolCall = {
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+};
+
+type OpenAiMessageContentPart = { type?: string; text?: string };
+
+type OpenAiChatMessagePayload = {
+  role?: string;
+  content?: string | OpenAiMessageContentPart[] | null;
+  tool_calls?: OpenAiToolCall[];
+};
+
 type OpenAiChatCompletion = {
-  choices?: Array<{ message?: { role?: string; content?: string } }>;
+  choices?: Array<{ message?: OpenAiChatMessagePayload; finish_reason?: string | null }>;
   usage?: OpenAiUsage;
 };
+
+type OpenAiCompatibleCompletionResult = {
+  text: string;
+  usage?: OpenAiUsage;
+  toolCalls: OpenAiToolCall[];
+  finishReason: string | null;
+};
+
+type CommunityToolLoopCallResult = {
+  payload: Record<string, unknown>;
+  chatRows: CommunityChatSnippetRow[];
+  resourceRows: CommunityResourceSnippetRow[];
+  aliasLookupUpdates: CommunityEvidenceAliasLookup;
+};
+
+type CommunityToolLoopResult = {
+  text: string;
+  usage?: OpenAiUsage;
+  toolCalls: CommunityToolTraceItem[];
+  communityEvidenceUsedV1: ReturnType<typeof buildCommunityEvidenceUsedV1>;
+};
+
+const COMMUNITY_TOOL_LOOP_MAX_STEPS = 4;
+const COMMUNITY_AUTO_SEARCH_FEEDBACK_MAX_CHARS = 12000;
+
+type CommunityToolTraceItem = {
+  name: string;
+  ok: boolean;
+  mode?: "model" | "auto";
+};
+
+type CommunityEvidenceSourceType = "chat" | "resource" | "memory";
+
+type CommunityEvidenceAliasLookup = Record<
+  string,
+  {
+    source_type: CommunityEvidenceSourceType;
+    source_id: string;
+  }
+>;
+
+type CommunitySearchPayloadChatRow = {
+  source_type: "chat";
+  source_id: string;
+  sender_display: string;
+  created_at: string;
+  snippet: string;
+};
+
+type CommunitySearchPayloadResourceRow = {
+  source_type: "resource" | "memory";
+  source_id: string;
+  title: string;
+  created_at: string;
+  snippet: string;
+  url: string | null;
+};
+
+type CommunitySearchPayloadMemoryRow = {
+  source_type: "memory";
+  source_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  snippet: string;
+  score: number | null;
+};
+
+function sanitizeCommunitySearchPayloadChatRows(
+  rows: CommunityChatSnippetRow[],
+): CommunitySearchPayloadChatRow[] {
+  return rows.map((row, idx) => ({
+    source_type: "chat",
+    source_id: `chat_${idx + 1}`,
+    sender_display: String(row.sender_display ?? "").trim() || "member",
+    created_at: String(row.created_at ?? "").trim(),
+    snippet: String(row.snippet ?? "").trim(),
+  }));
+}
+
+function sanitizeCommunitySearchPayloadResourceRows(
+  rows: CommunityResourceSnippetRow[],
+): CommunitySearchPayloadResourceRow[] {
+  const counts = new Map<string, number>();
+  return rows.map((row) => {
+    const sourceType = String(row.resource_type ?? "").trim().toLowerCase() === "memory" ? "memory" : "resource";
+    const next = (counts.get(sourceType) ?? 0) + 1;
+    counts.set(sourceType, next);
+    return {
+      source_type: sourceType,
+      source_id: `${sourceType}_${next}`,
+      title: String(row.title ?? "").trim() || (sourceType === "memory" ? "Community memory" : "Community resource"),
+      created_at: String(row.created_at ?? "").trim(),
+      snippet: String(row.snippet ?? "").trim(),
+      url: typeof row.url === "string" && row.url.trim() ? row.url.trim() : null,
+    };
+  });
+}
+
+function sanitizeCommunitySearchPayloadMemoryRows(
+  rows: CommunityMemorySearchRow[],
+): CommunitySearchPayloadMemoryRow[] {
+  return rows.map((row, idx) => ({
+    source_type: "memory",
+    source_id: `memory_${idx + 1}`,
+    title: String(row.title ?? "").trim() || "Community memory",
+    created_at: String(row.created_at ?? "").trim(),
+    updated_at: String(row.updated_at ?? "").trim(),
+    snippet: String(row.snippet ?? "").trim(),
+    score: typeof row.score === "number" && Number.isFinite(row.score) ? row.score : null,
+  }));
+}
+
+function communityEvidenceAliasLookupKey(sourceType: string, sourceId: string): string {
+  return `${String(sourceType ?? "").trim().toLowerCase()}:${String(sourceId ?? "").trim()}`;
+}
+
+function buildCommunitySearchAliasLookupUpdates(params: {
+  payloadChatRows: CommunitySearchPayloadChatRow[];
+  payloadResourceRows: CommunitySearchPayloadResourceRow[];
+  payloadMemoryRows: CommunitySearchPayloadMemoryRow[];
+  internalChatRows: CommunityChatSnippetRow[];
+  internalResourceRows: CommunityResourceSnippetRow[];
+  internalMemoryRows: CommunityMemorySearchRow[];
+}): CommunityEvidenceAliasLookup {
+  const out: CommunityEvidenceAliasLookup = {};
+  for (let idx = 0; idx < params.payloadChatRows.length; idx += 1) {
+    const alias = params.payloadChatRows[idx];
+    const internal = params.internalChatRows[idx];
+    const internalSourceId = String(internal?.message_id ?? "").trim();
+    if (!alias || !internalSourceId) continue;
+    out[communityEvidenceAliasLookupKey("chat", alias.source_id)] = {
+      source_type: "chat",
+      source_id: internalSourceId,
+    };
+  }
+  for (let idx = 0; idx < params.payloadResourceRows.length; idx += 1) {
+    const alias = params.payloadResourceRows[idx];
+    const internal = params.internalResourceRows[idx];
+    const aliasSourceType = alias?.source_type === "memory" ? "memory" : "resource";
+    const internalSourceId = String(internal?.resource_id ?? "").trim();
+    if (!alias || !internalSourceId) continue;
+    out[communityEvidenceAliasLookupKey(aliasSourceType, alias.source_id)] = {
+      source_type: aliasSourceType,
+      source_id: internalSourceId,
+    };
+  }
+  for (let idx = 0; idx < params.payloadMemoryRows.length; idx += 1) {
+    const alias = params.payloadMemoryRows[idx];
+    const internal = params.internalMemoryRows[idx];
+    const internalSourceId = String(internal?.memory_id ?? "").trim();
+    if (!alias || !internalSourceId) continue;
+    out[communityEvidenceAliasLookupKey("memory", alias.source_id)] = {
+      source_type: "memory",
+      source_id: internalSourceId,
+    };
+  }
+  return out;
+}
+
+function resolveCommunityProposalEvidenceForRpc(params: {
+  evidence: Record<string, unknown>;
+  aliasLookup: CommunityEvidenceAliasLookup;
+}): Record<string, unknown> {
+  const evidenceItems = Array.isArray(params.evidence.items) ? params.evidence.items : [];
+  const resolvedItems = evidenceItems.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+    const item = { ...(raw as Record<string, unknown>) };
+    const internalSourceId = String(item.internal_source_id ?? "").trim();
+    if (internalSourceId) {
+      item.source_id = internalSourceId;
+      return item;
+    }
+    const sourceType = String(item.source_type ?? "").trim().toLowerCase();
+    const sourceId = String(item.source_id ?? "").trim();
+    if (!sourceType || !sourceId) return item;
+    const resolved = params.aliasLookup[communityEvidenceAliasLookupKey(sourceType, sourceId)];
+    if (!resolved || resolved.source_type !== sourceType) return item;
+    item.source_id = resolved.source_id;
+    return item;
+  });
+  return {
+    ...params.evidence,
+    items: resolvedItems,
+  };
+}
+
+function sanitizeCommunityEvidenceUsedForUserFacing(
+  value: ReturnType<typeof buildCommunityEvidenceUsedV1>,
+): ReturnType<typeof buildCommunityEvidenceUsedV1> {
+  if (!value || typeof value !== "object") return null;
+  const itemsRaw = Array.isArray(value.items) ? value.items : [];
+  const counts = new Map<CommunityEvidenceSourceType, number>();
+  const items = itemsRaw.map((item) => {
+    const sourceType = String(item?.source_type ?? "").trim().toLowerCase();
+    const normalizedType: CommunityEvidenceSourceType =
+      sourceType === "chat" ? "chat" : sourceType === "memory" ? "memory" : "resource";
+    const next = (counts.get(normalizedType) ?? 0) + 1;
+    counts.set(normalizedType, next);
+    const internalSourceId = String(item?.source_id ?? "").trim();
+    return {
+      ...item,
+      source_type: normalizedType,
+      source_id: `${normalizedType}_${next}`,
+      ...(internalSourceId ? { internal_source_id: internalSourceId } : {}),
+    };
+  });
+  return {
+    ...value,
+    items,
+  };
+}
+
+function buildCommunityRuntimeToolDefinitions(): OpenAiToolDefinition[] {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "community_search",
+        description:
+          "Search the active thread community for chat/resource/memory evidence snippets. Read-only.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: [],
+          properties: {
+            query: { type: "string", maxLength: 240 },
+            source_types: {
+              type: "array",
+              items: { type: "string", enum: ["chat", "resource", "memory"] },
+              minItems: 1,
+              maxItems: 3,
+            },
+            limit: { type: "integer", minimum: 1, maximum: 12 },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "community_memory_candidate_propose",
+        description:
+          "Propose a candidate memory item for the active thread community's governed memory router.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["memory_text", "evidence"],
+          properties: {
+            title: { type: "string", maxLength: 160 },
+            memory_text: { type: "string", minLength: 1, maxLength: 32000 },
+            evidence: {
+              type: "object",
+              additionalProperties: true,
+              required: ["items"],
+              properties: {
+                v: { type: "integer" },
+                contract_id: { type: "string", maxLength: 128 },
+                items: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: 32,
+                  items: {
+                    type: "object",
+                    additionalProperties: true,
+                    required: ["source_type", "source_id"],
+                    properties: {
+                      source_type: { type: "string", enum: ["chat", "resource", "memory"] },
+                      source_id: { type: "string", minLength: 1, maxLength: 256 },
+                      title: { type: "string", maxLength: 240 },
+                      snippet: { type: "string", maxLength: 2400 },
+                      url: { type: "string", maxLength: 2048 },
+                      score: { type: "number" },
+                      rank: { type: "integer", minimum: 1, maximum: 128 },
+                    },
+                  },
+                },
+              },
+            },
+            request_key: { type: "string", maxLength: 128 },
+          },
+        },
+      },
+    },
+  ];
+}
+
+function extractOpenAiMessageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const text = (part as OpenAiMessageContentPart).text;
+      return typeof text === "string" ? text : "";
+    })
+    .join("");
+}
 
 async function openAiChatCompletion(
   openaiKey: string,
@@ -600,6 +1252,63 @@ async function openAiChatCompletion(
   });
 }
 
+async function openAiCompatibleChatCompletionRaw(params: {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  messages: Array<Record<string, unknown>>;
+  maxTokens: number;
+  tools?: OpenAiToolDefinition[];
+  toolChoice?: "auto" | "none";
+}): Promise<OpenAiCompatibleCompletionResult> {
+  const url = `${params.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const tokenKey = params.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens";
+  const payload = Object.assign(
+    {
+      model: params.model,
+      messages: params.messages,
+      stream: false,
+    },
+    { [tokenKey]: params.maxTokens },
+    params.tools && params.tools.length > 0
+      ? { tools: params.tools, tool_choice: params.toolChoice ?? "auto" }
+      : {},
+  );
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`OpenAI-compatible error ${res.status}: ${text}`);
+  const parsed = JSON.parse(text) as OpenAiChatCompletion;
+  const choice = parsed.choices?.[0] ?? null;
+  const message = choice?.message ?? null;
+  const out = extractOpenAiMessageText(message?.content ?? "").trim();
+  const toolCalls = Array.isArray(message?.tool_calls)
+    ? message!.tool_calls!
+        .map((call) => ({
+          id: typeof call?.id === "string" ? call.id : undefined,
+          type: typeof call?.type === "string" ? call.type : undefined,
+          function: {
+            name: typeof call?.function?.name === "string" ? call.function.name : undefined,
+            arguments:
+              typeof call?.function?.arguments === "string" ? call.function.arguments : undefined,
+          },
+        }))
+        .filter((call) => typeof call.function?.name === "string" && call.function.name.trim().length > 0)
+    : [];
+  return {
+    text: out,
+    usage: parsed.usage,
+    toolCalls,
+    finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null,
+  };
+}
+
 async function openAiCompatibleChatCompletion(params: {
   apiKey: string;
   baseUrl: string;
@@ -607,31 +1316,19 @@ async function openAiCompatibleChatCompletion(params: {
   messages: OpenRouterChatMessage[];
   maxTokens: number;
 }): Promise<{ text: string; usage?: OpenAiUsage }> {
-  const url = `${params.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const tokenKey = params.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(
-      Object.assign(
-        {
-          model: params.model,
-          messages: params.messages,
-          stream: false,
-        },
-        { [tokenKey]: params.maxTokens },
-      ),
-    ),
+  const completion = await openAiCompatibleChatCompletionRaw({
+    apiKey: params.apiKey,
+    baseUrl: params.baseUrl,
+    model: params.model,
+    messages: params.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    maxTokens: params.maxTokens,
   });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI-compatible error ${res.status}: ${text}`);
-  const parsed = JSON.parse(text) as OpenAiChatCompletion;
-  const out = String(parsed.choices?.[0]?.message?.content ?? "").trim();
+  const out = completion.text.trim();
   if (!out) throw new Error("Model returned an empty response");
-  return { text: out, usage: parsed.usage };
+  return { text: out, usage: completion.usage };
 }
 
 type OpenRouterStreamChunk = {
@@ -808,6 +1505,221 @@ async function googleGenerateContent(params: {
     .trim();
   if (!out) throw new Error("Model returned an empty response");
   return { text: out, usage: parsed.usageMetadata };
+}
+
+function normalizeToolCall(call: OpenAiToolCall): OpenAiToolCall {
+  const name = typeof call?.function?.name === "string" ? call.function.name.trim() : "";
+  const toolCallId = typeof call?.id === "string" && call.id.trim() ? call.id.trim() : `call_${crypto.randomUUID()}`;
+  return {
+    id: toolCallId,
+    type: "function",
+    function: {
+      name,
+      arguments: typeof call?.function?.arguments === "string" ? call.function.arguments : "{}",
+    },
+  };
+}
+
+function asCommunityToolName(value: string): CommunityToolName | null {
+  if ((COMMUNITY_HARNESS_RUNTIME_TOOLS as readonly string[]).includes(value)) {
+    return value as CommunityToolName;
+  }
+  return null;
+}
+
+function hasCommunityEvidenceRows(
+  chatRows: CommunityChatSnippetRow[],
+  resourceRows: CommunityResourceSnippetRow[],
+): boolean {
+  return chatRows.length > 0 || resourceRows.length > 0;
+}
+
+function latestUserPromptText(messages: OpenRouterChatMessage[]): string {
+  for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
+    const message = messages[idx];
+    if (!message || message.role !== "user") continue;
+    const text = String(message.content ?? "").trim();
+    if (!text) continue;
+    if (text.startsWith(COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX)) continue;
+    return text;
+  }
+  return "";
+}
+
+async function runOpenAiCommunityToolLoop(params: {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  maxTokens: number;
+  messages: OpenRouterChatMessage[];
+  userId: string;
+  userAccessToken: string | null;
+  defaultCommunityId: string | null;
+  defaultCommunityName: string | null;
+  seedChatRows: CommunityChatSnippetRow[];
+  seedResourceRows: CommunityResourceSnippetRow[];
+}): Promise<CommunityToolLoopResult> {
+  const toolDefinitions = buildCommunityRuntimeToolDefinitions();
+  const toolTrace: CommunityToolTraceItem[] = [];
+  let chatRows = [...params.seedChatRows];
+  let resourceRows = [...params.seedResourceRows];
+  let aliasLookup: CommunityEvidenceAliasLookup = {};
+  let usage: OpenAiUsage | undefined;
+  let lastAssistantText = "";
+  let autoSearchAttempted = false;
+  const autoSearchQuery = truncateUtf8(
+    latestUserPromptText(params.messages).trim(),
+    COMMUNITY_CONTEXT_BUNDLE_V1.limits.queryMaxChars,
+  );
+  const workingMessages: Array<Record<string, unknown>> = params.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+
+  for (let step = 0; step < COMMUNITY_TOOL_LOOP_MAX_STEPS; step += 1) {
+    const completion = await openAiCompatibleChatCompletionRaw({
+      apiKey: params.apiKey,
+      baseUrl: params.baseUrl,
+      model: params.model,
+      messages: workingMessages,
+      maxTokens: params.maxTokens,
+      tools: toolDefinitions,
+      toolChoice: "auto",
+    });
+    usage = completion.usage ?? usage;
+    if (completion.text.trim()) lastAssistantText = completion.text.trim();
+    const toolCalls = completion.toolCalls.map(normalizeToolCall);
+
+    if (toolCalls.length === 0) {
+      if (
+        !hasCommunityEvidenceRows(chatRows, resourceRows) &&
+        !autoSearchAttempted
+      ) {
+        autoSearchAttempted = true;
+        const autoResult = await runCommunityToolCall({
+          toolName: "community_search",
+          rawArguments: JSON.stringify({
+            query: autoSearchQuery,
+            source_types: ["chat", "resource", "memory"],
+            limit: COMMUNITY_CONTEXT_BUNDLE_V1.limits.compiledLimit,
+          }),
+          defaultCommunityId: params.defaultCommunityId,
+          defaultCommunityName: params.defaultCommunityName,
+          userId: params.userId,
+          userAccessToken: params.userAccessToken,
+          aliasLookup,
+        });
+        if (Object.keys(autoResult.aliasLookupUpdates).length > 0) {
+          aliasLookup = { ...aliasLookup, ...autoResult.aliasLookupUpdates };
+        }
+        toolTrace.push({
+          name: "community_search",
+          ok: autoResult.payload.ok === true,
+          mode: "auto",
+        });
+
+        if (autoResult.chatRows.length > 0 || autoResult.resourceRows.length > 0) {
+          const merged = mergeCommunityEvidenceRows({
+            chatRows,
+            resourceRows,
+            nextChatRows: autoResult.chatRows,
+            nextResourceRows: autoResult.resourceRows,
+          });
+          chatRows = merged.chatRows;
+          resourceRows = merged.resourceRows;
+        }
+
+        const autoFeedback = truncateUtf8(
+          [
+            "Automatic community retrieval pass executed because no evidence was available yet.",
+            `Use this retrieval output as evidence and continue research only if needed:`,
+            JSON.stringify(autoResult.payload),
+          ].join("\n"),
+          COMMUNITY_AUTO_SEARCH_FEEDBACK_MAX_CHARS,
+        );
+        workingMessages.push({
+          role: "user",
+          content: autoFeedback,
+        });
+        continue;
+      }
+
+      const finalText = completion.text.trim() || lastAssistantText;
+      if (!finalText) throw new Error("Model returned an empty response");
+      return {
+        text: finalText,
+        usage,
+        toolCalls: toolTrace,
+        communityEvidenceUsedV1: buildCommunityEvidenceUsedV1(chatRows, resourceRows),
+      };
+    }
+
+    workingMessages.push({
+      role: "assistant",
+      content: completion.text.trim() || null,
+      tool_calls: toolCalls,
+    });
+
+    for (const rawToolCall of toolCalls) {
+      const toolCallId = String(rawToolCall.id ?? "").trim() || `call_${crypto.randomUUID()}`;
+      const toolNameRaw = String(rawToolCall.function?.name ?? "").trim();
+      const maybeToolName = asCommunityToolName(toolNameRaw);
+      if (!maybeToolName) {
+        toolTrace.push({ name: toolNameRaw || "unknown", ok: false, mode: "model" });
+        workingMessages.push({
+          role: "tool",
+          tool_call_id: toolCallId,
+          content: JSON.stringify({
+            ok: false,
+            tool: toolNameRaw || "unknown",
+            error: "Unsupported tool requested by model.",
+          }),
+        });
+        continue;
+      }
+
+      const result = await runCommunityToolCall({
+        toolName: maybeToolName,
+        rawArguments: typeof rawToolCall.function?.arguments === "string"
+          ? rawToolCall.function.arguments
+          : "{}",
+        defaultCommunityId: params.defaultCommunityId,
+        defaultCommunityName: params.defaultCommunityName,
+        userId: params.userId,
+        userAccessToken: params.userAccessToken,
+        aliasLookup,
+      });
+      if (Object.keys(result.aliasLookupUpdates).length > 0) {
+        aliasLookup = { ...aliasLookup, ...result.aliasLookupUpdates };
+      }
+      toolTrace.push({ name: maybeToolName, ok: result.payload.ok === true, mode: "model" });
+      if (result.chatRows.length > 0 || result.resourceRows.length > 0) {
+        const merged = mergeCommunityEvidenceRows({
+          chatRows,
+          resourceRows,
+          nextChatRows: result.chatRows,
+          nextResourceRows: result.resourceRows,
+        });
+        chatRows = merged.chatRows;
+        resourceRows = merged.resourceRows;
+      }
+      workingMessages.push({
+        role: "tool",
+        tool_call_id: toolCallId,
+        content: JSON.stringify(result.payload),
+      });
+    }
+  }
+
+  if (!lastAssistantText) {
+    throw new Error("Tool loop exceeded maximum depth before final response.");
+  }
+  return {
+    text: lastAssistantText,
+    usage,
+    toolCalls: toolTrace,
+    communityEvidenceUsedV1: buildCommunityEvidenceUsedV1(chatRows, resourceRows),
+  };
 }
 
 async function insertAssistantMessage(params: {
@@ -1416,27 +2328,55 @@ async function insertPersonalMemoryItems(params: {
 }
 
 Deno.serve(async (req: Request) => {
-  const cors = withStrictCors(noStoreHeaders(), req);
+  const requestId = crypto.randomUUID();
+  const withRequestId = (body: Record<string, unknown>): Record<string, unknown> => ({
+    ...body,
+    request_id: requestId,
+  });
+  const cors = withStrictCors(noStoreHeaders({ "x-arx-request-id": requestId }), req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
   }
   if (!cors.allowed) {
-    return jsonResponse({ ok: false, error: "cors_origin_not_allowed" }, { status: 403, headers: cors.headers });
+    return jsonResponse(withRequestId({ ok: false, error: "cors_origin_not_allowed" }), { status: 403, headers: cors.headers });
   }
   const headers = cors.headers;
-  if (req.method !== "POST") return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405, headers });
+  if (req.method !== "POST") {
+    return jsonResponse(withRequestId({ ok: false, error: "method_not_allowed" }), { status: 405, headers });
+  }
 
   try {
-    const userId = await requireVerifiedUserId(req);
+    let userId: string;
+    let userAccessToken: string | null = null;
+    try {
+      userId = await requireVerifiedUserId(req);
+      userAccessToken = extractBearerToken(req);
+    } catch (error) {
+      if (isAuthApiError(error)) {
+        throw createApiError(error.code, error.message, error.status, error.details);
+      }
+      throw error;
+    }
     const input = await readJson<AgentTurnInput>(req);
     const threadId = sanitizeUuid(input.thread_id);
+    const inferenceLaneFallbacks = normalizeInferenceLaneFallbacks(input.inference_lane_fallbacks);
+    const replyToIdRaw = typeof input.reply_to_id === "string" ? input.reply_to_id.trim() : "";
+    let requestedReplyToId: string | null = null;
+    if (replyToIdRaw) {
+      try {
+        requestedReplyToId = sanitizeUuid(replyToIdRaw);
+      } catch {
+        throw createApiError("invalid_reply_to_id", "Invalid reply target.", 400);
+      }
+    }
     const maxTokens = Number.isFinite(input.max_tokens) ? Math.max(1, Math.min(4096, Number(input.max_tokens))) : 2048;
     const wantsStream = Boolean(input.stream);
 
     const thread = await loadThread(threadId);
     if ((thread.engine_id ?? "").trim() === "community_chat") throw new Error("forbidden");
     if ((thread.owner_id ?? "").trim() !== userId) throw new Error("forbidden");
-    const aliasModelId = (thread.model_id ?? "").trim() || "gpt-5.2";
+    const requestedModelId = typeof input.model_id === "string" ? input.model_id.trim() : "";
+    const aliasModelId = requestedModelId || (thread.model_id ?? "").trim() || "gpt-5.2";
 
     // Parallelize I/O to reduce time-to-first-token.
     const [
@@ -1447,10 +2387,10 @@ Deno.serve(async (req: Request) => {
       memoryRowsResult,
       contextEntitlementResult,
       communityAgentPromptResult,
-      modelRegistryResult,
+      communityDisplayNameResult,
     ] = await Promise.allSettled([
       loadRecentMessages(threadId, 40),
-      loadUserBuilderTier(userId),
+      loadUserBuilderTierForPlatformInference(userId),
       loadUserMemorySettings(userId),
       loadUserModelSettings(userId),
       loadPersonalMemoryItems(userId, 32),
@@ -1458,50 +2398,45 @@ Deno.serve(async (req: Request) => {
       thread.community_id
         ? loadCommunityAgentSystemPrompt({ userId, communityId: thread.community_id })
         : Promise.resolve(null),
-      loadModelRegistryRow(aliasModelId),
+      thread.community_id ? loadCommunityDisplayName(thread.community_id) : Promise.resolve(null),
     ]);
 
     if (rowsDescResult.status !== "fulfilled") throw rowsDescResult.reason;
 
-    const rowsDesc = rowsDescResult.value;
+    let rowsDesc = rowsDescResult.value;
     if (rowsDesc.length === 0) throw new Error("No messages in thread");
 
-    const builderTier: BuilderTier =
+    if (requestedReplyToId) {
+      let replyTarget = rowsDesc.find((row) => row.id === requestedReplyToId) ?? null;
+      if (!replyTarget) {
+        replyTarget = await loadMessageById(threadId, requestedReplyToId);
+      }
+      if (!replyTarget) {
+        throw createApiError("reply_to_not_found", "Reply target was not found.", 404);
+      }
+      if (replyTarget.role !== "user") {
+        throw createApiError("invalid_reply_to", "reply_to_id must reference a user message.", 400);
+      }
+      const boundedRowsDesc = await loadRecentMessagesUpToSeq(threadId, replyTarget.seq, 40);
+      rowsDesc = boundedRowsDesc.length > 0 ? boundedRowsDesc : [replyTarget];
+    }
+
+    const builderTier: PlatformBuilderTier =
       builderTierResult.status === "fulfilled" ? builderTierResult.value : "free";
     const hasPersonalMemoryAccess = builderTier !== "free";
 
-    const platformEnabledRaw = getEnv("ARX_PLATFORM_INFERENCE_ENABLED") || getEnv("OPENROUTER_PLATFORM_ENABLED");
-    // Kill switch only: if unset, treat platform inference as enabled for paid tiers.
-    const platformEnabled = platformEnabledRaw ? isTruthyEnv(platformEnabledRaw) : true;
-    const modelRegistryRow: ModelRegistryRow | null =
-      modelRegistryResult.status === "fulfilled" ? modelRegistryResult.value : null;
-    if (modelRegistryRow && !modelRegistryRow.enabled) {
-      throw new Error("Model is not available.");
-    }
-
-    let providerHint: PlatformProvider | null = null;
-    if (modelRegistryRow?.provider) {
-      try {
-        providerHint = normalizePlatformProvider(modelRegistryRow.provider);
-      } catch {
-        providerHint = null;
-      }
-    }
-
     const inferenceSource = "platform" as const;
 
-    if (!platformEnabled) {
+    const platformEntitlement = evaluatePlatformInferenceEntitlement(builderTier);
+    if (!platformEntitlement.allowed && platformEntitlement.reason === "platform_inference_disabled") {
       throw createApiError("platform_inference_disabled", "Arx AI is temporarily unavailable.", 503, {
         model_id: aliasModelId,
-        provider: providerHint,
       });
     }
-
-    // Model-level gating: if platform inference is disabled for this model, fail cleanly.
-    if (modelRegistryRow?.platform_enabled === false) {
-      throw createApiError("platform_inference_not_allowed", "Arx AI isn't available for this model.", 403, {
+    if (!platformEntitlement.allowed && platformEntitlement.reason === "platform_inference_not_allowed") {
+      throw createApiError("platform_inference_not_allowed", "Arx AI isn't available on your current plan.", 403, {
         model_id: aliasModelId,
-        provider: providerHint,
+        tier: builderTier,
       });
     }
 
@@ -1528,14 +2463,18 @@ Deno.serve(async (req: Request) => {
     const hasCommunityContextEntitlement: boolean =
       contextEntitlementResult.status === "fulfilled" ? Boolean(contextEntitlementResult.value) : false;
     const threadCommunityId: string | null = thread.community_id ?? null;
+    let communityContractResult: CommunityHarnessContractCheckResult | null = null;
+    let communityContractMeta: Record<string, unknown> | null = null;
     const contextCommunityId: string | null = hasCommunityContextEntitlement ? threadCommunityId : null;
+    const scopeCommunityId: string | null = threadCommunityId;
+    const evidenceCommunityId: string | null = contextCommunityId;
 
     const latest = rowsDesc[0];
     if (latest.role !== "user") {
       if (wantsStream) {
         const s = new ReadableStream<Uint8Array>({
           start(controller) {
-            controller.enqueue(encodeSse("done", { ok: true, status: "noop", thread_id: threadId }));
+            controller.enqueue(encodeSse("done", withRequestId({ ok: true, status: "noop", thread_id: threadId })));
             controller.close();
           },
         });
@@ -1544,10 +2483,11 @@ Deno.serve(async (req: Request) => {
           headers: { ...headers, "Content-Type": "text/event-stream; charset=utf-8", Connection: "keep-alive" },
         });
       }
-      return jsonResponse({ ok: true, status: "noop" }, { status: 200, headers });
+      return jsonResponse(withRequestId({ ok: true, status: "noop" }), { status: 200, headers });
     }
 
-    const replyToId = latest.id;
+    const replyToId = requestedReplyToId ?? latest.id;
+    const replyTarget = rowsDesc.find((row) => row.id === replyToId) ?? latest;
     const allowUpdate = input.mode === "regenerate";
     const runId = allowUpdate ? `agent_web_regen:${replyToId}:${Date.now()}` : `agent_web:${replyToId}`;
 
@@ -1557,7 +2497,7 @@ Deno.serve(async (req: Request) => {
         if (wantsStream) {
           const s = new ReadableStream<Uint8Array>({
             start(controller) {
-              controller.enqueue(encodeSse("done", { ok: true, status: "noop", thread_id: threadId }));
+              controller.enqueue(encodeSse("done", withRequestId({ ok: true, status: "noop", thread_id: threadId })));
               controller.close();
             },
           });
@@ -1566,7 +2506,26 @@ Deno.serve(async (req: Request) => {
             headers: { ...headers, "Content-Type": "text/event-stream; charset=utf-8", Connection: "keep-alive" },
           });
         }
-        return jsonResponse({ ok: true, status: "noop" }, { status: 200, headers });
+        return jsonResponse(withRequestId({ ok: true, status: "noop" }), { status: 200, headers });
+      }
+    }
+
+    if (threadCommunityId) {
+      communityContractResult = await checkCommunityHarnessContract();
+      communityContractMeta = toCommunityHarnessContractMeta(communityContractResult);
+      if (!communityContractResult.ok && communityContractResult.mode === "enforce") {
+        throw createApiError(
+          "community_contract_mismatch",
+          "Community features are temporarily unavailable while the backend contract is out of sync.",
+          503,
+          {
+            contract_id: communityContractResult.contract_id,
+            missing_symbols: communityContractResult.missing_symbols,
+            ...(communityContractResult.error_message
+              ? { contract_check_error: communityContractResult.error_message }
+              : {}),
+          },
+        );
       }
     }
 
@@ -1606,67 +2565,34 @@ Deno.serve(async (req: Request) => {
     let platformProviderKey: string | null = null;
     let platformOpenAiBaseUrl: string | null = null;
 
-    try {
-      platformModel = await resolvePlatformModelForAliasOrRegistry(aliasModelId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (isPlatformModelRoutingMisconfiguredMessage(message)) {
-        throw createApiError("platform_inference_misconfigured", "Arx AI isn't configured yet for this model.", 503, {
-          model_id: aliasModelId,
-          provider: providerHint ?? null,
-          misconfig: "model_routing",
-        });
-      }
-      throw error;
+    const platformTarget = await resolvePlatformInferenceTarget(aliasModelId);
+    if (!platformTarget.ok) {
+      const strictRegistryMessage =
+        platformTarget.code === "platform_inference_misconfigured"
+          ? `platform model not configured for '${platformTarget.model_id}'`
+          : platformTarget.message;
+      throw createApiError(platformTarget.code, strictRegistryMessage, platformTarget.status, {
+        model_id: platformTarget.model_id,
+        provider: platformTarget.provider,
+        ...(platformTarget.details ?? {}),
+      });
     }
-    const providerEnvKey = platformProviderEnvKey(platformModel.provider);
-    platformProviderKey = getEnv(providerEnvKey);
-    platformOpenAiBaseUrl = platformOpenAiCompatibleBaseUrl(platformModel.provider);
-    if (!platformProviderKey) {
-      const providerDisplayName = platformModel.provider === "x-ai"
-        ? "xAI"
-        : platformModel.provider === "openai"
-        ? "OpenAI"
-        : platformModel.provider === "anthropic"
-        ? "Anthropic"
-        : "Google";
-      throw createApiError(
-        "platform_inference_misconfigured",
-        `Arx AI isn't configured yet for ${providerDisplayName}.`,
-        503,
-        {
-          model_id: aliasModelId,
-          provider: platformModel.provider,
-          misconfig: "missing_secret",
-          missing_secret: providerEnvKey,
-        },
-      );
-    }
-    if ((platformModel.provider === "openai" || platformModel.provider === "x-ai") && !platformOpenAiBaseUrl) {
-      throw createApiError(
-        "platform_inference_misconfigured",
-        "Arx AI isn't configured yet for this model.",
-        503,
-        {
-          model_id: aliasModelId,
-          provider: platformModel.provider,
-          misconfig: "model_routing",
-        },
-      );
-    }
+    platformModel = platformTarget.platform_model;
+    platformProviderKey = platformTarget.provider_key;
+    platformOpenAiBaseUrl = platformTarget.openai_compatible_base_url;
     try {
       platformRemaining = await consumePlatformInferenceStandard(userId, 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isPlatformQuotaExceededErrorMessage(message)) {
         return jsonResponse(
-          {
+          withRequestId({
             ok: false,
             code: "platform_inference_quota_exceeded",
             provider: platformModel.provider,
             model_id: aliasModelId,
             message: "You've used your Arx AI quota for this month.",
-          },
+          }),
           { status: 403, headers },
         );
       } else {
@@ -1674,9 +2600,13 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const latestUserText = extractTextFromContentJson(latest.content_json);
+    const latestUserText = extractTextFromContentJson(replyTarget.content_json);
     let priorAssistantText = "";
-    for (let i = 1; i < rowsDesc.length; i++) {
+    const replyTargetIndex = Math.max(
+      0,
+      rowsDesc.findIndex((row) => row.id === replyToId),
+    );
+    for (let i = replyTargetIndex + 1; i < rowsDesc.length; i++) {
       const row = rowsDesc[i];
       if (row?.role !== "assistant") continue;
       const text = extractTextFromContentJson(row.content_json);
@@ -1686,7 +2616,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const [resolvedModelResult, historyRowsResult, communityContextBundleResult] =
+    const [resolvedModelResult, historyRowsResult, communityContextPrefetchResult] =
       await Promise.allSettled([
         Promise.resolve(platformModel!.ref),
         loadHistorySnippets({
@@ -1695,49 +2625,41 @@ Deno.serve(async (req: Request) => {
           excludeThreadId: threadId,
           limit: 4,
         }),
-        contextCommunityId
-          ? loadCommunityContextBundle({
+        evidenceCommunityId
+          ? loadCommunityContextViaCanonicalSearch({
               userId,
-              communityId: contextCommunityId,
+              communityId: evidenceCommunityId,
               query: latestUserText,
             })
           : Promise.resolve({
               chatRows: [] as CommunityChatSnippetRow[],
               resourceRows: [] as CommunityResourceSnippetRow[],
-              compiledAttempted: false,
-              compiledFetchOk: false,
-              compiledItemsUsed: 0,
-              compileVersion: null,
-              fallbackUsed: false,
-              chatFetchOk: null,
-              resourceFetchOk: null,
-              retrievalLatencyMs: null,
-              failureClass: threadCommunityId && !hasCommunityContextEntitlement ? "not_entitled" : "not_attempted",
-            } satisfies CommunityContextBundle),
+              diagnostics: buildCommunityContextFailureDiagnostics(
+                threadCommunityId
+                  ? (!hasCommunityContextEntitlement ? "not_entitled" : "not_attempted")
+                  : "no_active_community",
+              ),
+            } satisfies CommunityContextPrefetchResult),
       ]);
 
     if (resolvedModelResult.status !== "fulfilled") throw resolvedModelResult.reason;
     const resolvedModelId = resolvedModelResult.value;
 
     const historyRows: HistorySnippetRow[] = historyRowsResult.status === "fulfilled" ? historyRowsResult.value : [];
-    const communityContextBundle: CommunityContextBundle =
-      communityContextBundleResult.status === "fulfilled"
-        ? communityContextBundleResult.value
+    const communityContextPrefetch: CommunityContextPrefetchResult =
+      communityContextPrefetchResult.status === "fulfilled"
+        ? communityContextPrefetchResult.value
         : {
             chatRows: [],
             resourceRows: [],
-            compiledAttempted: Boolean(contextCommunityId),
-            compiledFetchOk: false,
-            compiledItemsUsed: 0,
-            compileVersion: null,
-            fallbackUsed: Boolean(contextCommunityId),
-            chatFetchOk: null,
-            resourceFetchOk: null,
-            retrievalLatencyMs: null,
-            failureClass: contextCommunityId ? "compiled_fetch_failed_fallback_failed" : "not_attempted",
+            diagnostics: buildCommunityContextFailureDiagnostics(
+              evidenceCommunityId
+                ? "compiled_fetch_failed_fallback_failed"
+                : "no_active_community",
+            ),
           };
-    const communityChatRows: CommunityChatSnippetRow[] = communityContextBundle.chatRows;
-    const communityResourceRows: CommunityResourceSnippetRow[] = communityContextBundle.resourceRows;
+    const communityChatRows: CommunityChatSnippetRow[] = communityContextPrefetch.chatRows;
+    const communityResourceRows: CommunityResourceSnippetRow[] = communityContextPrefetch.resourceRows;
 
     const memoryExtractorModelId = platformModel!.model;
 
@@ -1761,6 +2683,7 @@ Deno.serve(async (req: Request) => {
                 priorAssistantText,
               });
             case "x-ai":
+            case "openrouter":
               return extractMemoryCandidatesViaOpenAi({
                 openaiKey: platformProviderKey!,
                 baseUrl: platformOpenAiBaseUrl!,
@@ -1806,10 +2729,17 @@ Deno.serve(async (req: Request) => {
       created_at: row.created_at,
       snippet: truncateUtf8(row.snippet, 280),
     }));
+    const communityAgentPrompt =
+      scopeCommunityId && communityAgentPromptResult.status === "fulfilled" ? communityAgentPromptResult.value : null;
+    const contextCommunityName =
+      scopeCommunityId && communityDisplayNameResult.status === "fulfilled"
+        ? (communityDisplayNameResult.value ?? null)
+        : null;
     const communityContextPrompt =
-      contextCommunityId && (communityChatRows.length > 0 || communityResourceRows.length > 0)
+      evidenceCommunityId && (communityChatRows.length > 0 || communityResourceRows.length > 0)
         ? buildCommunityContextSystemPrompt({
-            communityId: contextCommunityId,
+            communityId: evidenceCommunityId,
+            communityName: contextCommunityName,
             chatItems: communityChatRows,
             resourceItems: communityResourceRows,
           }).prompt
@@ -1819,25 +2749,23 @@ Deno.serve(async (req: Request) => {
       communityResourceRows,
     );
     const communityContextDiagnostics = threadCommunityId
-      ? buildCommunityContextDiagnostics(
-          communityContextBundle,
-          communityChatRows.length,
-          communityResourceRows.length,
-        )
+      ? (communityContextPrefetch.diagnostics ?? null)
       : null;
 
     const history = [...rowsDesc].reverse();
     const messages: OpenRouterChatMessage[] = [];
-    const systemPrompt = String(modelSettings.system_prompt ?? "").trim();
+    const personalSystemPrompt = String(modelSettings.system_prompt ?? "").trim();
+    const contextEnvelope = buildCloudCommunityContextEnvelope({
+      communityId: scopeCommunityId,
+      communityName: contextCommunityName,
+      customCommunitySystemPrompt: communityAgentPrompt?.systemPrompt ?? "",
+      communityPromptDraftId: communityAgentPrompt?.draftId ?? null,
+      personalSystemPrompt,
+    });
     messages.push({
       role: "system",
-      content: systemPrompt ? truncateUtf8(systemPrompt, 6000) : "You are a helpful assistant.",
+      content: truncateUtf8(contextEnvelope.scopedSystemPrompt.trim() || "You are a helpful assistant.", 6000),
     });
-    const communityAgentPrompt =
-      contextCommunityId && communityAgentPromptResult.status === "fulfilled" ? communityAgentPromptResult.value : null;
-    if (communityAgentPrompt?.systemPrompt) {
-      messages.push({ role: "system", content: truncateUtf8(communityAgentPrompt.systemPrompt, 6000) });
-    }
     const communityEvidenceUserMessage = buildCommunityEvidenceUserMessage(communityContextPrompt);
     if (communityEvidenceUserMessage) {
       messages.push({
@@ -1862,14 +2790,48 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const canUseOpenAiCommunityTools =
+      Boolean(contextCommunityId) &&
+      (platformModel!.provider === "openai" ||
+        platformModel!.provider === "x-ai" ||
+        platformModel!.provider === "openrouter");
+    const openAiCompatibleBaseUrl = platformOpenAiBaseUrl ?? "https://api.openai.com/v1";
+    let runtimeCommunityEvidenceUsedV1 = communityEvidenceUsedV1;
+    let userFacingCommunityEvidenceUsedV1 = sanitizeCommunityEvidenceUsedForUserFacing(
+      runtimeCommunityEvidenceUsedV1,
+    );
+    let runtimeCommunityToolCalls: CommunityToolTraceItem[] = [];
+
     if (!wantsStream) {
       const requested = maxTokens;
       const effectiveMaxTokens = Math.min(requested, platformMaxTokens);
       const { text, usage } = await (async () => {
+        if (canUseOpenAiCommunityTools) {
+          const loopResult = await runOpenAiCommunityToolLoop({
+            apiKey: platformProviderKey!,
+            baseUrl: openAiCompatibleBaseUrl,
+            model: platformModel!.model,
+            maxTokens: effectiveMaxTokens,
+            messages,
+            userId,
+            userAccessToken,
+            defaultCommunityId: contextCommunityId,
+            defaultCommunityName: contextCommunityName,
+            seedChatRows: communityChatRows,
+            seedResourceRows: communityResourceRows,
+          });
+          runtimeCommunityToolCalls = loopResult.toolCalls;
+          runtimeCommunityEvidenceUsedV1 = loopResult.communityEvidenceUsedV1;
+          userFacingCommunityEvidenceUsedV1 = sanitizeCommunityEvidenceUsedForUserFacing(
+            runtimeCommunityEvidenceUsedV1,
+          );
+          return { text: loopResult.text, usage: loopResult.usage };
+        }
         switch (platformModel!.provider) {
           case "openai":
             return openAiChatCompletion(platformProviderKey!, platformModel!.model, messages, effectiveMaxTokens);
           case "x-ai":
+          case "openrouter":
             return openAiCompatibleChatCompletion({
               apiKey: platformProviderKey!,
               baseUrl: platformOpenAiBaseUrl!,
@@ -1898,6 +2860,12 @@ Deno.serve(async (req: Request) => {
       })();
 
       const memoryCandidates = await memoryCandidatesPromise;
+      const safeAssistantText = sanitizeUserFacingAssistantText({
+        text,
+        communityId: contextCommunityId,
+        communityName: contextCommunityName,
+        blockedIds: [threadId, replyToId, runId],
+      });
 
       let memoryAdded: PersonalMemoryRow[] = [];
       if (memorySettings.memory_mode === "auto" && memoryCandidates.length > 0) {
@@ -1910,21 +2878,34 @@ Deno.serve(async (req: Request) => {
 
       const meta: Record<string, unknown> = {};
       if (contextCommunityId) meta.context_community_id = contextCommunityId;
+      if (contextCommunityName) meta.context_community_name = contextCommunityName;
       meta.inference_source = inferenceSource;
       meta.community_harness_capability_contract_id = COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID;
       meta.community_harness_runtime_tools = communityHarnessRuntimeTools();
-      if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
+      if (contextEnvelope.communityPromptDraftId) meta.community_agent_draft_id = contextEnvelope.communityPromptDraftId;
+      if (contextEnvelope.communitySystemPromptSource) {
+        meta.community_system_prompt_source = contextEnvelope.communitySystemPromptSource;
+      }
       meta.platform_standard_remaining = platformRemaining;
       meta.platform_provider = platformModel!.provider;
       meta.platform_model = platformModel!.model;
       if (usage && typeof usage === "object") {
         meta.platform_usage = usage;
       }
-      if (communityEvidenceUsedV1) {
-        meta.community_evidence_used_v1 = communityEvidenceUsedV1;
+      if (userFacingCommunityEvidenceUsedV1) {
+        meta.community_evidence_used_v1 = userFacingCommunityEvidenceUsedV1;
       }
       if (communityContextDiagnostics) {
         meta.community_context_diagnostics = communityContextDiagnostics;
+      }
+      if (inferenceLaneFallbacks.length > 0) {
+        meta.inference_lane_fallbacks = inferenceLaneFallbacks;
+      }
+      if (runtimeCommunityToolCalls.length > 0) {
+        meta.community_tool_calls = runtimeCommunityToolCalls;
+      }
+      if (communityContractMeta) {
+        meta.community_contract = communityContractMeta;
       }
       if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
       if (historyUsed.length > 0) meta.history_used = historyUsed;
@@ -1934,7 +2915,7 @@ Deno.serve(async (req: Request) => {
       const result = await writeAssistantReply({
         threadId,
         replyToId,
-        contentText: text,
+        contentText: safeAssistantText,
         modelId: aliasModelId,
         openrouterModelId: resolvedModelId,
         runId,
@@ -1942,7 +2923,7 @@ Deno.serve(async (req: Request) => {
         allowUpdate,
       });
       return jsonResponse(
-        {
+        withRequestId({
           ok: true,
           status: result.status,
           thread_id: threadId,
@@ -1952,13 +2933,18 @@ Deno.serve(async (req: Request) => {
           platform_standard_remaining: platformRemaining,
           community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
           community_harness_runtime_tools: communityHarnessRuntimeTools(),
-          community_evidence_used_v1: communityEvidenceUsedV1,
+          community_evidence_used_v1: userFacingCommunityEvidenceUsedV1,
           community_context_diagnostics: communityContextDiagnostics,
+          ...(inferenceLaneFallbacks.length > 0
+            ? { inference_lane_fallbacks: inferenceLaneFallbacks }
+            : {}),
+          community_tool_calls: runtimeCommunityToolCalls,
+          ...(communityContractMeta ? { community_contract: communityContractMeta } : {}),
           memory_used: memoryUsed,
           history_used: historyUsed,
           memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
           memory_added: memoryAdded,
-        },
+        }),
         { status: 200, headers },
       );
     }
@@ -1986,38 +2972,84 @@ Deno.serve(async (req: Request) => {
             community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
             community_harness_runtime_tools: communityHarnessRuntimeTools(),
             platform_standard_remaining: platformRemaining,
-            community_evidence_used_v1: communityEvidenceUsedV1,
+            community_evidence_used_v1: userFacingCommunityEvidenceUsedV1,
             community_context_diagnostics: communityContextDiagnostics,
+            ...(inferenceLaneFallbacks.length > 0
+              ? { inference_lane_fallbacks: inferenceLaneFallbacks }
+              : {}),
+            ...(communityContractMeta ? { community_contract: communityContractMeta } : {}),
             memory_used: memoryUsed,
             history_used: historyUsed,
+            request_id: requestId,
           });
 
           const requested = maxTokens;
           const effectiveMaxTokens = Math.min(requested, platformMaxTokens);
           let fullContent = "";
+          let emittedSafeContent = "";
           let usage: unknown | null = null;
+          const emitSanitizedDeltaFromFullContent = () => {
+            const nextSafe = sanitizeUserFacingAssistantText({
+              text: fullContent,
+              communityId: contextCommunityId,
+              communityName: contextCommunityName,
+              blockedIds: [threadId, replyToId, runId],
+            });
+            if (nextSafe === emittedSafeContent) return;
+            const delta = nextSafe.startsWith(emittedSafeContent)
+              ? nextSafe.slice(emittedSafeContent.length)
+              : nextSafe;
+            emittedSafeContent = nextSafe;
+            emit("delta", {
+              delta,
+              full_content: emittedSafeContent,
+            });
+          };
 
-          switch (platformModel!.provider) {
-	              case "openai": {
-	                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-	                const streamingResponse = await fetch(url, {
-	                  method: "POST",
-	                  headers: {
-	                    Authorization: `Bearer ${platformProviderKey!}`,
-	                    "Content-Type": "application/json",
-	                  },
-	                  body: JSON.stringify({
-	                    model: platformModel!.model,
-	                    messages,
-	                    max_completion_tokens: effectiveMaxTokens,
-	                    stream: true,
-	                  }),
-	                });
-	                if (!streamingResponse.ok) {
-	                  const body = await streamingResponse.text();
-	                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
-	                }
-	                const reader = streamingResponse.body?.getReader();
+          if (canUseOpenAiCommunityTools) {
+            const loopResult = await runOpenAiCommunityToolLoop({
+              apiKey: platformProviderKey!,
+              baseUrl: openAiCompatibleBaseUrl,
+              model: platformModel!.model,
+              maxTokens: effectiveMaxTokens,
+              messages,
+              userId,
+              userAccessToken,
+              defaultCommunityId: contextCommunityId,
+              defaultCommunityName: contextCommunityName,
+              seedChatRows: communityChatRows,
+              seedResourceRows: communityResourceRows,
+            });
+            runtimeCommunityToolCalls = loopResult.toolCalls;
+            runtimeCommunityEvidenceUsedV1 = loopResult.communityEvidenceUsedV1;
+            userFacingCommunityEvidenceUsedV1 = sanitizeCommunityEvidenceUsedForUserFacing(
+              runtimeCommunityEvidenceUsedV1,
+            );
+            usage = loopResult.usage ?? usage;
+            fullContent = loopResult.text.trim();
+            emitSanitizedDeltaFromFullContent();
+          } else {
+            switch (platformModel!.provider) {
+              case "openai": {
+                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+                const streamingResponse = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${platformProviderKey!}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: platformModel!.model,
+                    messages,
+                    max_completion_tokens: effectiveMaxTokens,
+                    stream: true,
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
                 if (!reader) throw new Error("Missing model stream");
 
                 await consumeSseEvents({
@@ -2034,56 +3066,57 @@ Deno.serve(async (req: Request) => {
                     const delta = extractStreamDelta(parsed);
                     if (!delta) return;
                     fullContent += delta;
-                    emit("delta", { delta });
+                    emitSanitizedDeltaFromFullContent();
                   },
-	                });
-	                break;
-	              }
-	              case "x-ai": {
-	                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
-	                const streamingResponse = await fetch(url, {
-	                  method: "POST",
-	                  headers: {
-	                    Authorization: `Bearer ${platformProviderKey!}`,
-	                    "Content-Type": "application/json",
-	                  },
-	                  body: JSON.stringify({
-	                    model: platformModel!.model,
-	                    messages,
-	                    max_tokens: effectiveMaxTokens,
-	                    stream: true,
-	                  }),
-	                });
-	                if (!streamingResponse.ok) {
-	                  const body = await streamingResponse.text();
-	                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
-	                }
-	                const reader = streamingResponse.body?.getReader();
-	                if (!reader) throw new Error("Missing model stream");
+                });
+                break;
+              }
+              case "x-ai":
+              case "openrouter": {
+                const url = `${platformOpenAiBaseUrl!.replace(/\/+$/, "")}/chat/completions`;
+                const streamingResponse = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${platformProviderKey!}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: platformModel!.model,
+                    messages,
+                    max_tokens: effectiveMaxTokens,
+                    stream: true,
+                  }),
+                });
+                if (!streamingResponse.ok) {
+                  const body = await streamingResponse.text();
+                  throw new Error(`Platform model error ${streamingResponse.status}: ${body}`);
+                }
+                const reader = streamingResponse.body?.getReader();
+                if (!reader) throw new Error("Missing model stream");
 
-	                await consumeSseEvents({
-	                  reader,
-	                  onData: (raw) => {
-	                    if (raw === "[DONE]") return true;
-	                    let parsed: OpenRouterStreamChunk | null = null;
-	                    try {
-	                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
-	                    } catch {
-	                      return;
-	                    }
-	                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
-	                    const delta = extractStreamDelta(parsed);
-	                    if (!delta) return;
-	                    fullContent += delta;
-		                    emit("delta", { delta });
-	                  },
-	                });
-	                break;
-	              }
-	              case "anthropic": {
-	                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
-	                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
-	                  method: "POST",
+                await consumeSseEvents({
+                  reader,
+                  onData: (raw) => {
+                    if (raw === "[DONE]") return true;
+                    let parsed: OpenRouterStreamChunk | null = null;
+                    try {
+                      parsed = JSON.parse(raw) as OpenRouterStreamChunk;
+                    } catch {
+                      return;
+                    }
+                    if (parsed?.usage && typeof parsed.usage === "object") usage = parsed.usage;
+                    const delta = extractStreamDelta(parsed);
+                    if (!delta) return;
+                    fullContent += delta;
+                    emitSanitizedDeltaFromFullContent();
+                  },
+                });
+                break;
+              }
+              case "anthropic": {
+                const { system, messages: anthropicMessages } = toAnthropicSystemAndMessages(messages);
+                const streamingResponse = await fetch("https://api.anthropic.com/v1/messages", {
+                  method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                     "x-api-key": platformProviderKey!,
@@ -2130,7 +3163,7 @@ Deno.serve(async (req: Request) => {
                     const deltaText = typeof deltaObj?.text === "string" ? String(deltaObj.text) : "";
                     if (!deltaText) return;
                     fullContent += deltaText;
-                    emit("delta", { delta: deltaText });
+                    emitSanitizedDeltaFromFullContent();
                   },
                 });
                 break;
@@ -2180,12 +3213,12 @@ Deno.serve(async (req: Request) => {
                       const delta = nextText.slice(fullContent.length);
                       if (!delta) return;
                       fullContent = nextText;
-                      emit("delta", { delta });
+                      emitSanitizedDeltaFromFullContent();
                       return;
                     }
                     // Fallback: emit the entire nextText if the stream is non-monotonic.
                     fullContent = nextText;
-                    emit("delta", { delta: nextText });
+                    emitSanitizedDeltaFromFullContent();
                   },
                 });
                 break;
@@ -2193,10 +3226,22 @@ Deno.serve(async (req: Request) => {
               default:
                 throw new Error("Unsupported platform model provider");
             }
-
-
-	          const finalText = fullContent.trim();
-	          if (!finalText) throw new Error("Model returned an empty response");
+          }
+            const finalTextRaw = fullContent.trim();
+            if (!finalTextRaw) throw new Error("Model returned an empty response");
+            const finalText = sanitizeUserFacingAssistantText({
+              text: finalTextRaw,
+              communityId: contextCommunityId,
+              communityName: contextCommunityName,
+              blockedIds: [threadId, replyToId, runId],
+            });
+            if (finalText && emittedSafeContent !== finalText) {
+              const delta = finalText.startsWith(emittedSafeContent)
+                ? finalText.slice(emittedSafeContent.length)
+                : finalText;
+              emittedSafeContent = finalText;
+              emit("delta", { delta, full_content: emittedSafeContent });
+            }
 
             const memoryCandidates = await memoryCandidatesPromise;
 
@@ -2211,21 +3256,36 @@ Deno.serve(async (req: Request) => {
 
             const meta: Record<string, unknown> = {};
             if (contextCommunityId) meta.context_community_id = contextCommunityId;
+            if (contextCommunityName) meta.context_community_name = contextCommunityName;
             meta.inference_source = inferenceSource;
             meta.community_harness_capability_contract_id = COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID;
             meta.community_harness_runtime_tools = communityHarnessRuntimeTools();
-            if (communityAgentPrompt?.draftId) meta.community_agent_draft_id = communityAgentPrompt.draftId;
+            if (contextEnvelope.communityPromptDraftId) {
+              meta.community_agent_draft_id = contextEnvelope.communityPromptDraftId;
+            }
+            if (contextEnvelope.communitySystemPromptSource) {
+              meta.community_system_prompt_source = contextEnvelope.communitySystemPromptSource;
+            }
             meta.platform_standard_remaining = platformRemaining;
             meta.platform_provider = platformModel!.provider;
             meta.platform_model = platformModel!.model;
             if (usage && typeof usage === "object") {
               meta.platform_usage = usage;
             }
-            if (communityEvidenceUsedV1) {
-              meta.community_evidence_used_v1 = communityEvidenceUsedV1;
+            if (userFacingCommunityEvidenceUsedV1) {
+              meta.community_evidence_used_v1 = userFacingCommunityEvidenceUsedV1;
             }
             if (communityContextDiagnostics) {
               meta.community_context_diagnostics = communityContextDiagnostics;
+            }
+            if (inferenceLaneFallbacks.length > 0) {
+              meta.inference_lane_fallbacks = inferenceLaneFallbacks;
+            }
+            if (runtimeCommunityToolCalls.length > 0) {
+              meta.community_tool_calls = runtimeCommunityToolCalls;
+            }
+            if (communityContractMeta) {
+              meta.community_contract = communityContractMeta;
             }
             if (memoryUsed.length > 0) meta.memory_used = memoryUsed;
             if (historyUsed.length > 0) meta.history_used = historyUsed;
@@ -2253,17 +3313,23 @@ Deno.serve(async (req: Request) => {
               community_harness_capability_contract_id: COMMUNITY_HARNESS_CAPABILITY_CONTRACT_ID,
               community_harness_runtime_tools: communityHarnessRuntimeTools(),
               platform_standard_remaining: platformRemaining,
-              community_evidence_used_v1: communityEvidenceUsedV1,
+              community_evidence_used_v1: userFacingCommunityEvidenceUsedV1,
               community_context_diagnostics: communityContextDiagnostics,
+              ...(inferenceLaneFallbacks.length > 0
+                ? { inference_lane_fallbacks: inferenceLaneFallbacks }
+                : {}),
+              community_tool_calls: runtimeCommunityToolCalls,
+              ...(communityContractMeta ? { community_contract: communityContractMeta } : {}),
               memory_used: memoryUsed,
               history_used: historyUsed,
               memory_suggestions: memorySettings.memory_mode === "suggest" ? memoryCandidates : [],
               memory_added: memoryAdded,
+              request_id: requestId,
 	          });
 	          controller.close();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          emit("error", { ok: false, error: message });
+          emit("error", withRequestId({ ok: false, error: message }));
           controller.close();
         }
       },
@@ -2272,19 +3338,19 @@ Deno.serve(async (req: Request) => {
     return new Response(stream, { status: 200, headers: streamHeaders });
   } catch (error) {
     if (isApiError(error)) {
-      const details = (error.details ?? {}) as Record<string, unknown>;
+      const details = sanitizeApiErrorDetails(error.details);
       const retryAfter =
         typeof details.retry_after_seconds === "number" && Number.isFinite(details.retry_after_seconds)
           ? Math.max(0, Math.floor(details.retry_after_seconds))
           : null;
       return jsonResponse(
-        {
+        withRequestId({
           ok: false,
           code: error.code,
           error: error.code,
           message: error.message,
           ...details,
-        },
+        }),
         {
           status: error.status,
           headers: retryAfter ? { ...headers, "Retry-After": String(retryAfter) } : headers,
@@ -2293,6 +3359,6 @@ Deno.serve(async (req: Request) => {
     }
     const message = error instanceof Error ? error.message : String(error);
     const status = message === "forbidden" ? 403 : message === "rate_limited" ? 429 : 400;
-    return jsonResponse({ ok: false, error: message }, { status, headers });
+    return jsonResponse(withRequestId({ ok: false, error: message }), { status, headers });
   }
 });

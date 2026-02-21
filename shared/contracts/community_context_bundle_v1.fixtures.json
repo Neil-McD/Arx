@@ -31,7 +31,7 @@
       "compiled_items_used": 4,
       "chat_items_used": 2,
       "resource_items_used": 1,
-      "prompt": "Community evidence (community-abc)\n- [chat:1] Weekly launch retrospective (from Alice)\n- [chat:2] Keep changelog and incident notes updated (from Ops Team)\n- [resource:1] Runbook: How to roll forward safely (https://example.com/runbook)",
+      "prompt": "Community evidence (active community)\n- [chat:1] Weekly launch retrospective (from Alice)\n- [chat:2] Keep changelog and incident notes updated (from Ops Team)\n- [resource:1] Runbook: How to roll forward safely (https://example.com/runbook)",
       "diagnostics": {
         "attempted": true,
         "compiled_fetch_ok": true,
@@ -76,7 +76,7 @@
       "compiled_items_used": 3,
       "chat_items_used": 1,
       "resource_items_used": 0,
-      "prompt": "Community evidence (community-def)\n- [chat:1] Ship small batches (from member)",
+      "prompt": "Community evidence (active community)\n- [chat:1] Ship small batches (from member)",
       "diagnostics": {
         "attempted": true,
         "compiled_fetch_ok": true,
@@ -129,7 +129,7 @@
         "chat_items_used": 0,
         "resource_items_used": 0,
         "retrieval_latency_ms": null,
-        "failure_class": "none",
+        "failure_class": "compiled_empty_fallback_empty",
         "quality_score": 0,
         "quality_band": "none",
         "contract_id": "community_context_observability_v1"

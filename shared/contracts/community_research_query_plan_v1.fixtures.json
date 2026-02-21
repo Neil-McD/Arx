@@ -1,0 +1,30 @@
+[
+  {
+    "name": "blank_query_single_pass",
+    "query": "",
+    "expected": [""]
+  },
+  {
+    "name": "short_keyword_query_stays_single_pass",
+    "query": "xcv chat",
+    "expected": ["xcv chat"]
+  },
+  {
+    "name": "natural_language_query_gets_keyword_passes",
+    "query": "what did community chat say about ai safety updates this week",
+    "expected": [
+      "what did community chat say about ai safety updates this week",
+      "did community chat say about safety updates week",
+      "what did community chat say about"
+    ]
+  },
+  {
+    "name": "punctuation_is_normalized_for_keyword_pass",
+    "query": "Can you list resources for growth loops, onboarding, and retention?",
+    "expected": [
+      "Can you list resources for growth loops, onboarding, and retention?",
+      "can list resources growth loops onboarding retention",
+      "Can you list resources for growth"
+    ]
+  }
+]

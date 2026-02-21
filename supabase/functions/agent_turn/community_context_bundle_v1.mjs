@@ -108,7 +108,9 @@ export function normalizeCompiledCommunityRows(compiledRows, communityId) {
 }
 
 export function buildCommunityContextSystemPrompt(params) {
-  const communityId = typeof params?.communityId === "string" ? params.communityId : "";
+  const communityNameRaw = typeof params?.communityName === "string" ? params.communityName : "";
+  const communityName = communityNameRaw.trim();
+  const communityLabel = communityName || "active community";
   const chatItems = Array.isArray(params?.chatItems) ? params.chatItems : [];
   const resourceItems = Array.isArray(params?.resourceItems) ? params.resourceItems : [];
 
@@ -151,7 +153,7 @@ export function buildCommunityContextSystemPrompt(params) {
   }
 
   return {
-    prompt: `Community evidence (${communityId})\n${lines.join("\n")}`,
+    prompt: `Community evidence (${communityLabel})\n${lines.join("\n")}`,
     chatItemsUsed,
     resourceItemsUsed,
   };
@@ -179,28 +181,34 @@ export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resource
   const chatUsed = Number.isFinite(chatItemsUsed) ? Math.max(0, Math.floor(chatItemsUsed)) : 0;
   const resourceUsed = Number.isFinite(resourceItemsUsed) ? Math.max(0, Math.floor(resourceItemsUsed)) : 0;
   const usedCount = chatUsed + resourceUsed;
+  const fallbackOutcome =
+    usedCount <= 0
+      ? chatFetchOk === false && resourceFetchOk === false
+        ? "failed"
+        : "empty"
+      : chatFetchOk === true && resourceFetchOk === true
+        ? "ok"
+        : "partial";
 
   let failureClass = "none";
   if (requestedFailureClass) {
     failureClass = requestedFailureClass;
   } else if (!attempted) {
     failureClass = "not_attempted";
-  } else if (compiledFetchOk) {
-    failureClass = "none";
   } else if (fallbackUsed) {
-    if (chatFetchOk === true && resourceFetchOk === true) {
-      failureClass = "compiled_fetch_failed_fallback_ok";
-    } else if (chatFetchOk === false && resourceFetchOk === false) {
-      failureClass = "compiled_fetch_failed_fallback_failed";
+    if (compiledFetchOk) {
+      failureClass = `compiled_empty_fallback_${fallbackOutcome}`;
     } else {
-      failureClass = "compiled_fetch_failed_fallback_partial";
+      failureClass = `compiled_fetch_failed_fallback_${fallbackOutcome}`;
     }
+  } else if (compiledFetchOk) {
+    failureClass = usedCount > 0 ? "none" : "compiled_empty_fallback_empty";
   } else {
     failureClass = "compiled_fetch_failed_fallback_failed";
   }
 
   let qualityScore = chatUsed * 12 + resourceUsed * 16;
-  if (compiledFetchOk && usedCount > 0) qualityScore += 20;
+  if (compiledFetchOk && !fallbackUsed && usedCount > 0) qualityScore += 20;
   else if (fallbackUsed && (chatFetchOk === true || resourceFetchOk === true) && usedCount > 0)
     qualityScore += 10;
   if (qualityScore > 100) qualityScore = 100;

@@ -1,9 +1,10 @@
 export function formatInferenceSourceLabel(value: string | null | undefined): string | null {
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return null;
-  if (raw === "platform") return "Arx";
+  if (raw === "platform") return "Polynet.ai";
   if (raw === "user") return "User key";
   if (raw === "chatgpt") return "ChatGPT";
+  if (raw === "free") return "Free";
   return null;
 }
 

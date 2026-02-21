@@ -1,4 +1,11 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { resolveCloudModelSelection } from "./inferenceLaneResolver";
+import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
+import { resolveLatestUserQueryFromThreadMessages } from "./communityLaneMessageBuilder";
+import {
+  getCommunityHarnessUnavailableErrorMessage,
+  isCommunityHarnessUnavailablePreflight,
+} from "./cloudCommunityContextPreflight";
 
 type ModelToggle = {
   id: string;
@@ -8,6 +15,7 @@ type ModelToggle = {
 type ThreadRecord = {
   id: string;
   model_id: string | null;
+  community_id?: string | null;
   last_seq: number;
   updated_at: number;
 };
@@ -38,6 +46,20 @@ type GuestThreadStorageV1 = {
   messages: GuestStoredMessageV1[];
 };
 
+type CommunityContextPreflightResult = {
+  hasEntitlement: boolean;
+  communityEvidenceUserMessage: string | null;
+  communityEvidenceUsedV1: unknown;
+  communityContextDiagnostics: Record<string, unknown> | null;
+};
+
+type LoadCommunityContextPreflightParams<SessionT> = {
+  threadId: string;
+  communityId: string;
+  query: string;
+  session: SessionT;
+};
+
 type UseWebSendFlowControllerArgs<
   SessionT,
   AttachmentT,
@@ -51,6 +73,16 @@ type UseWebSendFlowControllerArgs<
   createThread: (session: SessionT) => Promise<ThreadRecordT | null>;
   updateThreadModel: (threadId: string, modelId: string, session: SessionT) => Promise<void>;
   maybeSetThreadTitleFromText: (threadId: string, userText: string, session: SessionT) => Promise<void>;
+  loadEffectiveCommunitySystemPrompt?: (params: {
+    threadId: string;
+    communityId: string;
+    session: SessionT;
+  }) => Promise<string | null>;
+  loadCommunityContextPreflight?: (
+    params: LoadCommunityContextPreflightParams<SessionT>,
+  ) => Promise<CommunityContextPreflightResult | null>;
+  getPersonalSystemPrompt: () => string | null | undefined;
+  getCommunityNameById?: (communityId: string) => string | null;
   createPersonalMemoryItemDirect: (params: { content: string; pinned: boolean }) => Promise<unknown>;
   showMemoryToastMessage: (message: string) => void;
   loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
@@ -60,6 +92,8 @@ type UseWebSendFlowControllerArgs<
     threadId: string;
     runIdHint: string;
     messages: ThreadMessageT[];
+    systemPrompt?: string | null;
+    communityEvidenceUserMessage?: string | null;
   }) => Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }>;
   runAgentTurn: (
     session: SessionT,
@@ -69,13 +103,26 @@ type UseWebSendFlowControllerArgs<
       mode?: "respond" | "regenerate";
       runIdHint: string;
       inferenceSource?: "platform" | "user";
+      replyToId?: string;
     },
   ) => Promise<{ cancelled: boolean; error: string | null }>;
   createThreadMessage: (
     session: SessionT,
     params: { id?: string; threadId: string; role: "user" | "assistant" | "system"; content_json: unknown },
   ) => Promise<string>;
-  createAssistantTextMessage: (session: SessionT, params: { threadId: string; text: string }) => Promise<string>;
+  createAssistantTextMessage: (
+    session: SessionT,
+    params: {
+      threadId: string;
+      text: string;
+      engineId?: string | null;
+      modelId?: string | null;
+      runId?: string | null;
+      inferenceSource?: string | null;
+      communityEvidenceUsedV1?: unknown;
+      communityContextDiagnostics?: Record<string, unknown> | null;
+    },
+  ) => Promise<string>;
   deleteThreadMessagesByIds: (session: SessionT, messageIds: string[]) => Promise<void>;
 
   extractRememberIntent: (input: string) => string | null;
@@ -146,7 +193,7 @@ export function useWebSendFlowController<
     current.setIsBuilderUpgradeOpen(true);
   }, []);
 
-  const resolvePreferredModelId = useCallback((): { preferredModelIdRaw: string; preferredModelId: string } => {
+  const resolvePreferredModelSelection = useCallback(() => {
     const current = argsRef.current;
     const enabled = current.modelToggles.filter((toggle) => toggle.enabled);
     const preferredModelIdRaw =
@@ -154,11 +201,14 @@ export function useWebSendFlowController<
       enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
       enabled[0]?.id ||
       current.defaultActiveModelId;
-    const preferredModelId =
-      current.hasPaidAccess || current.guestModelAllowlist.has(preferredModelIdRaw)
-        ? preferredModelIdRaw
-        : current.defaultGuestModelId;
-    return { preferredModelIdRaw, preferredModelId };
+    return resolveCloudModelSelection({
+      requestedModelId: preferredModelIdRaw,
+      enabledModelIds: enabled.map((toggle) => toggle.id),
+      defaultAuthedModelId: current.defaultActiveModelId,
+      defaultGuestModelId: current.defaultGuestModelId,
+      hasPaidAccess: current.hasPaidAccess,
+      freeModelAllowlist: current.guestModelAllowlist,
+    });
   }, []);
 
   const persistGuestFromMessages = useCallback((messages: ThreadMessageT[]): void => {
@@ -182,6 +232,82 @@ export function useWebSendFlowController<
     }
     current.storeGuestThreadStorage(stored);
   }, []);
+
+  const syncThreadModelSelection = useCallback(
+    (threadId: string, modelId: string, session: SessionT | null): void => {
+      const current = argsRef.current;
+      current.setThreads((prev) =>
+        prev.map((thread) => (thread.id === threadId ? ({ ...thread, model_id: modelId } as ThreadRecordT) : thread)),
+      );
+      if (!session) return;
+      void current.updateThreadModel(threadId, modelId, session).catch((error) => {
+        console.warn("Failed to persist thread model selection:", error);
+      });
+    },
+    [],
+  );
+
+  const resolveScopedSystemPrompt = useCallback(
+    async (threadId: string, session: SessionT): Promise<string | null> => {
+      const current = argsRef.current;
+      const thread = current.threads.find((candidate) => candidate.id === threadId) ?? null;
+      const communityId = String(thread?.community_id ?? "").trim();
+      const communityName =
+        communityId && current.getCommunityNameById ? current.getCommunityNameById(communityId) : null;
+      let customCommunitySystemPrompt: string | null = null;
+      const loader = current.loadEffectiveCommunitySystemPrompt;
+      if (communityId && loader) {
+        try {
+          customCommunitySystemPrompt = await loader({ threadId, communityId, session });
+        } catch {
+          customCommunitySystemPrompt = null;
+        }
+      }
+      const envelope = buildCloudCommunityContextEnvelope({
+        communityId: communityId || null,
+        communityName,
+        customCommunitySystemPrompt,
+        personalSystemPrompt: current.getPersonalSystemPrompt(),
+      });
+      return envelope.scopedSystemPrompt;
+    },
+    [],
+  );
+
+  const resolveCommunityPreflight = useCallback(
+    async (params: {
+      threadId: string;
+      session: SessionT;
+      messages: ThreadMessageT[];
+      fallbackQuery?: string | null;
+    }): Promise<CommunityContextPreflightResult | null> => {
+      const current = argsRef.current;
+      const loader = current.loadCommunityContextPreflight;
+      if (!loader) return null;
+      const thread = current.threads.find((candidate) => candidate.id === params.threadId) ?? null;
+      const communityId = String(thread?.community_id ?? "").trim();
+      if (!communityId) return null;
+      const query = resolveLatestUserQueryFromThreadMessages({
+        messages: params.messages,
+        fallbackQuery: params.fallbackQuery,
+        getRole: (message) => message.role,
+        getText: (message) => current.extractTextFromContentJson(message.content_json),
+      });
+      try {
+        return (
+          (await loader({
+            threadId: params.threadId,
+            communityId,
+            query,
+            session: params.session,
+          })) ?? null
+        );
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
 
   const sendUserMessage = useCallback(async (opts?: { text?: string }) => {
     const current = argsRef.current;
@@ -228,6 +354,9 @@ export function useWebSendFlowController<
           threadId: current.guestThreadId,
           runIdHint: `public_web:${userMsg.id}`,
           messages: baseMessages,
+          systemPrompt: buildCloudCommunityContextEnvelope({
+            personalSystemPrompt: current.getPersonalSystemPrompt(),
+          }).scopedSystemPrompt,
         });
         if (turnResult.error) throw new Error(turnResult.error);
         if (turnResult.cancelled) return;
@@ -275,12 +404,13 @@ export function useWebSendFlowController<
       if (!threadId) throw new Error("No thread available.");
 
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
-      const { preferredModelIdRaw, preferredModelId } = resolvePreferredModelId();
-      if (preferredModelId !== preferredModelIdRaw) {
+      const preferredModelSelection = resolvePreferredModelSelection();
+      const preferredModelId = preferredModelSelection.modelId;
+      if (preferredModelSelection.usedFallback) {
         current.setActiveModelId(preferredModelId);
       }
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        await current.updateThreadModel(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, session);
       }
 
       await current.ensureWorkspaceThreadLensBeforeSend(threadId, session);
@@ -298,7 +428,7 @@ export function useWebSendFlowController<
 
       const messageId = crypto.randomUUID();
       const attachmentsToSend = [...current.workspaceAttachmentsRef.current];
-      const usePublicModel = current.guestModelAllowlist.has(preferredModelId);
+      const usePublicModel = preferredModelSelection.lane === "public";
       if (usePublicModel && attachmentsToSend.length > 0) {
         throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
       }
@@ -342,19 +472,42 @@ export function useWebSendFlowController<
         model_id: null,
         run_id: null,
       } as ThreadMessageT;
+      const optimisticThreadMessages = [...priorThreadMessages, syntheticUserMessage];
+      current.setThreadMessages(optimisticThreadMessages);
 
       if (usePublicModel) {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
+        const communityPreflight = await resolveCommunityPreflight({
+          threadId,
+          session,
+          messages: optimisticThreadMessages,
+          fallbackQuery: text,
+        });
+        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
+          throw new Error(getCommunityHarnessUnavailableErrorMessage());
+        }
         const turnResult = await current.runPublicTurn({
           modelId: preferredModelId,
           threadId,
           runIdHint: `public_web:${messageId}`,
-          messages: [...priorThreadMessages, syntheticUserMessage],
+          messages: optimisticThreadMessages,
+          systemPrompt,
+          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
         });
         if (turnResult.error) throw new Error(turnResult.error);
         if (!turnResult.cancelled) {
           const assistantContent = (turnResult.content ?? "").trim();
           if (assistantContent) {
-            await current.createAssistantTextMessage(session, { threadId, text: assistantContent });
+            await current.createAssistantTextMessage(session, {
+              threadId,
+              text: assistantContent,
+              engineId: "public_web",
+              modelId: preferredModelId,
+              runId: turnResult.runId ?? null,
+              inferenceSource: "free",
+              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
+              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
+            });
           }
         }
       } else {
@@ -362,6 +515,7 @@ export function useWebSendFlowController<
           preferredModelId,
           mode: "respond",
           runIdHint: `agent_web:${messageId}`,
+          replyToId: messageId,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }
@@ -379,7 +533,14 @@ export function useWebSendFlowController<
     } finally {
       current.setIsSendingMessage(false);
     }
-  }, [maybeShowBuilderLimitUpgrade, persistGuestFromMessages, resolvePreferredModelId]);
+  }, [
+    maybeShowBuilderLimitUpgrade,
+    persistGuestFromMessages,
+    resolveScopedSystemPrompt,
+    resolveCommunityPreflight,
+    resolvePreferredModelSelection,
+    syncThreadModelSelection,
+  ]);
 
   const retryLastTurn = useCallback(async () => {
     const current = argsRef.current;
@@ -404,25 +565,46 @@ export function useWebSendFlowController<
     current.setIsWorkspaceAtBottom(true);
     try {
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
-      const { preferredModelId } = resolvePreferredModelId();
-      const usePublicModel = current.guestModelAllowlist.has(preferredModelId);
+      const preferredModelSelection = resolvePreferredModelSelection();
+      const preferredModelId = preferredModelSelection.modelId;
+      const usePublicModel = preferredModelSelection.lane === "public";
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        await current.updateThreadModel(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, session);
       }
 
       if (usePublicModel) {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
+        const communityPreflight = await resolveCommunityPreflight({
+          threadId,
+          session,
+          messages: currentThreadMessages,
+        });
+        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
+          throw new Error(getCommunityHarnessUnavailableErrorMessage());
+        }
         const turnResult = await current.runPublicTurn({
           modelId: preferredModelId,
           threadId,
           runIdHint: `public_web_retry:${lastUserMessageId}:${Date.now()}`,
           messages: currentThreadMessages,
+          systemPrompt,
+          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
         });
         if (turnResult.error) throw new Error(turnResult.error);
         if (!turnResult.cancelled) {
           const assistantContent = (turnResult.content ?? "").trim();
           if (assistantContent) {
-            await current.createAssistantTextMessage(session, { threadId, text: assistantContent });
+            await current.createAssistantTextMessage(session, {
+              threadId,
+              text: assistantContent,
+              engineId: "public_web",
+              modelId: preferredModelId,
+              runId: turnResult.runId ?? null,
+              inferenceSource: "free",
+              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
+              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
+            });
           }
         }
       } else {
@@ -430,6 +612,7 @@ export function useWebSendFlowController<
           preferredModelId,
           mode: "respond",
           runIdHint: `agent_web:${lastUserMessageId}`,
+          replyToId: lastUserMessageId,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }
@@ -441,7 +624,7 @@ export function useWebSendFlowController<
     } finally {
       current.setIsSendingMessage(false);
     }
-  }, [maybeShowBuilderLimitUpgrade, resolvePreferredModelId]);
+  }, [maybeShowBuilderLimitUpgrade, resolveScopedSystemPrompt, resolveCommunityPreflight, resolvePreferredModelSelection, syncThreadModelSelection]);
 
   const regenerateLastTurn = useCallback(async () => {
     const current = argsRef.current;
@@ -464,13 +647,15 @@ export function useWebSendFlowController<
     current.setIsWorkspaceAtBottom(true);
     try {
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
-      const { preferredModelId } = resolvePreferredModelId();
-      const usePublicModel = current.guestModelAllowlist.has(preferredModelId);
+      const preferredModelSelection = resolvePreferredModelSelection();
+      const preferredModelId = preferredModelSelection.modelId;
+      const usePublicModel = preferredModelSelection.lane === "public";
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        await current.updateThreadModel(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, session);
       }
 
       if (usePublicModel) {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
         let lastUserIndex = -1;
         for (let i = currentThreadMessages.length - 1; i >= 0; i--) {
@@ -488,17 +673,37 @@ export function useWebSendFlowController<
           .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
         await current.deleteThreadMessagesByIds(session, trailingMessageIds);
 
+        const communityPreflight = await resolveCommunityPreflight({
+          threadId,
+          session,
+          messages: messagesForTurn,
+        });
+        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
+          throw new Error(getCommunityHarnessUnavailableErrorMessage());
+        }
+
         const turnResult = await current.runPublicTurn({
           modelId: preferredModelId,
           threadId,
           runIdHint: `public_web_regen:${lastUserMessageId}:${Date.now()}`,
           messages: messagesForTurn,
+          systemPrompt,
+          communityEvidenceUserMessage: communityPreflight?.communityEvidenceUserMessage ?? null,
         });
         if (turnResult.error) throw new Error(turnResult.error);
         if (!turnResult.cancelled) {
           const assistantContent = (turnResult.content ?? "").trim();
           if (assistantContent) {
-            await current.createAssistantTextMessage(session, { threadId, text: assistantContent });
+            await current.createAssistantTextMessage(session, {
+              threadId,
+              text: assistantContent,
+              engineId: "public_web",
+              modelId: preferredModelId,
+              runId: turnResult.runId ?? null,
+              inferenceSource: "free",
+              communityEvidenceUsedV1: communityPreflight?.communityEvidenceUsedV1 ?? null,
+              communityContextDiagnostics: communityPreflight?.communityContextDiagnostics ?? null,
+            });
           }
         }
       } else {
@@ -506,6 +711,7 @@ export function useWebSendFlowController<
           preferredModelId,
           mode: "regenerate",
           runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
+          replyToId: lastUserMessageId,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }
@@ -517,7 +723,7 @@ export function useWebSendFlowController<
     } finally {
       current.setIsSendingMessage(false);
     }
-  }, [maybeShowBuilderLimitUpgrade, resolvePreferredModelId]);
+  }, [maybeShowBuilderLimitUpgrade, resolveScopedSystemPrompt, resolveCommunityPreflight, resolvePreferredModelSelection, syncThreadModelSelection]);
 
   return {
     sendUserMessage,

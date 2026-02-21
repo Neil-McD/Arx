@@ -124,7 +124,25 @@ import {
 } from "../../../shared/supabaseAuthFlow";
 import { consumeSupabaseOAuthCallback } from "../../../shared/supabaseOAuthCallback";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
-import { resolveUserAccessPolicy } from "../../../shared/capabilities";
+import { isPaidBuilderTier, resolveUserAccessPolicy } from "../../../shared/capabilities";
+import {
+  DEFAULT_ACTIVE_MODEL_ID,
+  DEFAULT_GUEST_MODEL_ID,
+  FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
+  FREE_MODEL_LABELS as SHARED_FREE_MODEL_LABELS,
+  getDefaultModelToggles,
+  getFreeModelEntries,
+  inferModelSection,
+  isFreeModelId,
+  isModelAvailableOnSurface,
+  type ModelSectionId,
+  type ModelToggle,
+} from "../../../shared/modelCatalog";
+import {
+  APP_THEME_OPTIONS,
+  parseAppTheme,
+  type AppTheme,
+} from "../../../shared/theme";
 import { CommunityChatMessageRow } from "../../../shared/CommunityChatMessageRow";
 import { useLastClickWinsController } from "../../../shared/useLastClickWinsController";
 import { useCommunityChatRealtime } from "../../../shared/useCommunityChatRealtime";
@@ -138,6 +156,8 @@ import { useCommunityResourceController } from "../../../shared/useCommunityReso
 import { useCommunityResourceEditorController } from "../../../shared/useCommunityResourceEditorController";
 import { useCommunityCreateController } from "../../../shared/useCommunityCreateController";
 import { useCommunityDeleteController } from "../../../shared/useCommunityDeleteController";
+import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
+import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useBuilderUpgradeScrollHint } from "../../../shared/useBuilderUpgradeScrollHint";
 import { useWorkspaceAutoScroll } from "../../../shared/useWorkspaceAutoScroll";
 import { useModelPickerController } from "../../../shared/useModelPickerController";
@@ -172,7 +192,7 @@ import {
   extractCommunityEvidenceUsedV1,
   type CommunityEvidenceUsedV1,
 } from "../../../shared/communityEvidence";
-import { CommunityEvidenceCitations } from "../../../shared/CommunityEvidenceCitations";
+import { loadCloudCommunityContextPreflight } from "../../../shared/cloudCommunityContextPreflight";
 import { AttachmentChipButton } from "../../../shared/AttachmentChipButton";
 import { partitionCommunityAttachments } from "../../../shared/communityAttachmentUi";
 import {
@@ -186,10 +206,9 @@ import {
 import { buildCommunityInstantAccessLink } from "../../../shared/communityInviteLinks";
 import { isValidCommunitySlug, slugifyCommunityName } from "../../../shared/communitySlug";
 import {
-  MessageContextAction,
   MessageCopyAction,
   MessageFooter,
-  MessageRegenerateAction,
+  MessageSourcesAction,
 } from "../../../shared/MessageFooterActions";
 import {
   formatCommunityVisibilityLabel,
@@ -201,12 +220,15 @@ import {
 } from "../../../shared/communityEvidenceUi";
 import {
   buildMessageContextModalPayload,
-  contextActionLabel,
   hasContextPayload,
   openMessageContextModal,
   type MessageContextModalPayload,
 } from "../../../shared/messageContextUi";
-import { appendInferenceSourceLabel } from "../../../shared/inferenceSourceUi";
+import {
+  extractInferenceSourceFromMessageContent,
+  extractModelIdFromMessageContent,
+  formatModelAttributionLabel,
+} from "../../../shared/modelAttributionUi";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import { isCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
 import { useWebBuilderBillingActions } from "./controllers/useWebBuilderBillingActions";
@@ -338,14 +360,8 @@ type CommunityAgentDraft = {
 const GUEST_THREAD_ID = "__guest__";
 const GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
 const GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
-const DEFAULT_GUEST_MODEL_ID = "gpt-oss-120b-free";
-const GUEST_MODEL_ALLOWLIST = new Set<string>([DEFAULT_GUEST_MODEL_ID, "deepseek-r1-free"]);
-const GUEST_MODEL_LABELS: Record<string, string> = {
-  "gpt-oss-120b-free": "GPT OSS 120B (Free)",
-  "deepseek-r1-free": "DeepSeek R1 (Free)",
-};
-
-type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
+const GUEST_MODEL_ALLOWLIST = SHARED_FREE_MODEL_ALLOWLIST;
+const GUEST_MODEL_LABELS = SHARED_FREE_MODEL_LABELS;
 
 type GuestStoredMessageV1 = {
   id: string;
@@ -364,7 +380,7 @@ type GuestThreadStorageV1 = {
 function loadGuestModelId(): string {
   try {
     const raw = (localStorage.getItem(GUEST_MODEL_STORAGE_KEY) ?? "").trim();
-    return raw && GUEST_MODEL_ALLOWLIST.has(raw) ? raw : DEFAULT_GUEST_MODEL_ID;
+    return raw && isFreeModelId(raw, GUEST_MODEL_ALLOWLIST) ? raw : DEFAULT_GUEST_MODEL_ID;
   } catch {
     return DEFAULT_GUEST_MODEL_ID;
   }
@@ -386,7 +402,7 @@ function loadGuestThreadStorage(): GuestThreadStorageV1 {
     if (!parsed || typeof parsed !== "object") return { v: 1, model_id: loadGuestModelId(), messages: [] };
     const asAny = parsed as any;
     const model_id_raw = typeof asAny.model_id === "string" ? asAny.model_id.trim() : "";
-    const model_id = model_id_raw && GUEST_MODEL_ALLOWLIST.has(model_id_raw) ? model_id_raw : loadGuestModelId();
+    const model_id = model_id_raw && isFreeModelId(model_id_raw, GUEST_MODEL_ALLOWLIST) ? model_id_raw : loadGuestModelId();
     const messages_raw = Array.isArray(asAny.messages) ? (asAny.messages as unknown[]) : [];
     const messages: GuestStoredMessageV1[] = [];
     for (const item of messages_raw) {
@@ -551,14 +567,6 @@ type MyCommunityJoinRequest = {
 type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
 type SettingsGroup = "account" | "agent" | "appearance";
 
-type AppTheme = "light" | "dark" | "dark-warm";
-
-type ModelToggle = {
-  id: string;
-  label: string;
-  enabled: boolean;
-};
-
 type PersonalMemoryItem = {
   id: string;
   content: string;
@@ -633,16 +641,7 @@ type NavSnapshot = {
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
-const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
-const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
-  { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
-  { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
-  { id: "opus-4.5", label: "Opus 4.5", enabled: true },
-  { id: "opus-4.6", label: "Opus 4.6", enabled: true },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
-  { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
-  { id: "grok-4.1", label: "Grok 4.1", enabled: true }
-];
+const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("web");
 
 const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
 const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
@@ -887,35 +886,18 @@ function extractRememberIntent(text: string): string | null {
   return content;
 }
 
-function formatModelLabel(modelId: string | null | undefined): string | null {
-  const raw = (modelId ?? "").trim();
-  if (!raw) return null;
-
-  const normalized = raw.replace(/[_\s]+/g, "-");
-  const gptMatch = normalized.match(/^gpt-?(\d+(?:\.\d+)?)(.*)$/i);
-  if (gptMatch) {
-    const version = gptMatch[1] ?? "";
-    const rest = (gptMatch[2] ?? "").replace(/^-+/, "").replace(/-+/g, " ").trim();
-    return `GPT ${version}${rest ? ` ${rest}` : ""}`.trim();
-  }
-
-  return raw.replace(/[_-]+/g, " ");
-}
-
-function extractInferenceSourceFromContent(content: unknown): string | null {
-  if (!content || typeof content !== "object") return null;
-  const record = content as Record<string, unknown>;
-  const meta = record.meta;
-  if (!meta || typeof meta !== "object") return null;
-  const value = (meta as Record<string, unknown>).inference_source;
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function formatModelSignature(modelId: string | null | undefined, inferenceSource: string | null | undefined): string | null {
-  const base = formatModelLabel(modelId);
-  return appendInferenceSourceLabel(base, inferenceSource);
+function formatModelSignature(
+  modelId: string | null | undefined,
+  inferenceSource: string | null | undefined,
+  modelToggles: ModelToggle[],
+): string | null {
+  return formatModelAttributionLabel({
+    modelId,
+    inferenceSource,
+    modelToggles,
+    freeModelAllowlist: GUEST_MODEL_ALLOWLIST,
+    freeModelLabels: GUEST_MODEL_LABELS,
+  });
 }
 
 function shouldShowSender(
@@ -1002,10 +984,8 @@ export default function App() {
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
-      const stored = localStorage.getItem("arx-theme");
-      if (stored && ["light", "dark", "dark-warm"].includes(stored)) {
-        return stored as AppTheme;
-      }
+      const stored = parseAppTheme(localStorage.getItem("arx-theme"));
+      if (stored) return stored;
       return "dark";
     } catch {
       return "dark";
@@ -1077,15 +1057,26 @@ export default function App() {
   const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
 
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
+  const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
-      const stored = localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY);
-      const allowedIds = new Set(DEFAULT_MODEL_TOGGLES.map((toggle) => toggle.id));
-      return stored && allowedIds.has(stored) ? stored : null;
+      const stored = (localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) ?? "").trim();
+      return stored || null;
     } catch {
       return null;
     }
   });
+  const formatModelLabel = useCallback(
+    (modelId: string | null | undefined): string | null => {
+      const normalized = (modelId ?? "").trim();
+      if (!normalized) return null;
+      if (isFreeModelId(normalized, GUEST_MODEL_ALLOWLIST)) {
+        return GUEST_MODEL_LABELS[normalized] ?? normalized;
+      }
+      return modelToggles.find((toggle) => toggle.id === normalized)?.label ?? normalized;
+    },
+    [modelToggles],
+  );
   const [personalMemoryItems, setPersonalMemoryItems] = useState<PersonalMemoryItem[]>([]);
   const [personalMemoryQuery, setPersonalMemoryQuery] = useState("");
   const [personalMemoryError, setPersonalMemoryError] = useState<string | null>(null);
@@ -1097,6 +1088,15 @@ export default function App() {
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
+  const communityRailOrderStorageKey = useMemo(
+    () => `arx-community-rail-order:web:${supabaseSession?.user?.id ?? "local"}`,
+    [supabaseSession?.user?.id],
+  );
+  const { orderedCommunities: railCommunities, moveCommunityToIndex: handleReorderCommunityRail } =
+    useCommunityRailOrder<CommunityRecord>({
+      communities,
+      storageKey: communityRailOrderStorageKey,
+    });
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
   const [deleteCommunityNameInput, setDeleteCommunityNameInput] = useState("");
@@ -1664,7 +1664,7 @@ export default function App() {
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const [platformQuotaModal, setPlatformQuotaModal] = useState<{
-    reason: "quota" | "unavailable";
+    reason: "quota" | "plan" | "misconfigured" | "disabled" | "unavailable";
     threadId: string;
     mode: "respond" | "regenerate";
     message: string | null;
@@ -1675,7 +1675,7 @@ export default function App() {
     remember_intent_enabled: true,
   });
   const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
-  const [, setUserModelSettings] = useState<UserModelSettings>({ system_prompt: "" });
+  const [userModelSettings, setUserModelSettings] = useState<UserModelSettings>({ system_prompt: "" });
   const [systemPromptDraft, setSystemPromptDraft] = useState("");
   const [isLoadingUserModelSettings, setIsLoadingUserModelSettings] = useState(false);
   const [isSavingUserModelSettings, setIsSavingUserModelSettings] = useState(false);
@@ -2012,6 +2012,8 @@ export default function App() {
     setThreads,
     setThreadMessages,
     setModelToggles,
+    setModelProviderById,
+    isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "web"),
   });
 
   const {
@@ -2268,6 +2270,26 @@ export default function App() {
       void loadCommunities(current);
     },
   });
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      const key = String(event.key ?? "").trim();
+      if (key && !key.startsWith("arx_supabase_session")) return;
+      const latest = loadPersistedSupabaseSession();
+      if (!latest) {
+        if (sessionRef.current) {
+          sessionRef.current = null;
+          setSupabaseSession(null);
+        }
+        return;
+      }
+      if (sessionsEqual(latest, sessionRef.current)) return;
+      sessionRef.current = latest;
+      setSupabaseSession(latest);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -2891,11 +2913,32 @@ export default function App() {
     return await fetchWithSupabasePublicShared(url, init);
   }
 
+  function sessionsEqual(
+    a: SupabaseSession | null | undefined,
+    b: SupabaseSession | null | undefined,
+  ): boolean {
+    if (!a || !b) return false;
+    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+  }
+
+  function adoptSupabaseSession(session: SupabaseSession): void {
+    sessionRef.current = session;
+    setSupabaseSession(session);
+    persistSupabaseSession(session);
+  }
+
   async function fetchWithSupabaseAuth(url: string, init: RequestInit, session: SupabaseSession): Promise<Response> {
+    let requestSession = sessionRef.current ?? session;
+    const persistedBeforeRequest = loadPersistedSupabaseSession();
+    if (persistedBeforeRequest && !sessionsEqual(persistedBeforeRequest, requestSession)) {
+      adoptSupabaseSession(persistedBeforeRequest);
+      requestSession = persistedBeforeRequest;
+    }
+
     return await fetchWithSupabaseAuthShared({
       url,
       init,
-      session,
+      session: requestSession,
       sessionRef,
       refreshLocked: refreshSupabaseSessionLocked,
       onSessionExpired: () => {
@@ -3274,6 +3317,80 @@ export default function App() {
     return webThreadContextController.ensureLensBeforeSend(threadId);
   };
 
+  const loadEffectiveCommunitySystemPrompt = useCallback(
+    async (params: {
+      threadId: string;
+      communityId: string;
+      session: SupabaseSession;
+    }): Promise<string | null> => {
+      void params.threadId;
+      const communityId = String(params.communityId ?? "").trim();
+      if (!communityId) return null;
+      const url = getSupabaseUrl();
+      if (!url) return null;
+      try {
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/get_active_community_agent_system_prompt`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              p_user_id: getSupabaseAuthUid(params.session),
+              p_community_id: communityId,
+            }),
+          },
+          params.session,
+        );
+        if (!response.ok) return null;
+        const payload = (await response.json()) as unknown;
+        let prompt: string | null = null;
+        if (Array.isArray(payload)) {
+          const row = payload[0] as Record<string, unknown> | undefined;
+          prompt = typeof row?.system_prompt === "string" ? row.system_prompt.trim() : null;
+        } else if (payload && typeof payload === "object") {
+          prompt = typeof (payload as Record<string, unknown>).system_prompt === "string"
+            ? String((payload as Record<string, unknown>).system_prompt).trim()
+            : null;
+        }
+        return prompt;
+      } catch {
+        return null;
+      }
+    },
+    [fetchWithSupabaseAuth],
+  );
+  const resolveCommunityNameById = useCallback((communityId: string): string | null => {
+    const id = String(communityId ?? "").trim();
+    if (!id) return null;
+    const community = communities.find((candidate) => candidate.id === id) ?? null;
+    if (!community) return null;
+    const name = (community.name ?? "").trim();
+    if (name) return name;
+    const slug = (community.slug ?? "").trim();
+    return slug || null;
+  }, [communities]);
+
+  const loadCommunityContextPreflight = useCallback(
+    async (params: {
+      threadId: string;
+      communityId: string;
+      query: string;
+      session: SupabaseSession;
+    }) => {
+      void params.threadId;
+      return await loadCloudCommunityContextPreflight({
+        getSupabaseUrl,
+        fetchWithSupabaseAuth,
+        session: params.session,
+        communityId: params.communityId,
+        communityName: resolveCommunityNameById(params.communityId),
+        query: params.query,
+      });
+    },
+    [fetchWithSupabaseAuth, resolveCommunityNameById],
+  );
+
+
   const selectWorkspaceThread = (thread: ThreadRecord): void => {
     webThreadContextController.selectThread(thread);
   };
@@ -3350,7 +3467,7 @@ export default function App() {
     return [...existing, ...next];
   }
 
-  const { sendUserMessage, retryLastTurn, regenerateLastTurn } = useWebSendFlowController<
+  const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     SupabaseSession,
     MessageAttachment,
     ThreadRecord,
@@ -3362,6 +3479,10 @@ export default function App() {
     createThread,
     updateThreadModel,
     maybeSetThreadTitleFromText,
+    loadEffectiveCommunitySystemPrompt,
+    loadCommunityContextPreflight,
+    getPersonalSystemPrompt: () => userModelSettings.system_prompt,
+    getCommunityNameById: resolveCommunityNameById,
     createPersonalMemoryItemDirect,
     showMemoryToastMessage,
     loadThreadMessages,
@@ -3713,9 +3834,7 @@ export default function App() {
 
 	  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
 	  const effectiveTier = ((builderBillingStatus?.builder_tier ?? "free") as string).toLowerCase();
-	  const hasPaidAccess =
-      Boolean(supabaseSession) &&
-      (effectiveTier === "builder" || effectiveTier === "pro" || effectiveTier === "architect");
+	  const hasPaidAccess = Boolean(supabaseSession) && isPaidBuilderTier(effectiveTier);
 
 	  const guestModelLabel = useMemo(() => {
 	    const label = (GUEST_MODEL_LABELS[guestModelId] ?? "").trim();
@@ -3723,11 +3842,15 @@ export default function App() {
 	  }, [guestModelId]);
 
 	  const selectedModelId = useMemo(() => {
+	    const isGuestModel = (modelId: string): boolean => isFreeModelId(modelId, GUEST_MODEL_ALLOWLIST);
+	    const isEnabledAuthedModel = (modelId: string): boolean => modelToggles.some((toggle) => toggle.id === modelId);
+	    const isKnownModel = (modelId: string): boolean =>
+	      isGuestModel(modelId) || isEnabledAuthedModel(modelId);
 	    const threadModel = (activeThread?.model_id ?? "").trim();
 	    if (
 	      threadModel &&
-	      modelToggles.some((toggle) => toggle.id === threadModel) &&
-	      (!supabaseSession || hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(threadModel))
+	      isKnownModel(threadModel) &&
+	      (!supabaseSession || hasPaidAccess || isGuestModel(threadModel))
 	    ) {
 	      return threadModel;
 	    }
@@ -3735,8 +3858,8 @@ export default function App() {
 	    const stored = (activeModelId ?? "").trim();
 	    if (
 	      stored &&
-	      modelToggles.some((toggle) => toggle.id === stored) &&
-	      (!supabaseSession || hasPaidAccess || GUEST_MODEL_ALLOWLIST.has(stored))
+	      isKnownModel(stored) &&
+	      (!supabaseSession || hasPaidAccess || isGuestModel(stored))
 	    ) {
 	      return stored;
 	    }
@@ -3747,23 +3870,23 @@ export default function App() {
 	      modelToggles[0]?.id ??
 	      "";
 	    if (!supabaseSession || hasPaidAccess) return fallbackModelId;
-	    return GUEST_MODEL_ALLOWLIST.has(fallbackModelId) ? fallbackModelId : DEFAULT_GUEST_MODEL_ID;
+	    return isGuestModel(fallbackModelId) ? fallbackModelId : DEFAULT_GUEST_MODEL_ID;
 	  }, [activeThread?.model_id, activeModelId, enabledModels, hasPaidAccess, modelToggles, supabaseSession]);
 
 	  const selectedModelLabel = useMemo(() => {
 	    if (!selectedModelId) return "Model";
-	    return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
-	  }, [enabledModels, selectedModelId]);
+    if (isFreeModelId(selectedModelId, GUEST_MODEL_ALLOWLIST)) {
+      return GUEST_MODEL_LABELS[selectedModelId] ?? selectedModelId;
+    }
+    return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
+  }, [enabledModels, selectedModelId]);
 
 	  const activeModelLabel = supabaseSession ? selectedModelLabel : guestModelLabel;
 
-	  const inferProviderSection = (modelId: string): ModelSectionId => {
-	    const id = (modelId ?? "").trim().toLowerCase();
-	    if (id.startsWith("gpt-")) return "openai";
-	    if (id.startsWith("sonnet-") || id.startsWith("opus-")) return "anthropic";
-	    if (id.startsWith("gemini-")) return "google";
-	    if (id.startsWith("grok-")) return "x-ai";
-	    return "openrouter";
+  const inferProviderSection = (modelId: string): ModelSectionId => {
+    const id = (modelId ?? "").trim().toLowerCase();
+    const mappedProvider = String(modelProviderById[id] ?? "").trim().toLowerCase();
+    return inferModelSection(modelId, mappedProvider || null);
 	  };
 
 		  type CuratedPickerModel = {
@@ -3777,22 +3900,26 @@ export default function App() {
 		  const selectedPickerModelId = supabaseSession ? selectedModelId : guestModelId;
 
 		  const curatedPickerModels = useMemo(() => {
-		    const out: CuratedPickerModel[] = [];
-		    out.push(
-		      { id: "gpt-oss-120b-free", label: GUEST_MODEL_LABELS["gpt-oss-120b-free"]!, section: "free", access: "guest", description: "OpenRouter free tier" },
-		      { id: "deepseek-r1-free", label: GUEST_MODEL_LABELS["deepseek-r1-free"]!, section: "free", access: "guest", description: "OpenRouter free tier" },
-		    );
-		    for (const toggle of enabledModels) {
-		      out.push({ id: toggle.id, label: toggle.label, section: inferProviderSection(toggle.id), access: "authed" });
-		    }
-		    out.push(
-		      { id: "kimi-k2", label: "Kimi K2", section: "openrouter", access: "paid", description: "Moonshot via OpenRouter" },
-		      { id: "glm-4.7", label: "GLM 4.7", section: "openrouter", access: "paid", description: "Zhipu via OpenRouter" },
-		      { id: "gpt-oss-20b", label: "GPT OSS 20B", section: "openrouter", access: "paid", description: "OpenAI OSS via OpenRouter" },
-		      { id: "deepseek-v3.2", label: "DeepSeek V3.2", section: "openrouter", access: "paid", description: "DeepSeek via OpenRouter" },
-		    );
-		    return out;
-		  }, [enabledModels]);
+		    const byId = new Map<string, CuratedPickerModel>();
+    for (const model of getFreeModelEntries()) {
+      byId.set(model.id, {
+        id: model.id,
+        label: model.label,
+        section: "free",
+        access: "guest",
+        description: model.description,
+      });
+    }
+    for (const toggle of enabledModels) {
+      byId.set(toggle.id, {
+        id: toggle.id,
+        label: toggle.label,
+        section: inferProviderSection(toggle.id),
+        access: "authed",
+      });
+    }
+    return Array.from(byId.values());
+  }, [enabledModels, modelProviderById]);
 
 		  const { visiblePickerModels, openModelPicker, closeModelPicker } = useModelPickerController<
 		    CuratedPickerModel,
@@ -3817,21 +3944,21 @@ export default function App() {
 		  const canSelectPickerModel = (model: CuratedPickerModel): boolean => {
 		    if (!supabaseSession) return model.access === "guest";
 		    if (model.access === "guest") return true;
-		    if (!modelToggles.some((toggle) => toggle.id === model.id)) return false;
-		    if (model.access === "paid") return hasPaidAccess;
-		    return hasPaidAccess;
+		    const isEnabled = modelToggles.some((toggle) => toggle.id === model.id);
+		    return hasPaidAccess && isEnabled;
 			  };
 
 			  const handleSelectPickerModel = (model: CuratedPickerModel) => {
+			    const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
 			    if (!canSelectPickerModel(model)) {
+			      if (supabaseSession && model.access !== "guest" && !isModelEnabled) {
+			        showAppToastMessage("This model isn't enabled yet.");
+			        return;
+			      }
 			      if (supabaseSession && model.access !== "guest" && !hasPaidAccess) {
 			        closeModelPicker();
 			        setBuilderUpgradeContext("builder");
 			        setIsBuilderUpgradeOpen(true);
-			        return;
-			      }
-			      if (supabaseSession && !modelToggles.some((toggle) => toggle.id === model.id)) {
-			        showAppToastMessage("This model is coming soon.");
 			        return;
 			      }
 				      if (!supabaseSession && model.access !== "guest") {
@@ -3902,6 +4029,14 @@ export default function App() {
 	  const sessionsDrawerEnabled = publicRoute.kind === "app" && activePage === "workspace" && !isWorkspaceSettings;
 	  const isSessionsDrawerOpen = sessionsDrawerEnabled && userWantsSessions;
 	  const hasLeftPanel = isWorkspaceSettings || showCommunityNav;
+  const canReorderCommunities = railCommunities.length > 1;
+  const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
+  const { setContainerElement: setCommunityRailListElement, getItemBindings: getCommunityRailItemBindings, draggingId: draggingCommunityId } =
+    useRailPointerReorder({
+      itemIds: communityRailIds,
+      enabled: canReorderCommunities,
+      onMoveToIndex: handleReorderCommunityRail,
+    });
 
   useEffect(() => {
     if (!isSessionsDrawerOpen) return;
@@ -3923,7 +4058,6 @@ export default function App() {
 	  }
 	  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
 	  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
-	  const lastThreadAssistantMessageId = getLastThreadMessageId(threadMessages, "assistant");
   const canRetryLastThreadTurn = Boolean(
     threadError &&
       supabaseSession &&
@@ -3932,14 +4066,6 @@ export default function App() {
       lastThreadMessageRole === "user" &&
       lastThreadUserMessageId,
   );
-	  const canRegenerateLastThreadTurn = Boolean(
-	    supabaseSession &&
-	      activeThreadId &&
-	      !isSendingMessage &&
-	      lastThreadMessageRole === "assistant" &&
-	      lastThreadUserMessageId &&
-	      lastThreadAssistantMessageId,
-	  );
 		  const workspaceThreadKey = supabaseSession ? activeThreadId : GUEST_THREAD_ID;
 		  const isStreamingWorkspaceTurn = Boolean(
 		    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
@@ -4716,51 +4842,61 @@ export default function App() {
                   <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
                 </svg>
               </button>
-              <div className="community-rail-divider" />
-	              {communities.map((community) => (
-	                <button
-	                  key={community.id}
-	                  type="button"
-		                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}`}
-	                  onClick={() => {
-	                    if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
-	                    setActiveCommunityId(community.id);
-	                      // Keep the user on their current page; only the selected community context changes.
-	                      if (activePage === "workspace") {
-	                        const currentLens = activeThreadId
-	                          ? (threads.find((t) => t.id === activeThreadId)?.community_id ?? null)
-	                          : null;
-	                        const isWorkspaceRunActive =
-	                          isSendingMessage ||
-	                          (streamingThreadId === activeThreadId && streamingContent !== null);
-	                        if (isWorkspaceRunActive && currentLens !== community.id) {
-	                          showAppToastMessage(
-	                            `Switched to ${community.name}. Active run keeps prior context; new context applies next turn.`,
-	                          );
-	                        }
-	                        const session = supabaseSession;
-	                        if (session && activeThreadId) {
-	                          void syncWorkspaceThreadCommunityLens(activeThreadId, community.id, session);
-	                        }
-	                      }
-		                  }}
-		                  title={community.name}
-	                >
-                  {community.avatar_url ? (
-                    <img
-                      className="community-rail-avatar"
-                      src={community.avatar_url}
-                      alt={community.name}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="community-rail-initials">{communityInitials(community.name)}</span>
-                  )}
-                </button>
-              ))}
-              {communities.length === 0 && isLoadingCommunities && (
-                <div className="community-rail-skeleton" aria-hidden="true">
-                  <div className="community-rail-skeleton-item" />
+	              <div className="community-rail-divider" />
+	              <div className="community-rail-list" ref={setCommunityRailListElement}>
+	                {railCommunities.map((community) => {
+	                  const bindings = getCommunityRailItemBindings(community.id);
+	                  return (
+	                    <button
+	                      key={community.id}
+	                      type="button"
+			                  ref={bindings.ref}
+			                  className={`community-rail-button community-rail-community${community.id === activeCommunityId ? " active" : ""}${community.id === draggingCommunityId ? " is-dragging" : ""}${canReorderCommunities ? " reorder-enabled" : ""}`}
+	                      onClick={() => {
+	                        if (!confirmDiscardUnsavedCommunitySettings(community.id)) return;
+	                        setActiveCommunityId(community.id);
+	                          // Keep the user on their current page; only the selected community context changes.
+	                          if (activePage === "workspace") {
+	                            const currentLens = activeThreadId
+	                              ? (threads.find((t) => t.id === activeThreadId)?.community_id ?? null)
+	                              : null;
+	                            const isWorkspaceRunActive =
+	                              isSendingMessage ||
+	                              (streamingThreadId === activeThreadId && streamingContent !== null);
+	                            if (isWorkspaceRunActive && currentLens !== community.id) {
+	                              showAppToastMessage(
+	                                `Switched to ${community.name}. Active run keeps prior context; new context applies next turn.`,
+	                              );
+	                            }
+	                            const session = supabaseSession;
+	                            if (session && activeThreadId) {
+	                              void syncWorkspaceThreadCommunityLens(activeThreadId, community.id, session);
+	                            }
+	                          }
+			                  }}
+	                      onClickCapture={bindings.onClickCapture}
+	                      onPointerDown={bindings.onPointerDown}
+	                      style={bindings.style}
+		                      title={community.name}
+	                    >
+	                      {community.avatar_url ? (
+	                        <img
+	                          className="community-rail-avatar"
+	                          src={community.avatar_url}
+	                          alt={community.name}
+	                          loading="lazy"
+	                          draggable={false}
+	                        />
+	                      ) : (
+	                        <span className="community-rail-initials">{communityInitials(community.name)}</span>
+	                      )}
+	                    </button>
+	                  );
+	                })}
+	              </div>
+	              {communities.length === 0 && isLoadingCommunities && (
+	                <div className="community-rail-skeleton" aria-hidden="true">
+	                  <div className="community-rail-skeleton-item" />
                   <div className="community-rail-skeleton-item" />
                   <div className="community-rail-skeleton-item" />
                 </div>
@@ -5634,12 +5770,7 @@ export default function App() {
                     <div className="appearance-selector">
                       <div className="appearance-title">Theme</div>
                       <div className="appearance-options">
-                        {([
-                          { id: "light", label: "Light", description: "Default light theme", disabled: false },
-                          { id: "dark", label: "Dark", description: "Default dark theme", disabled: false },
-                          { id: "dark-warm", label: "Dark (Warm)", description: "Warm obsidian + champagne gold", disabled: false },
-                          { id: "polynet", label: "Polynet Dark", description: "Monolithic surface + violet", disabled: false }
-                        ] as const).map((theme) => (
+                        {APP_THEME_OPTIONS.map((theme) => (
                           <button
                             key={theme.id}
                             className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
@@ -5832,13 +5963,17 @@ export default function App() {
                               communityEvidence,
                             })
                           : null;
-                        const inlineCommunityEvidence =
-                          !isUser && communityEvidence ? communityEvidence.items.slice(0, 4) : [];
-                        const hasContext = hasContextPayload(contextPayload);
-                        const contextLabel = contextActionLabel(hasContext);
-                        const inferenceSource = !isUser ? extractInferenceSourceFromContent(message.content_json) : null;
+	                        const hasContext = hasContextPayload(contextPayload);
+	                        const inferenceSource = !isUser ? extractInferenceSourceFromMessageContent(message.content_json) : null;
+                        const messageModelId = !isUser
+                          ? message.model_id ?? extractModelIdFromMessageContent(message.content_json)
+                          : null;
 	                      const modelLabel = !isUser
-	                        ? formatModelSignature(message.model_id ?? activeThread?.model_id ?? null, inferenceSource)
+	                        ? formatModelSignature(
+                              messageModelId,
+                              inferenceSource,
+                              modelToggles,
+                            )
 	                        : null;
 	                      return (
 	                        <div
@@ -5848,15 +5983,6 @@ export default function App() {
                           <div className="message-text">
                             {isUser ? textContent : renderMarkdown(textContent, { onCopyCode: copyTextToClipboard })}
                           </div>
-                          {!isUser && inlineCommunityEvidence.length > 0 && (
-                            <CommunityEvidenceCitations
-                              items={inlineCommunityEvidence}
-                              onChipClick={() => {
-                                openMessageContextModal(contextPayload, setContextModal);
-                              }}
-                              actionTitle="Open source details"
-                            />
-                          )}
                             {attachments.length > 0 && (
                               <div className="attachments-preview message-attachments-preview">
                                 {attachments.map((att) => {
@@ -5882,35 +6008,26 @@ export default function App() {
                                 })}
                               </div>
                             )}
-	                          {!isUser && (
-                              <MessageFooter metaLabel={modelLabel}>
-                                <MessageCopyAction
-                                  copied={copiedMessageId === message.id}
+		                          {!isUser && (
+	                              <MessageFooter metaLabel={modelLabel}>
+	                                <MessageCopyAction
+	                                  copied={copiedMessageId === message.id}
                                   onClick={() => {
                                     void handleCopyMessage(message.id, textContent);
                                   }}
-                                  title="Copy"
-                                  ariaLabel="Copy"
-                                />
-                                <MessageContextAction
-                                  disabled={!hasContext}
-                                  onClick={() => {
-                                    openMessageContextModal(contextPayload, setContextModal);
-                                  }}
-                                  title={contextLabel}
-                                  ariaLabel={contextLabel}
-                                />
-                                {canRegenerateLastThreadTurn && message.id === lastThreadAssistantMessageId && (
-                                  <MessageRegenerateAction
-                                    onClick={() => {
-                                      void regenerateLastTurn();
-                                    }}
-                                    title="Regenerate"
-                                    ariaLabel="Regenerate"
-                                  />
-                                )}
-                              </MessageFooter>
-	                          )}
+	                                  title="Copy"
+	                                  ariaLabel="Copy"
+	                                />
+	                                <MessageSourcesAction
+	                                  disabled={!hasContext}
+	                                  onClick={() => {
+	                                    openMessageContextModal(contextPayload, setContextModal);
+	                                  }}
+	                                  title="Sources used"
+	                                  ariaLabel="Sources used"
+	                                />
+	                              </MessageFooter>
+		                          )}
 	                        </div>
 	                      );
 	                    })}
@@ -5930,40 +6047,6 @@ export default function App() {
                                 </span>
                               )}
                             </div>
-                            {streamingMeta && (
-                              (() => {
-                                const streamingContextPayload = buildMessageContextModalPayload<
-                                  MemoryUsedItem,
-                                  HistoryUsedItem,
-                                  MemorySuggestion
-                                >({
-                                  memoryUsed: streamingMeta.memory_used,
-                                  historyUsed: streamingMeta.history_used,
-                                  memorySuggestions: [],
-                                  memoryAdded: [],
-                                  communityEvidence: streamingMeta.community_evidence_used ?? null,
-                                });
-                                const hasStreamingContext = hasContextPayload(streamingContextPayload);
-                                const streamingContextLabel = contextActionLabel(hasStreamingContext);
-                                return (
-                                  <MessageFooter
-                                    metaLabel={formatModelSignature(
-                                      streamingMeta.model_id ?? activeThread?.model_id ?? null,
-                                      streamingMeta.inference_source ?? null,
-                                    )}
-                                  >
-                                    <MessageContextAction
-                                      disabled={!hasStreamingContext}
-                                      onClick={() => {
-                                        openMessageContextModal(streamingContextPayload, setContextModal);
-                                      }}
-                                      title={streamingContextLabel}
-                                      ariaLabel={streamingContextLabel}
-                                    />
-                                  </MessageFooter>
-                                );
-                              })()
-                            )}
 		                          </div>
 		                        )}
 		                  </div>
@@ -6211,19 +6294,20 @@ export default function App() {
 	                                    google: "Google", "x-ai": "xAI", openrouter: "OpenRouter",
 	                                  };
 	                                  let lastSection = "";
-	                                  return visiblePickerModels.map((model) => {
-	                                    const isSelected = model.id === selectedPickerModelId;
-	                                    const selectable = canSelectPickerModel(model);
-	                                    const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
-	                                    const requiresPaidPlan = model.access !== "guest";
-	                                    const showPremiumBadge = requiresPaidPlan && !hasPaidAccess;
-	                                    const lockedLabel = model.access === "guest"
-	                                      ? "Free"
-	                                      : !showPremiumBadge && !supabaseSession
-	                                          ? "Sign in"
-	                                          : !showPremiumBadge && !isModelEnabled
-	                                            ? "Soon"
-	                                            : null;
+		                                  return visiblePickerModels.map((model) => {
+		                                    const isSelected = model.id === selectedPickerModelId;
+		                                    const selectable = canSelectPickerModel(model);
+		                                    const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
+		                                    const requiresPaidPlan = model.access !== "guest";
+		                                    const showSoonBadge = requiresPaidPlan && !isModelEnabled;
+		                                    const showPremiumBadge = requiresPaidPlan && !showSoonBadge && !hasPaidAccess;
+		                                    const lockedLabel = model.access === "guest"
+		                                      ? "Free"
+		                                      : !supabaseSession
+		                                          ? "Sign in"
+		                                          : showSoonBadge
+		                                            ? "Soon"
+		                                            : null;
 	                                    const showGroupHeader = modelPickerSection === "all" && model.section !== lastSection && sectionLabels[model.section];
 	                                    if (model.section !== lastSection) lastSection = model.section;
 	                                    return (
@@ -9058,13 +9142,21 @@ export default function App() {
 	            setPlatformQuotaModal(null);
 	          }}
 	        >
-	          <div className="modal" onClick={(event) => event.stopPropagation()}>
-	            <div className="modal-header">
-	              <div className="modal-title">
-                  {platformQuotaModal.reason === "quota" ? "Arx AI quota reached" : "Arx AI unavailable"}
-                </div>
-	              <button
-	                className="modal-close"
+		          <div className="modal" onClick={(event) => event.stopPropagation()}>
+		            <div className="modal-header">
+		              <div className="modal-title">
+                  {platformQuotaModal.reason === "quota"
+                    ? "Arx AI quota reached"
+                    : platformQuotaModal.reason === "plan"
+                      ? "Model not in your plan"
+                      : platformQuotaModal.reason === "misconfigured"
+                        ? "Model not configured"
+                        : platformQuotaModal.reason === "disabled"
+                          ? "Model temporarily disabled"
+                          : "Arx AI unavailable"}
+	                </div>
+		              <button
+		                className="modal-close"
 	                type="button"
 	                onClick={() => setPlatformQuotaModal(null)}
 	                title="Close"
@@ -9072,20 +9164,32 @@ export default function App() {
 	              >
 	                ×
 	              </button>
-	            </div>
-	            <div className="modal-body">
-	              <div className="model-note" style={{ marginBottom: 12 }}>
-	                {platformQuotaModal.reason === "quota"
-	                  ? "You've used your included Arx AI quota for this month."
-	                  : platformQuotaModal.message || "Arx AI is temporarily unavailable."}
-	              </div>
+		            </div>
+		            <div className="modal-body">
 		              <div className="model-note" style={{ marginBottom: 12 }}>
-		                To continue, choose another available model or upgrade for more included quota.
+		                {platformQuotaModal.reason === "quota"
+		                  ? "You've used your included Arx AI quota for this month."
+		                  : platformQuotaModal.reason === "plan"
+		                    ? platformQuotaModal.message || "This model isn't included in your current plan."
+		                    : platformQuotaModal.reason === "misconfigured"
+		                      ? platformQuotaModal.message || "Arx AI isn't configured for this model yet."
+		                      : platformQuotaModal.reason === "disabled"
+		                        ? platformQuotaModal.message || "Arx AI is currently disabled for this model."
+		                        : platformQuotaModal.message || "Arx AI is temporarily unavailable."}
 		              </div>
-		              <div className="auth-error" style={{ marginBottom: 12 }}>
-		                This model isn&apos;t available on your current plan.
-		              </div>
-	            </div>
+			              <div className="model-note" style={{ marginBottom: 12 }}>
+			                {platformQuotaModal.reason === "quota"
+			                  ? "To continue, choose another available model or upgrade for more included quota."
+			                  : platformQuotaModal.reason === "plan"
+			                    ? "To continue, choose another available model or upgrade to a plan that includes this model."
+			                    : "To continue, choose another available model while this one is being fixed."}
+			              </div>
+			              {platformQuotaModal.reason === "plan" && (
+			                <div className="auth-error" style={{ marginBottom: 12 }}>
+			                  This model isn&apos;t available on your current plan.
+			                </div>
+			              )}
+		            </div>
 	            <div className="modal-footer">
 	              <div className="auth-actions">
 	                <button

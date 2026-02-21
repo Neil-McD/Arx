@@ -27,6 +27,7 @@ pub(crate) fn build_handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 's
         crate::commands::auth_invite::get_chatgpt_auth_summary_cmd,
         crate::commands::auth_invite::clear_chatgpt_auth_cmd,
         crate::commands::auth_invite::chatgpt_login_cmd,
+        crate::commands::auth_invite::chatgpt_cloud_turn_cmd,
         crate::commands::auth_invite::open_external_url_cmd,
         // Invites + onboarding
         crate::commands::auth_invite::list_pending_invites_cmd,

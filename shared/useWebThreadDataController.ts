@@ -1,4 +1,6 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import type { ModelToggle } from "./modelCatalog";
+import { parseModelRegistryRows } from "./modelRegistry";
 
 type ThreadRecord = {
   id: string;
@@ -10,18 +12,6 @@ type ThreadRecord = {
   last_seq: number;
   created_at: number;
   updated_at: number;
-};
-
-type ModelToggle = {
-  id: string;
-  label: string;
-  enabled: boolean;
-};
-
-type ModelRegistryListRow = {
-  id: string;
-  display_name: string | null;
-  sort_order: number | null;
 };
 
 type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
@@ -40,6 +30,8 @@ type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   setThreads: Dispatch<SetStateAction<ThreadRecord[]>>;
   setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
   setModelToggles: Dispatch<SetStateAction<ModelToggle[]>>;
+  setModelProviderById?: Dispatch<SetStateAction<Record<string, string>>>;
+  isModelAllowed?: (modelId: string) => boolean;
 };
 
 export function useWebThreadDataController<SessionT, ThreadMessageT>(
@@ -159,26 +151,45 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
     if (!url) return;
     try {
       const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/model_registry?select=id,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
+        `${url}/rest/v1/model_registry?select=id,provider,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
         {},
         session,
       );
       if (!response.ok) return;
-      const rows = (await response.json()) as Array<Partial<ModelRegistryListRow>>;
-      const catalog = rows
-        .map((row) => {
-          const id = typeof row?.id === "string" ? row.id.trim() : "";
-          if (!id) return null;
-          const label =
-            (typeof row.display_name === "string" ? row.display_name.trim() : "") ||
-            current.formatModelLabel(id) ||
-            id;
-          return { id, label, enabled: true } satisfies ModelToggle;
-        })
-        .filter(Boolean) as ModelToggle[];
+      const rows = await response.json();
+      const isModelAllowed = current.isModelAllowed ?? (() => true);
+      const parsed = parseModelRegistryRows(rows, {
+        isModelAllowed,
+        formatModelLabel: current.formatModelLabel,
+      });
+      const catalog = parsed.catalog;
+
+      if (
+        parsed.diagnostics.dropped_empty_id > 0 ||
+        parsed.diagnostics.dropped_duplicate_id > 0 ||
+        parsed.diagnostics.dropped_invalid_row > 0 ||
+        parsed.diagnostics.unknown_provider > 0
+      ) {
+        console.warn("[model-registry] ignored malformed rows (web)", parsed.diagnostics);
+      }
 
       if (!catalog.length) return;
-      current.setModelToggles(catalog);
+      if (current.setModelProviderById) {
+        current.setModelProviderById(parsed.providerById);
+      }
+      current.setModelToggles((prev) => {
+        const prevById = new Map((prev ?? []).map((toggle) => [toggle.id, toggle]));
+        const nextById = new Map<string, ModelToggle>();
+        for (const toggle of catalog) {
+          const existing = prevById.get(toggle.id);
+          nextById.set(toggle.id, existing ? { ...toggle, enabled: existing.enabled } : toggle);
+        }
+        for (const existing of prev ?? []) {
+          if (!isModelAllowed(existing.id)) continue;
+          if (!nextById.has(existing.id)) nextById.set(existing.id, existing);
+        }
+        return Array.from(nextById.values());
+      });
     } catch {
       // ignore
     }

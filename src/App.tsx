@@ -33,6 +33,7 @@ import { useCommunityResourceController } from "../shared/useCommunityResourceCo
 import { useCommunityResourceEditorController } from "../shared/useCommunityResourceEditorController";
 import { useCommunityCreateController } from "../shared/useCommunityCreateController";
 import { useCommunityDeleteController } from "../shared/useCommunityDeleteController";
+import { useCommunityRailOrder } from "../shared/useCommunityRailOrder";
 import { useBuilderUpgradeScrollHint } from "../shared/useBuilderUpgradeScrollHint";
 import { useWorkspaceAutoScroll } from "../shared/useWorkspaceAutoScroll";
 import { useModelPickerController } from "../shared/useModelPickerController";
@@ -67,9 +68,13 @@ import {
   MessageCopyAction,
   MessageFooter,
   MessageSourcesAction,
-  MessageTeachAction,
 } from "../shared/MessageFooterActions";
-import { appendInferenceSourceLabel } from "../shared/inferenceSourceUi";
+import {
+  extractInferenceLaneFallbacksFromMessageContent,
+  extractInferenceSourceFromMessageContent,
+  extractModelIdFromMessageContent,
+  formatModelAttributionLabel,
+} from "../shared/modelAttributionUi";
 import {
   formatCommunityEvidenceTypeLabel,
 } from "../shared/communityEvidenceUi";
@@ -206,6 +211,8 @@ import {
   readBannerFileAsWideDataUrlWithinLimit,
 } from "../shared/imageTransforms";
 import {
+  decodeJwtPayload,
+  ensureSupabaseSessionForAuthenticatedSend,
   ensureSupabaseSessionForRequest,
   fetchWithSupabaseAuthShared,
   fetchWithSupabasePublicShared,
@@ -240,6 +247,24 @@ import { DesktopTopbar } from "./components/DesktopTopbar";
 import { ThreadSidebarPanel } from "./components/ThreadSidebarPanel";
 import { ThreadSidebarSessionItem } from "./components/ThreadSidebarSessionItem";
 import { resolveUserAccessPolicy } from "../shared/capabilities";
+import {
+  DEFAULT_ACTIVE_MODEL_ID,
+  FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
+  FREE_MODEL_LABELS as SHARED_FREE_MODEL_LABELS,
+  getDefaultModelToggles,
+  getPremiumModelCatalog,
+  inferModelProviderId,
+  isFreeModelId,
+  type ModelSectionId,
+  type ModelToggle,
+} from "../shared/modelCatalog";
+import { parseModelRegistryRows } from "../shared/modelRegistry";
+import {
+  APP_THEME_OPTIONS,
+  applyAppThemeAttributes,
+  parseAppTheme,
+  type AppTheme,
+} from "../shared/theme";
 
 type ThreadRecord = ArpThreadRecord;
 type ThreadLane = ArpThreadRecord["thread_lane"];
@@ -292,22 +317,6 @@ type ToolDebug = {
   id: string;
   text: string;
 };
-
-type ModelToggle = {
-  id: string;
-  label: string;
-  enabled: boolean;
-};
-
-type ModelRegistryListRow = {
-  id: string;
-  provider: string | null;
-  display_name: string | null;
-  sort_order: number | null;
-  enabled: boolean | null;
-};
-
-type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 
 type ProviderKey = {
   id: string;
@@ -464,27 +473,10 @@ const DESKTOP_IMAGE_FILE_DETECTION_OPTIONS: ImageFileDetectionOptions = {
   allowSvg: true,
   allowAvif: false,
 };
-const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
-const DESKTOP_FREE_MODEL_ALLOWLIST = new Set<string>(["gpt-oss-120b-free", "deepseek-r1-free"]);
-const DESKTOP_FREE_MODEL_LABELS: Record<string, string> = {
-  "gpt-oss-120b-free": "GPT OSS 120B (Free)",
-  "deepseek-r1-free": "DeepSeek R1 (Free)",
-};
-const DESKTOP_PREMIUM_MODEL_CATALOG: Array<{ id: string; label: string; section: ModelSectionId; description: string }> = [
-  { id: "kimi-k2", label: "Kimi K2", section: "openrouter", description: "Moonshot via OpenRouter" },
-  { id: "glm-4.7", label: "GLM 4.7", section: "openrouter", description: "Zhipu via OpenRouter" },
-  { id: "gpt-oss-20b", label: "GPT OSS 20B", section: "openrouter", description: "OpenAI OSS via OpenRouter" },
-  { id: "deepseek-v3.2", label: "DeepSeek V3.2", section: "openrouter", description: "DeepSeek via OpenRouter" },
-];
-const DEFAULT_MODEL_TOGGLES: ModelToggle[] = [
-  { id: "gpt-5.2", label: "GPT 5.2", enabled: true },
-  { id: "sonnet-4.5", label: "Sonnet 4.5", enabled: true },
-  { id: "opus-4.5", label: "Opus 4.5", enabled: true },
-  { id: "opus-4.6", label: "Opus 4.6", enabled: true },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", enabled: true },
-  { id: "gemini-3-pro", label: "Gemini 3 Pro", enabled: true },
-  { id: "grok-4.1", label: "Grok 4.1", enabled: true },
-];
+const DESKTOP_FREE_MODEL_ALLOWLIST = SHARED_FREE_MODEL_ALLOWLIST;
+const DESKTOP_FREE_MODEL_LABELS = SHARED_FREE_MODEL_LABELS;
+const DESKTOP_PREMIUM_MODEL_CATALOG = getPremiumModelCatalog("desktop");
+const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("desktop");
 
 const THREAD_LANE_PREF_KEY = "arx-thread-lane-filter-v1";
 const PROJECT_EXPANDED_PREF_KEY = "arx-project-expanded-v1";
@@ -658,8 +650,6 @@ type CommunityInviteRecord = {
 type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
 type SettingsGroup = "account" | "agent" | "appearance";
 
-type AppTheme = "light" | "dark" | "dark-warm";
-
 type AppPage = "workspace" | "community" | "discover";
 
 type AppView = "home" | "settings";
@@ -768,10 +758,8 @@ function App() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("models");
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
-    const stored = localStorage.getItem("arx-theme");
-    if (stored && ["light", "dark", "dark-warm"].includes(stored)) {
-      return stored as AppTheme;
-    }
+    const stored = parseAppTheme(localStorage.getItem("arx-theme"));
+    if (stored) return stored;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
   const [activePage, setActivePage] = useState<"workspace" | "community" | "discover">("workspace");
@@ -876,10 +864,19 @@ function App() {
 	  const [inviteJoinError, setInviteJoinError] = useState<string | null>(null);
 	  const [isJoiningInvite, setIsJoiningInvite] = useState(false);
 	  const [activeInviteGateKey, setActiveInviteGateKey] = useState<string | null>(null);
-		  const [communities, setCommunities] = useState<CommunityRecord[]>([]);
-		  const [communitiesLoadError, setCommunitiesLoadError] = useState<string | null>(null);
-		  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
-		  const activeCommunityIdRef = useRef<string | null>(null);
+	  const [communities, setCommunities] = useState<CommunityRecord[]>([]);
+	  const [communitiesLoadError, setCommunitiesLoadError] = useState<string | null>(null);
+	  const [activeCommunityId, setActiveCommunityId] = useState<string | null>(null);
+  const communityRailOrderStorageKey = useMemo(
+    () => `arx-community-rail-order:desktop:${profileStorageUserId ?? "local"}`,
+    [profileStorageUserId],
+  );
+  const { orderedCommunities: railCommunities, moveCommunityToIndex: handleReorderCommunityRail } =
+    useCommunityRailOrder<CommunityRecord>({
+      communities,
+      storageKey: communityRailOrderStorageKey,
+    });
+	  const activeCommunityIdRef = useRef<string | null>(null);
       const navStackRef = useRef<NavSnapshot[]>([]);
       const takeNavSnapshot = (): NavSnapshot => ({
         page: activePage,
@@ -1198,6 +1195,8 @@ function App() {
   const {
     streamingContent,
     setStreamingContent,
+    streamingRunId,
+    setStreamingRunId,
     streamingRenderedContent,
     streamingTokens,
     setStreamingTokens,
@@ -1795,6 +1794,7 @@ function App() {
       shellClient,
       runtimeClient,
       preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
+      freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
       defaultModelToggles: DEFAULT_MODEL_TOGGLES,
       modelToggles,
       activeModelId,
@@ -1904,7 +1904,7 @@ function App() {
 	  }, [activeInviteGateKey, pendingInvites]);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", appTheme);
+    applyAppThemeAttributes(appTheme, document.documentElement);
     localStorage.setItem("arx-theme", appTheme);
   }, [appTheme]);
 
@@ -1980,7 +1980,6 @@ function App() {
     if (fromState?.model_id) {
       setActiveModelId(fromState.model_id);
     }
-    setActiveCommunityId(fromState?.community_id ?? null);
     const refreshKey = fromState
       ? [
           fromState.id,
@@ -2010,7 +2009,6 @@ function App() {
         if (thread.model_id) {
           setActiveModelId(thread.model_id);
         }
-        setActiveCommunityId(thread.community_id ?? null);
       })
       .catch(() => {
         // Non-fatal; keep current selection.
@@ -2045,15 +2043,36 @@ function App() {
     return runtimeClient.listThreads();
   }
 
+  const getCommunityNameById = useCallback((communityId: string): string | null => {
+    const id = String(communityId ?? "").trim();
+    if (!id) return null;
+    const community = communities.find((candidate) => candidate.id === id) ?? null;
+    if (!community) return null;
+    const name = (community.name ?? "").trim();
+    if (name) return name;
+    const slug = (community.slug ?? "").trim();
+    return slug || null;
+  }, [communities]);
+
   const desktopCloudChatThreadApi = createDesktopCloudChatThreadApi({
     getSupabaseUrl,
     fetchWithSupabaseAuth,
+    fetchWithSupabasePublic,
     readSupabaseError,
     getSupabaseAuthUid,
     toUnixSecondsFromIso,
     getThreads: () => threads,
     setThreads,
     getActiveModelId: () => activeModelId,
+    getPersonalSystemPrompt: () => systemPromptDraft,
+    getCommunityNameById,
+    freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
+    hasChatgptAuth: () => Boolean(chatgptAuthSummary),
+    refreshHasChatgptAuth: async () => {
+      const summary = await shellClient.getChatgptAuthSummary();
+      return Boolean(summary);
+    },
+    chatgptCloudTurn: (args) => shellClient.chatgptCloudTurn(args),
   });
   const setThreadCommunityLensInCloud = createDesktopCloudLensSync({
     getSupabaseUrl,
@@ -2087,6 +2106,7 @@ function App() {
   const desktopThreadServiceRouter = createDesktopAppThreadServiceRouter({
     threads,
     runtimeClient,
+    getCommunityNameById,
     getSession: () => supabaseSessionRef.current,
     listCloudChatThreads: desktopCloudChatThreadApi.listCloudChatThreads,
     getCloudThreadRecord: desktopCloudChatThreadApi.getCloudThreadRecord,
@@ -3273,15 +3293,6 @@ function App() {
     }
   }
 
-  function normalizeProviderKeyId(value: string): ProviderKey["id"] | null {
-    const v = (value ?? "").trim().toLowerCase();
-    if (v === "openai") return "openai";
-    if (v === "anthropic") return "anthropic";
-    if (v === "google") return "google";
-    if (v === "x-ai" || v === "xai") return "x-ai";
-    return null;
-  }
-
   async function loadModelRegistry(session: SupabaseSession): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) return;
@@ -3292,33 +3303,38 @@ function App() {
         session,
       );
       if (!response.ok) return;
-      const rows = (await response.json()) as Array<Partial<ModelRegistryListRow>>;
-      const catalog = rows
-        .map((row) => {
-          const id = typeof row?.id === "string" ? row.id.trim() : "";
-          if (!id) return null;
-          const label = (typeof row.display_name === "string" ? row.display_name.trim() : "") || id;
-          return { id, label, enabled: true } satisfies ModelToggle;
-        })
-        .filter(Boolean) as ModelToggle[];
+      const rows = await response.json();
+      const parsed = parseModelRegistryRows(rows, {
+        isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "desktop"),
+      });
+      const catalog = parsed.catalog;
       if (!catalog.length) return;
-
-      const nextProviderById: Record<string, ProviderKey["id"]> = {};
-      for (const row of rows) {
-        const id = typeof row?.id === "string" ? row.id.trim() : "";
-        if (!id) continue;
-        const provider = typeof row?.provider === "string" ? normalizeProviderKeyId(row.provider) : null;
-        if (!provider) continue;
-        nextProviderById[id] = provider;
+      if (
+        parsed.diagnostics.dropped_empty_id > 0 ||
+        parsed.diagnostics.dropped_duplicate_id > 0 ||
+        parsed.diagnostics.dropped_invalid_row > 0 ||
+        parsed.diagnostics.unknown_provider > 0
+      ) {
+        console.warn("[model-registry] ignored malformed rows (desktop)", parsed.diagnostics);
       }
 
       const prevById = new Map(modelToggles.map((t) => [t.id, t]));
-      const merged = catalog.map((toggle) => {
+      const mergedById = new Map<string, ModelToggle>();
+      for (const toggle of catalog) {
         const existing = prevById.get(toggle.id);
-        return existing ? { ...toggle, enabled: existing.enabled } : toggle;
-      });
+        mergedById.set(toggle.id, existing ? { ...toggle, enabled: existing.enabled } : toggle);
+      }
+      for (const fallback of DEFAULT_MODEL_TOGGLES) {
+        if (mergedById.has(fallback.id)) continue;
+        const existing = prevById.get(fallback.id);
+        mergedById.set(fallback.id, existing ? { ...fallback, enabled: existing.enabled } : fallback);
+      }
+      for (const existing of modelToggles) {
+        if (!mergedById.has(existing.id)) mergedById.set(existing.id, existing);
+      }
+      const merged = Array.from(mergedById.values());
 
-      setModelProviderById(nextProviderById);
+      setModelProviderById(parsed.providerById);
       setModelToggles(merged);
       await shellClient.setModelToggles(merged).catch(() => null);
     } catch {
@@ -3331,11 +3347,7 @@ function App() {
     if (!id) return null;
     const mappedProvider = modelProviderById[id];
     if (mappedProvider) return mappedProvider;
-    if (id.startsWith("gpt-")) return "openai";
-    if (id.startsWith("sonnet-") || id.startsWith("opus-")) return "anthropic";
-    if (id.startsWith("gemini-")) return "google";
-    if (id.startsWith("grok-")) return "x-ai";
-    return "openai";
+    return inferModelProviderId(id, null);
   }
 
   function hasKeyForProvider(providerId: ProviderKey["id"]): boolean {
@@ -3343,6 +3355,9 @@ function App() {
   }
 
   function isModelReady(modelId: string): boolean {
+    if (isFreeModelId(modelId, DESKTOP_FREE_MODEL_ALLOWLIST)) {
+      return true;
+    }
     const providerId = providerIdForModelId(modelId);
     if (!providerId) return false;
     if (hasKeyForProvider(providerId)) return true;
@@ -3399,8 +3414,40 @@ function App() {
     if (!stored) return;
     try {
       const parsed = JSON.parse(stored) as SupabaseSession;
+      const supabaseUrl = (getSupabaseUrl() ?? "").trim();
+      if (supabaseUrl) {
+        try {
+          const parsedUrl = new URL(supabaseUrl);
+          const configuredHost = (parsedUrl.hostname ?? "").trim().toLowerCase();
+          const configuredProjectRef = (configuredHost.split(".")[0] ?? "").trim().toLowerCase();
+          if (configuredProjectRef) {
+            const payload = decodeJwtPayload(parsed.access_token);
+            const payloadRef =
+              payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).ref === "string"
+                ? String((payload as Record<string, unknown>).ref).trim().toLowerCase()
+                : "";
+            if (payloadRef && payloadRef !== configuredProjectRef) {
+              await shellClient.clearSupabaseSession();
+              return;
+            }
+            const payloadIss =
+              payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).iss === "string"
+                ? String((payload as Record<string, unknown>).iss).trim().toLowerCase()
+                : "";
+            if (payloadIss && !payloadIss.includes(`${configuredProjectRef}.supabase.co`)) {
+              await shellClient.clearSupabaseSession();
+              return;
+            }
+          }
+        } catch {
+          // Ignore URL parse errors and continue with refresh check below.
+        }
+      }
       const refreshed = await ensureFreshSession(parsed);
-      if (!refreshed) return;
+      if (!refreshed) {
+        await shellClient.clearSupabaseSession();
+        return;
+      }
       setSupabaseSession(refreshed);
       try {
         await shellClient.setSupabaseSession(JSON.stringify(refreshed));
@@ -3443,7 +3490,15 @@ function App() {
   }
 
   async function ensureFreshSession(session: SupabaseSession): Promise<SupabaseSession | null> {
-    return await ensureSupabaseSessionForRequest(session, refreshSupabaseSession);
+    return await ensureSupabaseSessionForRequest(session, refreshSupabaseSessionLocked);
+  }
+
+  async function ensureAuthenticatedSendSession(session: SupabaseSession): Promise<SupabaseSession | null> {
+    return await ensureSupabaseSessionForAuthenticatedSend({
+      session,
+      sessionRef: supabaseSessionRef,
+      refreshLocked: refreshSupabaseSessionLocked,
+    });
   }
 
   async function persistSupabaseSession(session: SupabaseSession) {
@@ -3628,7 +3683,7 @@ function App() {
         source_turn_id: draft.turnId,
         items: draft.evidenceItems.map((item) => ({
           source_type: item.source_type,
-          source_id: item.source_id,
+          source_id: (item.internal_source_id ?? item.source_id ?? "").trim(),
           title: item.title,
           snippet: item.snippet,
           url: item.url,
@@ -4796,72 +4851,15 @@ function App() {
 	  const onInvalidModelForThreadSend = useCallback(() => {
 	    setMemoryToast("Invalid model selection. Enable a model in Settings → Models.");
 	  }, []);
-	  const onRequirePaidAccessForThreadSend = useCallback(
-	    (ctx: { providerId: string; hasSession: boolean; planStateResolved: boolean }) => {
-	      if (ctx.hasSession && !ctx.planStateResolved) {
-	        setMemoryToast("Couldn't verify your plan. Retry sign-in, or try again.");
-	      } else if (ctx.providerId === "openai") {
-	        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
-	      } else {
-	        setMemoryToast("This model requires a paid plan. Upgrade to use Arx AI for this provider.");
-	      }
-	      setActiveView("settings");
-	      setSettingsPage("models");
-	    },
-	    [],
-	  );
-	  const ensureFreshSessionForThreadSend = useCallback(
-	    async (session: SupabaseSession): Promise<SupabaseSession | null> => {
-	      const fresh = await ensureSupabaseSessionForRequest(session, refreshSupabaseSessionLocked);
-	      if (!fresh) {
-	        await expireSupabaseSessionFailClosed({
-	          clearPersistedSupabaseSession,
-	          setSupabaseSession,
-	          sessionRef: supabaseSessionRef,
-	          onExpired: () => {
-	            setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
-	            setMemoryToast(SUPABASE_SESSION_EXPIRED_MESSAGE);
-	          },
-	        });
-	        return null;
-	      }
-	      if (
-	        fresh.access_token !== session.access_token ||
-	        fresh.refresh_token !== session.refresh_token ||
-	        fresh.expires_at !== session.expires_at
-	      ) {
-	        setSupabaseSession(fresh);
-	        supabaseSessionRef.current = fresh;
-	        await persistSupabaseSession(fresh);
-	      }
-	      return fresh;
-	    },
-	    [refreshSupabaseSessionLocked],
-	  );
-	  const resolveAllowPlatformInferenceForBuilderTier = useCallback((builderTier: string): boolean => {
-	    return resolveUserAccessPolicy({
-	      surface: "desktop",
-	      authState: "authenticated",
-	      builderTier,
-	    }).allowPlatformInference;
-	  }, []);
 	  const { ensureThreadReadyForSend } = useDesktopThreadSendReadiness({
 	    threads,
 	    getThreadRecord,
 	    activeModelId,
+	    defaultModelId: DEFAULT_ACTIVE_MODEL_ID,
+	    freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
 	    providerIdForModelId,
-	    hasKeyForProvider,
-	    userAllowPlatformInference: userAccessPolicy.allowPlatformInference,
-	    userTier: userAccessPolicy.tier,
-	    builderBillingStatus,
-	    getSupabaseUrl,
-	    getSupabaseAnonKey,
-	    loadBuilderBillingStatus,
-	    resolveAllowPlatformInferenceForBuilderTier,
 	    onMissingModel: onMissingModelForThreadLifecycle,
 	    onInvalidModel: onInvalidModelForThreadSend,
-	    onRequirePaidAccess: onRequirePaidAccessForThreadSend,
-	    ensureFreshSessionForRequest: ensureFreshSessionForThreadSend,
 	    getThreadServiceById: resolveThreadServiceForThreadId,
 	    setThreads,
 	  });
@@ -5364,7 +5362,9 @@ function App() {
     async (threadId: string, session: SupabaseSession | null): Promise<boolean> => {
       const service = resolveThreadServiceForThreadId(threadId);
       if (service.storageMode === "cloud" && !session) {
-        setAuthError("Sign in to send cloud chat messages.");
+        const message = "Sign in to send cloud chat messages.";
+        setAuthError(message);
+        setMemoryToast(message);
         await handleSignIn();
         return false;
       }
@@ -5401,13 +5401,41 @@ function App() {
     setMessages,
     setThreads,
     ensureThreadReadyForSend: ensureThreadReadyForDesktopSend,
-    clearStreamingRefs,
+    prepareSessionForSend: async (session, threadId) => {
+      const service = resolveThreadServiceForThreadId(threadId);
+      if (service.storageMode !== "local") return session;
+      if (!session) return session;
+      const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+      const modelId = (thread?.model_id ?? activeModelId ?? "").trim();
+      if (isFreeModelId(modelId, DESKTOP_FREE_MODEL_ALLOWLIST)) {
+        return session;
+      }
+      const fresh = await ensureAuthenticatedSendSession(session);
+      if (!fresh) {
+        setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
+        throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+      }
+      return fresh;
+    },
+    clearStreamingState,
+    setStreamingRunId,
     scheduleStreamingUpdate,
+    streamingContentRef,
+    streamingTokensRef,
+    streamingMetaRef,
     getSupabaseUrl,
     getSupabaseAnonKey,
     setMemoryToast,
     setAgentStatus,
     setRunningTools,
+    getSendPolicySnapshot: (threadId) => {
+      const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+      const selectedModelId = (activeModelId ?? thread?.model_id ?? "").trim() || null;
+      return {
+        selectedModelId,
+        hasChatgptAuth: Boolean(chatgptAuthSummary),
+      };
+    },
   });
 
   async function applyApprovalMode(mode: "read-only" | "agent" | "agent-full") {
@@ -5473,6 +5501,7 @@ function App() {
     clearStreamingRefs,
     scheduleStreamingUpdate,
     setStreamingContent,
+    setStreamingRunId,
     setStreamingTokens,
     setStreamingMeta,
     streamingContentRef,
@@ -5592,6 +5621,18 @@ function App() {
     flushAssistantTurn();
     return result;
   }, [combinedFeed, streamingContent]);
+  const hasPersistedAssistantForStreamingRun = useMemo(() => {
+    const runId = (streamingRunId ?? "").trim();
+    if (!runId) return false;
+    return messages.some(
+      (message) => message.role === "assistant" && (message.run_id ?? "").trim() === runId,
+    );
+  }, [messages, streamingRunId]);
+
+  useEffect(() => {
+    if (!hasPersistedAssistantForStreamingRun) return;
+    clearStreamingState();
+  }, [clearStreamingState, hasPersistedAssistantForStreamingRun]);
   const [expandedOutputIds, setExpandedOutputIds] = useState<Set<string>>(new Set());
   const [expandedToolGroupIds, setExpandedToolGroupIds] = useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -5700,12 +5741,11 @@ function App() {
       if (snapshot.view === "settings") {
         return "settings";
       }
-      const root = workspaceRoot ? workspaceRoot.split("/").pop() : null;
-      return root ? `workspace / ${root}` : "workspace";
+      return "workspace";
     }
     return "workspace";
   };
-  const defaultBackLabel = workspaceRoot ? `workspace / ${workspaceRoot.split("/").pop()}` : "workspace";
+  const defaultBackLabel = "workspace";
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabel(backTargetSnapshot) : null;
   const handleTopbarBackFromWorkspaceSettings = () => {
@@ -5780,12 +5820,13 @@ function App() {
         <DesktopCommunityRail
           activePage={activePage}
           activeView={activeView}
-          communities={communities}
+          communities={railCommunities}
           activeCommunityId={activeCommunityId}
           emptyMessage={communityRailEmptyMessage}
           getCommunityInitials={communityInitials}
           onOpenDiscover={handleRailOpenDiscover}
           onSelectCommunity={handleSelectActiveCommunity}
+          onMoveCommunityToIndex={handleReorderCommunityRail}
           onOpenCreateCommunity={openCreateCommunityModal}
           onToggleSettings={handleRailToggleSettings}
         />
@@ -7451,12 +7492,7 @@ function App() {
                   <div className="appearance-selector">
                     <div className="appearance-title">Theme</div>
                     <div className="appearance-options">
-                      {([
-                        { id: "light", label: "Light", description: "Default light theme", disabled: false },
-                        { id: "dark", label: "Dark", description: "Default dark theme", disabled: false },
-                        { id: "dark-warm", label: "Dark (Warm)", description: "Warm obsidian + champagne gold", disabled: false },
-                        { id: "polynet", label: "Polynet Dark", description: "Monolithic surface + violet", disabled: false },
-                      ] as const).map((theme) => (
+                      {APP_THEME_OPTIONS.map((theme) => (
                         <button
                           key={theme.id}
                           className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
@@ -7487,7 +7523,7 @@ function App() {
           </div>
         ) : activePage === "workspace" ? (
           <>
-	        <div className="workspace-body">
+	        <div className="workspace-body desktop-ai-workspace-body">
 	          {memoryToast && (
 	            <div className="memory-toast success-toast">{memoryToast}</div>
 	          )}
@@ -7589,14 +7625,18 @@ function App() {
                 )}
               </>
             )}
-            {activeThreadId && combinedFeed.length === 0 && !isSending && (
+            {activeThreadId &&
+              combinedFeed.length === 0 &&
+              !isSending &&
+              (Boolean(messageLoadErrorForActiveThread) ||
+                (activeThread?.storage_mode === "cloud" && !supabaseSession)) && (
               <div className="message-item system">
                 <div className="message-text">
                   {messageLoadErrorForActiveThread
                     ? `Couldn't load thread messages: ${messageLoadErrorForActiveThread}`
                     : activeThread?.storage_mode === "cloud" && !supabaseSession
                       ? "This is a cloud chat thread. Sign in to load messages, or switch to a local agent thread."
-                      : "This thread has no visible messages yet. Send a message to start, or switch threads."}
+                      : null}
                 </div>
               </div>
             )}
@@ -7607,27 +7647,28 @@ function App() {
                 const parsedContent = parseMessageContent(message.content_json);
                 const textContent = parsedContent.text;
                 const isTerminal = parsedContent.format === "terminal";
-                const communityEvidence = !isUser ? extractCommunityEvidenceUsedV1(message.content_json) : null;
-                const inlineCommunityEvidence =
-                  !isUser && communityEvidence
-                    ? communityEvidence.items.slice(0, 4)
-                    : [];
 	                const turnForMessage = !isUser ? (turnsByAssistantEventId[message.id] ?? null) : null;
-	                const messageInferenceSource = !isUser
-	                  ? extractInferenceSourceFromContentJson(message.content_json)
+	                  const messageInferenceSource = !isUser
+	                    ? extractInferenceSourceFromMessageContent(message.content_json)
+	                    : null;
+	                  const messageModelId = !isUser
+	                  ? (message.model_id || extractModelIdFromMessageContent(message.content_json))
 	                  : null;
+	                const messageInferenceLaneFallbacks = !isUser
+	                  ? extractInferenceLaneFallbacksFromMessageContent(message.content_json)
+	                  : [];
 	                const messageSignature = !isUser
-		                  ? formatExecutionLabel(message.engine_id, message.model_id, modelToggles, messageInferenceSource)
+		                  ? formatExecutionLabel(
+                                  message.engine_id,
+                                  messageModelId,
+                                  modelToggles,
+                                  messageInferenceSource,
+                                  messageInferenceLaneFallbacks,
+                                )
 		                  : null;
-		                const teachStatus = !isUser ? (teachStatusByMessageId[message.id] ?? null) : null;
-		                const turnMeta = !isUser ? (turnMetaByMessageId.get(message.id) ?? null) : null;
-		                const isEndOfTurn = Boolean(turnMeta?.isEndOfTurn);
-		                const turnContent = turnMeta?.turnContent ?? "";
-		                const canTeachCommunity =
-		                  !isUser &&
-		                  isEndOfTurn &&
-		                  Boolean(activeThread?.community_id) &&
-		                  Boolean(turnContent.trim());
+	                const turnMeta = !isUser ? (turnMetaByMessageId.get(message.id) ?? null) : null;
+	                const isEndOfTurn = Boolean(turnMeta?.isEndOfTurn);
+	                const turnContent = turnMeta?.turnContent ?? "";
 
                 return (
                   <div
@@ -7643,64 +7684,27 @@ function App() {
                           ? <pre className="terminal-message">{textContent}</pre>
                           : renderMarkdown(textContent, { onCopyCode: copyTextToClipboard })}
                     </div>
-                    {!isUser && inlineCommunityEvidence.length > 0 && (
-                      <CommunityEvidenceCitations
-                        items={inlineCommunityEvidence}
-                        onChipClick={
-                          turnForMessage
-                            ? () => {
-                                void handleOpenSourcesUsed(turnForMessage);
-                              }
-                            : null
-                        }
-                        actionTitle="Open source details"
-                      />
-                    )}
                     {!isUser && (
                       <MessageFooter metaLabel={messageSignature}>
-                        {isEndOfTurn && (
-                          <MessageCopyAction
-                            copied={copiedMessageId === message.id}
-                            onClick={() => handleCopyMessage(message.id, turnContent)}
-                            title="Copy response"
-                            ariaLabel="Copy response"
-                          />
-                        )}
-	                        {isEndOfTurn && turnForMessage && (
-	                          <MessageSourcesAction
-	                            onClick={() => {
-	                              void handleOpenSourcesUsed(turnForMessage);
-	                            }}
-	                            title="Sources used"
-	                            ariaLabel="Sources used"
+	                        {isEndOfTurn && (
+	                          <MessageCopyAction
+	                            copied={copiedMessageId === message.id}
+	                            onClick={() => handleCopyMessage(message.id, turnContent)}
+	                            title="Copy"
+	                            ariaLabel="Copy"
 	                          />
 	                        )}
-	                        {canTeachCommunity && (
-	                          <MessageTeachAction
-	                            onClick={() => {
-	                              void handleTeachCommunityFromTurn({
-	                                messageId: message.id,
-	                                turnId: turnForMessage?.id ?? null,
-	                                turnContent,
-	                                communityEvidence,
-	                              });
-	                            }}
-		                            title={
-		                              teachStatus?.status === "submitting"
-		                                ? "Teaching community memory..."
-		                                : teachStatus?.status === "submitted"
-		                                  ? teachStatus.promotedMemoryId
-		                                    ? "Teach again (last auto-promoted)"
-		                                    : "Teach again (last in review)"
-		                                  : "Teach community"
-		                            }
-		                            ariaLabel="Teach community memory"
-		                            disabled={teachStatus?.status === "submitting"}
-		                            className={`message-copy-btn${teachStatus?.status === "submitted" ? " copied" : ""}`}
+		                        {isEndOfTurn && turnForMessage && (
+		                          <MessageSourcesAction
+		                            onClick={() => {
+		                              void handleOpenSourcesUsed(turnForMessage);
+		                            }}
+		                            title="Sources used"
+		                            ariaLabel="Sources used"
 		                          />
-	                        )}
-	                      </MessageFooter>
-	                    )}
+		                        )}
+		                      </MessageFooter>
+		                    )}
 	                  </div>
 	                );
               } else if (item.type === "tool_group") {
@@ -8089,7 +8093,7 @@ function App() {
                 );
               }
             })}
-		            {streamingContent && (() => {
+		            {streamingContent && !hasPersistedAssistantForStreamingRun && (() => {
 		              const { cleaned } = cleanStreamingContent(streamingContent);
                   const rendered = streamingRenderedContent ?? cleaned;
                   const usePlainTextFallback = rendered.length > 24000;
@@ -8593,8 +8597,8 @@ function App() {
 		                    cancelActiveRun();
 	                    return;
                   }
-                  handleSendMessage();
-                }}
+	                  void handleSendMessage();
+	                }}
                 disabled={
                   isTurnRunning
                     ? !activeThreadId
@@ -11448,36 +11452,22 @@ function formatExecutionLabel(
   engineIdInput: string | null | undefined,
   modelIdInput: string | null | undefined,
   modelToggles: ModelToggle[],
-  inferenceSourceInput?: string | null
+  inferenceSourceInput?: string | null,
+  inferenceLaneFallbacksInput?: ReadonlyArray<{ from: string; to: string; reason: string }> | null,
 ): string | null {
+  const modelSignature = formatModelAttributionLabel({
+    modelId: modelIdInput,
+    inferenceSource: inferenceSourceInput,
+    modelToggles,
+    inferenceLaneFallbacks: inferenceLaneFallbacksInput,
+    freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
+    freeModelLabels: DESKTOP_FREE_MODEL_LABELS,
+  });
+  if (modelSignature) return modelSignature;
+
   const engineId = (engineIdInput ?? "").trim();
   if (!engineId) return null;
-  const normalizedEngineId = engineId.replace(/\s+/g, "_");
-  if (
-    normalizedEngineId === "messages_agent" ||
-    normalizedEngineId === "openrouter_messages_agent" ||
-    normalizedEngineId === "openrouter_chat"
-  ) {
-    const modelId = (modelIdInput ?? "").trim();
-    if (!modelId) return null;
-    const modelLabel = modelToggles.find((toggle) => toggle.id === modelId)?.label;
-    return appendInferenceSourceLabel(modelLabel ?? modelId, inferenceSourceInput);
-  }
   return engineId.replace(/_/g, " ");
-}
-
-function extractInferenceSourceFromContentJson(contentJson: string): string | null {
-  try {
-    const parsed = JSON.parse(contentJson) as { meta?: unknown };
-    const meta = parsed?.meta;
-    if (!meta || typeof meta !== "object") return null;
-    const value = (meta as { inference_source?: unknown }).inference_source;
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  } catch {
-    return null;
-  }
 }
 
 function previewText(value: string, limit = 160): string {
