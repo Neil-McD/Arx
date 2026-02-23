@@ -4,11 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm run dev:desktop",
+    "dev:desktop": "vite --port 5273 --strictPort",
+    "dev:web": "npm --prefix apps/web run dev -- --port 5174 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh",
+    "check:function-auth-lane": "bash scripts/function_auth_lane_coherence_guard.sh",
     "check:reliability-smoke": "bash scripts/reliability_smoke_gate.sh",
     "check:reliability-turn-path": "bash scripts/reliability_turn_path_smoke_check.sh"
   },

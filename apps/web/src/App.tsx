@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import "highlight.js/styles/github-dark.css";
 import {
   clearPersistedSupabaseSession,
+  clearSupabaseAuthFlowPending,
+  clearSupabaseSignedOutIntentMarker,
   fetchWithSupabaseAuthShared,
   fetchWithSupabasePublicShared,
   getOAuthRedirectUrl,
@@ -9,8 +11,13 @@ import {
   getSupabaseAnonKey,
   getSupabaseUrl,
   loadPersistedSupabaseSession,
+  hasRecentSupabaseAuthFlowPending,
+  markSupabaseAuthFlowPending,
+  parseSupabaseOAuthCallbackFromLocation,
   persistSupabaseSession,
   readSupabaseError,
+  SUPABASE_SIGNED_OUT_INTENT_KEY,
+  SUPABASE_SIGNED_OUT_TAB_INTENT_KEY,
   refreshSupabaseSessionWithLock,
   refreshSupabaseSession,
   type SupabaseSession
@@ -81,6 +88,7 @@ import {
   formatSubscriptionPrice,
   type BuilderBillingReturn,
 } from "../../../shared/builderBilling";
+import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
@@ -182,6 +190,7 @@ import {
   SUPABASE_SESSION_EXPIRED_MESSAGE,
 } from "../../../shared/supabaseAuthFlow";
 import { consumeSupabaseOAuthCallback } from "../../../shared/supabaseOAuthCallback";
+import { clearOAuthCallbackParamsFromLocation } from "../../../shared/supabasePkce";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import {
@@ -633,6 +642,7 @@ export default function App() {
   const refreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
   const didJustSignInRef = useRef(false);
+  const authSessionEpochRef = useRef(0);
 
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
 
@@ -683,6 +693,8 @@ export default function App() {
   const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
   const [, setIsLoadingBuilderBilling] = useState(false);
   const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
+  const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
+  const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
   const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
   const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
   const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
@@ -1826,6 +1838,24 @@ export default function App() {
     refreshLocked: refreshSupabaseSessionLocked,
     didJustSignInRef,
     onMountOAuthBootstrap: async () => {
+      const parsedOAuthCallback = parseSupabaseOAuthCallbackFromLocation();
+      try {
+        if (
+          sessionStorage.getItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY) === "1" ||
+          localStorage.getItem(SUPABASE_SIGNED_OUT_INTENT_KEY) === "1"
+        ) {
+          clearOAuthCallbackParamsFromLocation();
+          clearSupabaseAuthFlowPending();
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      if (parsedOAuthCallback && !hasRecentSupabaseAuthFlowPending()) {
+        clearOAuthCallbackParamsFromLocation();
+        clearSupabaseAuthFlowPending();
+        return;
+      }
       const outcome = await consumeSupabaseOAuthCallback({
         onBeforeStart: () => {
           setAuthError(null);
@@ -1862,7 +1892,9 @@ export default function App() {
           }
         },
         profileLoadErrorMessage: "Failed to load user profile from Supabase.",
+        parseResult: parsedOAuthCallback,
       });
+      if (outcome !== "none") clearSupabaseAuthFlowPending();
       if (outcome === "none") return;
     },
     onDidJustSignIn: () => {
@@ -1902,7 +1934,13 @@ export default function App() {
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       const key = String(event.key ?? "").trim();
-      if (key && !key.startsWith("arx_supabase_session")) return;
+      if (
+        key &&
+        !key.startsWith("arx_supabase_session") &&
+        key !== SUPABASE_SIGNED_OUT_INTENT_KEY
+      ) {
+        return;
+      }
       const latest = loadPersistedSupabaseSession();
       if (!latest) {
         if (sessionRef.current) {
@@ -2032,6 +2070,15 @@ export default function App() {
       profileSaveTimeoutRef.current = null;
     }
   }, [profileStorageUserId]);
+
+  useEffect(() => {
+    if (supabaseSession) return;
+    if (!profileName && !profileUsername && !profileBio && !profileAvatarUrl) return;
+    setProfileName("");
+    setProfileUsername("");
+    setProfileBio("");
+    setProfileAvatarUrl(null);
+  }, [supabaseSession, profileName, profileUsername, profileBio, profileAvatarUrl]);
 
   const isProfileDirty = useMemo(() => {
     if (!supabaseSession) return false;
@@ -2230,11 +2277,14 @@ export default function App() {
   });
 
   async function refreshSupabaseSessionLocked(refreshToken: string): Promise<SupabaseSession | null> {
+    if (!sessionRef.current) return null;
+    const epochAtRefreshStart = authSessionEpochRef.current;
     return await refreshSupabaseSessionWithLock({
       refreshToken,
       inFlightRef: refreshInFlightRef,
       refreshSession: refreshSupabaseSession,
       onRefreshed: (refreshed) => {
+        if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
         setSupabaseSession(refreshed);
         sessionRef.current = refreshed;
@@ -2245,6 +2295,8 @@ export default function App() {
 
   async function handleSignIn() {
     setAuthError(null);
+    clearSupabaseSignedOutIntentMarker();
+    markSupabaseAuthFlowPending();
     storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
     const result = await beginGoogleSupabaseSignIn();
     if (!result.ok) {
@@ -2370,6 +2422,8 @@ export default function App() {
       return;
     }
 
+    clearSupabaseSignedOutIntentMarker();
+    markSupabaseAuthFlowPending();
     storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
     setMagicLinkStatus("sending");
     setMagicLinkError(null);
@@ -2411,78 +2465,86 @@ export default function App() {
   }
 
   async function handleSignOut() {
-    try {
-      await revokeSupabaseSessionRemote(supabaseSession?.access_token);
-    } finally {
-      // Always clear local auth state, even if remote logout fails.
-      await resetWebSessionStateAfterSignOut({
-        clearPersistedSupabaseSession,
-        setSupabaseSession,
-        setCommunities,
-        setIsLoadingCommunities,
-        setCommunityRoleById,
-        setActiveCommunityId,
-        setCommunityTab,
-        setCommunityMessages,
-        setCommunityMessageInput,
-        setCommunityChatError,
-        setIsLoadingChat,
-        setIsLoadingMoreChat,
-        setCommunityChatHasMore,
-        setUnreadCount,
-        setIsUserAtBottom,
-        isUserAtBottomRef,
-        setIsSendingCommunityMessage,
-        setReplyingToMessage,
-        setMessageReactions,
-        setReactionPickerMessageId,
-        setEditingMessageId,
-        setEditingMessageText,
-        setEditingMessagePrefix,
-        setCommunityResources,
-        setIsLoadingResources,
-        setShowResourceModal,
-        setEditingResourceId,
-        setResourceTitleInput,
-        setResourceUrlInput,
-        setResourceBodyInput,
-        setResourcePinnedInput,
-        setResourceError,
-        setIsSavingResource,
-        setResourceSuccess,
-        setOpenResourceEmbedId,
-        setCommunityMembers,
-        setCommunityInvites,
-        setIsLoadingCommunityInvites,
-        setInviteMaxUsesPreset,
-        setInviteMaxUsesCustom,
-        setInviteExpiryPreset,
-        setInviteExpiryCustom,
-        setInviteCreateError,
-        setIsCreatingInvite,
-        setCommunitySettingsName,
-        setCommunitySettingsSlug,
-        setCommunitySettingsDescription,
-        setCommunitySettingsVisibility,
-        setCommunitySettingsAvatarUrl,
-        setCommunitySettingsBannerUrl,
-        setCommunitySettingsError,
-        setIsSavingCommunitySettings,
-        setIsSettingsBannerDragOver,
-        setIsSettingsAvatarDragOver,
-        setThreads,
-        setWorkspaceWantsNewChatMode,
-        setActiveThreadId,
-        setThreadMessages,
-        streamingAbortRef,
-        streamingRafRef,
-        streamingContentRef,
-        setStreamingContent,
-        setStreamingThreadId,
-        setStreamingRunId,
-        setStreamingMeta,
-        setDiscoverCommunities,
-      });
+    // Fail closed immediately so a fast refresh cannot rehydrate auth.
+    clearPersistedSupabaseSession();
+    clearSupabaseAuthFlowPending();
+    clearOAuthCallbackParamsFromLocation();
+
+    const accessToken = (sessionRef.current?.access_token ?? supabaseSession?.access_token ?? "").trim();
+    authSessionEpochRef.current += 1;
+    setAuthError(null);
+    sessionRef.current = null;
+    setSupabaseSession(null);
+    await resetWebSessionStateAfterSignOut({
+      clearPersistedSupabaseSession,
+      setSupabaseSession,
+      setCommunities,
+      setIsLoadingCommunities,
+      setCommunityRoleById,
+      setActiveCommunityId,
+      setCommunityTab,
+      setCommunityMessages,
+      setCommunityMessageInput,
+      setCommunityChatError,
+      setIsLoadingChat,
+      setIsLoadingMoreChat,
+      setCommunityChatHasMore,
+      setUnreadCount,
+      setIsUserAtBottom,
+      isUserAtBottomRef,
+      setIsSendingCommunityMessage,
+      setReplyingToMessage,
+      setMessageReactions,
+      setReactionPickerMessageId,
+      setEditingMessageId,
+      setEditingMessageText,
+      setEditingMessagePrefix,
+      setCommunityResources,
+      setIsLoadingResources,
+      setShowResourceModal,
+      setEditingResourceId,
+      setResourceTitleInput,
+      setResourceUrlInput,
+      setResourceBodyInput,
+      setResourcePinnedInput,
+      setResourceError,
+      setIsSavingResource,
+      setResourceSuccess,
+      setOpenResourceEmbedId,
+      setCommunityMembers,
+      setCommunityInvites,
+      setIsLoadingCommunityInvites,
+      setInviteMaxUsesPreset,
+      setInviteMaxUsesCustom,
+      setInviteExpiryPreset,
+      setInviteExpiryCustom,
+      setInviteCreateError,
+      setIsCreatingInvite,
+      setCommunitySettingsName,
+      setCommunitySettingsSlug,
+      setCommunitySettingsDescription,
+      setCommunitySettingsVisibility,
+      setCommunitySettingsAvatarUrl,
+      setCommunitySettingsBannerUrl,
+      setCommunitySettingsError,
+      setIsSavingCommunitySettings,
+      setIsSettingsBannerDragOver,
+      setIsSettingsAvatarDragOver,
+      setThreads,
+      setWorkspaceWantsNewChatMode,
+      setActiveThreadId,
+      setThreadMessages,
+      streamingAbortRef,
+      streamingRafRef,
+      streamingContentRef,
+      setStreamingContent,
+      setStreamingThreadId,
+      setStreamingRunId,
+      setStreamingMeta,
+      setDiscoverCommunities,
+    });
+    if (accessToken) {
+      void revokeSupabaseSessionRemote(accessToken);
     }
   }
 
@@ -2614,6 +2676,41 @@ export default function App() {
     setBuilderBillingStatus,
     redeemPendingPurchasesInFlightRef,
   });
+
+  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+    const session = sessionRef.current ?? supabaseSession;
+    if (!session || !canUseDevTierOverride) return;
+    const url = getSupabaseUrl();
+    if (!url) {
+      setDevBuilderTierError("Missing Supabase URL.");
+      return;
+    }
+    setIsSettingDevBuilderTier(true);
+    setDevBuilderTierError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_builder_tier: tier }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await loadBuilderBillingStatus(session);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to set dev builder tier.";
+      setDevBuilderTierError(message);
+    } finally {
+      setIsSettingDevBuilderTier(false);
+    }
+  }
 
   const {
     openCreateCommunityModal,
@@ -3144,6 +3241,15 @@ export default function App() {
   const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
+  );
+  const canUseDevTierOverride = useMemo(
+    () =>
+      canUseCreatorDevTierOverride({
+        email: supabaseSession?.user?.email ?? null,
+        isDev: import.meta.env.DEV,
+        featureFlag: import.meta.env.VITE_ENABLE_DEV_TIER_OVERRIDE,
+      }),
+    [supabaseSession?.user?.email],
   );
   const userAccessPolicy = useMemo(
     () =>
@@ -4293,14 +4399,23 @@ export default function App() {
                         onDragLeave={() => setIsProfileAvatarDragOver(false)}
                         onDrop={handleProfileAvatarDrop}
                       >
-                        {profileAvatarUrl ? (
+                        {supabaseSession && profileAvatarUrl ? (
                           <img src={profileAvatarUrl} alt="Profile avatar" />
                         ) : (
-                          <span>
-                            {getInitials(
-                              (profileName || profileUsername || supabaseSession?.user.email || "AR").replace(/^@/, "")
-                            )}
-                          </span>
+                          supabaseSession ? (
+                            <span>
+                              {getInitials(
+                                (profileName || profileUsername || supabaseSession.user.email || "AR").replace(/^@/, "")
+                              )}
+                            </span>
+                          ) : (
+                            <span className="profile-avatar-placeholder" aria-hidden="true">
+                              <svg viewBox="0 0 24 24">
+                                <circle cx="12" cy="8" r="4.2" />
+                                <path d="M4.5 20c1.8-4 5-6 7.5-6s5.7 2 7.5 6" />
+                              </svg>
+                            </span>
+                          )
                         )}
                       </div>
                       <div className="profile-avatar-actions">
@@ -4312,7 +4427,7 @@ export default function App() {
                             onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
                           />
                         </label>
-                        {profileAvatarUrl && (
+                        {supabaseSession && profileAvatarUrl && (
                           <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
                             Remove
                           </button>
@@ -4443,10 +4558,45 @@ export default function App() {
                                 )}
                               </div>
                             </div>
+                            {canUseDevTierOverride && (
+                              <div className="account-row">
+                                <div className="account-identity">
+                                  <span>Internal tier override (dev)</span>
+                                  <strong>Creator-only testing control</strong>
+                                </div>
+                                <div className="auth-actions">
+                                  <button
+                                    type="button"
+                                    className={isBuilderTierFree(tier) ? "" : "secondary"}
+                                    onClick={() => void setDevBuilderTier("free")}
+                                    disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
+                                  >
+                                    Free
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={tier === "builder" ? "" : "secondary"}
+                                    onClick={() => void setDevBuilderTier("builder")}
+                                    disabled={isSettingDevBuilderTier || tier === "builder"}
+                                  >
+                                    Builder
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={tier === "pro" || tier === "architect" ? "" : "secondary"}
+                                    onClick={() => void setDevBuilderTier("architect")}
+                                    disabled={isSettingDevBuilderTier || tier === "pro" || tier === "architect"}
+                                  >
+                                    Architect
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </>
                         );
                       })()}
                       {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+                      {devBuilderTierError && <div className="auth-error">{devBuilderTierError}</div>}
                     </div>
                   )}
 

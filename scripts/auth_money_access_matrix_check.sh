@@ -167,6 +167,14 @@ grep -q 'if (isFunctionsSurface) return false;' "$AUTH_CORE" || {
   echo "FAIL: functions-surface auth expiry guard missing"
   exit 1
 }
+if rg -n 'isFunctionsBearerJwtFailure\(finalFailure\)\) return await expireSession\(\);' "$AUTH_CORE" >/dev/null; then
+  echo "FAIL: direct function auth failure -> local session expiry path reintroduced"
+  exit 1
+fi
+grep -q 'const verifiedSession = await ensureSupabaseSessionForAuthenticatedSend({' "$AUTH_CORE" || {
+  echo "FAIL: functions lane must verify session with /auth/v1/user before local expiry"
+  exit 1
+}
 
 echo "[16/22] Canonical product state RPC must exist and expose plan+inference caps..."
 require_migration_pattern 'get_my_product_state' "missing get_my_product_state RPC"

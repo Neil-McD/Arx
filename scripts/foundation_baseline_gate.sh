@@ -28,6 +28,7 @@ run_step "Community AI-agent single-slot contract" bash scripts/community_agent_
 run_step "Secret redaction contract check" bash scripts/secret_redaction_contract_check.sh
 run_step "Cloud payment-provider-events hardening contract" bash scripts/cloud_payment_provider_events_hardening_check.sh
 run_step "Edge verify_jwt default guard" bash scripts/edge_verify_jwt_default_guard.sh
+run_step "Function auth lane coherence guard" bash scripts/function_auth_lane_coherence_guard.sh
 run_step "Auth + money + access matrix contract" bash scripts/auth_money_access_matrix_check.sh
 run_step "Runtime turn idempotency scope contract" bash scripts/runtime_turn_idempotency_scope_check.sh
 run_step "Desktop agent lane contract" bash scripts/desktop_agent_lane_contract_guard.sh
