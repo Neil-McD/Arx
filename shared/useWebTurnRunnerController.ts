@@ -331,6 +331,26 @@ export function useWebTurnRunnerController<
             return { cancelled: false, error: null };
           }
           if (failure.category === "auth") {
+            // Function-lane auth errors can be verifier/config drift while the
+            // browser session is still valid. Confirm auth truth before showing
+            // a sign-in error.
+            try {
+              const authProbe = await current.fetchWithSupabaseAuth(
+                `${url}/auth/v1/user`,
+                { method: "GET" },
+                session,
+              );
+              if (authProbe.ok) {
+                const base = "Arx AI is temporarily unavailable. Please retry.";
+                const withRequestId =
+                  failure.requestId && !base.toLowerCase().includes("request_id=")
+                    ? `${base} (request_id=${failure.requestId})`
+                    : base;
+                return { cancelled: false, error: withRequestId };
+              }
+            } catch {
+              // fall through: true auth/session failure should keep sign-in copy.
+            }
             return { cancelled: false, error: formatSupabaseFunctionErrorMessage(failure) };
           }
           throw new Error(formatSupabaseFunctionErrorMessage(failure));

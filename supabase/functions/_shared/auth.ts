@@ -52,16 +52,31 @@ function includesJwtFailureText(value: string): boolean {
   );
 }
 
-function includesVerifierMisconfiguredText(value: string): boolean {
-  const lower = (value ?? "").trim().toLowerCase();
-  if (!lower) return false;
-  return (
-    lower.includes("invalid api key") ||
-    lower.includes("apikey") ||
-    lower.includes("service role") ||
-    lower.includes("service_role") ||
-    lower.includes("project not found")
-  );
+function parseJwtIssuerOrigin(token: string): string | null {
+  const parts = String(token ?? "").trim().split(".");
+  if (parts.length !== 3) return null;
+  const payloadRaw = parts[1] ?? "";
+  if (!payloadRaw) return null;
+  const padded = payloadRaw.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payloadRaw.length / 4) * 4, "=");
+  let decoded = "";
+  try {
+    decoded = atob(padded);
+  } catch {
+    return null;
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+  const iss = payload && typeof payload === "object" ? (payload as { iss?: unknown }).iss : null;
+  if (typeof iss !== "string" || !iss.trim()) return null;
+  try {
+    return new URL(iss).origin.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 async function readAuthErrorBody(response: Response): Promise<string> {
@@ -95,6 +110,13 @@ export function extractBearerToken(req: Request): string {
 export async function requireVerifiedUserId(req: Request): Promise<string> {
   const token = extractBearerToken(req);
   const admin = getSupabaseAdmin();
+  let verifierOrigin: string | null = null;
+  try {
+    verifierOrigin = new URL(admin.url).origin.toLowerCase();
+  } catch {
+    verifierOrigin = null;
+  }
+  const tokenIssuerOrigin = parseJwtIssuerOrigin(token);
 
   // Fail closed: verify the JWT against Supabase Auth, even if a function is
   // accidentally deployed with verify_jwt=false.
@@ -116,7 +138,14 @@ export async function requireVerifiedUserId(req: Request): Promise<string> {
 
   if (!res.ok) {
     const verifyError = await readAuthErrorBody(res);
-    if (includesJwtFailureText(verifyError) || (res.status === 401 && !includesVerifierMisconfiguredText(verifyError))) {
+    // Only explicit JWT/bearer failures map to 401. All other verifier
+    // failures are treated as infrastructure/config drift (503), never auth.
+    if (includesJwtFailureText(verifyError)) {
+      if (tokenIssuerOrigin && verifierOrigin && tokenIssuerOrigin !== verifierOrigin) {
+        throw createAuthApiError("auth_verifier_misconfigured", "Auth verification misconfigured.", 503, {
+          verify_status: res.status,
+        });
+      }
       throw createAuthApiError("auth_invalid_bearer_token", "Invalid bearer token", 401, {
         verify_status: res.status,
       });

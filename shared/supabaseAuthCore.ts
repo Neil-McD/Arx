@@ -342,9 +342,18 @@ export async function fetchWithSupabaseAuthShared(params: {
   };
 
   const isFunctionsRequest = classifySupabaseSurface(url) === "functions";
-  const isAuthSurfaceRequest = (url ?? "").toLowerCase().includes("/auth/v1/");
   const isFunctionsAuthFailure = (response: Response): boolean =>
     isFunctionsRequest && (response.status === 401 || response.status === 403);
+  const canRetryWithSession = (
+    candidate: SupabaseSession | null,
+    baseline: SupabaseSession,
+  ): candidate is SupabaseSession => {
+    if (!candidate) return false;
+    return (
+      candidate.access_token !== baseline.access_token ||
+      candidate.refresh_token !== baseline.refresh_token
+    );
+  };
 
   const baseSession = sessionRef.current ?? session;
   let requestSession = baseSession;
@@ -359,11 +368,21 @@ export async function fetchWithSupabaseAuthShared(params: {
     if (latestAttempt && !isFunctionsAuthFailure(latestAttempt)) return latestAttempt;
 
     const refreshedAttempt = await tryRefreshAndFetch();
-    if (refreshedAttempt) {
-      return refreshedAttempt;
-    }
+    if (refreshedAttempt && !isFunctionsAuthFailure(refreshedAttempt)) return refreshedAttempt;
 
-    const finalFailure = latestAttempt ?? first;
+    let finalFailure = refreshedAttempt ?? latestAttempt ?? first;
+    const verifiedSession = await ensureSupabaseSessionForAuthenticatedSend({
+      session: requestSession,
+      sessionRef,
+      refreshLocked,
+    });
+    if (!verifiedSession) return await expireSession();
+    if (canRetryWithSession(verifiedSession, requestSession)) {
+      requestSession = verifiedSession;
+      const verifiedAttempt = await doFetch(verifiedSession);
+      if (!isFunctionsAuthFailure(verifiedAttempt)) return verifiedAttempt;
+      finalFailure = verifiedAttempt;
+    }
     return finalFailure;
   }
   if (!(await isSupabaseJwtExpired(first, url))) return first;
@@ -374,10 +393,10 @@ export async function fetchWithSupabaseAuthShared(params: {
   const refreshedAttempt = await tryRefreshAndFetch();
   if (!refreshedAttempt) {
     const finalFailure = latestAttempt ?? first;
-    if (isAuthSurfaceRequest && (await isSupabaseJwtExpired(finalFailure, url))) return await expireSession();
+    if (await isSupabaseJwtExpired(finalFailure, url)) return await expireSession();
     return finalFailure;
   }
-  if (isAuthSurfaceRequest && (await isSupabaseJwtExpired(refreshedAttempt, url))) return await expireSession();
+  if (await isSupabaseJwtExpired(refreshedAttempt, url)) return await expireSession();
   return refreshedAttempt;
 }
 
