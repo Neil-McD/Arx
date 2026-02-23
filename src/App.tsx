@@ -181,6 +181,7 @@ import {
   parseBuilderBillingReturn,
   type BuilderBillingReturn,
 } from "../shared/builderBilling";
+import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import {
   copyTextToClipboard,
   downloadTextFile,
@@ -189,6 +190,8 @@ import {
   formatToolLabel,
   getAvatarColor,
   getInitials,
+  shouldShowCommunitySenderMeta,
+  shouldShowDateSeparator,
   shortId,
 } from "../shared/chatUi";
 import {
@@ -263,6 +266,7 @@ import {
   SUPABASE_SESSION_EXPIRED_MESSAGE,
 } from "../shared/supabaseAuthFlow";
 import { consumeSupabaseOAuthCallback } from "../shared/supabaseOAuthCallback";
+import { clearOAuthCallbackParamsFromLocation } from "../shared/supabasePkce";
 import {
   buildTeachMemoryText,
   deriveTeachCandidateTitle,
@@ -291,9 +295,12 @@ import { resolveUserAccessPolicy } from "../shared/capabilities";
 import { CommunityNav } from "../shared/CommunityNav";
 import { BuilderUpgradeModal } from "../shared/BuilderUpgradeModal";
 import { DiscoverCommunityCard } from "../shared/DiscoverCommunityCard";
+import { formatCommunityVisibilityLabel, isPublishedCommunityVisibility } from "../shared/communityVisibility";
+import { openAiLogo } from "../shared/providerLogos";
 import { SettingsNavList } from "../shared/SettingsNavList";
 import {
   DEFAULT_ACTIVE_MODEL_ID,
+  DEFAULT_GUEST_MODEL_ID,
   FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
   FREE_MODEL_LABELS as SHARED_FREE_MODEL_LABELS,
   getDefaultModelToggles,
@@ -492,6 +499,35 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("desktop");
 
 const THREAD_LANE_PREF_KEY = "arx-thread-lane-filter-v1";
 const PROJECT_EXPANDED_PREF_KEY = "arx-project-expanded-v1";
+const SUPABASE_SIGNED_OUT_INTENT_KEY = "arx_supabase_signed_out_v1";
+const SUPABASE_SIGNED_OUT_TAB_INTENT_KEY = "arx_supabase_signed_out_tab_v1";
+
+function hasSupabaseSignedOutIntent(): boolean {
+  try {
+    if (sessionStorage.getItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY) === "1") return true;
+  } catch {
+    // ignore
+  }
+  try {
+    return localStorage.getItem(SUPABASE_SIGNED_OUT_INTENT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function clearSupabaseSignedOutIntent(): void {
+  try {
+    sessionStorage.removeItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY);
+  } catch {
+    // ignore
+  }
+  try {
+    localStorage.removeItem(SUPABASE_SIGNED_OUT_INTENT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 const SLASH_COMMAND_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape"]);
 const SLASH_COMMANDS = [
   { name: "/status", description: "Show session, model, and tool-call status." },
@@ -711,6 +747,7 @@ function App() {
 		  const autoJoinInvitesAttemptedRef = useRef<Set<string>>(new Set());
 		  const autoJoinPublicCommunitiesAttemptedRef = useRef<Set<string>>(new Set());
 		  const supabaseRefreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
+		  const authSessionEpochRef = useRef(0);
 		  const [authError, setAuthError] = useState<string | null>(null);
       const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaim[]>([]);
       const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
@@ -727,6 +764,8 @@ function App() {
       const [builderBillingStatus, setBuilderBillingStatus] = useState<BuilderBillingStatus | null>(null);
       const [, setIsLoadingBuilderBilling] = useState(false);
       const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
+      const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
+      const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
 	      const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
 	      const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
 	      const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
@@ -746,6 +785,12 @@ function App() {
 	        refreshToken: builderUpgradeScrollRefreshToken,
 	      });
 
+  // Keep ref + state aligned so authenticated sends and refresh logic observe
+  // the same session truth across hooks/controllers.
+  useEffect(() => {
+    supabaseSessionRef.current = supabaseSession;
+  }, [supabaseSession]);
+
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
     .sort()
@@ -759,7 +804,7 @@ function App() {
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
-  const [createCommunityVisibility, setCreateCommunityVisibility] = useState<"public" | "unlisted" | "private">("private");
+  const [createCommunityVisibility, setCreateCommunityVisibility] = useState<"published" | "unlisted">("unlisted");
   const [createCommunityAvatarUrl, setCreateCommunityAvatarUrl] = useState<string | null>(null);
   const [createCommunityDescription, setCreateCommunityDescription] = useState("");
   const [createCommunityBannerUrl, setCreateCommunityBannerUrl] = useState<string | null>(null);
@@ -893,7 +938,7 @@ function App() {
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
-  const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("private");
+  const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("unlisted");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
   const [, setCommunitySettingsMonthlyPlanId] = useState<string | null>(null);
@@ -3177,6 +3222,7 @@ function App() {
   }
 
   async function loadSupabaseSession() {
+    if (hasSupabaseSignedOutIntent()) return;
     // Desktop auth session persistence invariant:
     // secure-store only (via shellClient), never localStorage fallback.
     let stored: string | null = null;
@@ -3286,6 +3332,16 @@ function App() {
 
   async function clearPersistedSupabaseSession() {
     try {
+      sessionStorage.setItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY, "1");
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.setItem(SUPABASE_SIGNED_OUT_INTENT_KEY, "1");
+    } catch {
+      // ignore
+    }
+    try {
       await shellClient.clearSupabaseSession();
     } catch {
       // ignore
@@ -3293,11 +3349,14 @@ function App() {
   }
 
   async function refreshSupabaseSessionLocked(refreshToken: string): Promise<SupabaseSession | null> {
+    if (!supabaseSessionRef.current) return null;
+    const epochAtRefreshStart = authSessionEpochRef.current;
     return await refreshSupabaseSessionWithLock({
       refreshToken,
       inFlightRef: supabaseRefreshInFlightRef,
       refreshSession: refreshSupabaseSession,
       onRefreshed: async (refreshed) => {
+        if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
         setSupabaseSession(refreshed);
         supabaseSessionRef.current = refreshed;
@@ -3665,6 +3724,41 @@ function App() {
 	    }
 	  }
 
+  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session || !canUseDevTierOverride) return;
+    const url = getSupabaseUrl();
+    if (!url) {
+      setDevBuilderTierError("Missing Supabase URL.");
+      return;
+    }
+    setIsSettingDevBuilderTier(true);
+    setDevBuilderTierError(null);
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_builder_tier: tier }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await loadBuilderBillingStatus(session);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to set dev builder tier.";
+      setDevBuilderTierError(message);
+    } finally {
+      setIsSettingDevBuilderTier(false);
+    }
+  }
+
   const openExternalUrl = useCallback(async (url: string): Promise<boolean> => {
     const trimmed = url.trim();
     if (!trimmed) return false;
@@ -3831,6 +3925,10 @@ function App() {
   }
 
   async function consumeOAuthHash(): Promise<"none" | "session_set" | "callback_error"> {
+    if (hasSupabaseSignedOutIntent()) {
+      clearOAuthCallbackParamsFromLocation();
+      return "none";
+    }
     return await consumeSupabaseOAuthCallback({
       onAuthError: (message) => {
         setAuthError(message);
@@ -3851,6 +3949,7 @@ function App() {
 
   async function handleSignIn() {
     setAuthError(null);
+    clearSupabaseSignedOutIntent();
     const result = await beginGoogleSupabaseSignIn();
     if (!result.ok) {
       setAuthError(result.error);
@@ -3860,17 +3959,20 @@ function App() {
   }
 
   async function handleSignOut() {
-    try {
-      await revokeSupabaseSessionRemote(supabaseSession?.access_token);
-    } finally {
-      // Always clear local auth state, even if remote logout fails.
-      await resetDesktopSessionStateAfterSignOut({
-        clearPersistedSupabaseSession,
-        setSupabaseSession,
-        setCommunities,
-        setActiveCommunityId,
-        navStackRef,
-      });
+    const accessToken = (supabaseSessionRef.current?.access_token ?? supabaseSession?.access_token ?? "").trim();
+    authSessionEpochRef.current += 1;
+    setAuthError(null);
+    supabaseSessionRef.current = null;
+    setSupabaseSession(null);
+    await resetDesktopSessionStateAfterSignOut({
+      clearPersistedSupabaseSession,
+      setSupabaseSession,
+      setCommunities,
+      setActiveCommunityId,
+      navStackRef,
+    });
+    if (accessToken) {
+      void revokeSupabaseSessionRemote(accessToken);
     }
   }
 
@@ -4107,6 +4209,15 @@ function App() {
         () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
         [builderBillingStatus?.builder_tier],
       );
+      const canUseDevTierOverride = useMemo(
+        () =>
+          canUseCreatorDevTierOverride({
+            email: supabaseSession?.user?.email ?? null,
+            isDev: import.meta.env.DEV,
+            featureFlag: import.meta.env.VITE_ENABLE_DEV_TIER_OVERRIDE,
+          }),
+        [supabaseSession?.user?.email],
+      );
 		  const userAccessPolicy = useMemo(
 		    () =>
 		      resolveUserAccessPolicy({
@@ -4117,6 +4228,18 @@ function App() {
 		    [supabaseSession, builderBillingStatus?.builder_tier],
 		  );
 		  const hasPaidAccess = userAccessPolicy.allowPlatformInference && Boolean(supabaseSession);
+      const forceShowDesktopChatgptRateLimitCardPreview = (() => {
+        if (typeof window === "undefined") return false;
+        try {
+          return window.localStorage.getItem("arx-force-chatgpt-rate-card") === "1";
+        } catch {
+          return false;
+        }
+      })();
+      const showDesktopChatgptRateLimitCard = Boolean(
+        forceShowDesktopChatgptRateLimitCardPreview ||
+          !chatgptAuthSummary,
+      );
 		  const applySelectedPickerModel = useCallback(
 		    async (modelId: string) => {
 		      setActiveModelId(modelId);
@@ -4226,6 +4349,17 @@ function App() {
             activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
         );
 
+        const activeProjectLabelForDraft = useMemo(() => {
+          if (threadLaneFilter !== "agent") return "";
+          if (!activeProject) return "";
+          const name = (activeProject.name ?? "").trim();
+          if (name) return name;
+          const rootPath = (activeProject.root_path ?? "").trim();
+          if (!rootPath) return "";
+          const parts = rootPath.split("/").filter(Boolean);
+          return parts[parts.length - 1] ?? rootPath;
+        }, [activeProject, threadLaneFilter]);
+
         const emptyThreadLanding = useMemo(() => {
           const landingMatchesCommunity = Boolean(
             activeCommunityId && activeCommunityAgentLandingCommunityIdRef.current === activeCommunityId,
@@ -4233,13 +4367,29 @@ function App() {
           const communityLanding = landingMatchesCommunity
             ? normalizeCommunityAgentLanding(activeCommunityAgentLanding)
             : null;
-          if (communityLanding) return communityLanding;
-          const canViewCommunity = communityActionGuards.canViewCommunity;
-          if (activeCommunity && canViewCommunity) {
-            return buildDefaultCommunityEmptyThreadLanding(activeCommunity.name);
+          const baseLanding = (() => {
+            if (communityLanding) return communityLanding;
+            const canViewCommunity = communityActionGuards.canViewCommunity;
+            if (activeCommunity && canViewCommunity) {
+              return buildDefaultCommunityEmptyThreadLanding(activeCommunity.name);
+            }
+            return DEFAULT_EMPTY_THREAD_LANDING;
+          })();
+          if (threadLaneFilter === "agent" && activeProjectLabelForDraft) {
+            return {
+              ...baseLanding,
+              title: `How can I help in ${activeProjectLabelForDraft}?`,
+            };
           }
-          return DEFAULT_EMPTY_THREAD_LANDING;
-        }, [activeCommunity, communityActionGuards.canViewCommunity, activeCommunityAgentLanding, activeCommunityId]);
+          return baseLanding;
+        }, [
+          activeCommunity,
+          communityActionGuards.canViewCommunity,
+          activeCommunityAgentLanding,
+          activeCommunityId,
+          threadLaneFilter,
+          activeProjectLabelForDraft,
+        ]);
 
         useDesktopUiLifecycleEffects({
           isModelPickerOpen,
@@ -4505,7 +4655,11 @@ function App() {
 	    getThreadRecord,
 	    activeModelId,
 	    defaultModelId: DEFAULT_ACTIVE_MODEL_ID,
+	    defaultGuestModelId: DEFAULT_GUEST_MODEL_ID,
+	    enabledModelIds: modelToggles.filter((toggle) => toggle.enabled).map((toggle) => toggle.id),
 	    freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
+	    hasPaidAccess,
+	    hasChatgptAuth: Boolean(chatgptAuthSummary),
 	    providerIdForModelId,
 	    onMissingModel: onMissingModelForThreadLifecycle,
 	    onInvalidModel: onInvalidModelForThreadSend,
@@ -4785,6 +4939,15 @@ function App() {
     setProfileBio(nextDraft.bio);
     setProfileAvatarUrl(nextDraft.avatarUrl);
   }, [profileStorageUserId]);
+
+  useEffect(() => {
+    if (supabaseSession) return;
+    if (!profileName && !profileUsername && !profileBio && !profileAvatarUrl) return;
+    setProfileName("");
+    setProfileUsername("");
+    setProfileBio("");
+    setProfileAvatarUrl(null);
+  }, [supabaseSession, profileName, profileUsername, profileBio, profileAvatarUrl]);
 
   useEffect(() => {
     writeProfileDraftForUser(profileStorageUserId, {
@@ -5359,6 +5522,18 @@ function App() {
   const handleTopbarToggleThreadsPanel = () => {
     setUserWantsSessions((prev) => !prev);
   };
+  const handleTopbarNewThread = () => {
+    if (threadLaneFilter === "chat" && !supabaseSession) {
+      setThreadLaneFilter("agent");
+      const fallbackLabel = activeProjectLabelForDraft;
+      showAppToastMessage(
+        fallbackLabel
+          ? `Chat requires sign-in. Started an agent thread in ${fallbackLabel}.`
+          : "Chat requires sign-in. Started an agent thread instead.",
+      );
+    }
+    enterDraftThread();
+  };
   const handleTopbarBackToWorkspace = () => {
     if (goBack()) return;
     const transition = deriveBackToWorkspaceFallbackTransition({ activeView });
@@ -5386,7 +5561,7 @@ function App() {
   return (
     <div className="app-root desktop-root">
       <DesktopTopbar
-        state={{
+			                state={{
           activePage,
           activeView,
           userWantsSessions,
@@ -5399,7 +5574,7 @@ function App() {
           getCommunityInitials: communityInitials,
           onBackFromWorkspaceSettings: handleTopbarBackFromWorkspaceSettings,
           onToggleThreadsPanel: handleTopbarToggleThreadsPanel,
-          onNewThread: enterDraftThread,
+          onNewThread: handleTopbarNewThread,
           onBackToWorkspace: handleTopbarBackToWorkspace,
           onOpenCommunity: handleTopbarOpenCommunity,
         }}
@@ -5452,10 +5627,11 @@ function App() {
 		                  projectExpandedById,
 		                  projectMenuProjectId,
 		                  generalThreads,
-		                  laneThreadsCount: laneThreads.length,
-		                  chatThreadGroups,
-		                }}
-		                actions={{
+				                  laneThreadsCount: laneThreads.length,
+				                  chatThreadGroups,
+		                      showChatSignInPrompt: threadLaneFilter === "chat" && !supabaseSession,
+				                }}
+				                actions={{
 		                  onThreadSearchQueryChange: setThreadSearchQuery,
 		                  onSelectChatLane: threadPanelController.setChatLane,
 		                  onSelectAgentLane: threadPanelController.setAgentLane,
@@ -5466,9 +5642,10 @@ function App() {
 		                  projectMenuRef,
 		                  onRenameProject: handleRenameProject,
 		                  onRemoveProject: handleRemoveProject,
-		                  renderSessionItem,
-		                }}
-		              />
+			                  renderSessionItem,
+		                      onSignInForChat: handleSignIn,
+				                }}
+				              />
             </>
           )}
         </aside>
@@ -5688,12 +5865,11 @@ function App() {
                       className="select-styled"
                       value={createCommunityVisibility}
                       onChange={(event) =>
-                        setCreateCommunityVisibility(event.target.value as "public" | "unlisted" | "private")
+                        setCreateCommunityVisibility(event.target.value as "published" | "unlisted")
                       }
                     >
-                      <option value="private">Private</option>
+                      <option value="published">Published</option>
                       <option value="unlisted">Unlisted</option>
-                      <option value="public">Public</option>
                   </select>
                 </label>
                 {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
@@ -5950,7 +6126,7 @@ function App() {
                   <div className="settings-section-desc">
                     {supabaseSession
                       ? "Profile details shown in communities. Save to sync across devices."
-                      : "Local profile details shown in communities on this device."}
+                      : "Sign in to set your profile details."}
                   </div>
                   <div className="profile-block">
                     <div
@@ -5962,29 +6138,35 @@ function App() {
                       onDragLeave={() => setIsProfileAvatarDragOver(false)}
                       onDrop={handleProfileAvatarDrop}
                     >
-                      {profileAvatarUrl ? (
+                      {supabaseSession && profileAvatarUrl ? (
                         <img src={profileAvatarUrl} alt="Profile avatar" />
                       ) : (
-                        <span>
-                          {getInitials(
-                            (profileName || profileUsername || supabaseSession?.user.email || "AR")
-                              .replace(/^@/, "")
-                          )}
+                        <span className="profile-avatar-placeholder" aria-hidden="true">
+                          <svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="8" r="4.2" />
+                            <path d="M4.5 20c1.8-4 5-6 7.5-6s5.7 2 7.5 6" />
+                          </svg>
                         </span>
                       )}
                     </div>
                     <div className="profile-avatar-actions">
-                      <label className="create-avatar-btn">
-                        Upload photo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(event) =>
-                            void handleProfileAvatarUpload(event.target.files?.[0] ?? null)
-                          }
-                        />
-                      </label>
-                      {profileAvatarUrl && (
+                      {supabaseSession ? (
+                        <label className="create-avatar-btn">
+                          Upload photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) =>
+                              void handleProfileAvatarUpload(event.target.files?.[0] ?? null)
+                            }
+                          />
+                        </label>
+                      ) : (
+                        <button className="create-avatar-btn" type="button" disabled>
+                          Sign in to upload
+                        </button>
+                      )}
+                      {supabaseSession && profileAvatarUrl && (
                         <button
                           className="create-avatar-remove"
                           type="button"
@@ -5999,20 +6181,23 @@ function App() {
                     <input
                       type="text"
                       placeholder="Name"
-                      value={profileName}
+                      value={supabaseSession ? profileName : ""}
+                      disabled={!supabaseSession}
                       onChange={(event) => setProfileName(event.target.value)}
                     />
                     <input
                       type="text"
                       placeholder="Username"
-                      value={profileUsername}
+                      value={supabaseSession ? profileUsername : ""}
+                      disabled={!supabaseSession}
                       onChange={(event) => setProfileUsername(event.target.value)}
                     />
                   </div>
                   <textarea
                     className="profile-bio"
                     placeholder="Bio"
-                    value={profileBio}
+                    value={supabaseSession ? profileBio : ""}
+                    disabled={!supabaseSession}
                     onChange={(event) => setProfileBio(event.target.value)}
                     rows={3}
                   />
@@ -6115,13 +6300,48 @@ function App() {
                                 >
                                   {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
                                 </button>
-	                              )}
+                              )}
                             </div>
                           </div>
+                          {canUseDevTierOverride && (
+                            <div className="account-row">
+                              <div className="account-identity">
+                                <span>Internal tier override (dev)</span>
+                                <strong>Creator-only testing control</strong>
+                              </div>
+                              <div className="auth-actions">
+                                <button
+                                  type="button"
+                                  className={isBuilderTierFree(tier) ? "" : "secondary"}
+                                  onClick={() => void setDevBuilderTier("free")}
+                                  disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
+                                >
+                                  Free
+                                </button>
+                                <button
+                                  type="button"
+                                  className={tier === "builder" ? "" : "secondary"}
+                                  onClick={() => void setDevBuilderTier("builder")}
+                                  disabled={isSettingDevBuilderTier || tier === "builder"}
+                                >
+                                  Builder
+                                </button>
+                                <button
+                                  type="button"
+                                  className={tier === "pro" || tier === "architect" ? "" : "secondary"}
+                                  onClick={() => void setDevBuilderTier("architect")}
+                                  disabled={isSettingDevBuilderTier || tier === "pro" || tier === "architect"}
+                                >
+                                  Architect
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </>
                       );
                     })()}
                     {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+                    {devBuilderTierError && <div className="auth-error">{devBuilderTierError}</div>}
                   </div>
                 )}
 
@@ -6655,10 +6875,10 @@ function App() {
                               ))}
                             </div>
                           )}
-                          <div className="web-starter-list" role="list">
-                            {prompts.map((prompt) => (
-                              <button
-                                key={prompt}
+	                          <div className="web-starter-list" role="list">
+	                            {prompts.map((prompt) => (
+	                              <button
+	                                key={prompt}
                                 className="web-starter-row"
                                 type="button"
                                 disabled={isSending}
@@ -6673,13 +6893,39 @@ function App() {
                                     <path d="M9 18l6-6-6-6" />
                                   </svg>
                                 </span>
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
+	                              </button>
+	                            ))}
+	                          </div>
+                          {showDesktopChatgptRateLimitCard && (
+                            <div className="desktop-chatgpt-rate-card" role="note" aria-label="ChatGPT rate limits">
+                              <div className="desktop-chatgpt-rate-body">
+                                <div className="desktop-chatgpt-rate-icon" aria-hidden="true">
+                                  <img className="desktop-chatgpt-rate-logo monochrome" src={openAiLogo} alt="" />
+                                </div>
+                                <div className="desktop-chatgpt-rate-copy">
+                                  <div className="desktop-chatgpt-rate-title">Use ChatGPT rate limits</div>
+                                  <div className="desktop-chatgpt-rate-subtitle">
+                                    Log in with ChatGPT to use your ChatGPT plan limits on desktop.
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="desktop-chatgpt-rate-actions">
+                                <button
+                                  className="desktop-chatgpt-rate-button"
+                                  type="button"
+                                  onClick={() => void handleChatgptLogin()}
+                                  disabled={isChatgptLoggingIn}
+                                >
+                                  <img className="desktop-chatgpt-rate-button-logo" src={openAiLogo} alt="" aria-hidden="true" />
+                                  {isChatgptLoggingIn ? "Connecting..." : "Log in with ChatGPT"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+	                        </>
+	                      );
+	                    })()}
+	                  </div>
                 )}
               </>
             )}
@@ -7512,14 +7758,9 @@ function App() {
 	                          const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
 	                          const alreadyMember = Boolean(memberCommunity);
 	                          const isJoining = joiningDiscoverCommunityId === community.slug;
-	                          const visibilityLabel =
-	                            community.visibility === "public"
-	                              ? "Public"
-	                              : community.visibility === "unlisted"
-	                                ? "Unlisted"
-	                                : "Private";
+	                          const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
 	                          const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
-	                          const isJoinable = community.visibility === "public";
+	                          const isJoinable = isPublishedCommunityVisibility(community.visibility);
 	                          const description =
 	                            community.description && community.description.trim().length > 0
 	                              ? community.description
@@ -7534,9 +7775,9 @@ function App() {
 		                              avatarUrl={community.avatar_url}
 		                              bannerUrl={community.banner_url}
 		                              priceLabel={priceLabel}
-		                              visibilityClass={community.visibility ?? "private"}
+		                              visibilityClass={isJoinable ? "published" : "unlisted"}
 		                              visibilityLabel={visibilityLabel}
-		                              isPublishedVisibility={community.visibility === "public"}
+		                              isPublishedVisibility={isJoinable}
 		                              clickable={canActivate}
 		                              ariaLabel={
 		                                canActivate

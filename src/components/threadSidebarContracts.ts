@@ -28,6 +28,7 @@ export type ThreadSidebarPanelState<TThread, TProject extends ProjectLike> = {
   generalThreads: TThread[];
   laneThreadsCount: number;
   chatThreadGroups: Array<ChatThreadGroup<TThread>>;
+  showChatSignInPrompt?: boolean;
 };
 
 export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
@@ -42,4 +43,5 @@ export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
   onRenameProject: (project: TProject) => void | Promise<void>;
   onRemoveProject: (project: TProject) => void | Promise<void>;
   renderSessionItem: (thread: TThread, opts?: { showProjectHint?: boolean }) => ReactNode;
+  onSignInForChat?: () => void | Promise<void>;
 };

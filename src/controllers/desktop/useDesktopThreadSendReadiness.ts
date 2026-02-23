@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { ThreadService } from "../../../shared/threadService";
-import { resolveCloudInferenceLane } from "../../../shared/inferenceLaneResolver";
+import { resolveCloudInferenceLane, resolveCloudModelSelection } from "../../../shared/inferenceLaneResolver";
 import { isModelAvailableOnSurface } from "../../../shared/modelCatalog";
 
 type ThreadSendReadinessThread = {
@@ -14,7 +14,11 @@ type UseDesktopThreadSendReadinessArgs<ThreadT extends ThreadSendReadinessThread
   getThreadRecord: (threadId: string) => Promise<ThreadT | null>;
   activeModelId: string | null;
   defaultModelId: string;
+  defaultGuestModelId: string;
+  enabledModelIds: ReadonlyArray<string>;
   freeModelAllowlist: ReadonlySet<string>;
+  hasPaidAccess: boolean;
+  hasChatgptAuth: boolean;
   providerIdForModelId: (modelId: string) => string | null;
   onMissingModel: () => void;
   onInvalidModel: () => void;
@@ -26,14 +30,39 @@ export function useDesktopThreadSendReadiness<ThreadT extends ThreadSendReadines
   args: UseDesktopThreadSendReadinessArgs<ThreadT>,
 ) {
   const normalizeModelForDesktopSurface = useCallback((requestedIds: Array<string | null | undefined>): string => {
+    let requestedModelId = "";
     for (const raw of requestedIds) {
       const candidate = String(raw ?? "").trim();
       if (!candidate) continue;
-      if (isModelAvailableOnSurface(candidate, "desktop")) return candidate;
+      if (isModelAvailableOnSurface(candidate, "desktop")) {
+        requestedModelId = candidate;
+        break;
+      }
     }
-    const fallback = String(args.defaultModelId ?? "").trim();
-    return fallback;
-  }, [args.defaultModelId]);
+    if (!requestedModelId) {
+      requestedModelId = String(args.defaultModelId ?? "").trim();
+    }
+    const selection = resolveCloudModelSelection({
+      requestedModelId,
+      enabledModelIds: args.enabledModelIds,
+      defaultAuthedModelId: args.defaultModelId,
+      defaultGuestModelId: args.defaultGuestModelId,
+      hasPaidAccess: args.hasPaidAccess,
+      freeModelAllowlist: args.freeModelAllowlist,
+      surface: "desktop",
+      hasChatgptAuth: args.hasChatgptAuth,
+    });
+    const resolved = String(selection.modelId ?? "").trim();
+    if (resolved && isModelAvailableOnSurface(resolved, "desktop")) return resolved;
+    return String(args.defaultGuestModelId ?? args.defaultModelId ?? "").trim();
+  }, [
+    args.defaultGuestModelId,
+    args.defaultModelId,
+    args.enabledModelIds,
+    args.freeModelAllowlist,
+    args.hasChatgptAuth,
+    args.hasPaidAccess,
+  ]);
 
   const ensureThreadReadyForSend = useCallback(
     async (sessionId: string, _session: unknown): Promise<boolean> => {
