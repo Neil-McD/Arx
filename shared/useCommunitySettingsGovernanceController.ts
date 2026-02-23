@@ -1,5 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
-import { toCanonicalCommunityVisibility, toLegacyCommunityVisibility } from "./communityVisibility";
+import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
 type SessionLike = {
   user: {
@@ -210,7 +210,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
             p_description: current.communitySettingsDescription.trim() || null,
             p_avatar_url: current.communitySettingsAvatarUrl?.trim() || null,
             p_banner_url: current.communitySettingsBannerUrl?.trim() || null,
-            p_visibility: toLegacyCommunityVisibility(visibility, "unlisted"),
+            p_visibility: visibility,
             p_monthly_amount_base_units: monthlyAmount,
             p_yearly_amount_base_units: yearlyAmount,
             p_currency: "usd",

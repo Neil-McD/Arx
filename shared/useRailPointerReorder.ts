@@ -21,7 +21,6 @@ type DragSession = {
   baseMinDeltaY: number;
   baseMaxDeltaY: number;
   hasMoved: boolean;
-  captureElement: HTMLElement;
 };
 
 type DragVisualState = {
@@ -129,14 +128,6 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
 
       if (session.hasMoved) {
         suppressNextClickRef.current = true;
-      }
-
-      try {
-        if (session.captureElement.hasPointerCapture(session.pointerId)) {
-          session.captureElement.releasePointerCapture(session.pointerId);
-        }
-      } catch {
-        // Ignore capture release failures.
       }
 
       document.body.style.userSelect = "";
@@ -277,7 +268,6 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
         baseMinDeltaY: containerRect.top - draggedRect.top,
         baseMaxDeltaY: containerRect.bottom - draggedRect.bottom,
         hasMoved: false,
-        captureElement: event.currentTarget,
       };
 
       setDragVisual({
@@ -289,11 +279,6 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
       });
       setDragActive(true);
 
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // Ignore capture failures.
-      }
       event.preventDefault();
     },
     [enabled, itemIds],

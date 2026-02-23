@@ -286,16 +286,13 @@ export function DesktopCommunitySettingsTab(props: DesktopCommunitySettingsTabPr
                     onMarkCommunitySettingsDirty();
                   }}
                 >
-                  <option value="private">Private</option>
+                  <option value="published">Published</option>
                   <option value="unlisted">Unlisted</option>
-                  <option value="public">Public</option>
                 </select>
                 <span className="create-community-hint">
-                  {communitySettingsVisibility === "public"
+                  {communitySettingsVisibility === "published"
                     ? "Discoverable. Anyone can preview chat and join to participate."
-                    : communitySettingsVisibility === "unlisted"
-                      ? "Not listed in discovery. Share the link when you're ready."
-                      : "Discoverable, but chat is gated until you join."}
+                    : "Not listed in discovery. Share the link when you're ready."}
                 </span>
               </label>
               <div className="create-community-field">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { type CreateCommunityDraft } from "./communityDraftStorage";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
-import { toCanonicalCommunityVisibility, toLegacyCommunityVisibility } from "./communityVisibility";
+import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
 type SessionLike = {
   user: {
@@ -212,7 +212,7 @@ export function useCommunityCreateController<
           body: JSON.stringify({
             p_name: draft.name,
             p_slug: draft.slug,
-            p_visibility: toLegacyCommunityVisibility(draft.visibility, "unlisted"),
+            p_visibility: draft.visibility,
             p_avatar_url: draft.avatar_url,
             p_description: draft.description,
             p_banner_url: draft.banner_url,
@@ -290,7 +290,7 @@ export function useCommunityCreateController<
           body: JSON.stringify({
             p_name: name,
             p_slug: slug,
-            p_visibility: toLegacyCommunityVisibility(current.createCommunityVisibility, "unlisted"),
+            p_visibility: current.createCommunityVisibility,
             p_avatar_url: current.createCommunityAvatarUrl?.trim() || null,
             p_description: current.createCommunityDescription.trim() || null,
             p_banner_url: current.createCommunityBannerUrl?.trim() || null,

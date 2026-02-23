@@ -152,17 +152,17 @@ export function DesktopCommunityChatTab(props: DesktopCommunityChatTabProps) {
                         <span>Loading messages...</span>
                       </div>
                     )}
-	                    {activeCommunity && !isLoadingChat && communityMessages.length === 0 && (
-	                      <div className="chat-empty-state">
+		                    {activeCommunity && !isLoadingChat && communityMessages.length === 0 && (
+		                      <div className="chat-empty-state">
                         <div className="chat-empty-icon">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                           </svg>
                         </div>
-                        <div className="chat-empty-title">Welcome to {activeCommunity.name}</div>
-                        <div className="chat-empty-text">This is the beginning of your community chat. Say hello!</div>
-	                      </div>
-	                    )}
+	                        <div className="chat-empty-title">Welcome to {activeCommunity.name}</div>
+	                        <div className="chat-empty-text">This is the beginning of your community chat. Say hello!</div>
+		                      </div>
+		                    )}
 	                    {activeCommunity && !isLoadingChat && isLoadingMoreChat && (
 	                      <div className="chat-loading">
 	                        <div className="loading-spinner" />
