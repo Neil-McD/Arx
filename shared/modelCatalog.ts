@@ -46,15 +46,11 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
 
 const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
   { id: "gpt-5.2", label: "GPT 5.2", section: "openai", description: "OpenAI", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "sonnet-4.5", label: "Sonnet 4.5", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "opus-4.5", label: "Opus 4.5", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
   { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "gemini-3-pro", label: "Gemini 3 Pro", section: "google", description: "Google", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "kimi-k2", label: "Kimi K2", section: "openrouter", description: "Moonshot via OpenRouter", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "glm-4.7", label: "GLM 4.7", section: "openrouter", description: "Zhipu via OpenRouter", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "deepseek-v3.2", label: "DeepSeek V3.2", section: "openrouter", description: "DeepSeek via OpenRouter", surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "grok-4.1", label: "Grok 4.1 Fast Reasoning", section: "x-ai", description: "xAI", surfaces: ["web", "desktop"], defaultEnabled: true },
 ];
 
 export const DEFAULT_GUEST_MODEL_ID = FREE_MODELS[0]!.id;

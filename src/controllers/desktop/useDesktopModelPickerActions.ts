@@ -89,31 +89,56 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
     return Array.from(byId.values());
   }, [enabledModels, freeModelAllowlist, freeModelLabels, inferPickerSection, premiumModelCatalog]);
 
+  const hasAccessToPickerModel = useCallback(
+    (model: DesktopCuratedPickerModel): boolean => {
+      if (model.access === "free") return true;
+      const isEnabled = modelToggles.some((toggle) => toggle.id === model.id);
+      if (!isEnabled) return false;
+      const providerId = providerIdForModelId(model.id);
+      if (!providerId) return false;
+      if (providerId === "openai") {
+        return hasChatgptAuth || hasPaidAccess;
+      }
+      return hasPaidAccess;
+    },
+    [hasChatgptAuth, hasPaidAccess, modelToggles, providerIdForModelId],
+  );
+
   const canSelectPickerModel = useCallback((model: DesktopCuratedPickerModel): boolean => {
+    if (!hasAccessToPickerModel(model)) return false;
     if (model.access === "free") return true;
-    const isEnabled = modelToggles.some((toggle) => toggle.id === model.id);
-    if (!isEnabled) return false;
     return isModelReady(model.id);
-  }, [isModelReady, modelToggles]);
+  }, [hasAccessToPickerModel, isModelReady]);
 
   const handleSelectPickerModel = useCallback(async (model: DesktopCuratedPickerModel, closeModelPicker: () => void) => {
     const isEnabled = model.access === "free" || modelToggles.some((toggle) => toggle.id === model.id);
     const providerId = providerIdForModelId(model.id);
-    const ready = isEnabled && (model.access === "free" || isModelReady(model.id));
-    if (!ready) {
-      if (!isEnabled) {
-        setMemoryToast("This model is coming soon.");
+    if (!isEnabled) {
+      setMemoryToast("This model is coming soon.");
+      return;
+    }
+
+    if (!hasAccessToPickerModel(model)) {
+      closeModelPicker();
+      if (!hasSupabaseSession) {
+        await handleSignIn();
+        return;
+      }
+      if (providerId === "openai" && !hasChatgptAuth) {
+        openModelSettings();
+        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
         return;
       }
       if (model.access === "paid" && !hasPaidAccess) {
-        closeModelPicker();
-        if (!hasSupabaseSession) {
-          await handleSignIn();
-          return;
-        }
         openBuilderUpgrade();
         return;
       }
+      setMemoryToast("This model is unavailable right now.");
+      return;
+    }
+
+    const ready = model.access === "free" || isModelReady(model.id);
+    if (!ready) {
       if (providerId === "openai" && !hasChatgptAuth) {
         openModelSettings();
         setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
@@ -127,6 +152,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
     await onApplyModelSelection(model.id);
     closeModelPicker();
   }, [
+    hasAccessToPickerModel,
     handleSignIn,
     hasChatgptAuth,
     hasPaidAccess,

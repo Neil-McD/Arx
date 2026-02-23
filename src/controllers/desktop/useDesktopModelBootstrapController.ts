@@ -104,13 +104,17 @@ export function useDesktopModelBootstrapController(args: UseDesktopModelBootstra
       const shouldKeepActive =
         Boolean(activeId) &&
         activeIsEnabled &&
-        (enabledReady.length === 0 || activeIsReady);
+        activeIsReady;
 
       if (shouldKeepActive) return;
 
       const preferredReady = enabledReady.find((toggle) => toggle.id === preferredModelId)?.id;
       const preferredEnabled = enabled.find((toggle) => toggle.id === preferredModelId)?.id;
-      const fallback = preferredReady ?? enabledReady[0]?.id ?? preferredEnabled ?? enabled[0].id;
+      const defaultGuestModelId = String(freeModelAllowlist.values().next().value ?? "").trim();
+      const fallback =
+        preferredReady ??
+        enabledReady[0]?.id ??
+        (defaultGuestModelId || preferredEnabled || enabled[0].id);
       setActiveModelId(fallback);
       await runtimeClient.setActiveModel(fallback);
     },

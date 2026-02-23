@@ -9,7 +9,6 @@ import {
   anthropicLogo,
   googleLogo,
   openAiLogo,
-  openRouterLogo,
   xAiLogo,
 } from "../../shared/providerLogos";
 import type { ModelSectionId, ModelToggle } from "../../shared/modelCatalog";
@@ -46,7 +45,7 @@ const SECTION_LABELS: Record<ModelSectionId, string> = {
   anthropic: "Anthropic",
   google: "Google",
   "x-ai": "xAI",
-  openrouter: "OpenRouter",
+  openrouter: "Other",
 };
 
 const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: ReactNode }> = [
@@ -105,15 +104,6 @@ const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: Re
     icon: (
       <span className="model-picker-nav-logo">
         <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" />
-      </span>
-    ),
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    icon: (
-      <span className="model-picker-nav-logo">
-        <img className="model-picker-nav-logo-img monochrome" src={openRouterLogo} alt="" />
       </span>
     ),
   },

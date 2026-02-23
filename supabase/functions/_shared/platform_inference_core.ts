@@ -99,6 +99,19 @@ export function evaluatePlatformInferenceEntitlement(
 
 function fallbackPlatformModelForAlias(aliasModelId: string): PlatformModelRef | null {
   const alias = (aliasModelId ?? "").trim().toLowerCase();
+  if (alias === "sonnet-4.6") {
+    const model = "claude-sonnet-4-20250514";
+    return { provider: "anthropic", model, ref: `anthropic/${model}` };
+  }
+  if (alias === "gemini-3.1-pro") {
+    const model = "gemini-3-pro-preview";
+    return { provider: "google", model, ref: `google/${model}` };
+  }
+  if (alias === "grok-4.1" || alias === "grok-4.2") {
+    const model = "grok-4-1-fast-reasoning";
+    return { provider: "x-ai", model, ref: `x-ai/${model}` };
+  }
+
   let model = "";
   if (alias === "kimi-k2") model = "moonshotai/kimi-k2";
   else if (alias === "glm-4.7") model = "z-ai/glm-4.7";
