@@ -111,12 +111,12 @@ grep -q 'ChatGPT sign-in failed' "$MAIN_RS" || {
   exit 1
 }
 
-echo "[7/11] Canonical lane doc must include chatgpt lane contract..."
-grep -q 'Inference lane: `chatgpt_cloud_turn` | `public_turn` | `agent_turn` | `platform_agent_infer`' "$MATRIX_DOC" || {
-  echo "FAIL: matrix inference lane contract is out of sync"
+echo "[7/11] Canonical lane doc must include runtime_turn + desktop ChatGPT lane contract..."
+grep -q 'Runtime lane: `public` | `daytona` | `platform_fallback` | `chatgpt_desktop`' "$MATRIX_DOC" || {
+  echo "FAIL: matrix runtime lane contract is out of sync"
   exit 1
 }
-grep -q 'Desktop | Agent | authenticated | free | paid_model (OpenAI alias) | local runtime uses `chatgpt` lane first' "$MATRIX_DOC" || {
+grep -q 'Desktop | Chat | authenticated | free/builder/pro | OpenAI alias + ChatGPT auth | false | optional `chatgpt_desktop` override' "$MATRIX_DOC" || {
   echo "FAIL: matrix desktop ChatGPT lane contract is out of sync"
   exit 1
 }

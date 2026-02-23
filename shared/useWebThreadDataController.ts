@@ -7,6 +7,7 @@ type ThreadRecord = {
   title: string | null;
   engine_id: string;
   model_id: string | null;
+  project_id: string | null;
   community_id: string | null;
   context_version: number;
   last_seq: number;
@@ -48,7 +49,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
     current.setThreadError(null);
     try {
       const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,context_version,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,project_id,community_id,context_version,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
         {},
         session,
       );
@@ -61,6 +62,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
         title: string | null;
         engine_id: string;
         model_id: string | null;
+        project_id: string | null;
         community_id: string | null;
         context_version: unknown;
         created_at: string;
@@ -87,6 +89,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
             title: row.title ?? null,
             engine_id: row.engine_id,
             model_id: row.model_id ?? null,
+            project_id: row.project_id ?? null,
             community_id: row.community_id ?? null,
             context_version: Number.isFinite(parsedContextVersion) ? parsedContextVersion : 0,
             last_seq: Number.isFinite(parsedLastSeq) ? parsedLastSeq : 0,

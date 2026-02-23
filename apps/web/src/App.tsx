@@ -353,6 +353,7 @@ type ThreadRecord = {
   title: string | null;
   engine_id: string;
   model_id: string | null;
+  project_id: string | null;
   community_id: string | null;
   context_version: number;
   last_seq: number;
@@ -1768,6 +1769,9 @@ export default function App() {
     streamingRafRef,
     streamingAbortRef,
     streamingUserCancelledRef,
+    runtimeTurnV2Enabled: String(((import.meta as any)?.env?.VITE_ENABLE_RUNTIME_TURN_V2 ?? "false"))
+      .trim()
+      .toLowerCase() === "true",
   });
 
   const desktopDownloadUrl = (((import.meta as any)?.env?.VITE_ARX_DESKTOP_DOWNLOAD_URL as string | undefined) ?? "").trim();

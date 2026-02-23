@@ -6,6 +6,7 @@ type ThreadRecord = {
   title: string | null;
   engine_id: string;
   model_id: string | null;
+  project_id: string | null;
   community_id: string | null;
   context_version: number;
   last_seq: number;
@@ -30,6 +31,7 @@ type UseWebThreadMutationControllerArgs<SessionT> = {
   toEpochSeconds: (value: string) => number;
 
   activeCommunityId: string | null;
+  activeProjectId?: string | null;
   activeModelId: string | null;
   modelToggles: ModelToggle[];
   threads: ThreadRecord[];
@@ -60,6 +62,35 @@ export function useWebThreadMutationController<SessionT>(
       enabled.find((toggle) => toggle.id === current.defaultActiveModelId)?.id ||
       enabled[0]?.id ||
       current.defaultActiveModelId;
+    const preferredProjectId = (current.activeProjectId ?? "").trim();
+    let projectId = preferredProjectId;
+    if (!projectId) {
+      const projectResponse = await current.fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/ensure_default_cloud_project`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+        session,
+      );
+      if (!projectResponse.ok) {
+        const message = await current.readSupabaseError(projectResponse);
+        throw new Error(message);
+      }
+      const payload = (await projectResponse.json()) as unknown;
+      const rows = Array.isArray(payload) ? payload : [payload];
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
+        const candidate = String((row as Record<string, unknown>).id ?? "").trim();
+        if (!candidate) continue;
+        projectId = candidate;
+        break;
+      }
+      if (!projectId) {
+        throw new Error("Default cloud project payload is missing id.");
+      }
+    }
     const body = {
       id,
       owner_id: ownerId,
@@ -67,7 +98,7 @@ export function useWebThreadMutationController<SessionT>(
       engine_id: "arx_harness",
       model_id: preferredModelId,
       thread_lane: "chat",
-      project_id: null,
+      project_id: projectId,
       community_id: communityId,
     };
     try {
@@ -89,6 +120,7 @@ export function useWebThreadMutationController<SessionT>(
         title: null,
         engine_id: "arx_harness",
         model_id: preferredModelId,
+        project_id: projectId,
         community_id: communityId,
         context_version: 0,
         last_seq: 0,

@@ -83,14 +83,14 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
     current.setIsExporting(true);
     try {
       const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,community_id,created_at,updated_at&order=updated_at.desc&limit=1000`,
+        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,project_id,community_id,created_at,updated_at&order=updated_at.desc&limit=1000`,
         {},
         session,
       );
       if (!response.ok) throw new Error(await current.readSupabaseError(response));
       const rows = (await response.json()) as Array<Record<string, unknown>>;
       const csv = current.buildCsv(
-        ["id", "title", "engine_id", "model_id", "community_id", "created_at", "updated_at"],
+        ["id", "title", "engine_id", "model_id", "project_id", "community_id", "created_at", "updated_at"],
         rows,
       );
       current.downloadTextFile("arx_threads.csv", csv);

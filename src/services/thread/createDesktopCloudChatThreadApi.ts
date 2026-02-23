@@ -62,6 +62,7 @@ type CreateDesktopCloudChatThreadApiDeps = {
   freeModelAllowlist: ReadonlySet<string>;
   hasChatgptAuth: () => boolean;
   refreshHasChatgptAuth?: () => Promise<boolean>;
+  runtimeTurnV2Enabled?: boolean;
   chatgptCloudTurn: (args: {
     model_id: string;
     messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
@@ -144,6 +145,14 @@ function isDesktopChatgptEligibleAlias(modelId: string | null | undefined): bool
 }
 
 const inferenceFallbackReasonCounters = new Map<string, number>();
+const runtimeTurnLegacyFallbackCodes = new Set([
+  "runner_unavailable",
+  "runtime_turn_failed",
+  "run_lookup_failed",
+  "run_create_failed",
+  "run_update_failed",
+  "run_event_append_failed",
+]);
 
 function recordInferenceFallbackTelemetry(params: {
   threadId: string;
@@ -284,6 +293,15 @@ async function consumeSseResponse(
       if (typeof parsed?.run_id === "string" && parsed.run_id.trim()) {
         runId = parsed.run_id;
       }
+      if (typeof parsed?.engine_id === "string" && parsed.engine_id.trim()) {
+        engineId = parsed.engine_id.trim();
+      }
+      if (typeof parsed?.model_id === "string" && parsed.model_id.trim()) {
+        modelId = parsed.model_id.trim();
+      }
+      if (typeof parsed?.inference_source === "string" && parsed.inference_source.trim()) {
+        inferenceSource = parsed.inference_source.trim();
+      }
       if (typeof parsed?.full_content === "string") {
         rawFullContent = parsed.full_content;
         fullContent = sanitizeText(rawFullContent);
@@ -421,12 +439,45 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
       .filter((thread) => thread.storage_mode === "cloud" && thread.thread_lane === "chat");
   };
 
+  const ensureDefaultCloudProjectId = async (session: SupabaseSession): Promise<string> => {
+    const url = deps.getSupabaseUrl();
+    if (!url) throw new Error("Missing Supabase URL.");
+    const response = await deps.fetchWithSupabaseAuth(
+      `${url}/rest/v1/rpc/ensure_default_cloud_project`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+      session,
+    );
+    if (!response.ok) throw new Error(await deps.readSupabaseError(response));
+    const payload = (await response.json()) as unknown;
+    const rows = Array.isArray(payload) ? payload : [payload];
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const projectId = String((row as Record<string, unknown>).id ?? "").trim();
+      if (projectId) return projectId;
+    }
+    throw new Error("Default cloud project payload is missing id.");
+  };
+
+  const resolveCloudProjectId = async (
+    preferredProjectId: string | null | undefined,
+    session: SupabaseSession,
+  ): Promise<string> => {
+    const projectId = String(preferredProjectId ?? "").trim();
+    if (projectId) return projectId;
+    return ensureDefaultCloudProjectId(session);
+  };
+
   const createCloudChatThread = async (
     thread: ThreadRecord,
     session: SupabaseSession,
   ): Promise<ThreadRecord | null> => {
     const url = deps.getSupabaseUrl();
     if (!url) throw new Error("Missing Supabase URL.");
+    const projectId = await resolveCloudProjectId(thread.project_id, session);
     const response = await deps.fetchWithSupabaseAuth(
       `${url}/rest/v1/threads`,
       {
@@ -443,7 +494,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
           engine_id: thread.engine_id,
           model_id: thread.model_id ?? null,
           thread_lane: "chat",
-          project_id: null,
+          project_id: projectId,
           community_id: thread.community_id ?? null,
         }),
       },
@@ -477,6 +528,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     const canonicalThread = await getCloudThreadRecord(threadId, session);
     if (canonicalThread) return canonicalThread;
     const modelId = (thread?.model_id ?? deps.getActiveModelId() ?? "").trim();
+    const projectId = await resolveCloudProjectId(thread?.project_id ?? null, session);
     const response = await deps.fetchWithSupabaseAuth(
       `${url}/rest/v1/threads`,
       {
@@ -495,7 +547,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
           model_id: modelId || null,
           // Cloud chat API always manages chat-lane threads.
           thread_lane: "chat",
-          project_id: null,
+          project_id: projectId,
           community_id: thread?.community_id ?? null,
         }),
       },
@@ -946,26 +998,76 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     const runPlatformLane = async (
       fallbackTrace: Array<{ from: string; to: string; reason: string }>,
     ): Promise<void> => {
-      const turnResponse = await deps.fetchWithSupabaseAuth(
-        `${url}/functions/v1/agent_turn`,
+      const runLegacyPlatformLane = async (): Promise<void> => {
+        const turnResponse = await deps.fetchWithSupabaseAuth(
+          `${url}/functions/v1/agent_turn`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              thread_id: params.thread_id,
+              reply_to_id: replyToId,
+              stream: true,
+              mode: "respond",
+              ...(modelId ? { model_id: modelId } : null),
+              ...(fallbackTrace.length > 0
+                ? { inference_lane_fallbacks: fallbackTrace }
+                : null),
+            }),
+          },
+          params.session,
+        );
+        if (!turnResponse.ok) {
+          const failure = await readSupabaseFunctionError(turnResponse);
+          const message = formatSupabaseFunctionErrorMessage(failure);
+          if (shouldFallbackFromPlatformErrorToPublic(failure)) {
+            throw new RetryNextInferenceLaneError({
+              lane: "platform",
+              reasonCode: failure.code ?? failure.category,
+              message,
+            });
+          }
+          throw new Error(message);
+        }
+        await consumeSseResponse(turnResponse, {
+          sanitizeText: (text) => sanitizeAssistantText(text, null),
+          onStreamEvent: params.onStreamEvent,
+        });
+      };
+
+      if (!deps.runtimeTurnV2Enabled) {
+        await runLegacyPlatformLane();
+        return;
+      }
+
+      const prepared = await loadPreparedMessages();
+      if (isCommunityHarnessUnavailablePreflight(prepared.communityPreflight)) {
+        throw new RetryNextInferenceLaneError({
+          lane: "platform",
+          reasonCode: COMMUNITY_HARNESS_UNAVAILABLE_FAILURE_CLASS,
+          message: getCommunityHarnessUnavailableErrorMessage(),
+        });
+      }
+      const runtimeTurnResponse = await deps.fetchWithSupabaseAuth(
+        `${url}/functions/v1/runtime_turn`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             thread_id: params.thread_id,
-            reply_to_id: replyToId,
             stream: true,
-            mode: "respond",
-            ...(modelId ? { model_id: modelId } : null),
-            ...(fallbackTrace.length > 0
-              ? { inference_lane_fallbacks: fallbackTrace }
-              : null),
+            surface: "desktop",
+            requires_tools: false,
+            model_id: modelId,
+            prefer_chatgpt_lane: false,
+            idempotency_key: `desktop_runtime:${replyToId}`,
+            messages: prepared.laneMessages,
           }),
         },
         params.session,
       );
-      if (!turnResponse.ok) {
-        const failure = await readSupabaseFunctionError(turnResponse);
+      if (!runtimeTurnResponse.ok) {
+        const failure = await readSupabaseFunctionError(runtimeTurnResponse);
         const message = formatSupabaseFunctionErrorMessage(failure);
         if (shouldFallbackFromPlatformErrorToPublic(failure)) {
           throw new RetryNextInferenceLaneError({
@@ -974,11 +1076,33 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
             message,
           });
         }
+        const code = String(failure.code ?? "").trim().toLowerCase();
+        if (failure.status >= 500 || runtimeTurnLegacyFallbackCodes.has(code)) {
+          await runLegacyPlatformLane();
+          return;
+        }
         throw new Error(message);
       }
-      await consumeSseResponse(turnResponse, {
+
+      const streamResult = await consumeSseResponse(runtimeTurnResponse, {
+        defaultEngineId: "runtime_turn",
+        defaultModelId: modelId,
+        defaultInferenceSource: "platform",
         sanitizeText: (text) => sanitizeAssistantText(text, null),
         onStreamEvent: params.onStreamEvent,
+      });
+      const assistantText = streamResult.fullContent.trim();
+      if (!assistantText) {
+        throw new Error("Runtime turn returned an empty response.");
+      }
+      await persistAssistantMessage({
+        text: assistantText,
+        runId: streamResult.runId,
+        engineId: (streamResult.engineId ?? "runtime_turn").trim() || "runtime_turn",
+        resolvedModelId: (streamResult.modelId ?? modelId ?? "").trim() || modelId,
+        inferenceSource: (streamResult.inferenceSource ?? "platform").trim() || "platform",
+        prepared,
+        fallbackTrace,
       });
     };
 

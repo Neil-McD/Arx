@@ -28,3 +28,9 @@ Edge Functions run on Supabase and read secrets from the Supabase project (not y
 - Paste keys into `supabase/.secrets.env`
 - Apply:
   - `supabase secrets set --project-ref <PROJECT_REF> --env-file supabase/.secrets.env`
+
+Minimum for runtime lanes:
+- `public_turn`: `OPENROUTER_API_KEY` (or model provider key via current function config)
+- `platform_agent_infer`: provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `XAI_API_KEY`) as needed by selected model routing
+- `runtime_turn` paid Daytona lane: `DAYTONA_API_URL`, `DAYTONA_API_KEY`
+  - optional: `DAYTONA_ORG_ID`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`

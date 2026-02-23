@@ -10,6 +10,7 @@ type ModelToggle = {
 export type ThreadRecord = {
   id: string;
   model_id: string | null;
+  project_id?: string | null;
   community_id?: string | null;
   last_seq: number;
   updated_at: number;

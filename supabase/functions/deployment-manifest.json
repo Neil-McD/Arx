@@ -11,6 +11,7 @@
     { "slug": "public_discover", "verify_jwt": false },
     { "slug": "public_funnel", "verify_jwt": false },
     { "slug": "public_turn", "verify_jwt": false },
+    { "slug": "runtime_turn", "verify_jwt": true },
     { "slug": "stripe_webhook", "verify_jwt": false },
     { "slug": "voice_transcribe", "verify_jwt": true }
   ],

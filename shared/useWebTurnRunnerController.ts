@@ -246,6 +246,15 @@ export function useWebTurnRunnerController<
       const url = current.getSupabaseUrl();
       if (!url) return { cancelled: false, error: "Missing Supabase URL." };
 
+      const runtimeTurnFallbackCodes = new Set([
+        "runner_unavailable",
+        "runtime_turn_failed",
+        "run_lookup_failed",
+        "run_create_failed",
+        "run_update_failed",
+        "run_event_append_failed",
+      ]);
+
       current.streamingAbortRef.current?.abort();
       const abort = new AbortController();
       current.streamingAbortRef.current = abort;
@@ -278,7 +287,7 @@ export function useWebTurnRunnerController<
         });
       };
 
-      try {
+      const runLegacyAgentTurn = async (): Promise<{ cancelled: boolean; error: string | null }> => {
         const turn = await current.fetchWithSupabaseAuth(
           `${url}/functions/v1/agent_turn`,
           {
@@ -417,6 +426,197 @@ export function useWebTurnRunnerController<
         await current.loadThreadMessages(threadId, session);
         await current.loadThreads(session);
         return { cancelled: false, error: null };
+      };
+
+      try {
+        const runtimeTurnEnabled = current.runtimeTurnV2Enabled === true && params.mode !== "regenerate";
+        if (runtimeTurnEnabled) {
+          const runtimeTurn = await current.fetchWithSupabaseAuth(
+            `${url}/functions/v1/runtime_turn`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                thread_id: threadId,
+                stream: true,
+                surface: "web",
+                requires_tools: false,
+                model_id: params.preferredModelId,
+                idempotency_key: params.runIdHint,
+              }),
+              signal: abort.signal,
+            },
+            session,
+          );
+          if (!runtimeTurn.ok) {
+            const failure = await readSupabaseFunctionError(runtimeTurn);
+            if (failure.category === "rate_limited") {
+              return {
+                cancelled: false,
+                error: formatSupabaseFunctionErrorMessage({
+                  ...failure,
+                  message: "Too many requests. Try again soon.",
+                }),
+              };
+            }
+            if (
+              failure.category === "quota" ||
+              failure.category === "misconfigured" ||
+              failure.category === "disabled" ||
+              failure.category === "plan"
+            ) {
+              current.setPlatformQuotaModal({
+                reason: mapPlatformFailureReason(failure.category),
+                threadId,
+                mode: params.mode === "regenerate" ? "regenerate" : "respond",
+                message: failure.message.trim() || null,
+              });
+              return { cancelled: false, error: null };
+            }
+            if (failure.category === "auth") {
+              return { cancelled: false, error: formatSupabaseFunctionErrorMessage(failure) };
+            }
+            const code = String(failure.code ?? "").trim().toLowerCase();
+            if (failure.status >= 500 || runtimeTurnFallbackCodes.has(code)) {
+              return await runLegacyAgentTurn();
+            }
+            throw new Error(formatSupabaseFunctionErrorMessage(failure));
+          }
+
+          const reader = runtimeTurn.body?.getReader();
+          if (!reader) throw new Error("Missing streaming response.");
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let eventName = "message";
+          let dataBuffer = "";
+          let seenDone = false;
+          let runtimeLane: string | null = null;
+          let runtimeEngineId: string | null = null;
+          let runtimeModelId: string | null = null;
+          let finalContent = "";
+
+          const flushEvent = () => {
+            const raw = dataBuffer.trim();
+            dataBuffer = "";
+            if (!raw) return;
+            let parsed: any = null;
+            try {
+              parsed = JSON.parse(raw);
+            } catch {
+              parsed = { raw };
+            }
+            if (eventName === "start") {
+              if (typeof parsed?.run_id === "string") {
+                runIdFromServer = parsed.run_id;
+                current.setStreamingRunId(parsed.run_id);
+              }
+              if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
+              if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
+              if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
+            } else if (eventName === "delta") {
+              const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
+              const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
+              if (full !== null) {
+                finalContent = full;
+                current.streamingContentRef.current = full;
+              } else if (delta) {
+                finalContent += delta;
+                current.streamingContentRef.current = finalContent;
+              }
+              scheduleStreamingFlush();
+            } else if (eventName === "done") {
+              if (typeof parsed?.full_content === "string") {
+                finalContent = parsed.full_content;
+                current.streamingContentRef.current = parsed.full_content;
+                scheduleStreamingFlush();
+              }
+              if (typeof parsed?.run_id === "string") runIdFromServer = parsed.run_id;
+              if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
+              if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
+              if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
+              seenDone = true;
+            } else if (eventName === "error") {
+              const msg =
+                (typeof parsed?.error === "string" && parsed.error.trim()) ||
+                (typeof parsed?.message === "string" && parsed.message.trim()) ||
+                (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
+                "Failed to run model.";
+              throw new Error(msg);
+            }
+            eventName = "message";
+          };
+
+          while (!seenDone) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            while (true) {
+              const idx = buffer.indexOf("\n");
+              if (idx < 0) break;
+              let line = buffer.slice(0, idx);
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              buffer = buffer.slice(idx + 1);
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim();
+                continue;
+              }
+              if (line.startsWith("data:")) {
+                dataBuffer += line.slice(5).trim();
+                continue;
+              }
+              if (line === "") {
+                flushEvent();
+                continue;
+              }
+            }
+          }
+          flushEvent();
+
+          const safeAssistantText = sanitizeUserFacingAssistantText({
+            text: finalContent,
+            blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
+          }).trim();
+          if (!safeAssistantText) {
+            throw new Error("Failed to run model.");
+          }
+          const normalizedLane = String(runtimeLane ?? "").trim().toLowerCase();
+          const inferenceSource = normalizedLane === "public" ? "free" : "platform";
+          const assistantPayload = buildAssistantTextMessagePayload({
+            threadId,
+            text: safeAssistantText,
+            engineId: (runtimeEngineId ?? "runtime_turn").trim() || "runtime_turn",
+            modelId: (runtimeModelId ?? params.preferredModelId).trim() || params.preferredModelId,
+            runId: runIdFromServer,
+            inferenceSource,
+          });
+          const insertAssistant = await current.fetchWithSupabaseAuth(
+            `${url}/rest/v1/messages`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: crypto.randomUUID(),
+                thread_id: threadId,
+                seq: 0,
+                role: "assistant",
+                content_json: assistantPayload.content_json,
+                ...(assistantPayload.engine_id ? { engine_id: assistantPayload.engine_id } : null),
+                ...(assistantPayload.model_id ? { model_id: assistantPayload.model_id } : null),
+                ...(assistantPayload.run_id ? { run_id: assistantPayload.run_id } : null),
+              }),
+            },
+            session,
+          );
+          if (!insertAssistant.ok) {
+            throw new Error(await current.readSupabaseError(insertAssistant));
+          }
+          await current.loadThreadMessages(threadId, session);
+          await current.loadThreads(session);
+          return { cancelled: false, error: null };
+        }
+
+        return await runLegacyAgentTurn();
       } catch (error) {
         const cancelled = current.streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
         if (cancelled) {

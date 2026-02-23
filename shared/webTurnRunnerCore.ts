@@ -50,6 +50,7 @@ export type UseWebTurnRunnerControllerArgs<
   streamingRafRef: MutableRefObject<number | null>;
   streamingAbortRef: MutableRefObject<AbortController | null>;
   streamingUserCancelledRef: MutableRefObject<boolean>;
+  runtimeTurnV2Enabled?: boolean;
 };
 
 export type PublicTurnThreadMessage = {

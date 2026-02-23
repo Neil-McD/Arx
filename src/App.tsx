@@ -1976,6 +1976,9 @@ function App() {
       const summary = await shellClient.getChatgptAuthSummary();
       return Boolean(summary);
     },
+    runtimeTurnV2Enabled: String((import.meta.env.VITE_ENABLE_RUNTIME_TURN_V2 as string | undefined) ?? "false")
+      .trim()
+      .toLowerCase() === "true",
     chatgptCloudTurn: (args) => shellClient.chatgptCloudTurn(args),
   });
   const setThreadCommunityLensInCloud = createDesktopCloudLensSync({
