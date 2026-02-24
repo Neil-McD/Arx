@@ -460,7 +460,7 @@ export function useWebTurnRunnerController<
                 thread_id: threadId,
                 stream: true,
                 surface: "web",
-                requires_tools: false,
+                requires_tools: true,
                 model_id: params.preferredModelId,
                 idempotency_key: params.runIdHint,
               }),

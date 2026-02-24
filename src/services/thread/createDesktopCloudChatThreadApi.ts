@@ -1145,7 +1145,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
             thread_id: params.thread_id,
             stream: true,
             surface: "desktop",
-            requires_tools: false,
+            requires_tools: true,
             model_id: modelId,
             prefer_chatgpt_lane: false,
             idempotency_key: `desktop_runtime:${replyToId}`,
