@@ -39,6 +39,11 @@ type InferenceMessage = {
 
 type RuntimeLane = "public" | "daytona" | "chatgpt_desktop" | "platform_fallback";
 
+const CANONICAL_CLOUD_RUN_CONTRACT_NAME = "canonical_cloud_run_v1";
+const CANONICAL_CLOUD_RUN_CONTRACT_VERSION = "v1";
+
+type RuntimeExecutionMode = "chat" | "agentic";
+
 type RuntimeRunRow = {
   id: string;
   user_id: string;
@@ -104,6 +109,47 @@ type LaneExecutionResult = {
   modelId: string;
   lane: RuntimeLane;
   sandboxId: string | null;
+};
+
+type DaytonaToolName =
+  | "read"
+  | "list_dir"
+  | "glob"
+  | "grep"
+  | "sha256"
+  | "write"
+  | "edit"
+  | "bash"
+  | "update_plan";
+
+type DaytonaToolCallDecision = {
+  type: "tool_call";
+  tool_name: DaytonaToolName;
+  args?: Record<string, unknown> | null;
+  reason?: string | null;
+};
+
+type DaytonaAssistantDecision = {
+  type: "assistant";
+  text: string;
+};
+
+type DaytonaAgentDecision = DaytonaToolCallDecision | DaytonaAssistantDecision;
+
+type DaytonaToolPolicyDecision = {
+  allowed: boolean;
+  requiresApproval: boolean;
+  policyBasis: string;
+  denialCode: string | null;
+  denialMessage: string | null;
+};
+
+type DaytonaToolExecutionResult = {
+  status: "ok" | "error";
+  exitCode: number | null;
+  outputText: string;
+  errorCode: string | null;
+  errorMessage: string | null;
 };
 
 type ApiError = Error & {
@@ -272,6 +318,153 @@ async function loadThreadOwnership(threadId: string): Promise<ThreadOwnershipRow
 function normalizeProjectId(value: unknown): string | null {
   const cleaned = String(value ?? "").trim();
   return cleaned.length > 0 ? cleaned : null;
+}
+
+function resolveExecutionMode(requiresTools: boolean): RuntimeExecutionMode {
+  return requiresTools ? "agentic" : "chat";
+}
+
+function normalizeToolName(value: unknown): DaytonaToolName | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (
+    normalized === "read" ||
+    normalized === "list_dir" ||
+    normalized === "glob" ||
+    normalized === "grep" ||
+    normalized === "sha256" ||
+    normalized === "write" ||
+    normalized === "edit" ||
+    normalized === "bash" ||
+    normalized === "update_plan"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function stripCodeFence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("```")) return trimmed;
+  const firstNewline = trimmed.indexOf("\n");
+  if (firstNewline <= 0) return trimmed;
+  const closingFence = trimmed.lastIndexOf("```");
+  if (closingFence <= firstNewline) return trimmed;
+  return trimmed.slice(firstNewline + 1, closingFence).trim();
+}
+
+function parseDaytonaAgentDecision(rawText: string): DaytonaAgentDecision | null {
+  const stripped = stripCodeFence(rawText);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const type = String(record.type ?? "").trim().toLowerCase();
+  if (type === "assistant") {
+    const text = String(record.text ?? "").trim();
+    if (!text) return null;
+    return { type: "assistant", text };
+  }
+  if (type === "tool_call") {
+    const toolName = normalizeToolName(record.tool_name);
+    if (!toolName) return null;
+    const args = record.args && typeof record.args === "object" && !Array.isArray(record.args)
+      ? (record.args as Record<string, unknown>)
+      : {};
+    const reason = String(record.reason ?? "").trim() || null;
+    return {
+      type: "tool_call",
+      tool_name: toolName,
+      args,
+      reason,
+    };
+  }
+  return null;
+}
+
+function buildDaytonaAgentSystemPrompt(params: {
+  projectId: string;
+  sandboxId: string;
+  maxIterations: number;
+}): string {
+  return [
+    "You are the Arx cloud coding agent running inside a Daytona sandbox.",
+    "Return only strict JSON (no prose, no markdown).",
+    "Allowed JSON outputs:",
+    '1) {"type":"assistant","text":"..."}',
+    '2) {"type":"tool_call","tool_name":"read|list_dir|glob|grep|sha256|write|edit|bash|update_plan","args":{...},"reason":"..."}',
+    "Rules:",
+    "- At most one tool_call per response.",
+    "- Prefer read/list_dir/glob/grep/sha256 before any risky operation.",
+    "- Keep paths relative to workspace root and never use absolute paths.",
+    "- If a tool result indicates denial/error, adapt and continue without repeating the same failing call.",
+    `- You have a max of ${params.maxIterations} tool iterations this run.`,
+    `Context: project_id=${params.projectId}, sandbox_id=${params.sandboxId}`,
+  ].join("\n");
+}
+
+function normalizeRelativeWorkspacePath(raw: unknown): string {
+  const candidate = String(raw ?? "").trim().replaceAll("\\", "/");
+  if (!candidate) throw createApiError("invalid_tool_args", "Tool path is required.", 400);
+  if (candidate.startsWith("/")) {
+    throw createApiError("path_outside_workspace", "Absolute paths are not allowed.", 403);
+  }
+  const segments = candidate.split("/").filter((part) => part.length > 0 && part !== ".");
+  if (segments.length === 0) {
+    throw createApiError("invalid_tool_args", "Tool path is required.", 400);
+  }
+  if (segments.some((part) => part === "..")) {
+    throw createApiError("path_outside_workspace", "Parent directory traversal is not allowed.", 403);
+  }
+  return segments.join("/");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const view = new Uint8Array(digest);
+  return Array.from(view).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function makeToolCallKey(params: {
+  toolName: DaytonaToolName;
+  args: Record<string, unknown>;
+  projectId: string;
+}): Promise<string> {
+  const canonicalArgs = JSON.stringify(params.args, Object.keys(params.args).sort());
+  return sha256Hex(`${params.projectId}:${params.toolName}:${canonicalArgs}`);
+}
+
+function resolveDaytonaToolPolicy(toolName: DaytonaToolName): DaytonaToolPolicyDecision {
+  if (
+    toolName === "read" ||
+    toolName === "list_dir" ||
+    toolName === "glob" ||
+    toolName === "grep" ||
+    toolName === "sha256"
+  ) {
+    return {
+      allowed: true,
+      requiresApproval: false,
+      policyBasis: "cloud_policy_v1:readonly_auto_allow",
+      denialCode: null,
+      denialMessage: null,
+    };
+  }
+  return {
+    allowed: false,
+    requiresApproval: true,
+    policyBasis: "cloud_policy_v1:write_tools_disabled",
+    denialCode: "tool_not_enabled_for_cloud_daytona_v1",
+    denialMessage: "This tool is not enabled for cloud Daytona yet.",
+  };
 }
 
 async function ensureDefaultCloudProjectId(userId: string): Promise<string> {
@@ -868,6 +1061,7 @@ async function executeDaytonaCommand(params: {
   command: string;
   cwd?: string | null;
   timeoutSeconds?: number | null;
+  allowNonZero?: boolean;
 }): Promise<{ stdout: string; exitCode: number }> {
   const payload: Record<string, unknown> = {
     command: params.command,
@@ -893,7 +1087,7 @@ async function executeDaytonaCommand(params: {
   const exitCodeRaw = parsed.exitCode ?? parsed.code;
   const exitCode = Number.isFinite(Number(exitCodeRaw)) ? Number(exitCodeRaw) : 0;
   const stdout = typeof parsed.result === "string" ? parsed.result : String(parsed.result ?? "");
-  if (exitCode !== 0) {
+  if (exitCode !== 0 && params.allowNonZero !== true) {
     throw createApiError(
       "daytona_command_failed",
       `Daytona command failed with exit code ${exitCode}.`,
@@ -1036,6 +1230,152 @@ async function executePlatformFallbackLane(params: {
   };
 }
 
+async function executeDaytonaTool(params: {
+  config: DaytonaConfig;
+  toolboxProxyUrl: string;
+  toolName: DaytonaToolName;
+  args: Record<string, unknown>;
+}): Promise<DaytonaToolExecutionResult> {
+  try {
+    if (params.toolName === "read") {
+      const relPath = normalizeRelativeWorkspacePath(params.args.path);
+      const offsetRaw = Number(params.args.offset ?? 0);
+      const limitRaw = Number(params.args.limit ?? 200);
+      const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(400, Math.floor(limitRaw))) : 200;
+      const start = offset + 1;
+      const end = offset + limit;
+      const cmd =
+        `set -euo pipefail; FILE=${shellQuote(relPath)}; ` +
+        `if [ ! -f "$FILE" ]; then echo "file_not_found:$FILE"; exit 2; fi; ` +
+        `nl -ba "$FILE" | sed -n '${start},${end}p'`;
+      const result = await executeDaytonaCommand({
+        config: params.config,
+        toolboxProxyUrl: params.toolboxProxyUrl,
+        command: cmd,
+        cwd: "workspace",
+        timeoutSeconds: 25,
+        allowNonZero: true,
+      });
+      return {
+        status: result.exitCode === 0 ? "ok" : "error",
+        exitCode: result.exitCode,
+        outputText: result.stdout.trim(),
+        errorCode: result.exitCode === 0 ? null : "tool_execution_failed",
+        errorMessage: result.exitCode === 0 ? null : `read failed with exit code ${result.exitCode}`,
+      };
+    }
+    if (params.toolName === "list_dir") {
+      const rawPath = String(params.args.path ?? "").trim();
+      const relPath = !rawPath || rawPath === "." ? "." : normalizeRelativeWorkspacePath(rawPath);
+      const cmd = relPath === "."
+        ? "set -euo pipefail; ls -la"
+        : `set -euo pipefail; ls -la ${shellQuote(relPath)}`;
+      const result = await executeDaytonaCommand({
+        config: params.config,
+        toolboxProxyUrl: params.toolboxProxyUrl,
+        command: cmd,
+        cwd: "workspace",
+        timeoutSeconds: 25,
+        allowNonZero: true,
+      });
+      return {
+        status: result.exitCode === 0 ? "ok" : "error",
+        exitCode: result.exitCode,
+        outputText: result.stdout.trim(),
+        errorCode: result.exitCode === 0 ? null : "tool_execution_failed",
+        errorMessage: result.exitCode === 0 ? null : `list_dir failed with exit code ${result.exitCode}`,
+      };
+    }
+    if (params.toolName === "glob") {
+      const rawPath = String(params.args.path ?? "").trim();
+      const relPath = !rawPath || rawPath === "." ? "." : normalizeRelativeWorkspacePath(rawPath);
+      const pattern = String(params.args.pat ?? params.args.pattern ?? "").trim();
+      if (!pattern) throw createApiError("invalid_tool_args", "glob requires pat/pattern.", 400);
+      const cmd = relPath === "."
+        ? `set -euo pipefail; find . -path ${shellQuote(pattern)} | sed 's#^\\./##'`
+        : `set -euo pipefail; cd ${shellQuote(relPath)} && find . -path ${shellQuote(pattern)} | sed 's#^\\./##'`;
+      const result = await executeDaytonaCommand({
+        config: params.config,
+        toolboxProxyUrl: params.toolboxProxyUrl,
+        command: cmd,
+        cwd: "workspace",
+        timeoutSeconds: 25,
+        allowNonZero: true,
+      });
+      return {
+        status: result.exitCode === 0 ? "ok" : "error",
+        exitCode: result.exitCode,
+        outputText: result.stdout.trim(),
+        errorCode: result.exitCode === 0 ? null : "tool_execution_failed",
+        errorMessage: result.exitCode === 0 ? null : `glob failed with exit code ${result.exitCode}`,
+      };
+    }
+    if (params.toolName === "grep") {
+      const rawPath = String(params.args.path ?? "").trim();
+      const relPath = !rawPath || rawPath === "." ? "." : normalizeRelativeWorkspacePath(rawPath);
+      const pattern = String(params.args.pat ?? params.args.pattern ?? "").trim();
+      if (!pattern) throw createApiError("invalid_tool_args", "grep requires pat/pattern.", 400);
+      const include = String(params.args.include ?? "").trim();
+      const cmd = `set -euo pipefail; rg -n --no-heading --color=never ${
+        include ? `-g ${shellQuote(include)} ` : ""
+      }-- ${shellQuote(pattern)} ${shellQuote(relPath)}`;
+      const result = await executeDaytonaCommand({
+        config: params.config,
+        toolboxProxyUrl: params.toolboxProxyUrl,
+        command: cmd,
+        cwd: "workspace",
+        timeoutSeconds: 30,
+        allowNonZero: true,
+      });
+      return {
+        status: result.exitCode === 0 ? "ok" : "error",
+        exitCode: result.exitCode,
+        outputText: result.stdout.trim(),
+        errorCode: result.exitCode === 0 ? null : "tool_execution_failed",
+        errorMessage: result.exitCode === 0 ? null : `grep failed with exit code ${result.exitCode}`,
+      };
+    }
+    if (params.toolName === "sha256") {
+      const relPath = normalizeRelativeWorkspacePath(params.args.path);
+      const cmd = `set -euo pipefail; shasum -a 256 ${shellQuote(relPath)} | awk '{print $1}'`;
+      const result = await executeDaytonaCommand({
+        config: params.config,
+        toolboxProxyUrl: params.toolboxProxyUrl,
+        command: cmd,
+        cwd: "workspace",
+        timeoutSeconds: 20,
+        allowNonZero: true,
+      });
+      return {
+        status: result.exitCode === 0 ? "ok" : "error",
+        exitCode: result.exitCode,
+        outputText: result.stdout.trim(),
+        errorCode: result.exitCode === 0 ? null : "tool_execution_failed",
+        errorMessage: result.exitCode === 0 ? null : `sha256 failed with exit code ${result.exitCode}`,
+      };
+    }
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: "",
+      errorCode: "tool_not_enabled_for_cloud_daytona_v1",
+      errorMessage: "This tool is not enabled for cloud Daytona yet.",
+    };
+  } catch (error) {
+    const apiError = isApiError(error)
+      ? error
+      : createApiError("tool_execution_failed", error instanceof Error ? error.message : String(error), 500);
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: "",
+      errorCode: apiError.code,
+      errorMessage: apiError.message,
+    };
+  }
+}
+
 async function executeDaytonaLane(params: {
   request: Request;
   modelId: string;
@@ -1054,32 +1394,185 @@ async function executeDaytonaLane(params: {
     timeoutSeconds: 10,
   });
   await params.appendRunEvent("daytona_probe_finished", {
+    contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+    contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
     project_id: params.projectId,
     sandbox_id: params.sandbox.id,
     provider_sandbox_id: params.sandbox.provider_sandbox_id,
     exit_code: probe.exitCode,
     stdout_preview: probe.stdout.slice(0, 200),
   });
+  const maxIterations = 8;
+  const transcript: InferenceMessage[] = [
+    {
+      role: "system",
+      content: buildDaytonaAgentSystemPrompt({
+        projectId: params.projectId,
+        sandboxId: params.sandbox.id,
+        maxIterations,
+      }),
+    },
+    ...params.messages.map((message) => ({ role: message.role, content: message.content })),
+  ];
 
-  const downstream = isFreeModelId(params.modelId)
-    ? await executePublicLane({
-      modelId: params.modelId,
-      messages: params.messages,
-    })
-    : await executePlatformFallbackLane({
+  const callInference = async (): Promise<LaneExecutionResult> => {
+    if (isFreeModelId(params.modelId)) {
+      return executePublicLane({
+        modelId: params.modelId,
+        messages: transcript,
+      });
+    }
+    return executePlatformFallbackLane({
       request: params.request,
       modelId: params.modelId,
-      messages: params.messages,
+      messages: transcript,
       maxTokens: params.maxTokens,
     });
-
-  return {
-    assistantText: downstream.assistantText,
-    engineId: `daytona/${downstream.engineId}`,
-    modelId: downstream.modelId,
-    lane: "daytona",
-    sandboxId: params.sandbox.id,
   };
+
+  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    const infer = await callInference();
+    const rawAssistantText = infer.assistantText.trim();
+    if (!rawAssistantText) {
+      throw createApiError("empty_response", "Daytona lane model returned an empty response.", 502);
+    }
+    const decision = parseDaytonaAgentDecision(rawAssistantText);
+    if (!decision) {
+      return {
+        assistantText: rawAssistantText,
+        engineId: `daytona/${infer.engineId}`,
+        modelId: infer.modelId,
+        lane: "daytona",
+        sandboxId: params.sandbox.id,
+      };
+    }
+
+    if (decision.type === "assistant") {
+      return {
+        assistantText: decision.text,
+        engineId: `daytona/${infer.engineId}`,
+        modelId: infer.modelId,
+        lane: "daytona",
+        sandboxId: params.sandbox.id,
+      };
+    }
+
+    const toolCallId = crypto.randomUUID();
+    const normalizedArgs = decision.args ?? {};
+    const toolCallKey = await makeToolCallKey({
+      toolName: decision.tool_name,
+      args: normalizedArgs,
+      projectId: params.projectId,
+    });
+    const policy = resolveDaytonaToolPolicy(decision.tool_name);
+
+    await params.appendRunEvent("tool_call_requested", {
+      contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+      contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+      tool_call_id: toolCallId,
+      tool_call_key: toolCallKey,
+      tool_name: decision.tool_name,
+      args: normalizedArgs,
+      requires_approval: policy.requiresApproval,
+      policy_basis: policy.policyBasis,
+      reason: decision.reason ?? null,
+      iteration,
+    });
+
+    if (!policy.allowed) {
+      await params.appendRunEvent("tool_call_denied", {
+        contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+        contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+        tool_call_id: toolCallId,
+        approved: false,
+        approved_by: "policy",
+        code: policy.denialCode,
+        message: policy.denialMessage,
+      });
+      transcript.push({
+        role: "assistant",
+        content: rawAssistantText,
+      });
+      transcript.push({
+        role: "system",
+        content: [
+          "TOOL_RESULT",
+          `tool_name=${decision.tool_name}`,
+          `status=denied`,
+          `code=${policy.denialCode ?? "tool_denied"}`,
+          `message=${policy.denialMessage ?? "Tool call denied by cloud policy."}`,
+        ].join("\n"),
+      });
+      continue;
+    }
+
+    await params.appendRunEvent("tool_call_approved", {
+      contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+      contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+      tool_call_id: toolCallId,
+      approved: true,
+      approved_by: "policy",
+      note: "Auto-approved by cloud read-only tool policy.",
+    });
+
+    await params.appendRunEvent("tool_call_started", {
+      contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+      contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+      tool_call_id: toolCallId,
+      attempt: 1,
+      cwd: "workspace",
+      workspace_scope_id: params.projectId,
+      sandbox: {
+        sandbox_id: params.sandbox.id,
+        provider_sandbox_id: params.sandbox.provider_sandbox_id,
+      },
+    });
+
+    const toolResult = await executeDaytonaTool({
+      config,
+      toolboxProxyUrl: params.sandbox.toolbox_proxy_url,
+      toolName: decision.tool_name,
+      args: normalizedArgs,
+    });
+
+    await params.appendRunEvent("tool_call_finished", {
+      contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+      contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+      tool_call_id: toolCallId,
+      attempt: 1,
+      status: toolResult.status,
+      exit_code: toolResult.exitCode,
+      error_code: toolResult.errorCode,
+      error_message: toolResult.errorMessage,
+      output_preview: toolResult.outputText.slice(0, 2_000),
+    });
+
+    transcript.push({
+      role: "assistant",
+      content: rawAssistantText,
+    });
+    transcript.push({
+      role: "system",
+      content: [
+        "TOOL_RESULT",
+        `tool_name=${decision.tool_name}`,
+        `status=${toolResult.status}`,
+        `exit_code=${toolResult.exitCode ?? ""}`,
+        toolResult.errorCode ? `error_code=${toolResult.errorCode}` : "",
+        toolResult.errorMessage ? `error_message=${toolResult.errorMessage}` : "",
+        "output:",
+        toolResult.outputText || "(empty)",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n"),
+    });
+  }
+
+  throw createApiError(
+    "run_loop_limit_exceeded",
+    `Daytona run exceeded max tool iterations (${maxIterations}).`,
+    502,
+  );
 }
 
 function buildStreamHeaders(baseHeaders: Record<string, string>): Headers {
@@ -1125,6 +1618,7 @@ Deno.serve(async (req: Request) => {
     const surface = String(input.surface ?? "web").trim().toLowerCase() || "web";
     const preferChatgptLane = input.prefer_chatgpt_lane === true;
     const idempotencyKey = String(input.idempotency_key ?? "").trim() || crypto.randomUUID();
+    const executionMode = resolveExecutionMode(requiresTools);
 
     const thread = await loadThreadOwnership(threadId);
     if (!thread) {
@@ -1235,6 +1729,9 @@ Deno.serve(async (req: Request) => {
       eventSeq += 1;
     };
     await appendEvent("run_started", {
+      contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+      contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+      execution_mode: executionMode,
       lane,
       project_id: threadProjectId,
       model_id: modelId,
@@ -1283,6 +1780,9 @@ Deno.serve(async (req: Request) => {
       try {
         const result = await executeLane();
         await appendEvent("run_completed", {
+          contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+          contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+          execution_mode: executionMode,
           lane: result.lane,
           project_id: threadProjectId,
           model_id: result.modelId,
@@ -1311,6 +1811,9 @@ Deno.serve(async (req: Request) => {
           ? error
           : createApiError("runtime_turn_failed", error instanceof Error ? error.message : String(error), 500);
         await appendEvent("run_failed", {
+          contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+          contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+          execution_mode: executionMode,
           lane,
           project_id: threadProjectId,
           code: apiError.code,
@@ -1336,6 +1839,9 @@ Deno.serve(async (req: Request) => {
         try {
           emit("start", {
             run_id: run.id,
+            contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+            contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+            execution_mode: executionMode,
             lane,
             project_id: threadProjectId,
             model_id: modelId,
@@ -1349,6 +1855,9 @@ Deno.serve(async (req: Request) => {
             lane: result.lane,
           });
           await appendEvent("run_completed", {
+            contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+            contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+            execution_mode: executionMode,
             lane: result.lane,
             project_id: threadProjectId,
             model_id: result.modelId,
@@ -1363,6 +1872,9 @@ Deno.serve(async (req: Request) => {
           emit("done", {
             ok: true,
             run_id: run.id,
+            contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+            contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+            execution_mode: executionMode,
             lane: result.lane,
             project_id: threadProjectId,
             model_id: result.modelId,
@@ -1377,6 +1889,9 @@ Deno.serve(async (req: Request) => {
           emit("error", {
             ok: false,
             run_id: run.id,
+            contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+            contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+            execution_mode: executionMode,
             lane,
             project_id: threadProjectId,
             code: apiError.code,
@@ -1385,6 +1900,9 @@ Deno.serve(async (req: Request) => {
           });
           try {
               await appendEvent("run_failed", {
+                contract_name: CANONICAL_CLOUD_RUN_CONTRACT_NAME,
+                contract_version: CANONICAL_CLOUD_RUN_CONTRACT_VERSION,
+                execution_mode: executionMode,
                 lane,
                 project_id: threadProjectId,
                 code: apiError.code,

@@ -1,8 +1,10 @@
 # Daytona Project-Scoped Sandbox Migration Spec (V1)
 
-Status: implemented (phases A-F complete)  
+Status: implemented (phases A-F complete + project-required guardrails)  
 Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`  
 Goal: move from thread-scoped Daytona sandboxes to project-scoped sandboxes with clean UX and bounded cost.
+
+Related contract: `docs/canonical-cloud-run-v1.md` (execution semantics for the cloud harness)
 
 ## 1) First-Principles Contract
 
@@ -27,6 +29,7 @@ V1 constraints:
 3. Cloud thread creation paths are project-scoped (default `General` project is assigned server-side when needed).
 4. `daytona_sandboxes` is project-scoped (`project_id` required for `provider='daytona'`).
 5. `runtime_runs` stores `thread_id` and `project_id`; Daytona lane requires non-null `project_id`.
+6. Non-community cloud threads are enforced project-bound (no null `project_id`).
 
 ## 3) Target Data Model
 
@@ -212,6 +215,7 @@ V1:
 1. User can create max 5 active projects; 6th fails with `project_limit_exceeded`.
 2. User cannot bind thread to another user’s project.
 3. `runtime_runs.project_id` always set for Daytona lane runs.
+4. Non-community thread insert/update with null `project_id` is rejected by DB constraint.
 
 ## 9.2 Runtime routing tests
 
@@ -256,7 +260,16 @@ Rollback-safe points:
 6. Add regression tests for routing, entitlement, reuse key, and max-5 projects.
 7. Update docs + matrix checks to enforce project-scoped invariant.
 
-## 12) Definition of Done
+## 12) Next Phase (Execution Contract Hardening)
+
+Project-scoped sandboxing is now in place. The next phase is execution contract hardening:
+
+1. Use `canonical_cloud_run_v1` as the runtime execution contract.
+2. Replace Daytona probe/delegate behavior with full Daytona tool loop.
+3. Keep fallback lanes explicit and observable until removed.
+4. Enforce parity between web cloud and desktop cloud execution semantics.
+
+## 13) Definition of Done
 
 Done means:
 
