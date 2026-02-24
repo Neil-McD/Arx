@@ -47,21 +47,42 @@ function serializeCloudContentJson(content: unknown): string {
   return JSON.stringify({ text: "" });
 }
 
+function extractMetaFieldFromCloudContent(
+  contentJson: string,
+  field: "engine_id" | "model_id",
+): string | null {
+  try {
+    const parsed = JSON.parse(contentJson) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const meta = (parsed as Record<string, unknown>).meta;
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+    const value = (meta as Record<string, unknown>)[field];
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function toMessageRecordFromCloud(row: CloudThreadMessageRow): MessageRecord {
   const createdAt =
     typeof row.created_at === "number" && Number.isFinite(row.created_at)
       ? row.created_at
       : toUnixSecondsFromIso(typeof row.created_at === "string" ? row.created_at : null) ??
         Math.floor(Date.now() / 1000);
+  const contentJson = serializeCloudContentJson(row.content_json);
+  const engineId = row.engine_id ?? extractMetaFieldFromCloudContent(contentJson, "engine_id");
+  const modelId = row.model_id ?? extractMetaFieldFromCloudContent(contentJson, "model_id");
   return {
     id: row.id,
     session_id: row.thread_id,
     seq: typeof row.seq === "number" && Number.isFinite(row.seq) ? row.seq : null,
     role: row.role,
-    content_json: serializeCloudContentJson(row.content_json),
+    content_json: contentJson,
     created_at: createdAt,
-    engine_id: row.engine_id ?? null,
-    model_id: row.model_id ?? null,
+    engine_id: engineId,
+    model_id: modelId,
     run_id: row.run_id ?? null,
   };
 }

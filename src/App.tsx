@@ -8414,6 +8414,7 @@ function formatExecutionLabel(
     if (
       normalized.includes("runtime_turn") ||
       normalized.includes("agent_turn") ||
+      normalized.includes("agent_web") ||
       normalized.includes("platform")
     ) {
       return "platform";
