@@ -3,6 +3,7 @@ import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
 import type { ThreadServiceTurnStreamEvent } from "../../../shared/threadService";
 import { normalizeThreadLane } from "../../../shared/threadSidebarSelectors";
 import { resolveDesktopCloudInferenceExecutionPlan } from "../../../shared/inferenceLaneResolver";
+import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "../../../shared/threadTitleUi";
 import { buildCloudCommunityContextEnvelope } from "../../../shared/communityContextEnvelope";
 import {
   buildChatgptLaneMessages,
@@ -116,6 +117,13 @@ type CloudMessageRow = {
   seq: unknown;
 };
 
+type CloudThreadTitleProbeRow = {
+  thread_id: string;
+  role: string;
+  content_json: unknown;
+  seq: unknown;
+};
+
 type CommunityCustomSystemPromptResult = {
   draftId: string | null;
   systemPrompt: string;
@@ -154,6 +162,8 @@ const runtimeTurnLegacyFallbackCodes = new Set([
   "run_event_append_failed",
 ]);
 const PUBLIC_EMPTY_RESPONSE_MAX_RETRIES = 1;
+const MAX_DERIVED_THREAD_TITLES_PER_LIST = 80;
+const TITLE_DERIVATION_CHUNK_SIZE = 40;
 
 function recordInferenceFallbackTelemetry(params: {
   threadId: string;
@@ -204,6 +214,21 @@ function extractTextFromCloudContent(content: unknown): string {
     if (typeof record.content === "string") return record.content;
   }
   return "";
+}
+
+function deriveThreadTitleFromCloudMessage(content: unknown): string {
+  const text = extractTextFromCloudContent(content).trim();
+  if (!text) return "";
+  return deriveThreadTitleFromUserText(text).trim();
+}
+
+function chunkArray<T>(values: ReadonlyArray<T>, chunkSize: number): T[][] {
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) return [values.slice() as T[]];
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += chunkSize) {
+    out.push(values.slice(index, index + chunkSize) as T[]);
+  }
+  return out;
 }
 
 type ConsumeSseOptions = {
@@ -435,9 +460,61 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     );
     if (!response.ok) throw new Error(await deps.readSupabaseError(response));
     const rows = (await response.json()) as CloudThreadRow[];
-    return rows
+    const threads = rows
       .map(toThreadRecordFromCloud)
       .filter((thread) => thread.storage_mode === "cloud" && thread.thread_lane === "chat");
+
+    try {
+      const untitledThreadIds = threads
+        .filter((thread) => isMissingThreadTitleValue(thread.title))
+        .slice(0, MAX_DERIVED_THREAD_TITLES_PER_LIST)
+        .map((thread) => thread.id);
+      if (untitledThreadIds.length === 0) return threads;
+
+      const titleByThreadId = new Map<string, { user: string | null; assistant: string | null }>();
+      for (const threadId of untitledThreadIds) {
+        titleByThreadId.set(threadId, { user: null, assistant: null });
+      }
+
+      for (const idsChunk of chunkArray(untitledThreadIds, TITLE_DERIVATION_CHUNK_SIZE)) {
+        const encodedIds = idsChunk.map((id) => encodeURIComponent(id)).join(",");
+        const limit = Math.max(idsChunk.length * 8, idsChunk.length);
+        const response = await deps.fetchWithSupabaseAuth(
+          `${url}/rest/v1/messages?select=thread_id,role,content_json,seq&thread_id=in.(${encodedIds})&role=in.(user,assistant)&order=seq.asc&limit=${limit}`,
+          { method: "GET" },
+          session,
+        );
+        if (!response.ok) throw new Error(await deps.readSupabaseError(response));
+        const rows = (await response.json()) as CloudThreadTitleProbeRow[];
+        for (const row of rows) {
+          const threadId = String(row?.thread_id ?? "").trim();
+          if (!threadId) continue;
+          const current = titleByThreadId.get(threadId);
+          if (!current) continue;
+          const role = String(row?.role ?? "").trim().toLowerCase();
+          const candidate = deriveThreadTitleFromCloudMessage(row?.content_json);
+          if (!candidate) continue;
+          if (role === "user" && !current.user) {
+            current.user = candidate;
+            continue;
+          }
+          if (role === "assistant" && !current.assistant) {
+            current.assistant = candidate;
+          }
+        }
+      }
+
+      return threads.map((thread) => {
+        if (!isMissingThreadTitleValue(thread.title)) return thread;
+        const candidate = titleByThreadId.get(thread.id);
+        const nextTitle = candidate?.user ?? candidate?.assistant ?? null;
+        if (!nextTitle) return thread;
+        return { ...thread, title: nextTitle };
+      });
+    } catch (error) {
+      console.warn("Failed to derive cloud thread titles from message history:", error);
+      return threads;
+    }
   };
 
   const ensureDefaultCloudProjectId = async (session: SupabaseSession): Promise<string> => {
