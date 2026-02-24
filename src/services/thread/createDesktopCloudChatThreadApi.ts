@@ -153,6 +153,7 @@ const runtimeTurnLegacyFallbackCodes = new Set([
   "run_update_failed",
   "run_event_append_failed",
 ]);
+const PUBLIC_EMPTY_RESPONSE_MAX_RETRIES = 1;
 
 function recordInferenceFallbackTelemetry(params: {
   threadId: string;
@@ -870,47 +871,57 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
         throw new Error(getCommunityHarnessUnavailableErrorMessage());
       }
       const laneMessages = prepared.laneMessages;
-      const communityId = String(thread?.community_id ?? "").trim();
-      const publicResponse = await deps.fetchWithSupabasePublic(
-        `${url}/functions/v1/public_turn`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model_id: publicModelId,
-            stream: true,
-            messages: laneMessages,
-          }),
-        },
-      );
-      if (!publicResponse.ok) {
-        const failure = await readSupabaseFunctionError(publicResponse);
-        throw new Error(formatSupabaseFunctionErrorMessage(failure));
-      }
-      const streamResult = await consumeSseResponse(publicResponse, {
-        defaultEngineId: "public_openrouter",
-        defaultModelId: publicModelId,
-        defaultInferenceSource: "free",
-        sanitizeText: (text) => sanitizeAssistantText(text, null),
-        onStreamEvent: params.onStreamEvent,
-      });
-      const assistantText = streamResult.fullContent.trim();
-      if (assistantText) {
-        const resolvedModelId = (streamResult.modelId ?? modelId ?? "").trim();
-        const resolvedInferenceSource = (streamResult.inferenceSource ?? "free").trim() || "free";
-        await persistAssistantMessage({
-          text: assistantText,
-          runId: streamResult.runId,
-          engineId: (streamResult.engineId ?? "public_openrouter").trim() || "public_openrouter",
-          resolvedModelId: resolvedModelId || publicModelId,
-          inferenceSource: resolvedInferenceSource,
-          prepared,
-          fallbackTrace,
+
+      for (let attempt = 0; attempt <= PUBLIC_EMPTY_RESPONSE_MAX_RETRIES; attempt += 1) {
+        const publicResponse = await deps.fetchWithSupabasePublic(
+          `${url}/functions/v1/public_turn`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model_id: publicModelId,
+              stream: true,
+              messages: laneMessages,
+            }),
+          },
+        );
+        if (!publicResponse.ok) {
+          const failure = await readSupabaseFunctionError(publicResponse);
+          throw new Error(formatSupabaseFunctionErrorMessage(failure));
+        }
+        const streamResult = await consumeSseResponse(publicResponse, {
+          defaultEngineId: "public_openrouter",
+          defaultModelId: publicModelId,
+          defaultInferenceSource: "free",
+          sanitizeText: (text) => sanitizeAssistantText(text, null),
+          onStreamEvent: params.onStreamEvent,
+        });
+        const assistantText = streamResult.fullContent.trim();
+        if (assistantText) {
+          const resolvedModelId = (streamResult.modelId ?? modelId ?? "").trim();
+          const resolvedInferenceSource = (streamResult.inferenceSource ?? "free").trim() || "free";
+          await persistAssistantMessage({
+            text: assistantText,
+            runId: streamResult.runId,
+            engineId: (streamResult.engineId ?? "public_openrouter").trim() || "public_openrouter",
+            resolvedModelId: resolvedModelId || publicModelId,
+            inferenceSource: resolvedInferenceSource,
+            prepared,
+            fallbackTrace,
+          });
+          return;
+        }
+
+        const hasRetryRemaining = attempt < PUBLIC_EMPTY_RESPONSE_MAX_RETRIES;
+        if (!hasRetryRemaining) break;
+        console.warn("Public lane returned empty assistant text; retrying once.", {
+          thread_id: params.thread_id,
+          model_id: publicModelId,
+          attempt: attempt + 1,
         });
       }
-      if (communityId && !assistantText) {
-        console.warn("Public lane returned empty assistant text for community-scoped turn.");
-      }
+
+      throw new Error("Public model returned an empty response. Please retry.");
     };
 
     const runChatgptLane = async (

@@ -8406,9 +8406,27 @@ function formatExecutionLabel(
   inferenceSourceInput?: string | null,
   inferenceLaneFallbacksInput?: ReadonlyArray<{ from: string; to: string; reason: string }> | null,
 ): string | null {
+  const inferInferenceSourceFromEngine = (engineId: string | null | undefined): string | null => {
+    const normalized = String(engineId ?? "").trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized.includes("chatgpt")) return "chatgpt";
+    if (normalized.includes("public")) return "free";
+    if (
+      normalized.includes("runtime_turn") ||
+      normalized.includes("agent_turn") ||
+      normalized.includes("platform")
+    ) {
+      return "platform";
+    }
+    return null;
+  };
+
+  const effectiveInferenceSource =
+    (inferenceSourceInput ?? "").trim() || inferInferenceSourceFromEngine(engineIdInput) || null;
+
   const modelSignature = formatModelAttributionLabel({
     modelId: modelIdInput,
-    inferenceSource: inferenceSourceInput,
+    inferenceSource: effectiveInferenceSource,
     modelToggles,
     inferenceLaneFallbacks: inferenceLaneFallbacksInput,
     freeModelAllowlist: DESKTOP_FREE_MODEL_ALLOWLIST,
