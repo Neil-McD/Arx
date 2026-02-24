@@ -28,10 +28,9 @@ export function buildContextFallbackThreadTitle(params: {
     return deriveThreadTitleFromUserText(joined) || joined;
   }
   if (params.lane) {
-    const laneLabel = params.lane === "agent" ? "Agent" : "Chat";
-    return `${laneLabel} ${params.threadId.slice(0, 6)}`;
+    return params.lane === "agent" ? "New agent thread" : "New chat";
   }
-  return `Thread ${params.threadId.slice(0, 6)}`;
+  return "New thread";
 }
 
 function isThreadContextTraceEnabled(): boolean {
