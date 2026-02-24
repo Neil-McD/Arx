@@ -1,19 +1,19 @@
 {
   "active_functions": [
-    { "slug": "agent_turn", "verify_jwt": true },
-    { "slug": "builder_billing_portal", "verify_jwt": true },
-    { "slug": "builder_checkout_start", "verify_jwt": true },
+    { "slug": "agent_turn", "verify_jwt": false },
+    { "slug": "builder_billing_portal", "verify_jwt": false },
+    { "slug": "builder_checkout_start", "verify_jwt": false },
     { "slug": "checkout_finalize", "verify_jwt": false },
     { "slug": "checkout_start", "verify_jwt": false },
-    { "slug": "community_research", "verify_jwt": true },
-    { "slug": "connect_onboard_start", "verify_jwt": true },
-    { "slug": "platform_agent_infer", "verify_jwt": true },
+    { "slug": "community_research", "verify_jwt": false },
+    { "slug": "connect_onboard_start", "verify_jwt": false },
+    { "slug": "platform_agent_infer", "verify_jwt": false },
     { "slug": "public_discover", "verify_jwt": false },
     { "slug": "public_funnel", "verify_jwt": false },
     { "slug": "public_turn", "verify_jwt": false },
-    { "slug": "runtime_turn", "verify_jwt": true },
+    { "slug": "runtime_turn", "verify_jwt": false },
     { "slug": "stripe_webhook", "verify_jwt": false },
-    { "slug": "voice_transcribe", "verify_jwt": true }
+    { "slug": "voice_transcribe", "verify_jwt": false }
   ],
   "inactive_functions": []
 }

@@ -44,7 +44,15 @@ grep -q "| Surface | Lane | Auth | Tier | Model class | requires_tools | Runtime
 }
 
 echo "[3/22] Shared model catalog must include canonical free+paid baseline..."
-for id in "gpt-oss-120b-free" "deepseek-r1-free" "gpt-5.2" "kimi-k2" "glm-4.7"; do
+for id in \
+  "gpt-oss-120b-free" \
+  "deepseek-r1-free" \
+  "gpt-5.2" \
+  "sonnet-4.6" \
+  "opus-4.6" \
+  "gemini-3-flash" \
+  "gemini-3.1-pro" \
+  "grok-4.1"; do
   grep -q "\"$id\"" "$MODEL_CATALOG" || { echo "FAIL: missing model '$id' in model catalog"; exit 1; }
 done
 

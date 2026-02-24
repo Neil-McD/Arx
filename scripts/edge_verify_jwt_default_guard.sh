@@ -16,6 +16,19 @@ PUBLIC_VERIFY_JWT_FALSE_ALLOWLIST=(
   "stripe_webhook"
 )
 
+# Protected endpoints that intentionally rely on strict in-function bearer verification.
+# This is a fail-safe fallback mode when edge verify_jwt is unreliable.
+MANUAL_AUTH_VERIFY_JWT_FALSE_ALLOWLIST=(
+  "agent_turn"
+  "builder_billing_portal"
+  "builder_checkout_start"
+  "community_research"
+  "connect_onboard_start"
+  "platform_agent_infer"
+  "runtime_turn"
+  "voice_transcribe"
+)
+
 # Auth-required endpoints must keep manual auth verification as defense in depth.
 PROTECTED_FUNCTIONS=(
   "agent_turn"
@@ -24,6 +37,7 @@ PROTECTED_FUNCTIONS=(
   "community_research"
   "connect_onboard_start"
   "platform_agent_infer"
+  "runtime_turn"
   "voice_transcribe"
 )
 
@@ -45,14 +59,19 @@ if [[ ! -f "$MANIFEST_PATH" ]]; then
   exit 1
 fi
 
-echo "[1/4] Manifest verify_jwt=false entries must stay inside explicit public allowlist..."
+echo "[1/4] Manifest verify_jwt=false entries must stay inside explicit allowlists..."
 PUBLIC_ALLOWLIST_CSV="$(IFS=,; echo "${PUBLIC_VERIFY_JWT_FALSE_ALLOWLIST[*]}")"
-MANIFEST_PATH="$MANIFEST_PATH" PUBLIC_ALLOWLIST_CSV="$PUBLIC_ALLOWLIST_CSV" node <<'NODE'
+MANUAL_ALLOWLIST_CSV="$(IFS=,; echo "${MANUAL_AUTH_VERIFY_JWT_FALSE_ALLOWLIST[*]}")"
+MANIFEST_PATH="$MANIFEST_PATH" PUBLIC_ALLOWLIST_CSV="$PUBLIC_ALLOWLIST_CSV" MANUAL_ALLOWLIST_CSV="$MANUAL_ALLOWLIST_CSV" node <<'NODE'
 const fs = require("fs");
 
 const manifestPath = process.env.MANIFEST_PATH;
 const allowCsv = process.env.PUBLIC_ALLOWLIST_CSV ?? "";
+const manualCsv = process.env.MANUAL_ALLOWLIST_CSV ?? "";
 const allow = new Set(allowCsv.split(",").map((s) => s.trim()).filter(Boolean));
+for (const slug of manualCsv.split(",").map((s) => s.trim()).filter(Boolean)) {
+  allow.add(slug);
+}
 
 const fail = (message) => {
   console.error(`FAIL: ${message}`);
@@ -87,15 +106,15 @@ for (const entry of active) {
 
 const unexpected = falseSlugs.filter((slug) => !allow.has(slug));
 if (unexpected.length > 0) {
-  fail(`verify_jwt=false is only allowed for explicit public/webhook endpoints; found: ${unexpected.join(", ")}`);
+  fail(`verify_jwt=false is only allowed for explicit allowlists; found: ${unexpected.join(", ")}`);
 }
 
 console.log(
-  `PASS: manifest verify_jwt defaults are strict (false slugs: ${falseSlugs.length ? falseSlugs.sort().join(", ") : "none"}).`,
+  `PASS: manifest verify_jwt posture is allowlisted (false slugs: ${falseSlugs.length ? falseSlugs.sort().join(", ") : "none"}).`,
 );
 NODE
 
-echo "[2/4] Function configs must not set verify_jwt=false outside allowlist..."
+echo "[2/4] Function configs must not set verify_jwt=false outside allowlists..."
 false_configs=()
 for config in "$ROOT_DIR"/supabase/functions/*/config.toml; do
   slug="$(basename "$(dirname "$config")")"
@@ -105,14 +124,15 @@ for config in "$ROOT_DIR"/supabase/functions/*/config.toml; do
     exit 1
   fi
   if [[ "$verify_jwt" == "false" ]]; then
-    if ! contains_item "$slug" "${PUBLIC_VERIFY_JWT_FALSE_ALLOWLIST[@]}"; then
-      echo "FAIL: $config sets verify_jwt=false but '$slug' is not in public allowlist"
+    if ! contains_item "$slug" "${PUBLIC_VERIFY_JWT_FALSE_ALLOWLIST[@]}" &&
+      ! contains_item "$slug" "${MANUAL_AUTH_VERIFY_JWT_FALSE_ALLOWLIST[@]}"; then
+      echo "FAIL: $config sets verify_jwt=false but '$slug' is not in an explicit allowlist"
       exit 1
     fi
     false_configs+=("$slug")
   fi
 done
-echo "PASS: config verify_jwt posture is strict (false slugs: ${false_configs[*]:-none})."
+echo "PASS: config verify_jwt posture is allowlisted (false slugs: ${false_configs[*]:-none})."
 
 echo "[3/4] Auth-protected endpoints must keep strict CORS..."
 for slug in "${PROTECTED_FUNCTIONS[@]}"; do
