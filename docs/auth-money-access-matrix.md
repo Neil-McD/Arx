@@ -26,6 +26,7 @@ And 5 outputs:
 
 1. Server decides lane. Clients request a turn; they do not authoritatively choose execution backend.
 2. `runtime_turn` is the canonical authenticated cloud runtime entrypoint.
+2a. Non-community cloud threads must be project-bound (`project_id` required). The server auto-assigns `General` where needed.
 3. Free models may run on `public` lane.
 4. Paid models require paid tier entitlement.
 5. Daytona sandbox is paid-only:

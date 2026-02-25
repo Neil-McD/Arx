@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from "react";
 import { createThreadPanelController } from "../../../shared/threadPanelController";
-import type { ThreadLane } from "../../../shared/threadSidebarSelectors";
 
 type ProjectExpandedById = Record<string, boolean>;
 
@@ -8,7 +7,6 @@ type UseDesktopThreadPanelActionsArgs<TProject extends { id: string }> = {
   activeProjectId: string | null;
   setActiveProject: (project: TProject) => void;
   persistActiveProject?: (projectId: string) => void | Promise<void>;
-  setThreadLaneFilter: (lane: ThreadLane) => void;
   enterDraftThread: () => void;
   projectMenuProjectId: string | null;
   setProjectMenuProjectId: (value: string | null | ((prev: string | null) => string | null)) => void;
@@ -23,7 +21,6 @@ export function useDesktopThreadPanelActions<TProject extends { id: string }>(
     activeProjectId,
     setActiveProject,
     persistActiveProject,
-    setThreadLaneFilter,
     enterDraftThread,
     projectMenuProjectId,
     setProjectMenuProjectId,
@@ -61,7 +58,6 @@ export function useDesktopThreadPanelActions<TProject extends { id: string }>(
         getActiveProjectId: () => activeProjectId,
         setActiveProject,
         persistActiveProject,
-        setThreadLaneFilter,
         enterDraftThread,
         setProjectMenuProjectId,
         setProjectExpandedById,
@@ -70,7 +66,6 @@ export function useDesktopThreadPanelActions<TProject extends { id: string }>(
       activeProjectId,
       setActiveProject,
       persistActiveProject,
-      setThreadLaneFilter,
       enterDraftThread,
       setProjectMenuProjectId,
       setProjectExpandedById,

@@ -17,6 +17,8 @@ export type ThreadServiceSendTurnInput = {
   supabaseAccessToken?: string;
   sendPolicySnapshot?: {
     selectedModelId?: string | null;
+    hasChatgptAuth?: boolean;
+    approvalMode?: "read-only" | "agent" | "agent-full";
   };
   onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };

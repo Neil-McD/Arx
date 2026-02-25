@@ -1,6 +1,42 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { ModelToggle } from "./modelCatalog";
 import { parseModelRegistryRows } from "./modelRegistry";
+import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "./threadTitleUi";
+
+const MAX_DERIVED_THREAD_TITLES_PER_LIST = 120;
+const TITLE_DERIVATION_CHUNK_SIZE = 25;
+
+type ThreadTitleProbeRow = {
+  thread_id: string;
+  role: string;
+  content_json: unknown;
+  seq: unknown;
+};
+
+function chunkArray<T>(values: ReadonlyArray<T>, chunkSize: number): T[][] {
+  if (!Number.isFinite(chunkSize) || chunkSize <= 0) return [values.slice() as T[]];
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += chunkSize) {
+    out.push(values.slice(index, index + chunkSize) as T[]);
+  }
+  return out;
+}
+
+function extractTextFromCloudContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const record = content as Record<string, unknown>;
+    if (typeof record.text === "string") return record.text;
+    if (typeof record.content === "string") return record.content;
+  }
+  return "";
+}
+
+function deriveThreadTitleFromCloudMessage(content: unknown): string {
+  const text = extractTextFromCloudContent(content).trim();
+  if (!text) return "";
+  return deriveThreadTitleFromUserText(text).trim();
+}
 
 type ThreadRecord = {
   id: string;
@@ -97,9 +133,63 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
             updated_at: current.toEpochSeconds(row.updated_at),
           };
         });
+      let listWithDerivedTitles = list;
+      try {
+        const untitledThreadIds = list
+          .filter((thread) => isMissingThreadTitleValue(thread.title))
+          .slice(0, MAX_DERIVED_THREAD_TITLES_PER_LIST)
+          .map((thread) => thread.id);
+        if (untitledThreadIds.length > 0) {
+          const titleByThreadId = new Map<string, { user: string | null; assistant: string | null }>();
+          for (const threadId of untitledThreadIds) {
+            titleByThreadId.set(threadId, { user: null, assistant: null });
+          }
 
-      current.setThreads(list);
-      const visible = list.filter((thread) => thread.last_seq > 0);
+          for (const idsChunk of chunkArray(untitledThreadIds, TITLE_DERIVATION_CHUNK_SIZE)) {
+            const encodedIds = idsChunk.map((id) => encodeURIComponent(id)).join(",");
+            const limit = Math.max(idsChunk.length * 8, idsChunk.length);
+            const titleProbeResponse = await current.fetchWithSupabaseAuth(
+              `${url}/rest/v1/messages?select=thread_id,role,content_json,seq&thread_id=in.(${encodedIds})&role=in.(user,assistant)&order=seq.asc&limit=${limit}`,
+              {},
+              session,
+            );
+            if (!titleProbeResponse.ok) {
+              const message = await current.readSupabaseError(titleProbeResponse);
+              throw new Error(message);
+            }
+            const titleProbeRows = (await titleProbeResponse.json()) as ThreadTitleProbeRow[];
+            for (const row of titleProbeRows) {
+              const threadId = String(row?.thread_id ?? "").trim();
+              if (!threadId) continue;
+              const currentTitles = titleByThreadId.get(threadId);
+              if (!currentTitles) continue;
+              const role = String(row?.role ?? "").trim().toLowerCase();
+              const candidate = deriveThreadTitleFromCloudMessage(row?.content_json);
+              if (!candidate) continue;
+              if (role === "user" && !currentTitles.user) {
+                currentTitles.user = candidate;
+                continue;
+              }
+              if (role === "assistant" && !currentTitles.assistant) {
+                currentTitles.assistant = candidate;
+              }
+            }
+          }
+
+          listWithDerivedTitles = list.map((thread) => {
+            if (!isMissingThreadTitleValue(thread.title)) return thread;
+            const candidate = titleByThreadId.get(thread.id);
+            const nextTitle = candidate?.user ?? candidate?.assistant ?? null;
+            if (!nextTitle) return thread;
+            return { ...thread, title: nextTitle };
+          });
+        }
+      } catch (error) {
+        console.warn("Failed to derive web thread titles from message history:", error);
+      }
+
+      current.setThreads(listWithDerivedTitles);
+      const visible = listWithDerivedTitles.filter((thread) => thread.last_seq > 0);
 
       if (!current.activeThreadId) {
         if (!current.threadsHydratedRef.current && !current.workspaceWantsNewChatRef.current) {
@@ -109,7 +199,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
         return;
       }
 
-      const selected = list.find((thread) => thread.id === current.activeThreadId) ?? null;
+      const selected = listWithDerivedTitles.find((thread) => thread.id === current.activeThreadId) ?? null;
       if (selected && selected.last_seq <= 0) {
         current.setActiveThreadId(visible[0]?.id ?? null);
       }

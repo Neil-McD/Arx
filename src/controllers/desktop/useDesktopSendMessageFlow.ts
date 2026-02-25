@@ -67,6 +67,8 @@ type UseDesktopSendMessageFlowArgs<
   setRunningTools: (value: []) => void;
   getSendPolicySnapshot?: (threadId: string) => {
     selectedModelId?: string | null;
+    hasChatgptAuth?: boolean;
+    approvalMode?: "read-only" | "agent" | "agent-full";
   } | null;
 };
 

@@ -107,6 +107,7 @@ type SendCloudTurnInput = {
   sendPolicySnapshot?: {
     selectedModelId?: string | null;
     hasChatgptAuth?: boolean;
+    approvalMode?: "read-only" | "agent" | "agent-full";
   };
   onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
@@ -771,6 +772,13 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     }
     const snapshotModelId = (params.sendPolicySnapshot?.selectedModelId ?? "").trim();
     const modelId = (snapshotModelId || thread?.model_id || deps.getActiveModelId() || "").trim();
+    const snapshotApprovalMode = String(params.sendPolicySnapshot?.approvalMode ?? "").trim().toLowerCase();
+    const approvalMode: "read-only" | "agent" | "agent-full" =
+      snapshotApprovalMode === "read-only" ||
+        snapshotApprovalMode === "agent" ||
+        snapshotApprovalMode === "agent-full"
+        ? snapshotApprovalMode
+        : "agent";
     let hasChatgptAuth =
       Boolean(params.sendPolicySnapshot?.hasChatgptAuth) || deps.hasChatgptAuth();
     if (
@@ -1146,6 +1154,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
             stream: true,
             surface: "desktop",
             requires_tools: true,
+            approval_mode: approvalMode,
             model_id: modelId,
             prefer_chatgpt_lane: false,
             idempotency_key: `desktop_runtime:${replyToId}`,

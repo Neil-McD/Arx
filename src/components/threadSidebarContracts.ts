@@ -1,5 +1,4 @@
 import type { ReactNode, RefObject } from "react";
-import type { ThreadLane } from "../../shared/threadSidebarSelectors";
 
 export type ProjectLike = {
   id: string;
@@ -18,23 +17,23 @@ export type ProjectThreadGroup<TProject, TThread> = {
 };
 
 export type ThreadSidebarPanelState<TThread, TProject extends ProjectLike> = {
+  threadLaneFilter: "chat" | "agent";
   threadSearchQuery: string;
-  threadLaneFilter: ThreadLane;
   normalizedThreadSearch: string;
   threadSearchResults: TThread[];
   projectThreadGroups: Array<ProjectThreadGroup<TProject, TThread>>;
   projectExpandedById: Record<string, boolean>;
   projectMenuProjectId: string | null;
   generalThreads: TThread[];
-  laneThreadsCount: number;
+  agentThreadsCount: number;
+  chatThreadsCount: number;
   chatThreadGroups: Array<ChatThreadGroup<TThread>>;
   showChatSignInPrompt?: boolean;
 };
 
 export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
+  onThreadLaneFilterChange: (lane: "chat" | "agent") => void;
   onThreadSearchQueryChange: (value: string) => void;
-  onSelectChatLane: () => void;
-  onSelectAgentLane: () => void;
   onAddProject: () => void | Promise<void>;
   onToggleProjectExpanded: (projectId: string) => void;
   onStartDraftInProject: (project: TProject) => void;

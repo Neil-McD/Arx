@@ -90,7 +90,7 @@ Current transitional Daytona-only observability events are allowed while migrati
 2. No parallel tool calls in one run.
 3. No desktop local harness behavior changes in this contract.
 
-## 10) Phase-1 Tool Policy (Current)
+## 10) Tool Policy (Current)
 
 Current canonical Daytona loop policy in this branch:
 
@@ -100,8 +100,13 @@ Current canonical Daytona loop policy in this branch:
    - `glob`
    - `grep`
    - `sha256`
-2. Explicitly denied (evented) until cloud approvals are wired:
+2. Approval-gated write tools:
    - `write`
    - `edit`
    - `bash`
+3. Approval mode behavior:
+   - `approval_mode=agent-full` => write tools are allowed and evented as approved
+   - `approval_mode=agent` (default) => write tools are denied with `tool_approval_required`
+   - `approval_mode=read-only` => write tools are denied with `tool_denied_read_only_mode`
+4. Explicitly denied:
    - `update_plan`

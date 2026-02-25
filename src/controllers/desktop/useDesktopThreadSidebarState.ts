@@ -8,8 +8,6 @@ import {
   searchThreads,
 } from "../../../shared/threadSidebarSelectors";
 
-type ThreadLane = "chat" | "agent";
-
 type ThreadSidebarThread = {
   id: string;
   workspace_path: string | null;
@@ -27,7 +25,6 @@ type ThreadSidebarProject = {
 type UseDesktopThreadSidebarStateArgs<ThreadT extends ThreadSidebarThread, ProjectT extends ThreadSidebarProject> = {
   threads: ThreadT[];
   projects: ProjectT[];
-  threadLaneFilter: ThreadLane;
   threadSearchQuery: string;
   projectById: Map<string, ProjectT>;
   resolveThreadProjectId: (thread: ThreadT) => string | null;
@@ -41,7 +38,6 @@ export function useDesktopThreadSidebarState<
   const {
     threads,
     projects,
-    threadLaneFilter,
     threadSearchQuery,
     projectById,
     resolveThreadProjectId,
@@ -50,18 +46,28 @@ export function useDesktopThreadSidebarState<
 
   const normalizedThreadSearch = threadSearchQuery.trim().toLowerCase();
 
-  const laneThreads = useMemo(
-    () => filterThreadsByLane(filterVisibleThreads(threads), threadLaneFilter),
-    [threadLaneFilter, threads],
+  const visibleThreads = useMemo(
+    () => filterVisibleThreads(threads),
+    [threads],
+  );
+
+  const chatThreads = useMemo(
+    () => filterThreadsByLane(visibleThreads, "chat"),
+    [visibleThreads],
+  );
+
+  const agentThreads = useMemo(
+    () => filterThreadsByLane(visibleThreads, "agent"),
+    [visibleThreads],
   );
 
   const chatThreadGroups = useMemo(
-    () => groupThreadsByDate(laneThreads),
-    [laneThreads],
+    () => groupThreadsByDate(chatThreads),
+    [chatThreads],
   );
 
   const threadSearchResults = useMemo(() => {
-    return searchThreads(laneThreads, normalizedThreadSearch, (thread) => {
+    return searchThreads(visibleThreads, normalizedThreadSearch, (thread) => {
       const title = getThreadDisplayTitle(thread);
       const workspaceHint = (thread.workspace_path ?? "").trim();
       const workspaceLabel = workspaceHint ? (workspaceHint.split("/").pop() ?? workspaceHint) : "";
@@ -69,21 +75,22 @@ export function useDesktopThreadSidebarState<
       const projectName = projectId ? (projectById.get(projectId)?.name ?? "").trim() : "";
       return `${title} ${workspaceLabel} ${projectName}`;
     });
-  }, [getThreadDisplayTitle, laneThreads, normalizedThreadSearch, projectById, resolveThreadProjectId]);
+  }, [getThreadDisplayTitle, normalizedThreadSearch, projectById, resolveThreadProjectId, visibleThreads]);
 
   const projectThreadGroups = useMemo(
-    () => buildProjectThreadGroups(projects, laneThreads, resolveThreadProjectId),
-    [laneThreads, projects, resolveThreadProjectId],
+    () => buildProjectThreadGroups(projects, agentThreads, resolveThreadProjectId),
+    [agentThreads, projects, resolveThreadProjectId],
   );
 
   const generalThreads = useMemo(
-    () => filterThreadsWithoutProject(laneThreads, resolveThreadProjectId),
-    [laneThreads, resolveThreadProjectId],
+    () => filterThreadsWithoutProject(agentThreads, resolveThreadProjectId),
+    [agentThreads, resolveThreadProjectId],
   );
 
   return {
     normalizedThreadSearch,
-    laneThreads,
+    chatThreads,
+    agentThreads,
     chatThreadGroups,
     threadSearchResults,
     projectThreadGroups,

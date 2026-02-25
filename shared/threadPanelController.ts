@@ -1,12 +1,9 @@
-import type { ThreadLane } from "./threadSidebarSelectors";
-
 type ProjectExpandedById = Record<string, boolean>;
 
 type ThreadPanelControllerParams<TProject extends { id: string }> = {
   getActiveProjectId: () => string | null;
   setActiveProject: (project: TProject) => void;
   persistActiveProject?: (projectId: string) => void | Promise<void>;
-  setThreadLaneFilter: (lane: ThreadLane) => void;
   enterDraftThread: () => void;
   setProjectMenuProjectId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setProjectExpandedById: (updater: (prev: ProjectExpandedById) => ProjectExpandedById) => void;
@@ -15,21 +12,11 @@ type ThreadPanelControllerParams<TProject extends { id: string }> = {
 export function createThreadPanelController<TProject extends { id: string }>(
   params: ThreadPanelControllerParams<TProject>,
 ): {
-  setChatLane: () => void;
-  setAgentLane: () => void;
   closeProjectMenu: () => void;
   toggleProjectMenu: (projectId: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
   startDraftInProject: (project: TProject) => void;
 } {
-  const setChatLane = () => {
-    params.setThreadLaneFilter("chat");
-  };
-
-  const setAgentLane = () => {
-    params.setThreadLaneFilter("agent");
-  };
-
   const closeProjectMenu = () => {
     params.setProjectMenuProjectId(null);
   };
@@ -51,13 +38,10 @@ export function createThreadPanelController<TProject extends { id: string }>(
       params.setActiveProject(project);
       void params.persistActiveProject?.(project.id);
     }
-    setAgentLane();
     params.enterDraftThread();
   };
 
   return {
-    setChatLane,
-    setAgentLane,
     closeProjectMenu,
     toggleProjectMenu,
     toggleProjectExpanded,

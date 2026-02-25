@@ -97,7 +97,9 @@ import {
   traceThreadContext,
 } from "../shared/threadTitleUi";
 import {
+  buildProjectThreadGroups,
   buildProjectByIdMap,
+  filterThreadsWithoutProject,
   normalizeThreadLane,
   normalizeThreadStorageMode,
   resolveThreadProjectId as resolveThreadProjectIdShared,
@@ -321,6 +323,36 @@ import {
 type ThreadRecord = ArpThreadRecord;
 type ThreadLane = ArpThreadRecord["thread_lane"];
 type ProjectRecord = ArpProjectRecord;
+type CloudProjectRecord = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  status: string;
+  created_at: number;
+  updated_at: number;
+  root_path: string;
+};
+
+function resolvePreferredCloudProjectId(
+  projects: readonly CloudProjectRecord[],
+  preferredProjectId: string | null | undefined,
+): string | null {
+  const preferred = String(preferredProjectId ?? "").trim();
+  if (preferred && projects.some((project) => project.id === preferred)) {
+    return preferred;
+  }
+  const general =
+    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
+  if (general) return general.id;
+  return projects[0]?.id ?? null;
+}
+
+function resolveGeneralCloudProjectId(projects: readonly CloudProjectRecord[]): string | null {
+  const general =
+    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
+  if (general) return general.id;
+  return null;
+}
 type ToolCallRecord = ArpToolCallRecord & {
   duration_ms?: number | null;
   raw_output_file_id?: string | null;
@@ -1039,7 +1071,7 @@ function App() {
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
   const [selectedLibraryResourceId, setSelectedLibraryResourceId] = useState<string | null>(null);
 		  const [isLoadingResources, setIsLoadingResources] = useState(false);
-      const [joiningDiscoverCommunityId, setJoiningDiscoverCommunityId] = useState<string | null>(null);
+      const [, setJoiningDiscoverCommunityId] = useState<string | null>(null);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1125,6 +1157,9 @@ function App() {
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<ProjectRecord | null>(null);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [cloudProjects, setCloudProjects] = useState<CloudProjectRecord[]>([]);
+  const [activeCloudProjectId, setActiveCloudProjectId] = useState<string | null>(null);
+  const pendingCloudDraftProjectIdRef = useRef<string | null>(null);
   const [projectMenuProjectId, setProjectMenuProjectId] = useState<string | null>(null);
   const [projectExpandedById, setProjectExpandedById] = useState<Record<string, boolean>>(() => {
     if (typeof window === "undefined") return {};
@@ -1172,6 +1207,10 @@ function App() {
   const isLoadingThreadRef = useRef(false); // Suppresses scroll handler during thread transitions
   const capturePrependAnchorRef = useRef<() => void>(() => {});
   const clearPendingPrependAnchorRef = useRef<() => void>(() => {});
+  const activeThread = useMemo(() => {
+    if (!activeThreadId) return null;
+    return threads.find((thread) => thread.id === activeThreadId) ?? null;
+  }, [activeThreadId, threads]);
 
   const {
     isLoadingChat,
@@ -1385,7 +1424,6 @@ function App() {
   const {
     openCommunityLandingExternal,
     maybeAutoJoinPendingPublicCommunity,
-    handleJoinDiscoverCommunity,
   } = usePendingPublicCommunityJoinController<SupabaseSession>({
     shellClient,
     supabaseSession,
@@ -1783,6 +1821,7 @@ function App() {
     },
     onSessionAvailable: (session) => {
       void loadCommunities(session);
+      void loadCloudProjects(session);
       void maybeAutoJoinPendingInvites(session);
       void maybeAutoJoinPendingPublicCommunity(session);
       void loadPendingPurchaseClaims(session);
@@ -1791,11 +1830,19 @@ function App() {
       void loadModelRegistry(session);
     },
     onFocusWithSession: (current) => {
+      void loadCommunities(current);
+      void loadCloudProjects(current);
       void loadBuilderBillingStatus(current);
       void loadSelfProfile(current);
       void loadModelRegistry(current);
     },
   });
+
+  useEffect(() => {
+    if (supabaseSession) return;
+    setCloudProjects([]);
+    setActiveCloudProjectId(null);
+  }, [supabaseSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2042,7 +2089,9 @@ function App() {
       await handleSignIn();
       return null;
     }
-    return desktopCloudChatThreadApi.createCloudChatThread(thread, session);
+    const created = await desktopCloudChatThreadApi.createCloudChatThread(thread, session);
+    void loadCloudProjects(session);
+    return created;
   }
 
   async function deleteCloudChatThread(threadId: string): Promise<void> {
@@ -2078,13 +2127,27 @@ function App() {
       return desktopThreadServiceRouter.resolveByThreadId(threadId);
     } catch (error) {
       // New draft threads can be created and sent before React state re-renders with the thread row.
-      // Fall back to the currently selected lane domain to keep send flow deterministic.
-      const fallbackStorageMode = storageModeForThreadLane(threadLaneFilter);
+      // Fall back to the draft lane domain to keep send flow deterministic.
+      const active = activeThreadId
+        ? threads.find((thread) => thread.id === activeThreadId) ?? null
+        : null;
+      const fallbackLane: ThreadLane = (() => {
+        if (active) {
+          const activeLane = normalizeThreadLane(active.thread_lane, active.engine_id);
+          if (activeLane === "chat" && !supabaseSessionRef.current) return "agent";
+          return activeLane;
+        }
+        if (threadLaneFilter === "chat") return supabaseSessionRef.current ? "chat" : "agent";
+        if (threadLaneFilter === "agent") return "agent";
+        if (activeProject) return "agent";
+        return supabaseSessionRef.current ? "chat" : "agent";
+      })();
+      const fallbackStorageMode = storageModeForThreadLane(fallbackLane);
       console.warn(
-        `Thread service routing fallback for thread_id=${threadId} via ${threadLaneFilter}/${fallbackStorageMode}.`,
+        `Thread service routing fallback for thread_id=${threadId} via ${fallbackLane}/${fallbackStorageMode}.`,
         error,
       );
-      return desktopThreadServiceRouter.resolveByLane(threadLaneFilter, fallbackStorageMode);
+      return desktopThreadServiceRouter.resolveByLane(fallbackLane, fallbackStorageMode);
     }
   }
 
@@ -3074,6 +3137,80 @@ function App() {
     } catch (error) {
       console.error("Failed to load threads:", error);
       setThreads([]);
+    }
+  }
+
+  async function loadCloudProjects(session: SupabaseSession): Promise<void> {
+    const url = getSupabaseUrl();
+    if (!url) return;
+    const fetchProjects = async (): Promise<CloudProjectRecord[]> => {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/list_cloud_projects`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+        session,
+      );
+      if (!response.ok) {
+        throw new Error(await readSupabaseError(response));
+      }
+      const rows = (await response.json()) as Array<{
+        id: string;
+        name: string | null;
+        slug: string | null;
+        status: string;
+        created_at: string;
+        updated_at: string;
+      }>;
+      return rows
+        .filter((row) => String(row?.status ?? "").trim().toLowerCase() === "active")
+        .map((row) => {
+          const slug = (row.slug ?? "").trim() || null;
+          const id = String(row.id ?? "").trim();
+          return {
+            id,
+            name: row.name ?? null,
+            slug,
+            status: (row.status ?? "").trim().toLowerCase(),
+            created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
+            updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
+            root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
+          } satisfies CloudProjectRecord;
+        })
+        .filter((project) => Boolean(project.id));
+    };
+    try {
+      let next = await fetchProjects();
+      if (next.length === 0) {
+        const ensureResponse = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/ensure_default_cloud_project`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          },
+          session,
+        );
+        if (!ensureResponse.ok) {
+          throw new Error(await readSupabaseError(ensureResponse));
+        }
+        next = await fetchProjects();
+      }
+      setCloudProjects(next);
+      setProjectExpandedById((prev) => {
+        const nextExpanded: Record<string, boolean> = { ...prev };
+        for (const project of next) {
+          nextExpanded[project.id] = prev[project.id] ?? true;
+        }
+        return nextExpanded;
+      });
+      setActiveCloudProjectId((prev) => resolvePreferredCloudProjectId(next, prev));
+    } catch (error) {
+      console.warn("Failed to load cloud projects:", error);
+      // Keep existing in-memory cloud project state on transient failures so desktop
+      // doesn't regress to an empty "Unassigned" view when cloud sync hiccups.
     }
   }
 
@@ -4349,8 +4486,20 @@ function App() {
             activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
         );
 
+        const draftThreadLane = useMemo<ThreadLane>(() => {
+          if (activeThread) {
+            const activeLane = normalizeThreadLane(activeThread.thread_lane, activeThread.engine_id);
+            if (activeLane === "chat" && !supabaseSession) return "agent";
+            return activeLane;
+          }
+          if (threadLaneFilter === "chat") return supabaseSession ? "chat" : "agent";
+          if (threadLaneFilter === "agent") return "agent";
+          if (activeProject) return "agent";
+          return supabaseSession ? "chat" : "agent";
+        }, [activeProject, activeThread, supabaseSession, threadLaneFilter]);
+
         const activeProjectLabelForDraft = useMemo(() => {
-          if (threadLaneFilter !== "agent") return "";
+          if (draftThreadLane !== "agent") return "";
           if (!activeProject) return "";
           const name = (activeProject.name ?? "").trim();
           if (name) return name;
@@ -4358,7 +4507,7 @@ function App() {
           if (!rootPath) return "";
           const parts = rootPath.split("/").filter(Boolean);
           return parts[parts.length - 1] ?? rootPath;
-        }, [activeProject, threadLaneFilter]);
+        }, [activeProject, draftThreadLane]);
 
         const emptyThreadLanding = useMemo(() => {
           const landingMatchesCommunity = Boolean(
@@ -4375,7 +4524,7 @@ function App() {
             }
             return DEFAULT_EMPTY_THREAD_LANDING;
           })();
-          if (threadLaneFilter === "agent" && activeProjectLabelForDraft) {
+          if (draftThreadLane === "agent" && activeProjectLabelForDraft) {
             return {
               ...baseLanding,
               title: `How can I help in ${activeProjectLabelForDraft}?`,
@@ -4387,7 +4536,7 @@ function App() {
           communityActionGuards.canViewCommunity,
           activeCommunityAgentLanding,
           activeCommunityId,
-          threadLaneFilter,
+          draftThreadLane,
           activeProjectLabelForDraft,
         ]);
 
@@ -4442,7 +4591,6 @@ function App() {
 	  useEffect(() => {
 	    communityAttachmentsRef.current = communityAttachments;
 	  }, [communityAttachments]);
-	  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
 	  const pendingCommunityMemoryCandidates = useMemo(
 	    () =>
 	      communityMemoryCandidates.filter((candidate) => {
@@ -4533,20 +4681,77 @@ function App() {
 	  });
 	  const {
 	    normalizedThreadSearch,
-	    laneThreads,
-	    chatThreadGroups,
+	    chatThreads,
+	    agentThreads,
+	    chatThreadGroups: chatThreadDateGroups,
 	    threadSearchResults,
 	    projectThreadGroups,
 	    generalThreads,
 	  } = useDesktopThreadSidebarState({
 	    threads,
 	    projects,
-	    threadLaneFilter,
 	    threadSearchQuery,
 	    projectById,
 	    resolveThreadProjectId,
 	    getThreadDisplayTitle,
 	  });
+	  const cloudProjectById = useMemo(() => buildProjectByIdMap(cloudProjects), [cloudProjects]);
+	  const generalCloudProjectId = useMemo(
+	    () => resolveGeneralCloudProjectId(cloudProjects),
+	    [cloudProjects],
+	  );
+	  const resolveCloudThreadProjectId = useCallback(
+	    (thread: ThreadRecord): string | null => {
+	      const projectId = (thread.project_id ?? "").trim();
+	      if (!projectId) return generalCloudProjectId;
+	      if (cloudProjectById.has(projectId)) return projectId;
+	      return generalCloudProjectId;
+	    },
+	    [cloudProjectById, generalCloudProjectId],
+	  );
+	  const resolvedActiveCloudProjectId = useMemo(
+	    () => resolvePreferredCloudProjectId(cloudProjects, activeCloudProjectId),
+	    [activeCloudProjectId, cloudProjects],
+	  );
+	  const chatProjectThreadGroups = useMemo(
+	    () => buildProjectThreadGroups(cloudProjects, chatThreads, resolveCloudThreadProjectId),
+	    [chatThreads, cloudProjects, resolveCloudThreadProjectId],
+	  );
+	  const chatUnassignedThreads = useMemo(
+	    () => filterThreadsWithoutProject(chatThreads, resolveCloudThreadProjectId),
+	    [chatThreads, resolveCloudThreadProjectId],
+	  );
+	  const chatThreadGroups = useMemo(() => {
+	    if (!supabaseSession) return chatThreadDateGroups;
+	    const named = chatProjectThreadGroups
+	      .filter((group) => group.threads.length > 0)
+	      .map((group) => ({
+	        label: (group.project.name ?? "").trim() || "General",
+	        threads: group.threads,
+	      }));
+	    if (chatUnassignedThreads.length > 0) {
+	      named.push({ label: "Unassigned", threads: chatUnassignedThreads });
+	    }
+	    return named;
+	  }, [chatProjectThreadGroups, chatThreadDateGroups, chatUnassignedThreads, supabaseSession]);
+	  const laneProjectThreadGroups = useMemo(
+	    () =>
+	      threadLaneFilter === "agent"
+	        ? (projectThreadGroups as Array<{ project: ProjectRecord | CloudProjectRecord; threads: ThreadRecord[] }>)
+	        : (chatProjectThreadGroups as Array<{ project: ProjectRecord | CloudProjectRecord; threads: ThreadRecord[] }>),
+	    [chatProjectThreadGroups, projectThreadGroups, threadLaneFilter],
+	  );
+	  const laneGeneralThreads = useMemo(
+	    () => (threadLaneFilter === "agent" ? generalThreads : chatUnassignedThreads),
+	    [chatUnassignedThreads, generalThreads, threadLaneFilter],
+	  );
+	  const laneFilteredThreadSearchResults = useMemo(
+	    () =>
+	      threadSearchResults.filter(
+	        (thread) => normalizeThreadLane(thread.thread_lane, thread.engine_id) === threadLaneFilter,
+	      ),
+	    [threadSearchResults, threadLaneFilter],
+	  );
 	  const resetThreadViewStateForDraft = useCallback(() => {
 	    setMessages([]);
 	    setToolCalls([]);
@@ -4563,23 +4768,30 @@ function App() {
 	    setMemoryToast("No model selected. Enable a model in Settings → Models.");
 	  }, []);
 	  const createDraftThreadRecord = useCallback(
-	    (threadId: string, nowSec: number): ThreadRecord => ({
-	      id: threadId,
-	      title: null,
-	      engine_id: "messages_agent",
-	      model_id: activeModelId,
-	      thread_lane: threadLaneFilter,
-	      storage_mode: storageModeForThreadLane(threadLaneFilter),
-	      project_id: threadLaneFilter === "agent" ? activeProject?.id ?? null : null,
-	      community_id: activeCommunityId ?? null,
-	      context_version: 0,
-	      workspace_path: null,
-	      created_at: nowSec,
-	      updated_at: nowSec,
-	      last_event_at: null,
-	      last_seq: 0,
-	    }),
-	    [activeCommunityId, activeModelId, activeProject?.id, threadLaneFilter],
+	    (threadId: string, nowSec: number): ThreadRecord => {
+	      const cloudProjectId = pendingCloudDraftProjectIdRef.current ?? resolvedActiveCloudProjectId;
+	      if (draftThreadLane === "chat") {
+	        // One-shot override used when user starts a draft from a specific cloud project row.
+	        pendingCloudDraftProjectIdRef.current = null;
+	      }
+	      return {
+	        id: threadId,
+	        title: null,
+	        engine_id: "messages_agent",
+	        model_id: activeModelId,
+	        thread_lane: draftThreadLane,
+	        storage_mode: storageModeForThreadLane(draftThreadLane),
+	        project_id: draftThreadLane === "agent" ? activeProject?.id ?? null : cloudProjectId,
+	        community_id: activeCommunityId ?? null,
+	        context_version: 0,
+	        workspace_path: null,
+	        created_at: nowSec,
+	        updated_at: nowSec,
+	        last_event_at: null,
+	        last_seq: 0,
+	      };
+	    },
+	    [activeCommunityId, activeModelId, activeProject?.id, draftThreadLane, resolvedActiveCloudProjectId],
 	  );
   const {
     ensureThreadId,
@@ -4852,14 +5064,21 @@ function App() {
     syncThreadCommunityLens: (thread: ThreadRecord, desiredCommunityId: string | null) =>
       syncWorkspaceThreadCommunityLens(thread, desiredCommunityId),
     onSelectThread: (thread: ThreadRecord) => {
+      const lane = normalizeThreadLane(thread.thread_lane, thread.engine_id);
+      setThreadLaneFilter(lane);
       setActiveCommunityId(thread.community_id ?? null);
       setActiveThreadId(thread.id);
-      const projectId = resolveThreadProjectId(thread);
-      const project = projectId ? projectById.get(projectId) ?? null : null;
+      if (lane === "chat") {
+        const cloudProjectId = (thread.project_id ?? "").trim();
+        if (cloudProjectId) setActiveCloudProjectId(cloudProjectId);
+        return;
+      }
+      const localProjectId = resolveThreadProjectId(thread);
+      const localProject = localProjectId ? projectById.get(localProjectId) ?? null : null;
       const currentProjectId = activeProject?.id ?? null;
-      const nextProjectId = project?.id ?? null;
+      const nextProjectId = localProject?.id ?? null;
       if (currentProjectId !== nextProjectId) {
-        void handleSetActiveProject(project);
+        void handleSetActiveProject(localProject);
       }
     },
     trace: traceThreadContext,
@@ -5098,6 +5317,197 @@ function App() {
     }
   }
 
+  async function handleAddCloudProject(): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session) {
+      setAuthError("Sign in to manage cloud projects.");
+      void handleSignIn();
+      return;
+    }
+    const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
+    const nextName = window.prompt("Cloud project name", suggestedName);
+    const cleaned =
+      nextName === null
+        ? cloudProjects.length === 0
+          ? suggestedName
+          : ""
+        : nextName.trim();
+    if (!cleaned) {
+      if (nextName === null) return;
+      setMemoryToast("Project name cannot be empty.");
+      return;
+    }
+    const url = getSupabaseUrl();
+    if (!url) {
+      setMemoryToast("Missing Supabase URL.");
+      return;
+    }
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/create_cloud_project`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_name: cleaned, p_slug: null }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      const payload = (await response.json()) as unknown;
+      const rows = Array.isArray(payload) ? payload : [payload];
+      let createdProject: CloudProjectRecord | null = null;
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
+        const id = String((row as Record<string, unknown>).id ?? "").trim();
+        if (!id) continue;
+        const slugRaw = (row as Record<string, unknown>).slug;
+        const slug = typeof slugRaw === "string" ? slugRaw.trim() || null : null;
+        const statusRaw = (row as Record<string, unknown>).status;
+        const createdAtRaw = (row as Record<string, unknown>).created_at;
+        const updatedAtRaw = (row as Record<string, unknown>).updated_at;
+        createdProject = {
+          id,
+          name:
+            typeof (row as Record<string, unknown>).name === "string"
+              ? String((row as Record<string, unknown>).name)
+              : cleaned,
+          slug,
+          status:
+            typeof statusRaw === "string" && statusRaw.trim()
+              ? statusRaw.trim().toLowerCase()
+              : "active",
+          created_at:
+            typeof createdAtRaw === "string"
+              ? (toUnixSecondsFromIso(createdAtRaw) ?? Math.floor(Date.now() / 1000))
+              : Math.floor(Date.now() / 1000),
+          updated_at:
+            typeof updatedAtRaw === "string"
+              ? (toUnixSecondsFromIso(updatedAtRaw) ?? Math.floor(Date.now() / 1000))
+              : Math.floor(Date.now() / 1000),
+          root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
+        };
+        break;
+      }
+      if (createdProject) {
+        setCloudProjects((prev) => {
+          const merged = [createdProject!, ...prev.filter((project) => project.id !== createdProject!.id)];
+          return merged.sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0));
+        });
+        setProjectExpandedById((prev) => ({ ...prev, [createdProject.id]: true }));
+        setActiveCloudProjectId(createdProject.id);
+      }
+      await loadCloudProjects(session);
+      setThreadLaneFilter("chat");
+      setMemoryToast(`Created cloud project: ${cleaned}`);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to create cloud project.";
+      setMemoryToast(message);
+    }
+  }
+
+  async function handleRenameCloudProject(project: CloudProjectRecord): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session) {
+      setAuthError("Sign in to manage cloud projects.");
+      void handleSignIn();
+      return;
+    }
+    setProjectMenuProjectId(null);
+    const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
+    const nextName = window.prompt("Cloud project name", defaultName);
+    if (nextName === null) return;
+    const cleaned = nextName.trim();
+    if (!cleaned) {
+      setMemoryToast("Project name cannot be empty.");
+      return;
+    }
+    const url = getSupabaseUrl();
+    if (!url) {
+      setMemoryToast("Missing Supabase URL.");
+      return;
+    }
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/rename_cloud_project`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_project_id: project.id, p_name: cleaned }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await loadCloudProjects(session);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to rename cloud project.";
+      setMemoryToast(message);
+    }
+  }
+
+  async function handleRemoveCloudProject(project: CloudProjectRecord): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session) {
+      setAuthError("Sign in to manage cloud projects.");
+      void handleSignIn();
+      return;
+    }
+    setProjectMenuProjectId(null);
+    if (String(project.slug ?? "").trim().toLowerCase() === "general") {
+      setMemoryToast("General project cannot be removed.");
+      return;
+    }
+    const label = (project.name ?? "").trim() || project.root_path;
+    const shouldRemove = window.confirm(
+      `Delete cloud project "${label}"?\n\nIts threads will move to General.`,
+    );
+    if (!shouldRemove) return;
+    const url = getSupabaseUrl();
+    if (!url) {
+      setMemoryToast("Missing Supabase URL.");
+      return;
+    }
+    try {
+      const response = await fetchWithSupabaseAuth(
+        `${url}/rest/v1/rpc/delete_cloud_project`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ p_project_id: project.id, p_force: true }),
+        },
+        session,
+      );
+      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await Promise.all([loadCloudProjects(session), loadThreads()]);
+      setMemoryToast(`Deleted cloud project: ${label}`);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to remove cloud project.";
+      setMemoryToast(message);
+    }
+  }
+
+  function handleStartDraftInCloudProject(project: CloudProjectRecord): void {
+    setProjectMenuProjectId(null);
+    pendingCloudDraftProjectIdRef.current = project.id;
+    setThreadLaneFilter("chat");
+    setActiveCloudProjectId(project.id);
+    enterDraftThread();
+  }
+
   async function handleSetActiveProject(project: ProjectRecord | null) {
     try {
       await runtimeClient.setActiveProject(project?.id ?? null);
@@ -5224,6 +5634,7 @@ function App() {
       return {
         selectedModelId,
         hasChatgptAuth: Boolean(chatgptAuthSummary),
+        approvalMode,
       };
     },
   });
@@ -5483,7 +5894,6 @@ function App() {
     activeProjectId: activeProject?.id ?? null,
     setActiveProject: (project) => setActiveProject(project),
     persistActiveProject: persistActiveProjectForPanel,
-    setThreadLaneFilter,
     enterDraftThread,
     projectMenuProjectId,
     setProjectMenuProjectId,
@@ -5523,14 +5933,10 @@ function App() {
     setUserWantsSessions((prev) => !prev);
   };
   const handleTopbarNewThread = () => {
+    pendingCloudDraftProjectIdRef.current = null;
     if (threadLaneFilter === "chat" && !supabaseSession) {
       setThreadLaneFilter("agent");
-      const fallbackLabel = activeProjectLabelForDraft;
-      showAppToastMessage(
-        fallbackLabel
-          ? `Chat requires sign-in. Started an agent thread in ${fallbackLabel}.`
-          : "Chat requires sign-in. Started an agent thread instead.",
-      );
+      showAppToastMessage("Cloud chat requires sign-in. Started a local agent thread instead.");
     }
     enterDraftThread();
   };
@@ -5617,35 +6023,47 @@ function App() {
             </>
 	          ) : (
 	            <>
-		              <ThreadSidebarPanel
-		                state={{
-		                  threadSearchQuery,
-		                  threadLaneFilter,
-		                  normalizedThreadSearch,
-		                  threadSearchResults,
-		                  projectThreadGroups,
-		                  projectExpandedById,
-		                  projectMenuProjectId,
-		                  generalThreads,
-				                  laneThreadsCount: laneThreads.length,
-				                  chatThreadGroups,
-		                      showChatSignInPrompt: threadLaneFilter === "chat" && !supabaseSession,
-				                }}
-				                actions={{
-		                  onThreadSearchQueryChange: setThreadSearchQuery,
-		                  onSelectChatLane: threadPanelController.setChatLane,
-		                  onSelectAgentLane: threadPanelController.setAgentLane,
-		                  onAddProject: handleAddProjectFromFolderPicker,
-		                  onToggleProjectExpanded: threadPanelController.toggleProjectExpanded,
-		                  onStartDraftInProject: threadPanelController.startDraftInProject,
+			              <ThreadSidebarPanel<ThreadRecord, ProjectRecord | CloudProjectRecord>
+			                state={{
+			                  threadLaneFilter,
+			                  threadSearchQuery,
+			                  normalizedThreadSearch,
+			                  threadSearchResults: laneFilteredThreadSearchResults,
+			                  projectThreadGroups: laneProjectThreadGroups,
+			                  projectExpandedById,
+			                  projectMenuProjectId,
+		                  generalThreads: laneGeneralThreads,
+					                  agentThreadsCount: agentThreads.length,
+					                  chatThreadsCount: chatThreads.length,
+					                  chatThreadGroups,
+			                      showChatSignInPrompt: !supabaseSession,
+					                }}
+						                actions={{
+			                  onThreadLaneFilterChange: setThreadLaneFilter,
+			                  onThreadSearchQueryChange: setThreadSearchQuery,
+			                  onAddProject: () =>
+			                    threadLaneFilter === "agent"
+			                      ? handleAddProjectFromFolderPicker()
+			                      : handleAddCloudProject(),
+			                  onToggleProjectExpanded: threadPanelController.toggleProjectExpanded,
+		                  onStartDraftInProject: (project) =>
+		                    threadLaneFilter === "agent"
+		                      ? threadPanelController.startDraftInProject(project as ProjectRecord)
+		                      : handleStartDraftInCloudProject(project as CloudProjectRecord),
 		                  onToggleProjectMenu: threadPanelController.toggleProjectMenu,
 		                  projectMenuRef,
-		                  onRenameProject: handleRenameProject,
-		                  onRemoveProject: handleRemoveProject,
+		                  onRenameProject: (project) =>
+		                    threadLaneFilter === "agent"
+		                      ? handleRenameProject(project as ProjectRecord)
+		                      : handleRenameCloudProject(project as CloudProjectRecord),
+		                  onRemoveProject: (project) =>
+		                    threadLaneFilter === "agent"
+		                      ? handleRemoveProject(project as ProjectRecord)
+		                      : handleRemoveCloudProject(project as CloudProjectRecord),
 			                  renderSessionItem,
-		                      onSignInForChat: handleSignIn,
-				                }}
-				              />
+			                      onSignInForChat: handleSignIn,
+					                }}
+					              />
             </>
           )}
         </aside>
@@ -7757,7 +8175,6 @@ function App() {
 	                      {filteredDiscoverCommunities.map((community) => {
 	                          const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
 	                          const alreadyMember = Boolean(memberCommunity);
-	                          const isJoining = joiningDiscoverCommunityId === community.slug;
 	                          const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
 	                          const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
 	                          const isJoinable = isPublishedCommunityVisibility(community.visibility);
@@ -7780,16 +8197,10 @@ function App() {
 		                              isPublishedVisibility={isJoinable}
 		                              clickable={canActivate}
 		                              ariaLabel={
-		                                canActivate
-		                                  ? alreadyMember
-		                                    ? `Open ${community.name}`
-		                                    : isJoinable && supabaseSession
-		                                      ? `Join ${community.name}`
-		                                      : `View ${community.name}`
-		                                  : undefined
+		                                canActivate ? (alreadyMember ? `Open ${community.name}` : `View ${community.name}`) : undefined
 		                              }
-                                onActivate={() => {
-                                  if (!canActivate) return;
+	                                onActivate={() => {
+	                                  if (!canActivate) return;
                                   if (alreadyMember) {
                                     if (!memberCommunity) return;
                                     if (
@@ -7805,10 +8216,6 @@ function App() {
                                     openCommunityTab(memberCommunity.id, "chat", { pushSnapshot: true });
                                     return;
                                   }
-		                                if (isJoinable && supabaseSession && !isJoining) {
-		                                  void handleJoinDiscoverCommunity(community);
-		                                  return;
-		                                }
 		                                void openCommunityLandingExternal(community);
 		                              }}
 		                            />
