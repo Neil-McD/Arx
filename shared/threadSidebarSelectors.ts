@@ -69,6 +69,43 @@ export function sortProjectsByRootPathLengthDesc<TProject extends { root_path: s
   return [...projects].sort((a, b) => (b.root_path?.length ?? 0) - (a.root_path?.length ?? 0));
 }
 
+type CloudProjectLike = { id: string; slug?: string | null };
+
+export function resolveGeneralCloudProjectId<TProject extends CloudProjectLike>(
+  projects: readonly TProject[],
+): string | null {
+  const general =
+    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
+  if (general) return general.id;
+  return null;
+}
+
+export function resolvePreferredCloudProjectId<TProject extends CloudProjectLike>(
+  projects: readonly TProject[],
+  preferredProjectId: string | null | undefined,
+): string | null {
+  const preferred = String(preferredProjectId ?? "").trim();
+  if (preferred && projects.some((project) => project.id === preferred)) {
+    return preferred;
+  }
+  const generalId = resolveGeneralCloudProjectId(projects);
+  if (generalId) return generalId;
+  return projects[0]?.id ?? null;
+}
+
+export function resolveCloudThreadProjectId<
+  TThread extends { project_id?: string | null },
+  TProject extends CloudProjectLike,
+>(
+  thread: TThread,
+  projectById: Map<string, TProject>,
+  generalProjectId: string | null,
+): string | null {
+  const direct = String(thread.project_id ?? "").trim();
+  if (direct && projectById.has(direct)) return direct;
+  return generalProjectId;
+}
+
 export function resolveThreadProjectId<
   TThread extends { project_id?: string | null; workspace_path?: string | null },
   TProject extends { id: string; root_path: string },

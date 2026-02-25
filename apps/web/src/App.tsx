@@ -46,6 +46,9 @@ import {
   buildProjectThreadGroups,
   filterThreadsWithoutProject,
   filterVisibleThreads,
+  resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
+  resolveGeneralCloudProjectId,
+  resolvePreferredCloudProjectId,
   searchThreads,
 } from "../../../shared/threadSidebarSelectors";
 import {
@@ -381,27 +384,6 @@ type CloudProjectRecord = {
   updated_at: number;
   root_path: string;
 };
-
-function resolvePreferredCloudProjectId(
-  projects: readonly CloudProjectRecord[],
-  preferredProjectId: string | null | undefined,
-): string | null {
-  const preferred = String(preferredProjectId ?? "").trim();
-  if (preferred && projects.some((project) => project.id === preferred)) {
-    return preferred;
-  }
-  const general =
-    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
-  if (general) return general.id;
-  return projects[0]?.id ?? null;
-}
-
-function resolveGeneralCloudProjectId(projects: readonly CloudProjectRecord[]): string | null {
-  const general =
-    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
-  if (general) return general.id;
-  return null;
-}
 
 type ThreadMessage = {
   id: string;
@@ -3721,10 +3703,7 @@ export default function App() {
   );
   const resolveCloudThreadProjectId = useCallback(
     (thread: ThreadRecord): string | null => {
-      const direct = (thread.project_id ?? "").trim();
-      if (!direct) return generalCloudProjectId;
-      if (cloudProjectById.has(direct)) return direct;
-      return generalCloudProjectId;
+      return resolveCloudThreadProjectIdShared(thread, cloudProjectById, generalCloudProjectId);
     },
     [cloudProjectById, generalCloudProjectId],
   );

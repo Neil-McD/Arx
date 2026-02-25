@@ -102,6 +102,9 @@ import {
   filterThreadsWithoutProject,
   normalizeThreadLane,
   normalizeThreadStorageMode,
+  resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
+  resolveGeneralCloudProjectId,
+  resolvePreferredCloudProjectId,
   resolveThreadProjectId as resolveThreadProjectIdShared,
   storageModeForThreadLane,
   sortProjectsByRootPathLengthDesc,
@@ -332,27 +335,6 @@ type CloudProjectRecord = {
   updated_at: number;
   root_path: string;
 };
-
-function resolvePreferredCloudProjectId(
-  projects: readonly CloudProjectRecord[],
-  preferredProjectId: string | null | undefined,
-): string | null {
-  const preferred = String(preferredProjectId ?? "").trim();
-  if (preferred && projects.some((project) => project.id === preferred)) {
-    return preferred;
-  }
-  const general =
-    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
-  if (general) return general.id;
-  return projects[0]?.id ?? null;
-}
-
-function resolveGeneralCloudProjectId(projects: readonly CloudProjectRecord[]): string | null {
-  const general =
-    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
-  if (general) return general.id;
-  return null;
-}
 type ToolCallRecord = ArpToolCallRecord & {
   duration_ms?: number | null;
   raw_output_file_id?: string | null;
@@ -4700,15 +4682,12 @@ function App() {
 	    () => resolveGeneralCloudProjectId(cloudProjects),
 	    [cloudProjects],
 	  );
-	  const resolveCloudThreadProjectId = useCallback(
-	    (thread: ThreadRecord): string | null => {
-	      const projectId = (thread.project_id ?? "").trim();
-	      if (!projectId) return generalCloudProjectId;
-	      if (cloudProjectById.has(projectId)) return projectId;
-	      return generalCloudProjectId;
-	    },
-	    [cloudProjectById, generalCloudProjectId],
-	  );
+  const resolveCloudThreadProjectId = useCallback(
+    (thread: ThreadRecord): string | null => {
+      return resolveCloudThreadProjectIdShared(thread, cloudProjectById, generalCloudProjectId);
+    },
+    [cloudProjectById, generalCloudProjectId],
+  );
 	  const resolvedActiveCloudProjectId = useMemo(
 	    () => resolvePreferredCloudProjectId(cloudProjects, activeCloudProjectId),
 	    [activeCloudProjectId, cloudProjects],
