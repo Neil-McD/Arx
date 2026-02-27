@@ -10,6 +10,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
+    "convex:codegen": "convex codegen",
     "check:gate-parity": "bash scripts/gate_parity_contract_check.sh",
     "check:harness-parity": "bash scripts/harness_parity_contract_check.sh",
     "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh",
@@ -20,6 +23,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
+    "convex": "^1.32.0",
     "highlight.js": "^11.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

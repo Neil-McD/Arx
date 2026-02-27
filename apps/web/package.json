@@ -10,6 +10,7 @@
     "check:bundle-budget": "bash ../../scripts/web_bundle_budget_check.sh apps/web"
   },
   "dependencies": {
+    "convex": "^1.32.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

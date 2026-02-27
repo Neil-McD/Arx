@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
+import { bootConvexProbe } from "../../../shared/convexRuntime";
 
 type ErrorBoundaryState = { error: Error | null };
 
@@ -66,6 +67,8 @@ try {
 } catch {
   applyAppThemeAttributes("dark", document.documentElement);
 }
+
+bootConvexProbe();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
