@@ -44,13 +44,18 @@ import {
 import {
   buildProjectByIdMap,
   buildProjectThreadGroups,
-  filterThreadsWithoutProject,
   filterVisibleThreads,
   resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
   resolveGeneralCloudProjectId,
   resolvePreferredCloudProjectId,
   searchThreads,
 } from "../../../shared/threadSidebarSelectors";
+import {
+  type DaytonaSandboxStatus,
+} from "../../../shared/daytonaSandboxStatus";
+import {
+  fetchMappedDaytonaCloudProjects,
+} from "../../../shared/daytonaCloudProjects";
 import {
   isUuid,
 } from "../../../shared/appIdentity";
@@ -218,6 +223,7 @@ import {
 } from "../../../shared/theme";
 import { CommunityChatMessageRow } from "../../../shared/CommunityChatMessageRow";
 import { useLastClickWinsController } from "../../../shared/useLastClickWinsController";
+import { ThreadSidebarPanel } from "../../../src/components/ThreadSidebarPanel";
 import { useCommunityChatRealtime } from "../../../shared/useCommunityChatRealtime";
 import { useCommunityChatViewport } from "../../../shared/useCommunityChatViewport";
 import { useCommunityChatLightbox } from "../../../shared/useCommunityChatLightbox";
@@ -380,6 +386,7 @@ type CloudProjectRecord = {
   name: string | null;
   slug: string | null;
   status: string;
+  sandbox_status: DaytonaSandboxStatus | null;
   created_at: number;
   updated_at: number;
   root_path: string;
@@ -1222,6 +1229,15 @@ export default function App() {
   const [activeCloudProjectId, setActiveCloudProjectId] = useState<string | null>(null);
   const [cloudProjectExpandedById, setCloudProjectExpandedById] = useState<Record<string, boolean>>({});
   const [cloudProjectMenuProjectId, setCloudProjectMenuProjectId] = useState<string | null>(null);
+  const [showCreateCloudProjectModal, setShowCreateCloudProjectModal] = useState(false);
+  const [createCloudProjectName, setCreateCloudProjectName] = useState("");
+  const [createCloudProjectError, setCreateCloudProjectError] = useState<string | null>(null);
+  const [isCreatingCloudProject, setIsCreatingCloudProject] = useState(false);
+  const [showRenameCloudProjectModal, setShowRenameCloudProjectModal] = useState(false);
+  const [renameCloudProjectId, setRenameCloudProjectId] = useState<string | null>(null);
+  const [renameCloudProjectName, setRenameCloudProjectName] = useState("");
+  const [renameCloudProjectError, setRenameCloudProjectError] = useState<string | null>(null);
+  const [isRenamingCloudProject, setIsRenamingCloudProject] = useState(false);
   const cloudProjectMenuRef = useRef<HTMLDivElement | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
@@ -1285,6 +1301,7 @@ export default function App() {
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
 
   const threadsHydratedRef = useRef(false);
+  const lastCloudStatusRefreshAtRef = useRef(0);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
   const [messageInput, setMessageInput] = useState("");
@@ -1782,6 +1799,15 @@ export default function App() {
     setAppToast,
   });
 
+  const refreshCloudProjectStatuses = useCallback(() => {
+    if (!supabaseSession) return;
+    if (activePage !== "workspace") return;
+    const now = Date.now();
+    if (now - lastCloudStatusRefreshAtRef.current < 1000) return;
+    lastCloudStatusRefreshAtRef.current = now;
+    void loadCloudProjects(supabaseSession);
+  }, [activePage, loadCloudProjects, supabaseSession]);
+
   const {
     stopStreamingTurn,
     runPublicTurn,
@@ -1816,7 +1842,10 @@ export default function App() {
     streamingRafRef,
     streamingAbortRef,
     streamingUserCancelledRef,
-    runtimeTurnV2Enabled: String(((import.meta as any)?.env?.VITE_ENABLE_RUNTIME_TURN_V2 ?? "false"))
+    onCloudRunLifecycleEvent: () => {
+      refreshCloudProjectStatuses();
+    },
+    runtimeTurnV2Enabled: String(((import.meta as any)?.env?.VITE_ENABLE_RUNTIME_TURN_V2 ?? "true"))
       .trim()
       .toLowerCase() === "true",
   });
@@ -1995,6 +2024,23 @@ export default function App() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    if (!supabaseSession || activePage !== "workspace") return;
+    let cancelled = false;
+    const refresh = async () => {
+      if (cancelled) return;
+      refreshCloudProjectStatuses();
+    };
+    void refresh();
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activePage, refreshCloudProjectStatuses, supabaseSession]);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -3090,42 +3136,13 @@ export default function App() {
     const url = getSupabaseUrl();
     if (!url) return;
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/list_cloud_projects`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
+      const next = (await fetchMappedDaytonaCloudProjects({
+        supabaseUrl: url,
         session,
-      );
-      if (!response.ok) {
-        throw new Error(await readSupabaseError(response));
-      }
-      const rows = (await response.json()) as Array<{
-        id: string;
-        name: string | null;
-        slug: string | null;
-        status: string;
-        created_at: string;
-        updated_at: string;
-      }>;
-      const next = rows
-        .filter((row) => String(row?.status ?? "").trim().toLowerCase() === "active")
-        .map((row) => {
-          const slug = (row.slug ?? "").trim() || null;
-          const id = String(row.id ?? "").trim();
-          return {
-            id,
-            name: row.name ?? null,
-            slug,
-            status: (row.status ?? "").trim().toLowerCase(),
-            created_at: toEpochSeconds(row.created_at),
-            updated_at: toEpochSeconds(row.updated_at),
-            root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
-          } satisfies CloudProjectRecord;
-        })
-        .filter((project) => Boolean(project.id));
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+        toEpochSeconds,
+      })).map(({ description: _description, ...project }) => project satisfies CloudProjectRecord);
       setCloudProjects(next);
       setCloudProjectExpandedById((prev) => {
         const nextExpanded: Record<string, boolean> = { ...prev };
@@ -3148,18 +3165,38 @@ export default function App() {
       return;
     }
     const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
-    const nextName = window.prompt("Cloud project name", suggestedName);
-    if (nextName === null) return;
-    const cleaned = nextName.trim();
+    setCloudProjectMenuProjectId(null);
+    setCreateCloudProjectName(suggestedName);
+    setCreateCloudProjectError(null);
+    setShowCreateCloudProjectModal(true);
+  }
+
+  function closeCreateCloudProjectModal(): void {
+    if (isCreatingCloudProject) return;
+    setShowCreateCloudProjectModal(false);
+    setCreateCloudProjectName("");
+    setCreateCloudProjectError(null);
+  }
+
+  async function handleConfirmCreateCloudProject(): Promise<void> {
+    if (!supabaseSession) {
+      openAuthGate();
+      setCreateCloudProjectError("Sign in to manage cloud projects.");
+      return;
+    }
+    const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
+    const cleaned = createCloudProjectName.trim() || suggestedName;
     if (!cleaned) {
-      setThreadError("Project name cannot be empty.");
+      setCreateCloudProjectError("Project name cannot be empty.");
       return;
     }
     const url = getSupabaseUrl();
     if (!url) {
-      setThreadError("Missing Supabase URL.");
+      setCreateCloudProjectError("Missing Supabase URL.");
       return;
     }
+    setIsCreatingCloudProject(true);
+    setCreateCloudProjectError(null);
     try {
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/rpc/create_cloud_project`,
@@ -3175,6 +3212,7 @@ export default function App() {
       }
       await loadCloudProjects(supabaseSession);
       setThreadError(null);
+      closeCreateCloudProjectModal();
     } catch (error) {
       const message =
         typeof error === "string"
@@ -3182,7 +3220,9 @@ export default function App() {
           : error instanceof Error
             ? error.message
             : "Failed to create cloud project.";
-      setThreadError(message);
+      setCreateCloudProjectError(message);
+    } finally {
+      setIsCreatingCloudProject(false);
     }
   }
 
@@ -3193,25 +3233,49 @@ export default function App() {
     }
     setCloudProjectMenuProjectId(null);
     const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
-    const nextName = window.prompt("Cloud project name", defaultName);
-    if (nextName === null) return;
-    const cleaned = nextName.trim();
+    setRenameCloudProjectId(project.id);
+    setRenameCloudProjectName(defaultName);
+    setRenameCloudProjectError(null);
+    setShowRenameCloudProjectModal(true);
+  }
+
+  function closeRenameCloudProjectModal(): void {
+    if (isRenamingCloudProject) return;
+    setShowRenameCloudProjectModal(false);
+    setRenameCloudProjectId(null);
+    setRenameCloudProjectName("");
+    setRenameCloudProjectError(null);
+  }
+
+  async function handleConfirmRenameCloudProject(): Promise<void> {
+    if (!supabaseSession) {
+      openAuthGate();
+      setRenameCloudProjectError("Sign in to manage cloud projects.");
+      return;
+    }
+    if (!renameCloudProjectId) {
+      closeRenameCloudProjectModal();
+      return;
+    }
+    const cleaned = renameCloudProjectName.trim();
     if (!cleaned) {
-      setThreadError("Project name cannot be empty.");
+      setRenameCloudProjectError("Project name cannot be empty.");
       return;
     }
     const url = getSupabaseUrl();
     if (!url) {
-      setThreadError("Missing Supabase URL.");
+      setRenameCloudProjectError("Missing Supabase URL.");
       return;
     }
+    setIsRenamingCloudProject(true);
+    setRenameCloudProjectError(null);
     try {
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/rpc/rename_cloud_project`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_project_id: project.id, p_name: cleaned }),
+          body: JSON.stringify({ p_project_id: renameCloudProjectId, p_name: cleaned }),
         },
         supabaseSession,
       );
@@ -3220,6 +3284,7 @@ export default function App() {
       }
       await loadCloudProjects(supabaseSession);
       setThreadError(null);
+      closeRenameCloudProjectModal();
     } catch (error) {
       const message =
         typeof error === "string"
@@ -3227,7 +3292,9 @@ export default function App() {
           : error instanceof Error
             ? error.message
             : "Failed to rename cloud project.";
-      setThreadError(message);
+      setRenameCloudProjectError(message);
+    } finally {
+      setIsRenamingCloudProject(false);
     }
   }
 
@@ -3495,6 +3562,10 @@ export default function App() {
         surface: "web",
         authState: supabaseSession ? "authenticated" : "anonymous",
         builderTier: builderBillingStatus?.builder_tier ?? null,
+        hasDesktopChatgptAuth: false,
+        useCanonicalGates: String(import.meta.env.VITE_ARX_CANONICAL_GATES_V1 ?? "").trim() === "1",
+        enableCanonicalGateParityLog:
+          String(import.meta.env.VITE_ARX_CANONICAL_GATES_PARITY_LOG ?? "").trim() === "1",
       }),
     [supabaseSession, builderBillingStatus?.builder_tier],
   );
@@ -3504,7 +3575,7 @@ export default function App() {
 		    if (membersCommunityHasPaidPlans === null) return null;
 		    if (membersCommunityHasPaidPlans) return "checkout";
         const rawVisibility = String(activeCommunity.visibility ?? "").trim().toLowerCase();
-        if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) {
+        if (rawVisibility && !["published", "unlisted"].includes(rawVisibility)) {
           return "request_access";
         }
         const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
@@ -3752,10 +3823,6 @@ export default function App() {
   const cloudProjectThreadGroups = useMemo(
     () => buildProjectThreadGroups(cloudProjects, visibleThreads, resolveCloudThreadProjectId),
     [cloudProjects, resolveCloudThreadProjectId, visibleThreads],
-  );
-  const cloudUnassignedThreads = useMemo(
-    () => filterThreadsWithoutProject(visibleThreads, resolveCloudThreadProjectId),
-    [resolveCloudThreadProjectId, visibleThreads],
   );
 	  const enabledModels = useMemo(() => modelToggles.filter((toggle) => toggle.enabled), [modelToggles]);
 	  const hasPaidAccess = Boolean(supabaseSession) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
@@ -4323,11 +4390,7 @@ export default function App() {
         </div>
 
         <div className="topbar-right">
-          {activePage === "community"
-            ? null
-            : showHeaderIslands
-              ? communityHomeButton
-              : <div className="web-floating-island">{communityHomeButton}</div>}
+          {communityHomeButton}
         </div>
 	      </header>
 
@@ -4338,198 +4401,58 @@ export default function App() {
               aria-hidden={!isSessionsDrawerOpen}
             >
               {threadError && <div className="auth-error">{threadError}</div>}
-	              {supabaseSession ? (
-	                <>
-		                  <div className="session-search" role="search" aria-label="Search threads">
-	                    <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
-	                      <circle cx="11" cy="11" r="7" />
-	                      <path d="M20 20l-3.5-3.5" />
-	                    </svg>
-	                    <input
-	                      value={threadSearchQuery}
-	                      onChange={(event) => setThreadSearchQuery(event.target.value)}
-	                      onKeyDown={(event) => {
-	                        if (event.key === "Escape") setThreadSearchQuery("");
-	                      }}
-	                      placeholder="Search threads…"
-	                      aria-label="Search threads"
-	                    />
-		                    {threadSearchQuery.trim() && (
-	                      <button
-	                        type="button"
-	                        className="session-search-clear"
-	                        onClick={() => setThreadSearchQuery("")}
-	                        aria-label="Clear search"
-	                        title="Clear"
-	                      >
-	                        ×
-	                      </button>
-		                    )}
-		                  </div>
-                      <div className="project-toolbar">
-                        <div className="project-toolbar-label">Cloud projects</div>
-                        <button
-                          type="button"
-                          className="project-toolbar-add"
-                          onClick={() => void handleAddCloudProject()}
-                          title="Create cloud project"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                            <path d="M12 11v6M9 14h6" />
-                          </svg>
-                        </button>
+              {supabaseSession ? (
+                <ThreadSidebarPanel<ThreadRecord, CloudProjectRecord>
+                  showThreadLaneSwitch={false}
+                  state={{
+                    threadLaneFilter: "chat",
+                    threadSearchQuery,
+                    normalizedThreadSearch,
+                    threadSearchResults,
+                    projectThreadGroups: cloudProjectThreadGroups,
+                    projectExpandedById: cloudProjectExpandedById,
+                    projectMenuProjectId: cloudProjectMenuProjectId,
+                    generalThreads: [],
+                    agentThreadsCount: 0,
+                    chatThreadsCount: visibleThreads.length,
+                    showChatSignInPrompt: false,
+                  }}
+                  actions={{
+                    onThreadLaneFilterChange: () => {},
+                    onThreadSearchQueryChange: setThreadSearchQuery,
+                    onAddProject: handleAddCloudProject,
+                    onToggleProjectExpanded: (projectId) => {
+                      setCloudProjectExpandedById((prev) => ({
+                        ...prev,
+                        [projectId]: !(prev[projectId] ?? true),
+                      }));
+                      setActiveCloudProjectId(projectId);
+                    },
+                    onStartDraftInProject: (project) => {
+                      handleStartDraftInCloudProject(project.id);
+                    },
+                    onToggleProjectMenu: (projectId) => {
+                      setCloudProjectMenuProjectId((prev) => (prev === projectId ? null : projectId));
+                    },
+                    projectMenuRef: cloudProjectMenuRef,
+                    onRenameProject: handleRenameCloudProject,
+                    onRemoveProject: handleRemoveCloudProject,
+                    renderSessionItem: (thread) => (
+                      <div
+                        key={thread.id}
+                        className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
+                        onClick={() => {
+                          selectWorkspaceThread(thread);
+                        }}
+                      >
+                        <div className="session-content">
+                          <div className="session-title">{getThreadDisplayTitle(thread)}</div>
+                        </div>
                       </div>
-		                  <div className="session-list">
-		                    {normalizedThreadSearch ? (
-		                      threadSearchResults.length === 0 ? (
-	                        <div className="empty-state">No matching threads.</div>
-	                      ) : (
-		                        threadSearchResults.map((thread) => (
-		                          <div
-		                            key={thread.id}
-		                            className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-		                            onClick={() => {
-		                              selectWorkspaceThread(thread);
-		                            }}
-		                          >
-		                            <div className="session-content">
-		                              <div className="session-title">{getThreadDisplayTitle(thread)}</div>
-		                            </div>
-		                          </div>
-		                        ))
-		                      )
-		                    ) : (
-		                      <>
-		                        {cloudProjectThreadGroups.map(({ project, threads }) => {
-                              const expanded = cloudProjectExpandedById[project.id] ?? true;
-                              const label =
-                                (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
-                              return (
-                                <div key={project.id} className="project-group">
-                                  <div className={`project-group-header${expanded ? " expanded" : ""}`}>
-                                    <button
-                                      type="button"
-                                      className="project-group-label"
-                                      onClick={() => {
-                                        setCloudProjectExpandedById((prev) => ({
-                                          ...prev,
-                                          [project.id]: !(prev[project.id] ?? true),
-                                        }));
-                                        setActiveCloudProjectId(project.id);
-                                      }}
-                                      aria-expanded={expanded}
-                                      title={expanded ? "Collapse project" : "Expand project"}
-                                    >
-                                      <span className="project-group-icon-wrap" aria-hidden="true">
-                                        <svg className="project-group-icon project-group-icon-folder" viewBox="0 0 24 24">
-                                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                                        </svg>
-                                        <svg className="project-group-icon project-group-icon-chevron" viewBox="0 0 24 24">
-                                          <path d="M9 6l6 6-6 6" />
-                                        </svg>
-                                      </span>
-                                      <span className="project-group-name">{label}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="project-group-new"
-                                      onClick={() => handleStartDraftInCloudProject(project.id)}
-                                      title="Start a new thread in this project"
-                                    >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="project-group-menu-trigger"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setCloudProjectMenuProjectId((prev) => (prev === project.id ? null : project.id));
-                                      }}
-                                      aria-haspopup="menu"
-                                      aria-expanded={cloudProjectMenuProjectId === project.id}
-                                      title="Project options"
-                                    >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                        <circle cx="6" cy="12" r="1.5" />
-                                        <circle cx="12" cy="12" r="1.5" />
-                                        <circle cx="18" cy="12" r="1.5" />
-                                      </svg>
-                                    </button>
-                                    {cloudProjectMenuProjectId === project.id && (
-                                      <div className="project-group-menu" role="menu" ref={cloudProjectMenuRef}>
-                                        <button
-                                          type="button"
-                                          className="project-group-menu-item"
-                                          role="menuitem"
-                                          onClick={() => void handleRenameCloudProject(project)}
-                                        >
-                                          Rename
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="project-group-menu-item danger"
-                                          role="menuitem"
-                                          onClick={() => void handleRemoveCloudProject(project)}
-                                        >
-                                          Remove
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {expanded && (
-                                    <div className="project-group-threads">
-                                      {threads.length > 0 ? (
-                                        threads.map((thread) => (
-                                          <div
-                                            key={thread.id}
-                                            className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                                            onClick={() => {
-                                              selectWorkspaceThread(thread);
-                                            }}
-                                          >
-                                            <div className="session-content">
-                                              <div className="session-title">{getThreadDisplayTitle(thread)}</div>
-                                            </div>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <div className="project-group-empty">No threads yet.</div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            {cloudUnassignedThreads.length > 0 && (
-                              <div className="session-group">
-                                <div className="session-group-label">Unassigned</div>
-                                {cloudUnassignedThreads.map((thread) => (
-                                  <div
-                                    key={thread.id}
-                                    className={`session-item${thread.id === activeThreadId ? " active" : ""}`}
-                                    onClick={() => {
-                                      selectWorkspaceThread(thread);
-                                    }}
-                                  >
-                                    <div className="session-content">
-                                      <div className="session-title">{getThreadDisplayTitle(thread)}</div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-		                        {visibleThreads.length === 0 && (
-		                          <div className="empty-state">No chats yet. Send a message to start.</div>
-		                        )}
-	                      </>
-	                    )}
-	                  </div>
-	                </>
-	              ) : (
+                    ),
+                  }}
+                />
+              ) : (
 	                <div className="session-list">
 	                  <div
 	                    className={`session-item${(activeThreadId === GUEST_THREAD_ID || (!activeThreadId && !guestThreadHasMessages)) ? " active" : ""}`}
@@ -4759,6 +4682,7 @@ export default function App() {
         <main className={`workspace${activePage !== "workspace" ? " community-mode" : ""}`}>
 	          {activeView === "settings" ? (
 	            <div className="settings-panel">
+	              <div className="web-settings-centered-pane">
 	              {settingsGroup === "account" && (
 	                <>
 	                  <div className="settings-section">
@@ -5266,7 +5190,7 @@ export default function App() {
                               Memory behavior
                             </div>
                             <div className="settings-section-desc">
-                              Control how Arx suggests and stores personal memory.
+                              Control how PolyNet suggests and stores personal memory.
                             </div>
                             <div className="export-actions">
                               <label className="model-toggle">
@@ -5285,7 +5209,7 @@ export default function App() {
                               </label>
                             </div>
                             <div className="memory-block-meta">
-                              When enabled, Arx may save useful preferences/facts to your personal memory. You can delete anything later.
+                              When enabled, PolyNet may save useful preferences/facts to your personal memory. You can delete anything later.
                             </div>
                           </div>
 
@@ -5393,10 +5317,10 @@ export default function App() {
                 </>
               )}
 
-              {settingsGroup === "appearance" && (
-                <>
-                  <div className="panel-title">Appearance</div>
-                  <div className="appearance-panel">
+	              {settingsGroup === "appearance" && (
+	                <>
+	                  <div className="panel-title">Appearance</div>
+	                  <div className="appearance-panel">
                     <div className="appearance-selector">
                       <div className="appearance-title">Theme</div>
                       <div className="appearance-options">
@@ -5427,9 +5351,10 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                </>
-              )}
-            </div>
+	                </>
+	              )}
+	              </div>
+	            </div>
 	          ) : activePage === "workspace" ? (
 	            <>
 		              <div className="workspace-body">
@@ -5538,7 +5463,7 @@ export default function App() {
 		                                    title={
 		                                      desktopDownloadUrl
 		                                        ? "Download desktop app"
-		                                        : "Set VITE_ARX_DESKTOP_DOWNLOAD_URL to enable downloads in this build"
+		                                        : "Configure desktop download URL to enable downloads in this build"
 		                                    }
 		                                    onClick={() => {
 		                                      if (!desktopDownloadUrl) return;
@@ -5702,9 +5627,9 @@ export default function App() {
 		                  </button>
 		                )}
 		              </div>
-		              <div className="ask-bar ask-bar-v2">
-	                <textarea
-	                  ref={workspaceAskInputRef}
+			              <div className="ask-bar ask-bar-v2">
+		                <textarea
+		                  ref={workspaceAskInputRef}
                   className="ask-input ask-input-v2"
 	                  placeholder={
 	                    supabaseSession
@@ -5906,6 +5831,9 @@ export default function App() {
 	                            const alreadyMember = Boolean(memberCommunity);
 	                            const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
                             const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
+                            const visibilityClass = isPublishedCommunityVisibility(community.visibility)
+                              ? "published"
+                              : "unlisted";
 		                            const description =
 		                              community.description && community.description.trim().length > 0
 		                                ? community.description
@@ -5927,7 +5855,7 @@ export default function App() {
 		                                avatarUrl={community.avatar_url}
 		                                bannerUrl={community.banner_url}
 		                                priceLabel={priceLabel}
-		                                visibilityClass={community.visibility ?? "unlisted"}
+		                                visibilityClass={visibilityClass}
 		                                visibilityLabel={visibilityLabel}
 		                                isPublishedVisibility={isPublishedCommunityVisibility(community.visibility)}
 		                                clickable={canActivate}
@@ -6579,6 +6507,101 @@ export default function App() {
           />
         )}
 
+        {showCreateCloudProjectModal && (
+          <div className="modal-overlay" onClick={closeCreateCloudProjectModal}>
+            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title">Create cloud project</div>
+                <button className="modal-close" onClick={closeCreateCloudProjectModal} title="Close">
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="create-community-form">
+                  <label className="create-community-field">
+                    <span>Name</span>
+                    <input
+                      type="text"
+                      placeholder="Project name"
+                      value={createCloudProjectName}
+                      onChange={(event) => setCreateCloudProjectName(event.target.value)}
+                      disabled={isCreatingCloudProject}
+                    />
+                  </label>
+                  {createCloudProjectError && <div className="auth-error">{createCloudProjectError}</div>}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <div className="create-community-actions">
+                  <button
+                    className="create-community-primary"
+                    type="button"
+                    onClick={() => void handleConfirmCreateCloudProject()}
+                    disabled={isCreatingCloudProject || createCloudProjectName.trim().length === 0}
+                  >
+                    {isCreatingCloudProject ? "Creating..." : "Create project"}
+                  </button>
+                  <button
+                    className="create-community-secondary"
+                    type="button"
+                    onClick={closeCreateCloudProjectModal}
+                    disabled={isCreatingCloudProject}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showRenameCloudProjectModal && (
+          <div className="modal-overlay" onClick={closeRenameCloudProjectModal}>
+            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-title">Rename cloud project</div>
+                <button className="modal-close" onClick={closeRenameCloudProjectModal} title="Close">
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="create-community-form">
+                  <label className="create-community-field">
+                    <span>Name</span>
+                    <input
+                      type="text"
+                      placeholder="Project name"
+                      value={renameCloudProjectName}
+                      onChange={(event) => setRenameCloudProjectName(event.target.value)}
+                      disabled={isRenamingCloudProject}
+                    />
+                  </label>
+                  {renameCloudProjectError && <div className="auth-error">{renameCloudProjectError}</div>}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <div className="create-community-actions">
+                  <button
+                    className="create-community-primary"
+                    type="button"
+                    onClick={() => void handleConfirmRenameCloudProject()}
+                    disabled={isRenamingCloudProject || renameCloudProjectName.trim().length === 0}
+                  >
+                    {isRenamingCloudProject ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    className="create-community-secondary"
+                    type="button"
+                    onClick={closeRenameCloudProjectModal}
+                    disabled={isRenamingCloudProject}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
 	      <WebCreateCommunityModal
           isOpen={showCreateCommunityModal}

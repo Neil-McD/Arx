@@ -1,0 +1,96 @@
+import { query } from "./_generated/server";
+import { v } from "convex/values";
+
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type AuthState = "anonymous" | "authenticated";
+
+function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
+  const normalized = String(rawTier ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "builder") return "builder";
+  if (normalized === "architect" || normalized === "pro") return "architect";
+  return "free";
+}
+
+function resolveEffectiveTier(input: { authState: AuthState; tier: CanonicalTier }): EffectiveTier {
+  if (input.authState === "anonymous") return "anon_free";
+  if (input.tier === "free") return "auth_free";
+  return input.tier;
+}
+
+function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
+  if (startsAt > nowMs) return false;
+  if (typeof endsAt === "number" && nowMs > endsAt) return false;
+  return true;
+}
+
+export const getCanonicalTierByUserId = query({
+  args: {
+    userId: v.id("users"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const rows = await ctx.db
+      .query("userEntitlements")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    const activeRows = rows
+      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
+      .sort((a, b) => b.startsAt - a.startsAt);
+    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
+    return canonicalTier;
+  },
+});
+
+export const getEffectiveTierByAuthSubject = query({
+  args: {
+    authSubject: v.string(),
+    authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authState = args.authState;
+    if (authState === "anonymous") {
+      return {
+        authState,
+        canonicalTier: "free" as const,
+        effectiveTier: "anon_free" as const,
+        userId: null,
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_authSubject", (q) => q.eq("authSubject", args.authSubject))
+      .first();
+
+    if (!user) {
+      return {
+        authState,
+        canonicalTier: "free" as const,
+        effectiveTier: "auth_free" as const,
+        userId: null,
+      };
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const rows = await ctx.db
+      .query("userEntitlements")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const activeRows = rows
+      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
+      .sort((a, b) => b.startsAt - a.startsAt);
+    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
+    const effectiveTier = resolveEffectiveTier({ authState, tier: canonicalTier });
+    return {
+      authState,
+      canonicalTier,
+      effectiveTier,
+      userId: user._id,
+    };
+  },
+});

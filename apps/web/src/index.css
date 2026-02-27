@@ -149,6 +149,21 @@
   -webkit-backdrop-filter: blur(14px) saturate(120%);
 }
 
+/* Keep the top-right community shortcut as a plain avatar (no glass card). */
+.app-root.web-header-islands .app-topbar .topbar-right {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-topbar .topbar-right .community-btn:hover,
+.app-topbar .topbar-right .community-btn:active {
+  background: transparent;
+}
+
 /* Shrink header controls a touch so the floating groups feel lighter. */
 .app-topbar .icon-button,
 .app-topbar .new-session-header-btn {
@@ -2136,6 +2151,25 @@
 .community-chat .community-attachments-preview {
   margin: 0 max(24px, calc((100% - var(--web-chat-max-width)) / 2));
   padding-bottom: 10px;
+}
+
+/* Web community tabs: keep non-chat content in the same centered visual lane as AI/Discover. */
+.web-community-centered-pane {
+  width: min(100%, 1080px);
+  margin-inline: auto;
+}
+
+.web-settings-centered-pane {
+  width: min(100%, 920px);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+
+.web-community-settings-centered-pane {
+  width: min(100%, 1020px);
 }
 
 /* Extra-tight windows: prevent community nav + feed from colliding */

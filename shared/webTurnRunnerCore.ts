@@ -45,6 +45,11 @@ export type UseWebTurnRunnerControllerArgs<
   setStreamingMeta: Dispatch<
     SetStateAction<WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null>
   >;
+  onCloudRunLifecycleEvent?: (payload: {
+    threadId: string;
+    runId: string | null;
+    phase: "start" | "done";
+  }) => void;
 
   streamingContentRef: MutableRefObject<string | null>;
   streamingRafRef: MutableRefObject<number | null>;

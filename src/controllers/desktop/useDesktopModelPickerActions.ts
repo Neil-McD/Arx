@@ -126,7 +126,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
       }
       if (providerId === "openai" && !hasChatgptAuth) {
         openModelSettings();
-        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
+        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for PolyNet AI.");
         return;
       }
       if (model.access === "paid" && !hasPaidAccess) {
@@ -141,7 +141,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
     if (!ready) {
       if (providerId === "openai" && !hasChatgptAuth) {
         openModelSettings();
-        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for Arx AI.");
+        setMemoryToast("Sign in with ChatGPT to use OpenAI on free tier, or upgrade for PolyNet AI.");
         closeModelPicker();
         return;
       }

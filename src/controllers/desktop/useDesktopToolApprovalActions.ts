@@ -3,6 +3,8 @@ import type { RuntimeClient } from "../../runtime/arp/client";
 
 type PendingToolApprovalLike = {
   tool_call_id: string;
+  source?: "local" | "cloud";
+  run_id?: string | null;
 };
 
 type UseDesktopToolApprovalActionsArgs<PendingApprovalT extends PendingToolApprovalLike> = {
@@ -11,6 +13,11 @@ type UseDesktopToolApprovalActionsArgs<PendingApprovalT extends PendingToolAppro
   pendingToolApproval: PendingApprovalT | null;
   setPendingToolApproval: Dispatch<SetStateAction<PendingApprovalT | null>>;
   setIsToolApprovalSubmitting: Dispatch<SetStateAction<boolean>>;
+  resolveCloudToolApproval?: (params: {
+    pending: PendingApprovalT;
+    approved: boolean;
+    allow_write_edit_for_session: boolean;
+  }) => Promise<void>;
   onApprovalResolved: () => void;
 };
 
@@ -26,10 +33,22 @@ export function useDesktopToolApprovalActions<PendingApprovalT extends PendingTo
       if (!pending) return;
       args.setIsToolApprovalSubmitting(true);
       try {
-        await args.runtimeClient.decideToolCall(pending.tool_call_id, {
-          approved,
-          allow_write_edit_for_session: opts?.allow_write_edit_for_session ?? false,
-        });
+        const allowWriteEditForSession = opts?.allow_write_edit_for_session ?? false;
+        if (pending.source === "cloud") {
+          if (!args.resolveCloudToolApproval) {
+            throw new Error("Cloud tool approval resolver is unavailable.");
+          }
+          await args.resolveCloudToolApproval({
+            pending,
+            approved,
+            allow_write_edit_for_session: allowWriteEditForSession,
+          });
+        } else {
+          await args.runtimeClient.decideToolCall(pending.tool_call_id, {
+            approved,
+            allow_write_edit_for_session: allowWriteEditForSession,
+          });
+        }
         args.setPendingToolApproval(null);
         args.onApprovalResolved();
       } catch (error) {

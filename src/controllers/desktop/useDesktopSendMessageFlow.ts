@@ -40,7 +40,9 @@ type UseDesktopSendMessageFlowArgs<
   effectiveCwd: string;
   sendInFlightRef: { current: boolean };
   autoScrollEnabledRef: { current: boolean };
-  dispatchRunPhase: (action: { type: "send_start" | "reset" }) => void;
+  dispatchRunPhase: (action: {
+    type: "send_start" | "reset" | "stream_chunk" | "approval_requested";
+  }) => void;
   ensureThreadId: () => Promise<string | null>;
   getSession: () => SessionT;
   ensureWorkspaceThreadLensBeforeSend: (threadId: string) => Promise<void>;
@@ -65,6 +67,18 @@ type UseDesktopSendMessageFlowArgs<
   setMemoryToast: (message: string) => void;
   setAgentStatus: (value: null) => void;
   setRunningTools: (value: []) => void;
+  onCloudToolApprovalRequested?: (payload: {
+    session_id: string;
+    run_id: string | null;
+    tool_call_id: string;
+    tool_name: string;
+    args_json: string;
+  }) => void;
+  onCloudRunLifecycleEvent?: (payload: {
+    threadId: string;
+    runId: string | null;
+    phase: "start" | "done";
+  }) => void;
   getSendPolicySnapshot?: (threadId: string) => {
     selectedModelId?: string | null;
     hasChatgptAuth?: boolean;
@@ -164,9 +178,17 @@ export function useDesktopSendMessageFlow<
           supabase_access_token,
         }) => {
           const service = args.getThreadServiceById(thread_id);
+          const isCloudChatLane = service.storageMode === "cloud" && service.threadLane === "chat";
           const sendPolicySnapshot = args.getSendPolicySnapshot?.(thread_id) ?? undefined;
           const onStreamEvent = (event: ThreadServiceTurnStreamEvent): void => {
             if (event.type === "start") {
+              if (isCloudChatLane) {
+                args.onCloudRunLifecycleEvent?.({
+                  threadId: thread_id,
+                  runId: event.runId,
+                  phase: "start",
+                });
+              }
               args.setStreamingRunId(event.runId?.trim() || null);
               args.streamingMetaRef.current = {
                 engine_id: event.engineId ?? "agent_web",
@@ -198,7 +220,25 @@ export function useDesktopSendMessageFlow<
               return;
             }
             if (event.type === "done") {
+              if (isCloudChatLane) {
+                args.onCloudRunLifecycleEvent?.({
+                  threadId: thread_id,
+                  runId: null,
+                  phase: "done",
+                });
+              }
               args.clearStreamingState();
+              return;
+            }
+            if (event.type === "tool_approval_requested") {
+              args.dispatchRunPhase({ type: "approval_requested" });
+              args.onCloudToolApprovalRequested?.({
+                session_id: thread_id,
+                run_id: event.runId,
+                tool_call_id: event.toolCallId,
+                tool_name: event.toolName,
+                args_json: event.argsJson,
+              });
             }
           };
           await service.sendTurn({

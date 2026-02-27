@@ -10,6 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "check:gate-parity": "bash scripts/gate_parity_contract_check.sh",
+    "check:harness-parity": "bash scripts/harness_parity_contract_check.sh",
     "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh",
     "check:function-auth-lane": "bash scripts/function_auth_lane_coherence_guard.sh",
     "check:reliability-smoke": "bash scripts/reliability_smoke_gate.sh",

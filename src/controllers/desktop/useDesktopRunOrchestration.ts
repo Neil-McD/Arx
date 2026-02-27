@@ -303,10 +303,10 @@ export function useDesktopRunOrchestration<
         const to = (n.to ?? "").trim().toLowerCase();
         const message =
           reason === "platform_quota_exceeded"
-            ? "Arx AI quota reached for this model. Select another model or upgrade."
+            ? "PolyNet AI quota reached for this model. Select another model or upgrade."
             : from === "platform" && to === "public"
-              ? "Arx AI is temporarily unavailable for this model. Falling back to free model lane."
-              : "Arx AI unavailable for this model. Select another model or upgrade.";
+              ? "PolyNet AI is temporarily unavailable for this model. Falling back to free model lane."
+              : "PolyNet AI unavailable for this model. Select another model or upgrade.";
         showMemoryToast(message, 2500);
         return;
       }
@@ -326,6 +326,8 @@ export function useDesktopRunOrchestration<
           tool_call_id: n.tool_call_id,
           tool_name: n.tool_name,
           args_json: n.args_json,
+          source: "local",
+          run_id: null,
         } as PendingToolApprovalT);
         scheduleToolCallsReload(n.session_id, { immediate: true, force: true });
         return;

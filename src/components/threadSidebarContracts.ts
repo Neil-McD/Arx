@@ -4,11 +4,7 @@ export type ProjectLike = {
   id: string;
   name: string | null;
   root_path: string;
-};
-
-export type ChatThreadGroup<TThread> = {
-  label: string;
-  threads: TThread[];
+  sandbox_status?: string | null;
 };
 
 export type ProjectThreadGroup<TProject, TThread> = {
@@ -27,7 +23,6 @@ export type ThreadSidebarPanelState<TThread, TProject extends ProjectLike> = {
   generalThreads: TThread[];
   agentThreadsCount: number;
   chatThreadsCount: number;
-  chatThreadGroups: Array<ChatThreadGroup<TThread>>;
   showChatSignInPrompt?: boolean;
 };
 

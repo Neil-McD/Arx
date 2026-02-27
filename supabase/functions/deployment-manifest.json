@@ -7,6 +7,7 @@
     { "slug": "checkout_start", "verify_jwt": false },
     { "slug": "community_research", "verify_jwt": false },
     { "slug": "connect_onboard_start", "verify_jwt": false },
+    { "slug": "daytona_sync_statuses", "verify_jwt": false },
     { "slug": "platform_agent_infer", "verify_jwt": false },
     { "slug": "public_discover", "verify_jwt": false },
     { "slug": "public_funnel", "verify_jwt": false },

@@ -1,6 +1,6 @@
 # Supabase workflow (keep schema reproducible)
 
-Arx treats **the repo as the source of truth** for the cloud schema and Edge Functions.
+PolyNet treats **the repo as the source of truth** for the cloud schema and Edge Functions.
 
 ## Migrations
 
@@ -33,4 +33,8 @@ Minimum for runtime lanes:
 - `public_turn`: `OPENROUTER_API_KEY` (or model provider key via current function config)
 - `platform_agent_infer`: provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `XAI_API_KEY`) as needed by selected model routing
 - `runtime_turn` paid Daytona lane: `DAYTONA_API_URL`, `DAYTONA_API_KEY`
-  - optional: `DAYTONA_ORG_ID`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`
+  - optional:
+    - `DAYTONA_ORG_ID`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`
+    - `DAYTONA_AUTO_STOP_INTERVAL_MINUTES` (default `20`)
+    - `DAYTONA_AUTO_ARCHIVE_INTERVAL_MINUTES` (default `0`)
+    - `DAYTONA_AUTO_DELETE_INTERVAL_MINUTES` (default `-1`)

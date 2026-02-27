@@ -15,6 +15,8 @@ AGENT_TURN="supabase/functions/agent_turn/index.ts"
 PUBLIC_TURN="supabase/functions/public_turn/index.ts"
 PLATFORM_AGENT_INFER="supabase/functions/platform_agent_infer/index.ts"
 RUNTIME_TURN="supabase/functions/runtime_turn/index.ts"
+DAYTONA_LANE="supabase/functions/_shared/daytona_cloud_lane.ts"
+DAYTONA_ADAPTER="supabase/functions/_shared/daytona_cloud_adapter.ts"
 PUBLIC_FUNNEL_FN="supabase/functions/public_funnel/index.ts"
 CHECKOUT_START_FN="supabase/functions/checkout_start/index.ts"
 CHECKOUT_FINALIZE_FN="supabase/functions/checkout_finalize/index.ts"
@@ -144,8 +146,8 @@ grep -q 'withStrictCors' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing s
 grep -q 'requireVerifiedUserId' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing bearer verification"; exit 1; }
 grep -q 'ensureDaytonaSandbox' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing daytona sandbox resolver"; exit 1; }
 grep -q 'executeDaytonaLane' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing daytona lane executor"; exit 1; }
-grep -q 'daytona_probe_finished' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing daytona probe event"; exit 1; }
-grep -q 'DAYTONA_API_KEY' "$RUNTIME_TURN" || { echo "FAIL: runtime_turn missing Daytona secret requirement"; exit 1; }
+grep -q 'daytona_probe_finished' "$DAYTONA_LANE" || { echo "FAIL: daytona_cloud_lane missing daytona probe event"; exit 1; }
+grep -q 'DAYTONA_API_KEY' "$DAYTONA_ADAPTER" || { echo "FAIL: daytona_cloud_adapter missing Daytona secret requirement"; exit 1; }
 
 echo "[13/22] Public inference endpoint must remain public + rate-limited + model-gated..."
 grep -q 'withCors' "$PUBLIC_TURN" || { echo "FAIL: public_turn missing public CORS"; exit 1; }

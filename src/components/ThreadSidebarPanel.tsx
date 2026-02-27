@@ -1,18 +1,23 @@
+import { useEffect, useState } from "react";
 import type {
   ProjectLike,
   ThreadSidebarPanelActions,
   ThreadSidebarPanelState,
 } from "./threadSidebarContracts";
+import { daytonaSandboxStatusBadge } from "../../shared/daytonaSandboxStatus";
+
+const PROJECT_THREAD_PREVIEW_LIMIT = 7;
 
 type ThreadSidebarPanelProps<TThread, TProject extends ProjectLike> = {
   state: ThreadSidebarPanelState<TThread, TProject>;
   actions: ThreadSidebarPanelActions<TThread, TProject>;
+  showThreadLaneSwitch?: boolean;
 };
 
 export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
   props: ThreadSidebarPanelProps<TThread, TProject>,
 ) {
-  const { state, actions } = props;
+  const { state, actions, showThreadLaneSwitch = true } = props;
   const {
     threadLaneFilter,
     threadSearchQuery,
@@ -26,28 +31,47 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
     chatThreadsCount,
     showChatSignInPrompt,
   } = state;
+  const [showAllThreadsByProjectId, setShowAllThreadsByProjectId] = useState<Record<string, true>>({});
+
+  useEffect(() => {
+    const projectIds = new Set(projectThreadGroups.map(({ project }) => project.id));
+    setShowAllThreadsByProjectId((prev) => {
+      let changed = false;
+      const next: Record<string, true> = {};
+      for (const projectId of Object.keys(prev)) {
+        if (projectIds.has(projectId)) {
+          next[projectId] = true;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [projectThreadGroups]);
 
   return (
     <>
-      <div className={`thread-lane-switch${threadLaneFilter === "agent" ? " agent" : ""}`}>
-        <div className="thread-lane-switch-thumb" />
-        <button
-          type="button"
-          className={`thread-lane-switch-button${threadLaneFilter === "chat" ? " active" : ""}`}
-          onClick={() => actions.onThreadLaneFilterChange("chat")}
-          title="Cloud threads"
-        >
-          Cloud
-        </button>
-        <button
-          type="button"
-          className={`thread-lane-switch-button${threadLaneFilter === "agent" ? " active" : ""}`}
-          onClick={() => actions.onThreadLaneFilterChange("agent")}
-          title="Local threads"
-        >
-          Local
-        </button>
-      </div>
+      {showThreadLaneSwitch && (
+        <div className={`thread-lane-switch${threadLaneFilter === "agent" ? " agent" : ""}`}>
+          <div className="thread-lane-switch-thumb" />
+          <button
+            type="button"
+            className={`thread-lane-switch-button${threadLaneFilter === "chat" ? " active" : ""}`}
+            onClick={() => actions.onThreadLaneFilterChange("chat")}
+            title="Cloud threads"
+          >
+            Cloud
+          </button>
+          <button
+            type="button"
+            className={`thread-lane-switch-button${threadLaneFilter === "agent" ? " active" : ""}`}
+            onClick={() => actions.onThreadLaneFilterChange("agent")}
+            title="Local threads"
+          >
+            Local
+          </button>
+        </div>
+      )}
       <div className="session-search" role="search" aria-label="Search threads">
         <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
@@ -79,7 +103,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
       {(threadLaneFilter === "agent" || (threadLaneFilter === "chat" && !showChatSignInPrompt)) && (
         <div className="project-toolbar">
           <div className="project-toolbar-label">
-            {threadLaneFilter === "agent" ? "Projects" : "Cloud projects"}
+            Projects
           </div>
           <button
             type="button"
@@ -125,6 +149,17 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                 {projectThreadGroups.map(({ project, threads }) => {
                   const expanded = projectExpandedById[project.id] ?? true;
                   const label = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
+                  const showAllThreads = showAllThreadsByProjectId[project.id] === true;
+                  const visibleThreads = showAllThreads
+                    ? threads
+                    : threads.slice(0, PROJECT_THREAD_PREVIEW_LIMIT);
+                  const hiddenThreadCount = Math.max(0, threads.length - visibleThreads.length);
+                  const statusBadge =
+                    threadLaneFilter === "chat" ? daytonaSandboxStatusBadge(project.sandbox_status ?? null) : null;
+                  const statusDot =
+                    threadLaneFilter === "chat"
+                      ? (statusBadge ?? { label: "Not started", tone: "stopped" as const })
+                      : null;
                   return (
                     <div key={project.id} className="project-group">
                       <div className={`project-group-header${expanded ? " expanded" : ""}`}>
@@ -144,6 +179,14 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                             </svg>
                           </span>
                           <span className="project-group-name">{label}</span>
+                          {statusDot && (
+                            <span
+                              className={`project-group-sandbox-dot ${statusDot.tone}`}
+                              role="img"
+                              aria-label={`Sandbox ${statusDot.label.toLowerCase()}`}
+                              title={`Sandbox ${statusDot.label}`}
+                            />
+                          )}
                         </button>
                         <button
                           type="button"
@@ -197,7 +240,41 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                       {expanded && (
                         <div className="project-group-threads">
                           {threads.length > 0 ? (
-                            threads.map((thread) => actions.renderSessionItem(thread))
+                            <>
+                              {visibleThreads.map((thread) => actions.renderSessionItem(thread))}
+                              {hiddenThreadCount > 0 && (
+                                <button
+                                  type="button"
+                                  className="project-group-show-more"
+                                  onClick={() =>
+                                    setShowAllThreadsByProjectId((prev) => ({
+                                      ...prev,
+                                      [project.id]: true,
+                                    }))
+                                  }
+                                >
+                                  Show more ({hiddenThreadCount})
+                                </button>
+                              )}
+                              {hiddenThreadCount === 0 &&
+                                showAllThreads &&
+                                threads.length > PROJECT_THREAD_PREVIEW_LIMIT && (
+                                  <button
+                                    type="button"
+                                    className="project-group-show-more"
+                                    onClick={() =>
+                                      setShowAllThreadsByProjectId((prev) => {
+                                        if (!(project.id in prev)) return prev;
+                                        const next = { ...prev };
+                                        delete next[project.id];
+                                        return next;
+                                      })
+                                    }
+                                  >
+                                    Show less
+                                  </button>
+                                )}
+                            </>
                           ) : (
                             <div className="project-group-empty">No threads yet.</div>
                           )}

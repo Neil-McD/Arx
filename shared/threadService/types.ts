@@ -43,6 +43,13 @@ export type ThreadServiceTurnStreamEvent =
       maxTokens: number | null;
     }
   | {
+      type: "tool_approval_requested";
+      runId: string | null;
+      toolCallId: string;
+      toolName: string;
+      argsJson: string;
+    }
+  | {
       type: "done";
     };
 

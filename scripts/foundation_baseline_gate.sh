@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=13
+TOTAL_STEPS=16
 CURRENT_STEP=1
 
 run_step() {
@@ -30,6 +30,8 @@ run_step "Cloud payment-provider-events hardening contract" bash scripts/cloud_p
 run_step "Edge verify_jwt default guard" bash scripts/edge_verify_jwt_default_guard.sh
 run_step "Function auth lane coherence guard" bash scripts/function_auth_lane_coherence_guard.sh
 run_step "Auth + money + access matrix contract" bash scripts/auth_money_access_matrix_check.sh
+run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
+run_step "Harness parity contract" bash scripts/harness_parity_contract_check.sh
 run_step "Runtime turn idempotency scope contract" bash scripts/runtime_turn_idempotency_scope_check.sh
 run_step "Desktop agent lane contract" bash scripts/desktop_agent_lane_contract_guard.sh
 run_step "Community edge deploy path guard" bash scripts/community_edge_deploy_path_guard.sh

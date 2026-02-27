@@ -1,0 +1,134 @@
+{
+  "contract_id": "gate_parity_matrix_v1",
+  "version": 1,
+  "sharedParityScenarios": [
+    {
+      "id": "anon_chat_free_model_cloud",
+      "input": {
+        "authState": "anonymous",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "modelClass": "free_model",
+        "hasDesktopChatGptAuth": false
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "public",
+        "effectiveTier": "anon_free"
+      }
+    },
+    {
+      "id": "auth_free_chat_free_model_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "modelClass": "free_model",
+        "hasDesktopChatGptAuth": false
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "public",
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_paid_chat_paid_model_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "builder",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "modelClass": "paid_model",
+        "hasDesktopChatGptAuth": false
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "platform",
+        "effectiveTier": "builder"
+      }
+    },
+    {
+      "id": "auth_paid_tools_paid_model_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "architect",
+        "executionMode": "cloud",
+        "turnClass": "requires_tools",
+        "modelClass": "paid_model",
+        "hasDesktopChatGptAuth": false
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "daytona_cloud",
+        "effectiveTier": "architect"
+      }
+    },
+    {
+      "id": "auth_free_tools_denied_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "requires_tools",
+        "modelClass": "free_model",
+        "hasDesktopChatGptAuth": false
+      },
+      "expected": {
+        "allowed": false,
+        "code": "tier_required",
+        "cta": "upgrade",
+        "lane": null,
+        "effectiveTier": "auth_free"
+      }
+    }
+  ],
+  "intentionalDivergenceScenarios": [
+    {
+      "id": "auth_free_paid_model_desktop_chatgpt_lane",
+      "webInput": {
+        "surface": "web",
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "modelClass": "paid_model",
+        "hasDesktopChatGptAuth": true
+      },
+      "desktopInput": {
+        "surface": "desktop",
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "modelClass": "paid_model",
+        "hasDesktopChatGptAuth": true
+      },
+      "expectedWeb": {
+        "allowed": false,
+        "code": "tier_required",
+        "cta": "upgrade",
+        "lane": null,
+        "effectiveTier": "auth_free"
+      },
+      "expectedDesktop": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "chatgpt_desktop",
+        "effectiveTier": "auth_free"
+      }
+    }
+  ]
+}
+

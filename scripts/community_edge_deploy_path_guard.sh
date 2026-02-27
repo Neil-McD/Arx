@@ -4,22 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-WRAPPER_SCRIPT="scripts/community_edge_manifest_deploy.sh"
+DEPLOYMENT_CONTRACT_SCRIPT="scripts/community_edge_deployment_contract_check.sh"
 GUARD_SCRIPT="scripts/community_edge_deploy_path_guard.sh"
 
 echo "== Community edge deploy path guard =="
 
-echo "[1/3] Manifest-only deploy wrapper must exist..."
-if [[ ! -f "$WRAPPER_SCRIPT" ]]; then
-  echo "FAIL: missing manifest deploy wrapper at $WRAPPER_SCRIPT"
-  exit 1
-fi
-if [[ ! -x "$WRAPPER_SCRIPT" ]]; then
-  echo "FAIL: manifest deploy wrapper is not executable: $WRAPPER_SCRIPT"
-  exit 1
-fi
-
-echo "[2/3] CI/scripts must not use direct supabase functions deploy/delete commands..."
+echo "[1/2] CI/scripts must not use direct supabase functions deploy/delete commands..."
 DEPLOY_MATCHES=()
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
@@ -34,29 +24,33 @@ UNAPPROVED_MATCHES=()
 for match in "${DEPLOY_MATCHES[@]}"; do
   [[ -z "$match" ]] && continue
   file="${match%%:*}"
-  if [[ "$file" == "$WRAPPER_SCRIPT" || "$file" == "$GUARD_SCRIPT" ]]; then
+  if [[ "$file" == "$GUARD_SCRIPT" ]]; then
     continue
   fi
   UNAPPROVED_MATCHES+=("$match")
 done
 
 if [[ "${#UNAPPROVED_MATCHES[@]}" -gt 0 ]]; then
-  echo "FAIL: found direct edge deploy/delete commands outside manifest wrapper:"
+  echo "FAIL: found direct edge deploy/delete commands in CI/scripts:"
   printf '  %s\n' "${UNAPPROVED_MATCHES[@]}"
-  echo "Use: bash $WRAPPER_SCRIPT"
+  echo "Use the manifest contract path instead: bash $DEPLOYMENT_CONTRACT_SCRIPT"
   exit 1
 fi
-echo "PASS: no direct edge deploy/delete commands found outside wrapper."
+echo "PASS: no direct edge deploy/delete commands found."
 
-echo "[3/3] Wrapper must deploy only from deployment manifest..."
-if ! rg -n 'deployment-manifest\.json' "$WRAPPER_SCRIPT" >/dev/null; then
-  echo "FAIL: wrapper does not reference deployment-manifest.json"
+echo "[2/2] Deployment contract script must exist and be manifest-driven..."
+if [[ ! -f "$DEPLOYMENT_CONTRACT_SCRIPT" ]]; then
+  echo "FAIL: missing deployment contract script at $DEPLOYMENT_CONTRACT_SCRIPT"
   exit 1
 fi
-if ! rg -n 'functions[[:space:]]+deploy' "$WRAPPER_SCRIPT" >/dev/null; then
-  echo "FAIL: wrapper does not execute supabase functions deploy"
+if [[ ! -x "$DEPLOYMENT_CONTRACT_SCRIPT" ]]; then
+  echo "FAIL: deployment contract script is not executable: $DEPLOYMENT_CONTRACT_SCRIPT"
   exit 1
 fi
-echo "PASS: wrapper is manifest-driven."
+if ! rg -n 'deployment-manifest\.json' "$DEPLOYMENT_CONTRACT_SCRIPT" >/dev/null; then
+  echo "FAIL: deployment contract script does not reference deployment-manifest.json"
+  exit 1
+fi
+echo "PASS: deployment contract script is manifest-driven."
 
 echo "PASS: community edge deploy path guard passed."

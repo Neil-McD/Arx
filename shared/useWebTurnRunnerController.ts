@@ -246,15 +246,6 @@ export function useWebTurnRunnerController<
       const url = current.getSupabaseUrl();
       if (!url) return { cancelled: false, error: "Missing Supabase URL." };
 
-      const runtimeTurnFallbackCodes = new Set([
-        "runner_unavailable",
-        "runtime_turn_failed",
-        "run_lookup_failed",
-        "run_create_failed",
-        "run_update_failed",
-        "run_event_append_failed",
-      ]);
-
       current.streamingAbortRef.current?.abort();
       const abort = new AbortController();
       current.streamingAbortRef.current = abort;
@@ -287,26 +278,26 @@ export function useWebTurnRunnerController<
         });
       };
 
-      const runLegacyAgentTurn = async (): Promise<{ cancelled: boolean; error: string | null }> => {
-        const turn = await current.fetchWithSupabaseAuth(
-          `${url}/functions/v1/agent_turn`,
+      try {
+        const runtimeTurn = await current.fetchWithSupabaseAuth(
+          `${url}/functions/v1/runtime_turn`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               thread_id: threadId,
               stream: true,
+              surface: "web",
+              requires_tools: true,
               model_id: params.preferredModelId,
-              ...(params.mode ? { mode: params.mode } : null),
-              ...(params.inferenceSource ? { inference_source: params.inferenceSource } : null),
-              ...(params.replyToId ? { reply_to_id: params.replyToId } : null),
+              idempotency_key: params.runIdHint,
             }),
             signal: abort.signal,
           },
           session,
         );
-        if (!turn.ok) {
-          const failure = await readSupabaseFunctionError(turn);
+        if (!runtimeTurn.ok) {
+          const failure = await readSupabaseFunctionError(runtimeTurn);
           if (failure.category === "rate_limited") {
             return {
               cancelled: false,
@@ -331,7 +322,7 @@ export function useWebTurnRunnerController<
             return { cancelled: false, error: null };
           }
           if (failure.category === "auth") {
-            // Function-lane auth errors can be verifier/config drift while the
+            // Runtime auth failures can be verifier/config drift while the
             // browser session is still valid. Confirm auth truth before showing
             // a sign-in error.
             try {
@@ -341,7 +332,7 @@ export function useWebTurnRunnerController<
                 session,
               );
               if (authProbe.ok) {
-                const base = "Arx AI is temporarily unavailable. Please retry.";
+                const base = "PolyNet AI is temporarily unavailable. Please retry.";
                 const withRequestId =
                   failure.requestId && !base.toLowerCase().includes("request_id=")
                     ? `${base} (request_id=${failure.requestId})`
@@ -355,156 +346,9 @@ export function useWebTurnRunnerController<
           }
           throw new Error(formatSupabaseFunctionErrorMessage(failure));
         }
-        const reader = turn.body?.getReader();
+
+        const reader = runtimeTurn.body?.getReader();
         if (!reader) throw new Error("Missing streaming response.");
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let eventName = "message";
-        let dataBuffer = "";
-        let seenDone = false;
-
-        const flushEvent = () => {
-          const raw = dataBuffer.trim();
-          dataBuffer = "";
-          if (!raw) return;
-          let parsed: any = null;
-          try {
-            parsed = JSON.parse(raw);
-          } catch {
-            parsed = { raw };
-          }
-          if (eventName === "start") {
-            if (typeof parsed?.run_id === "string") {
-              runIdFromServer = parsed.run_id;
-              current.setStreamingRunId(parsed.run_id);
-            }
-            if (typeof parsed?.engine_id === "string") {
-              const memoryUsed = current.parseMemoryUsedArray(parsed?.memory_used);
-              const historyUsed = current.parseHistoryUsedArray(parsed?.history_used);
-              const communityEvidence = current.extractCommunityEvidenceUsedV1(parsed);
-              current.setStreamingMeta({
-                engine_id: parsed.engine_id,
-                model_id: typeof parsed?.model_id === "string" ? parsed.model_id : null,
-                inference_source: typeof parsed?.inference_source === "string" ? parsed.inference_source : null,
-                memory_used: memoryUsed,
-                history_used: historyUsed,
-                community_evidence_used: communityEvidence,
-              });
-            }
-          } else if (eventName === "delta") {
-            const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
-            const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
-            if (full !== null) {
-              current.streamingContentRef.current = full;
-            } else if (delta) {
-              const prior = current.streamingContentRef.current ?? "";
-              current.streamingContentRef.current = `${prior}${delta}`;
-            }
-            scheduleStreamingFlush();
-          } else if (eventName === "done") {
-            const memoryAdded = current.parseMemoryUsedArray(parsed?.memory_added);
-            if (memoryAdded.length > 0) current.showMemoryToastMessage("Memory updated");
-            seenDone = true;
-          } else if (eventName === "error") {
-            const msg =
-              (typeof parsed?.error === "string" && parsed.error.trim()) ||
-              (typeof parsed?.message === "string" && parsed.message.trim()) ||
-              (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
-              "Failed to run model.";
-            throw new Error(msg);
-          }
-          eventName = "message";
-        };
-
-        while (!seenDone) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          while (true) {
-            const idx = buffer.indexOf("\n");
-            if (idx < 0) break;
-            let line = buffer.slice(0, idx);
-            if (line.endsWith("\r")) line = line.slice(0, -1);
-            buffer = buffer.slice(idx + 1);
-            if (line.startsWith("event:")) {
-              eventName = line.slice(6).trim();
-              continue;
-            }
-            if (line.startsWith("data:")) {
-              dataBuffer += line.slice(5).trim();
-              continue;
-            }
-            if (line === "") {
-              flushEvent();
-              continue;
-            }
-          }
-        }
-        flushEvent();
-
-        await current.loadThreadMessages(threadId, session);
-        await current.loadThreads(session);
-        return { cancelled: false, error: null };
-      };
-
-      try {
-        const runtimeTurnEnabled = current.runtimeTurnV2Enabled === true && params.mode !== "regenerate";
-        if (runtimeTurnEnabled) {
-          const runtimeTurn = await current.fetchWithSupabaseAuth(
-            `${url}/functions/v1/runtime_turn`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                thread_id: threadId,
-                stream: true,
-                surface: "web",
-                requires_tools: true,
-                model_id: params.preferredModelId,
-                idempotency_key: params.runIdHint,
-              }),
-              signal: abort.signal,
-            },
-            session,
-          );
-          if (!runtimeTurn.ok) {
-            const failure = await readSupabaseFunctionError(runtimeTurn);
-            if (failure.category === "rate_limited") {
-              return {
-                cancelled: false,
-                error: formatSupabaseFunctionErrorMessage({
-                  ...failure,
-                  message: "Too many requests. Try again soon.",
-                }),
-              };
-            }
-            if (
-              failure.category === "quota" ||
-              failure.category === "misconfigured" ||
-              failure.category === "disabled" ||
-              failure.category === "plan"
-            ) {
-              current.setPlatformQuotaModal({
-                reason: mapPlatformFailureReason(failure.category),
-                threadId,
-                mode: params.mode === "regenerate" ? "regenerate" : "respond",
-                message: failure.message.trim() || null,
-              });
-              return { cancelled: false, error: null };
-            }
-            if (failure.category === "auth") {
-              return { cancelled: false, error: formatSupabaseFunctionErrorMessage(failure) };
-            }
-            const code = String(failure.code ?? "").trim().toLowerCase();
-            if (failure.status >= 500 || runtimeTurnFallbackCodes.has(code)) {
-              return await runLegacyAgentTurn();
-            }
-            throw new Error(formatSupabaseFunctionErrorMessage(failure));
-          }
-
-          const reader = runtimeTurn.body?.getReader();
-          if (!reader) throw new Error("Missing streaming response.");
 
           const decoder = new TextDecoder();
           let buffer = "";
@@ -515,6 +359,25 @@ export function useWebTurnRunnerController<
           let runtimeEngineId: string | null = null;
           let runtimeModelId: string | null = null;
           let finalContent = "";
+          let cloudLifecycleStarted = false;
+          let cloudLifecycleDone = false;
+
+          const maybeEmitCloudLifecycle = (phase: "start" | "done", laneValue: string | null | undefined): void => {
+            if (String(laneValue ?? "").trim().toLowerCase() !== "daytona") return;
+            if (phase === "start") {
+              if (cloudLifecycleStarted) return;
+              cloudLifecycleStarted = true;
+            } else if (cloudLifecycleDone) {
+              return;
+            } else {
+              cloudLifecycleDone = true;
+            }
+            current.onCloudRunLifecycleEvent?.({
+              threadId,
+              runId: runIdFromServer,
+              phase,
+            });
+          };
 
           const flushEvent = () => {
             const raw = dataBuffer.trim();
@@ -534,6 +397,7 @@ export function useWebTurnRunnerController<
               if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
               if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
               if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
+              maybeEmitCloudLifecycle("start", runtimeLane);
             } else if (eventName === "delta") {
               const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
               const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
@@ -555,8 +419,10 @@ export function useWebTurnRunnerController<
               if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
               if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
               if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
+              maybeEmitCloudLifecycle("done", runtimeLane);
               seenDone = true;
             } else if (eventName === "error") {
+              maybeEmitCloudLifecycle("done", runtimeLane);
               const msg =
                 (typeof parsed?.error === "string" && parsed.error.trim()) ||
                 (typeof parsed?.message === "string" && parsed.message.trim()) ||
@@ -592,6 +458,7 @@ export function useWebTurnRunnerController<
             }
           }
           flushEvent();
+          maybeEmitCloudLifecycle("done", runtimeLane);
 
           const safeAssistantText = sanitizeUserFacingAssistantText({
             text: finalContent,
@@ -633,10 +500,7 @@ export function useWebTurnRunnerController<
           }
           await current.loadThreadMessages(threadId, session);
           await current.loadThreads(session);
-          return { cancelled: false, error: null };
-        }
-
-        return await runLegacyAgentTurn();
+        return { cancelled: false, error: null };
       } catch (error) {
         const cancelled = current.streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
         if (cancelled) {

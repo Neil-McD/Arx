@@ -99,7 +99,6 @@ import {
 import {
   buildProjectThreadGroups,
   buildProjectByIdMap,
-  filterThreadsWithoutProject,
   normalizeThreadLane,
   normalizeThreadStorageMode,
   resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared,
@@ -109,6 +108,13 @@ import {
   storageModeForThreadLane,
   sortProjectsByRootPathLengthDesc,
 } from "../shared/threadSidebarSelectors";
+import {
+  type DaytonaSandboxStatus,
+} from "../shared/daytonaSandboxStatus";
+import {
+  ensureDefaultCloudProject,
+  fetchMappedDaytonaCloudProjects,
+} from "../shared/daytonaCloudProjects";
 import {
   resolveThreadServiceDomain,
   type ThreadService,
@@ -329,11 +335,17 @@ type ProjectRecord = ArpProjectRecord;
 type CloudProjectRecord = {
   id: string;
   name: string | null;
+  description: string | null;
   slug: string | null;
   status: string;
+  sandbox_status: DaytonaSandboxStatus | null;
   created_at: number;
   updated_at: number;
   root_path: string;
+};
+type RenameProjectTarget = {
+  lane: "agent" | "chat";
+  id: string;
 };
 type ToolCallRecord = ArpToolCallRecord & {
   duration_ms?: number | null;
@@ -347,6 +359,8 @@ type ToolApprovalRequestedPayload = {
   tool_call_id: string;
   tool_name: string;
   args_json: string;
+  source?: "local" | "cloud";
+  run_id?: string | null;
 };
 
 type AgentStatusPayload = {
@@ -809,6 +823,16 @@ function App() {
     .map((claim) => claim.community_id)
     .sort()
     .join("|");
+  const [showCreateCloudProjectModal, setShowCreateCloudProjectModal] = useState(false);
+  const [createCloudProjectName, setCreateCloudProjectName] = useState("");
+  const [createCloudProjectDescription, setCreateCloudProjectDescription] = useState("");
+  const [createCloudProjectError, setCreateCloudProjectError] = useState<string | null>(null);
+  const [isCreatingCloudProject, setIsCreatingCloudProject] = useState(false);
+  const [showRenameProjectModal, setShowRenameProjectModal] = useState(false);
+  const [renameProjectTarget, setRenameProjectTarget] = useState<RenameProjectTarget | null>(null);
+  const [renameProjectName, setRenameProjectName] = useState("");
+  const [renameProjectError, setRenameProjectError] = useState<string | null>(null);
+  const [isRenamingProject, setIsRenamingProject] = useState(false);
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
   const [deleteCommunityNameInput, setDeleteCommunityNameInput] = useState("");
@@ -1827,6 +1851,25 @@ function App() {
   }, [supabaseSession]);
 
   useEffect(() => {
+    if (!supabaseSession) return;
+    if (threadLaneFilter !== "chat") return;
+    if (activePage !== "workspace") return;
+    let cancelled = false;
+    const refresh = async () => {
+      if (cancelled) return;
+      await loadCloudProjects(supabaseSession);
+    };
+    void refresh();
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activePage, supabaseSession, threadLaneFilter]);
+
+  useEffect(() => {
     let cancelled = false;
     void runtimeClient
       .initialize()
@@ -1856,7 +1899,7 @@ function App() {
 		  useEffect(() => {
 		    if (activeInviteGateKey) return;
 	    if (activePage !== "workspace" || activeView === "settings") return;
-	    if (showCreateCommunityModal || showResourceModal) return;
+    if (showCreateCommunityModal || showCreateCloudProjectModal || showRenameProjectModal || showResourceModal) return;
 
 	    const candidates = pendingInvites
 	      .filter((invite) => invite.status === "pending" && invite.source === "url")
@@ -1869,7 +1912,9 @@ function App() {
 	    activePage,
 	    activeView,
 	    pendingInvites,
+      showCreateCloudProjectModal,
 	    showCreateCommunityModal,
+      showRenameProjectModal,
 	    showResourceModal
 	  ]);
 
@@ -2050,7 +2095,7 @@ function App() {
       const summary = await shellClient.getChatgptAuthSummary();
       return Boolean(summary);
     },
-    runtimeTurnV2Enabled: String((import.meta.env.VITE_ENABLE_RUNTIME_TURN_V2 as string | undefined) ?? "false")
+    runtimeTurnV2Enabled: String((import.meta.env.VITE_ENABLE_RUNTIME_TURN_V2 as string | undefined) ?? "true")
       .trim()
       .toLowerCase() === "true",
     chatgptCloudTurn: (args) => shellClient.chatgptCloudTurn(args),
@@ -3125,60 +3170,28 @@ function App() {
   async function loadCloudProjects(session: SupabaseSession): Promise<void> {
     const url = getSupabaseUrl();
     if (!url) return;
-    const fetchProjects = async (): Promise<CloudProjectRecord[]> => {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/list_cloud_projects`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
-        session,
-      );
-      if (!response.ok) {
-        throw new Error(await readSupabaseError(response));
-      }
-      const rows = (await response.json()) as Array<{
-        id: string;
-        name: string | null;
-        slug: string | null;
-        status: string;
-        created_at: string;
-        updated_at: string;
-      }>;
-      return rows
-        .filter((row) => String(row?.status ?? "").trim().toLowerCase() === "active")
-        .map((row) => {
-          const slug = (row.slug ?? "").trim() || null;
-          const id = String(row.id ?? "").trim();
-          return {
-            id,
-            name: row.name ?? null,
-            slug,
-            status: (row.status ?? "").trim().toLowerCase(),
-            created_at: toUnixSecondsFromIso(row.created_at) ?? Math.floor(Date.now() / 1000),
-            updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
-            root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
-          } satisfies CloudProjectRecord;
-        })
-        .filter((project) => Boolean(project.id));
-    };
     try {
-      let next = await fetchProjects();
+      let next = (await fetchMappedDaytonaCloudProjects({
+        supabaseUrl: url,
+        session,
+        fetchWithSupabaseAuth,
+        readSupabaseError,
+        toEpochSeconds: toUnixSecondsFromIso,
+      })) as CloudProjectRecord[];
       if (next.length === 0) {
-        const ensureResponse = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/ensure_default_cloud_project`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          },
+        await ensureDefaultCloudProject({
+          supabaseUrl: url,
           session,
-        );
-        if (!ensureResponse.ok) {
-          throw new Error(await readSupabaseError(ensureResponse));
-        }
-        next = await fetchProjects();
+          fetchWithSupabaseAuth,
+          readSupabaseError,
+        });
+        next = (await fetchMappedDaytonaCloudProjects({
+          supabaseUrl: url,
+          session,
+          fetchWithSupabaseAuth,
+          readSupabaseError,
+          toEpochSeconds: toUnixSecondsFromIso,
+        })) as CloudProjectRecord[];
       }
       setCloudProjects(next);
       setProjectExpandedById((prev) => {
@@ -3192,7 +3205,7 @@ function App() {
     } catch (error) {
       console.warn("Failed to load cloud projects:", error);
       // Keep existing in-memory cloud project state on transient failures so desktop
-      // doesn't regress to an empty "Unassigned" view when cloud sync hiccups.
+      // doesn't regress to an empty project list when cloud sync hiccups.
     }
   }
 
@@ -4343,8 +4356,12 @@ function App() {
 		        surface: "desktop",
 		        authState: supabaseSession ? "authenticated" : "anonymous",
 		        builderTier: builderBillingStatus?.builder_tier ?? null,
+            hasDesktopChatgptAuth: Boolean(chatgptAuthSummary),
+            useCanonicalGates: String(import.meta.env.VITE_ARX_CANONICAL_GATES_V1 ?? "").trim() === "1",
+            enableCanonicalGateParityLog:
+              String(import.meta.env.VITE_ARX_CANONICAL_GATES_PARITY_LOG ?? "").trim() === "1",
 		      }),
-		    [supabaseSession, builderBillingStatus?.builder_tier],
+		    [supabaseSession, builderBillingStatus?.builder_tier, chatgptAuthSummary],
 		  );
 		  const hasPaidAccess = userAccessPolicy.allowPlatformInference && Boolean(supabaseSession);
       const forceShowDesktopChatgptRateLimitCardPreview = (() => {
@@ -4665,7 +4682,6 @@ function App() {
 	    normalizedThreadSearch,
 	    chatThreads,
 	    agentThreads,
-	    chatThreadGroups: chatThreadDateGroups,
 	    threadSearchResults,
 	    projectThreadGroups,
 	    generalThreads,
@@ -4696,23 +4712,6 @@ function App() {
 	    () => buildProjectThreadGroups(cloudProjects, chatThreads, resolveCloudThreadProjectId),
 	    [chatThreads, cloudProjects, resolveCloudThreadProjectId],
 	  );
-	  const chatUnassignedThreads = useMemo(
-	    () => filterThreadsWithoutProject(chatThreads, resolveCloudThreadProjectId),
-	    [chatThreads, resolveCloudThreadProjectId],
-	  );
-	  const chatThreadGroups = useMemo(() => {
-	    if (!supabaseSession) return chatThreadDateGroups;
-	    const named = chatProjectThreadGroups
-	      .filter((group) => group.threads.length > 0)
-	      .map((group) => ({
-	        label: (group.project.name ?? "").trim() || "General",
-	        threads: group.threads,
-	      }));
-	    if (chatUnassignedThreads.length > 0) {
-	      named.push({ label: "Unassigned", threads: chatUnassignedThreads });
-	    }
-	    return named;
-	  }, [chatProjectThreadGroups, chatThreadDateGroups, chatUnassignedThreads, supabaseSession]);
 	  const laneProjectThreadGroups = useMemo(
 	    () =>
 	      threadLaneFilter === "agent"
@@ -4721,8 +4720,8 @@ function App() {
 	    [chatProjectThreadGroups, projectThreadGroups, threadLaneFilter],
 	  );
 	  const laneGeneralThreads = useMemo(
-	    () => (threadLaneFilter === "agent" ? generalThreads : chatUnassignedThreads),
-	    [chatUnassignedThreads, generalThreads, threadLaneFilter],
+	    () => (threadLaneFilter === "agent" ? generalThreads : []),
+	    [generalThreads, threadLaneFilter],
 	  );
 	  const laneFilteredThreadSearchResults = useMemo(
 	    () =>
@@ -5271,20 +5270,65 @@ function App() {
   async function handleRenameProject(project: ProjectRecord) {
     setProjectMenuProjectId(null);
     const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
-    const nextName = window.prompt("Project name", defaultName);
-    if (nextName === null) return;
-    const cleaned = nextName.trim();
-    if (!cleaned) {
-      setMemoryToast("Project name cannot be empty.");
+    setRenameProjectTarget({ lane: "agent", id: project.id });
+    setRenameProjectName(defaultName);
+    setRenameProjectError(null);
+    setShowRenameProjectModal(true);
+  }
+
+  function closeRenameProjectModal(): void {
+    if (isRenamingProject) return;
+    setShowRenameProjectModal(false);
+    setRenameProjectTarget(null);
+    setRenameProjectName("");
+    setRenameProjectError(null);
+  }
+
+  async function handleConfirmRenameProject(): Promise<void> {
+    const target = renameProjectTarget;
+    if (!target) {
+      closeRenameProjectModal();
       return;
     }
+    const cleaned = renameProjectName.trim();
+    if (!cleaned) {
+      setRenameProjectError("Project name cannot be empty.");
+      return;
+    }
+    setIsRenamingProject(true);
+    setRenameProjectError(null);
     try {
-      const updated = await runtimeClient.updateProjectName(project.id, cleaned);
-      setProjects((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      if (activeProject?.id === updated.id) {
-        setActiveProject(updated);
+      if (target.lane === "agent") {
+        const updated = await runtimeClient.updateProjectName(target.id, cleaned);
+        setProjects((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+        if (activeProject?.id === updated.id) {
+          setActiveProject(updated);
+        }
+      } else {
+        const session = supabaseSessionRef.current ?? supabaseSession;
+        if (!session) {
+          throw new Error("Sign in to manage cloud projects.");
+        }
+        const url = getSupabaseUrl();
+        if (!url) {
+          throw new Error("Missing Supabase URL.");
+        }
+        const response = await fetchWithSupabaseAuth(
+          `${url}/rest/v1/rpc/rename_cloud_project`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ p_project_id: target.id, p_name: cleaned }),
+          },
+          session,
+        );
+        if (!response.ok) throw new Error(await readSupabaseError(response));
+        await loadCloudProjects(session);
       }
-      setProjectMenuProjectId(null);
+      setShowRenameProjectModal(false);
+      setRenameProjectTarget(null);
+      setRenameProjectName("");
+      setRenameProjectError(null);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -5292,7 +5336,9 @@ function App() {
           : error instanceof Error
             ? error.message
             : "Failed to rename project.";
-      setMemoryToast(message);
+      setRenameProjectError(message);
+    } finally {
+      setIsRenamingProject(false);
     }
   }
 
@@ -5303,31 +5349,49 @@ function App() {
       void handleSignIn();
       return;
     }
+    setProjectMenuProjectId(null);
     const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
-    const nextName = window.prompt("Cloud project name", suggestedName);
-    const cleaned =
-      nextName === null
-        ? cloudProjects.length === 0
-          ? suggestedName
-          : ""
-        : nextName.trim();
-    if (!cleaned) {
-      if (nextName === null) return;
-      setMemoryToast("Project name cannot be empty.");
+    setCreateCloudProjectName(suggestedName);
+    setCreateCloudProjectDescription("");
+    setCreateCloudProjectError(null);
+    setShowCreateCloudProjectModal(true);
+  }
+
+  function closeCreateCloudProjectModal(): void {
+    if (isCreatingCloudProject) return;
+    setShowCreateCloudProjectModal(false);
+    setCreateCloudProjectError(null);
+  }
+
+  async function handleConfirmCreateCloudProject(): Promise<void> {
+    const session = supabaseSessionRef.current ?? supabaseSession;
+    if (!session) {
+      setCreateCloudProjectError("Sign in to manage cloud projects.");
+      setAuthError("Sign in to manage cloud projects.");
+      void handleSignIn();
       return;
     }
+    const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
+    const cleaned = createCloudProjectName.trim() || suggestedName;
+    if (!cleaned) {
+      setCreateCloudProjectError("Project name cannot be empty.");
+      return;
+    }
+    const description = createCloudProjectDescription.trim() || null;
     const url = getSupabaseUrl();
     if (!url) {
-      setMemoryToast("Missing Supabase URL.");
+      setCreateCloudProjectError("Missing Supabase URL.");
       return;
     }
+    setIsCreatingCloudProject(true);
+    setCreateCloudProjectError(null);
     try {
       const response = await fetchWithSupabaseAuth(
         `${url}/rest/v1/rpc/create_cloud_project`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_name: cleaned, p_slug: null }),
+          body: JSON.stringify({ p_name: cleaned, p_slug: null, p_description: description }),
         },
         session,
       );
@@ -5350,11 +5414,16 @@ function App() {
             typeof (row as Record<string, unknown>).name === "string"
               ? String((row as Record<string, unknown>).name)
               : cleaned,
+          description:
+            typeof (row as Record<string, unknown>).description === "string"
+              ? String((row as Record<string, unknown>).description)
+              : description,
           slug,
           status:
             typeof statusRaw === "string" && statusRaw.trim()
               ? statusRaw.trim().toLowerCase()
               : "active",
+          sandbox_status: null,
           created_at:
             typeof createdAtRaw === "string"
               ? (toUnixSecondsFromIso(createdAtRaw) ?? Math.floor(Date.now() / 1000))
@@ -5377,6 +5446,9 @@ function App() {
       }
       await loadCloudProjects(session);
       setThreadLaneFilter("chat");
+      setShowCreateCloudProjectModal(false);
+      setCreateCloudProjectName(suggestedName);
+      setCreateCloudProjectDescription("");
       setMemoryToast(`Created cloud project: ${cleaned}`);
     } catch (error) {
       const message =
@@ -5385,52 +5457,19 @@ function App() {
           : error instanceof Error
             ? error.message
             : "Failed to create cloud project.";
-      setMemoryToast(message);
+      setCreateCloudProjectError(message);
+    } finally {
+      setIsCreatingCloudProject(false);
     }
   }
 
   async function handleRenameCloudProject(project: CloudProjectRecord): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
-    if (!session) {
-      setAuthError("Sign in to manage cloud projects.");
-      void handleSignIn();
-      return;
-    }
     setProjectMenuProjectId(null);
     const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
-    const nextName = window.prompt("Cloud project name", defaultName);
-    if (nextName === null) return;
-    const cleaned = nextName.trim();
-    if (!cleaned) {
-      setMemoryToast("Project name cannot be empty.");
-      return;
-    }
-    const url = getSupabaseUrl();
-    if (!url) {
-      setMemoryToast("Missing Supabase URL.");
-      return;
-    }
-    try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/rename_cloud_project`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_project_id: project.id, p_name: cleaned }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      await loadCloudProjects(session);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to rename cloud project.";
-      setMemoryToast(message);
-    }
+    setRenameProjectTarget({ lane: "chat", id: project.id });
+    setRenameProjectName(defaultName);
+    setRenameProjectError(null);
+    setShowRenameProjectModal(true);
   }
 
   async function handleRemoveCloudProject(project: CloudProjectRecord): Promise<void> {
@@ -5552,6 +5591,33 @@ function App() {
     [ensureThreadReadyForSend, handleSignIn],
   );
 
+  const lastCloudStatusRefreshAtRef = useRef(0);
+  const refreshCloudProjectStatuses = useCallback(() => {
+    const session = supabaseSessionRef.current;
+    if (!session) return;
+    const now = Date.now();
+    if (now - lastCloudStatusRefreshAtRef.current < 1000) return;
+    lastCloudStatusRefreshAtRef.current = now;
+    void loadCloudProjects(session);
+  }, [loadCloudProjects]);
+
+  useEffect(() => {
+    if (activePage !== "workspace") return;
+    if (!supabaseSession) return;
+    if (threadLaneFilter !== "chat") return;
+    let cancelled = false;
+    const refresh = () => {
+      if (cancelled) return;
+      refreshCloudProjectStatuses();
+    };
+    refresh();
+    const intervalId = window.setInterval(refresh, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activePage, refreshCloudProjectStatuses, supabaseSession, threadLaneFilter]);
+
   const { handleSendMessage } = useDesktopSendMessageFlow<
     ThreadRecord,
     MessageRecord,
@@ -5607,6 +5673,20 @@ function App() {
     setMemoryToast,
     setAgentStatus,
     setRunningTools,
+    onCloudToolApprovalRequested: (payload) => {
+      setIsToolApprovalSubmitting(false);
+      setPendingToolApproval({
+        session_id: payload.session_id,
+        tool_call_id: payload.tool_call_id,
+        tool_name: payload.tool_name,
+        args_json: payload.args_json,
+        source: "cloud",
+        run_id: payload.run_id,
+      });
+    },
+    onCloudRunLifecycleEvent: () => {
+      refreshCloudProjectStatuses();
+    },
     getSendPolicySnapshot: (threadId) => {
       const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
       const selectedModelId = (activeModelId ?? thread?.model_id ?? "").trim() || null;
@@ -5632,6 +5712,23 @@ function App() {
     pendingToolApproval,
     setPendingToolApproval,
     setIsToolApprovalSubmitting,
+    resolveCloudToolApproval: async ({ pending, approved }) => {
+      const session = supabaseSessionRef.current;
+      if (!session) {
+        throw new Error("Sign in to approve cloud tool calls.");
+      }
+      const runId = String(pending.run_id ?? "").trim();
+      if (!runId) {
+        throw new Error("Missing run id for cloud tool approval.");
+      }
+      await desktopCloudChatThreadApi.decideCloudToolCall({
+        run_id: runId,
+        tool_call_id: pending.tool_call_id,
+        approved,
+        note: null,
+        session,
+      });
+    },
     onApprovalResolved: () => {
       dispatchRunPhase({ type: "approval_resolved" });
     },
@@ -6014,7 +6111,6 @@ function App() {
 		                  generalThreads: laneGeneralThreads,
 					                  agentThreadsCount: agentThreads.length,
 					                  chatThreadsCount: chatThreads.length,
-					                  chatThreadGroups,
 			                      showChatSignInPrompt: !supabaseSession,
 					                }}
 						                actions={{
@@ -6124,7 +6220,7 @@ function App() {
               </div>
             );
 	          })()}
-		        {supabaseSession && (
+	        {supabaseSession && (
               <BuilderUpgradeModal
                 isOpen={isBuilderUpgradeOpen}
                 builderUpgradeContext={builderUpgradeContext}
@@ -6140,6 +6236,110 @@ function App() {
                 }}
               />
             )}
+          {showCreateCloudProjectModal && (
+            <div className="modal-overlay" onClick={closeCreateCloudProjectModal}>
+              <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title">Create cloud project</div>
+                  <button className="modal-close" onClick={closeCreateCloudProjectModal} title="Close">
+                    ×
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="create-community-form">
+                    <label className="create-community-field">
+                      <span>Name</span>
+                      <input
+                        type="text"
+                        placeholder="Project name"
+                        value={createCloudProjectName}
+                        onChange={(event) => setCreateCloudProjectName(event.target.value)}
+                        disabled={isCreatingCloudProject}
+                      />
+                    </label>
+                    <label className="create-community-field">
+                      <span>Description</span>
+                      <textarea
+                        placeholder="Optional description for this project"
+                        rows={3}
+                        value={createCloudProjectDescription}
+                        onChange={(event) => setCreateCloudProjectDescription(event.target.value)}
+                        disabled={isCreatingCloudProject}
+                      />
+                    </label>
+                    {createCloudProjectError && <div className="auth-error">{createCloudProjectError}</div>}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <div className="create-community-actions">
+                    <button
+                      className="create-community-primary"
+                      type="button"
+                      onClick={() => void handleConfirmCreateCloudProject()}
+                      disabled={isCreatingCloudProject || createCloudProjectName.trim().length === 0}
+                    >
+                      {isCreatingCloudProject ? "Creating..." : "Create project"}
+                    </button>
+                    <button
+                      className="create-community-secondary"
+                      type="button"
+                      onClick={closeCreateCloudProjectModal}
+                      disabled={isCreatingCloudProject}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {showRenameProjectModal && (
+            <div className="modal-overlay" onClick={closeRenameProjectModal}>
+              <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title">Rename project</div>
+                  <button className="modal-close" onClick={closeRenameProjectModal} title="Close">
+                    ×
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <div className="create-community-form">
+                    <label className="create-community-field">
+                      <span>Name</span>
+                      <input
+                        type="text"
+                        placeholder="Project name"
+                        value={renameProjectName}
+                        onChange={(event) => setRenameProjectName(event.target.value)}
+                        disabled={isRenamingProject}
+                      />
+                    </label>
+                    {renameProjectError && <div className="auth-error">{renameProjectError}</div>}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <div className="create-community-actions">
+                    <button
+                      className="create-community-primary"
+                      type="button"
+                      onClick={() => void handleConfirmRenameProject()}
+                      disabled={isRenamingProject || renameProjectName.trim().length === 0}
+                    >
+                      {isRenamingProject ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      className="create-community-secondary"
+                      type="button"
+                      onClick={closeRenameProjectModal}
+                      disabled={isRenamingProject}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 	        {showCreateCommunityModal && (
 	          <div className="modal-overlay" onClick={closeCreateCommunityModal}>
 	            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
@@ -6874,7 +7074,7 @@ function App() {
 	                    ChatGPT
 	                  </div>
 	                  <div className="settings-section-desc">
-	                    Sign in to use your ChatGPT account for OpenAI models. This does not consume your Arx quota.
+	                    Sign in to use your ChatGPT account for OpenAI models. This does not consume your PolyNet quota.
 	                  </div>
 	                  {chatgptAuthSummary && (
 	                    <div className="auth-status">
@@ -7821,7 +8021,9 @@ function App() {
             })()}
 	            {pendingToolApproval && (() => {
 	              const formatted = formatToolApproval(pendingToolApproval.tool_name, pendingToolApproval.args_json);
-                const canApproveForSession = canEnableWriteEditSessionApproval(pendingToolApproval.tool_name);
+                const canApproveForSession =
+                  pendingToolApproval.source !== "cloud" &&
+                  canEnableWriteEditSessionApproval(pendingToolApproval.tool_name);
 	              return (
 	                <div className="tool-approval-card">
                   <div className="tool-approval-header">

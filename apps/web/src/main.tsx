@@ -27,7 +27,7 @@ class ErrorBoundary extends React.Component<
     const stack = this.state.error?.stack ?? "";
     return (
       <div style={{ padding: 24, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Arx Web UI crashed</h1>
+        <h1 style={{ margin: 0, fontSize: 18 }}>PolyNet Web UI crashed</h1>
         <p style={{ marginTop: 8, opacity: 0.8 }}>{message}</p>
         <button
           style={{

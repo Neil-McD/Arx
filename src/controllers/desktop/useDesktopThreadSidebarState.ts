@@ -4,7 +4,6 @@ import {
   filterThreadsByLane,
   filterThreadsWithoutProject,
   filterVisibleThreads,
-  groupThreadsByDate,
   searchThreads,
 } from "../../../shared/threadSidebarSelectors";
 
@@ -61,11 +60,6 @@ export function useDesktopThreadSidebarState<
     [visibleThreads],
   );
 
-  const chatThreadGroups = useMemo(
-    () => groupThreadsByDate(chatThreads),
-    [chatThreads],
-  );
-
   const threadSearchResults = useMemo(() => {
     return searchThreads(visibleThreads, normalizedThreadSearch, (thread) => {
       const title = getThreadDisplayTitle(thread);
@@ -91,7 +85,6 @@ export function useDesktopThreadSidebarState<
     normalizedThreadSearch,
     chatThreads,
     agentThreads,
-    chatThreadGroups,
     threadSearchResults,
     projectThreadGroups,
     generalThreads,

@@ -112,6 +112,14 @@ type SendCloudTurnInput = {
   onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
 
+type DecideCloudToolCallInput = {
+  run_id: string;
+  tool_call_id: string;
+  approved: boolean;
+  note?: string | null;
+  session: SupabaseSession;
+};
+
 type CloudMessageRow = {
   role: string;
   content_json: unknown;
@@ -154,14 +162,6 @@ function isDesktopChatgptEligibleAlias(modelId: string | null | undefined): bool
 }
 
 const inferenceFallbackReasonCounters = new Map<string, number>();
-const runtimeTurnLegacyFallbackCodes = new Set([
-  "runner_unavailable",
-  "runtime_turn_failed",
-  "run_lookup_failed",
-  "run_create_failed",
-  "run_update_failed",
-  "run_event_append_failed",
-]);
 const PUBLIC_EMPTY_RESPONSE_MAX_RETRIES = 1;
 const MAX_DERIVED_THREAD_TITLES_PER_LIST = 80;
 const TITLE_DERIVATION_CHUNK_SIZE = 40;
@@ -316,6 +316,30 @@ async function consumeSseResponse(
         completionTokens: parseOptionalNumber(parsed?.completion_tokens),
         maxTokens: parseOptionalNumber(parsed?.max_tokens),
       });
+    } else if (eventName === "tool_approval_requested") {
+      const parsedToolCallId = String(parsed?.tool_call_id ?? "").trim();
+      const parsedToolName = String(parsed?.tool_name ?? "").trim();
+      if (parsedToolCallId && parsedToolName) {
+        const argsJson = (() => {
+          const args = parsed?.args;
+          if (!args || typeof args !== "object" || Array.isArray(args)) {
+            return "{}";
+          }
+          try {
+            return JSON.stringify(args);
+          } catch {
+            return "{}";
+          }
+        })();
+        const parsedRunId = String(parsed?.run_id ?? "").trim();
+        options.onStreamEvent?.({
+          type: "tool_approval_requested",
+          runId: parsedRunId || null,
+          toolCallId: parsedToolCallId,
+          toolName: parsedToolName,
+          argsJson,
+        });
+      }
     } else if (eventName === "done") {
       if (typeof parsed?.run_id === "string" && parsed.run_id.trim()) {
         runId = parsed.run_id;
@@ -753,6 +777,33 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     }
   };
 
+  const decideCloudToolCall = async (params: DecideCloudToolCallInput): Promise<void> => {
+    const url = deps.getSupabaseUrl();
+    if (!url) throw new Error("Missing Supabase URL.");
+    const runId = String(params.run_id ?? "").trim();
+    const toolCallId = String(params.tool_call_id ?? "").trim();
+    if (!runId) throw new Error("Missing run_id for cloud tool decision.");
+    if (!toolCallId) throw new Error("Missing tool_call_id for cloud tool decision.");
+    const response = await deps.fetchWithSupabaseAuth(
+      `${url}/functions/v1/runtime_turn`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "tool_decision",
+          run_id: runId,
+          tool_call_id: toolCallId,
+          approved: params.approved === true,
+          note: typeof params.note === "string" ? params.note : null,
+        }),
+      },
+      params.session,
+    );
+    if (!response.ok) {
+      throw new Error(await deps.readSupabaseError(response));
+    }
+  };
+
   const sendCloudTurn = async (params: SendCloudTurnInput): Promise<void> => {
     const url = deps.getSupabaseUrl();
     if (!url) throw new Error("Missing Supabase URL.");
@@ -1094,47 +1145,6 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     const runPlatformLane = async (
       fallbackTrace: Array<{ from: string; to: string; reason: string }>,
     ): Promise<void> => {
-      const runLegacyPlatformLane = async (): Promise<void> => {
-        const turnResponse = await deps.fetchWithSupabaseAuth(
-          `${url}/functions/v1/agent_turn`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              thread_id: params.thread_id,
-              reply_to_id: replyToId,
-              stream: true,
-              mode: "respond",
-              ...(modelId ? { model_id: modelId } : null),
-              ...(fallbackTrace.length > 0
-                ? { inference_lane_fallbacks: fallbackTrace }
-                : null),
-            }),
-          },
-          params.session,
-        );
-        if (!turnResponse.ok) {
-          const failure = await readSupabaseFunctionError(turnResponse);
-          const message = formatSupabaseFunctionErrorMessage(failure);
-          if (shouldFallbackFromPlatformErrorToPublic(failure)) {
-            throw new RetryNextInferenceLaneError({
-              lane: "platform",
-              reasonCode: failure.code ?? failure.category,
-              message,
-            });
-          }
-          throw new Error(message);
-        }
-        await consumeSseResponse(turnResponse, {
-          sanitizeText: (text) => sanitizeAssistantText(text, null),
-          onStreamEvent: params.onStreamEvent,
-        });
-      };
-
-      if (!deps.runtimeTurnV2Enabled) {
-        await runLegacyPlatformLane();
-        return;
-      }
 
       const prepared = await loadPreparedMessages();
       if (isCommunityHarnessUnavailablePreflight(prepared.communityPreflight)) {
@@ -1165,18 +1175,34 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
       );
       if (!runtimeTurnResponse.ok) {
         const failure = await readSupabaseFunctionError(runtimeTurnResponse);
-        const message = formatSupabaseFunctionErrorMessage(failure);
+        let message = formatSupabaseFunctionErrorMessage(failure);
+        if (failure.category === "auth") {
+          // Function-lane auth failures can be verifier/config drift while the
+          // desktop session is still valid. Confirm auth truth before showing
+          // a sign-in error.
+          try {
+            const authProbe = await deps.fetchWithSupabaseAuth(
+              `${url}/auth/v1/user`,
+              { method: "GET" },
+              params.session,
+            );
+            if (authProbe.ok) {
+              const base = "Arx AI is temporarily unavailable. Please retry.";
+              message =
+                failure.requestId && !base.toLowerCase().includes("request_id=")
+                  ? `${base} (request_id=${failure.requestId})`
+                  : base;
+            }
+          } catch {
+            // fall through: true auth/session failure should keep sign-in copy.
+          }
+        }
         if (shouldFallbackFromPlatformErrorToPublic(failure)) {
           throw new RetryNextInferenceLaneError({
             lane: "platform",
             reasonCode: failure.code ?? failure.category,
             message,
           });
-        }
-        const code = String(failure.code ?? "").trim().toLowerCase();
-        if (failure.status >= 500 || runtimeTurnLegacyFallbackCodes.has(code)) {
-          await runLegacyPlatformLane();
-          return;
         }
         throw new Error(message);
       }
@@ -1250,6 +1276,7 @@ export function createDesktopCloudChatThreadApi(deps: CreateDesktopCloudChatThre
     setCloudThreadTitle,
     setCloudThreadEngine,
     addCloudMessage,
+    decideCloudToolCall,
     sendCloudTurn,
   };
 }
