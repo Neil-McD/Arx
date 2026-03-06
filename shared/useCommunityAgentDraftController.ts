@@ -1,5 +1,11 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
+import {
+  listCloudCommunityAgentDraftRows,
+  setActiveCloudCommunityAgentDraft,
+  upsertCloudCommunityAgentDraft,
+} from "./cloudCommunityAgentGateway";
+
 type SessionLike = {
   user: {
     id: string;
@@ -23,10 +29,7 @@ type UseCommunityAgentDraftControllerArgs<
   DraftT extends CommunityAgentDraftLike<LandingT>,
 > = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  session: SessionT | null;
   communityAgentDraftName: string;
   communityAgentDraftLanding: LandingT;
   communityAgentDraftSystemPrompt: string;
@@ -67,29 +70,13 @@ export function useCommunityAgentDraftController<
 
   const loadCommunityAgentDrafts = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setIsLoadingCommunityAgentDrafts(true);
     current.setCommunityAgentDraftsError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/list_community_agent_drafts`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId }),
-        },
+      const rows = await listCloudCommunityAgentDraftRows<SessionT, DraftT>({
         session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        current.setCommunityAgentDrafts([]);
-        current.setCommunityAgentDraftsError(message);
-        current.setLoadedCommunityId(communityId);
-        return;
-      }
-
-      const rows = (await response.json()) as DraftT[];
+        communityId,
+      });
       rows.sort((a, b) => a.slot - b.slot);
       current.setCommunityAgentDrafts(rows);
       current.setLoadedCommunityId(communityId);
@@ -111,7 +98,7 @@ export function useCommunityAgentDraftController<
 
   const handleSaveCommunityAgentDraft = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.supabaseSession;
+    const session = current.session;
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
@@ -121,34 +108,17 @@ export function useCommunityAgentDraftController<
       return;
     }
 
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setIsSavingCommunityAgentDraft(true);
     current.setCommunityAgentDraftSaveError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/upsert_community_agent_draft`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_slot: COMMUNITY_AGENT_PRIMARY_SLOT,
-            p_name: current.communityAgentDraftName,
-            p_landing_json: normalized,
-            p_system_prompt: current.communityAgentDraftSystemPrompt,
-          }),
-        },
+      const row = (await upsertCloudCommunityAgentDraft({
         session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        current.setCommunityAgentDraftSaveError(message);
-        return;
-      }
-
-      const rows = (await response.json()) as UpsertDraftResponseRow[];
-      const row = rows[0];
+        communityId,
+        slot: COMMUNITY_AGENT_PRIMARY_SLOT,
+        name: current.communityAgentDraftName,
+        landingJson: normalized,
+        systemPrompt: current.communityAgentDraftSystemPrompt,
+      })) as UpsertDraftResponseRow | null;
       if (!row) return;
       current.setCommunityAgentDrafts((prev) => {
         const without = prev.filter((draft) => draft.slot !== row.slot);
@@ -184,29 +154,18 @@ export function useCommunityAgentDraftController<
 
   const handleSetLiveCommunityAgentDraft = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.supabaseSession;
+    const session = current.session;
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setIsSavingCommunityAgentDraft(true);
     current.setCommunityAgentDraftSaveError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/set_active_community_agent_draft`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId, p_slot: COMMUNITY_AGENT_PRIMARY_SLOT }),
-        },
+      await setActiveCloudCommunityAgentDraft({
         session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        current.setCommunityAgentDraftSaveError(message);
-        return;
-      }
+        communityId,
+        slot: COMMUNITY_AGENT_PRIMARY_SLOT,
+      });
       current.setCommunityAgentDrafts((prev) =>
         prev.map((draft) =>
           draft.community_id === communityId ? { ...draft, is_active: draft.slot === COMMUNITY_AGENT_PRIMARY_SLOT } : draft,

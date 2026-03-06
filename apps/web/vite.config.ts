@@ -1,35 +1,78 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export default defineConfig({
-  plugins: [react()],
-  // Keep one source of truth for local env: repo root `.env`
-  envDir: resolve(process.cwd(), "../.."),
-  server: {
-    port: 5174,
-    fs: {
-      // Allow importing the shared desktop CSS from repo root.
-      allow: [resolve(process.cwd(), "../..")]
+const webRoot = fileURLToPath(new URL(".", import.meta.url));
+const repoRoot = resolve(webRoot, "../..");
+
+function deriveRuntimeProxyTarget(env: Record<string, string>): string | undefined {
+  const explicit = String(env.VITE_CONVEX_SITE_URL ?? "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const cloudUrl = String(env.VITE_CONVEX_URL ?? "").trim();
+  if (!cloudUrl) return undefined;
+  try {
+    const parsed = new URL(cloudUrl);
+    if (parsed.hostname.endsWith(".convex.cloud")) {
+      parsed.hostname = parsed.hostname.replace(/\.convex\.cloud$/, ".convex.site");
     }
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-          if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) {
-            return "react-vendor";
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, repoRoot, "");
+  const runtimeProxyTarget = deriveRuntimeProxyTarget(env);
+
+  return {
+    plugins: [react()],
+    resolve: {
+      dedupe: ["react", "react-dom"],
+      alias: {
+        react: resolve(repoRoot, "node_modules/react"),
+        "react-dom": resolve(repoRoot, "node_modules/react-dom"),
+      },
+    },
+    optimizeDeps: {
+      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    },
+    // Keep one source of truth for local env: repo root `.env`
+    envDir: repoRoot,
+    server: {
+      port: 5174,
+      fs: {
+        // Allow importing the shared desktop CSS from repo root.
+        allow: [repoRoot]
+      },
+      ...(runtimeProxyTarget
+        ? {
+            proxy: {
+              "/runtime": {
+                target: runtimeProxyTarget,
+                changeOrigin: true,
+                secure: true,
+              },
+            },
           }
-          if (id.includes("highlight.js")) {
-            return "highlight-vendor";
+        : null),
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) {
+              return "react-vendor";
+            }
+            if (id.includes("highlight.js")) {
+              return "highlight-vendor";
+            }
+            return "vendor";
           }
-          if (id.includes("@supabase")) {
-            return "supabase-vendor";
-          }
-          return "vendor";
         }
       }
     }
-  }
+  };
 });

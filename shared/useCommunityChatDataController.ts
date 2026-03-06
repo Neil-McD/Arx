@@ -1,18 +1,12 @@
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction, } from "react";
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
-} from "react";
+  abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
+
 import {
-  abortAllScopedRequests,
-  beginScopedAbortRequest,
-  finishScopedAbortRequest,
-  isAbortError,
-} from "./communityFetchAbortScope";
+  ensureCloudCommunityChatThread,
+  listCloudMessageReactions,
+  listCloudThreadMessages,
+} from "./cloudCommunityChatGateway";
 
 type CommunityChatRow = {
   id: string;
@@ -43,9 +37,6 @@ type UseCommunityChatDataControllerArgs<
     message_id: string;
   },
 > = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   extractTextFromContentJson: (contentJson: unknown) => string;
   parseMessageAttachments: (contentJson: unknown) => AttachmentT[];
   pageSize: number;
@@ -154,8 +145,6 @@ export function useCommunityChatDataController<
 
   const ensureCommunityChatThread = useCallback(
     async (communityId: string, session: SessionT): Promise<string> => {
-      const url = argsRef.current.getSupabaseUrl();
-      if (!url) throw new Error("Missing Supabase URL.");
       const normalizedCommunityId = String(communityId ?? "").trim();
       if (!normalizedCommunityId) throw new Error("Missing community id.");
 
@@ -180,19 +169,10 @@ export function useCommunityChatDataController<
       }
 
       const request = (async (): Promise<string> => {
-        const response = await argsRef.current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/ensure_community_chat_thread`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_id: normalizedCommunityId }),
-          },
+        const threadId = await ensureCloudCommunityChatThread({
           session,
-        );
-        if (!response.ok) throw new Error(await argsRef.current.readSupabaseError(response));
-        const rows = (await response.json()) as Array<{ thread_id: string }>;
-        const threadId = (rows[0]?.thread_id ?? "").trim();
-        if (!threadId) throw new Error("Failed to ensure community chat thread.");
+          communityId: normalizedCommunityId,
+        });
         ensureThreadCacheByKeyRef.current.set(cacheKey, {
           threadId,
           expiresAt: Date.now() + COMMUNITY_THREAD_CACHE_TTL_MS,
@@ -219,20 +199,29 @@ export function useCommunityChatDataController<
       session: SessionT,
       guard: { communityId: string; generation: number },
     ): Promise<void> => {
-      const url = argsRef.current.getSupabaseUrl();
-      if (!url || messageIds.length === 0) return;
+      if (messageIds.length === 0) return;
       const reactionsFetchController = beginScopedAbortRequest({
         inFlightByKind: fetchAbortControllersRef.current,
         kind: "community_chat_reactions",
       });
-      const idsFilter = messageIds.map((id) => `"${id}"`).join(",");
-      let response: Response;
       try {
-        response = await argsRef.current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/message_reactions?select=id,message_id,user_id,emoji,created_at&message_id=in.(${idsFilter})`,
-          { signal: reactionsFetchController.signal },
+        const rows = await listCloudMessageReactions<SessionT, ReactionT>({
           session,
-        );
+          messageIds,
+          init: { signal: reactionsFetchController.signal },
+        });
+        if (isStale(guard.communityId, guard.generation)) return;
+        argsRef.current.setMessageReactions((prev) => {
+          if (prev.length === 0) return rows;
+          const byId = new Map<string, ReactionT>();
+          for (const reaction of prev) {
+            byId.set(reaction.id, reaction);
+          }
+          for (const reaction of rows) {
+            byId.set(reaction.id, reaction);
+          }
+          return Array.from(byId.values());
+        });
       } catch (error) {
         if (isAbortError(error)) return;
         return;
@@ -243,30 +232,12 @@ export function useCommunityChatDataController<
           controller: reactionsFetchController,
         });
       }
-      if (!response.ok) return;
-      if (isStale(guard.communityId, guard.generation)) return;
-      const rows = (await response.json()) as ReactionT[];
-      if (isStale(guard.communityId, guard.generation)) return;
-      argsRef.current.setMessageReactions((prev) => {
-        if (prev.length === 0) return rows;
-        const byId = new Map<string, ReactionT>();
-        for (const reaction of prev) {
-          byId.set(reaction.id, reaction);
-        }
-        for (const reaction of rows) {
-          byId.set(reaction.id, reaction);
-        }
-        return Array.from(byId.values());
-      });
     },
     [isStale],
   );
 
   const loadCommunityChat = useCallback(
     async (communityId: string, session: SessionT): Promise<void> => {
-      const url = argsRef.current.getSupabaseUrl();
-      if (!url) return;
-
       const generation = beginCommunityLoadGeneration(communityId);
       argsRef.current.onLoadChatStart?.();
       setIsLoadingChatTracked(true);
@@ -283,15 +254,36 @@ export function useCommunityChatDataController<
           inFlightByKind: fetchAbortControllersRef.current,
           kind: "community_chat_initial",
         });
-        let response: Response;
         try {
-          response = await argsRef.current.fetchWithSupabaseAuth(
-            `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
-              threadId,
-            )}&order=seq.desc&limit=${argsRef.current.pageSize}`,
-            { method: "GET", signal: messagesFetchController.signal },
+          const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
             session,
-          );
+            threadId,
+            limit: argsRef.current.pageSize,
+            init: { signal: messagesFetchController.signal },
+          });
+          if (isStale(communityId, generation)) return;
+
+          const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as MessageT[];
+          const hasMore = mappedDesc.length >= argsRef.current.pageSize;
+          const rows = [...mappedDesc].reverse();
+
+          setCommunityChatHasMoreTracked(hasMore);
+          argsRef.current.setCommunityMessages(rows);
+          communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
+
+          if (rows.length > 0) {
+            const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
+            void argsRef.current.onHydrateProfiles?.(userIds, session);
+          }
+
+          argsRef.current.setUnreadCount(0);
+          argsRef.current.setIsUserAtBottom(true);
+          argsRef.current.isUserAtBottomRef.current = true;
+
+          if (rows.length > 0) {
+            const messageIds = rows.map((row) => row.id);
+            void loadMessageReactions(messageIds, session, { communityId, generation });
+          }
         } catch (error) {
           if (isAbortError(error)) return;
           return;
@@ -301,33 +293,6 @@ export function useCommunityChatDataController<
             kind: "community_chat_initial",
             controller: messagesFetchController,
           });
-        }
-        if (!response.ok) return;
-        if (isStale(communityId, generation)) return;
-
-        const rowsDesc = (await response.json()) as CommunityChatRow[];
-        if (isStale(communityId, generation)) return;
-
-        const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as MessageT[];
-        const hasMore = mappedDesc.length >= argsRef.current.pageSize;
-        const rows = [...mappedDesc].reverse();
-
-        setCommunityChatHasMoreTracked(hasMore);
-        argsRef.current.setCommunityMessages(rows);
-        communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
-
-        if (rows.length > 0) {
-          const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-          void argsRef.current.onHydrateProfiles?.(userIds, session);
-        }
-
-        argsRef.current.setUnreadCount(0);
-        argsRef.current.setIsUserAtBottom(true);
-        argsRef.current.isUserAtBottomRef.current = true;
-
-        if (rows.length > 0) {
-          const messageIds = rows.map((row) => row.id);
-          void loadMessageReactions(messageIds, session, { communityId, generation });
         }
       } catch {
         // Keep behavior fail-safe: best-effort fetch paths should not crash the shell.
@@ -359,9 +324,6 @@ export function useCommunityChatDataController<
         return "noop";
       }
 
-      const url = argsRef.current.getSupabaseUrl();
-      if (!url) return "noop";
-
       const generation = loadGenerationRef.current;
       if (activeCommunityIdRef.current !== communityId) return "noop";
 
@@ -376,15 +338,51 @@ export function useCommunityChatDataController<
           inFlightByKind: fetchAbortControllersRef.current,
           kind: "community_chat_older",
         });
-        let response: Response;
         try {
-          response = await argsRef.current.fetchWithSupabaseAuth(
-            `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at&thread_id=eq.${encodeURIComponent(
-              threadId,
-            )}&seq=lt.${cursor}&order=seq.desc&limit=${argsRef.current.pageSize}`,
-            { method: "GET", signal: olderFetchController.signal },
+          const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
             session,
-          );
+            threadId,
+            beforeSeq: cursor,
+            limit: argsRef.current.pageSize,
+            init: { signal: olderFetchController.signal },
+          });
+          if (isStale(communityId, generation)) {
+            argsRef.current.clearPendingPrependAnchor();
+            return "noop";
+          }
+
+          const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as MessageT[];
+          if (mappedDesc.length === 0) {
+            setCommunityChatHasMoreTracked(false);
+            argsRef.current.clearPendingPrependAnchor();
+            return "noop";
+          }
+
+          const hasMore = mappedDesc.length >= argsRef.current.pageSize;
+          const rows = [...mappedDesc].reverse();
+
+          setCommunityChatHasMoreTracked(hasMore);
+          communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
+
+          const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
+          void argsRef.current.onHydrateProfiles?.(userIds, session);
+
+          let appended = false;
+          argsRef.current.setCommunityMessages((prev) => {
+            const existing = new Set(prev.map((item) => item.id));
+            const unique = rows.filter((item) => !existing.has(item.id));
+            if (unique.length === 0) {
+              argsRef.current.clearPendingPrependAnchor();
+              return prev;
+            }
+            appended = true;
+            return [...unique, ...prev];
+          });
+
+          if (!appended) return "noop";
+
+          void loadMessageReactions(rows.map((row) => row.id), session, { communityId, generation });
+          return "appended";
         } catch (error) {
           argsRef.current.clearPendingPrependAnchor();
           if (isAbortError(error)) return "noop";
@@ -396,53 +394,6 @@ export function useCommunityChatDataController<
             controller: olderFetchController,
           });
         }
-        if (!response.ok) {
-          argsRef.current.clearPendingPrependAnchor();
-          return "error";
-        }
-        if (isStale(communityId, generation)) {
-          argsRef.current.clearPendingPrependAnchor();
-          return "noop";
-        }
-
-        const rowsDesc = (await response.json()) as CommunityChatRow[];
-        if (isStale(communityId, generation)) {
-          argsRef.current.clearPendingPrependAnchor();
-          return "noop";
-        }
-
-        const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as MessageT[];
-        if (mappedDesc.length === 0) {
-          setCommunityChatHasMoreTracked(false);
-          argsRef.current.clearPendingPrependAnchor();
-          return "noop";
-        }
-
-        const hasMore = mappedDesc.length >= argsRef.current.pageSize;
-        const rows = [...mappedDesc].reverse();
-
-        setCommunityChatHasMoreTracked(hasMore);
-        communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
-
-        const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-        void argsRef.current.onHydrateProfiles?.(userIds, session);
-
-        let appended = false;
-        argsRef.current.setCommunityMessages((prev) => {
-          const existing = new Set(prev.map((item) => item.id));
-          const unique = rows.filter((item) => !existing.has(item.id));
-          if (unique.length === 0) {
-            argsRef.current.clearPendingPrependAnchor();
-            return prev;
-          }
-          appended = true;
-          return [...unique, ...prev];
-        });
-
-        if (!appended) return "noop";
-
-        void loadMessageReactions(rows.map((row) => row.id), session, { communityId, generation });
-        return "appended";
       } catch {
         argsRef.current.clearPendingPrependAnchor();
         return "error";

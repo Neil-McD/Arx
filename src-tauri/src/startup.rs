@@ -21,19 +21,19 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             let conn = db::open_conn(&state.db_path, &state.key)?;
             let _ = db::crash_recovery(&conn, &state.db_path);
             if db::get_ui_state(&conn, "workspace_root")?.is_none() {
-                // Use current cwd in debug; fallback to ~/Arx Workspace in release.
+                // Use current cwd in debug; fallback to ~/PolyNet Workspace in release.
                 let default_root = if cfg!(debug_assertions) {
                     std::env::current_dir().ok().unwrap_or_else(|| {
                         app.path()
                             .home_dir()
                             .expect("home dir must exist")
-                            .join("Arx Workspace")
+                            .join("PolyNet Workspace")
                     })
                 } else {
                     app.path()
                         .home_dir()
                         .map_err(|e| anyhow::anyhow!(e))?
-                        .join("Arx Workspace")
+                        .join("PolyNet Workspace")
                 };
                 std::fs::create_dir_all(&default_root)?;
                 db::set_ui_state(

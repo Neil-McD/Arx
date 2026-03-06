@@ -18,9 +18,9 @@ type SendTurnParams = {
   cwd: string;
   input: string;
   user_content_json: string;
-  supabase_url: string;
-  supabase_anon_key: string;
-  supabase_access_token: string;
+  cloud_runtime_base_url: string;
+  cloud_publishable_key: string;
+  cloud_access_token: string;
   onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
 
@@ -47,9 +47,9 @@ type SendMessageFlowDeps<TSession> = {
   clearStreamingState: () => void;
   scheduleStreamingUpdate: () => void;
   sendTurn: (params: SendTurnParams) => Promise<void>;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAnonKey: () => string | null;
-  getSupabaseAccessToken: (session: NonNullable<TSession>) => string;
+  getCloudRuntimeBaseUrl: () => string | null;
+  getCloudPublishableKey: () => string | null;
+  getCloudAccessToken: (session: NonNullable<TSession>) => string;
   setMemoryToast: (message: string) => void;
   setAgentStatus: (value: null) => void;
   setRunningTools: (value: []) => void;
@@ -151,23 +151,23 @@ export async function executeSendMessageFlow<TSession>(
     deps.clearStreamingState();
 
     const cwd = deps.effectiveCwd || "";
-    const supabase_url = deps.getSupabaseUrl() ?? "";
-    const supabase_anon_key = deps.getSupabaseAnonKey() ?? "";
-    const supabase_access_token = session ? deps.getSupabaseAccessToken(session as NonNullable<TSession>) : "";
+    const cloud_runtime_base_url = deps.getCloudRuntimeBaseUrl() ?? "";
+    const cloud_publishable_key = deps.getCloudPublishableKey() ?? "";
+    const cloud_access_token = session ? deps.getCloudAccessToken(session as NonNullable<TSession>) : "";
 
     deps.traceThreadContext?.("send_turn_dispatch", {
       thread_id: threadId,
       input_chars: userText.length,
-      has_supabase_access_token: Boolean(supabase_access_token),
+      has_cloud_access_token: Boolean(cloud_access_token),
     });
     await deps.sendTurn({
       thread_id: threadId,
       cwd,
       input: userText,
       user_content_json: contentJson,
-      supabase_url,
-      supabase_anon_key,
-      supabase_access_token,
+      cloud_runtime_base_url,
+      cloud_publishable_key,
+      cloud_access_token,
     });
     deps.traceThreadContext?.("send_turn_dispatch_complete", {
       thread_id: threadId,

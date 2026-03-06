@@ -46,7 +46,7 @@ type CommunityChatMessageRowProps = {
   editingMessageText: string;
   reactionPickerMessageId: string | null;
   messageReactions: MessageReactionRecord[];
-  supabaseUserId: string | null | undefined;
+  sessionUserId: string | null | undefined;
   replyToId: string | null;
   replyTarget: CommunityChatMessageRecord | null;
   reactionEmojis: string[];
@@ -83,7 +83,7 @@ export function CommunityChatMessageRow({
   editingMessageText,
   reactionPickerMessageId,
   messageReactions,
-  supabaseUserId,
+  sessionUserId,
   replyToId,
   replyTarget,
   reactionEmojis,
@@ -272,7 +272,7 @@ export function CommunityChatMessageRow({
           {msgReactions.length > 0 && (
             <div className="chat-reactions">
               {Object.entries(groupedReactions).map(([emoji, reactions]) => {
-                const hasOwn = reactions.some((reaction) => reaction.user_id === supabaseUserId);
+                const hasOwn = reactions.some((reaction) => reaction.user_id === sessionUserId);
                 return (
                   <button
                     key={emoji}

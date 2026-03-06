@@ -11,19 +11,19 @@ import {
   openAiLogo,
   xAiLogo,
 } from "../../../../shared/providerLogos";
-import type { ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
+import type { ModelFundingSource, ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
 
 type PickerModel = {
   id: string;
   label: string;
   section: ModelSectionId;
-  access: "guest" | "authed" | "paid";
+  supportedFundingSources: readonly ModelFundingSource[];
   description?: string | null;
 };
 
 type WebModelPickerPopoverProps = {
-  modelPickerRef: RefObject<HTMLDivElement | null>;
-  modelPickerSearchRef: RefObject<HTMLInputElement | null>;
+  modelPickerRef: RefObject<HTMLDivElement>;
+  modelPickerSearchRef: RefObject<HTMLInputElement>;
   isOpen: boolean;
   activeModelLabel: string;
   curatedPickerModels: PickerModel[];
@@ -35,6 +35,8 @@ type WebModelPickerPopoverProps = {
   selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
   hasPaidAccess: boolean;
+  hasUserKeyConnection: boolean;
+  hasUserChatgptConnection: boolean;
   hasSession: boolean;
   canSelectPickerModel: (model: PickerModel) => boolean;
   onSelectModel: (model: PickerModel) => void;
@@ -128,6 +130,8 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
     selectedPickerModelId,
     modelToggles,
     hasPaidAccess,
+    hasUserKeyConnection,
+    hasUserChatgptConnection,
     hasSession,
     canSelectPickerModel,
     onSelectModel,
@@ -208,16 +212,34 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
                     const isSelected = model.id === selectedPickerModelId;
                     const selectable = canSelectPickerModel(model);
                     const isModelEnabled = modelToggles.some((toggle) => toggle.id === model.id);
-                    const requiresPaidPlan = model.access !== "guest";
+                    const supportsDemo = model.supportedFundingSources.includes("demo_public");
+                    const supportsUserKey = model.supportedFundingSources.includes("user_key");
+                    const supportsUserChatgpt = model.supportedFundingSources.includes("user_chatgpt");
+                    const requiresPaidPlan = !supportsDemo;
                     const showSoonBadge = requiresPaidPlan && !isModelEnabled;
-                    const showPremiumBadge = requiresPaidPlan && !showSoonBadge && !hasPaidAccess;
-                    const lockedLabel = model.access === "guest"
+                    const showPremiumBadge =
+                      requiresPaidPlan &&
+                      !showSoonBadge &&
+                      !hasPaidAccess &&
+                      !(hasUserKeyConnection && supportsUserKey) &&
+                      !(hasUserChatgptConnection && supportsUserChatgpt);
+                    const lockedLabel = supportsDemo
                       ? "Free"
                       : !hasSession
                           ? "Sign in"
                           : showSoonBadge
                             ? "Soon"
-                            : null;
+                            : !hasPaidAccess &&
+                                !(hasUserKeyConnection && supportsUserKey) &&
+                                !(hasUserChatgptConnection && supportsUserChatgpt)
+                              ? supportsUserChatgpt && !supportsUserKey
+                                ? "Connect ChatGPT"
+                                : supportsUserKey && !supportsUserChatgpt
+                                  ? "Connect key"
+                                  : supportsUserKey || supportsUserChatgpt
+                                    ? "Connect provider"
+                                    : null
+                              : null;
                     const showGroupHeader =
                       modelPickerSection === "all" &&
                       model.section !== lastSection &&
@@ -243,18 +265,20 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
                           >
                             <div className="model-picker-row-info">
                               <div className="model-picker-row-title">
-                                {model.label}
-                                {showPremiumBadge && (
-                                  <span className="model-picker-row-crown" title="Premium model" aria-label="Premium model">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 13H5L3 7z" />
-                                      <path d="M8 17h8" />
-                                    </svg>
-                                  </span>
-                                )}
-                                {lockedLabel && (
-                                  <span className="model-picker-row-pill">{lockedLabel}</span>
-                                )}
+                                <span className="model-picker-row-title-text">{model.label}</span>
+                                <span className="model-picker-row-badges">
+                                  {showPremiumBadge && (
+                                    <span className="model-picker-row-crown" title="Premium model" aria-label="Premium model">
+                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 13H5L3 7z" />
+                                        <path d="M8 17h8" />
+                                      </svg>
+                                    </span>
+                                  )}
+                                  {lockedLabel && (
+                                    <span className="model-picker-row-pill">{lockedLabel}</span>
+                                  )}
+                                </span>
                               </div>
                               {model.description && (
                                 <div className="model-picker-row-subtitle">{model.description}</div>

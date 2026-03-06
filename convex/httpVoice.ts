@@ -1,0 +1,452 @@
+type VoiceTranscribeInput = {
+  audio_base64?: unknown;
+  mime_type?: unknown;
+  language?: unknown;
+  prompt?: unknown;
+  surface?: unknown;
+  prefer_primary?: unknown;
+};
+
+type VoiceTranscribeResult = {
+  ok: boolean;
+  text: string;
+  provider: "openai" | "groq";
+  model: string;
+  message?: string;
+};
+
+type HttpRouterLike = {
+  route: (config: {
+    path: string;
+    method: string;
+    handler: unknown;
+  }) => void;
+};
+
+type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+
+type RequireAuthenticatedActor = (
+  ctx: unknown,
+  req: Request,
+) => Promise<
+  | {
+      ok: true;
+      actor: {
+        userId: string;
+        authSubject: string;
+        email: string | null;
+        displayName: string | null;
+        avatarUrl: string | null;
+      };
+    }
+  | { ok: false; response: Response }
+>;
+
+type RegisterRuntimeVoiceRoutesArgs = {
+  http: HttpRouterLike;
+  httpAction: HttpActionLike;
+  jsonResponse: (req: Request, status: number, payload: unknown) => Response;
+  optionsResponse: (req: Request) => Response;
+  requireAuthenticatedActor: RequireAuthenticatedActor;
+};
+
+const DEFAULT_VOICE_PRIMARY_MODEL = "gpt-4o-mini-transcribe";
+const DEFAULT_VOICE_FALLBACK_MODEL = "whisper-large-v3-turbo";
+const DEFAULT_VOICE_FALLBACK_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions";
+const DEFAULT_VOICE_PROMPT =
+  "Transcribe spoken words verbatim. If speech is unclear or absent, return an empty transcript.";
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function isTruthyEnv(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function looksLikeApiKey(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (/^(?:sk|gsk|xai|rk|or)-/i.test(v)) return true;
+  if (/^(?:sk|gsk|xai|rk|or)_/i.test(v)) return true;
+  if (v.length >= 40 && !v.includes("/") && !v.includes(" ") && /^[A-Za-z0-9._-]+$/.test(v)) return true;
+  return false;
+}
+
+function looksLikeXaiApiKey(value: string): boolean {
+  const v = value.trim();
+  return /^(?:xai[-_])/i.test(v);
+}
+
+function sanitizeMimeType(input: unknown): string {
+  const value = typeof input === "string" ? input.trim().toLowerCase() : "";
+  if (!value) return "audio/webm";
+  if (value.startsWith("audio/webm")) return "audio/webm";
+  if (value.startsWith("audio/ogg")) return "audio/ogg";
+  if (value.startsWith("audio/mp4")) return "audio/mp4";
+  if (value.startsWith("audio/mpeg")) return "audio/mpeg";
+  if (value.startsWith("audio/wav")) return "audio/wav";
+  if (value.startsWith("audio/x-wav")) return "audio/wav";
+  return "audio/webm";
+}
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes("ogg")) return ".ogg";
+  if (mimeType.includes("mp4")) return ".m4a";
+  if (mimeType.includes("mpeg")) return ".mp3";
+  if (mimeType.includes("wav")) return ".wav";
+  return ".webm";
+}
+
+function decodeBase64Audio(input: string): Uint8Array {
+  const cleaned = input.includes(",") ? input.slice(input.indexOf(",") + 1) : input;
+  const normalized = cleaned.replace(/\s+/g, "");
+  const atobFn = (globalThis as any).atob;
+  if (typeof atobFn === "function") {
+    const binary = atobFn(normalized);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      out[i] = binary.charCodeAt(i);
+    }
+    return out;
+  }
+  const BufferCtor = (globalThis as any).Buffer;
+  if (!BufferCtor) {
+    throw new Error("base64_decode_unavailable");
+  }
+  return new Uint8Array(BufferCtor.from(normalized, "base64"));
+}
+
+function parseProviderErrorMessage(rawBody: string): string {
+  const raw = (rawBody ?? "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const nested =
+      parsed?.error && typeof parsed.error === "object" && typeof parsed.error.message === "string"
+        ? parsed.error.message.trim()
+        : "";
+    const inline = typeof parsed?.error === "string" ? parsed.error.trim() : "";
+    const top = typeof parsed?.message === "string" ? parsed.message.trim() : "";
+    return nested || inline || top || raw;
+  } catch {
+    return raw;
+  }
+}
+
+async function readJsonBounded<T>(req: Request, maxChars = 14_000_000): Promise<T> {
+  const text = await req.text();
+  if (!text) throw new Error("invalid_request");
+  if (text.length > maxChars) throw new Error("request_too_large");
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error("invalid_request");
+  }
+}
+
+function resolveVoicePrimaryConfig(): { apiKey: string; model: string } {
+  const configuredModel = readEnv("ARX_VOICE_PRIMARY_MODEL");
+  const explicitApiKey = readEnv("ARX_VOICE_PRIMARY_API_KEY");
+  let model = configuredModel || DEFAULT_VOICE_PRIMARY_MODEL;
+  let apiKey = explicitApiKey || readEnv("OPENAI_API_KEY");
+  if (looksLikeApiKey(configuredModel)) {
+    if (!apiKey) apiKey = configuredModel;
+    model = DEFAULT_VOICE_PRIMARY_MODEL;
+  }
+  return { apiKey, model };
+}
+
+function resolveVoiceFallbackConfig(): { apiKey: string; model: string; endpoint: string } {
+  const configuredModel = readEnv("ARX_VOICE_FALLBACK_MODEL");
+  const explicitApiKey = readEnv("ARX_VOICE_FALLBACK_API_KEY") || readEnv("ARX_VOICE_FALLBACK_KEY");
+  let model = configuredModel || DEFAULT_VOICE_FALLBACK_MODEL;
+  let apiKey = explicitApiKey || readEnv("GROQ_API_KEY");
+  const endpoint = readEnv("ARX_VOICE_FALLBACK_ENDPOINT") || DEFAULT_VOICE_FALLBACK_ENDPOINT;
+  if (looksLikeApiKey(configuredModel)) {
+    if (!apiKey) apiKey = configuredModel;
+    model = DEFAULT_VOICE_FALLBACK_MODEL;
+  }
+  return { apiKey, model, endpoint };
+}
+
+async function transcribeWithOpenAi(params: {
+  bytes: Uint8Array;
+  mimeType: string;
+  language: string;
+  prompt: string;
+}): Promise<VoiceTranscribeResult> {
+  const { apiKey, model } = resolveVoicePrimaryConfig();
+  if (!apiKey) {
+    return {
+      ok: false,
+      text: "",
+      provider: "openai",
+      model,
+      message: "Missing OPENAI_API_KEY (or ARX_VOICE_PRIMARY_API_KEY).",
+    };
+  }
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
+  if (params.language) form.append("language", params.language);
+  if (params.prompt) form.append("prompt", params.prompt);
+  form.append("temperature", "0");
+  form.append("response_format", "json");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+  });
+  if (!response.ok) {
+    const message = parseProviderErrorMessage(await response.text());
+    return {
+      ok: false,
+      text: "",
+      provider: "openai",
+      model,
+      message: message || `OpenAI transcription failed (${response.status})`,
+    };
+  }
+  const payload = (await response.json()) as { text?: unknown };
+  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  return {
+    ok: Boolean(text),
+    text,
+    provider: "openai",
+    model,
+    message: text ? undefined : "OpenAI returned empty transcript.",
+  };
+}
+
+async function transcribeWithGroqFallback(params: {
+  bytes: Uint8Array;
+  mimeType: string;
+  language: string;
+  prompt: string;
+}): Promise<VoiceTranscribeResult> {
+  const { apiKey, model, endpoint } = resolveVoiceFallbackConfig();
+  if (!apiKey) {
+    return {
+      ok: false,
+      text: "",
+      provider: "groq",
+      model,
+      message: "Missing GROQ_API_KEY (or ARX_VOICE_FALLBACK_API_KEY).",
+    };
+  }
+  if (endpoint.includes("api.groq.com") && looksLikeXaiApiKey(apiKey)) {
+    return {
+      ok: false,
+      text: "",
+      provider: "groq",
+      model,
+      message:
+        "Fallback key appears to be an xAI key, but fallback endpoint is Groq. Provide a Groq key for fallback.",
+    };
+  }
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
+  if (params.language) form.append("language", params.language);
+  if (params.prompt) form.append("prompt", params.prompt);
+  form.append("temperature", "0");
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+  });
+  if (!response.ok) {
+    const message = parseProviderErrorMessage(await response.text());
+    return {
+      ok: false,
+      text: "",
+      provider: "groq",
+      model,
+      message: message || `Fallback transcription failed (${response.status})`,
+    };
+  }
+  const payload = (await response.json()) as { text?: unknown };
+  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  return {
+    ok: Boolean(text),
+    text,
+    provider: "groq",
+    model,
+    message: text ? undefined : "Fallback returned empty transcript.",
+  };
+}
+
+export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs): void {
+  const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
+
+  http.route({
+    path: "/runtime/voice_transcribe",
+    method: "OPTIONS",
+    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
+  });
+
+  http.route({
+    path: "/runtime/voice_transcribe",
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
+      const enabledRaw = readEnv("ARX_VOICE_TRANSCRIBE_ENABLED");
+      if (enabledRaw && !isTruthyEnv(enabledRaw)) {
+        return jsonResponse(req, 403, {
+          ok: false,
+          error: "voice_transcription_disabled",
+          code: "voice_transcription_disabled",
+        });
+      }
+
+      const auth = await requireAuthenticatedActor(ctx, req);
+      if (!auth.ok) return auth.response;
+      void auth.actor.userId;
+
+      try {
+        const input = await readJsonBounded<VoiceTranscribeInput>(req);
+        const audioBase64Raw = typeof input.audio_base64 === "string" ? input.audio_base64.trim() : "";
+        if (!audioBase64Raw) {
+          return jsonResponse(req, 400, {
+            ok: false,
+            error: "audio_required",
+            code: "audio_required",
+          });
+        }
+        if (audioBase64Raw.length > 12_000_000) {
+          return jsonResponse(req, 413, {
+            ok: false,
+            error: "audio_too_large",
+            code: "audio_too_large",
+          });
+        }
+
+        const mimeType = sanitizeMimeType(input.mime_type);
+        const language = typeof input.language === "string" ? input.language.trim().slice(0, 12) : "";
+        const promptRaw = typeof input.prompt === "string" ? input.prompt.trim().slice(0, 320) : "";
+        const prompt = promptRaw || DEFAULT_VOICE_PROMPT;
+        const surface = typeof input.surface === "string" ? input.surface.trim().toLowerCase() : "";
+        const preferPrimary =
+          input.prefer_primary === true || String(input.prefer_primary ?? "").trim().toLowerCase() === "true";
+
+        if (surface && surface !== "workspace" && surface !== "community") {
+          return jsonResponse(req, 400, {
+            ok: false,
+            error: "invalid_surface",
+            code: "invalid_surface",
+          });
+        }
+
+        let bytes: Uint8Array;
+        try {
+          bytes = decodeBase64Audio(audioBase64Raw);
+        } catch {
+          return jsonResponse(req, 400, {
+            ok: false,
+            error: "invalid_audio_base64",
+            code: "invalid_audio_base64",
+          });
+        }
+        if (bytes.byteLength < 256) {
+          return jsonResponse(req, 400, {
+            ok: false,
+            error: "audio_too_short",
+            code: "audio_too_short",
+          });
+        }
+
+        const primary = await transcribeWithOpenAi({ bytes, mimeType, language, prompt });
+        if (primary.ok) {
+          return jsonResponse(req, 200, {
+            ok: true,
+            text: primary.text,
+            provider: primary.provider,
+            model: primary.model,
+            fallback_used: false,
+          });
+        }
+
+        if (preferPrimary) {
+          return jsonResponse(req, 502, {
+            ok: false,
+            error: "voice_transcription_failed",
+            code: "voice_transcription_failed",
+            message: primary.message || "Primary transcription failed.",
+            primary_error: primary.message ?? null,
+            fallback_error: "skipped_by_prefer_primary",
+          });
+        }
+
+        const fallbackKeyPresent = Boolean(resolveVoiceFallbackConfig().apiKey);
+        if (!fallbackKeyPresent) {
+          return jsonResponse(req, 502, {
+            ok: false,
+            error: "voice_transcription_failed",
+            code: "voice_transcription_failed",
+            message: primary.message || "Transcription failed.",
+            primary_error: primary.message ?? null,
+            fallback_error: "Missing GROQ_API_KEY (or ARX_VOICE_FALLBACK_API_KEY).",
+          });
+        }
+
+        const fallback = await transcribeWithGroqFallback({ bytes, mimeType, language, prompt });
+        if (fallback.ok) {
+          return jsonResponse(req, 200, {
+            ok: true,
+            text: fallback.text,
+            provider: fallback.provider,
+            model: fallback.model,
+            fallback_used: true,
+            primary_error: primary.message ?? null,
+          });
+        }
+
+        const errors = [primary.message, fallback.message].filter(
+          (value): value is string => typeof value === "string" && value.trim().length > 0,
+        );
+        return jsonResponse(req, 502, {
+          ok: false,
+          error: "voice_transcription_failed",
+          code: "voice_transcription_failed",
+          message: errors.join(" | ") || "Transcription failed.",
+          primary_error: primary.message ?? null,
+          fallback_error: fallback.message ?? null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const code =
+          message === "request_too_large"
+            ? "request_too_large"
+            : message === "invalid_request"
+              ? "invalid_request"
+              : "internal_error";
+        const status = code === "request_too_large" ? 413 : code === "invalid_request" ? 400 : 500;
+        return jsonResponse(req, status, {
+          ok: false,
+          error: code,
+          code,
+          message,
+        });
+      }
+    }),
+  });
+}

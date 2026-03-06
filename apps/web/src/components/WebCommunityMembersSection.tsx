@@ -44,10 +44,10 @@ type CommunityMemberPlanCohort = {
 };
 
 type FormatSubscriptionPriceInput = {
-  amountBaseUnits?: number | string | null;
-  currency?: string | null;
-  currencyDecimals?: number | null;
-  billingPeriod: string;
+  amountBaseUnits: number | string | null | undefined;
+  currency: string | null | undefined;
+  currencyDecimals: number | null | undefined;
+  billingPeriod: string | null | undefined;
 };
 
 type WebCommunityMembersSectionProps = {
@@ -66,7 +66,7 @@ type WebCommunityMembersSectionProps = {
     communityMembersPlanFilter: string;
     communityMemberPlanCohorts: CommunityMemberPlanCohort[];
     membersCommunityHasPaidPlans: boolean | null;
-    activeCommunityJoinMode: string;
+    activeCommunityJoinMode: string | null;
     communityJoinRequests: CommunityJoinRequest[];
     communityJoinRequestsError: string | null;
     decidingCommunityJoinRequestId: string | null;

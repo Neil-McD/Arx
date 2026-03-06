@@ -1,9 +1,20 @@
 import { useCallback, useRef } from "react";
 import {
-  formatSupabaseFunctionErrorMessage,
-  readSupabaseFunctionError,
-} from "./supabaseFunctionErrors";
-import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer.mjs";
+  formatCloudFunctionErrorMessage,
+  readCloudFunctionError,
+} from "./cloudFunctionErrors";
+import {
+  invokeCloudPublicTurn,
+  invokeCloudRuntimeTurn,
+  requireCloudRuntimeBaseUrl,
+  type CloudRuntimeTransport,
+} from "./cloudRuntimeTransport";
+import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
+import {
+  addCloudThreadMessage,
+  deleteCloudThreadMessage,
+  ensureCloudThreadRecord,
+} from "./cloudThreadsGateway";
 import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
@@ -32,6 +43,29 @@ export function useWebTurnRunnerController<
   const argsRef = useRef(args);
   argsRef.current = args;
 
+  const ensureCloudThreadRecordForRuntime = useCallback(
+    async (session: SessionT, threadId: string): Promise<void> => {
+      const current = argsRef.current;
+      const thread = current.getThreadById?.(threadId);
+      await ensureCloudThreadRecord({
+        session: session as any,
+        thread: {
+          threadId,
+          title: thread?.title ?? null,
+          engineId: thread?.engine_id ?? "runtime_turn",
+          modelId: thread?.model_id ?? null,
+          projectId: thread?.project_id ?? null,
+          communityId: thread?.community_id ?? null,
+          contextVersion:
+            typeof thread?.context_version === "number" && Number.isFinite(thread.context_version)
+              ? Math.max(0, Math.floor(thread.context_version))
+              : null,
+        },
+      });
+    },
+    [],
+  );
+
   const stopStreamingTurn = useCallback((): void => {
     const current = argsRef.current;
     if (!current.streamingAbortRef.current) return;
@@ -44,8 +78,17 @@ export function useWebTurnRunnerController<
       params: RunPublicTurnParams<ThreadMessageT>,
     ): Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }> => {
       const current = argsRef.current;
-      const url = current.getSupabaseUrl();
-      if (!url) return { cancelled: false, error: "Missing Supabase URL.", content: "", runId: null };
+      let baseUrl: string;
+      try {
+        baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
+      } catch {
+        return { cancelled: false, error: "Missing cloud runtime base URL.", content: "", runId: null };
+      }
+      const transport: CloudRuntimeTransport<SessionT> = {
+        baseUrl,
+        fetchPublic: current.fetchCloudPublic,
+        fetchAuth: current.fetchCloudAuth,
+      };
 
       current.streamingAbortRef.current?.abort();
       const abort = new AbortController();
@@ -80,11 +123,15 @@ export function useWebTurnRunnerController<
 
       let finalContent = "";
       let runIdFromServer: string | null = null;
+      let runtimeRequestId: string | null = null;
+      let runtimeStage: string | null = null;
+      let responseStarted = false;
+      let firstEventSeen = false;
+      let lastEventName: string | null = null;
       try {
-        const turn = await current.fetchWithSupabasePublic(`${url}/functions/v1/public_turn`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const turn = await invokeCloudPublicTurn({
+          transport,
+          payload: {
             model_id: params.modelId,
             stream: true,
             messages: buildPublicTurnMessages({
@@ -93,15 +140,15 @@ export function useWebTurnRunnerController<
               communityEvidenceUserMessage: params.communityEvidenceUserMessage,
               extractTextFromContentJson: current.extractTextFromContentJson,
             }),
-          }),
+          },
           signal: abort.signal,
         });
         if (!turn.ok) {
-          const failure = await readSupabaseFunctionError(turn);
+          const failure = await readCloudFunctionError(turn);
           if (failure.category === "rate_limited") {
             return {
               cancelled: false,
-              error: formatSupabaseFunctionErrorMessage({
+              error: formatCloudFunctionErrorMessage({
                 ...failure,
                 message: "Too many requests. Try again soon.",
               }),
@@ -115,7 +162,7 @@ export function useWebTurnRunnerController<
               : "Guest chat is temporarily unavailable.";
             return {
               cancelled: false,
-              error: formatSupabaseFunctionErrorMessage({ ...failure, message: errorMessage }),
+              error: formatCloudFunctionErrorMessage({ ...failure, message: errorMessage }),
               content: "",
               runId: null,
             };
@@ -123,14 +170,14 @@ export function useWebTurnRunnerController<
           if (failure.category === "auth") {
             return {
               cancelled: false,
-              error: formatSupabaseFunctionErrorMessage(failure),
+              error: formatCloudFunctionErrorMessage(failure),
               content: "",
               runId: null,
             };
           }
           throw new Error(
             normalizeGuestInferenceError(
-              formatSupabaseFunctionErrorMessage(failure),
+              formatCloudFunctionErrorMessage(failure),
             ),
           );
         }
@@ -243,8 +290,22 @@ export function useWebTurnRunnerController<
   const runAgentTurn = useCallback(
     async (session: SessionT, threadId: string, params: RunAgentTurnParams): Promise<{ cancelled: boolean; error: string | null }> => {
       const current = argsRef.current;
-      const url = current.getSupabaseUrl();
-      if (!url) return { cancelled: false, error: "Missing Supabase URL." };
+      let baseUrl: string;
+      try {
+        baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
+      } catch {
+        return { cancelled: false, error: "Missing cloud runtime base URL." };
+      }
+      const transport: CloudRuntimeTransport<SessionT> = {
+        baseUrl,
+        fetchPublic: current.fetchCloudPublic,
+        fetchAuth: current.fetchCloudAuth,
+      };
+      try {
+        await ensureCloudThreadRecordForRuntime(session, threadId);
+      } catch (error) {
+        console.warn("Non-fatal: ensure cloud thread record failed:", error);
+      }
 
       current.streamingAbortRef.current?.abort();
       const abort = new AbortController();
@@ -263,6 +324,11 @@ export function useWebTurnRunnerController<
         community_evidence_used: null,
       });
       let runIdFromServer: string | null = null;
+      let runtimeRequestId: string | null = null;
+      let runtimeStage: string | null = null;
+      let responseStarted = false;
+      let firstEventSeen = false;
+      let lastEventName: string | null = null;
 
       const scheduleStreamingFlush = () => {
         if (current.streamingRafRef.current) return;
@@ -279,29 +345,64 @@ export function useWebTurnRunnerController<
       };
 
       try {
-        const runtimeTurn = await current.fetchWithSupabaseAuth(
-          `${url}/functions/v1/runtime_turn`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              thread_id: threadId,
-              stream: true,
-              surface: "web",
-              requires_tools: true,
-              model_id: params.preferredModelId,
-              idempotency_key: params.runIdHint,
-            }),
+        const laneMessages = Array.isArray(params.messages)
+          ? buildPublicTurnMessages({
+              messages: params.messages,
+              systemPrompt: params.systemPrompt,
+              extractTextFromContentJson: current.extractTextFromContentJson,
+            })
+          : [];
+        const createRuntimeTurnRequest = (): Promise<Response> =>
+          invokeCloudRuntimeTurn({
+            transport,
+            session,
+            payload: {
+                thread_id: threadId,
+                stream: true,
+                surface: "web",
+                requires_tools: params.requiresTools === true,
+                model_id: params.preferredModelId,
+                requested_funding_source: params.requestedFundingSource ?? "platform",
+                idempotency_key: params.runIdHint,
+                user_message_key: params.userMessageKey ?? undefined,
+                ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
+            },
             signal: abort.signal,
-          },
-          session,
-        );
+          });
+
+        let runtimeTurn = await createRuntimeTurnRequest();
+        responseStarted = true;
+        runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || null;
+        runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || null;
         if (!runtimeTurn.ok) {
-          const failure = await readSupabaseFunctionError(runtimeTurn);
+          let failure = await readCloudFunctionError(runtimeTurn);
+          runtimeRequestId = failure.requestId ?? runtimeRequestId;
+          runtimeStage = failure.stage ?? runtimeStage;
+          const failureMessage = String(failure.message ?? "").toLowerCase();
+          const canRetryThreadMirror =
+            failure.status === 404 &&
+            (failureMessage.includes("thread_not_found") || String(failure.code ?? "").toLowerCase() === "thread_not_found");
+          if (canRetryThreadMirror) {
+            try {
+              await ensureCloudThreadRecordForRuntime(session, threadId);
+              runtimeTurn = await createRuntimeTurnRequest();
+              responseStarted = true;
+              runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
+              runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
+              if (!runtimeTurn.ok) {
+                failure = await readCloudFunctionError(runtimeTurn);
+                runtimeRequestId = failure.requestId ?? runtimeRequestId;
+                runtimeStage = failure.stage ?? runtimeStage;
+              }
+            } catch (mirrorError) {
+              console.warn("Non-fatal: retry ensure cloud thread record failed:", mirrorError);
+            }
+          }
+          if (!runtimeTurn.ok) {
           if (failure.category === "rate_limited") {
             return {
               cancelled: false,
-              error: formatSupabaseFunctionErrorMessage({
+              error: formatCloudFunctionErrorMessage({
                 ...failure,
                 message: "Too many requests. Try again soon.",
               }),
@@ -322,29 +423,10 @@ export function useWebTurnRunnerController<
             return { cancelled: false, error: null };
           }
           if (failure.category === "auth") {
-            // Runtime auth failures can be verifier/config drift while the
-            // browser session is still valid. Confirm auth truth before showing
-            // a sign-in error.
-            try {
-              const authProbe = await current.fetchWithSupabaseAuth(
-                `${url}/auth/v1/user`,
-                { method: "GET" },
-                session,
-              );
-              if (authProbe.ok) {
-                const base = "PolyNet AI is temporarily unavailable. Please retry.";
-                const withRequestId =
-                  failure.requestId && !base.toLowerCase().includes("request_id=")
-                    ? `${base} (request_id=${failure.requestId})`
-                    : base;
-                return { cancelled: false, error: withRequestId };
-              }
-            } catch {
-              // fall through: true auth/session failure should keep sign-in copy.
-            }
-            return { cancelled: false, error: formatSupabaseFunctionErrorMessage(failure) };
+            return { cancelled: false, error: formatCloudFunctionErrorMessage(failure) };
           }
-          throw new Error(formatSupabaseFunctionErrorMessage(failure));
+          throw new Error(formatCloudFunctionErrorMessage(failure));
+          }
         }
 
         const reader = runtimeTurn.body?.getReader();
@@ -356,14 +438,14 @@ export function useWebTurnRunnerController<
           let dataBuffer = "";
           let seenDone = false;
           let runtimeLane: string | null = null;
-          let runtimeEngineId: string | null = null;
-          let runtimeModelId: string | null = null;
+          let persistedAssistantMessageId: string | null = null;
           let finalContent = "";
           let cloudLifecycleStarted = false;
           let cloudLifecycleDone = false;
 
           const maybeEmitCloudLifecycle = (phase: "start" | "done", laneValue: string | null | undefined): void => {
-            if (String(laneValue ?? "").trim().toLowerCase() !== "daytona") return;
+            const lane = String(laneValue ?? "").trim().toLowerCase();
+            if (lane !== "daytona" && lane !== "daytona_cloud") return;
             if (phase === "start") {
               if (cloudLifecycleStarted) return;
               cloudLifecycleStarted = true;
@@ -387,16 +469,22 @@ export function useWebTurnRunnerController<
             try {
               parsed = JSON.parse(raw);
             } catch {
-              parsed = { raw };
-            }
-            if (eventName === "start") {
-              if (typeof parsed?.run_id === "string") {
-                runIdFromServer = parsed.run_id;
+            parsed = { raw };
+          }
+          if (typeof parsed?.request_id === "string" && parsed.request_id.trim()) {
+            runtimeRequestId = parsed.request_id.trim();
+          }
+          if (typeof parsed?.stage === "string" && parsed.stage.trim()) {
+            runtimeStage = parsed.stage.trim();
+          }
+          firstEventSeen = true;
+          lastEventName = eventName;
+          if (eventName === "start") {
+            if (typeof parsed?.run_id === "string") {
+              runIdFromServer = parsed.run_id;
                 current.setStreamingRunId(parsed.run_id);
               }
               if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
-              if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
-              if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
               maybeEmitCloudLifecycle("start", runtimeLane);
             } else if (eventName === "delta") {
               const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
@@ -417,18 +505,22 @@ export function useWebTurnRunnerController<
               }
               if (typeof parsed?.run_id === "string") runIdFromServer = parsed.run_id;
               if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
-              if (typeof parsed?.model_id === "string") runtimeModelId = parsed.model_id;
-              if (typeof parsed?.engine_id === "string") runtimeEngineId = parsed.engine_id;
+              if (typeof parsed?.assistant_message_id === "string" && parsed.assistant_message_id.trim()) {
+                persistedAssistantMessageId = parsed.assistant_message_id.trim();
+              }
               maybeEmitCloudLifecycle("done", runtimeLane);
               seenDone = true;
             } else if (eventName === "error") {
               maybeEmitCloudLifecycle("done", runtimeLane);
-              const msg =
-                (typeof parsed?.error === "string" && parsed.error.trim()) ||
-                (typeof parsed?.message === "string" && parsed.message.trim()) ||
-                (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
-                "Failed to run model.";
-              throw new Error(msg);
+            const msg =
+              (typeof parsed?.error === "string" && parsed.error.trim()) ||
+              (typeof parsed?.message === "string" && parsed.message.trim()) ||
+              (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
+              "Failed to run model.";
+              const details: string[] = [];
+              if (runtimeStage) details.push(`stage=${runtimeStage}`);
+              if (runtimeRequestId) details.push(`request_id=${runtimeRequestId}`);
+              throw new Error(details.length > 0 ? `${msg} (${details.join(", ")})` : msg);
             }
             eventName = "message";
           };
@@ -467,36 +559,8 @@ export function useWebTurnRunnerController<
           if (!safeAssistantText) {
             throw new Error("Failed to run model.");
           }
-          const normalizedLane = String(runtimeLane ?? "").trim().toLowerCase();
-          const inferenceSource = normalizedLane === "public" ? "free" : "platform";
-          const assistantPayload = buildAssistantTextMessagePayload({
-            threadId,
-            text: safeAssistantText,
-            engineId: (runtimeEngineId ?? "runtime_turn").trim() || "runtime_turn",
-            modelId: (runtimeModelId ?? params.preferredModelId).trim() || params.preferredModelId,
-            runId: runIdFromServer,
-            inferenceSource,
-          });
-          const insertAssistant = await current.fetchWithSupabaseAuth(
-            `${url}/rest/v1/messages`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                id: crypto.randomUUID(),
-                thread_id: threadId,
-                seq: 0,
-                role: "assistant",
-                content_json: assistantPayload.content_json,
-                ...(assistantPayload.engine_id ? { engine_id: assistantPayload.engine_id } : null),
-                ...(assistantPayload.model_id ? { model_id: assistantPayload.model_id } : null),
-                ...(assistantPayload.run_id ? { run_id: assistantPayload.run_id } : null),
-              }),
-            },
-            session,
-          );
-          if (!insertAssistant.ok) {
-            throw new Error(await current.readSupabaseError(insertAssistant));
+          if (!persistedAssistantMessageId) {
+            throw new Error("Runtime turn did not persist assistant message.");
           }
           await current.loadThreadMessages(threadId, session);
           await current.loadThreads(session);
@@ -510,44 +574,45 @@ export function useWebTurnRunnerController<
           }, 350);
           return { cancelled: true, error: null };
         }
-        const message =
+        const rawMessage =
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
-        return { cancelled: false, error: message };
+        const details: string[] = [];
+        if (runtimeStage) details.push(`stage=${runtimeStage}`);
+        if (runtimeRequestId) details.push(`request_id=${runtimeRequestId}`);
+        if (lastEventName) details.push(`event=${lastEventName}`);
+        const inferredMessage = (() => {
+          if (rawMessage && rawMessage !== "Failed to fetch") return rawMessage;
+          if (!responseStarted) return "Runtime transport failed before response.";
+          if (!firstEventSeen) return "Runtime response stream failed before first event.";
+          return "Runtime stream terminated unexpectedly.";
+        })();
+        return {
+          cancelled: false,
+          error: details.length > 0 ? `${inferredMessage} (${details.join(", ")})` : inferredMessage,
+        };
       } finally {
         resetStreamingState(current);
       }
     },
-    [],
+    [ensureCloudThreadRecordForRuntime],
   );
 
   const createThreadMessage = useCallback(
     async (session: SessionT, params: CreateThreadMessageParams): Promise<string> => {
-      const current = argsRef.current;
-      const url = current.getSupabaseUrl();
-      if (!url) throw new Error("Missing Supabase URL.");
       const messageId = (params.id ?? crypto.randomUUID()).trim() || crypto.randomUUID();
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: messageId,
-            thread_id: params.threadId,
-            seq: 0,
-            role: params.role,
-            content_json: params.content_json,
-            ...(params.engine_id ? { engine_id: params.engine_id } : null),
-            ...(params.model_id ? { model_id: params.model_id } : null),
-            ...(params.run_id ? { run_id: params.run_id } : null),
-          }),
+      await addCloudThreadMessage({
+        session: session as any,
+        message: {
+          messageId,
+          threadId: params.threadId,
+          seq: 0,
+          role: params.role,
+          contentJson: params.content_json,
+          engineId: params.engine_id ?? null,
+          modelId: params.model_id ?? null,
+          runId: params.run_id ?? null,
         },
-        session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message || "Failed to save message.");
-      }
+      });
       return messageId;
     },
     [],
@@ -570,20 +635,16 @@ export function useWebTurnRunnerController<
 
   const deleteThreadMessagesByIds = useCallback(async (session: SessionT, messageIds: string[]): Promise<void> => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
+    const threadId = String(current.activeThreadId ?? "").trim();
+    if (!threadId) return;
     for (const messageId of messageIds) {
       const trimmed = messageId.trim();
       if (!trimmed) continue;
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?id=eq.${encodeURIComponent(trimmed)}`,
-        { method: "DELETE" },
-        session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message || "Failed to delete message.");
-      }
+      await deleteCloudThreadMessage({
+        session: session as any,
+        threadId,
+        messageId: trimmed,
+      });
     }
   }, []);
 

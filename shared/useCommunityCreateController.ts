@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { type CreateCommunityDraft } from "./communityDraftStorage";
+
+import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
@@ -25,14 +27,10 @@ type UseCommunityCreateControllerArgs<
   CommunityT extends CommunityLike,
   BillingStatusT extends BillingStatusLike,
 > = {
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   builderBillingStatus: BillingStatusT | null;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAnonKey: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   openBuilderBillingPortal: (context: "create_community") => Promise<void>;
   onStartUpgradeFlow: () => void;
@@ -135,7 +133,8 @@ export function useCommunityCreateController<
 
     current.setCreateCommunityError(null);
     const draft = current.loadCreateDraft();
-    const currentUserId = current.supabaseSession?.user.id ?? null;
+    const session = current.session;
+    const currentUserId = session?.user.id ?? null;
     if (draft && draft.user_id && currentUserId && draft.user_id !== currentUserId) {
       current.clearCreateDraft();
     }
@@ -154,6 +153,7 @@ export function useCommunityCreateController<
 
   const buildCreateCommunityDraftFromState = useCallback((): CreateCommunityDraft | null => {
     const current = argsRef.current;
+    const session = current.session;
     current.setCreateCommunityError(null);
 
     const name = current.createCommunityName.trim();
@@ -176,7 +176,7 @@ export function useCommunityCreateController<
       v: 1,
       id: current.createDraftId(),
       created_at: Date.now(),
-      user_id: current.supabaseSession?.user.id ?? null,
+      user_id: session?.user.id ?? null,
       name,
       slug,
       slug_edited: current.createCommunitySlugEdited,
@@ -194,35 +194,32 @@ export function useCommunityCreateController<
     session: SessionT,
   ): Promise<CommunityT | null> => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    const apiKey = current.getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      current.setFinalizeCreateCommunityError("Missing Supabase config.");
-      return null;
-    }
-
     current.setFinalizeCreateCommunityError(null);
     current.setIsFinalizingCreateCommunityFromBilling(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/create_community`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_name: draft.name,
-            p_slug: draft.slug,
-            p_visibility: draft.visibility,
-            p_avatar_url: draft.avatar_url,
-            p_description: draft.description,
-            p_banner_url: draft.banner_url,
-          }),
-        },
+      const [avatarField, bannerField] = await Promise.all([
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "avatar",
+          nextValue: draft.avatar_url,
+        }),
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "banner",
+          nextValue: draft.banner_url,
+        }),
+      ]);
+      const community = await createCloudCommunity<SessionT, CommunityT>({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const created = (await response.json()) as CommunityT[];
-      const community = created[0] ?? null;
+        name: draft.name,
+        slug: draft.slug,
+        visibility: draft.visibility,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        description: draft.description,
+        bannerStorageId: bannerField.storageId ?? null,
+        bannerUrl: bannerField.url ?? null,
+      });
       if (!community?.id) throw new Error("Failed to create community.");
 
       current.onCommunityCreated(community);
@@ -245,9 +242,10 @@ export function useCommunityCreateController<
 
   const handleCreateCommunity = useCallback(async () => {
     const current = argsRef.current;
+    const session = current.session;
     current.setCreateCommunityError(null);
 
-    if (!current.supabaseSession) {
+    if (!session) {
       const draft = current.buildDraftOnCreateUnauthenticated ? buildCreateCommunityDraftFromState() : null;
       if (current.onCreateUnauthenticated) {
         await current.onCreateUnauthenticated(draft);
@@ -269,12 +267,6 @@ export function useCommunityCreateController<
       return;
     }
 
-    const url = current.getSupabaseUrl();
-    const apiKey = current.getSupabaseAnonKey();
-    if (!url || !apiKey) {
-      current.setCreateCommunityError("Missing Supabase config.");
-      return;
-    }
     if (!["published", "unlisted"].includes(current.createCommunityVisibility)) {
       current.setCreateCommunityError("Visibility must be published or unlisted.");
       return;
@@ -282,29 +274,29 @@ export function useCommunityCreateController<
 
     current.setIsCreatingCommunity(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/create_community`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_name: name,
-            p_slug: slug,
-            p_visibility: current.createCommunityVisibility,
-            p_avatar_url: current.createCommunityAvatarUrl?.trim() || null,
-            p_description: current.createCommunityDescription.trim() || null,
-            p_banner_url: current.createCommunityBannerUrl?.trim() || null,
-          }),
-        },
-        current.supabaseSession,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        current.setCreateCommunityError(text || "Failed to create community.");
-        return;
-      }
-      const created = (await response.json()) as CommunityT[];
-      const community = created[0] ?? null;
+      const [avatarField, bannerField] = await Promise.all([
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "avatar",
+          nextValue: current.createCommunityAvatarUrl,
+        }),
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "banner",
+          nextValue: current.createCommunityBannerUrl,
+        }),
+      ]);
+      const community = await createCloudCommunity<SessionT, CommunityT>({
+        session,
+        name,
+        slug,
+        visibility: current.createCommunityVisibility,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        description: current.createCommunityDescription.trim() || null,
+        bannerStorageId: bannerField.storageId ?? null,
+        bannerUrl: bannerField.url ?? null,
+      });
       if (!community?.id) {
         current.setCreateCommunityError("Failed to create community.");
         return;
@@ -326,14 +318,16 @@ export function useCommunityCreateController<
 
   const handleCreateCommunityPrimaryAction = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
+    const session = current.session;
     current.setFinalizeCreateCommunityError(null);
-    if (!current.supabaseSession) {
+    if (!session) {
       const draft = current.buildDraftOnPrimaryUnauthenticated ? buildCreateCommunityDraftFromState() : null;
+      closeCreateCommunityModal();
       await current.onPrimaryUnauthenticated(draft);
       return;
     }
 
-    const status = current.builderBillingStatus ?? await current.loadBuilderBillingStatus(current.supabaseSession);
+    const status = current.builderBillingStatus ?? await current.loadBuilderBillingStatus(session);
     if (!status) {
       current.setCreateCommunityError("Couldn't check your plan. Try again.");
       return;

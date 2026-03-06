@@ -1,7 +1,7 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 
-const KEYCHAIN_SUPABASE_SESSION: &str = "supabase_session";
+const KEYCHAIN_CLOUD_SESSION: &str = "cloud_session";
 const UI_STATE_PENDING_INVITES_V1: &str = "pending_invites_v1";
 const MAX_INVITE_KEY_LEN: usize = 128;
 
@@ -295,11 +295,10 @@ fn parse_chatgpt_cloud_turn_response_bytes(
 pub(crate) async fn chatgpt_cloud_turn_cmd(
     model_id: String,
     messages: Vec<ChatgptCloudTurnMessageInput>,
-    max_tokens: Option<i64>,
+    _max_tokens: Option<i64>,
 ) -> Result<ChatgptCloudTurnResult, String> {
     let model_id = model_id.trim().to_string();
     let (instructions, input_items) = normalize_chatgpt_cloud_turn_request(&model_id, messages)?;
-    let max_tokens = max_tokens.filter(|value| *value > 0);
 
     let mut request_body = serde_json::json!({
         "model": model_id,
@@ -309,9 +308,6 @@ pub(crate) async fn chatgpt_cloud_turn_cmd(
     });
     if let Some(value) = instructions {
         request_body["instructions"] = serde_json::Value::String(value);
-    }
-    if let Some(value) = max_tokens {
-        request_body["max_output_tokens"] = serde_json::json!(value);
     }
     let request_bytes =
         serde_json::to_vec(&request_body).map_err(|e| format!("Request serialization failed: {}", e))?;
@@ -382,8 +378,8 @@ pub(crate) async fn chatgpt_cloud_turn_cmd(
 }
 
 #[tauri::command]
-pub(crate) fn get_supabase_session_cmd() -> Result<Option<String>, String> {
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
+pub(crate) fn get_cloud_session_cmd() -> Result<Option<String>, String> {
+    let entry = Entry::new("com.arx.app", KEYCHAIN_CLOUD_SESSION).map_err(|e| e.to_string())?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -392,7 +388,7 @@ pub(crate) fn get_supabase_session_cmd() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub(crate) fn set_supabase_session_cmd(session_json: String) -> Result<(), String> {
+pub(crate) fn set_cloud_session_cmd(session_json: String) -> Result<(), String> {
     let cleaned = session_json.trim();
     if cleaned.is_empty() {
         return Err("session_json is empty".to_string());
@@ -400,13 +396,13 @@ pub(crate) fn set_supabase_session_cmd(session_json: String) -> Result<(), Strin
     if cleaned.len() > 64 * 1024 {
         return Err("session_json too large".to_string());
     }
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
+    let entry = Entry::new("com.arx.app", KEYCHAIN_CLOUD_SESSION).map_err(|e| e.to_string())?;
     entry.set_password(cleaned).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub(crate) fn clear_supabase_session_cmd() -> Result<(), String> {
-    let entry = Entry::new("com.arx.app", KEYCHAIN_SUPABASE_SESSION).map_err(|e| e.to_string())?;
+pub(crate) fn clear_cloud_session_cmd() -> Result<(), String> {
+    let entry = Entry::new("com.arx.app", KEYCHAIN_CLOUD_SESSION).map_err(|e| e.to_string())?;
     match entry.delete_password() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),

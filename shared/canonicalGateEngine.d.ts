@@ -4,18 +4,22 @@ export type AuthState = "anonymous" | "authenticated";
 export type Surface = "web" | "desktop" | "mobile";
 export type ExecutionMode = "cloud" | "local";
 export type ModelClass = "free_model" | "paid_model";
+export type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform" | "auto";
 export type TurnClass = "chat_only" | "requires_tools";
 export type RuntimeLane = "public" | "platform" | "chatgpt_desktop" | "daytona_cloud" | "local_runtime";
-export type GateCode = "ok" | "auth_required" | "tier_required";
-export type GateCta = "none" | "sign_in" | "upgrade";
+export type GateCode = "ok" | "auth_required" | "tier_required" | "provider_connection_required" | "runner_unavailable";
+export type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider";
 
 export type CanonicalGateInput = {
   surface: Surface;
   executionMode: ExecutionMode;
-  modelClass: ModelClass;
+  modelClass?: ModelClass;
+  requestedFundingSource?: RequestedFundingSource | null;
   turnClass: TurnClass;
   authState: AuthState;
   tier?: string | null;
+  hasUserKeyConnection?: boolean;
+  hasUserChatGptConnection?: boolean;
   hasDesktopChatGptAuth?: boolean;
 };
 
@@ -24,6 +28,7 @@ export type CanonicalGateDecision = {
   code: GateCode;
   cta: GateCta;
   lane: RuntimeLane | null;
+  fundingSource: Exclude<RequestedFundingSource, "auto"> | null;
   effectiveTier: EffectiveTier;
 };
 
@@ -37,4 +42,3 @@ export declare function hasPaidAccessForGate(input: {
   authState: AuthState;
   tier?: string | null;
 }): boolean;
-

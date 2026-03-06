@@ -2,7 +2,7 @@ import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } 
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 
 export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(params: {
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeThreadId: string | null;
   guestThreadId: string;
   activePage: AppPage;
@@ -17,8 +17,10 @@ export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(para
   loadDiscoverCommunities: () => Promise<void>;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
 }) {
+  const session = params.session;
+
   useEffect(() => {
-    if (!params.supabaseSession) return;
+    if (!session) return;
     if (!params.activeThreadId || params.activeThreadId === params.guestThreadId) {
       params.setThreadMessages([]);
       return;
@@ -27,8 +29,8 @@ export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(para
     params.autoScrollEnabledRef.current = true;
     params.setIsWorkspaceAtBottom(true);
     params.lastWorkspaceScrollTopRef.current = 0;
-    void params.loadThreadMessages(params.activeThreadId, params.supabaseSession);
-  }, [params.supabaseSession, params.activeThreadId]);
+    void params.loadThreadMessages(params.activeThreadId, session);
+  }, [session, params.activeThreadId]);
 
   useEffect(() => {
     if (params.activePage !== "discover") return;
@@ -37,13 +39,13 @@ export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(para
 
   useEffect(() => {
     if (
-      !params.supabaseSession ||
+      !session ||
       !params.activeCommunityId ||
       params.activePage !== "community" ||
       params.communityTab !== "chat"
     ) {
       return;
     }
-    void params.loadCommunityChat(params.activeCommunityId, params.supabaseSession);
-  }, [params.supabaseSession, params.activeCommunityId, params.activePage, params.communityTab]);
+    void params.loadCommunityChat(params.activeCommunityId, session);
+  }, [session, params.activeCommunityId, params.activePage, params.communityTab]);
 }

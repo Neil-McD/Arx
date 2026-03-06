@@ -24,6 +24,7 @@ export type ThreadSidebarPanelState<TThread, TProject extends ProjectLike> = {
   agentThreadsCount: number;
   chatThreadsCount: number;
   showChatSignInPrompt?: boolean;
+  probingProjectId?: string | null;
 };
 
 export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
@@ -34,6 +35,7 @@ export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
   onStartDraftInProject: (project: TProject) => void;
   onToggleProjectMenu: (projectId: string) => void;
   projectMenuRef: RefObject<HTMLDivElement>;
+  onProbeProject?: (project: TProject) => void | Promise<void>;
   onRenameProject: (project: TProject) => void | Promise<void>;
   onRemoveProject: (project: TProject) => void | Promise<void>;
   renderSessionItem: (thread: TThread, opts?: { showProjectHint?: boolean }) => ReactNode;

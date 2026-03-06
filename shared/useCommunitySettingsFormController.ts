@@ -9,6 +9,9 @@ type CommunityLike = {
   visibility: string | null;
   avatar_url: string | null;
   banner_url: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
 };
 
 type UseCommunitySettingsFormControllerArgs<InviteT> = {
@@ -25,6 +28,9 @@ type UseCommunitySettingsFormControllerArgs<InviteT> = {
   setCommunitySettingsVisibility: Dispatch<SetStateAction<string>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerZoom: Dispatch<SetStateAction<number>>;
   setCommunitySettingsMonthlyPlanId: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsYearlyPlanId: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "yearly" | "both">>;
@@ -81,6 +87,9 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsVisibility("unlisted");
       current.setCommunitySettingsAvatarUrl(null);
       current.setCommunitySettingsBannerUrl(null);
+      current.setCommunitySettingsBannerFocusX(0.5);
+      current.setCommunitySettingsBannerFocusY(0.5);
+      current.setCommunitySettingsBannerZoom(1);
       current.setCommunitySettingsMonthlyPlanId(null);
       current.setCommunitySettingsYearlyPlanId(null);
       current.setCommunitySettingsPriceUsdMonthly("");
@@ -103,6 +112,21 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
     current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
     current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);
+    current.setCommunitySettingsBannerFocusX(
+      typeof selectedCommunity.banner_focus_x === "number" && Number.isFinite(selectedCommunity.banner_focus_x)
+        ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_x))
+        : 0.5,
+    );
+    current.setCommunitySettingsBannerFocusY(
+      typeof selectedCommunity.banner_focus_y === "number" && Number.isFinite(selectedCommunity.banner_focus_y)
+        ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_y))
+        : 0.5,
+    );
+    current.setCommunitySettingsBannerZoom(
+      typeof selectedCommunity.banner_zoom === "number" && Number.isFinite(selectedCommunity.banner_zoom)
+        ? Math.max(1, Math.min(2.5, selectedCommunity.banner_zoom))
+        : 1,
+    );
     current.setInviteCreateError(null);
   }, [clearBannerState]);
 

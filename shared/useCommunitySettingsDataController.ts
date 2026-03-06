@@ -1,5 +1,10 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
+import {
+  fetchCloudCommunityMemberSettingsRow,
+  listCloudCommunityPricingRows,
+} from "./cloudCommunityAdminGateway";
+
 type SessionLike = {
   user: {
     id: string;
@@ -20,11 +25,7 @@ type CommunityPricingRow = {
   currency_decimals: number;
 };
 
-type UseCommunitySettingsDataControllerArgs<SessionT extends SessionLike> = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
-
+type UseCommunitySettingsDataControllerArgs = {
   communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
   communityPricingDirtyRef: MutableRefObject<boolean>;
 
@@ -47,35 +48,21 @@ function formatPlanAmount(row: CommunityPricingRow | null): string {
 }
 
 export function useCommunitySettingsDataController<SessionT extends SessionLike>(
-  args: UseCommunitySettingsDataControllerArgs<SessionT>,
+  args: UseCommunitySettingsDataControllerArgs,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
   const loadCommunityMemberSettings = useCallback(async (params: { communityId: string; session: SessionT }) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) {
-      current.setCommunityMemberMuted(false);
-      return;
-    }
-
     current.setIsLoadingCommunityMemberSettings(true);
     current.setCommunityMemberSettingsError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_member_settings?select=community_id,user_id,muted,muted_until,created_at,updated_at&community_id=eq.${encodeURIComponent(
-          params.communityId,
-        )}&user_id=eq.${encodeURIComponent(params.session.user.id)}&limit=1`,
-        { method: "GET" },
-        params.session,
-      );
-      if (!response.ok) {
-        current.setCommunityMemberMuted(false);
-        return;
-      }
-      const rows = (await response.json()) as CommunityMemberSettingsRow[];
-      const row = rows[0];
+      const row = await fetchCloudCommunityMemberSettingsRow<SessionT, CommunityMemberSettingsRow>({
+        session: params.session,
+        communityId: params.communityId,
+        userId: params.session.user.id,
+      });
       current.setCommunityMemberMuted(Boolean(row?.muted));
     } catch {
       current.setCommunityMemberMuted(false);
@@ -87,22 +74,11 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
   const loadCommunityPricing = useCallback(
     async (params: { communityId: string; session: SessionT; shouldIgnore?: () => boolean }) => {
       const current = argsRef.current;
-      const url = current.getSupabaseUrl();
-      if (!url) return;
-
       try {
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/get_community_pricing`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_id: params.communityId }),
-          },
-          params.session,
-        );
-        if (!response.ok) return;
-
-        const rows = (await response.json()) as CommunityPricingRow[];
+        const rows = await listCloudCommunityPricingRows<SessionT, CommunityPricingRow>({
+          session: params.session,
+          communityId: params.communityId,
+        });
         if (params.shouldIgnore?.()) return;
         if (current.communitySettingsLoadedCommunityIdRef.current !== params.communityId) return;
         if (current.communityPricingDirtyRef.current) return;

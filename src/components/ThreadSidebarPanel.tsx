@@ -30,6 +30,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
     agentThreadsCount,
     chatThreadsCount,
     showChatSignInPrompt,
+    probingProjectId,
   } = state;
   const [showAllThreadsByProjectId, setShowAllThreadsByProjectId] = useState<Record<string, true>>({});
 
@@ -160,6 +161,10 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                     threadLaneFilter === "chat"
                       ? (statusBadge ?? { label: "Not started", tone: "stopped" as const })
                       : null;
+                  const isProbingProject =
+                    threadLaneFilter === "chat" &&
+                    typeof probingProjectId === "string" &&
+                    probingProjectId === project.id;
                   return (
                     <div key={project.id} className="project-group">
                       <div className={`project-group-header${expanded ? " expanded" : ""}`}>
@@ -218,6 +223,17 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                         </button>
                         {projectMenuProjectId === project.id && (
                           <div className="project-group-menu" role="menu" ref={actions.projectMenuRef}>
+                            {threadLaneFilter === "chat" && actions.onProbeProject && (
+                              <button
+                                type="button"
+                                className="project-group-menu-item"
+                                role="menuitem"
+                                disabled={isProbingProject}
+                                onClick={() => void actions.onProbeProject?.(project)}
+                              >
+                                {isProbingProject ? "Probing..." : "Probe sandbox"}
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="project-group-menu-item"

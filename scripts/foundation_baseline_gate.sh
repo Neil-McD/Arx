@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=16
+TOTAL_STEPS=18
 CURRENT_STEP=1
 
 run_step() {
@@ -20,21 +20,23 @@ run_step() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
 }
 
-run_step "Supabase CLI version contract" bash scripts/supabase_cli_contract_check.sh
-run_step "Supabase migration filename contract" bash scripts/supabase_migration_filename_guard.sh
-run_step "Supabase DB lint contract" bash scripts/supabase_db_lint_contract_check.sh
-run_step "Irreducible core contract guard" bash scripts/irreducible_core_contract_guard.sh
-run_step "Community AI-agent single-slot contract" bash scripts/community_agent_single_slot_contract_check.sh
 run_step "Secret redaction contract check" bash scripts/secret_redaction_contract_check.sh
-run_step "Cloud payment-provider-events hardening contract" bash scripts/cloud_payment_provider_events_hardening_check.sh
-run_step "Edge verify_jwt default guard" bash scripts/edge_verify_jwt_default_guard.sh
-run_step "Function auth lane coherence guard" bash scripts/function_auth_lane_coherence_guard.sh
-run_step "Auth + money + access matrix contract" bash scripts/auth_money_access_matrix_check.sh
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
-run_step "Harness parity contract" bash scripts/harness_parity_contract_check.sh
-run_step "Runtime turn idempotency scope contract" bash scripts/runtime_turn_idempotency_scope_check.sh
 run_step "Desktop agent lane contract" bash scripts/desktop_agent_lane_contract_guard.sh
-run_step "Community edge deploy path guard" bash scripts/community_edge_deploy_path_guard.sh
-run_step "Community edge deployment manifest contract" bash scripts/community_edge_deployment_contract_check.sh
+run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
+run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh
+run_step "Auth env contract guard" bash scripts/auth_env_contract_guard.sh
+run_step "No direct cloud-auth imports guard" bash scripts/no_direct_cloud_auth_imports_guard.sh
+run_step "Legacy function transport surface guard" bash scripts/legacy_function_transport_surface_guard.sh
+run_step "Convex client surface guard" bash scripts/convex_client_surface_guard.sh
+run_step "Convex verified identity guard" bash scripts/convex_verified_identity_guard.sh
+run_step "Auth bootstrap public identity guard" bash scripts/auth_bootstrap_public_identity_guard.sh
+run_step "Auth and billing public identity guard" bash scripts/auth_billing_public_identity_guard.sh
+run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
+run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
+run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
+run_step "Runtime turn client idempotency guard" bash scripts/runtime_turn_client_idempotency_guard.sh
+run_step "Journey smoke gate (non-duplicative)" env JOURNEY_SKIP_IDEMPOTENCY_GUARDS=1 bash scripts/journey_smoke_gate.sh
+run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 
 echo "PASS: foundation baseline gate passed."

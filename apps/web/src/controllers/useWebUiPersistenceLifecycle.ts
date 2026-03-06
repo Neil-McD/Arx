@@ -11,18 +11,18 @@ type ProfileDraftLike = {
 export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   communityAnalyticsRange: string;
   appTheme: AppTheme;
-  profileStorageUserId: string;
+  profileStorageUserId: string | null;
   profileName: string;
   profileUsername: string;
   profileBio: string;
   profileAvatarUrl: string | null;
   modelToggles: TModelToggles;
-  activeModelId: string;
+  activeModelId: string | null;
   guestModelId: string;
   modelTogglesStorageKey: string;
   activeModelStorageKey: string;
-  readProfileDraftForUser: (userId: string) => ProfileDraftLike;
-  writeProfileDraftForUser: (userId: string, draft: ProfileDraftLike) => void;
+  readProfileDraftForUser: (userId: string | null) => ProfileDraftLike;
+  writeProfileDraftForUser: (userId: string | null, draft: ProfileDraftLike) => void;
   storeGuestModelId: (modelId: string) => void;
   setProfileName: Dispatch<SetStateAction<string>>;
   setProfileUsername: Dispatch<SetStateAction<string>>;

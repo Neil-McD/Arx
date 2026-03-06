@@ -7,7 +7,7 @@
 - **Desktop (Tauri):** web features + **operator runtime** that can run local tools inside a bound workspace with approvals; also handles deep links (e.g. `arx://claim?...`).
 
 ## Canonical truth
-- **Cloud (Supabase) is canonical** for: `profiles`, `communities`, `community_memberships`, `entitlements`, `plans`, `payments`, `threads/messages`, `personal_memory_items`, `community_resources`, and analytics primitives.
+- **Cloud is canonical** for: `profiles`, `communities`, `community_memberships`, `entitlements`, `plans`, `payments`, `threads/messages`, `personal_memory_items`, `community_resources`, and analytics primitives.
 - **Desktop local storage is not canonical cognition.** It exists for:
   - workspace bindings (device-local)
   - approvals/session state (device-local)
@@ -44,6 +44,5 @@
 - `src/`: desktop UI
 - `src-tauri/`: desktop runtime + local tool runner
 - `apps/web/`: web app
-- `supabase/`: edge functions, migrations, payments/join plumbing
 - `references/`: research/inspiration; keep separate from product code paths
 - `shared/`: cross-surface shared modules (e.g. pay-first flow core)

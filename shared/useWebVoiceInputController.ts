@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { blobToBase64 } from "./imageTransforms";
+import { transcribeVoice as transcribeCloudVoice } from "./authSessionCore";
 import {
   createWavBlobFromInt16Chunks,
   floatToInt16Pcm,
@@ -25,17 +26,13 @@ type VoiceInputIntent = {
   title: string;
 };
 
-type UseWebVoiceInputControllerArgs<SupabaseSessionT> = {
-  supabaseSession: SupabaseSessionT | null;
-  supabaseSessionRef: MutableRefObject<SupabaseSessionT | null>;
+type UseWebVoiceInputControllerArgs<CloudSessionT> = {
+  session: CloudSessionT | null;
+  sessionRef: MutableRefObject<CloudSessionT | null>;
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "request_access" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
   normalizedBuilderTier: "free" | "builder" | "pro";
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSessionT) => Promise<Response>;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   openAuthGate: () => void;
   showAppToastMessage: (message: string) => void;
   setWorkspaceInput: Dispatch<SetStateAction<string>>;
@@ -44,7 +41,7 @@ type UseWebVoiceInputControllerArgs<SupabaseSessionT> = {
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
 };
 
-export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceInputControllerArgs<SupabaseSessionT>) {
+export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInputControllerArgs<CloudSessionT>) {
   const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
   const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
@@ -54,7 +51,7 @@ export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceIn
   const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
 
   function resolveVoiceInputIntent(surface: VoiceSurface): VoiceInputIntent {
-    if (!args.supabaseSession) {
+    if (!args.session) {
       return {
         mode: "sign_in",
         title:
@@ -163,28 +160,16 @@ export function useWebVoiceInputController<SupabaseSessionT>(args: UseWebVoiceIn
   }
 
   async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
-    const url = args.getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-    const payload = JSON.stringify({
-      audio_base64: await blobToBase64(blob),
-      mime_type: blob.type || "audio/webm",
+    const session = args.sessionRef.current ?? args.session;
+    if (!session) throw new Error("Sign in to use voice input.");
+    return await transcribeCloudVoice({
+      session: session as unknown as { access_token: string },
+      audioBase64: await blobToBase64(blob),
+      mimeType: blob.type || "audio/webm",
       language: getVoiceLanguageHint(),
       surface,
+      preferPrimary: false,
     });
-    const session = args.supabaseSessionRef.current ?? args.supabaseSession;
-    if (!session) throw new Error("Sign in to use voice input.");
-    const response = await args.fetchWithSupabaseAuth(
-      `${url}/functions/v1/voice_transcribe`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      },
-      session,
-    );
-    if (!response.ok) throw new Error(await args.readSupabaseError(response));
-    const data = (await response.json()) as { text?: unknown };
-    return typeof data?.text === "string" ? data.text.trim() : "";
   }
 
   async function startVoiceCapture(surface: VoiceSurface): Promise<void> {

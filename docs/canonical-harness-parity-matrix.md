@@ -1,33 +1,20 @@
 # Canonical Harness Parity Matrix (V1)
 
-Status: active (freeze)  
+Status: active  
 Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
 
-## 1) Irreducible Harness Core
+## 1) Irreducible Core
 
-The canonical harness behavior is defined by four shared contracts:
+Canonical harness parity is now defined by two authoritative runtime surfaces:
 
-1. Tool contract (`coding_harness_tools_v1`).
-2. Approval contract (read auto-allow, write tools approval-gated).
-3. Event lifecycle contract (`tool_call_requested` -> `tool_call_finished`).
-4. Run lifecycle contract (`run_started` + terminal run event).
+1. Desktop local runtime (`src-tauri` harness).
+2. Cloud runtime (`/runtime/runtime_turn` in `convex/http.ts`).
 
-Everything else is adapter behavior.
+For cloud behavior, the executable source of truth is runtime code, not a separate policy document.
 
-## 2) Adapter Boundary (Only Legitimate Differences)
+## 2) Tool Surface
 
-1. Local adapter:
-   - executes tools in desktop workspace (`src-tauri`).
-2. Daytona adapter:
-   - executes tools in Daytona sandbox toolbox.
-3. Runtime host:
-   - local run host (`src-tauri`) vs cloud host (`runtime_turn`).
-
-No other harness logic should diverge.
-
-## 3) Golden Tool Parity (Coding Harness)
-
-Canonical coding tool names:
+Shared tool subset (desktop + cloud):
 
 1. `read`
 2. `list_dir`
@@ -37,51 +24,46 @@ Canonical coding tool names:
 6. `write`
 7. `edit`
 8. `bash`
-9. `update_plan`
 
-Parity requirement:
+Desktop-only for now:
 
-1. Local harness must expose all canonical coding tools in agent lane.
-2. Cloud Daytona lane must parse all canonical coding tools.
-3. Cloud Daytona lane must auto-allow `update_plan` and persist plan updates as auditable run events.
+1. `update_plan`
 
-## 4) Golden Approval Parity
+Cloud policy:
 
-Shared policy intent:
+1. `update_plan` is denied in cloud Daytona runtime.
 
-1. Read tools: auto-allow.
-2. Write tools (`write`, `edit`, `bash`): explicit approval-gated.
-3. Policy denials must be explicit and evented.
-4. Cloud policy source of truth is `shared/contracts/coding_harness_tools_v1.json` (`approval_policy.cloud`).
+## 3) Approval Policy (Cloud)
 
-Current cloud policy modes:
+Authoritative implementation:
 
-1. `agent-full`: write tools approved.
-2. `agent`: write tools denied with approval-required code.
-3. `read-only`: write tools denied with read-only code.
+1. `convex/http.ts` (`resolveDaytonaToolPolicy`).
 
-## 5) Golden Event Parity
+Current cloud policy posture:
 
-Both paths must emit canonical tool lifecycle events:
+1. Single deterministic mode: write tools are auto-approved by cloud policy.
+2. Explicit cloud denials remain for contract-excluded tools (`update_plan`).
+
+## 4) Event Parity
+
+Tool lifecycle events required on cloud tool runs:
 
 1. `tool_call_requested`
 2. `tool_call_approved` or `tool_call_denied`
 3. `tool_call_started`
 4. `tool_call_finished`
 
-Run lifecycle parity:
+Run lifecycle events:
 
-1. Both emit `run_started`.
-2. Both emit terminal `run_finished`.
-3. Terminal payload uses canonical status semantics (`status='ok'|'error'|'cancelled'` + `reason?`).
-4. Terminal event semantics must remain deterministic and auditable.
+1. `run_started`
+2. terminal `run_finished`
 
-## 6) Drift Policy
+## 5) Drift Policy
 
-Any harness change must update:
+Any harness behavior change must update:
 
-1. This matrix document.
-2. `shared/contracts/coding_harness_tools_v1.json` if tool surface changes.
-3. Contract guard script (`scripts/harness_parity_contract_check.sh`).
+1. `convex/http.ts` runtime behavior.
+2. This matrix doc.
+3. Runtime guard coverage (`scripts/runtime_turn_contract_guard.sh`, `scripts/reliability_turn_path_smoke_check.sh`).
 
-No silent divergence allowed between local and cloud harness behavior.
+No silent divergence between docs and runtime behavior.

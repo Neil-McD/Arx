@@ -1,4 +1,4 @@
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { CloudAuthSession } from "../../../shared/cloudAuthSession";
 import type {
   ThreadService,
   ThreadServiceCreateInput,
@@ -9,29 +9,31 @@ import type {
   ThreadServiceThread,
 } from "../../../shared/threadService";
 
+type DesktopCloudSession = Exclude<CloudAuthSession, null>;
+
 type CloudChatThreadServiceDeps = {
-  getSession: () => SupabaseSession | null;
-  listCloudThreads: (session: SupabaseSession) => Promise<ThreadServiceThread[]>;
-  getCloudThread: (threadId: string, session: SupabaseSession) => Promise<ThreadServiceThread | null>;
+  getSession: () => DesktopCloudSession | null;
+  listCloudThreads: (session: DesktopCloudSession) => Promise<ThreadServiceThread[]>;
+  getCloudThread: (threadId: string, session: DesktopCloudSession) => Promise<ThreadServiceThread | null>;
   createCloudThread?: (
     input: ThreadServiceCreateInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
-  deleteCloudThread?: (threadId: string, session: SupabaseSession) => Promise<void>;
+  deleteCloudThread?: (threadId: string, session: DesktopCloudSession) => Promise<void>;
   setCloudLens?: (
     input: ThreadServiceSetLensInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
-  addCloudMessage?: (input: ThreadServiceMessageInput, session: SupabaseSession) => Promise<void>;
-  sendCloudTurn?: (input: ThreadServiceSendTurnInput, session: SupabaseSession) => Promise<void>;
+  addCloudMessage?: (input: ThreadServiceMessageInput, session: DesktopCloudSession) => Promise<void>;
+  sendCloudTurn?: (input: ThreadServiceSendTurnInput, session: DesktopCloudSession) => Promise<void>;
   setCloudThreadTitle?: (
     threadId: string,
     title: string,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<void>;
   setCloudThreadEngine?: (
     input: ThreadServiceSetEngineInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
 };
 
@@ -40,7 +42,7 @@ function unsupported(method: string): never {
 }
 
 export function createCloudChatThreadService(deps: CloudChatThreadServiceDeps): ThreadService {
-  const requireSession = (operation: string): SupabaseSession => {
+  const requireSession = (operation: string): DesktopCloudSession => {
     const session = deps.getSession();
     if (!session) {
       throw new Error(`Sign in to ${operation}.`);

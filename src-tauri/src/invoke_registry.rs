@@ -21,9 +21,9 @@ pub(crate) fn build_handler() -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 's
         crate::commands::runtime_thread::cancel_run_cmd,
         crate::commands::runtime_thread::submit_turn_cmd,
         // Auth + external identity
-        crate::commands::auth_invite::get_supabase_session_cmd,
-        crate::commands::auth_invite::set_supabase_session_cmd,
-        crate::commands::auth_invite::clear_supabase_session_cmd,
+        crate::commands::auth_invite::get_cloud_session_cmd,
+        crate::commands::auth_invite::set_cloud_session_cmd,
+        crate::commands::auth_invite::clear_cloud_session_cmd,
         crate::commands::auth_invite::get_chatgpt_auth_summary_cmd,
         crate::commands::auth_invite::clear_chatgpt_auth_cmd,
         crate::commands::auth_invite::chatgpt_login_cmd,

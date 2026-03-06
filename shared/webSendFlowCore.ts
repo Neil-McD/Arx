@@ -98,8 +98,11 @@ export type UseWebSendFlowControllerArgs<
       preferredModelId: string;
       mode?: "respond" | "regenerate";
       runIdHint: string;
-      inferenceSource?: "platform" | "user";
+      inferenceSource?: "platform" | "user_key";
+      requestedFundingSource?: "platform" | "user_key";
+      requiresTools?: boolean;
       replyToId?: string;
+      messages?: ThreadMessageT[];
     },
   ) => Promise<{ cancelled: boolean; error: string | null }>;
   createThreadMessage: (
@@ -136,9 +139,11 @@ export type UseWebSendFlowControllerArgs<
   userMemoryRememberEnabled: boolean;
   builderTier: string;
   hasPaidAccess: boolean;
+  hasUserKeyConnection: boolean;
+  hasUserChatgptConnection: boolean;
   guestThreadId: string;
   guestModelId: string;
-  guestModelAllowlist: Set<string>;
+  guestModelAllowlist: ReadonlySet<string>;
   defaultActiveModelId: string;
   defaultGuestModelId: string;
 
@@ -209,7 +214,10 @@ export function resolvePreferredModelSelectionFromArgs<
     defaultAuthedModelId: args.defaultActiveModelId,
     defaultGuestModelId: args.defaultGuestModelId,
     hasPaidAccess: args.hasPaidAccess,
+    hasUserKeyConnection: args.hasUserKeyConnection,
+    hasChatgptAuth: args.hasUserChatgptConnection,
     freeModelAllowlist: args.guestModelAllowlist,
+    surface: "web",
   });
 }
 

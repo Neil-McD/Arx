@@ -1,8 +1,8 @@
 type MutableRef<T> = { current: T };
 
 type WebSessionResetDeps = {
-  clearPersistedSupabaseSession: () => void | Promise<void>;
-  setSupabaseSession: (value: null) => void;
+  clearPersistedCloudSession: () => void | Promise<void>;
+  setCloudSession: (value: null) => void;
   setCommunities: (value: any[]) => void;
   setIsLoadingCommunities: (value: boolean) => void;
   setCommunityRoleById: (value: Record<string, string>) => void;
@@ -11,9 +11,7 @@ type WebSessionResetDeps = {
   setCommunityMessages: (value: any[]) => void;
   setCommunityMessageInput: (value: string) => void;
   setCommunityChatError: (value: string | null) => void;
-  setIsLoadingChat: (value: boolean) => void;
-  setIsLoadingMoreChat: (value: boolean) => void;
-  setCommunityChatHasMore: (value: boolean) => void;
+  resetCommunityChatDataState: () => void;
   setUnreadCount: (value: number) => void;
   setIsUserAtBottom: (value: boolean) => void;
   isUserAtBottomRef: MutableRef<boolean>;
@@ -56,6 +54,7 @@ type WebSessionResetDeps = {
   setIsSettingsBannerDragOver: (value: boolean) => void;
   setIsSettingsAvatarDragOver: (value: boolean) => void;
   setThreads: (value: any[]) => void;
+  setThreadError: (value: string | null) => void;
   setWorkspaceWantsNewChatMode: (value: boolean) => void;
   setActiveThreadId: (value: string | null) => void;
   setThreadMessages: (value: any[]) => void;
@@ -70,8 +69,8 @@ type WebSessionResetDeps = {
 };
 
 export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps): Promise<void> {
-  await deps.clearPersistedSupabaseSession();
-  deps.setSupabaseSession(null);
+  await deps.clearPersistedCloudSession();
+  deps.setCloudSession(null);
   deps.setCommunities([]);
   deps.setIsLoadingCommunities(false);
   deps.setCommunityRoleById({});
@@ -80,9 +79,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setCommunityMessages([]);
   deps.setCommunityMessageInput("");
   deps.setCommunityChatError(null);
-  deps.setIsLoadingChat(false);
-  deps.setIsLoadingMoreChat(false);
-  deps.setCommunityChatHasMore(true);
+  deps.resetCommunityChatDataState();
   deps.setUnreadCount(0);
   deps.setIsUserAtBottom(true);
   deps.isUserAtBottomRef.current = true;
@@ -117,7 +114,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setCommunitySettingsName("");
   deps.setCommunitySettingsSlug("");
   deps.setCommunitySettingsDescription("");
-  deps.setCommunitySettingsVisibility("private");
+  deps.setCommunitySettingsVisibility("unlisted");
   deps.setCommunitySettingsAvatarUrl(null);
   deps.setCommunitySettingsBannerUrl(null);
   deps.setCommunitySettingsError(null);
@@ -125,6 +122,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setIsSettingsBannerDragOver(false);
   deps.setIsSettingsAvatarDragOver(false);
   deps.setThreads([]);
+  deps.setThreadError(null);
   deps.setWorkspaceWantsNewChatMode(false);
   deps.setActiveThreadId(null);
   deps.setThreadMessages([]);

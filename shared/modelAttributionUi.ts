@@ -1,4 +1,4 @@
-import { appendInferenceSourceLabel } from "./inferenceSourceUi";
+import { appendInferenceProviderLabel } from "./inferenceSourceUi";
 import { FREE_MODEL_ALLOWLIST, FREE_MODEL_LABELS, isFreeModelId } from "./modelCatalog";
 
 type ModelToggleLike = {
@@ -51,7 +51,7 @@ export function formatModelAttributionLabel(args: FormatModelAttributionLabelArg
   const isFreeModel = isFreeModelId(modelId, args.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST);
   const modelLabel = resolveModelLabel(modelId, args.modelToggles, args.freeModelLabels);
   const source = isFreeModel ? "free" : args.inferenceSource;
-  const base = appendInferenceSourceLabel(modelLabel, source);
+  const base = appendInferenceProviderLabel(modelLabel, source);
   const fallbackSuffix = formatInferenceLaneFallbackSuffix(args.inferenceLaneFallbacks ?? null);
   return `${base}${fallbackSuffix}`;
 }

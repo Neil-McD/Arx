@@ -68,16 +68,16 @@ export class TauriDesktopShellClient implements DesktopShellClient {
     return invoke<string | null>("get_approval_mode_cmd");
   }
 
-  async getSupabaseSession(): Promise<string | null> {
-    return invoke<string | null>("get_supabase_session_cmd");
+  async getCloudSession(): Promise<string | null> {
+    return invoke<string | null>("get_cloud_session_cmd");
   }
 
-  async setSupabaseSession(session_json: string): Promise<void> {
-    await invoke("set_supabase_session_cmd", { sessionJson: session_json });
+  async setCloudSession(session_json: string): Promise<void> {
+    await invoke("set_cloud_session_cmd", { sessionJson: session_json });
   }
 
-  async clearSupabaseSession(): Promise<void> {
-    await invoke("clear_supabase_session_cmd");
+  async clearCloudSession(): Promise<void> {
+    await invoke("clear_cloud_session_cmd");
   }
 
   async listPendingInvites(): Promise<ShellPendingInviteRecord[]> {

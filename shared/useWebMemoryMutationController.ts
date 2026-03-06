@@ -1,5 +1,12 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
+import {
+  createCloudPersonalMemoryItem,
+  deleteCloudPersonalMemoryItem,
+  updateCloudPersonalMemoryPinned,
+} from "./cloudPersonalMemoryGateway";
+import { saveCloudUserMemorySettings, saveCloudUserModelSettings } from "./cloudUserSettingsGateway";
+
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
@@ -21,10 +28,7 @@ type PersonalMemoryItem = {
 
 type UseWebMemoryMutationControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAuthUid: (session: SessionT) => string;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getCloudAuthUid: (session: SessionT) => string;
   openAuthGate: (intentInput?: unknown) => void;
   loadPersonalMemoryItems: () => Promise<void>;
 
@@ -53,25 +57,16 @@ export function useWebMemoryMutationController<SessionT>(
   const saveUserMemorySettings = useCallback(async (next: UserMemorySettings): Promise<void> => {
     const current = argsRef.current;
     const session = current.getSession();
-    const url = session ? current.getSupabaseUrl() : null;
-    if (!session || !url) return;
+    if (!session) return;
     current.setIsLoadingUserMemorySettings(true);
     try {
-      const userId = current.getSupabaseAuthUid(session);
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/user_memory_settings`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
-          body: JSON.stringify({
-            user_id: userId,
-            memory_mode: next.memory_mode,
-            remember_intent_enabled: Boolean(next.remember_intent_enabled),
-          }),
-        },
+      const userId = current.getCloudAuthUid(session);
+      await saveCloudUserMemorySettings({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        userId,
+        memoryMode: next.memory_mode,
+        rememberIntentEnabled: Boolean(next.remember_intent_enabled),
+      });
       current.setUserMemorySettings(next);
     } catch (error) {
       console.warn("Failed to save memory settings:", error);
@@ -83,25 +78,16 @@ export function useWebMemoryMutationController<SessionT>(
   const saveUserModelSettings = useCallback(async (next: UserModelSettings): Promise<void> => {
     const current = argsRef.current;
     const session = current.getSession();
-    const url = session ? current.getSupabaseUrl() : null;
-    if (!session || !url) return;
+    if (!session) return;
     current.setIsSavingUserModelSettings(true);
     current.setUserModelSettingsError(null);
     try {
-      const userId = current.getSupabaseAuthUid(session);
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/user_model_settings`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify({
-            user_id: userId,
-            system_prompt: String(next.system_prompt ?? ""),
-          }),
-        },
+      const userId = current.getCloudAuthUid(session);
+      await saveCloudUserModelSettings({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        userId,
+        systemPrompt: String(next.system_prompt ?? ""),
+      });
       current.setUserModelSettings({ system_prompt: String(next.system_prompt ?? "") });
     } catch (error) {
       current.setUserModelSettingsError(
@@ -118,26 +104,17 @@ export function useWebMemoryMutationController<SessionT>(
       const content = params.content.trim();
       if (!content) return null;
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) return null;
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,created_at,updated_at`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({
-            user_id: current.getSupabaseAuthUid(session),
-            content,
-            scope: "global",
-            scope_id: null,
-            pinned: Boolean(params.pinned),
-          }),
-        },
+      if (!session) return null;
+      const rows = (await createCloudPersonalMemoryItem({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const rows = (await response.json()) as PersonalMemoryItem[];
-      return rows[0] ?? null;
+        userId: current.getCloudAuthUid(session),
+        content,
+        scope: "global",
+        scopeId: null,
+        pinned: Boolean(params.pinned),
+        returnRepresentation: true,
+      })) as PersonalMemoryItem[] | null;
+      return rows?.[0] ?? null;
     },
     [],
   );
@@ -149,27 +126,18 @@ export function useWebMemoryMutationController<SessionT>(
     current.setPersonalMemoryError(null);
     try {
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         current.openAuthGate({ reason: "create_memory", payload: { content, pinned: Boolean(current.newPersonalMemoryPinned) } });
         return;
       }
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            user_id: current.getSupabaseAuthUid(session),
-            content,
-            scope: current.newPersonalMemoryScope,
-            scope_id: null,
-            pinned: Boolean(current.newPersonalMemoryPinned),
-          }),
-        },
+      await createCloudPersonalMemoryItem({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        userId: current.getCloudAuthUid(session),
+        content,
+        scope: current.newPersonalMemoryScope,
+        scopeId: null,
+        pinned: Boolean(current.newPersonalMemoryPinned),
+      });
       current.setNewPersonalMemoryContent("");
       current.setNewPersonalMemoryPinned(false);
       await current.loadPersonalMemoryItems();
@@ -185,24 +153,15 @@ export function useWebMemoryMutationController<SessionT>(
     current.setPersonalMemoryError(null);
     try {
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         current.openAuthGate({ reason: "toggle_memory_pinned", payload: { id: item.id, pinned: !item.pinned } });
         return;
       }
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(item.id)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            pinned: !item.pinned,
-            updated_at: new Date().toISOString(),
-          }),
-        },
+      await updateCloudPersonalMemoryPinned({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        id: item.id,
+        pinned: !item.pinned,
+      });
       await current.loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -216,17 +175,14 @@ export function useWebMemoryMutationController<SessionT>(
     current.setPersonalMemoryError(null);
     try {
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         current.openAuthGate({ reason: "delete_memory", payload: { id } });
         return;
       }
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(id)}`,
-        { method: "DELETE", headers: { Prefer: "return=minimal" } },
+      await deleteCloudPersonalMemoryItem({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        id,
+      });
       await current.loadPersonalMemoryItems();
     } catch (error) {
       const message =

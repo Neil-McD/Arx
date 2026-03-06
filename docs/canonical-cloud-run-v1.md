@@ -38,7 +38,7 @@ For cloud-agent turns:
 
 ## 4) Runtime Contract Surface
 
-Runtime endpoint: `supabase/functions/runtime_turn`
+Runtime endpoint: `/runtime/runtime_turn` (implemented in `convex/http.ts`)
 
 Contract metadata included on run events:
 
@@ -56,11 +56,6 @@ Minimum events for cloud-agent turns:
 4. `tool_call_started`
 5. `tool_call_finished`
 6. `run_completed` or `run_failed`
-
-Current transitional Daytona-only observability events are allowed while migrating:
-
-1. `daytona_probe_finished`
-2. `daytona_lane_delegated`
 
 ## 6) Lane Semantics (Target)
 
@@ -90,23 +85,18 @@ Current transitional Daytona-only observability events are allowed while migrati
 2. No parallel tool calls in one run.
 3. No desktop local harness behavior changes in this contract.
 
-## 10) Tool Policy (Current)
+## 10) Tool Policy (Current vs Target)
 
-Current canonical Daytona loop policy in this branch:
+Current implemented scope in `convex/http.ts`:
 
-1. Auto-allowed read tools:
-   - `read`
-   - `list_dir`
-   - `glob`
-   - `grep`
-   - `sha256`
-2. Approval-gated write tools:
-   - `write`
-   - `edit`
-   - `bash`
-3. Approval mode behavior:
-   - `approval_mode=agent-full` => write tools are allowed and evented as approved
-   - `approval_mode=agent` (default) => write tools are denied with `tool_approval_required`
-   - `approval_mode=read-only` => write tools are denied with `tool_denied_read_only_mode`
-4. Explicitly denied:
-   - `update_plan`
+1. For `requires_tools=true`, runtime executes a real Daytona-backed probe tool call (`bash pwd` in `workspace`) and persists full lifecycle evidence.
+2. Runner failures are fail-closed (no silent fallback when Daytona execution fails).
+3. Probe output is injected into the iterative inference loop as explicit tool-result context.
+4. Model-directed tool loop is active for cloud tool turns, with policy-evented `tool_call_requested` / `tool_call_approved|denied` / `tool_call_started` / `tool_call_finished`.
+5. Cloud tool turns use a single deterministic policy posture (auto-approved tool execution except explicit contract-denied tools like `update_plan`).
+6. Web and desktop cloud clients send the same minimal runtime turn payload shape (no cloud approval-mode branch state).
+
+Target scope (next slice, not complete yet):
+
+1. Final tool policy parity and contract freeze for all allowed cloud tools.
+2. Additional cloud guard coverage for deterministic lane + lifecycle behavior.

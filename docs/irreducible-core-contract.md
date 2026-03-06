@@ -24,7 +24,6 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
 Community nav tabs:
 
 - Chat
-- Library
 - Resources
 - Members
 - Settings

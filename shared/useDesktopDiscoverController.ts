@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { listCloudDiscoverCommunities } from "./cloudDiscoverGateway";
 import { getErrorMessage } from "./pay_first";
 
 type UseDesktopDiscoverControllerArgs = {
   isDiscoverActive: boolean;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   discoverLimit?: number;
   loadFailureMessage?: string;
 };
@@ -38,21 +36,14 @@ export function useDesktopDiscoverController<
 
   const loadDiscoverCommunities = useCallback(async () => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     setIsLoadingDiscover(true);
     setDiscoverError(null);
     try {
       const limit = Math.max(1, Math.min(200, Math.floor(current.discoverLimit ?? 60)));
-      const response = await current.fetchWithSupabasePublic(
-        `${url}/functions/v1/public_discover?limit=${limit}`,
-        { method: "GET" },
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message);
-      }
-      const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunityT[] };
+      const payload = {
+        ok: true,
+        communities: await listCloudDiscoverCommunities<DiscoverCommunityT>({ limit }),
+      } as { ok?: boolean; communities?: DiscoverCommunityT[] };
       setDiscoverCommunities(Array.isArray(payload?.communities) ? payload.communities : []);
     } catch (error) {
       setDiscoverError(getErrorMessage(error, current.loadFailureMessage ?? "Failed to load communities."));

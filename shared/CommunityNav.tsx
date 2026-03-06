@@ -1,8 +1,12 @@
 import type { CommunityTab } from "./appShellNavigation";
+import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
 type CommunityNavCommunityLike = {
   name?: string | null;
   banner_url?: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
 } | null;
 
 type CommunityNavProps = {
@@ -37,12 +41,19 @@ export function CommunityNav({
       <div className="community-nav-header">
         <div
           className={`community-nav-banner${activeCommunity?.banner_url ? " has-image" : ""}`}
-          style={
-            activeCommunity?.banner_url
-              ? { backgroundImage: `url(${activeCommunity.banner_url})` }
-              : undefined
-          }
         >
+          {activeCommunity?.banner_url ? (
+            <img
+              className="community-nav-banner-img"
+              src={activeCommunity.banner_url}
+              alt=""
+              style={getCommunityBannerImageStyle({
+                focusX: activeCommunity.banner_focus_x,
+                focusY: activeCommunity.banner_focus_y,
+                zoom: activeCommunity.banner_zoom,
+              })}
+            />
+          ) : null}
           <div className="community-nav-banner-overlay" />
           <div className="community-nav-name">{activeCommunity?.name ?? "Community"}</div>
         </div>
@@ -61,18 +72,20 @@ export function CommunityNav({
         Chat
       </button>
       <button
-        className={communityTab === "library" ? "nav-item active" : "nav-item"}
+        className={communityTab === "feed" ? "nav-item active" : "nav-item"}
         type={buttonType}
-        onClick={() => onSelectTab("library")}
-        title={maybeTitle("Library")}
+        onClick={() => onSelectTab("feed")}
+        title={maybeTitle("AI Feed")}
       >
         <span className="nav-icon">
           <svg viewBox="0 0 24 24">
-            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 23" />
-            <path d="M4 5.5V19.5" />
+            <path d="M4 7h16" />
+            <path d="M4 12h16" />
+            <path d="M4 17h10" />
+            <circle cx="17" cy="17" r="2" />
           </svg>
         </span>
-        Library
+        AI Feed
       </button>
       <button
         className={communityTab === "resources" ? "nav-item active" : "nav-item"}

@@ -4,20 +4,11 @@ import "highlight.js/styles/github-dark.css";
 import { TauriRuntimeClient } from "./runtime/arp/tauriClient";
 import type { RuntimeClient } from "./runtime/arp/client";
 import {
-  ARP_PROTOCOL_VERSION,
-  type MessageRecord as ArpMessageRecord,
-  type ProjectRecord as ArpProjectRecord,
-  type SessionResume as ArpSessionResume,
-  type ThreadRecord as ArpThreadRecord,
-  type ToolCallRecord as ArpToolCallRecord,
-  type TurnRecord as ArpTurnRecord,
-} from "./runtime/arp/types";
+  ARP_PROTOCOL_VERSION, type MessageRecord as ArpMessageRecord, type ProjectRecord as ArpProjectRecord, type SessionResume as ArpSessionResume, type ThreadRecord as ArpThreadRecord, type ToolCallRecord as ArpToolCallRecord, type TurnRecord as ArpTurnRecord, } from "./runtime/arp/types";
 import { TauriDesktopShellClient } from "./runtime/shell/tauriClient";
 import type { DesktopShellClient } from "./runtime/shell/client";
 import {
-  runPhaseReducer,
-  type AgentMode,
-} from "./features/harness/runPhase";
+  runPhaseReducer, type AgentMode, } from "./features/harness/runPhase";
 import { useStreamingState } from "./features/harness/useStreamingState";
 import { useLastClickWinsController } from "../shared/useLastClickWinsController";
 import { useCommunityChatRealtime } from "../shared/useCommunityChatRealtime";
@@ -48,47 +39,31 @@ import { useCommunityResourcesTabLifecycle } from "../shared/useCommunityResourc
 import { useCommunitySettingsAccessLifecycle } from "../shared/useCommunitySettingsAccessLifecycle";
 import { createThreadContextController } from "../shared/threadContextController";
 import {
-  type CommunityEvidenceItem,
-} from "../shared/communityEvidence";
+  buildReplyPrefix, extractTextFromContentJson, parseMessageAttachments, parseReplyPrefix, truncateReplyPreview, type CommunityMessageAttachment, } from "../shared/communityMessageParsing";
 import {
-  buildReplyPrefix,
-  extractTextFromContentJson,
-  parseMessageAttachments,
-  parseReplyPrefix,
-  truncateReplyPreview,
-  type CommunityMessageAttachment,
-} from "../shared/communityMessageParsing";
-import {
-  buildDesktopBestInviteLink,
-  formatInviteLabel,
-  normalizeInviteCode,
-} from "../shared/communityInviteLinks";
+  buildDesktopBestInviteLink, formatInviteLabel, normalizeInviteCode, } from "../shared/communityInviteLinks";
 import { isValidCommunitySlug, slugifyCommunityName } from "../shared/communitySlug";
 import {
-  MessageCopyAction,
-  MessageFooter,
-  MessageSourcesAction,
-} from "../shared/MessageFooterActions";
+  MessageCopyAction, MessageFooter, MessageSourcesAction, } from "../shared/MessageFooterActions";
 import {
-  extractInferenceLaneFallbacksFromMessageContent,
-  extractInferenceSourceFromMessageContent,
-  extractModelIdFromMessageContent,
-  formatModelAttributionLabel,
-} from "../shared/modelAttributionUi";
+  extractInferenceLaneFallbacksFromMessageContent, extractInferenceSourceFromMessageContent, extractModelIdFromMessageContent, formatModelAttributionLabel, } from "../shared/modelAttributionUi";
 import {
-  captureBrandosAidFromLocation,
-  clearPendingPurchaseClaimToken,
-  getBrandosAidForCommunitySlug,
-  listPendingPurchaseClaimsRpc,
-  readPendingPurchaseClaimToken,
-  redeemPendingPurchaseClaimsRpc,
-  redeemPurchaseClaimRpc,
-  storePendingPurchaseClaimToken,
-  type PendingPurchaseClaim
+  captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, listPendingPurchaseClaimsRpc, readPendingPurchaseClaimToken, redeemPendingPurchaseClaimsRpc, redeemPurchaseClaimRpc, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../shared/pay_first";
 import { usePendingInviteJoinController } from "../shared/usePendingInviteJoinController";
 import { usePendingPublicCommunityJoinController } from "../shared/usePendingPublicCommunityJoinController";
 import { useDesktopDiscoverController } from "../shared/useDesktopDiscoverController";
+
+import {
+  createCloudPersonalMemoryItem,
+  deleteCloudPersonalMemoryItem,
+  listCloudPersonalMemoryRowsByScopes,
+  updateCloudPersonalMemoryPinned,
+} from "../shared/cloudPersonalMemoryGateway";
+import { fetchCloudMyCommunityAccessById } from "../shared/cloudCommunityAccessGateway";
+import { listEnabledCloudModelRegistryRows } from "../shared/cloudModelRegistryGateway";
+import { listCloudCommunityMembershipRows } from "../shared/cloudCommunityMembershipGateway";
+import { loadCloudUserModelSettings, saveCloudUserModelSettings } from "../shared/cloudUserSettingsGateway";
 import {
   readProfileDraftForUser,
   writeProfileDraftForUser,
@@ -112,8 +87,12 @@ import {
   type DaytonaSandboxStatus,
 } from "../shared/daytonaSandboxStatus";
 import {
+  createDaytonaCloudProject,
+  deleteDaytonaCloudProject,
   ensureDefaultCloudProject,
   fetchMappedDaytonaCloudProjects,
+  probeDaytonaCloudProject,
+  renameDaytonaCloudProject,
 } from "../shared/daytonaCloudProjects";
 import {
   resolveThreadServiceDomain,
@@ -192,6 +171,7 @@ import {
   parseBuilderBillingReturn,
   type BuilderBillingReturn,
 } from "../shared/builderBilling";
+import { loadBuilderBillingStatusCanonical, setDevBuilderTierCanonical } from "../shared/builderBillingStatusGateway";
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import {
   copyTextToClipboard,
@@ -214,6 +194,8 @@ import {
   settingsGroupForPage,
 } from "../shared/appShellNavigation";
 import type {
+  CommunityAiFeedPost as SharedCommunityAiFeedPost,
+  CommunityAiFeedPostType as SharedCommunityAiFeedPostType,
   AnalyticsChartMode as SharedAnalyticsChartMode,
   AnalyticsPoint as SharedAnalyticsPoint,
   AnalyticsRange as SharedAnalyticsRange,
@@ -257,37 +239,27 @@ import {
 } from "../shared/imageTransforms";
 import { confirmDiscardUnsavedCommunitySettingsDesktop } from "../shared/communityUnsavedGuard";
 import {
-  decodeJwtPayload,
-  ensureSupabaseSessionForAuthenticatedSend,
-  ensureSupabaseSessionForRequest,
-  fetchWithSupabaseAuthShared,
-  fetchWithSupabasePublicShared,
-  getSupabaseAnonKey,
-  getSupabaseAuthUid,
-  getSupabaseUrl,
-  readSupabaseError,
-  refreshSupabaseSessionWithLock,
-  refreshSupabaseSession,
-  type SupabaseSession,
-} from "../shared/supabaseAuthCore";
+  decodeAuthJwtPayload as decodeJwtPayload,
+  ensureAuthSessionForAuthenticatedSend as ensureCloudSessionForAuthenticatedSend,
+  ensureAuthSessionForRequest as ensureCloudSessionForRequest,
+  fetchWithAuthShared as fetchWithCloudAuthShared,
+  fetchWithPublicShared as fetchWithCloudPublicShared,
+  getAuthPublicKey as getCloudAnonKey,
+  getAuthUid as getCloudAuthUid,
+  getAuthUrl as getCloudUrl,
+  readAuthError as readCloudError,
+  refreshAuthSessionWithLock as refreshCloudSessionWithLock,
+  refreshAuthSession as refreshCloudSession,
+  type AuthSession as CloudAuthSession,
+} from "../shared/authSessionCore";
 import {
-  beginGoogleSupabaseSignIn,
-  expireSupabaseSessionFailClosed,
-  revokeSupabaseSessionRemote,
-  SUPABASE_SESSION_EXPIRED_MESSAGE,
-} from "../shared/supabaseAuthFlow";
-import { consumeSupabaseOAuthCallback } from "../shared/supabaseOAuthCallback";
-import { clearOAuthCallbackParamsFromLocation } from "../shared/supabasePkce";
-import {
-  buildTeachMemoryText,
-  deriveTeachCandidateTitle,
-  hashTeachCandidateContent,
-  listCommunityMemoryCandidatesRpc,
-  promoteCommunityMemoryCandidateRpc,
-  proposeCommunityMemoryCandidateRpc,
-  rejectCommunityMemoryCandidateRpc,
-  type CommunityMemoryCandidateRow,
-} from "../shared/communityMemoryCandidates";
+  beginGoogleSignIn as beginGoogleCloudSignIn,
+  expireAuthSessionFailClosed as expireCloudSessionFailClosed,
+  revokeAuthSessionRemote as revokeCloudSessionRemote,
+  AUTH_SESSION_EXPIRED_MESSAGE as CLOUD_SESSION_EXPIRED_MESSAGE,
+} from "../shared/authSessionFlow";
+import { consumeOAuthCallback as consumeCloudOAuthCallback } from "../shared/authOAuthCallback";
+import { clearOAuthCallbackParamsFromLocation } from "../shared/cloudPkce";
 import { resetDesktopSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { DesktopCommunityRail } from "./components/DesktopCommunityRail";
 import { DesktopTopbar } from "./components/DesktopTopbar";
@@ -298,7 +270,6 @@ import { ThreadSidebarPanel } from "./components/ThreadSidebarPanel";
 import { ThreadSidebarSessionItem } from "./components/ThreadSidebarSessionItem";
 import { DesktopCommunityChatTab } from "./components/DesktopCommunityChatTab";
 import { DesktopModelPickerPopover } from "./components/DesktopModelPickerPopover";
-import { DesktopTeachCandidateModal } from "./components/DesktopTeachCandidateModal";
 import { DesktopSourcesUsedModal } from "./components/DesktopSourcesUsedModal";
 import { DesktopCommunitySettingsTab } from "./components/DesktopCommunitySettingsTab";
 import { DesktopCommunityAiAgentTab } from "./components/DesktopCommunityAiAgentTab";
@@ -359,8 +330,6 @@ type ToolApprovalRequestedPayload = {
   tool_call_id: string;
   tool_name: string;
   args_json: string;
-  source?: "local" | "cloud";
-  run_id?: string | null;
 };
 
 type AgentStatusPayload = {
@@ -436,25 +405,6 @@ type BuilderBillingStatus = {
   cancel_at_period_end: boolean | null;
 };
 
-type ProductState = {
-  user_id: string;
-  auth_state: string;
-  builder_tier: string;
-  builder_plan_code: string;
-  builder_plan_price_usd: number;
-  is_builder_paid: boolean;
-  max_communities: number;
-  platform_fee_bps: number;
-  has_payouts: boolean;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
-  ai_history_bytes_used: number | string;
-  ai_history_bytes_cap: number | string;
-  platform_inference_standard_used: number | string;
-  platform_inference_standard_cap: number;
-};
-
 type BuilderUpgradeContext = "builder" | "create_community";
 
 type SecretScanRedaction = {
@@ -527,30 +477,30 @@ const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("desktop");
 
 const THREAD_LANE_PREF_KEY = "arx-thread-lane-filter-v1";
 const PROJECT_EXPANDED_PREF_KEY = "arx-project-expanded-v1";
-const SUPABASE_SIGNED_OUT_INTENT_KEY = "arx_supabase_signed_out_v1";
-const SUPABASE_SIGNED_OUT_TAB_INTENT_KEY = "arx_supabase_signed_out_tab_v1";
+const CLOUD_SIGNED_OUT_INTENT_KEY = "arx_cloud_signed_out_v1";
+const CLOUD_SIGNED_OUT_TAB_INTENT_KEY = "arx_cloud_signed_out_tab_v1";
 
-function hasSupabaseSignedOutIntent(): boolean {
+function hasCloudSignedOutIntent(): boolean {
   try {
-    if (sessionStorage.getItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY) === "1") return true;
+    if (sessionStorage.getItem(CLOUD_SIGNED_OUT_TAB_INTENT_KEY) === "1") return true;
   } catch {
     // ignore
   }
   try {
-    return localStorage.getItem(SUPABASE_SIGNED_OUT_INTENT_KEY) === "1";
+    return localStorage.getItem(CLOUD_SIGNED_OUT_INTENT_KEY) === "1";
   } catch {
     return false;
   }
 }
 
-function clearSupabaseSignedOutIntent(): void {
+function clearCloudSignedOutIntent(): void {
   try {
-    sessionStorage.removeItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY);
+    sessionStorage.removeItem(CLOUD_SIGNED_OUT_TAB_INTENT_KEY);
   } catch {
     // ignore
   }
   try {
-    localStorage.removeItem(SUPABASE_SIGNED_OUT_INTENT_KEY);
+    localStorage.removeItem(CLOUD_SIGNED_OUT_INTENT_KEY);
   } catch {
     // ignore
   }
@@ -632,14 +582,8 @@ type CommunityMember = {
 };
 
 type CommunityAccess = SharedCommunityAccess;
-
-type TeachCandidateDraft = {
-  communityId: string;
-  threadId: string;
-  messageId: string;
-  turnId: string | null;
-  evidenceItems: CommunityEvidenceItem[];
-};
+type CommunityAiFeedPost = SharedCommunityAiFeedPost;
+type CommunityAiFeedPostType = SharedCommunityAiFeedPostType;
 
 type CommunityAgentDraft = SharedCommunityAgentDraft;
 
@@ -764,17 +708,18 @@ function App() {
   const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false);
   const [systemPromptError, setSystemPromptError] = useState<string | null>(null);
   // Model availability is derived from local capability checks (no remote "models list" fetch).
-			  const [supabaseSession, setSupabaseSession] = useState<SupabaseSession | null>(null);
-  const profileStorageUserId = (supabaseSession?.user?.id ?? "").trim() || null;
+			  const [cloudSession, setCloudSession] = useState<CloudAuthSession | null>(null);
+  const cloudSessionArg = { session: cloudSession } as const;
+  const profileStorageUserId = (cloudSession?.user?.id ?? "").trim() || null;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
     [profileStorageUserId],
   );
-		  const supabaseSessionRef = useRef<SupabaseSession | null>(null);
-		  const supabaseAutoRefreshTimeoutRef = useRef<number | null>(null);
+		  const cloudSessionRef = useRef<CloudAuthSession | null>(null);
+		  const cloudAutoRefreshTimeoutRef = useRef<number | null>(null);
 		  const autoJoinInvitesAttemptedRef = useRef<Set<string>>(new Set());
 		  const autoJoinPublicCommunitiesAttemptedRef = useRef<Set<string>>(new Set());
-		  const supabaseRefreshInFlightRef = useRef<Promise<SupabaseSession | null> | null>(null);
+		  const cloudRefreshInFlightRef = useRef<Promise<CloudAuthSession | null> | null>(null);
 		  const authSessionEpochRef = useRef(0);
 		  const [authError, setAuthError] = useState<string | null>(null);
       const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaim[]>([]);
@@ -816,8 +761,8 @@ function App() {
   // Keep ref + state aligned so authenticated sends and refresh logic observe
   // the same session truth across hooks/controllers.
   useEffect(() => {
-    supabaseSessionRef.current = supabaseSession;
-  }, [supabaseSession]);
+    cloudSessionRef.current = cloudSession;
+  }, [cloudSession]);
 
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
@@ -1075,7 +1020,6 @@ function App() {
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
   const [showResourceModal, setShowResourceModal] = useState(false);
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
-  const [selectedLibraryResourceId, setSelectedLibraryResourceId] = useState<string | null>(null);
 		  const [isLoadingResources, setIsLoadingResources] = useState(false);
       const [, setJoiningDiscoverCommunityId] = useState<string | null>(null);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
@@ -1086,16 +1030,10 @@ function App() {
   const [resourceSuccess, setResourceSuccess] = useState(false);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
-  const [teachCandidateDraft, setTeachCandidateDraft] = useState<TeachCandidateDraft | null>(null);
-  const [teachCandidateTitleInput, setTeachCandidateTitleInput] = useState("");
-  const [teachCandidateMemoryInput, setTeachCandidateMemoryInput] = useState("");
-  const [teachCandidateSubmitError, setTeachCandidateSubmitError] = useState<string | null>(null);
-  const [isSubmittingTeachCandidate, setIsSubmittingTeachCandidate] = useState(false);
-  const [communityMemoryCandidates, setCommunityMemoryCandidates] = useState<CommunityMemoryCandidateRow[]>([]);
-  const [isLoadingCommunityMemoryCandidates, setIsLoadingCommunityMemoryCandidates] = useState(false);
-  const [communityMemoryCandidatesError, setCommunityMemoryCandidatesError] = useState<string | null>(null);
-  const [reviewingCommunityMemoryCandidateId, setReviewingCommunityMemoryCandidateId] = useState<string | null>(null);
-  const [communityMemoryRejectReasonById, setCommunityMemoryRejectReasonById] = useState<Record<string, string>>({});
+  const [communityFeedDraftBody, setCommunityFeedDraftBody] = useState("");
+  const [communityFeedDraftType, setCommunityFeedDraftType] = useState<CommunityAiFeedPostType>("observation");
+  const [communityFeedByCommunityId, setCommunityFeedByCommunityId] = useState<Record<string, CommunityAiFeedPost[]>>({});
+  const [communityFeedError, setCommunityFeedError] = useState<string | null>(null);
 	  const [unreadCount, setUnreadCount] = useState(0);
 	  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
 	  const isUserAtBottomRef = useRef(true);
@@ -1167,6 +1105,7 @@ function App() {
   const [activeCloudProjectId, setActiveCloudProjectId] = useState<string | null>(null);
   const pendingCloudDraftProjectIdRef = useRef<string | null>(null);
   const [projectMenuProjectId, setProjectMenuProjectId] = useState<string | null>(null);
+  const [probingCloudProjectId, setProbingCloudProjectId] = useState<string | null>(null);
   const [projectExpandedById, setProjectExpandedById] = useState<Record<string, boolean>>(() => {
     if (typeof window === "undefined") return {};
     try {
@@ -1228,14 +1167,11 @@ function App() {
     loadOlderCommunityChat,
     resetCommunityChatDataState,
   } = useCommunityChatDataController<
-    SupabaseSession,
+    CloudAuthSession,
     MessageAttachment,
     CommunityChatMessage,
     MessageReaction
   >({
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     extractTextFromContentJson,
     parseMessageAttachments,
     pageSize: COMMUNITY_CHAT_PAGE_SIZE,
@@ -1266,7 +1202,7 @@ function App() {
     setUnreadCount,
     loadMoreThresholdPx: COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX,
     canLoadOlder: Boolean(
-      supabaseSession
+      cloudSession
       && activeCommunityId
       && communityTab === "chat"
       && communityChatHasMore
@@ -1281,16 +1217,14 @@ function App() {
   capturePrependAnchorRef.current = capturePrependAnchor;
   clearPendingPrependAnchorRef.current = clearPendingPrependAnchor;
   loadOlderFromScrollRef.current = () => {
-    if (!supabaseSession || !activeCommunityId) return;
-    void loadOlderCommunityChat(activeCommunityId, supabaseSession);
+    if (!cloudSession || !activeCommunityId) return;
+    void loadOlderCommunityChat(activeCommunityId, cloudSession);
   };
 
   const { communityTypingUserIds, maybeBroadcastCommunityTyping } = useCommunityChatRealtime({
     isEnabled: activePage === "community" && communityTab === "chat",
-    supabaseSession,
+    session: cloudSession,
     activeCommunityId,
-    getSupabaseUrl,
-    getSupabaseAnonKey,
     ensureCommunityChatThread,
     toCommunityChatMessage,
     communityMessageIdsRef,
@@ -1310,13 +1244,8 @@ function App() {
     handleSendCommunityMessage,
   } = useCommunityChatMutationController({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    getSupabaseAnonKey,
-    requireAnonKey: true,
-    missingConfigMessage: "Missing Supabase config.",
+    session: cloudSession,
     missingPayloadMessage: "Message sent, but no response payload returned.",
-    fetchWithSupabaseAuth,
     ensureCommunityChatThread,
     toCommunityChatMessage,
     loadCommunityChat,
@@ -1357,11 +1286,9 @@ function App() {
     handleCreateInvite,
     handleRevokeInvite,
     handleDeleteInvite,
-  } = useCommunityInviteController<SupabaseSession, CommunityInviteRecord>({
+  } = useCommunityInviteController<CloudAuthSession, CommunityInviteRecord>({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
+    ...cloudSessionArg,
     inviteMaxUsesPreset,
     inviteMaxUsesCustom,
     inviteExpiryPreset,
@@ -1390,16 +1317,13 @@ function App() {
     handleInviteGateJoin,
     handleInviteGateDismiss,
     maybeAutoJoinPendingInvites,
-  } = usePendingInviteJoinController<SupabaseSession, PendingInviteRecord>({
+  } = usePendingInviteJoinController<CloudAuthSession, PendingInviteRecord>({
     shellClient,
-    supabaseSession,
+    ...cloudSessionArg,
     pendingInvites,
     activeInviteGateKey,
     autoJoinInvitesAttemptedRef,
-    getSupabaseUrl,
     normalizeInviteCode,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     loadCommunities,
     handleSignIn,
     onJoinSuccess: (joined) => {
@@ -1422,20 +1346,14 @@ function App() {
     filteredDiscoverCommunities,
   } = useDesktopDiscoverController<DiscoverCommunity>({
     isDiscoverActive: activePage === "discover",
-    getSupabaseUrl,
-    fetchWithSupabasePublic,
-    readSupabaseError,
   });
 
   const {
     openCommunityLandingExternal,
     maybeAutoJoinPendingPublicCommunity,
-  } = usePendingPublicCommunityJoinController<SupabaseSession>({
+  } = usePendingPublicCommunityJoinController<CloudAuthSession>({
     shellClient,
-    supabaseSession,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    ...cloudSessionArg,
     loadCommunities,
     autoJoinPublicCommunitiesAttemptedRef,
     getBrandosAidForCommunitySlug,
@@ -1451,15 +1369,10 @@ function App() {
     loadCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
-  } = useCommunityResourceController<SupabaseSession, CommunityResource>({
+  } = useCommunityResourceController<CloudAuthSession, CommunityResource>({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    getSupabaseAnonKey,
-    requireAnonKey: true,
-    missingConfigMessage: "Missing Supabase config.",
+    ...cloudSessionArg,
     parseEmbedUrl,
-    fetchWithSupabaseAuth,
     includeCommunityIdOnPatch: true,
     includeFileKeyOnSave: true,
     clearErrorWhenEditingDeleted: false,
@@ -1512,16 +1425,13 @@ function App() {
     handleSetCommunityMemberRole,
     handleRemoveCommunityMember,
   } = useCommunityAdminController<
-    SupabaseSession,
+    CloudAuthSession,
     CommunityMember,
     UserProfile,
     UserProfileDetail
   >({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    ...cloudSessionArg,
     parseContentRangeTotal,
     dateKeyLocal,
     ensureCommunityChatThread,
@@ -1529,7 +1439,7 @@ function App() {
     getMemberRefreshIncludeStatus: () => communityNavVisibility.canManageMembers,
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: loadCommunityAccess,
-    getProfileSaveSession: () => supabaseSessionRef.current ?? supabaseSession,
+    getProfileSaveSession: () => cloudSessionRef.current ?? cloudSession,
     profileName,
     profileBio,
     profileAvatarUrl,
@@ -1572,12 +1482,9 @@ function App() {
     loadCommunityAgentDrafts,
     handleSaveCommunityAgentDraft,
     handleSetLiveCommunityAgentDraft,
-  } = useCommunityAgentDraftController<SupabaseSession, CommunityAgentLanding, CommunityAgentDraft>({
+  } = useCommunityAgentDraftController<CloudAuthSession, CommunityAgentLanding, CommunityAgentDraft>({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    ...cloudSessionArg,
     communityAgentDraftName,
     communityAgentDraftLanding,
     communityAgentDraftSystemPrompt,
@@ -1632,10 +1539,7 @@ function App() {
   const {
     loadCommunityMemberSettings,
     loadCommunityPricing,
-  } = useCommunitySettingsDataController<SupabaseSession>({
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+  } = useCommunitySettingsDataController<CloudAuthSession>({
     communitySettingsLoadedCommunityIdRef,
     communityPricingDirtyRef,
     setCommunityMemberMuted,
@@ -1652,12 +1556,9 @@ function App() {
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
-  } = useCommunitySettingsGovernanceController<SupabaseSession>({
+  } = useCommunitySettingsGovernanceController<CloudAuthSession>({
     activeCommunityId,
-    supabaseSession,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    ...cloudSessionArg,
     confirmAction: (message) => window.confirm(message),
     loadCommunities,
     onLeaveCommunityLocalState: (leavingId) => {
@@ -1711,17 +1612,14 @@ function App() {
     closeDeleteCommunityModal,
     handleConfirmDeleteCommunity,
   } = useCommunityDeleteController<
-    SupabaseSession,
+    CloudAuthSession,
     CommunityRecord,
     AppPage,
     "home" | "settings",
     CommunityTab
   >({
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     loadCommunities,
     setDeleteCommunityError,
     setDeleteCommunityNameInput,
@@ -1798,12 +1696,12 @@ function App() {
       setChatgptAuthSummary,
     });
 
-  useDesktopAuthSessionLifecycle<SupabaseSession>({
-    session: supabaseSession,
-    sessionRef: supabaseSessionRef,
+  useDesktopAuthSessionLifecycle<CloudAuthSession>({
+    session: cloudSession,
+    sessionRef: cloudSessionRef,
     threadsHydratedRef,
-    refreshTimeoutRef: supabaseAutoRefreshTimeoutRef,
-    refreshLocked: refreshSupabaseSessionLocked,
+    refreshTimeoutRef: cloudAutoRefreshTimeoutRef,
+    refreshLocked: refreshCloudSessionLocked,
     onMountBootstrap: async () => {
       captureBrandosAidFromLocation();
       void loadThreads();
@@ -1819,10 +1717,10 @@ function App() {
       try {
         const oauthBootstrap = await consumeOAuthHash();
         if (oauthBootstrap !== "session_set") {
-          await loadSupabaseSession();
+          await loadCloudSession();
         }
       } catch {
-        await loadSupabaseSession();
+        await loadCloudSession();
       }
     },
     onSessionAvailable: (session) => {
@@ -1845,19 +1743,19 @@ function App() {
   });
 
   useEffect(() => {
-    if (supabaseSession) return;
+    if (cloudSession) return;
     setCloudProjects([]);
     setActiveCloudProjectId(null);
-  }, [supabaseSession]);
+  }, [cloudSession]);
 
   useEffect(() => {
-    if (!supabaseSession) return;
+    if (!cloudSession) return;
     if (threadLaneFilter !== "chat") return;
     if (activePage !== "workspace") return;
     let cancelled = false;
     const refresh = async () => {
       if (cancelled) return;
-      await loadCloudProjects(supabaseSession);
+      await loadCloudProjects(cloudSession);
     };
     void refresh();
     const intervalId = window.setInterval(() => {
@@ -1867,7 +1765,7 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activePage, supabaseSession, threadLaneFilter]);
+  }, [activePage, cloudSession, threadLaneFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2078,11 +1976,11 @@ function App() {
   }, [communities]);
 
   const desktopCloudChatThreadApi = createDesktopCloudChatThreadApi({
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    fetchWithSupabasePublic,
-    readSupabaseError,
-    getSupabaseAuthUid,
+    getCloudRuntimeBaseUrl: getCloudUrl,
+    fetchWithCloudAuth: fetchWithCloudAuth,
+    fetchWithCloudPublic: fetchWithCloudPublic,
+    readCloudError: readCloudError,
+    getCloudAuthUid: getCloudAuthUid,
     toUnixSecondsFromIso,
     getThreads: () => threads,
     setThreads,
@@ -2101,16 +1999,13 @@ function App() {
     chatgptCloudTurn: (args) => shellClient.chatgptCloudTurn(args),
   });
   const setThreadCommunityLensInCloud = createDesktopCloudLensSync({
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     toUnixSecondsFromIso,
     setThreads,
-    getCloudThreadRecord: desktopCloudChatThreadApi.getCloudThreadRecord,
+    getThreads: () => threads,
   });
 
   async function createCloudChatThread(thread: ThreadRecord): Promise<ThreadRecord | null> {
-    const session = supabaseSessionRef.current;
+    const session = cloudSessionRef.current;
     if (!session) {
       setAuthError("Sign in to create cloud chat threads.");
       await handleSignIn();
@@ -2122,7 +2017,7 @@ function App() {
   }
 
   async function deleteCloudChatThread(threadId: string): Promise<void> {
-    const session = supabaseSessionRef.current;
+    const session = cloudSessionRef.current;
     if (!session) {
       setAuthError("Sign in to manage cloud chat threads.");
       await handleSignIn();
@@ -2135,7 +2030,7 @@ function App() {
     threads,
     runtimeClient,
     getCommunityNameById,
-    getSession: () => supabaseSessionRef.current,
+    getSession: () => cloudSessionRef.current,
     listCloudChatThreads: desktopCloudChatThreadApi.listCloudChatThreads,
     getCloudThreadRecord: desktopCloudChatThreadApi.getCloudThreadRecord,
     createCloudChatThread,
@@ -2161,13 +2056,13 @@ function App() {
       const fallbackLane: ThreadLane = (() => {
         if (active) {
           const activeLane = normalizeThreadLane(active.thread_lane, active.engine_id);
-          if (activeLane === "chat" && !supabaseSessionRef.current) return "agent";
+          if (activeLane === "chat" && !cloudSessionRef.current) return "agent";
           return activeLane;
         }
-        if (threadLaneFilter === "chat") return supabaseSessionRef.current ? "chat" : "agent";
+        if (threadLaneFilter === "chat") return cloudSessionRef.current ? "chat" : "agent";
         if (threadLaneFilter === "agent") return "agent";
         if (activeProject) return "agent";
-        return supabaseSessionRef.current ? "chat" : "agent";
+        return cloudSessionRef.current ? "chat" : "agent";
       })();
       const fallbackStorageMode = storageModeForThreadLane(fallbackLane);
       console.warn(
@@ -2199,10 +2094,7 @@ function App() {
     setToolCalls,
     threads,
     resolveThreadStorageMode,
-    supabaseSessionRef,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    cloudSessionRef: cloudSessionRef,
   });
 
   useEffect(() => {
@@ -2242,37 +2134,18 @@ function App() {
     updated_at: string;
   };
 
-  async function fetchCloudPersonalMemoryItems(session: SupabaseSession): Promise<PersonalMemoryItemRecord[]> {
-    const url = getSupabaseUrl();
+  async function fetchCloudPersonalMemoryItems(session: CloudAuthSession): Promise<PersonalMemoryItemRecord[]> {
+    const url = getCloudUrl();
     if (!url) return [];
 
-    const userId = getSupabaseAuthUid(session);
+    const userId = getCloudAuthUid(session);
     const workspacePath = getEffectiveWorkspacePath();
-    const baseSelect = "id,content,scope,scope_id,pinned,created_at,updated_at";
-
-    const fetchRows = async (query: string): Promise<CloudPersonalMemoryRow[]> => {
-      const response = await fetchWithSupabaseAuth(`${url}/rest/v1/personal_memory_items?${query}`, { method: "GET" }, session);
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      return (await response.json()) as CloudPersonalMemoryRow[];
-    };
-
-    const [globalRows, workspaceRows] = await Promise.all([
-      fetchRows(
-        `select=${baseSelect}` +
-          `&user_id=eq.${encodeURIComponent(userId)}` +
-          `&scope=eq.global` +
-          `&order=pinned.desc,updated_at.desc` +
-          `&limit=200`,
-      ),
-      fetchRows(
-        `select=${baseSelect}` +
-          `&user_id=eq.${encodeURIComponent(userId)}` +
-          `&scope=eq.workspace` +
-          `&scope_id=eq.${encodeURIComponent(workspacePath)}` +
-          `&order=pinned.desc,updated_at.desc` +
-          `&limit=200`,
-      ),
-    ]);
+    const rows = await listCloudPersonalMemoryRowsByScopes({
+      session,
+      userId,
+      workspaceScopeId: workspacePath,
+      limitPerScope: 200,
+    });
 
     const toRecord = (row: CloudPersonalMemoryRow): PersonalMemoryItemRecord => ({
       id: row.id,
@@ -2285,14 +2158,14 @@ function App() {
       updated_at: toUnixSecondsFromIso(row.updated_at) ?? Math.floor(Date.now() / 1000),
     });
 
-    return [...globalRows, ...workspaceRows].map(toRecord);
+    return rows.map(toRecord);
   }
 
   async function loadPersonalMemoryItems() {
     setIsLoadingPersonalMemory(true);
     setPersonalMemoryError(null);
     try {
-      const session = supabaseSessionRef.current;
+      const session = cloudSessionRef.current;
       if (!session) {
         setPersonalMemoryItems([]);
         return;
@@ -2321,7 +2194,7 @@ function App() {
     setIsLoadingPersonalMemory(true);
     setPersonalMemoryError(null);
     try {
-      const session = supabaseSessionRef.current;
+      const session = cloudSessionRef.current;
       if (!session) {
         setPersonalMemoryItems([]);
         return;
@@ -2348,8 +2221,8 @@ function App() {
     if (!content) return;
     setPersonalMemoryError(null);
     try {
-      const session = supabaseSessionRef.current;
-      const url = session ? getSupabaseUrl() : null;
+      const session = cloudSessionRef.current;
+      const url = session ? getCloudUrl() : null;
       if (!session || !url) {
         setAuthError("Sign in to save memory.");
         await handleSignIn();
@@ -2357,22 +2230,14 @@ function App() {
       }
       const scope = newPersonalMemoryScope;
       const scopeId = scope === "workspace" ? getEffectiveWorkspacePath() : null;
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            user_id: getSupabaseAuthUid(session),
-            content,
-            scope,
-            scope_id: scopeId,
-            pinned: Boolean(newPersonalMemoryPinned),
-          }),
-        },
+      await createCloudPersonalMemoryItem({
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+        userId: getCloudAuthUid(session),
+        content,
+        scope,
+        scopeId,
+        pinned: Boolean(newPersonalMemoryPinned),
+      });
       setNewPersonalMemoryContent("");
       setNewPersonalMemoryPinned(false);
       await loadPersonalMemoryItems();
@@ -2390,26 +2255,18 @@ function App() {
   async function handleTogglePersonalMemoryPinned(item: PersonalMemoryItemRecord) {
     setPersonalMemoryError(null);
     try {
-      const session = supabaseSessionRef.current;
-      const url = session ? getSupabaseUrl() : null;
+      const session = cloudSessionRef.current;
+      const url = session ? getCloudUrl() : null;
       if (!session || !url) {
         setAuthError("Sign in to update memory.");
         await handleSignIn();
         return;
       }
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(item.id)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            pinned: item.pinned === 0,
-            updated_at: new Date().toISOString(),
-          }),
-        },
+      await updateCloudPersonalMemoryPinned({
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+        id: item.id,
+        pinned: item.pinned === 0,
+      });
       await loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -2425,19 +2282,17 @@ function App() {
   async function handleDeletePersonalMemoryItem(id: string) {
     setPersonalMemoryError(null);
     try {
-      const session = supabaseSessionRef.current;
-      const url = session ? getSupabaseUrl() : null;
+      const session = cloudSessionRef.current;
+      const url = session ? getCloudUrl() : null;
       if (!session || !url) {
         setAuthError("Sign in to delete memory.");
         await handleSignIn();
         return;
       }
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?id=eq.${encodeURIComponent(id)}`,
-        { method: "DELETE", headers: { Prefer: "return=minimal" } },
+      await deleteCloudPersonalMemoryItem({
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+        id,
+      });
       await loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -2513,7 +2368,7 @@ function App() {
   }
 
   async function exportPersonalMemoryCsv() {
-    const session = supabaseSessionRef.current;
+    const session = cloudSessionRef.current;
     if (!session) {
       setAuthError("Sign in to export.");
       await handleSignIn();
@@ -2570,42 +2425,39 @@ function App() {
       .finally(() => setIsLoadingSystemPrompt(false));
   }, [shellClient]);
 
-  async function fetchCloudSystemPrompt(session: SupabaseSession): Promise<string | null> {
-    const url = getSupabaseUrl();
+  async function fetchCloudSystemPrompt(session: CloudAuthSession): Promise<string | null> {
+    const url = getCloudUrl();
     if (!url) return null;
-    const userId = getSupabaseAuthUid(session);
-    const response = await fetchWithSupabaseAuth(
-      `${url}/rest/v1/user_model_settings?select=system_prompt&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
-      { method: "GET" },
+    const userId = getCloudAuthUid(session);
+    const row = await loadCloudUserModelSettings({
       session,
-    );
-    if (!response.ok) return null;
-    const rows = (await response.json()) as Array<{ system_prompt?: unknown }>;
-    const raw = rows[0]?.system_prompt;
+      userId,
+    });
+    const raw = row?.system_prompt;
     return typeof raw === "string" ? raw : "";
   }
 
-  async function setCloudSystemPrompt(session: SupabaseSession, prompt: string): Promise<boolean> {
-    const url = getSupabaseUrl();
+  async function setCloudSystemPrompt(session: CloudAuthSession, prompt: string): Promise<boolean> {
+    const url = getCloudUrl();
     if (!url) return false;
-    const userId = getSupabaseAuthUid(session);
-    const response = await fetchWithSupabaseAuth(
-      `${url}/rest/v1/user_model_settings`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ user_id: userId, system_prompt: prompt }),
-      },
-      session,
-    );
-    return response.ok;
+    const userId = getCloudAuthUid(session);
+    try {
+      await saveCloudUserModelSettings({
+        session,
+        userId,
+        systemPrompt: prompt,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   useEffect(() => {
-    if (!supabaseSession) return;
+    if (!cloudSession) return;
     setIsLoadingSystemPrompt(true);
     setSystemPromptError(null);
-    void fetchCloudSystemPrompt(supabaseSession)
+    void fetchCloudSystemPrompt(cloudSession)
       .then(async (prompt) => {
         if (prompt === null) return;
         setSystemPromptDraft(prompt);
@@ -2619,14 +2471,14 @@ function App() {
         setSystemPromptError(error instanceof Error ? error.message : "Failed to load system prompt");
       })
       .finally(() => setIsLoadingSystemPrompt(false));
-  }, [supabaseSession?.user?.id]);
+  }, [cloudSession?.user?.id]);
 
   async function saveSystemPrompt(prompt: string): Promise<void> {
     setIsSavingSystemPrompt(true);
     setSystemPromptError(null);
     try {
       await shellClient.setSystemPrompt(prompt);
-      const session = supabaseSessionRef.current;
+      const session = cloudSessionRef.current;
       if (session) {
         await setCloudSystemPrompt(session, prompt);
       }
@@ -2647,10 +2499,10 @@ function App() {
 
   useEffect(() => {
     void loadThreads();
-  }, [supabaseSession]);
+  }, [cloudSession]);
 
     useEffect(() => {
-      if (!supabaseSession) {
+      if (!cloudSession) {
         lastAutoRedeemPendingPurchasesUserIdRef.current = null;
         autoRedeemPendingPurchasesAttemptRef.current = 0;
         if (autoRedeemPendingPurchasesTimeoutRef.current) {
@@ -2660,7 +2512,7 @@ function App() {
         return;
       }
 
-      const userId = getSupabaseAuthUid(supabaseSession);
+      const userId = getCloudAuthUid(cloudSession);
       if (!userId) return;
       if (lastAutoRedeemPendingPurchasesUserIdRef.current === userId) return;
       lastAutoRedeemPendingPurchasesUserIdRef.current = userId;
@@ -2689,14 +2541,14 @@ function App() {
       return () => {
         cancelled = true;
       };
-    }, [supabaseSession]);
+    }, [cloudSession]);
 
     useEffect(() => {
       setIsPendingPurchasesBannerDismissed(false);
     }, [pendingPurchaseBannerKey]);
 
 	    useEffect(() => {
-	      if (supabaseSession) return;
+	      if (cloudSession) return;
 	      setPendingPurchaseClaims([]);
 	      setPendingPurchasesError(null);
 	      setPendingPurchasesSuccess(null);
@@ -2710,11 +2562,11 @@ function App() {
           window.clearTimeout(profileSaveTimeoutRef.current);
           profileSaveTimeoutRef.current = null;
         }
-	    }, [supabaseSession]);
+	    }, [cloudSession]);
 
 	    useEffect(() => {
 	      if (!builderBillingReturn) return;
-	      if (!supabaseSession) return;
+	      if (!cloudSession) return;
 	      if (builderBillingReturn.status === "cancel") return;
 
 		      let cancelled = false;
@@ -2728,7 +2580,7 @@ function App() {
 			          let lastStatus: BuilderBillingStatus | null = null;
 			          for (let attempt = 0; attempt < maxAttempts; attempt++) {
 			            if (cancelled) return;
-			            const status = await loadBuilderBillingStatus(supabaseSession);
+			            const status = await loadBuilderBillingStatus(cloudSession);
 			            lastStatus = status;
 				            const tier = status?.builder_tier ?? "free";
 				            const max = status?.max_communities ?? 0;
@@ -2747,7 +2599,7 @@ function App() {
 		            setFinalizeCreateCommunityError("Draft not found. Re-open Create community to continue.");
 		            return;
 		          }
-			          if (draft.user_id && supabaseSession.user.id && draft.user_id !== supabaseSession.user.id) {
+			          if (draft.user_id && cloudSession.user.id && draft.user_id !== cloudSession.user.id) {
 			            setFinalizeCreateCommunityError("Draft belongs to a different account. Re-open Create community to continue.");
 			            return;
 			          }
@@ -2761,7 +2613,7 @@ function App() {
 			            setFinalizeCreateCommunityError("You've reached your plan limit. Upgrade your plan to create more communities.");
 			            return;
 			          }
-			          await createCommunityFromDraft(draft, supabaseSession);
+			          await createCommunityFromDraft(draft, cloudSession);
 			        } finally {
 			          if (!cancelled) setIsFinalizingBuilderReturn(false);
 			        }
@@ -2771,20 +2623,20 @@ function App() {
 	      return () => {
 	        cancelled = true;
 	      };
-	    }, [builderBillingReturn, supabaseSession]);
+	    }, [builderBillingReturn, cloudSession]);
 
 	    useEffect(() => {
-	      if (!supabaseSession) return;
+	      if (!cloudSession) return;
 	      if (isRedeemingClaim) return;
 	      const token = readPendingPurchaseClaimToken();
       if (!token) return;
       void redeemPurchaseClaim(token);
-    }, [supabaseSession, isRedeemingClaim]);
+    }, [cloudSession, isRedeemingClaim]);
 
   useEffect(() => {
-    if (!supabaseSession || !activeCommunityId || communityTab !== "chat") return;
-    void loadCommunityChat(activeCommunityId, supabaseSession);
-  }, [supabaseSession, activeCommunityId, communityTab]);
+    if (!cloudSession || !activeCommunityId || communityTab !== "chat") return;
+    void loadCommunityChat(activeCommunityId, cloudSession);
+  }, [cloudSession, activeCommunityId, communityTab]);
 
 		  useEffect(() => {
 		    // Reset community chat UI when switching communities.
@@ -2808,10 +2660,10 @@ function App() {
 		    }
 		  }, [activeCommunityId, clearPendingPrependAnchor, resetCommunityChatDataState]);
 
-  useCommunitySettingsAccessLifecycle<SupabaseSession, CommunityRecord>({
+  useCommunitySettingsAccessLifecycle<CloudAuthSession, CommunityRecord>({
     activePage,
     communityTab,
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
     activeCommunityAccess,
     communities,
@@ -2829,27 +2681,23 @@ function App() {
     setIsLoadingCommunityAccess,
   });
 
-  useCommunityAgentLandingLifecycle<SupabaseSession>({
-    supabaseSession,
+  useCommunityAgentLandingLifecycle<CloudAuthSession>({
+    ...cloudSessionArg,
     activeCommunityId,
     canViewCommunity: communityActionGuards.canViewCommunity,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
     activeCommunityIdRef,
     activeCommunityAgentLandingCommunityIdRef,
     communityAgentLandingFetchSeqRef,
     setActiveCommunityAgentLanding,
   });
 
-  useCommunityAgentMembersLifecycle<SupabaseSession, CommunityAgentDraft>({
+  useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentDraft>({
     activePage,
     communityTab,
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
     canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
     activeCommunityOwnerIsPro,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
     setActiveCommunityOwnerIsPro,
     activeCommunityOwnerIsProLoadedCommunityIdRef,
     loadCommunityAgentDrafts,
@@ -2860,40 +2708,24 @@ function App() {
     enforceProDraftGate: false,
   });
 
-  useCommunityMembersTabLifecycle<SupabaseSession, CommunityInviteRecord, CommunityMemoryCandidateRow>({
+  useCommunityMembersTabLifecycle<CloudAuthSession, CommunityInviteRecord>({
     activePage,
     communityTab,
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
     canInviteActiveCommunity: communityActionGuards.canInvite,
-    canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
     loadCommunityInvites,
     setCommunityInvites,
-    loadCommunityMemoryCandidates,
-    setCommunityMemoryCandidates,
-    setCommunityMemoryCandidatesError,
   });
 
-  useCommunityResourcesTabLifecycle<SupabaseSession>({
+  useCommunityResourcesTabLifecycle<CloudAuthSession>({
     activePage,
     communityTab,
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
     loadCommunityResources,
     requireCommunityPage: false,
   });
-
-  useEffect(() => {
-    if (communityTab !== "library") return;
-    const pinned = communityResources.filter((resource) => Boolean(resource.pinned));
-    if (pinned.length === 0) {
-      if (selectedLibraryResourceId !== null) setSelectedLibraryResourceId(null);
-      return;
-    }
-    if (!selectedLibraryResourceId || !pinned.some((resource) => resource.id === selectedLibraryResourceId)) {
-      setSelectedLibraryResourceId(pinned[0].id);
-    }
-  }, [communityResources, communityTab, selectedLibraryResourceId]);
 
   const { handleWorkspaceScroll } = useWorkspaceAutoScroll({
     workspaceMessageListRef,
@@ -2942,7 +2774,6 @@ function App() {
       setSlashHover(null);
     }
   }, [slashState.query, slashState.filtered.length]);
-
 
   useEffect(() => {
     setUserWantsCommunity(activePage !== "workspace");
@@ -3070,7 +2901,7 @@ function App() {
       }
 
       if (newestClaimToken) {
-        const session = supabaseSessionRef.current;
+        const session = cloudSessionRef.current;
         if (session) {
           void redeemPurchaseClaim(newestClaimToken);
         } else {
@@ -3167,30 +2998,17 @@ function App() {
     }
   }
 
-  async function loadCloudProjects(session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) return;
+  async function loadCloudProjects(session: CloudAuthSession): Promise<void> {
     try {
       let next = (await fetchMappedDaytonaCloudProjects({
-        supabaseUrl: url,
         session,
-        fetchWithSupabaseAuth,
-        readSupabaseError,
-        toEpochSeconds: toUnixSecondsFromIso,
       })) as CloudProjectRecord[];
       if (next.length === 0) {
         await ensureDefaultCloudProject({
-          supabaseUrl: url,
           session,
-          fetchWithSupabaseAuth,
-          readSupabaseError,
         });
         next = (await fetchMappedDaytonaCloudProjects({
-          supabaseUrl: url,
           session,
-          fetchWithSupabaseAuth,
-          readSupabaseError,
-          toEpochSeconds: toUnixSecondsFromIso,
         })) as CloudProjectRecord[];
       }
       setCloudProjects(next);
@@ -3245,17 +3063,13 @@ function App() {
     }
   }
 
-  async function loadModelRegistry(session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
+  async function loadModelRegistry(session: CloudAuthSession): Promise<void> {
+    const url = getCloudUrl();
     if (!url) return;
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/model_registry?select=id,provider,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
-        { method: "GET" },
+      const rows = await listEnabledCloudModelRegistryRows({
         session,
-      );
-      if (!response.ok) return;
-      const rows = await response.json();
+      });
       const parsed = parseModelRegistryRows(rows, {
         isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "desktop"),
       });
@@ -3313,8 +3127,8 @@ function App() {
     const providerId = providerIdForModelId(modelId);
     if (!providerId) return false;
     if (hasKeyForProvider(providerId)) return true;
-    if (!userAccessPolicy.allowPlatformInference || !supabaseSession) return false;
-    return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
+    if (!userAccessPolicy.allowPlatformInference || !cloudSession) return false;
+    return Boolean(getCloudUrl());
   }
 
   async function loadExecPolicyRules() {
@@ -3353,24 +3167,25 @@ function App() {
     }
   }
 
-  async function loadSupabaseSession() {
-    if (hasSupabaseSignedOutIntent()) return;
+  async function loadCloudSession() {
+    if (hasCloudSignedOutIntent()) return;
     // Desktop auth session persistence invariant:
     // secure-store only (via shellClient), never localStorage fallback.
     let stored: string | null = null;
     try {
-      stored = await shellClient.getSupabaseSession();
+      stored = await shellClient.getCloudSession();
     } catch {
       stored = null;
     }
 
     if (!stored) return;
     try {
-      const parsed = JSON.parse(stored) as SupabaseSession;
-      const supabaseUrl = (getSupabaseUrl() ?? "").trim();
-      if (supabaseUrl) {
+      const parsed = JSON.parse(stored) as CloudAuthSession;
+      const cloudBaseUrl = (getCloudUrl() ?? "").trim();
+      const configuredIssuer = String(import.meta.env.VITE_AUTH_JWT_ISSUER ?? "").trim();
+      if (cloudBaseUrl) {
         try {
-          const parsedUrl = new URL(supabaseUrl);
+          const parsedUrl = new URL(cloudBaseUrl);
           const configuredHost = (parsedUrl.hostname ?? "").trim().toLowerCase();
           const configuredProjectRef = (configuredHost.split(".")[0] ?? "").trim().toLowerCase();
           if (configuredProjectRef) {
@@ -3380,16 +3195,23 @@ function App() {
                 ? String((payload as Record<string, unknown>).ref).trim().toLowerCase()
                 : "";
             if (payloadRef && payloadRef !== configuredProjectRef) {
-              await shellClient.clearSupabaseSession();
+              await shellClient.clearCloudSession();
               return;
             }
             const payloadIss =
               payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).iss === "string"
                 ? String((payload as Record<string, unknown>).iss).trim().toLowerCase()
                 : "";
-            if (payloadIss && !payloadIss.includes(`${configuredProjectRef}.supabase.co`)) {
-              await shellClient.clearSupabaseSession();
-              return;
+            if (payloadIss && configuredIssuer) {
+              try {
+                const issuerHost = new URL(configuredIssuer).hostname.trim().toLowerCase();
+                if (issuerHost && !payloadIss.includes(issuerHost)) {
+                  await shellClient.clearCloudSession();
+                  return;
+                }
+              } catch {
+                // Ignore invalid issuer URL and continue with refresh check below.
+              }
             }
           }
         } catch {
@@ -3398,18 +3220,18 @@ function App() {
       }
       const refreshed = await ensureFreshSession(parsed);
       if (!refreshed) {
-        await shellClient.clearSupabaseSession();
+        await shellClient.clearCloudSession();
         return;
       }
-      setSupabaseSession(refreshed);
+      setCloudSession(refreshed);
       try {
-        await shellClient.setSupabaseSession(JSON.stringify(refreshed));
+        await shellClient.setCloudSession(JSON.stringify(refreshed));
       } catch {
         // If secure-store write fails, keep session in memory only.
       }
     } catch {
       try {
-        await shellClient.clearSupabaseSession();
+        await shellClient.clearCloudSession();
       } catch {
         // ignore
       }
@@ -3425,326 +3247,132 @@ function App() {
     if (trimmed && /^https?:\/\//i.test(trimmed)) {
       return trimmed;
     }
-
-    // Dev-friendly fallback: if a Supabase project URL is configured, use the project's
-    // Edge Functions domain as the share base URL.
-    const supabaseUrl = ((import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "").trim();
-    if (!supabaseUrl) return null;
-    try {
-      const parsed = new URL(supabaseUrl);
-      const host = parsed.hostname.toLowerCase();
-      if (!host.endsWith(".supabase.co")) return null;
-      const projectRef = host.split(".")[0];
-      if (!projectRef) return null;
-      return `${parsed.protocol}//${projectRef}.functions.supabase.co`;
-    } catch {
-      return null;
-    }
+    return null;
   }
 
-  async function ensureFreshSession(session: SupabaseSession): Promise<SupabaseSession | null> {
-    return await ensureSupabaseSessionForRequest(session, refreshSupabaseSessionLocked);
+  async function ensureFreshSession(session: CloudAuthSession): Promise<CloudAuthSession | null> {
+    return await ensureCloudSessionForRequest(session, refreshCloudSessionLocked);
   }
 
-  async function ensureAuthenticatedSendSession(session: SupabaseSession): Promise<SupabaseSession | null> {
-    return await ensureSupabaseSessionForAuthenticatedSend({
+  async function ensureAuthenticatedSendSession(session: CloudAuthSession): Promise<CloudAuthSession | null> {
+    return await ensureCloudSessionForAuthenticatedSend({
       session,
-      sessionRef: supabaseSessionRef,
-      refreshLocked: refreshSupabaseSessionLocked,
+      sessionRef: cloudSessionRef,
+      refreshLocked: refreshCloudSessionLocked,
     });
   }
 
-  async function persistSupabaseSession(session: SupabaseSession) {
+  async function persistCloudSession(session: CloudAuthSession) {
     try {
-      await shellClient.setSupabaseSession(JSON.stringify(session));
+      await shellClient.setCloudSession(JSON.stringify(session));
     } catch {
       // Fail closed to in-memory session only. Do not persist auth session in localStorage.
     }
   }
 
-  async function clearPersistedSupabaseSession() {
+  async function clearPersistedCloudSession() {
     try {
-      sessionStorage.setItem(SUPABASE_SIGNED_OUT_TAB_INTENT_KEY, "1");
+      sessionStorage.setItem(CLOUD_SIGNED_OUT_TAB_INTENT_KEY, "1");
     } catch {
       // ignore
     }
     try {
-      localStorage.setItem(SUPABASE_SIGNED_OUT_INTENT_KEY, "1");
+      localStorage.setItem(CLOUD_SIGNED_OUT_INTENT_KEY, "1");
     } catch {
       // ignore
     }
     try {
-      await shellClient.clearSupabaseSession();
+      await shellClient.clearCloudSession();
     } catch {
       // ignore
     }
   }
 
-  async function refreshSupabaseSessionLocked(refreshToken: string): Promise<SupabaseSession | null> {
-    if (!supabaseSessionRef.current) return null;
+  async function refreshCloudSessionLocked(refreshToken: string): Promise<CloudAuthSession | null> {
+    if (!cloudSessionRef.current) return null;
     const epochAtRefreshStart = authSessionEpochRef.current;
-    return await refreshSupabaseSessionWithLock({
+    return await refreshCloudSessionWithLock({
       refreshToken,
-      inFlightRef: supabaseRefreshInFlightRef,
-      refreshSession: refreshSupabaseSession,
+      inFlightRef: cloudRefreshInFlightRef,
+      refreshSession: refreshCloudSession,
       onRefreshed: async (refreshed) => {
         if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
-        setSupabaseSession(refreshed);
-        supabaseSessionRef.current = refreshed;
-        await persistSupabaseSession(refreshed);
+        setCloudSession(refreshed);
+        cloudSessionRef.current = refreshed;
+        await persistCloudSession(refreshed);
       },
     });
   }
 
-  async function fetchWithSupabaseAuth(
+  async function fetchWithCloudAuth(
     url: string,
     init: RequestInit,
-    session: SupabaseSession,
+    session: CloudAuthSession,
   ): Promise<Response> {
-    return await fetchWithSupabaseAuthShared({
+    return await fetchWithCloudAuthShared({
       url,
       init,
       session,
-      sessionRef: supabaseSessionRef,
-      refreshLocked: refreshSupabaseSessionLocked,
+      sessionRef: cloudSessionRef,
+      refreshLocked: refreshCloudSessionLocked,
       onSessionExpired: async () => {
-        await expireSupabaseSessionFailClosed({
-          clearPersistedSupabaseSession,
-          setSupabaseSession,
-          sessionRef: supabaseSessionRef,
+        await expireCloudSessionFailClosed({
+          clearPersistedCloudSession: clearPersistedCloudSession,
+          setCloudSession,
+          sessionRef: cloudSessionRef,
           onExpired: () => {
-            setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
+            setAuthError(CLOUD_SESSION_EXPIRED_MESSAGE);
           },
         });
       },
-      sessionExpiredMessage: SUPABASE_SESSION_EXPIRED_MESSAGE,
+      sessionExpiredMessage: CLOUD_SESSION_EXPIRED_MESSAGE,
     });
   }
 
-  async function fetchWithSupabasePublic(url: string, init: RequestInit = {}): Promise<Response> {
-    return await fetchWithSupabasePublicShared(url, init);
+  async function fetchWithCloudPublic(url: string, init: RequestInit = {}): Promise<Response> {
+    return await fetchWithCloudPublicShared(url, init);
   }
 
-  async function loadCommunityMemoryCandidates(communityId: string, session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setIsLoadingCommunityMemoryCandidates(true);
-    setCommunityMemoryCandidatesError(null);
-    try {
-      const fresh = await ensureFreshSession(session);
-      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
-      const rows = await listCommunityMemoryCandidatesRpc({
-        url,
-        session: fresh,
-        communityId,
-        limit: 100,
-        fetchWithSupabaseAuth,
-        readSupabaseError,
-      });
-      setCommunityMemoryCandidates(rows);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load memory candidates.";
-      setCommunityMemoryCandidates([]);
-      setCommunityMemoryCandidatesError(message);
-    } finally {
-      setIsLoadingCommunityMemoryCandidates(false);
-    }
-  }
-
-  function closeTeachCandidateModal(): void {
-    if (isSubmittingTeachCandidate) return;
-    setTeachCandidateDraft(null);
-    setTeachCandidateTitleInput("");
-    setTeachCandidateMemoryInput("");
-    setTeachCandidateSubmitError(null);
-  }
-
-  async function handleSubmitTeachCommunityCandidate(): Promise<void> {
-    if (!teachCandidateDraft || isSubmittingTeachCandidate) return;
-
-    const memoryText = buildTeachMemoryText(teachCandidateMemoryInput);
-    if (!memoryText) {
-      setTeachCandidateSubmitError("Memory text is required.");
+  function handlePublishCommunityFeedPost(): void {
+    const body = communityFeedDraftBody.trim();
+    if (!body) return;
+    if (!activeCommunityId) {
+      setCommunityFeedError("Select a community first.");
       return;
     }
-    const resolvedTitleInput = teachCandidateTitleInput.trim();
-    const resolvedTitle =
-      resolvedTitleInput.length > 0
-        ? resolvedTitleInput.slice(0, 160)
-        : deriveTeachCandidateTitle(memoryText);
-    const draft = teachCandidateDraft;
-    setIsSubmittingTeachCandidate(true);
-    setTeachCandidateSubmitError(null);
-    try {
-      const session = supabaseSessionRef.current ?? supabaseSession;
-      if (!session) {
-        throw new Error("Sign in to teach community memory.");
-      }
-      const fresh = await ensureFreshSession(session);
-      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
-      const url = getSupabaseUrl();
-      if (!url) throw new Error("Missing Supabase URL.");
-
-      const requestHash = await hashTeachCandidateContent(`${resolvedTitle ?? ""}\n${memoryText}`);
-      const requestKey = `teach:${draft.threadId}:${draft.messageId}:${requestHash}`;
-      const evidencePayload = {
-        v: 1,
-        contract_id: "community_evidence_used_v1",
-        source_thread_id: draft.threadId,
-        source_message_id: draft.messageId,
-        source_turn_id: draft.turnId,
-        items: draft.evidenceItems.map((item) => ({
-          source_type: item.source_type,
-          source_id: (item.internal_source_id ?? item.source_id ?? "").trim(),
-          title: item.title,
-          snippet: item.snippet,
-          url: item.url,
-          score: item.score,
-          rank: item.rank,
-        })),
-      };
-
-      const row = await proposeCommunityMemoryCandidateRpc({
-        url,
-        session: fresh,
-        communityId: draft.communityId,
-        title: resolvedTitle,
-        memoryText,
-        evidence: evidencePayload,
-        requestKey,
-        fetchWithSupabaseAuth,
-        readSupabaseError,
-      });
-      const routerState = (row.router_state ?? "queued").trim().toLowerCase();
-      const routerReason = (row.router_reason ?? "").trim();
-      const promotedMemoryId = (row.promoted_memory_id ?? null) ? String(row.promoted_memory_id) : null;
-
-      if (routerState === "rejected") {
-        const reason = routerReason ? `Candidate rejected (${routerReason}).` : "Candidate rejected.";
-        setTeachCandidateSubmitError(reason);
-        setMemoryToast(reason);
-        return;
-      }
-
-      setTeachCandidateDraft(null);
-      setTeachCandidateTitleInput("");
-      setTeachCandidateMemoryInput("");
-      setTeachCandidateSubmitError(null);
-
-      if (promotedMemoryId) {
-        setMemoryToast("Community learned from this answer (auto-promoted).");
-      } else if (routerState === "needs_review" || routerState === "queued") {
-        setMemoryToast("Memory candidate submitted for community review.");
-      } else {
-        setMemoryToast("Memory candidate submitted.");
-      }
-
-      if (
-        activePage === "community" &&
-        communityTab === "members" &&
-        canManageMembersActiveCommunity &&
-        activeCommunityId === draft.communityId
-      ) {
-        void loadCommunityMemoryCandidates(draft.communityId, fresh);
-      }
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to teach community memory.";
-      setTeachCandidateSubmitError(message);
-      setMemoryToast(message);
-    } finally {
-      setIsSubmittingTeachCandidate(false);
+    if (!cloudSession) {
+      setCommunityFeedError("Sign in to publish.");
+      return;
     }
-  }
-
-  async function handlePromoteCommunityMemoryCandidate(candidateId: string): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
-    if (!session || !activeCommunityId) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setReviewingCommunityMemoryCandidateId(candidateId);
-    setCommunityMemoryCandidatesError(null);
-    try {
-      const fresh = await ensureFreshSession(session);
-      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
-      await promoteCommunityMemoryCandidateRpc({
-        url,
-        session: fresh,
-        candidateId,
-        title: null,
-        fetchWithSupabaseAuth,
-        readSupabaseError,
-      });
-      setMemoryToast("Candidate promoted to community memory.");
-      await loadCommunityMemoryCandidates(activeCommunityId, fresh);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to promote memory candidate.";
-      setCommunityMemoryCandidatesError(message);
-    } finally {
-      setReviewingCommunityMemoryCandidateId(null);
+    if (!canPostMessagesActiveCommunity) {
+      setCommunityFeedError("You don't have permission to publish here.");
+      return;
     }
-  }
 
-  async function handleRejectCommunityMemoryCandidate(candidateId: string, reason: string | null): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
-    if (!session || !activeCommunityId) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
-    setReviewingCommunityMemoryCandidateId(candidateId);
-    setCommunityMemoryCandidatesError(null);
-    try {
-      const fresh = await ensureFreshSession(session);
-      if (!fresh) throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
-      await rejectCommunityMemoryCandidateRpc({
-        url,
-        session: fresh,
-        candidateId,
-        reason,
-        fetchWithSupabaseAuth,
-        readSupabaseError,
-      });
-      setMemoryToast("Candidate rejected.");
-      setCommunityMemoryRejectReasonById((prev) => {
-        if (!(candidateId in prev)) return prev;
-        const next = { ...prev };
-        delete next[candidateId];
-        return next;
-      });
-      await loadCommunityMemoryCandidates(activeCommunityId, fresh);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to reject memory candidate.";
-      setCommunityMemoryCandidatesError(message);
-    } finally {
-      setReviewingCommunityMemoryCandidateId(null);
-    }
+    const post: CommunityAiFeedPost = {
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      community_id: activeCommunityId,
+      author_label: "Agent",
+      post_type: communityFeedDraftType,
+      body,
+      created_at: new Date().toISOString(),
+      pending: true,
+    };
+    setCommunityFeedByCommunityId((prev) => ({
+      ...prev,
+      [activeCommunityId]: [post, ...(prev[activeCommunityId] ?? [])],
+    }));
+    setCommunityFeedDraftBody("");
+    setCommunityFeedError(null);
   }
 
   async function redeemPurchaseClaim(token: string): Promise<void> {
     const trimmed = token.trim();
     if (!trimmed) return;
 
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
+    const session = cloudSessionRef.current;
+    const url = session ? getCloudUrl() : null;
     if (!session || !url) {
       storePendingPurchaseClaimToken(trimmed);
       setAuthError("Sign in to claim access.");
@@ -3756,11 +3384,8 @@ function App() {
     setRedeemClaimError(null);
     try {
       const communityId = await redeemPurchaseClaimRpc({
-        url,
         session,
         token: trimmed,
-        fetchWithSupabaseAuth,
-        readSupabaseError
       });
       clearPendingPurchaseClaimToken();
 
@@ -3779,17 +3404,14 @@ function App() {
     }
   }
 
-  async function loadPendingPurchaseClaims(session: SupabaseSession): Promise<void> {
-    const url = getSupabaseUrl();
+  async function loadPendingPurchaseClaims(session: CloudAuthSession): Promise<void> {
+    const url = getCloudUrl();
     if (!url) return;
     setIsLoadingPendingPurchases(true);
     setPendingPurchasesError(null);
     try {
       const rows = await listPendingPurchaseClaimsRpc({
-        url,
         session,
-        fetchWithSupabaseAuth,
-        readSupabaseError
       });
       setPendingPurchaseClaims(rows);
     } catch (error) {
@@ -3806,39 +3428,13 @@ function App() {
     }
   }
 
-	  async function loadBuilderBillingStatus(session: SupabaseSession): Promise<BuilderBillingStatus | null> {
-	    const url = getSupabaseUrl();
-	    if (!url) return null;
+	  async function loadBuilderBillingStatus(session: CloudAuthSession): Promise<BuilderBillingStatus | null> {
 	    setIsLoadingBuilderBilling(true);
 	    setBuilderBillingError(null);
 	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/rpc/get_my_product_state`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        },
-        session,
-	      );
-	      if (!response.ok) throw new Error(await readSupabaseError(response));
-	      const rows = (await response.json()) as ProductState[];
-	      const product = rows[0] ?? null;
-	      const row: BuilderBillingStatus | null = product
-	        ? {
-	            user_id: product.user_id,
-	            builder_tier: product.builder_tier,
-	            max_communities: Number(product.max_communities ?? 0),
-	            platform_fee_bps: Number(product.platform_fee_bps ?? 0),
-	            has_payouts: Boolean(product.has_payouts),
-	            subscription_status: product.subscription_status ?? null,
-	            current_period_end: product.current_period_end ?? null,
-	            cancel_at_period_end:
-	              product.cancel_at_period_end === null || product.cancel_at_period_end === undefined
-	                ? null
-	                : Boolean(product.cancel_at_period_end),
-	          }
-	        : null;
+	      const row = await loadBuilderBillingStatusCanonical({
+	        session,
+	      });
 	      setBuilderBillingStatus(row);
 	      return row;
 	    } catch (error) {
@@ -3857,26 +3453,15 @@ function App() {
 	  }
 
   async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
+    const session = cloudSessionRef.current ?? cloudSession;
     if (!session || !canUseDevTierOverride) return;
-    const url = getSupabaseUrl();
-    if (!url) {
-      setDevBuilderTierError("Missing Supabase URL.");
-      return;
-    }
     setIsSettingDevBuilderTier(true);
     setDevBuilderTierError(null);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/dev_set_my_builder_tier`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_builder_tier: tier }),
-        },
-        session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+	      await setDevBuilderTierCanonical({
+	        session,
+	        tier,
+	      });
       await loadBuilderBillingStatus(session);
     } catch (error) {
       const message =
@@ -3909,10 +3494,7 @@ function App() {
 
   const { startBuilderPlanCheckout, openBuilderBillingPortal, startConnectOnboarding } =
     useDesktopBuilderBillingActions({
-      getSession: () => supabaseSessionRef.current,
-      getSupabaseUrl,
-      fetchWithSupabaseAuth,
-      readSupabaseError,
+      getSession: () => cloudSessionRef.current,
       getPublicAppBaseUrl: getPublicShareBaseUrl,
       openExternalUrl,
       requireSignIn: async (message) => {
@@ -3934,15 +3516,11 @@ function App() {
     handleCreateCommunityBannerUpload,
     handleCreateBannerDrop,
     handleCreateAvatarDrop,
-  } = useCommunityCreateController<SupabaseSession, CommunityRecord, BuilderBillingStatus>({
-    supabaseSession,
+  } = useCommunityCreateController<CloudAuthSession, CommunityRecord, BuilderBillingStatus>({
+    ...cloudSessionArg,
     builderBillingStatus,
     communities,
     communityRoleById,
-    getSupabaseUrl,
-    getSupabaseAnonKey,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     loadBuilderBillingStatus,
     openBuilderBillingPortal,
     onStartUpgradeFlow: () => {
@@ -4004,8 +3582,8 @@ function App() {
   });
 
   async function redeemPendingPurchases(opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> {
-    const session = supabaseSessionRef.current;
-    const url = session ? getSupabaseUrl() : null;
+    const session = cloudSessionRef.current;
+    const url = session ? getCloudUrl() : null;
     if (!session || !url) {
       setAuthError("Sign in to claim access.");
       await handleSignIn();
@@ -4019,10 +3597,7 @@ function App() {
     setPendingPurchasesSuccess(null);
     try {
       const rows = await redeemPendingPurchaseClaimsRpc({
-        url,
         session,
-        fetchWithSupabaseAuth,
-        readSupabaseError
       });
       const claimedCommunityId = rows[0]?.community_id ?? null;
       if (rows.length === 0) {
@@ -4057,17 +3632,17 @@ function App() {
   }
 
   async function consumeOAuthHash(): Promise<"none" | "session_set" | "callback_error"> {
-    if (hasSupabaseSignedOutIntent()) {
+    if (hasCloudSignedOutIntent()) {
       clearOAuthCallbackParamsFromLocation();
       return "none";
     }
-    return await consumeSupabaseOAuthCallback({
+    return await consumeCloudOAuthCallback({
       onAuthError: (message) => {
         setAuthError(message);
       },
-      persistSession: persistSupabaseSession,
+      persistSession: persistCloudSession,
       onSessionSet: (session) => {
-        setSupabaseSession(session);
+        setCloudSession(session);
         setAuthError(null);
         setActivePage("workspace");
         setActiveView("home");
@@ -4081,8 +3656,8 @@ function App() {
 
   async function handleSignIn() {
     setAuthError(null);
-    clearSupabaseSignedOutIntent();
-    const result = await beginGoogleSupabaseSignIn();
+    clearCloudSignedOutIntent();
+    const result = await beginGoogleCloudSignIn();
     if (!result.ok) {
       setAuthError(result.error);
       return;
@@ -4091,122 +3666,87 @@ function App() {
   }
 
   async function handleSignOut() {
-    const accessToken = (supabaseSessionRef.current?.access_token ?? supabaseSession?.access_token ?? "").trim();
+    const accessToken = (cloudSessionRef.current?.access_token ?? cloudSession?.access_token ?? "").trim();
     authSessionEpochRef.current += 1;
     setAuthError(null);
-    supabaseSessionRef.current = null;
-    setSupabaseSession(null);
+    cloudSessionRef.current = null;
+    setCloudSession(null);
     await resetDesktopSessionStateAfterSignOut({
-      clearPersistedSupabaseSession,
-      setSupabaseSession,
+      clearPersistedCloudSession: clearPersistedCloudSession,
+      setCloudSession,
       setCommunities,
       setActiveCommunityId,
       navStackRef,
     });
     if (accessToken) {
-      void revokeSupabaseSessionRemote(accessToken);
+      void revokeCloudSessionRemote(accessToken);
     }
   }
 
-	  async function loadCommunities(session: SupabaseSession) {
-	    const url = getSupabaseUrl();
-	    if (!url) return;
-	    setCommunitiesLoadError(null);
-	    let response: Response;
-	    const userId = getSupabaseAuthUid(session);
-	    try {
-	      response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/community_memberships?select=community_id,role,communities(id,slug,name,owner_id,description,avatar_url,banner_url,visibility,created_at,updated_at)&user_id=eq.${userId}`,
-	        {},
-	        session
-	      );
-	    } catch {
-	      setCommunitiesLoadError("Failed to reach Supabase.");
-	      return;
-	    }
-	    if (!response.ok) {
-	      const message = await readSupabaseError(response);
-	      // Common during migrations: PostgREST schema cache lags and rejects new columns.
-	      // Retry with a minimal select so communities still appear.
-	      try {
-	        const fallback = await fetchWithSupabaseAuth(
-	          `${url}/rest/v1/community_memberships?select=community_id,role,communities(id,slug,name,owner_id,created_at)&user_id=eq.${userId}`,
-	          {},
-	          session
-	        );
-	        if (!fallback.ok) {
-	          setCommunitiesLoadError(message);
-	          return;
-	        }
-	        const rows = (await fallback.json()) as {
-	          community_id: string;
-	          role: string;
-	          communities: CommunityRecord;
-	        }[];
-	        const roles: Record<string, string> = {};
-	        const list = rows
-	          .map((row) => {
-	            roles[row.community_id] = row.role;
-	            return row.communities;
-	          })
-	          .filter((item): item is CommunityRecord => Boolean(item));
-	        setCommunities(list);
-	        setCommunityRoleById(roles);
-	        setCommunitiesLoadError(`Community fields are still updating. ${message}`);
-	        if (!activeCommunityId) {
-	          if (list.length > 0) setActiveCommunityId(list[0].id);
-	          return;
-	        }
-	        if (!list.some((item) => item.id === activeCommunityId) && list.length > 0) {
-	          setActiveCommunityId(list[0].id);
-	        }
-	        return;
-	      } catch {
-	        setCommunitiesLoadError(message);
-	        return;
-	      }
-	    }
+		  async function loadCommunities(session: CloudAuthSession) {
+		    const url = getCloudUrl();
+		    if (!url) return;
+		    setCommunitiesLoadError(null);
+		    const userId = getCloudAuthUid(session);
+		    const applyMembershipRows = (
+		      rows: Array<{ community_id: string; role: string; communities: CommunityRecord }>,
+		    ): void => {
+		      const roles: Record<string, string> = {};
+		      const list = rows
+		        .map((row) => {
+		          roles[row.community_id] = row.role;
+		          return row.communities;
+		        })
+		        .filter((item): item is CommunityRecord => Boolean(item));
+		      setCommunities(list);
+		      setCommunityRoleById(roles);
+		      if (!activeCommunityId) {
+		        if (list.length > 0) setActiveCommunityId(list[0].id);
+		        return;
+		      }
+		      if (!list.some((item) => item.id === activeCommunityId) && list.length > 0) {
+		        setActiveCommunityId(list[0].id);
+		      }
+		    };
 
-	    const rows = (await response.json()) as {
-	      community_id: string;
-	      role: string;
-	      communities: CommunityRecord;
-	    }[];
-	    const roles: Record<string, string> = {};
-	    const list = rows
-	      .map((row) => {
-	        roles[row.community_id] = row.role;
-	        return row.communities;
-	      })
-	      .filter((item): item is CommunityRecord => Boolean(item));
-	    setCommunities(list);
-	    setCommunityRoleById(roles);
-	    if (!activeCommunityId) {
-	      if (list.length > 0) setActiveCommunityId(list[0].id);
-	      return;
-	    }
-	    if (!list.some((item) => item.id === activeCommunityId) && list.length > 0) {
-	      setActiveCommunityId(list[0].id);
-	    }
-	  }
+		    try {
+		      const rows = await listCloudCommunityMembershipRows<CloudAuthSession, CommunityRecord>({
+		        session,
+		        userId,
+		        selectMode: "full",
+		      });
+		      applyMembershipRows(rows);
+		      return;
+		    } catch (error) {
+		      const message = error instanceof Error ? error.message : "Failed to reach Cloud.";
+		      // Common during migrations: PostgREST schema cache lags and rejects new columns.
+		      // Retry with a minimal select so communities still appear.
+		      try {
+		        const fallbackRows = await listCloudCommunityMembershipRows<CloudAuthSession, CommunityRecord>({
+		          session,
+		          userId,
+		          selectMode: "minimal",
+		        });
+		        applyMembershipRows(fallbackRows);
+		        setCommunitiesLoadError(`Community fields are still updating. ${message}`);
+		        return;
+		      } catch {
+		        setCommunitiesLoadError(message);
+		        return;
+		      }
+		    }
+		  }
 
-  async function loadCommunityAccess(communityId: string, session: SupabaseSession) {
-	    const url = getSupabaseUrl();
+  async function loadCommunityAccess(communityId: string, session: CloudAuthSession) {
+	    const url = getCloudUrl();
 	    if (!url) return;
 	    setIsLoadingCommunityAccess(true);
 	    try {
-	      const response = await fetchWithSupabaseAuth(
-	        `${url}/rest/v1/rpc/get_my_community_access`,
-	        {
-	          method: "POST",
-	          headers: { "Content-Type": "application/json" },
-	          body: JSON.stringify({ p_community_id: communityId })
-	        },
-	        session
-	      );
-	      if (!response.ok) return;
-	      const rows = (await response.json()) as CommunityAccess[];
-	      setActiveCommunityAccess(rows[0] ?? null);
+        const row = await fetchCloudMyCommunityAccessById<CloudAuthSession, CommunityAccess>({
+          session,
+          communityId,
+        });
+	      setActiveCommunityAccess(row ?? null);
 	    } catch {
 	      // ignore
 	    } finally {
@@ -4344,26 +3884,23 @@ function App() {
       const canUseDevTierOverride = useMemo(
         () =>
           canUseCreatorDevTierOverride({
-            email: supabaseSession?.user?.email ?? null,
+            email: cloudSession?.user?.email ?? null,
             isDev: import.meta.env.DEV,
             featureFlag: import.meta.env.VITE_ENABLE_DEV_TIER_OVERRIDE,
           }),
-        [supabaseSession?.user?.email],
+        [cloudSession?.user?.email],
       );
 		  const userAccessPolicy = useMemo(
 		    () =>
 		      resolveUserAccessPolicy({
 		        surface: "desktop",
-		        authState: supabaseSession ? "authenticated" : "anonymous",
+		        authState: cloudSession ? "authenticated" : "anonymous",
 		        builderTier: builderBillingStatus?.builder_tier ?? null,
             hasDesktopChatgptAuth: Boolean(chatgptAuthSummary),
-            useCanonicalGates: String(import.meta.env.VITE_ARX_CANONICAL_GATES_V1 ?? "").trim() === "1",
-            enableCanonicalGateParityLog:
-              String(import.meta.env.VITE_ARX_CANONICAL_GATES_PARITY_LOG ?? "").trim() === "1",
 		      }),
-		    [supabaseSession, builderBillingStatus?.builder_tier, chatgptAuthSummary],
+		    [cloudSession, builderBillingStatus?.builder_tier, chatgptAuthSummary],
 		  );
-		  const hasPaidAccess = userAccessPolicy.allowPlatformInference && Boolean(supabaseSession);
+		  const hasPaidAccess = userAccessPolicy.allowPlatformInference && Boolean(cloudSession);
       const forceShowDesktopChatgptRateLimitCardPreview = (() => {
         if (typeof window === "undefined") return false;
         try {
@@ -4419,7 +3956,7 @@ function App() {
 		    freeModelLabels: DESKTOP_FREE_MODEL_LABELS,
 		    premiumModelCatalog: DESKTOP_PREMIUM_MODEL_CATALOG,
 		    hasPaidAccess,
-		    hasSupabaseSession: Boolean(supabaseSession),
+		    hasCloudSession: Boolean(cloudSession),
 		    hasChatgptAuth: Boolean(chatgptAuthSummary),
 		    handleSignIn,
 		    openBuilderUpgrade: () => {
@@ -4462,10 +3999,8 @@ function App() {
           handleVoiceInputClick,
         } = useDesktopVoiceInputController({
           shellClient,
-          supabaseSession,
-          supabaseSessionRef,
-          fetchWithSupabaseAuth,
-          fetchWithSupabasePublic,
+          session: cloudSession,
+          sessionRef: cloudSessionRef,
           handleSignIn,
           showAppToastMessage,
           normalizedBuilderTier,
@@ -4479,7 +4014,7 @@ function App() {
 
         const showEmptyThreadLandingSkeleton = Boolean(
           !activeThreadId &&
-            supabaseSession &&
+            cloudSession &&
             activeCommunityId &&
             communityActionGuards.canViewCommunity &&
             activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
@@ -4488,14 +4023,14 @@ function App() {
         const draftThreadLane = useMemo<ThreadLane>(() => {
           if (activeThread) {
             const activeLane = normalizeThreadLane(activeThread.thread_lane, activeThread.engine_id);
-            if (activeLane === "chat" && !supabaseSession) return "agent";
+            if (activeLane === "chat" && !cloudSession) return "agent";
             return activeLane;
           }
-          if (threadLaneFilter === "chat") return supabaseSession ? "chat" : "agent";
+          if (threadLaneFilter === "chat") return cloudSession ? "chat" : "agent";
           if (threadLaneFilter === "agent") return "agent";
           if (activeProject) return "agent";
-          return supabaseSession ? "chat" : "agent";
-        }, [activeProject, activeThread, supabaseSession, threadLaneFilter]);
+          return cloudSession ? "chat" : "agent";
+        }, [activeProject, activeThread, cloudSession, threadLaneFilter]);
 
         const activeProjectLabelForDraft = useMemo(() => {
           if (draftThreadLane !== "agent") return "";
@@ -4554,7 +4089,7 @@ function App() {
   useCommunityAdminAnalyticsLifecycle({
     activePage,
     communityTab,
-    supabaseSession,
+    ...cloudSessionArg,
     activeCommunityId,
     canViewActiveCommunityAnalytics,
     communityAnalyticsRange,
@@ -4562,19 +4097,6 @@ function App() {
     loadCommunityAnalytics,
     resetCommunityAnalytics,
   });
-
-	      const libraryResources = useMemo(
-	        () => communityResources.filter((resource) => Boolean(resource.pinned)),
-	        [communityResources],
-	      );
-      const selectedLibraryResource = useMemo(() => {
-        if (!selectedLibraryResourceId) return libraryResources[0] ?? null;
-        return (
-          libraryResources.find((resource) => resource.id === selectedLibraryResourceId) ??
-          libraryResources[0] ??
-          null
-        );
-      }, [libraryResources, selectedLibraryResourceId]);
   const communityMessageById = useMemo(() => {
 	    const map = new Map<string, CommunityChatMessage>();
 	    for (const message of communityMessages) {
@@ -4590,54 +4112,24 @@ function App() {
 	  useEffect(() => {
 	    communityAttachmentsRef.current = communityAttachments;
 	  }, [communityAttachments]);
-	  const pendingCommunityMemoryCandidates = useMemo(
-	    () =>
-	      communityMemoryCandidates.filter((candidate) => {
-	        const routerState = candidate.router_state.trim().toLowerCase();
-	        return routerState === "queued" || routerState === "needs_review";
-	      }),
-	    [communityMemoryCandidates],
-	  );
-		  const reviewedCommunityMemoryCandidates = useMemo(() => {
-		    const parseTimestampMs = (value: string | null | undefined): number | null => {
-		      const trimmed = (value ?? "").trim();
-		      if (!trimmed) return null;
-		      const parsed = Date.parse(trimmed);
-		      return Number.isFinite(parsed) ? parsed : null;
-		    };
-		    const reviewed = communityMemoryCandidates.filter((candidate) => {
-		      const routerState = candidate.router_state.trim().toLowerCase();
-		      return routerState !== "queued" && routerState !== "needs_review";
-		    });
-		    reviewed.sort((a, b) => {
-		      const aTs =
-		        parseTimestampMs(a.reviewed_at) ??
-		        parseTimestampMs(a.updated_at) ??
-		        parseTimestampMs(a.created_at) ??
-		        0;
-		      const bTs =
-		        parseTimestampMs(b.reviewed_at) ??
-		        parseTimestampMs(b.updated_at) ??
-		        parseTimestampMs(b.created_at) ??
-		        0;
-		      return bTs - aTs;
-		    });
-		    return reviewed;
-		  }, [communityMemoryCandidates]);
-	  const rejectedReviewedCommunityMemoryCandidates = useMemo(
-	    () =>
-	      reviewedCommunityMemoryCandidates.filter(
-	        (candidate) => candidate.router_state.trim().toLowerCase() === "rejected",
-	      ),
-	    [reviewedCommunityMemoryCandidates],
-	  );
+  const activeCommunityFeedPosts = useMemo(() => {
+    if (!activeCommunityId) return [];
+    return communityFeedByCommunityId[activeCommunityId] ?? [];
+  }, [activeCommunityId, communityFeedByCommunityId]);
+
+  useEffect(() => {
+    setCommunityFeedDraftBody("");
+    setCommunityFeedDraftType("observation");
+    setCommunityFeedError(null);
+  }, [activeCommunityId]);
+
 	  const actionablePendingInvites = useMemo(
 	    () => pendingInvites.filter((invite) => invite.status === "pending"),
 	    [pendingInvites]
 	  );
 	  const communityRailEmptyMessage = useMemo(() => {
 	    if (communities.length !== 0) return null;
-	    if (!(actionablePendingInvites.length > 0 || supabaseSession)) return null;
+	    if (!(actionablePendingInvites.length > 0 || cloudSession)) return null;
 	    if (actionablePendingInvites.length > 0) {
 	      return `Invite waiting: ${formatInviteLabel(
 	        actionablePendingInvites[0].invite_key,
@@ -4646,7 +4138,7 @@ function App() {
 	    }
 	    if (communitiesLoadError) return "Couldn't load communities. Open Settings → Community.";
 	    return "No communities yet.";
-	  }, [actionablePendingInvites, communities.length, communitiesLoadError, supabaseSession]);
+	  }, [actionablePendingInvites, communities.length, communitiesLoadError, cloudSession]);
 
 	  const inviteGateRecord = useMemo(() => {
 	    if (!activeInviteGateKey) return null;
@@ -4862,7 +4354,7 @@ function App() {
     fromCommunityId: string | null;
     communityId: string | null;
     communityName: string;
-    session: SupabaseSession | null;
+    session: CloudAuthSession | null;
     storageMode: "cloud" | "local";
     expectedContextVersion: number | null;
   };
@@ -4992,7 +4484,7 @@ function App() {
     const desiredCommunityName = desiredCommunityId
       ? (communities.find((community) => community.id === desiredCommunityId)?.name ?? desiredCommunityId)
       : "none";
-    const session = supabaseSessionRef.current;
+    const session = cloudSessionRef.current;
     if (storageMode === "cloud" && !session) {
       const message = "Sign in to switch community context for cloud chat threads.";
       setAuthError(message);
@@ -5104,18 +4596,18 @@ function App() {
 	  const displayName = useCallback((userId: string): string => {
 	    const trimmedName = profileName.trim();
 	    const trimmedUsername = profileUsername.trim();
-	    if (supabaseSession?.user.id === userId) {
+	    if (cloudSession?.user.id === userId) {
 	      if (trimmedName) return trimmedName;
 	      if (trimmedUsername) return trimmedUsername.startsWith("@") ? trimmedUsername : `@${trimmedUsername}`;
 	    }
 	    const remote = profilesByUserId[userId];
 	    const remoteName = remote?.display_name?.trim();
 	    if (remoteName) return remoteName;
-	    return shortId(userId, supabaseSession?.user.id, supabaseSession?.user.email ?? undefined);
-	  }, [profileName, profileUsername, profilesByUserId, supabaseSession?.user.id, supabaseSession?.user.email]);
+	    return shortId(userId, cloudSession?.user.id, cloudSession?.user.email ?? undefined);
+	  }, [profileName, profileUsername, profilesByUserId, cloudSession?.user.id, cloudSession?.user.email]);
 
   const isProfileDirty = useMemo(() => {
-    if (!supabaseSession) return false;
+    if (!cloudSession) return false;
     const nextName = profileName.trim();
     const nextBio = profileBio.trim();
     const nextAvatar = profileAvatarUrl ?? null;
@@ -5126,8 +4618,8 @@ function App() {
       return Boolean(nextName || nextBio || nextAvatar);
     }
     return nextName !== prevName || nextBio !== prevBio || nextAvatar !== prevAvatar;
-  }, [cloudProfile, profileAvatarUrl, profileBio, profileName, supabaseSession]);
-  const profileNeedsSave = Boolean(supabaseSession && (isProfileDirty || cloudProfile === null));
+  }, [cloudProfile, profileAvatarUrl, profileBio, profileName, cloudSession]);
+  const profileNeedsSave = Boolean(cloudSession && (isProfileDirty || cloudProfile === null));
 
   useLayoutEffect(() => {
     const nextDraft = readProfileDraftForUser(profileStorageUserId);
@@ -5138,13 +4630,13 @@ function App() {
   }, [profileStorageUserId]);
 
   useEffect(() => {
-    if (supabaseSession) return;
+    if (cloudSession) return;
     if (!profileName && !profileUsername && !profileBio && !profileAvatarUrl) return;
     setProfileName("");
     setProfileUsername("");
     setProfileBio("");
     setProfileAvatarUrl(null);
-  }, [supabaseSession, profileName, profileUsername, profileBio, profileAvatarUrl]);
+  }, [cloudSession, profileName, profileUsername, profileBio, profileAvatarUrl]);
 
   useEffect(() => {
     writeProfileDraftForUser(profileStorageUserId, {
@@ -5305,24 +4797,15 @@ function App() {
           setActiveProject(updated);
         }
       } else {
-        const session = supabaseSessionRef.current ?? supabaseSession;
+        const session = cloudSessionRef.current ?? cloudSession;
         if (!session) {
           throw new Error("Sign in to manage cloud projects.");
         }
-        const url = getSupabaseUrl();
-        if (!url) {
-          throw new Error("Missing Supabase URL.");
-        }
-        const response = await fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/rename_cloud_project`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_project_id: target.id, p_name: cleaned }),
-          },
+        await renameDaytonaCloudProject({
           session,
-        );
-        if (!response.ok) throw new Error(await readSupabaseError(response));
+          projectId: target.id,
+          name: cleaned,
+        });
         await loadCloudProjects(session);
       }
       setShowRenameProjectModal(false);
@@ -5343,7 +4826,7 @@ function App() {
   }
 
   async function handleAddCloudProject(): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
+    const session = cloudSessionRef.current ?? cloudSession;
     if (!session) {
       setAuthError("Sign in to manage cloud projects.");
       void handleSignIn();
@@ -5364,7 +4847,7 @@ function App() {
   }
 
   async function handleConfirmCreateCloudProject(): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
+    const session = cloudSessionRef.current ?? cloudSession;
     if (!session) {
       setCreateCloudProjectError("Sign in to manage cloud projects.");
       setAuthError("Sign in to manage cloud projects.");
@@ -5378,64 +4861,14 @@ function App() {
       return;
     }
     const description = createCloudProjectDescription.trim() || null;
-    const url = getSupabaseUrl();
-    if (!url) {
-      setCreateCloudProjectError("Missing Supabase URL.");
-      return;
-    }
     setIsCreatingCloudProject(true);
     setCreateCloudProjectError(null);
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/create_cloud_project`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_name: cleaned, p_slug: null, p_description: description }),
-        },
+      const createdProject = await createDaytonaCloudProject({
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
-      const payload = (await response.json()) as unknown;
-      const rows = Array.isArray(payload) ? payload : [payload];
-      let createdProject: CloudProjectRecord | null = null;
-      for (const row of rows) {
-        if (!row || typeof row !== "object") continue;
-        const id = String((row as Record<string, unknown>).id ?? "").trim();
-        if (!id) continue;
-        const slugRaw = (row as Record<string, unknown>).slug;
-        const slug = typeof slugRaw === "string" ? slugRaw.trim() || null : null;
-        const statusRaw = (row as Record<string, unknown>).status;
-        const createdAtRaw = (row as Record<string, unknown>).created_at;
-        const updatedAtRaw = (row as Record<string, unknown>).updated_at;
-        createdProject = {
-          id,
-          name:
-            typeof (row as Record<string, unknown>).name === "string"
-              ? String((row as Record<string, unknown>).name)
-              : cleaned,
-          description:
-            typeof (row as Record<string, unknown>).description === "string"
-              ? String((row as Record<string, unknown>).description)
-              : description,
-          slug,
-          status:
-            typeof statusRaw === "string" && statusRaw.trim()
-              ? statusRaw.trim().toLowerCase()
-              : "active",
-          sandbox_status: null,
-          created_at:
-            typeof createdAtRaw === "string"
-              ? (toUnixSecondsFromIso(createdAtRaw) ?? Math.floor(Date.now() / 1000))
-              : Math.floor(Date.now() / 1000),
-          updated_at:
-            typeof updatedAtRaw === "string"
-              ? (toUnixSecondsFromIso(updatedAtRaw) ?? Math.floor(Date.now() / 1000))
-              : Math.floor(Date.now() / 1000),
-          root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
-        };
-        break;
-      }
+        name: cleaned,
+        description,
+      });
       if (createdProject) {
         setCloudProjects((prev) => {
           const merged = [createdProject!, ...prev.filter((project) => project.id !== createdProject!.id)];
@@ -5473,7 +4906,7 @@ function App() {
   }
 
   async function handleRemoveCloudProject(project: CloudProjectRecord): Promise<void> {
-    const session = supabaseSessionRef.current ?? supabaseSession;
+    const session = cloudSessionRef.current ?? cloudSession;
     if (!session) {
       setAuthError("Sign in to manage cloud projects.");
       void handleSignIn();
@@ -5489,22 +4922,12 @@ function App() {
       `Delete cloud project "${label}"?\n\nIts threads will move to General.`,
     );
     if (!shouldRemove) return;
-    const url = getSupabaseUrl();
-    if (!url) {
-      setMemoryToast("Missing Supabase URL.");
-      return;
-    }
     try {
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/delete_cloud_project`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_project_id: project.id, p_force: true }),
-        },
+      await deleteDaytonaCloudProject({
         session,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+        projectId: project.id,
+        force: true,
+      });
       await Promise.all([loadCloudProjects(session), loadThreads()]);
       setMemoryToast(`Deleted cloud project: ${label}`);
     } catch (error) {
@@ -5515,6 +4938,53 @@ function App() {
             ? error.message
             : "Failed to remove cloud project.";
       setMemoryToast(message);
+    }
+  }
+
+  async function handleProbeCloudProject(project: CloudProjectRecord): Promise<void> {
+    const session = cloudSessionRef.current ?? cloudSession;
+    if (!session) {
+      setAuthError("Sign in to manage cloud projects.");
+      void handleSignIn();
+      return;
+    }
+    setProjectMenuProjectId(null);
+    const label = (project.name ?? "").trim() || project.root_path;
+    setProbingCloudProjectId(project.id);
+    try {
+      const payload = (await probeDaytonaCloudProject({
+        session,
+        projectId: project.id,
+      })) as {
+        sandbox?: { status?: string | null };
+        probe?: { stdout_preview?: string | null };
+      };
+      await loadCloudProjects(session);
+      const status = String(payload?.sandbox?.status ?? "").trim().toLowerCase();
+      const firstOutputLine = String(payload?.probe?.stdout_preview ?? "")
+        .trim()
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0);
+      const details = [
+        status ? status : null,
+        firstOutputLine ? firstOutputLine.slice(0, 80) : null,
+      ].filter(Boolean);
+      setMemoryToast(
+        details.length > 0
+          ? `Sandbox probe ok: ${label} (${details.join(" · ")})`
+          : `Sandbox probe ok: ${label}`,
+      );
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to probe sandbox.";
+      setMemoryToast(message);
+    } finally {
+      setProbingCloudProjectId((current) => (current === project.id ? null : current));
     }
   }
 
@@ -5557,14 +5027,11 @@ function App() {
     runtimeClient,
     setSlashPanel,
     setAgentMode,
-    getSession: () => supabaseSessionRef.current,
-    getSupabaseUrl,
+    getSession: () => cloudSessionRef.current,
     setAuthError,
     handleSignIn,
-    fetchWithSupabaseAuth,
-    getSupabaseAuthUid,
+    getCloudAuthUid,
     getEffectiveWorkspacePath,
-    readSupabaseError,
     setActiveView,
     setSettingsPage,
     setPersonalMemoryQuery,
@@ -5577,7 +5044,7 @@ function App() {
   });
 
   const ensureThreadReadyForDesktopSend = useCallback(
-    async (threadId: string, session: SupabaseSession | null): Promise<boolean> => {
+    async (threadId: string, session: CloudAuthSession | null): Promise<boolean> => {
       const service = resolveThreadServiceForThreadId(threadId);
       if (service.storageMode === "cloud" && !session) {
         const message = "Sign in to send cloud chat messages.";
@@ -5593,7 +5060,7 @@ function App() {
 
   const lastCloudStatusRefreshAtRef = useRef(0);
   const refreshCloudProjectStatuses = useCallback(() => {
-    const session = supabaseSessionRef.current;
+    const session = cloudSessionRef.current;
     if (!session) return;
     const now = Date.now();
     if (now - lastCloudStatusRefreshAtRef.current < 1000) return;
@@ -5603,7 +5070,7 @@ function App() {
 
   useEffect(() => {
     if (activePage !== "workspace") return;
-    if (!supabaseSession) return;
+    if (!cloudSession) return;
     if (threadLaneFilter !== "chat") return;
     let cancelled = false;
     const refresh = () => {
@@ -5616,12 +5083,12 @@ function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activePage, refreshCloudProjectStatuses, supabaseSession, threadLaneFilter]);
+  }, [activePage, refreshCloudProjectStatuses, cloudSession, threadLaneFilter]);
 
   const { handleSendMessage } = useDesktopSendMessageFlow<
     ThreadRecord,
     MessageRecord,
-    SupabaseSession | null
+    CloudAuthSession | null
   >({
     commandInput,
     attachments,
@@ -5631,7 +5098,7 @@ function App() {
     autoScrollEnabledRef,
     dispatchRunPhase,
     ensureThreadId,
-    getSession: () => supabaseSessionRef.current,
+    getSession: () => cloudSessionRef.current,
     ensureWorkspaceThreadLensBeforeSend,
     traceThreadContext: (event, payload) =>
       traceThreadContext(event, {
@@ -5657,8 +5124,8 @@ function App() {
       }
       const fresh = await ensureAuthenticatedSendSession(session);
       if (!fresh) {
-        setAuthError(SUPABASE_SESSION_EXPIRED_MESSAGE);
-        throw new Error(SUPABASE_SESSION_EXPIRED_MESSAGE);
+        setAuthError(CLOUD_SESSION_EXPIRED_MESSAGE);
+        throw new Error(CLOUD_SESSION_EXPIRED_MESSAGE);
       }
       return fresh;
     },
@@ -5668,22 +5135,11 @@ function App() {
     streamingContentRef,
     streamingTokensRef,
     streamingMetaRef,
-    getSupabaseUrl,
-    getSupabaseAnonKey,
+    getCloudRuntimeBaseUrl: getCloudUrl,
+    getCloudPublishableKey: getCloudAnonKey,
     setMemoryToast,
     setAgentStatus,
     setRunningTools,
-    onCloudToolApprovalRequested: (payload) => {
-      setIsToolApprovalSubmitting(false);
-      setPendingToolApproval({
-        session_id: payload.session_id,
-        tool_call_id: payload.tool_call_id,
-        tool_name: payload.tool_name,
-        args_json: payload.args_json,
-        source: "cloud",
-        run_id: payload.run_id,
-      });
-    },
     onCloudRunLifecycleEvent: () => {
       refreshCloudProjectStatuses();
     },
@@ -5693,7 +5149,6 @@ function App() {
       return {
         selectedModelId,
         hasChatgptAuth: Boolean(chatgptAuthSummary),
-        approvalMode,
       };
     },
   });
@@ -5712,23 +5167,6 @@ function App() {
     pendingToolApproval,
     setPendingToolApproval,
     setIsToolApprovalSubmitting,
-    resolveCloudToolApproval: async ({ pending, approved }) => {
-      const session = supabaseSessionRef.current;
-      if (!session) {
-        throw new Error("Sign in to approve cloud tool calls.");
-      }
-      const runId = String(pending.run_id ?? "").trim();
-      if (!runId) {
-        throw new Error("Missing run id for cloud tool approval.");
-      }
-      await desktopCloudChatThreadApi.decideCloudToolCall({
-        run_id: runId,
-        tool_call_id: pending.tool_call_id,
-        approved,
-        note: null,
-        session,
-      });
-    },
     onApprovalResolved: () => {
       dispatchRunPhase({ type: "approval_resolved" });
     },
@@ -6010,7 +5448,7 @@ function App() {
   };
   const handleTopbarNewThread = () => {
     pendingCloudDraftProjectIdRef.current = null;
-    if (threadLaneFilter === "chat" && !supabaseSession) {
+    if (threadLaneFilter === "chat" && !cloudSession) {
       setThreadLaneFilter("agent");
       showAppToastMessage("Cloud chat requires sign-in. Started a local agent thread instead.");
     }
@@ -6110,8 +5548,9 @@ function App() {
 			                  projectMenuProjectId,
 		                  generalThreads: laneGeneralThreads,
 					                  agentThreadsCount: agentThreads.length,
-					                  chatThreadsCount: chatThreads.length,
-			                      showChatSignInPrompt: !supabaseSession,
+			                  chatThreadsCount: chatThreads.length,
+			                      showChatSignInPrompt: !cloudSession,
+                        probingProjectId: threadLaneFilter === "chat" ? probingCloudProjectId : null,
 					                }}
 						                actions={{
 			                  onThreadLaneFilterChange: setThreadLaneFilter,
@@ -6131,6 +5570,10 @@ function App() {
 		                    threadLaneFilter === "agent"
 		                      ? handleRenameProject(project as ProjectRecord)
 		                      : handleRenameCloudProject(project as CloudProjectRecord),
+		                  onProbeProject:
+		                    threadLaneFilter === "agent"
+		                      ? undefined
+		                      : (project) => handleProbeCloudProject(project as CloudProjectRecord),
 		                  onRemoveProject: (project) =>
 		                    threadLaneFilter === "agent"
 		                      ? handleRemoveProject(project as ProjectRecord)
@@ -6220,7 +5663,7 @@ function App() {
               </div>
             );
 	          })()}
-	        {supabaseSession && (
+	        {cloudSession && (
               <BuilderUpgradeModal
                 isOpen={isBuilderUpgradeOpen}
                 builderUpgradeContext={builderUpgradeContext}
@@ -6479,9 +5922,9 @@ function App() {
 			                  const tier = builderBillingStatus?.builder_tier ?? "unknown";
 			                  const max = builderBillingStatus?.max_communities ?? 0;
 			                  const ownedCount = Object.values(communityRoleById).filter((role) => role === "owner").length;
-			                  const needsPlan = Boolean(supabaseSession && isBuilderTierFree(tier));
-			                  const limitReached = Boolean(supabaseSession && !isBuilderTierFree(tier) && max > 0 && ownedCount >= max);
-	                  if (!supabaseSession) {
+			                  const needsPlan = Boolean(cloudSession && isBuilderTierFree(tier));
+			                  const limitReached = Boolean(cloudSession && !isBuilderTierFree(tier) && max > 0 && ownedCount >= max);
+	                  if (!cloudSession) {
 	                    return (
 	                      <button className="create-community-primary" onClick={() => void handleSignIn()}>
 	                        Sign in to create
@@ -6676,7 +6119,7 @@ function App() {
                   </div>
                   <div className="invite-gate-code">{inviteGateRecord.invite_key}</div>
                   <div className="invite-gate-desc">
-                    {supabaseSession
+                    {cloudSession
                       ? "Join this community now."
                       : "Sign in to join this community."}
                   </div>
@@ -6696,17 +6139,6 @@ function App() {
 	            </div>
 	          </div>
 	        )}
-        <DesktopTeachCandidateModal
-          draft={teachCandidateDraft}
-          titleInput={teachCandidateTitleInput}
-          memoryInput={teachCandidateMemoryInput}
-          submitError={teachCandidateSubmitError}
-          isSubmitting={isSubmittingTeachCandidate}
-          onClose={closeTeachCandidateModal}
-          onSubmit={handleSubmitTeachCommunityCandidate}
-          onChangeTitle={setTeachCandidateTitleInput}
-          onChangeMemory={setTeachCandidateMemoryInput}
-        />
         <DesktopSourcesUsedModal
           sourcesUsed={sourcesUsed}
           onClose={() => setSourcesUsed({ open: false })}
@@ -6721,7 +6153,7 @@ function App() {
                     Profile
                   </div>
                   <div className="settings-section-desc">
-                    {supabaseSession
+                    {cloudSession
                       ? "Profile details shown in communities. Save to sync across devices."
                       : "Sign in to set your profile details."}
                   </div>
@@ -6735,7 +6167,7 @@ function App() {
                       onDragLeave={() => setIsProfileAvatarDragOver(false)}
                       onDrop={handleProfileAvatarDrop}
                     >
-                      {supabaseSession && profileAvatarUrl ? (
+                      {cloudSession && profileAvatarUrl ? (
                         <img src={profileAvatarUrl} alt="Profile avatar" />
                       ) : (
                         <span className="profile-avatar-placeholder" aria-hidden="true">
@@ -6747,7 +6179,7 @@ function App() {
                       )}
                     </div>
                     <div className="profile-avatar-actions">
-                      {supabaseSession ? (
+                      {cloudSession ? (
                         <label className="create-avatar-btn">
                           Upload photo
                           <input
@@ -6763,7 +6195,7 @@ function App() {
                           Sign in to upload
                         </button>
                       )}
-                      {supabaseSession && profileAvatarUrl && (
+                      {cloudSession && profileAvatarUrl && (
                         <button
                           className="create-avatar-remove"
                           type="button"
@@ -6778,23 +6210,23 @@ function App() {
                     <input
                       type="text"
                       placeholder="Name"
-                      value={supabaseSession ? profileName : ""}
-                      disabled={!supabaseSession}
+                      value={cloudSession ? profileName : ""}
+                      disabled={!cloudSession}
                       onChange={(event) => setProfileName(event.target.value)}
                     />
                     <input
                       type="text"
                       placeholder="Username"
-                      value={supabaseSession ? profileUsername : ""}
-                      disabled={!supabaseSession}
+                      value={cloudSession ? profileUsername : ""}
+                      disabled={!cloudSession}
                       onChange={(event) => setProfileUsername(event.target.value)}
                     />
                   </div>
                   <textarea
                     className="profile-bio"
                     placeholder="Bio"
-                    value={supabaseSession ? profileBio : ""}
-                    disabled={!supabaseSession}
+                    value={cloudSession ? profileBio : ""}
+                    disabled={!cloudSession}
                     onChange={(event) => setProfileBio(event.target.value)}
                     rows={3}
                   />
@@ -6802,7 +6234,7 @@ function App() {
                     <div className="account-identity">
                       <span>Sync</span>
                       <strong>
-                        {supabaseSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
+                        {cloudSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
                       </strong>
                     </div>
                     <div className="auth-actions">
@@ -6810,7 +6242,7 @@ function App() {
                         className={profileNeedsSave ? "profile-save-btn needs-save" : "profile-save-btn synced"}
                         type="button"
                         onClick={() => void saveProfileToCloud()}
-                        disabled={!supabaseSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
+                        disabled={!cloudSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
                       >
                         {isSavingProfile ? "Saving…" : "Save"}
                       </button>
@@ -6828,12 +6260,12 @@ function App() {
                   <div className="settings-section-desc">
                     Sign in to join communities and sync your profile.
                   </div>
-                  {supabaseSession ? (
+                  {cloudSession ? (
                     <div className="account-row">
                       <div className="account-identity">
                         <span>Signed in as</span>
                         <strong>
-                          {supabaseSession.user.email ?? supabaseSession.user.id}
+                          {cloudSession.user.email ?? cloudSession.user.id}
                         </strong>
                       </div>
                       <button className="secondary" onClick={() => void handleSignOut()}>
@@ -6856,7 +6288,7 @@ function App() {
                   {authError && <div className="key-error">{authError}</div>}
                 </div>
 
-                {supabaseSession && (
+                {cloudSession && (
                   <div className="settings-section">
                     {(() => {
                       const status = builderBillingStatus;
@@ -6942,7 +6374,7 @@ function App() {
                   </div>
                 )}
 
-                {supabaseSession && (
+                {cloudSession && (
                   <div className="settings-section">
                     <div className="settings-section-title">
                       <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -7008,7 +6440,7 @@ function App() {
                   </div>
                 )}
 
-	                {supabaseSession &&
+	                {cloudSession &&
 	                  (isLoadingPendingPurchases ||
 	                    pendingPurchaseClaims.length > 0 ||
 	                    pendingPurchasesError ||
@@ -7054,7 +6486,7 @@ function App() {
                         <button
                           className="secondary"
                           type="button"
-                          onClick={() => supabaseSession && void loadPendingPurchaseClaims(supabaseSession)}
+                          onClick={() => cloudSession && void loadPendingPurchaseClaims(cloudSession)}
                           disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
                         >
                           Refresh
@@ -7232,7 +6664,7 @@ function App() {
 	                  {(() => {
 	                    const tier = builderBillingStatus?.builder_tier ?? "free";
 	                    const hasPersonalMemoryAccess = hasBuilderTierPaidAccess(tier);
-	                    if (!supabaseSession) return null;
+	                    if (!cloudSession) return null;
                     if (!hasPersonalMemoryAccess) {
                       return (
                         <div className="settings-section">
@@ -7530,12 +6962,12 @@ function App() {
               combinedFeed.length === 0 &&
               !isSending &&
               (Boolean(messageLoadErrorForActiveThread) ||
-                (activeThread?.storage_mode === "cloud" && !supabaseSession)) && (
+                (activeThread?.storage_mode === "cloud" && !cloudSession)) && (
               <div className="message-item system">
                 <div className="message-text">
                   {messageLoadErrorForActiveThread
                     ? `Couldn't load thread messages: ${messageLoadErrorForActiveThread}`
-                    : activeThread?.storage_mode === "cloud" && !supabaseSession
+                    : activeThread?.storage_mode === "cloud" && !cloudSession
                       ? "This is a cloud chat thread. Sign in to load messages, or switch to a local agent thread."
                       : null}
                 </div>
@@ -8021,9 +7453,7 @@ function App() {
             })()}
 	            {pendingToolApproval && (() => {
 	              const formatted = formatToolApproval(pendingToolApproval.tool_name, pendingToolApproval.args_json);
-                const canApproveForSession =
-                  pendingToolApproval.source !== "cloud" &&
-                  canEnableWriteEditSessionApproval(pendingToolApproval.tool_name);
+                const canApproveForSession = canEnableWriteEditSessionApproval(pendingToolApproval.tool_name);
 	              return (
 	                <div className="tool-approval-card">
                   <div className="tool-approval-header">
@@ -8345,7 +7775,7 @@ function App() {
 	                      {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
 	                        <div className="discover-empty">
 	                          <div className="discover-empty-title">
-	                            {supabaseSession ? "No communities yet." : "No public communities yet."}
+	                            {cloudSession ? "No communities yet." : "No public communities yet."}
 	                          </div>
 	                          <div className="discover-empty-text">Start one to make discovery meaningful.</div>
 	                          <button className="discover-empty-btn" onClick={openCreateCommunityModal}>
@@ -8409,7 +7839,7 @@ function App() {
             )}
 	            <DesktopCommunityChatTab
                 showChat={activePage === "community" && communityTab === "chat"}
-                supabaseSession={supabaseSession}
+                session={cloudSession}
                 activeCommunity={activeCommunity}
                 isLoadingChat={isLoadingChat}
                 communityMessages={communityMessages}
@@ -8473,7 +7903,7 @@ function App() {
               <DesktopCommunitySettingsTab
                 showSettings={activePage === "community" && communityTab === "settings"}
                 activeCommunity={activeCommunity}
-                hasSession={Boolean(supabaseSession)}
+                hasSession={Boolean(cloudSession)}
                 canViewSettings={canViewActiveCommunitySettings}
                 canManageMembers={canManageMembersActiveCommunity}
                 isActiveCommunityOwner={isActiveCommunityOwner}
@@ -8532,7 +7962,7 @@ function App() {
               <DesktopCommunityAiAgentTab
                 showAiAgent={activePage === "community" && communityTab === "ai_agent"}
                 activeCommunity={activeCommunity}
-                supabaseSession={supabaseSession}
+                session={cloudSession}
                 canManageMembersActiveCommunity={canManageMembersActiveCommunity}
                 isLoadingCommunityAgentDrafts={isLoadingCommunityAgentDrafts}
                 communityAgentDraftsError={communityAgentDraftsError}
@@ -8560,14 +7990,33 @@ function App() {
               />
 
             <DesktopCommunitySecondaryTabs
+              showFeed={activePage === "community" && communityTab === "feed"}
               showAnalytics={activePage === "community" && communityTab === "analytics"}
-              showLibrary={activePage === "community" && communityTab === "library"}
               showResources={activePage === "community" && communityTab === "resources"}
               showMembers={activePage === "community" && communityTab === "members"}
+              feedPanelProps={{
+                capabilities: {
+                  hasActiveCommunity: Boolean(activeCommunity),
+                  hasSession: Boolean(cloudSession),
+                  canPost: canPostMessagesActiveCommunity,
+                  activeCommunityName: activeCommunity?.name ?? null,
+                },
+                state: {
+                  posts: activeCommunityFeedPosts,
+                  draftBody: communityFeedDraftBody,
+                  draftType: communityFeedDraftType,
+                  error: communityFeedError,
+                },
+                actions: {
+                  setDraftBody: setCommunityFeedDraftBody,
+                  setDraftType: setCommunityFeedDraftType,
+                  publish: handlePublishCommunityFeedPost,
+                },
+              }}
               analyticsPanelProps={{
                 capabilities: {
                   hasActiveCommunity: Boolean(activeCommunity),
-                  hasSession: Boolean(supabaseSession),
+                  hasSession: Boolean(cloudSession),
                   canViewActiveCommunityAnalytics,
                 },
                 state: {
@@ -8584,20 +8033,6 @@ function App() {
                 actions: {
                   setCommunityAnalyticsRange,
                   setCommunityAnalyticsChartMode,
-                },
-              }}
-              libraryPanelProps={{
-                capabilities: {
-                  hasActiveCommunity: Boolean(activeCommunity),
-                },
-                state: {
-                  isLoadingResources,
-                  libraryResources,
-                  selectedLibraryResourceId,
-                  selectedLibraryResource,
-                },
-                actions: {
-                  setSelectedLibraryResourceId,
                 },
               }}
               resourcesPanelProps={{
@@ -8623,7 +8058,7 @@ function App() {
               membersPanelProps={{
                 capabilities: {
                   hasActiveCommunity: Boolean(activeCommunity),
-                  hasSession: Boolean(supabaseSession),
+                  hasSession: Boolean(cloudSession),
                   isActiveCommunityOwner,
                   canInvite: canInviteActiveCommunity,
                   canManageMembers: canManageMembersActiveCommunity,
@@ -8632,15 +8067,6 @@ function App() {
                   activeCommunityOwnerId: activeCommunity?.owner_id ?? null,
                   communityMembers,
                   profilesByUserId,
-                  memoryReview: {
-                    pendingCommunityMemoryCandidates,
-                    reviewedCommunityMemoryCandidates,
-                    rejectedReviewedCommunityMemoryCandidatesCount: rejectedReviewedCommunityMemoryCandidates.length,
-                    isLoadingCommunityMemoryCandidates,
-                    communityMemoryCandidatesError,
-                    communityMemoryRejectReasonById,
-                    reviewingCommunityMemoryCandidateId,
-                  },
                   invites: {
                     activeCommunityId: activeCommunity?.id ?? null,
                     inviteMaxUsesPreset,
@@ -8657,13 +8083,6 @@ function App() {
                   displayName,
                   handleSetCommunityMemberRole,
                   handleRemoveCommunityMember,
-                  memoryReview: {
-                    setCommunityMemoryRejectReasonById,
-                    handlePromoteCommunityMemoryCandidate,
-                    handleRejectCommunityMemoryCandidate,
-                    displayName,
-                    previewText,
-                  },
                   invites: {
                     setInviteMaxUsesPreset,
                     setInviteExpiryPreset,
@@ -9028,13 +8447,6 @@ function formatExecutionLabel(
   return engineId.replace(/_/g, " ");
 }
 
-function previewText(value: string, limit = 160): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  if (normalized.length <= limit) return normalized;
-  return `${normalized.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
-}
-
 function formatToolArtifactLines(
   summary: any,
   opts?: { includeFilePatchHashes?: boolean },
@@ -9103,7 +8515,6 @@ function ToolOutputBlock({ content }: { content: string }) {
   // For non-diff output, just render as plain monospace
   return <pre className="tool-output">{content}</pre>;
 }
-
 
 // Clean streaming content: remove TOOL_CALL/TOOLCALL and JSON tool content
 function cleanStreamingContent(text: string): {

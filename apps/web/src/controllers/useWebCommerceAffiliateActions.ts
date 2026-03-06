@@ -5,8 +5,9 @@ import {
   redeemPurchaseClaimRpc,
   type PendingPurchaseClaim,
 } from "../../../../shared/pay_first";
-import type { PendingAuthIntentInput } from "../../../../shared/supabaseAuthIntent";
-import type { SupabaseSession } from "../supabase";
+import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
+import { loadBuilderBillingStatusCanonical } from "../../../../shared/builderBillingStatusGateway";
+import type { CloudSession } from "../cloudAuth";
 
 type BuilderBillingStatus = {
   user_id: string;
@@ -19,33 +20,11 @@ type BuilderBillingStatus = {
   cancel_at_period_end: boolean | null;
 };
 
-type ProductState = {
-  user_id: string;
-  auth_state: string;
-  builder_tier: string;
-  builder_plan_code: string;
-  builder_plan_price_usd: number;
-  is_builder_paid: boolean;
-  max_communities: number;
-  platform_fee_bps: number;
-  has_payouts: boolean;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
-  ai_history_bytes_used: number | string;
-  ai_history_bytes_cap: number | string;
-  platform_inference_standard_used: number | string;
-  platform_inference_standard_cap: number;
-};
-
 type UseWebCommerceAffiliateActionsArgs = {
-  getSession: () => SupabaseSession | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getSession: () => CloudSession | null;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   openCommunityWorkspace: (communityId: string) => void;
-  loadCommunities: (session: SupabaseSession) => Promise<void>;
+  loadCommunities: (session: CloudSession) => Promise<void>;
   clearPendingPurchaseClaimToken: () => void;
   storePendingPurchaseClaimToken: (token: string) => void;
   setCheckoutClaimToken: Dispatch<SetStateAction<string | null>>;
@@ -67,8 +46,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   const redeemPurchaseClaim = useCallback(
     async (token: string): Promise<void> => {
       const session = args.getSession();
-      const url = session ? args.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         args.storePendingPurchaseClaimToken(token);
         args.openAuthGate({ reason: "redeem_purchase_claim", payload: { token } });
         return;
@@ -78,11 +56,8 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setRedeemClaimError(null);
       try {
         const communityId = await redeemPurchaseClaimRpc({
-          url,
           session,
           token,
-          fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-          readSupabaseError: args.readSupabaseError,
         });
         args.clearPendingPurchaseClaimToken();
         args.setCheckoutClaimToken(null);
@@ -106,17 +81,12 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   );
 
   const loadPendingPurchaseClaims = useCallback(
-    async (session: SupabaseSession): Promise<void> => {
-      const url = args.getSupabaseUrl();
-      if (!url) return;
+    async (session: CloudSession): Promise<void> => {
       args.setIsLoadingPendingPurchases(true);
       args.setPendingPurchasesError(null);
       try {
         const rows = await listPendingPurchaseClaimsRpc({
-          url,
           session,
-          fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-          readSupabaseError: args.readSupabaseError,
         });
         args.setPendingPurchaseClaims(rows);
       } catch (error) {
@@ -136,42 +106,13 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   );
 
   const loadBuilderBillingStatus = useCallback(
-    async (session: SupabaseSession): Promise<BuilderBillingStatus | null> => {
-      const url = args.getSupabaseUrl();
-      if (!url) return null;
+    async (session: CloudSession): Promise<BuilderBillingStatus | null> => {
       args.setIsLoadingBuilderBilling(true);
       args.setBuilderBillingError(null);
       try {
-        const response = await args.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/get_my_product_state`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: "{}",
-          },
+        const row = await loadBuilderBillingStatusCanonical({
           session,
-        );
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-        const rows = (await response.json()) as ProductState[];
-        const product = rows[0] ?? null;
-        const row: BuilderBillingStatus | null = product
-          ? {
-              user_id: product.user_id,
-              builder_tier:
-                product.builder_tier === "builder" || product.builder_tier === "pro" || product.builder_tier === "architect"
-                  ? product.builder_tier
-                  : "free",
-              max_communities: Number(product.max_communities ?? 0),
-              platform_fee_bps: Number(product.platform_fee_bps ?? 0),
-              has_payouts: Boolean(product.has_payouts),
-              subscription_status: product.subscription_status ?? null,
-              current_period_end: product.current_period_end ?? null,
-              cancel_at_period_end:
-                product.cancel_at_period_end === null || product.cancel_at_period_end === undefined
-                  ? null
-                  : Boolean(product.cancel_at_period_end),
-            }
-          : null;
+        });
         args.setBuilderBillingStatus(row);
         return row;
       } catch (error) {
@@ -194,8 +135,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   const redeemPendingPurchases = useCallback(
     async (opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> => {
       const session = args.getSession();
-      const url = session ? args.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         args.openAuthGate({
           reason: "redeem_pending_purchases",
           payload: { navigate: opts?.navigate !== false, silent_noop: Boolean(opts?.silentNoop) },
@@ -210,10 +150,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setPendingPurchasesSuccess(null);
       try {
         const rows = await redeemPendingPurchaseClaimsRpc({
-          url,
           session,
-          fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-          readSupabaseError: args.readSupabaseError,
         });
         const claimedCommunityId = rows[0]?.community_id;
         if (rows.length === 0) {

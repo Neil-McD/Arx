@@ -1,11 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 
 export function useWebGuestThreadLifecycle<
-  SupabaseSessionT,
+  CloudSessionT,
   GuestStorageT extends { model_id: string },
   ThreadMessageT,
 >(params: {
-  supabaseSession: SupabaseSessionT | null;
+  session: CloudSessionT | null;
   publicRouteKind: string;
   activeThreadId: string | null;
   guestThreadId: string;
@@ -16,8 +16,10 @@ export function useWebGuestThreadLifecycle<
   setWorkspaceWantsNewChatMode: Dispatch<SetStateAction<boolean>>;
   setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
 }) {
+  const session = params.session;
+
   useEffect(() => {
-    if (params.supabaseSession) return;
+    if (session) return;
     if (params.publicRouteKind !== "app") return;
     const storage = params.loadGuestThreadStorage();
     params.setGuestModelId(storage.model_id);
@@ -31,12 +33,12 @@ export function useWebGuestThreadLifecycle<
     if (params.activeThreadId !== params.guestThreadId) params.setActiveThreadId(params.guestThreadId);
     params.setWorkspaceWantsNewChatMode(false);
     params.setThreadMessages(guestMessages);
-  }, [params.supabaseSession, params.publicRouteKind]);
+  }, [session, params.publicRouteKind]);
 
   useEffect(() => {
-    if (!params.supabaseSession) return;
+    if (!session) return;
     if (params.activeThreadId !== params.guestThreadId) return;
     params.setActiveThreadId(null);
     params.setThreadMessages([]);
-  }, [params.supabaseSession, params.activeThreadId]);
+  }, [session, params.activeThreadId]);
 }

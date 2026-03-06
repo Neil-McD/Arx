@@ -1,15 +1,15 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
 
+import { fetchCloudCommunityOwnerIsPro } from "./cloudCommunityAdminGateway";
+
 export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT>(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
   canManageMembersActiveCommunity: boolean;
   activeCommunityOwnerIsPro: boolean | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
   setActiveCommunityOwnerIsPro: Dispatch<SetStateAction<boolean | null>>;
   activeCommunityOwnerIsProLoadedCommunityIdRef: MutableRefObject<string | null>;
   loadCommunityAgentDrafts: (communityId: string, session: SessionT) => Promise<void>;
@@ -23,58 +23,42 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
   ) => Promise<void>;
   enforceProDraftGate?: boolean;
 }) {
+  const session = params.session;
+
   useEffect(() => {
-    if (!params.supabaseSession || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
+    if (!session || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
       params.setActiveCommunityOwnerIsPro(null);
       params.activeCommunityOwnerIsProLoadedCommunityIdRef.current = null;
       return;
     }
-    const session = params.supabaseSession;
     const communityId = params.activeCommunityId;
     if (params.activeCommunityOwnerIsProLoadedCommunityIdRef.current === params.activeCommunityId) return;
     params.activeCommunityOwnerIsProLoadedCommunityIdRef.current = params.activeCommunityId;
-
-    const url = params.getSupabaseUrl();
-    if (!url) return;
-
     void (async () => {
       try {
-        const response = await params.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/community_owner_is_pro`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_id: communityId }),
-          },
+        const isPro = await fetchCloudCommunityOwnerIsPro({
           session,
-        );
-        if (!response.ok) {
-          params.setActiveCommunityOwnerIsPro(null);
-          return;
-        }
-        const data = (await response.json()) as unknown;
-        params.setActiveCommunityOwnerIsPro(typeof data === "boolean" ? data : null);
+          communityId,
+        });
+        params.setActiveCommunityOwnerIsPro(isPro);
       } catch {
         params.setActiveCommunityOwnerIsPro(null);
       }
     })();
   }, [
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.canManageMembersActiveCommunity,
-    params.getSupabaseUrl,
-    params.fetchWithSupabaseAuth,
   ]);
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "ai_agent") return;
-    if (!params.supabaseSession || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
+    if (!session || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
       params.setCommunityAgentDrafts([]);
       params.setCommunityAgentDraftsError(null);
       params.communityAgentDraftsLoadedCommunityIdRef.current = null;
       return;
     }
-    const session = params.supabaseSession;
     const communityId = params.activeCommunityId;
     if ((params.enforceProDraftGate ?? true) && params.activeCommunityOwnerIsPro === false) {
       params.setCommunityAgentDrafts([]);
@@ -87,7 +71,7 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.canManageMembersActiveCommunity,
     params.activeCommunityOwnerIsPro,
@@ -96,14 +80,13 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
   ]);
 
   useEffect(() => {
-    if (!params.supabaseSession || !params.activeCommunityId || params.activePage !== "community") return;
-    const session = params.supabaseSession;
+    if (!session || !params.activeCommunityId || params.activePage !== "community") return;
     const communityId = params.activeCommunityId;
     void params.loadCommunityMembers(communityId, session, {
       includeStatus: params.canManageMembersActiveCommunity,
     });
   }, [
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.activePage,
     params.canManageMembersActiveCommunity,

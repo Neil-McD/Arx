@@ -48,6 +48,7 @@ const project = (value) => ({
   code: String(value?.code ?? ""),
   cta: String(value?.cta ?? ""),
   lane: value?.lane ?? null,
+  fundingSource: value?.fundingSource ?? null,
   effectiveTier: String(value?.effectiveTier ?? ""),
 });
 
@@ -102,4 +103,3 @@ grep -q '"version": 1' "$MATRIX_PATH" || {
 }
 
 echo "PASS: gate parity contract check passed."
-

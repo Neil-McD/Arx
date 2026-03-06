@@ -5,7 +5,7 @@ import type { CommunityAccess, CommunityPricingMode } from "./communityTypes";
 export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
   activeCommunityAccess: CommunityAccess | null;
   communities: CommunityT[];
@@ -32,6 +32,8 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   setActiveCommunityAccess: Dispatch<SetStateAction<CommunityAccess | null>>;
   setIsLoadingCommunityAccess: Dispatch<SetStateAction<boolean>>;
 }) {
+  const session = params.session;
+
   useEffect(() => {
     params.syncCommunitySettingsSelection({
       activeCommunityId: params.activeCommunityId,
@@ -41,7 +43,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "settings") return;
-    if (!params.supabaseSession || !params.activeCommunityId) {
+    if (!session || !params.activeCommunityId) {
       params.setCommunityMemberMuted(false);
       return;
     }
@@ -49,12 +51,12 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     if (params.activeCommunityAccess.is_owner || params.activeCommunityAccess.can_manage_members) return;
     void params.loadCommunityMemberSettings({
       communityId: params.activeCommunityId,
-      session: params.supabaseSession,
+      session,
     });
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.activeCommunityAccess?.can_view,
     params.activeCommunityAccess?.is_owner,
@@ -64,7 +66,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "settings") return;
-    if (!params.supabaseSession || !params.activeCommunityId) {
+    if (!session || !params.activeCommunityId) {
       params.setCommunitySettingsMonthlyPlanId(null);
       params.setCommunitySettingsYearlyPlanId(null);
       params.setCommunitySettingsPricingMode("free");
@@ -78,7 +80,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     const communityId = params.activeCommunityId;
     void params.loadCommunityPricing({
       communityId,
-      session: params.supabaseSession,
+      session,
       shouldIgnore: () => cancelled,
     });
     return () => {
@@ -87,18 +89,18 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.activeCommunityAccess?.can_manage_members,
     params.loadCommunityPricing,
   ]);
 
   useEffect(() => {
-    if (!params.supabaseSession || !params.activeCommunityId) {
+    if (!session || !params.activeCommunityId) {
       params.setActiveCommunityAccess(null);
       params.setIsLoadingCommunityAccess(false);
       return;
     }
-    void params.loadCommunityAccess(params.activeCommunityId, params.supabaseSession);
-  }, [params.supabaseSession, params.activeCommunityId]);
+    void params.loadCommunityAccess(params.activeCommunityId, session);
+  }, [session, params.activeCommunityId]);
 }

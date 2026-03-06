@@ -13,7 +13,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=7
+TOTAL_STEPS=6
 CURRENT_STEP=1
 
 run_step() {
@@ -62,6 +62,5 @@ run_step "Canonical turn-path smoke tests" bash scripts/reliability_turn_path_sm
 run_step "Crash-recovery closure invariants" check_crash_recovery_invariants
 run_step "Cancellation closure invariants" check_cancellation_invariants
 run_step "Event immutability invariants" check_event_immutability_invariants
-run_step "Function auth lane coherence guard" bash scripts/function_auth_lane_coherence_guard.sh
 
 echo "PASS: reliability smoke gate passed."

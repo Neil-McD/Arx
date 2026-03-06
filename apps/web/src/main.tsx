@@ -4,6 +4,7 @@ import App from "./App";
 import "./index.css";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
+import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
 
 type ErrorBoundaryState = { error: Error | null };
 
@@ -69,6 +70,7 @@ try {
 }
 
 bootConvexProbe();
+bootstrapConvexAnonymousActor();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

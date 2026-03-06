@@ -1,5 +1,13 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
+import {
+  createCloudMessageReaction,
+  createCloudThreadUserMessageRows,
+  deleteCloudMessageReactionById,
+  deleteCloudOwnMessage,
+  patchCloudOwnMessageContent,
+} from "./cloudCommunityChatGateway";
+
 type SessionLike = {
   user: { id: string };
 };
@@ -33,13 +41,8 @@ type UseCommunityChatMutationControllerArgs<
   },
 > = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAnonKey?: () => string | null;
-  requireAnonKey: boolean;
-  missingConfigMessage: string;
+  session: SessionT | null;
   missingPayloadMessage: string;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   toCommunityChatMessage: (row: RowT) => MessageT | null;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
@@ -96,14 +99,12 @@ export function useCommunityChatMutationController<
 
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const current = argsRef.current;
-    if (!current.supabaseSession) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
+    const session = current.session;
+    if (!session) return;
     const existingReaction = current.messageReactions.find(
       (reaction) => (
         reaction.message_id === messageId
-        && reaction.user_id === current.supabaseSession!.user.id
+        && reaction.user_id === session.user.id
         && reaction.emoji === emoji
       ),
     );
@@ -111,14 +112,10 @@ export function useCommunityChatMutationController<
     if (existingReaction) {
       current.setMessageReactions((prev) => prev.filter((reaction) => reaction.id !== existingReaction.id));
       try {
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/message_reactions?id=eq.${existingReaction.id}`,
-          { method: "DELETE" },
-          current.supabaseSession,
-        );
-        if (!response.ok) {
-          current.setMessageReactions((prev) => [...prev, existingReaction]);
-        }
+        await deleteCloudMessageReactionById({
+          session,
+          reactionId: existingReaction.id,
+        });
       } catch {
         current.setMessageReactions((prev) => [...prev, existingReaction]);
       }
@@ -127,30 +124,20 @@ export function useCommunityChatMutationController<
       const optimisticReaction = {
         id: optimisticId,
         message_id: messageId,
-        user_id: current.supabaseSession.user.id,
+        user_id: session.user.id,
         emoji,
         created_at: new Date().toISOString(),
       } as ReactionT;
       current.setMessageReactions((prev) => [...prev, optimisticReaction]);
 
       try {
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/message_reactions`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Prefer: "return=representation",
-            },
-            body: JSON.stringify({ message_id: messageId, emoji }),
-          },
-          current.supabaseSession,
-        );
-        if (response.ok) {
-          const created = (await response.json()) as ReactionT[];
-          if (created.length > 0) {
-            current.setMessageReactions((prev) => prev.map((reaction) => (reaction.id === optimisticId ? created[0] : reaction)));
-          }
+        const created = await createCloudMessageReaction<SessionT, ReactionT>({
+          session,
+          messageId,
+          emoji,
+        });
+        if (created.length > 0) {
+          current.setMessageReactions((prev) => prev.map((reaction) => (reaction.id === optimisticId ? created[0] : reaction)));
         } else {
           current.setMessageReactions((prev) => prev.filter((reaction) => reaction.id !== optimisticId));
         }
@@ -190,13 +177,10 @@ export function useCommunityChatMutationController<
 
   const handleSaveEdit = useCallback(async () => {
     const current = argsRef.current;
-    if (!current.supabaseSession || !current.editingMessageId) return;
+    const session = current.session;
+    if (!session || !current.editingMessageId) return;
     const text = current.editingMessageText.trim();
     if (!text) return;
-
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     const existingAttachments = current.communityMessages.find((message) => message.id === current.editingMessageId)?.attachments ?? [];
     const bodyToSave = current.editingMessagePrefix ? current.editingMessagePrefix + text : text;
 
@@ -207,63 +191,47 @@ export function useCommunityChatMutationController<
     current.setEditingMessageText("");
     current.setEditingMessagePrefix(null);
 
-    let response: Response | null = null;
     try {
-      response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?id=eq.${current.editingMessageId}&sender_id=eq.${current.supabaseSession.user.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content_json: {
-              text: bodyToSave,
-              ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {}),
-            },
-          }),
+      await patchCloudOwnMessageContent({
+        session,
+        messageId: current.editingMessageId,
+        senderId: session.user.id,
+        contentJson: {
+          text: bodyToSave,
+          ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {}),
         },
-        current.supabaseSession,
-      );
+      });
     } catch {
-      response = null;
-    }
-
-    if (!response || !response.ok) {
       if (current.activeCommunityId) {
-        await current.loadCommunityChat(current.activeCommunityId, current.supabaseSession);
+        await current.loadCommunityChat(current.activeCommunityId, session);
       }
     }
   }, []);
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     const current = argsRef.current;
-    if (!current.supabaseSession) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
+    const session = current.session;
+    if (!session) return;
     current.setCommunityMessages((prev) => prev.filter((message) => message.id !== messageId));
     current.setMessageReactions((prev) => prev.filter((reaction) => reaction.message_id !== messageId));
 
-    let response: Response | null = null;
     try {
-      response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?id=eq.${messageId}&sender_id=eq.${current.supabaseSession.user.id}`,
-        { method: "DELETE" },
-        current.supabaseSession,
-      );
+      await deleteCloudOwnMessage({
+        session,
+        messageId,
+        senderId: session.user.id,
+      });
     } catch {
-      response = null;
-    }
-
-    if (!response || !response.ok) {
       if (current.activeCommunityId) {
-        await current.loadCommunityChat(current.activeCommunityId, current.supabaseSession);
+        await current.loadCommunityChat(current.activeCommunityId, session);
       }
     }
   }, []);
 
   const handleSendCommunityMessage = useCallback(async () => {
     const current = argsRef.current;
-    if (!current.supabaseSession || !current.activeCommunityId) return;
+    const session = current.session;
+    if (!session || !current.activeCommunityId) return;
 
     const rawText = current.communityMessageInput.trim();
     const attachmentsToSend = [...current.communityAttachmentsRef.current];
@@ -285,7 +253,7 @@ export function useCommunityChatMutationController<
     const optimisticMessage = {
       id: optimisticId,
       community_id: current.activeCommunityId,
-      sender_id: current.supabaseSession.user.id,
+      sender_id: session.user.id,
       body: bodyToSend,
       attachments: attachmentsToSend,
       reply_to_id: replyToId,
@@ -311,49 +279,15 @@ export function useCommunityChatMutationController<
 
     current.setIsSendingCommunityMessage(true);
     current.setCommunityChatError(null);
-
-    const url = current.getSupabaseUrl();
-    const anonKey = current.getSupabaseAnonKey?.();
-    if (!url || (current.requireAnonKey && !anonKey)) {
-      current.setCommunityChatError(current.missingConfigMessage);
-      current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-      restoreDraft();
-      current.setIsSendingCommunityMessage(false);
-      return;
-    }
-
     try {
-      const threadId = await current.ensureCommunityChatThread(current.activeCommunityId, current.supabaseSession);
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,sender_id,reply_to_id,created_at`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation",
-          },
-          body: JSON.stringify({
-            thread_id: threadId,
-            role: "user",
-            content_json: {
-              text: bodyToSend,
-              ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {}),
-            },
-            reply_to_id: replyToId,
-          }),
-        },
-        current.supabaseSession,
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        current.setCommunityChatError(errText || "Failed to send message.");
-        current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-        restoreDraft();
-        return;
-      }
-
-      const created = (await response.json()) as RowT[];
+      const threadId = await current.ensureCommunityChatThread(current.activeCommunityId, session);
+      const created = await createCloudThreadUserMessageRows<SessionT, RowT>({
+        session,
+        threadId,
+        text: bodyToSend,
+        attachments: attachmentsToSend,
+        replyToId,
+      });
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
       if (!record) {
         current.setCommunityChatError(current.missingPayloadMessage);

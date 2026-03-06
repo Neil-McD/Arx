@@ -1,27 +1,22 @@
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
+import { fetchActiveCloudCommunityAgentLanding } from "./cloudCommunityAgentGateway";
+
 const COMMUNITY_AGENT_LANDING_RPC_TIMEOUT_MS = 5000;
 
 export function useCommunityAgentLandingLifecycle<SessionT>(params: {
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
   canViewCommunity: boolean;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
   activeCommunityIdRef: MutableRefObject<string | null>;
   activeCommunityAgentLandingCommunityIdRef: MutableRefObject<string | null>;
   communityAgentLandingFetchSeqRef: MutableRefObject<number>;
   setActiveCommunityAgentLanding: Dispatch<SetStateAction<unknown | null>>;
 }) {
-  const fetchWithSupabaseAuthRef = useRef(params.fetchWithSupabaseAuth);
   const inFlightCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    fetchWithSupabaseAuthRef.current = params.fetchWithSupabaseAuth;
-  }, [params.fetchWithSupabaseAuth]);
-
-  useEffect(() => {
-    const session = params.supabaseSession;
+    const session = params.session;
     const communityId = params.activeCommunityId;
     const canView = params.canViewCommunity;
     if (!session || !communityId || !canView) {
@@ -32,10 +27,6 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
     }
     if (params.activeCommunityAgentLandingCommunityIdRef.current === communityId) return;
     if (inFlightCommunityIdRef.current === communityId) return;
-
-    const url = params.getSupabaseUrl();
-    if (!url) return;
-
     inFlightCommunityIdRef.current = communityId;
     params.communityAgentLandingFetchSeqRef.current += 1;
     const fetchSeq = params.communityAgentLandingFetchSeqRef.current;
@@ -46,17 +37,13 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
 
     void (async () => {
       try {
-        const response = await fetchWithSupabaseAuthRef.current(
-          `${url}/rest/v1/rpc/get_active_community_agent_landing`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_id: communityId }),
+        const data = await fetchActiveCloudCommunityAgentLanding({
+          session,
+          communityId,
+          init: {
             signal: abortController.signal,
           },
-          session,
-        );
-        const data = response.ok ? ((await response.json()) as unknown) : null;
+        });
         if (params.communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
         if (params.activeCommunityIdRef.current !== communityId) return;
         params.setActiveCommunityAgentLanding(data ?? null);
@@ -81,10 +68,9 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
       }
     };
   }, [
-    params.supabaseSession,
+    params.session,
     params.activeCommunityId,
     params.canViewCommunity,
-    params.getSupabaseUrl,
     params.activeCommunityIdRef,
     params.activeCommunityAgentLandingCommunityIdRef,
     params.communityAgentLandingFetchSeqRef,

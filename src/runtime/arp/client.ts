@@ -97,9 +97,9 @@ export interface RuntimeClient {
     input: string;
     user_content_json: string;
     community_name?: string | null;
-    supabase_url?: string | null;
-    supabase_anon_key?: string | null;
-    supabase_access_token?: string | null;
+    cloud_runtime_base_url?: string | null;
+    cloud_publishable_key?: string | null;
+    cloud_access_token?: string | null;
   }): Promise<{
     thread_id: ThreadId;
     engine_id: string;

@@ -1,3 +1,5 @@
+import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
 const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
@@ -120,34 +122,17 @@ export type PendingPurchaseClaim = {
   expires_at: string;
 };
 
-export type SupabaseSessionLike = {
+export type CloudSessionLike = {
   access_token: string;
 };
 
-export type FetchWithSupabaseAuth<S extends SupabaseSessionLike> = (
-  url: string,
-  init: RequestInit,
-  session: S,
-) => Promise<Response>;
-
-export type ReadSupabaseError = (response: Response) => Promise<string>;
-
-type SupabaseErrorBody = {
-  code?: unknown;
-  message?: unknown;
-  details?: unknown;
-  hint?: unknown;
-  error?: unknown;
-  error_description?: unknown;
-};
-
-type ParsedSupabaseError = {
-  status: number;
-  code: string | null;
-  message: string | null;
-  details: string | null;
-  hint: string | null;
-};
+async function bootstrapConvexUserForPayFirst(sessionRaw: unknown): Promise<{
+  client: ConvexClient;
+  authSubject: string;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(sessionRaw);
+  return { client, authSubject };
+}
 
 function normalizeErrorToken(value: unknown): string {
   return String(value ?? "")
@@ -155,81 +140,13 @@ function normalizeErrorToken(value: unknown): string {
     .toLowerCase();
 }
 
-function readNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-async function parseSupabaseErrorResponse(response: Response): Promise<ParsedSupabaseError> {
-  const fallback: ParsedSupabaseError = {
-    status: response.status,
-    code: null,
-    message: null,
-    details: null,
-    hint: null,
-  };
-  try {
-    const json = (await response.clone().json()) as SupabaseErrorBody;
-    return {
-      status: response.status,
-      code: readNonEmptyString(json?.code),
-      message:
-        readNonEmptyString(json?.message) ??
-        readNonEmptyString(json?.error_description) ??
-        readNonEmptyString(json?.error),
-      details: readNonEmptyString(json?.details),
-      hint: readNonEmptyString(json?.hint),
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-export class SupabaseRpcError extends Error {
-  readonly status: number;
-  readonly code: string | null;
-  readonly details: string | null;
-  readonly hint: string | null;
-
-  constructor(input: {
-    message: string;
-    status: number;
-    code: string | null;
-    details: string | null;
-    hint: string | null;
-  }) {
-    super(input.message);
-    this.name = "SupabaseRpcError";
-    this.status = input.status;
-    this.code = input.code;
-    this.details = input.details;
-    this.hint = input.hint;
-  }
-}
-
-function isSupabaseRpcError(error: unknown): error is SupabaseRpcError {
-  return error instanceof SupabaseRpcError;
-}
-
-async function toSupabaseRpcError(response: Response, readSupabaseError: ReadSupabaseError): Promise<SupabaseRpcError> {
-  const parsed = await parseSupabaseErrorResponse(response);
-  let message = parsed.message;
-  if (!message) {
-    try {
-      message = await readSupabaseError(response);
-    } catch {
-      message = null;
-    }
-  }
-  if (!message) message = `Supabase error (${response.status})`;
-  return new SupabaseRpcError({
-    message,
-    status: parsed.status,
-    code: parsed.code,
-    details: parsed.details,
-    hint: parsed.hint,
-  });
+function collectStructuredErrorFields(error: unknown, collect: (value: unknown) => void): void {
+  if (!error || typeof error !== "object") return;
+  const record = error as Record<string, unknown>;
+  collect(record.code);
+  collect(record.message);
+  collect(record.details);
+  collect(record.hint);
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
@@ -263,14 +180,10 @@ export function classifyInviteAcceptError(error: unknown): InviteAcceptErrorKind
     if (normalized) values.push(normalized);
   };
 
-  if (isSupabaseRpcError(error)) {
-    collect(error.code);
+  collectStructuredErrorFields(error, collect);
+  if (error instanceof Error) {
     collect(error.message);
-    collect(error.details);
-    collect(error.hint);
-  } else if (error instanceof Error) {
-    collect(error.message);
-  } else {
+  } else if (!error || typeof error !== "object") {
     collect(error);
   }
 
@@ -292,14 +205,10 @@ export function classifyPublicCommunityJoinError(error: unknown): PublicCommunit
     if (normalized) values.push(normalized);
   };
 
-  if (isSupabaseRpcError(error)) {
-    collect(error.code);
+  collectStructuredErrorFields(error, collect);
+  if (error instanceof Error) {
     collect(error.message);
-    collect(error.details);
-    collect(error.hint);
-  } else if (error instanceof Error) {
-    collect(error.message);
-  } else {
+  } else if (!error || typeof error !== "object") {
     collect(error);
   }
 
@@ -317,130 +226,95 @@ export function classifyPublicCommunityJoinError(error: unknown): PublicCommunit
   return null;
 }
 
-export async function redeemPurchaseClaimRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function redeemPurchaseClaimRpc<S extends CloudSessionLike>(opts: {
   session: S;
   token: string;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<string> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/redeem_purchase_claim`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ p_token: opts.token }),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
-  const rows = (await response.json()) as Array<{ community_id: string }>;
+  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
+  const rows =
+    ((await client.mutation("billing:redeemPurchaseClaim" as any, {
+      authSubject,
+      token: opts.token,
+      nowMs: Date.now(),
+    })) as Array<{ community_id?: string }> | null) ?? [];
   const communityId = rows[0]?.community_id;
   if (!communityId) throw new Error("Redeem succeeded but community missing.");
   return communityId;
 }
 
-export async function acceptCommunityInviteRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function acceptCommunityInviteRpc<S extends CloudSessionLike>(opts: {
   session: S;
   inviteCode: string;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<AcceptCommunityInviteResult> {
   const inviteCode = opts.inviteCode.trim();
   if (!inviteCode) throw new Error("Invite code is required.");
 
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/accept_community_invite`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invite_code: inviteCode }),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
-
-  const rows = (await response.json()) as AcceptCommunityInviteResult[];
-  const first = rows[0];
-  if (!first) throw new Error("Failed to join community.");
+  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
+  const payload = (await client.mutation("community:acceptCommunityInvite" as any, {
+    authSubject,
+    inviteCode,
+    nowMs: Date.now(),
+  })) as Partial<AcceptCommunityInviteResult> | null;
+  const first: AcceptCommunityInviteResult = {
+    community_id: String(payload?.community_id ?? "").trim(),
+    community_slug: String(payload?.community_slug ?? "").trim(),
+    community_name: String(payload?.community_name ?? "").trim(),
+  };
+  if (!first.community_id || !first.community_slug || !first.community_name) {
+    throw new Error("Failed to join community.");
+  }
   return first;
 }
 
-export async function listPendingPurchaseClaimsRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
   session: S;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<PendingPurchaseClaim[]> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/list_pending_purchase_claims`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    },
-    opts.session,
-  );
-  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
-  const rows = (await response.json()) as PendingPurchaseClaim[];
+  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
+  const rows = (await client.query("billing:listPendingPurchaseClaims" as any, {
+    authSubject,
+    nowMs: Date.now(),
+  })) as PendingPurchaseClaim[] | null;
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function redeemPendingPurchaseClaimsRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function redeemPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
   session: S;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<Array<{ community_id: string }>> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/redeem_pending_purchase_claims`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    },
-    opts.session,
-  );
-  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
-  const rows = (await response.json()) as Array<{ community_id: string }>;
+  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
+  const rows = (await client.mutation("billing:redeemPendingPurchaseClaims" as any, {
+    authSubject,
+    nowMs: Date.now(),
+  })) as Array<{ community_id: string }> | null;
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function joinPublicCommunityRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function joinPublicCommunityRpc<S extends CloudSessionLike>(opts: {
   session: S;
   communityId?: string;
   communitySlug?: string;
   brandosAid?: string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const slug = (opts.communitySlug ?? "").trim();
   const id = (opts.communityId ?? "").trim();
-  const body: Record<string, unknown> = {};
-  const rpc = slug ? "join_public_community_by_slug" : "join_public_community";
-
+  const aid = (opts.brandosAid ?? "").trim() || null;
+  let rows: Array<{ community_id: string }> = [];
   if (slug) {
-    body.p_community_slug = slug;
+    rows = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
+      authSubject,
+      communitySlug: slug,
+      brandosAid: aid,
+      nowMs: Date.now(),
+    })) as Array<{ community_id: string }> | null) ?? [];
   } else if (id) {
-    body.p_community_id = id;
+    rows = ((await client.mutation("community:joinPublicCommunity" as any, {
+      authSubject,
+      communityId: id,
+      brandosAid: aid,
+      nowMs: Date.now(),
+    })) as Array<{ community_id: string }> | null) ?? [];
   } else {
     throw new Error("Missing community");
   }
-  const aid = (opts.brandosAid ?? "").trim();
-  if (aid) body.p_brandos_aid = aid;
-
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/${rpc}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw await toSupabaseRpcError(response, opts.readSupabaseError);
-  const rows = (await response.json()) as Array<{ community_id: string }>;
   return rows[0]?.community_id ?? id;
 }

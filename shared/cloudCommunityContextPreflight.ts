@@ -1,4 +1,4 @@
-import type { SupabaseSession } from "./supabaseAuthCore";
+import { type CloudAuthSession } from "./cloudAuthSession";
 import {
   COMMUNITY_EVIDENCE_TOTAL_LIMIT,
   COMMUNITY_EVIDENCE_USED_CONTRACT_ID,
@@ -12,7 +12,8 @@ import {
   buildCommunityEvidenceUserMessage,
   parseNumberOrNull,
   truncateUtf8ForPrompt,
-} from "../supabase/functions/agent_turn/community_context_bundle_v1.mjs";
+} from "./community_context_bundle_v1";
+import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 
 export const COMMUNITY_HARNESS_UNAVAILABLE_FAILURE_CLASS = "community_harness_unavailable";
 const COMMUNITY_HARNESS_UNAVAILABLE_MESSAGE =
@@ -31,11 +32,7 @@ const LIMITS = Object.freeze({
   communityLabelMaxChars: 80,
 });
 
-export type FetchWithSupabaseAuth = (
-  url: string,
-  init: RequestInit,
-  session: SupabaseSession,
-) => Promise<Response>;
+type DefaultCloudSession = Exclude<CloudAuthSession, null>;
 
 type CommunitySearchPayloadChatRow = {
   source_type: "chat";
@@ -406,99 +403,140 @@ type CommunityResearchCallResult =
       payload: CommunityResearchErrorPayload | null;
     };
 
-async function callCommunityResearch(params: {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth;
-  session: SupabaseSession;
+function classifyConvexResearchError(error: unknown): {
+  status: number;
+  reasonCode: string | null;
+  message: string;
+} {
+  const message =
+    (error instanceof Error ? error.message : typeof error === "string" ? error : "")
+      .trim()
+      .toLowerCase() || "community_research_failed";
+
+  if (
+    message.includes("not_entitled") ||
+    message.includes("community_entitlement_required") ||
+    message.includes("active community entitlement")
+  ) {
+    return {
+      status: 403,
+      reasonCode: "not_entitled",
+      message,
+    };
+  }
+  if (message.includes("community_not_found")) {
+    return {
+      status: 404,
+      reasonCode: "community_not_found",
+      message,
+    };
+  }
+  if (message.includes("convex_url_required")) {
+    return {
+      status: 0,
+      reasonCode: "missing_convex_url",
+      message,
+    };
+  }
+  if (message.includes("convex_auth_subject_required")) {
+    return {
+      status: 401,
+      reasonCode: "authentication_required",
+      message,
+    };
+  }
+  if (message.includes("convex_verified_identity_required")) {
+    return {
+      status: 401,
+      reasonCode: "authentication_required",
+      message,
+    };
+  }
+  if (message.includes("convex_auth_subject_mismatch")) {
+    return {
+      status: 403,
+      reasonCode: "authentication_required",
+      message,
+    };
+  }
+  return {
+    status: 503,
+    reasonCode: COMMUNITY_HARNESS_UNAVAILABLE_FAILURE_CLASS,
+    message,
+  };
+}
+
+async function callCommunityResearch<SessionT>(params: {
+  session: SessionT;
   communityId: string;
   communityName: string | null;
   query: string;
 }): Promise<CommunityResearchCallResult> {
-  const url = params.getSupabaseUrl();
-  if (!url) {
+  const session = params.session as unknown as CloudAuthSession;
+
+  try {
+    const { client, authSubject: verifiedAuthSubject } = await bootstrapConvexAuthenticatedClient(session);
+
+    const payload = await client.query("community:researchCommunityContext" as any, {
+      authSubject: verifiedAuthSubject,
+      communityId: params.communityId,
+      communityName: params.communityName,
+      query: truncateUtf8ForPrompt(params.query, LIMITS.queryMaxChars),
+      sourceTypes: ["chat", "resource", "memory"],
+      limit: LIMITS.compiledLimit,
+      nowMs: Date.now(),
+    });
+    const payloadRecord = asRecord(payload);
+    const reasonCode = toTrimmedString(payloadRecord?.reason_code ?? null) || null;
+    const errorText =
+      toTrimmedString(payloadRecord?.message ?? null) ||
+      toTrimmedString(payloadRecord?.error ?? null) ||
+      "community_research failed";
+
+    if (!payloadRecord || payloadRecord.ok !== true) {
+      const normalizedReasonCode = normalizeCommunityResearchFailureClass({
+        status: 200,
+        reasonCode,
+      });
+      return {
+        ok: false,
+        status: 200,
+        reasonCode: normalizedReasonCode,
+        message: errorText,
+        payload: payloadRecord as CommunityResearchErrorPayload | null,
+      };
+    }
+
+    return {
+      ok: true,
+      payload: payloadRecord as CommunityResearchSuccessPayload,
+    };
+  } catch (error) {
+    const classified = classifyConvexResearchError(error);
     return {
       ok: false,
-      status: 0,
-      reasonCode: "missing_supabase_url",
-      message: "Missing Supabase URL.",
+      status: classified.status,
+      reasonCode: classified.reasonCode,
+      message: classified.message,
       payload: null,
     };
   }
-
-  const response = await params.fetchWithSupabaseAuth(
-    `${url}/functions/v1/community_research`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        community_id: params.communityId,
-        ...(params.communityName ? { community_name: params.communityName } : null),
-        query: truncateUtf8ForPrompt(params.query, LIMITS.queryMaxChars),
-        source_types: ["chat", "resource", "memory"],
-        limit: LIMITS.compiledLimit,
-      }),
-    },
-    params.session,
-  );
-
-  const rawText = await response.text();
-  let payload: unknown = null;
-  try {
-    payload = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    payload = null;
-  }
-
-  const payloadRecord = asRecord(payload);
-  const reasonCode = toTrimmedString(payloadRecord?.reason_code ?? null) || null;
-  const errorText =
-    toTrimmedString(payloadRecord?.message ?? null) ||
-    toTrimmedString(payloadRecord?.error ?? null) ||
-    toTrimmedString(rawText) ||
-    `community_research failed (${response.status})`;
-
-  if (!response.ok) {
-    const normalizedReasonCode = normalizeCommunityResearchFailureClass({
-      status: response.status,
-      reasonCode,
-    });
-    return {
-      ok: false,
-      status: response.status,
-      reasonCode: normalizedReasonCode,
-      message: errorText,
-      payload: payloadRecord as CommunityResearchErrorPayload | null,
-    };
-  }
-
-  if (!payloadRecord || payloadRecord.ok !== true) {
-    const normalizedReasonCode = normalizeCommunityResearchFailureClass({
-      status: response.status,
-      reasonCode,
-    });
-    return {
-      ok: false,
-      status: response.status,
-      reasonCode: normalizedReasonCode,
-      message: errorText,
-      payload: payloadRecord as CommunityResearchErrorPayload | null,
-    };
-  }
-
-  return {
-    ok: true,
-    payload: payloadRecord as CommunityResearchSuccessPayload,
-  };
 }
 
-export async function loadCloudCommunityContextPreflight(params: {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth;
-  session: SupabaseSession;
+export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloudSession>(params: {
+  session: SessionT;
   communityId: string | null;
   communityName?: string | null;
   query: string;
 }): Promise<CloudCommunityContextPreflightResult> {
+  if (!params || typeof params !== "object") {
+    return {
+      hasEntitlement: false,
+      communityEvidenceUserMessage: null,
+      communityEvidenceUsedV1: null,
+      communityContextDiagnostics: buildFailureDiagnostics(COMMUNITY_HARNESS_UNAVAILABLE_FAILURE_CLASS),
+    };
+  }
   const communityId = toTrimmedString(params.communityId);
   if (!communityId) {
     return {
@@ -514,8 +552,6 @@ export async function loadCloudCommunityContextPreflight(params: {
   let searchResult: CommunityResearchCallResult;
   try {
     searchResult = await callCommunityResearch({
-      getSupabaseUrl: params.getSupabaseUrl,
-      fetchWithSupabaseAuth: params.fetchWithSupabaseAuth,
       session: params.session,
       communityId,
       communityName,

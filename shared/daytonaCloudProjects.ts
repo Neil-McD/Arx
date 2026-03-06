@@ -1,15 +1,6 @@
 import { normalizeDaytonaSandboxStatus, type DaytonaSandboxStatus } from "./daytonaSandboxStatus";
-
-export const DAYTONA_SANDBOX_STATUS_SELECT_QUERY =
-  "daytona_sandboxes?select=project_id,status&provider=eq.daytona";
-
-export type DaytonaAuthenticatedFetch<TSession> = (
-  input: string,
-  init: RequestInit,
-  session: TSession,
-) => Promise<Response>;
-
-export type DaytonaReadSupabaseError = (response: Response) => Promise<string>;
+import { type CloudAuthSession } from "./cloudAuthSession";
+import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 
 type DaytonaCloudProjectsWarn = (message: string, error?: unknown) => void;
 
@@ -18,8 +9,8 @@ export type DaytonaSandboxStatusRow = {
   status?: string | null;
 };
 
-export type DaytonaCloudProjectRow = {
-  id: string;
+type DaytonaCloudProjectRow = {
+  id?: string | null;
   name?: string | null;
   description?: string | null;
   slug?: string | null;
@@ -40,8 +31,61 @@ export type DaytonaCloudProjectRecord = {
   root_path: string;
 };
 
-let daytonaSyncStatusesBackoffUntilMs = 0;
-const DAYTONA_SYNC_STATUSES_AUTH_BACKOFF_MS = 5 * 60 * 1000;
+type ConvexCloudProjectRow = {
+  _id: string;
+  name?: string | null;
+  description?: string | null;
+  slug?: string | null;
+  status?: string | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
+};
+
+type ConvexCloudProjectProbePayload = {
+  sandbox?: {
+    status?: string | null;
+  } | null;
+  probe?: {
+    stdout_preview?: string | null;
+  } | null;
+};
+
+async function bootstrapConvexOwnerId(session: CloudAuthSession): Promise<{
+  client: ConvexClient;
+  authSubject: string;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
+  return { client, authSubject };
+}
+
+function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudProjectRecord {
+  const id = String(row._id ?? "").trim();
+  const slug = String(row.slug ?? "").trim() || null;
+  const createdAtMs = Number(row.createdAt ?? Date.now());
+  const updatedAtMs = Number(row.updatedAt ?? Date.now());
+  return {
+    id,
+    name: typeof row.name === "string" ? row.name : null,
+    description: typeof row.description === "string" ? row.description : null,
+    slug,
+    status: String(row.status ?? "active").trim().toLowerCase() || "active",
+    sandbox_status: null,
+    created_at: Number.isFinite(createdAtMs) ? Math.floor(createdAtMs / 1000) : Math.floor(Date.now() / 1000),
+    updated_at: Number.isFinite(updatedAtMs) ? Math.floor(updatedAtMs / 1000) : Math.floor(Date.now() / 1000),
+    root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
+  };
+}
+
+async function fetchMappedDaytonaCloudProjectsViaConvex<TSession>(params: {
+  session: TSession;
+}): Promise<DaytonaCloudProjectRecord[]> {
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const rows = (await client.query("projects:listCloudProjectsByOwner" as any, {
+    authSubject,
+    includeArchived: false,
+  })) as ConvexCloudProjectRow[];
+  return rows.map((row) => mapConvexProjectRowToRecord(row));
+}
 
 export function buildDaytonaSandboxStatusByProject(
   rows: readonly DaytonaSandboxStatusRow[],
@@ -87,90 +131,101 @@ export function mapActiveDaytonaCloudProjects(params: {
 }
 
 export async function fetchMappedDaytonaCloudProjects<TSession>(params: {
-  supabaseUrl: string;
   session: TSession;
-  fetchWithSupabaseAuth: DaytonaAuthenticatedFetch<TSession>;
-  readSupabaseError: DaytonaReadSupabaseError;
-  toEpochSeconds: (value: string | null | undefined) => number | null;
   onWarn?: DaytonaCloudProjectsWarn;
 }): Promise<DaytonaCloudProjectRecord[]> {
-  const warn = params.onWarn ?? ((message: string, error?: unknown) => console.warn(message, error));
-  const nowMs = Date.now();
-  if (nowMs >= daytonaSyncStatusesBackoffUntilMs) {
-    try {
-      const syncResponse = await params.fetchWithSupabaseAuth(
-        `${params.supabaseUrl}/functions/v1/daytona_sync_statuses`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
-        params.session,
-      );
-      if (!syncResponse.ok) {
-        if (syncResponse.status === 401 || syncResponse.status === 403) {
-          daytonaSyncStatusesBackoffUntilMs = Date.now() + DAYTONA_SYNC_STATUSES_AUTH_BACKOFF_MS;
-        }
-        warn("Failed to sync Daytona sandbox statuses:", await params.readSupabaseError(syncResponse));
-      }
-    } catch (error) {
-      warn("Failed to sync Daytona sandbox statuses:", error);
-    }
-  }
-
-  const projectsResponse = await params.fetchWithSupabaseAuth(
-    `${params.supabaseUrl}/rest/v1/rpc/list_cloud_projects`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    },
-    params.session,
-  );
-  if (!projectsResponse.ok) {
-    throw new Error(await params.readSupabaseError(projectsResponse));
-  }
-
-  const rows = (await projectsResponse.json()) as DaytonaCloudProjectRow[];
-  let sandboxRows: DaytonaSandboxStatusRow[] = [];
-  try {
-    const sandboxesResponse = await params.fetchWithSupabaseAuth(
-      `${params.supabaseUrl}/rest/v1/${DAYTONA_SANDBOX_STATUS_SELECT_QUERY}`,
-      { method: "GET" },
-      params.session,
-    );
-    if (!sandboxesResponse.ok) {
-      warn("Failed to load Daytona sandbox statuses:", await params.readSupabaseError(sandboxesResponse));
-    } else {
-      sandboxRows = (await sandboxesResponse.json()) as DaytonaSandboxStatusRow[];
-    }
-  } catch (error) {
-    warn("Failed to load Daytona sandbox statuses:", error);
-  }
-
-  return mapActiveDaytonaCloudProjects({
-    rows,
-    sandboxRows,
-    toEpochSeconds: params.toEpochSeconds,
+  void params.onWarn;
+  return await fetchMappedDaytonaCloudProjectsViaConvex({
+    session: params.session,
   });
 }
 
-export async function ensureDefaultCloudProject<TSession>(params: {
-  supabaseUrl: string;
+export async function ensureDefaultCloudProjectId<TSession>(params: {
   session: TSession;
-  fetchWithSupabaseAuth: DaytonaAuthenticatedFetch<TSession>;
-  readSupabaseError: DaytonaReadSupabaseError;
+}): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
+    authSubject,
+  })) as ConvexCloudProjectRow | null;
+  const projectId = String(row?._id ?? "").trim();
+  if (!projectId) throw new Error("default_project_missing_id");
+  return projectId;
+}
+
+export async function ensureDefaultCloudProject<TSession>(params: {
+  session: TSession;
 }): Promise<void> {
-  const response = await params.fetchWithSupabaseAuth(
-    `${params.supabaseUrl}/rest/v1/rpc/ensure_default_cloud_project`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    },
-    params.session,
-  );
-  if (!response.ok) {
-    throw new Error(await params.readSupabaseError(response));
-  }
+  await ensureDefaultCloudProjectId(params);
+}
+
+export async function createDaytonaCloudProject<TSession>(params: {
+  session: TSession;
+  name: string;
+  description?: string | null;
+}): Promise<DaytonaCloudProjectRecord | null> {
+  const cleanedName = String(params.name ?? "").trim();
+  if (!cleanedName) throw new Error("project_name_required");
+  const cleanedDescription = String(params.description ?? "").trim() || null;
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const row = (await client.mutation("projects:createCloudProject" as any, {
+    authSubject,
+    name: cleanedName,
+    description: cleanedDescription ?? undefined,
+  })) as ConvexCloudProjectRow;
+  return mapConvexProjectRowToRecord(row);
+}
+
+export async function renameDaytonaCloudProject<TSession>(params: {
+  session: TSession;
+  projectId: string;
+  name: string;
+}): Promise<DaytonaCloudProjectRecord | null> {
+  const projectId = String(params.projectId ?? "").trim();
+  const cleanedName = String(params.name ?? "").trim();
+  if (!projectId) throw new Error("project_id_required");
+  if (!cleanedName) throw new Error("project_name_required");
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const row = (await client.mutation("projects:renameCloudProject" as any, {
+    authSubject,
+    projectId,
+    name: cleanedName,
+  })) as ConvexCloudProjectRow;
+  return mapConvexProjectRowToRecord(row);
+}
+
+export async function deleteDaytonaCloudProject<TSession>(params: {
+  session: TSession;
+  projectId: string;
+  force?: boolean;
+}): Promise<{ ok: boolean }> {
+  const projectId = String(params.projectId ?? "").trim();
+  if (!projectId) throw new Error("project_id_required");
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  await client.mutation("projects:deleteCloudProject" as any, {
+    authSubject,
+    projectId,
+  });
+  return { ok: true };
+}
+
+export async function probeDaytonaCloudProject<TSession>(params: {
+  session: TSession;
+  projectId: string;
+}): Promise<{
+  sandbox: { status: string | null };
+  probe: { stdout_preview: string | null };
+}> {
+  const projectId = String(params.projectId ?? "").trim();
+  if (!projectId) throw new Error("project_id_required");
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const payload = (await client.query("projects:probeCloudProject" as any, {
+    authSubject,
+    projectId,
+  })) as ConvexCloudProjectProbePayload | null;
+  const status = String(payload?.sandbox?.status ?? "").trim().toLowerCase() || null;
+  const stdoutPreview = String(payload?.probe?.stdout_preview ?? "").trim() || null;
+  return {
+    sandbox: { status },
+    probe: { stdout_preview: stdoutPreview },
+  };
 }

@@ -2,6 +2,11 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import type { ModelToggle } from "./modelCatalog";
 import { parseModelRegistryRows } from "./modelRegistry";
 import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "./threadTitleUi";
+import {
+  isConvexCloudThreadsEnabled,
+  listConvexCloudThreadMessagesPageByThreadKey,
+  listConvexCloudThreadRows,
+} from "./daytonaCloudThreadsRead";
 
 const MAX_DERIVED_THREAD_TITLES_PER_LIST = 120;
 const TITLE_DERIVATION_CHUNK_SIZE = 25;
@@ -52,9 +57,7 @@ type ThreadRecord = {
 };
 
 type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  fetchModelRegistryRows?: (session: SessionT) => Promise<unknown[] | null>;
   toEpochSeconds: (value: string) => number;
   formatModelLabel: (modelId: string | null | undefined) => string | null;
 
@@ -79,131 +82,51 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
   const loadThreads = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    const hasConvex = isConvexCloudThreadsEnabled();
+    if (!hasConvex) {
+      current.setThreadError("Convex is required for cloud threads in this build.");
+      current.setThreads([]);
+      current.threadsHydratedRef.current = true;
+      return;
+    }
 
     current.setThreadError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,project_id,community_id,context_version,created_at,updated_at,last_seq&engine_id=neq.community_chat&order=updated_at.desc&limit=200`,
-        {},
-        session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message);
-      }
-      const rows = (await response.json()) as Array<{
-        id: string;
-        title: string | null;
-        engine_id: string;
-        model_id: string | null;
-        project_id: string | null;
-        community_id: string | null;
-        context_version: unknown;
-        created_at: string;
-        updated_at: string;
-        last_seq: unknown;
-      }>;
-      const list: ThreadRecord[] = rows
-        .filter((row) => (row.engine_id ?? "").trim() !== "community_chat")
-        .map((row) => {
-          const parsedLastSeq =
-            typeof row.last_seq === "number"
-              ? row.last_seq
-              : typeof row.last_seq === "string"
-                ? Number(row.last_seq)
-                : Number.NaN;
-          const parsedContextVersion =
-            typeof row.context_version === "number"
-              ? row.context_version
-              : typeof row.context_version === "string"
-                ? Number(row.context_version)
-                : Number.NaN;
-          return {
-            id: row.id,
-            title: row.title ?? null,
-            engine_id: row.engine_id,
-            model_id: row.model_id ?? null,
-            project_id: row.project_id ?? null,
-            community_id: row.community_id ?? null,
-            context_version: Number.isFinite(parsedContextVersion) ? parsedContextVersion : 0,
-            last_seq: Number.isFinite(parsedLastSeq) ? parsedLastSeq : 0,
-            created_at: current.toEpochSeconds(row.created_at),
-            updated_at: current.toEpochSeconds(row.updated_at),
-          };
-        });
-      let listWithDerivedTitles = list;
-      try {
-        const untitledThreadIds = list
-          .filter((thread) => isMissingThreadTitleValue(thread.title))
-          .slice(0, MAX_DERIVED_THREAD_TITLES_PER_LIST)
-          .map((thread) => thread.id);
-        if (untitledThreadIds.length > 0) {
-          const titleByThreadId = new Map<string, { user: string | null; assistant: string | null }>();
-          for (const threadId of untitledThreadIds) {
-            titleByThreadId.set(threadId, { user: null, assistant: null });
-          }
+      const applyLoadedThreadList = (nextList: ThreadRecord[]): void => {
+        current.setThreads(nextList);
+        const visible = nextList.filter((thread) => thread.last_seq > 0);
 
-          for (const idsChunk of chunkArray(untitledThreadIds, TITLE_DERIVATION_CHUNK_SIZE)) {
-            const encodedIds = idsChunk.map((id) => encodeURIComponent(id)).join(",");
-            const limit = Math.max(idsChunk.length * 8, idsChunk.length);
-            const titleProbeResponse = await current.fetchWithSupabaseAuth(
-              `${url}/rest/v1/messages?select=thread_id,role,content_json,seq&thread_id=in.(${encodedIds})&role=in.(user,assistant)&order=seq.asc&limit=${limit}`,
-              {},
-              session,
-            );
-            if (!titleProbeResponse.ok) {
-              const message = await current.readSupabaseError(titleProbeResponse);
-              throw new Error(message);
-            }
-            const titleProbeRows = (await titleProbeResponse.json()) as ThreadTitleProbeRow[];
-            for (const row of titleProbeRows) {
-              const threadId = String(row?.thread_id ?? "").trim();
-              if (!threadId) continue;
-              const currentTitles = titleByThreadId.get(threadId);
-              if (!currentTitles) continue;
-              const role = String(row?.role ?? "").trim().toLowerCase();
-              const candidate = deriveThreadTitleFromCloudMessage(row?.content_json);
-              if (!candidate) continue;
-              if (role === "user" && !currentTitles.user) {
-                currentTitles.user = candidate;
-                continue;
-              }
-              if (role === "assistant" && !currentTitles.assistant) {
-                currentTitles.assistant = candidate;
-              }
-            }
+        if (!current.activeThreadId) {
+          if (!current.threadsHydratedRef.current && !current.workspaceWantsNewChatRef.current) {
+            current.setActiveThreadId(visible[0]?.id ?? null);
           }
-
-          listWithDerivedTitles = list.map((thread) => {
-            if (!isMissingThreadTitleValue(thread.title)) return thread;
-            const candidate = titleByThreadId.get(thread.id);
-            const nextTitle = candidate?.user ?? candidate?.assistant ?? null;
-            if (!nextTitle) return thread;
-            return { ...thread, title: nextTitle };
-          });
+          current.threadsHydratedRef.current = true;
+          return;
         }
-      } catch (error) {
-        console.warn("Failed to derive web thread titles from message history:", error);
-      }
 
-      current.setThreads(listWithDerivedTitles);
-      const visible = listWithDerivedTitles.filter((thread) => thread.last_seq > 0);
-
-      if (!current.activeThreadId) {
-        if (!current.threadsHydratedRef.current && !current.workspaceWantsNewChatRef.current) {
+        const selected = nextList.find((thread) => thread.id === current.activeThreadId) ?? null;
+        if (selected && selected.last_seq <= 0) {
           current.setActiveThreadId(visible[0]?.id ?? null);
         }
         current.threadsHydratedRef.current = true;
-        return;
-      }
+      };
 
-      const selected = listWithDerivedTitles.find((thread) => thread.id === current.activeThreadId) ?? null;
-      if (selected && selected.last_seq <= 0) {
-        current.setActiveThreadId(visible[0]?.id ?? null);
-      }
-      current.threadsHydratedRef.current = true;
+      const convexRows = await listConvexCloudThreadRows(session as any);
+      const convexList: ThreadRecord[] = (convexRows ?? [])
+        .filter((row) => (row.engine_id ?? "").trim() !== "community_chat")
+        .map((row) => ({
+          id: row.id,
+          title: row.title ?? null,
+          engine_id: row.engine_id,
+          model_id: row.model_id ?? null,
+          project_id: row.project_id ?? null,
+          community_id: row.community_id ?? null,
+          context_version: Number.isFinite(row.context_version) ? row.context_version : 0,
+          last_seq: Number.isFinite(row.last_seq) ? row.last_seq : 0,
+          created_at: current.toEpochSeconds(row.created_at),
+          updated_at: current.toEpochSeconds(row.updated_at),
+        }));
+      applyLoadedThreadList(convexList);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -218,38 +141,34 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
   const loadThreadMessages = useCallback(async (threadId: string, session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    const hasConvex = isConvexCloudThreadsEnabled();
+    if (!hasConvex) {
+      current.setThreadError("Convex is required for cloud threads in this build.");
+      current.setThreadMessages([]);
+      return;
+    }
+
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${threadId}&order=seq.asc&limit=1000`,
-        {},
-        session,
-      );
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message);
-      }
-      const rows = (await response.json()) as ThreadMessageT[];
-      current.setThreadMessages(rows);
+      const convexRows = await listConvexCloudThreadMessagesPageByThreadKey({
+        session: session as any,
+        threadKey: threadId,
+        pageSize: 1000,
+        maxScan: 4000,
+      });
+      current.setThreadMessages(((convexRows ?? []) as ThreadMessageT[]));
     } catch (error) {
-      console.warn("Failed to load messages:", error);
+      console.warn("Failed to load Convex thread messages:", error);
       current.setThreadMessages([]);
     }
   }, []);
 
   const loadModelRegistry = useCallback(async (session: SessionT): Promise<void> => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    const fetchRows = current.fetchModelRegistryRows;
+    if (!fetchRows) return;
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/model_registry?select=id,provider,display_name,sort_order,enabled&enabled=eq.true&order=sort_order.asc,id.asc`,
-        {},
-        session,
-      );
-      if (!response.ok) return;
-      const rows = await response.json();
+      const rows = await fetchRows(session);
+      if (!rows || !Array.isArray(rows)) return;
       const isModelAllowed = current.isModelAllowed ?? (() => true);
       const parsed = parseModelRegistryRows(rows, {
         isModelAllowed,

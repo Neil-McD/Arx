@@ -1,5 +1,4 @@
 import type { RuntimeClient } from "../../runtime/arp/client";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
 import type {
   ThreadServiceRouter,
   ThreadServiceThread,
@@ -7,52 +6,61 @@ import type {
 } from "../../../shared/threadService";
 import { createDesktopThreadServiceRouter as createCoreThreadServiceRouter } from "./createDesktopThreadServiceRouter";
 
+type DesktopCloudSession = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: {
+    id: string;
+    email?: string;
+  };
+};
+
 type CreateDesktopAppThreadServiceRouterDeps = {
   threads: ThreadServiceThread[];
   runtimeClient: RuntimeClient;
   getCommunityNameById: (communityId: string) => string | null;
-  getSession: () => SupabaseSession | null;
-  listCloudChatThreads: (session: SupabaseSession) => Promise<ThreadServiceThread[]>;
+  getSession: () => DesktopCloudSession | null;
+  listCloudChatThreads: (session: DesktopCloudSession) => Promise<ThreadServiceThread[]>;
   getCloudThreadRecord: (
     threadId: string,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
   createCloudChatThread: (thread: ThreadServiceThread) => Promise<ThreadServiceThread | null>;
   deleteCloudChatThread: (threadId: string) => Promise<void>;
   setThreadCommunityLensInCloud: (params: {
     threadId: string;
     communityId: string | null;
-    session: SupabaseSession;
+    session: DesktopCloudSession;
     expectedContextVersion: number | null;
   }) => Promise<ThreadServiceThread | null>;
   addCloudMessage: (params: {
     thread_id: string;
     role: "user" | "assistant";
     content_json: string;
-    session: SupabaseSession;
+    session: DesktopCloudSession;
   }) => Promise<void>;
   sendCloudTurn: (params: {
     thread_id: string;
     input: string;
     user_content_json: string;
-    session: SupabaseSession;
+    session: DesktopCloudSession;
     sendPolicySnapshot?: {
       selectedModelId?: string | null;
       hasChatgptAuth?: boolean;
-      approvalMode?: "read-only" | "agent" | "agent-full";
     };
     onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
   }) => Promise<void>;
   setCloudThreadTitle: (params: {
     thread_id: string;
     title: string;
-    session: SupabaseSession;
+    session: DesktopCloudSession;
   }) => Promise<void>;
   setCloudThreadEngine: (params: {
     thread_id: string;
     engine_id: string;
     model_id: string | null;
-    session: SupabaseSession;
+    session: DesktopCloudSession;
   }) => Promise<ThreadServiceThread | null>;
   listLocalThreads: () => Promise<ThreadServiceThread[]>;
   setThreadCommunityLensLocal: (params: {
@@ -167,9 +175,9 @@ export function createDesktopAppThreadServiceRouter(
         input: input.input,
         user_content_json: input.userContentJson,
         community_name: communityName || null,
-        supabase_url: input.supabaseUrl ?? null,
-        supabase_anon_key: input.supabaseAnonKey ?? null,
-        supabase_access_token: input.supabaseAccessToken ?? "",
+        cloud_runtime_base_url: input.cloudRuntimeBaseUrl ?? null,
+        cloud_publishable_key: input.cloudPublishableKey ?? null,
+        cloud_access_token: input.cloudAccessToken ?? "",
       });
     },
     setLocalThreadTitle: async (threadId, title) =>

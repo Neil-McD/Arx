@@ -1,6 +1,7 @@
 export type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 export type ModelCatalogSurface = "web" | "desktop";
 export type ModelProviderId = "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
+export type ModelFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 
 export type ModelToggle = {
   id: string;
@@ -13,6 +14,7 @@ export type PremiumModelCatalogEntry = {
   label: string;
   section: Exclude<ModelSectionId, "all" | "free">;
   description: string;
+  supportedFundingSources: readonly ModelFundingSource[];
 };
 
 type CatalogModelEntry = PremiumModelCatalogEntry & {
@@ -25,6 +27,7 @@ type FreeModelEntry = {
   label: string;
   description: string;
   openRouterModelRef: string;
+  supportedFundingSources: readonly ModelFundingSource[];
 };
 
 export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
@@ -35,22 +38,17 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
     label: "GPT OSS 120B",
     description: "OpenRouter free tier",
     openRouterModelRef: "openai/gpt-oss-120b:free",
-  },
-  {
-    id: "deepseek-r1-free",
-    label: "DeepSeek R1",
-    description: "OpenRouter free tier",
-    openRouterModelRef: "deepseek/deepseek-r1-0528:free",
+    supportedFundingSources: ["demo_public", "user_key"],
   },
 ];
 
 const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
-  { id: "gpt-5.2", label: "GPT 5.2", section: "openai", description: "OpenAI", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "grok-4.1", label: "Grok 4.1 Fast Reasoning", section: "x-ai", description: "xAI", surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "gpt-5.2", label: "GPT 5.2", section: "openai", description: "OpenAI", supportedFundingSources: ["platform", "user_key", "user_chatgpt"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
 ];
 
 export const DEFAULT_GUEST_MODEL_ID = FREE_MODELS[0]!.id;
@@ -67,7 +65,10 @@ export const FREE_MODEL_LABELS: Readonly<Record<string, string>> = Object.freeze
 );
 
 export function getFreeModelEntries(): FreeModelEntry[] {
-  return FREE_MODELS.map((model) => ({ ...model }));
+  return FREE_MODELS.map((model) => ({
+    ...model,
+    supportedFundingSources: [...model.supportedFundingSources],
+  }));
 }
 
 export function getPublicFreeModelMap(): Record<string, string> {
@@ -94,7 +95,25 @@ export function getPremiumModelCatalog(surface: ModelCatalogSurface): PremiumMod
     label: model.label,
     section: model.section,
     description: model.description,
+    supportedFundingSources: [...model.supportedFundingSources],
   }));
+}
+
+export function getSupportedFundingSourcesForModel(modelId: string | null | undefined): ModelFundingSource[] {
+  const id = normalizeModelId(modelId);
+  if (!id) return [];
+  const freeModel = FREE_MODELS.find((model) => model.id === id);
+  if (freeModel) return [...freeModel.supportedFundingSources];
+  const premiumModel = PREMIUM_MODELS.find((model) => model.id === id);
+  if (premiumModel) return [...premiumModel.supportedFundingSources];
+  return [];
+}
+
+export function supportsModelFundingSource(
+  modelId: string | null | undefined,
+  fundingSource: ModelFundingSource,
+): boolean {
+  return getSupportedFundingSourcesForModel(modelId).includes(fundingSource);
 }
 
 export function isModelAvailableOnSurface(modelId: string | null | undefined, surface: ModelCatalogSurface): boolean {

@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { getCommunityBannerImageStyle } from "./communityBannerUi";
 import { communityInitials } from "./messageMetadataUi";
 
 type DiscoverCommunityCardProps = {
@@ -7,6 +8,9 @@ type DiscoverCommunityCardProps = {
   description: string;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
+  bannerFocusX?: number | null;
+  bannerFocusY?: number | null;
+  bannerZoom?: number | null;
   priceLabel: string;
   visibilityClass?: string | null;
   visibilityLabel: string;
@@ -22,6 +26,9 @@ export function DiscoverCommunityCard({
   description,
   avatarUrl,
   bannerUrl,
+  bannerFocusX,
+  bannerFocusY,
+  bannerZoom,
   priceLabel,
   visibilityClass,
   visibilityLabel,
@@ -53,7 +60,18 @@ export function DiscoverCommunityCard({
     >
       <div className="discover-card-banner">
         {bannerUrl ? (
-          <img className="discover-card-banner-img" src={bannerUrl} alt="" loading="lazy" decoding="async" />
+          <img
+            className="discover-card-banner-img"
+            src={bannerUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            style={getCommunityBannerImageStyle({
+              focusX: bannerFocusX,
+              focusY: bannerFocusY,
+              zoom: bannerZoom,
+            })}
+          />
         ) : null}
       </div>
       <div className="discover-card-body">

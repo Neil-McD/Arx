@@ -5,8 +5,6 @@ src-tauri/target/
 .worktrees/
 .DS_Store
 .env
-supabase/.secrets.env
-supabase/.temp/
 
 # local reference repo mirrors (non-runtime, never commit)
 references/detect-secrets/
@@ -14,3 +12,5 @@ references/git-secrets/
 references/gitleaks/
 references/noseyparker/
 references/trufflehog/
+
+.env.local

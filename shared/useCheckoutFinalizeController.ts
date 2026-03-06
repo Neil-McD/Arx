@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { SupabaseSession } from "./supabaseAuthCore";
+import type { AuthSession as CloudSession } from "./authSessionCore";
+import { createConvexClient } from "./convexAuthenticatedClient";
 
 export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
 type UseCheckoutFinalizeControllerArgs = {
   checkoutSuccessSessionId: string | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
-  getSession: () => SupabaseSession | null;
+  getSession: () => CloudSession | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   persistClaimToken: (token: string) => void;
   setCheckoutStatus: Dispatch<SetStateAction<CheckoutFinalizeStatus>>;
@@ -53,8 +51,14 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       return;
     }
 
-    const supabaseUrl = args.getSupabaseUrl();
-    if (!supabaseUrl) return;
+    let client: ReturnType<typeof createConvexClient>;
+    try {
+      client = createConvexClient();
+    } catch {
+      args.setCheckoutStatus("error");
+      args.setCheckoutError("Missing Convex URL.");
+      return;
+    }
 
     if (lastSessionIdRef.current !== sessionId) {
       lastSessionIdRef.current = sessionId;
@@ -77,12 +81,10 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       currentArgs.setCheckoutClaimToken(null);
       currentArgs.setRedeemClaimError(null);
       try {
-        const response = await currentArgs.fetchWithSupabasePublic(
-          `${supabaseUrl}/functions/v1/checkout_finalize?session_id=${encodeURIComponent(sessionId)}`,
-          { method: "GET" },
-        );
-        if (!response.ok) throw new Error(await currentArgs.readSupabaseError(response));
-        const payload = (await response.json()) as {
+        const payload = (await client.query("billing:finalizeCheckoutSession" as any, {
+          sessionId,
+          nowMs: Date.now(),
+        })) as {
           ok?: boolean;
           status?: string;
           claim?: { token?: string };

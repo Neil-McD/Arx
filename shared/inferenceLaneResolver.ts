@@ -1,25 +1,34 @@
-import { DEFAULT_GUEST_MODEL_ID, FREE_MODEL_ALLOWLIST, isFreeModelId } from "./modelCatalog";
+import {
+  DEFAULT_GUEST_MODEL_ID,
+  FREE_MODEL_ALLOWLIST,
+  isFreeModelId,
+  supportsModelFundingSource,
+} from "./modelCatalog";
 
-export type CloudInferenceLane = "chatgpt" | "public" | "platform";
-
-function isChatgptEligibleModelAlias(modelId: string | null | undefined): boolean {
-  const cleaned = String(modelId ?? "").trim().toLowerCase();
-  return cleaned.startsWith("gpt-") && !cleaned.startsWith("gpt-oss-");
-}
+export type CloudInferenceLane = "chatgpt" | "public" | "platform" | "user_key";
 
 export function resolveCloudInferenceLane(params: {
   modelId: string | null | undefined;
   freeModelAllowlist?: ReadonlySet<string>;
   surface?: "web" | "desktop";
   hasChatgptAuth?: boolean;
+  hasUserKeyConnection?: boolean;
+  hasPaidAccess?: boolean;
 }): CloudInferenceLane {
   const allowlist = params.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST;
-  const surface = params.surface ?? "web";
   const hasChatgptAuth = Boolean(params.hasChatgptAuth);
-  if (surface === "desktop" && hasChatgptAuth && isChatgptEligibleModelAlias(params.modelId)) {
+  const hasUserKeyConnection = Boolean(params.hasUserKeyConnection);
+  const hasPaidAccess = Boolean(params.hasPaidAccess);
+  const isFree = isFreeModelId(params.modelId, allowlist);
+  if (isFree) return "public";
+  if (hasChatgptAuth && supportsModelFundingSource(params.modelId, "user_chatgpt")) {
     return "chatgpt";
   }
-  return isFreeModelId(params.modelId, allowlist) ? "public" : "platform";
+  if (hasUserKeyConnection && supportsModelFundingSource(params.modelId, "user_key")) {
+    return "user_key";
+  }
+  void hasPaidAccess;
+  return "platform";
 }
 
 export type DesktopCloudInferenceExecutionPlan = {
@@ -71,6 +80,7 @@ export function resolveDesktopCloudInferenceExecutionPlan(params: {
   const laneOrder = (() => {
     if (primaryLane === "public") return ["public"] as CloudInferenceLane[];
     if (primaryLane === "chatgpt") return ["chatgpt", "platform", "public"] as CloudInferenceLane[];
+    if (primaryLane === "user_key") return ["user_key", "platform", "public"] as CloudInferenceLane[];
     return ["platform", "public"] as CloudInferenceLane[];
   })();
 
@@ -89,6 +99,7 @@ export type CloudModelSelectionResolution = {
   requestedModelId: string;
   modelId: string;
   lane: CloudInferenceLane;
+  fundingSource: "demo_public" | "user_key" | "user_chatgpt" | "platform";
   usedFallback: boolean;
 };
 
@@ -98,6 +109,7 @@ export function resolveCloudModelSelection(params: {
   defaultAuthedModelId: string;
   defaultGuestModelId: string;
   hasPaidAccess: boolean;
+  hasUserKeyConnection?: boolean;
   freeModelAllowlist?: ReadonlySet<string>;
   surface?: "web" | "desktop";
   hasChatgptAuth?: boolean;
@@ -106,6 +118,8 @@ export function resolveCloudModelSelection(params: {
   const requestedModelId = String(params.requestedModelId ?? "").trim();
   const defaultAuthedModelId = String(params.defaultAuthedModelId ?? "").trim();
   const defaultGuestModelId = String(params.defaultGuestModelId ?? "").trim();
+  const hasUserKeyConnection = Boolean(params.hasUserKeyConnection);
+  const hasChatgptAuth = Boolean(params.hasChatgptAuth);
 
   const enabledModelIds = params.enabledModelIds
     .map((id) => String(id ?? "").trim())
@@ -126,24 +140,37 @@ export function resolveCloudModelSelection(params: {
     modelId: candidateModelId,
     freeModelAllowlist: allowlist,
     surface: params.surface,
-    hasChatgptAuth: params.hasChatgptAuth,
+    hasChatgptAuth,
+    hasUserKeyConnection,
+    hasPaidAccess: params.hasPaidAccess,
   });
 
   const modelId =
-    !params.hasPaidAccess && candidateLane === "platform"
+    !params.hasPaidAccess && !hasUserKeyConnection && !hasChatgptAuth && candidateLane === "platform"
       ? defaultGuestModelId
       : candidateModelId;
   const lane = resolveCloudInferenceLane({
     modelId,
     freeModelAllowlist: allowlist,
     surface: params.surface,
-    hasChatgptAuth: params.hasChatgptAuth,
+    hasChatgptAuth,
+    hasUserKeyConnection,
+    hasPaidAccess: params.hasPaidAccess,
   });
+  const fundingSource =
+    lane === "public"
+      ? ("demo_public" as const)
+      : lane === "chatgpt"
+        ? ("user_chatgpt" as const)
+        : lane === "user_key"
+          ? ("user_key" as const)
+          : ("platform" as const);
 
   return {
     requestedModelId,
     modelId,
     lane,
+    fundingSource,
     usedFallback: modelId !== requestedModelId,
   };
 }

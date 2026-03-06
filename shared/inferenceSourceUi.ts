@@ -17,3 +17,22 @@ export function appendInferenceSourceLabel(
   const source = formatInferenceSourceLabel(inferenceSource);
   return source ? `${base} · ${source}` : base;
 }
+
+function formatInferenceProviderLabel(value: string | null | undefined): string | null {
+  const raw = (value ?? "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT";
+  if (raw === "platform") return "Polynet";
+  if (raw === "user" || raw === "user_key" || raw === "free") return "OpenRouter";
+  return null;
+}
+
+export function appendInferenceProviderLabel(
+  baseLabel: string | null | undefined,
+  inferenceSource: string | null | undefined,
+): string | null {
+  const base = (baseLabel ?? "").trim();
+  if (!base) return null;
+  const provider = formatInferenceProviderLabel(inferenceSource);
+  return provider ? `${base} · ${provider}` : base;
+}

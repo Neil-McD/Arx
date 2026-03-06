@@ -368,9 +368,9 @@ export class TauriRuntimeClient implements RuntimeClient {
     input: string;
     user_content_json: string;
     community_name?: string | null;
-    supabase_url?: string | null;
-    supabase_anon_key?: string | null;
-    supabase_access_token?: string | null;
+    cloud_runtime_base_url?: string | null;
+    cloud_publishable_key?: string | null;
+    cloud_access_token?: string | null;
   }) {
     return invoke<{
       thread_id: ThreadId;
@@ -384,9 +384,9 @@ export class TauriRuntimeClient implements RuntimeClient {
       input: args.input,
       userContentJson: args.user_content_json,
       communityName: args.community_name ?? null,
-      supabaseUrl: args.supabase_url ?? null,
-      supabaseAnonKey: args.supabase_anon_key ?? null,
-      supabaseAccessToken: args.supabase_access_token ?? null,
+      cloudRuntimeBaseUrl: args.cloud_runtime_base_url ?? null,
+      cloudPublishableKey: args.cloud_publishable_key ?? null,
+      cloudAccessToken: args.cloud_access_token ?? null,
     });
   }
 

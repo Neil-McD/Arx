@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { RuntimeClient } from "../../runtime/arp/client";
 import type { EventRecord, MessageRecord, ThreadRecord, ToolCallRecord } from "../../runtime/arp/types";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { CloudAuthSession } from "../../../shared/cloudAuthSession";
 import {
   DELTA_EVENTS_PAGE_SIZE,
   MESSAGE_PAGE_SIZE,
@@ -22,6 +22,12 @@ import {
   toMessageRecordFromCloud,
   type CloudThreadMessageRow,
 } from "./desktopThreadFeedCore";
+import {
+  isConvexCloudThreadsEnabled,
+  listConvexCloudThreadMessagesPageByThreadKey,
+} from "../../../shared/daytonaCloudThreadsRead";
+
+type DesktopCloudSession = Exclude<CloudAuthSession, null>;
 
 type UseDesktopThreadFeedControllerArgs = {
   activeThreadId: string | null;
@@ -32,14 +38,7 @@ type UseDesktopThreadFeedControllerArgs = {
   setToolCalls: Dispatch<SetStateAction<ToolCallRecord[]>>;
   threads: ThreadRecord[];
   resolveThreadStorageMode: (threadId: string) => "cloud" | "local";
-  supabaseSessionRef: { current: SupabaseSession | null };
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (
-    input: string,
-    init: RequestInit,
-    session: SupabaseSession,
-  ) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  cloudSessionRef: { current: DesktopCloudSession | null };
 };
 
 export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControllerArgs) {
@@ -52,10 +51,7 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
     setToolCalls,
     threads,
     resolveThreadStorageMode,
-    supabaseSessionRef,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
+    cloudSessionRef,
   } = args;
 
   const activeThreadIdRef = useRef<string | null>(activeThreadId);
@@ -174,32 +170,23 @@ export function useDesktopThreadFeedController(args: UseDesktopThreadFeedControl
 
   const fetchCloudMessagesPage = useCallback(
     async (sessionId: string, beforeSeq?: number): Promise<MessageRecord[]> => {
-      const session = supabaseSessionRef.current;
-      const url = session ? getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!isConvexCloudThreadsEnabled()) {
+        throw new Error("Convex is required for cloud thread messages in this build.");
+      }
+      const session = cloudSessionRef.current;
+      if (!session) {
         throw new Error("Sign in to load cloud chat thread messages.");
       }
-
-      const beforeFilter =
-        typeof beforeSeq === "number" && Number.isFinite(beforeSeq) && beforeSeq > 0
-          ? `&seq=lt.${Math.floor(beforeSeq)}`
-          : "";
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&thread_id=eq.${encodeURIComponent(
-          sessionId,
-        )}${beforeFilter}&order=seq.desc&limit=${MESSAGE_PAGE_SIZE}`,
-        { method: "GET" },
+      const convexRows = await listConvexCloudThreadMessagesPageByThreadKey({
         session,
-      );
-      if (!response.ok) {
-        throw new Error(await readSupabaseError(response));
-      }
-      const rows = (await response.json()) as CloudThreadMessageRow[];
-      const mapped = rows.map(toMessageRecordFromCloud);
-      mapped.reverse();
-      return mapped;
+        threadKey: sessionId,
+        pageSize: MESSAGE_PAGE_SIZE,
+        beforeSeq,
+        maxScan: 4000,
+      });
+      return (convexRows ?? []).map((row) => toMessageRecordFromCloud(row as CloudThreadMessageRow));
     },
-    [fetchWithSupabaseAuth, getSupabaseUrl, readSupabaseError, supabaseSessionRef],
+    [cloudSessionRef],
   );
 
   const loadMessages = useCallback(

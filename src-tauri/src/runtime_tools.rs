@@ -8,8 +8,6 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command as TokioCommand;
 
 const RIPGREP_VERSION: &str = "14.1.1";
-const COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR: &str =
-    "evidence_required: community_memory_candidate_propose requires evidence.items with at least one provenance item";
 
 fn resolve_scoped_path(root: &str, raw_path: &str) -> Result<std::path::PathBuf, String> {
     let cleaned = raw_path.trim();
@@ -102,33 +100,6 @@ fn community_tool_arg_string(args: &serde_json::Value, key: &str) -> Option<Stri
         .map(str::to_string)
 }
 
-fn community_tool_arg_object(args: &serde_json::Value, key: &str) -> Option<serde_json::Value> {
-    args.get(key)
-        .and_then(|value| value.as_object())
-        .map(|obj| {
-            let map = obj
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<serde_json::Map<String, serde_json::Value>>();
-            serde_json::Value::Object(map)
-        })
-}
-
-fn parse_required_community_tool_arg(
-    args: &serde_json::Value,
-    key: &str,
-    fallback: Option<&str>,
-) -> Result<String, String> {
-    if let Some(value) = community_tool_arg_string(args, key) {
-        return Ok(value);
-    }
-    let fallback_value = fallback
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string);
-    fallback_value.ok_or_else(|| format!("{} is required", key))
-}
-
 fn resolve_scoped_community_id(
     args: &serde_json::Value,
     thread_community_id: Option<&str>,
@@ -159,47 +130,10 @@ fn parse_optional_community_limit(args: &serde_json::Value) -> Option<usize> {
         })
 }
 
-fn has_valid_community_evidence_provenance_item(item: &serde_json::Value) -> bool {
-    let Some(obj) = item.as_object() else {
-        return false;
-    };
-    let source_type = obj
-        .get("source_type")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_default();
-    let source_id = obj
-        .get("source_id")
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .unwrap_or("");
-    matches!(source_type.as_str(), "chat" | "resource" | "memory") && !source_id.is_empty()
-}
-
-fn parse_required_community_memory_evidence(args: &serde_json::Value) -> Result<serde_json::Value, String> {
-    let evidence = community_tool_arg_object(args, "evidence")
-        .ok_or_else(|| COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR.to_string())?;
-    let has_provenance = evidence
-        .get("items")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .any(|item| has_valid_community_evidence_provenance_item(item))
-        })
-        .unwrap_or(false);
-    if !has_provenance {
-        return Err(COMMUNITY_MEMORY_EVIDENCE_REQUIRED_ERROR.to_string());
-    }
-    Ok(evidence)
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommunitySearchSourceType {
     Chat,
     Resource,
-    Memory,
 }
 
 fn parse_community_search_source_types(args: &serde_json::Value) -> Vec<CommunitySearchSourceType> {
@@ -215,18 +149,13 @@ fn parse_community_search_source_types(args: &serde_json::Value) -> Vec<Communit
         })
         .unwrap_or_default();
     if raw_values.is_empty() {
-        return vec![
-            CommunitySearchSourceType::Chat,
-            CommunitySearchSourceType::Resource,
-            CommunitySearchSourceType::Memory,
-        ];
+        return vec![CommunitySearchSourceType::Chat, CommunitySearchSourceType::Resource];
     }
     let mut out = Vec::new();
     for raw in raw_values {
         let source = match raw.as_str() {
             "chat" => Some(CommunitySearchSourceType::Chat),
             "resource" => Some(CommunitySearchSourceType::Resource),
-            "memory" => Some(CommunitySearchSourceType::Memory),
             _ => None,
         };
         if let Some(source) = source {
@@ -236,11 +165,7 @@ fn parse_community_search_source_types(args: &serde_json::Value) -> Vec<Communit
         }
     }
     if out.is_empty() {
-        vec![
-            CommunitySearchSourceType::Chat,
-            CommunitySearchSourceType::Resource,
-            CommunitySearchSourceType::Memory,
-        ]
+        vec![CommunitySearchSourceType::Chat, CommunitySearchSourceType::Resource]
     } else {
         out
     }
@@ -252,25 +177,8 @@ fn source_types_to_json_values(source_types: &[CommunitySearchSourceType]) -> Ve
         .map(|source| match source {
             CommunitySearchSourceType::Chat => "chat",
             CommunitySearchSourceType::Resource => "resource",
-            CommunitySearchSourceType::Memory => "memory",
         })
         .collect()
-}
-
-fn truncate_for_tool_preview(value: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    let trimmed = value.trim();
-    let mut out = String::new();
-    for (index, ch) in trimmed.chars().enumerate() {
-        if index >= max_chars {
-            out.push_str("...");
-            return out;
-        }
-        out.push(ch);
-    }
-    out
 }
 
 pub(crate) async fn run_community_capability_tool(
@@ -309,41 +217,52 @@ pub(crate) async fn run_community_capability_tool(
             }
         }
         "community_memory_candidate_propose" => {
-            let community_id = match resolve_scoped_community_id(args, thread_community_id) {
+            let scoped = match resolve_scoped_community_id(args, thread_community_id) {
                 Ok(value) => value,
                 Err(err) => return tool_error(err),
             };
-            let memory_text = match parse_required_community_tool_arg(args, "memory_text", None) {
-                Ok(value) => value,
-                Err(err) => return tool_error(err),
-            };
+            let requested_community_id = community_tool_arg_string(args, "community_id");
             let title = community_tool_arg_string(args, "title");
-            let evidence = match parse_required_community_memory_evidence(args) {
-                Ok(value) => value,
-                Err(err) => return tool_error(err),
-            };
+            let memory_text = community_tool_arg_string(args, "memory_text").unwrap_or_default();
             let request_key = community_tool_arg_string(args, "request_key");
+            let evidence = args.get("evidence").unwrap_or(&serde_json::Value::Null);
+            let evidence_items = evidence.get("items").and_then(|value| value.as_array());
+            if evidence_items.map(|items| items.is_empty()).unwrap_or(true) {
+                return tool_error(
+                    "community_memory_candidate_propose requires evidence.items with at least one item"
+                        .to_string(),
+                );
+            }
+
             match community_context::propose_community_memory_candidate_strict(
                 proxy,
-                community_id.as_str(),
+                scoped.as_str(),
                 title.as_deref(),
                 memory_text.as_str(),
-                &evidence,
+                evidence,
                 request_key.as_deref(),
             )
             .await
             {
-                Ok(result) => tool_ok(
-                    serde_json::json!({
+                Ok(rpc_payload) => {
+                    let mut payload = serde_json::json!({
                         "ok": true,
                         "tool": "community_memory_candidate_propose",
                         "community_scope": "thread_context",
-                        "title": title,
-                        "memory_text_preview": truncate_for_tool_preview(memory_text.as_str(), 200),
-                        "result": result
-                    })
-                    .to_string(),
-                ),
+                        "result": rpc_payload,
+                    });
+                    if let Some(requested) = requested_community_id.as_deref() {
+                        if requested != scoped.as_str() {
+                            if let Some(obj) = payload.as_object_mut() {
+                                obj.insert(
+                                    "requested_community_id_ignored".to_string(),
+                                    serde_json::Value::Bool(true),
+                                );
+                            }
+                        }
+                    }
+                    tool_ok(payload.to_string())
+                }
                 Err(err) => tool_error(err),
             }
         }

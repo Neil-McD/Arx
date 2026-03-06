@@ -11,7 +11,8 @@ export function useAuthGateLifecycleEffects(args: UseAuthGateLifecycleEffectsArg
   useEffect(() => {
     if (!args.isAuthGateOpen) return;
     const keyHost = args.keyTarget === "document" ? document : window;
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: Event) => {
+      if (!(event instanceof KeyboardEvent)) return;
       if (event.key === "Escape") args.closeAuthGate();
     };
     keyHost.addEventListener("keydown", handleKeyDown);

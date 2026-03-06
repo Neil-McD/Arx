@@ -4,7 +4,7 @@ import type { AppPage, CommunityTab } from "./appShellNavigation";
 export function useCommunityMembersTabLifecycle<SessionT, CommunityInviteT, CommunityMemoryCandidateT>(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
   canInviteActiveCommunity: boolean;
   canManageMembersActiveCommunity: boolean;
@@ -14,9 +14,11 @@ export function useCommunityMembersTabLifecycle<SessionT, CommunityInviteT, Comm
   setCommunityMemoryCandidates: Dispatch<SetStateAction<CommunityMemoryCandidateT[]>>;
   setCommunityMemoryCandidatesError: Dispatch<SetStateAction<string | null>>;
 }) {
+  const session = params.session;
+
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "members") return;
-    if (!params.supabaseSession || !params.activeCommunityId) {
+    if (!session || !params.activeCommunityId) {
       params.setCommunityInvites([]);
       return;
     }
@@ -24,11 +26,11 @@ export function useCommunityMembersTabLifecycle<SessionT, CommunityInviteT, Comm
       params.setCommunityInvites([]);
       return;
     }
-    void params.loadCommunityInvites(params.activeCommunityId, params.supabaseSession);
+    void params.loadCommunityInvites(params.activeCommunityId, session);
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.canInviteActiveCommunity,
     params.loadCommunityInvites,
@@ -37,7 +39,7 @@ export function useCommunityMembersTabLifecycle<SessionT, CommunityInviteT, Comm
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "members") return;
-    if (!params.supabaseSession || !params.activeCommunityId) {
+    if (!session || !params.activeCommunityId) {
       params.setCommunityMemoryCandidates([]);
       params.setCommunityMemoryCandidatesError(null);
       return;
@@ -47,11 +49,11 @@ export function useCommunityMembersTabLifecycle<SessionT, CommunityInviteT, Comm
       params.setCommunityMemoryCandidatesError(null);
       return;
     }
-    void params.loadCommunityMemoryCandidates(params.activeCommunityId, params.supabaseSession);
+    void params.loadCommunityMemoryCandidates(params.activeCommunityId, session);
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    session,
     params.activeCommunityId,
     params.canManageMembersActiveCommunity,
     params.loadCommunityMemoryCandidates,

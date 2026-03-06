@@ -8,7 +8,7 @@ export type AppView = "home" | "settings";
 
 export const COMMUNITY_TABS = [
   "chat",
-  "library",
+  "feed",
   "resources",
   "members",
   "settings",
@@ -30,8 +30,10 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 
 export function parseCommunityTab(value: string | null | undefined): CommunityTab {
   switch ((value ?? "").trim()) {
+    case "feed":
+      return "feed";
     case "library":
-      return "library";
+      return "resources";
     case "resources":
       return "resources";
     case "members":

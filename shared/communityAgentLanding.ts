@@ -69,7 +69,7 @@ export function buildDefaultCommunityEmptyThreadLanding(
         id: "start",
         label: "Start here",
         prompts: [
-          "Where do I find Chat, Library, and Resources in this community?",
+          "Where do I find Chat and Resources in this community?",
           "Help me write a short intro message to post in Chat.",
           "Ask me 5 questions so you can point me to the right place in this community.",
           "What should I do first to get value here?",

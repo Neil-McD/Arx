@@ -7,21 +7,16 @@ import {
   readPendingPublicJoinBrandosAid,
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
-  type FetchWithSupabaseAuth,
-  type ReadSupabaseError,
-  type SupabaseSessionLike,
+  type CloudSessionLike,
 } from "./pay_first";
 
 type OpenExternalUrlClient = {
   openExternalUrl: (url: string) => Promise<void>;
 };
 
-type UsePendingPublicCommunityJoinControllerArgs<SessionT extends SupabaseSessionLike> = {
+type UsePendingPublicCommunityJoinControllerArgs<SessionT extends CloudSessionLike> = {
   shellClient: OpenExternalUrlClient;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<SessionT>;
-  readSupabaseError: ReadSupabaseError;
+  session: SessionT | null;
   loadCommunities: (session: SessionT) => Promise<void>;
   autoJoinPublicCommunitiesAttemptedRef: MutableRefObject<Set<string>>;
   getBrandosAidForCommunitySlug: (slug: string | null) => string | null;
@@ -35,7 +30,7 @@ type UsePendingPublicCommunityJoinControllerArgs<SessionT extends SupabaseSessio
   joinCommunityFailureMessage?: string;
 };
 
-export function usePendingPublicCommunityJoinController<SessionT extends SupabaseSessionLike>(
+export function usePendingPublicCommunityJoinController<SessionT extends CloudSessionLike>(
   args: UsePendingPublicCommunityJoinControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
@@ -102,9 +97,6 @@ export function usePendingPublicCommunityJoinController<SessionT extends Supabas
     if (current.autoJoinPublicCommunitiesAttemptedRef.current.has(attemptKey)) return;
     current.autoJoinPublicCommunitiesAttemptedRef.current.add(attemptKey);
 
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     current.setJoiningDiscoverCommunityId(attemptKey);
     current.setDiscoverError(null);
     try {
@@ -114,13 +106,10 @@ export function usePendingPublicCommunityJoinController<SessionT extends Supabas
         return null;
       })();
       const joinedId = await joinPublicCommunityRpc({
-        url,
         session,
         communityId: id || undefined,
         communitySlug: slug || undefined,
         brandosAid: resolvedBrandosAid,
-        fetchWithSupabaseAuth: current.fetchWithSupabaseAuth,
-        readSupabaseError: current.readSupabaseError,
       });
       clearPendingPublicJoin();
 
@@ -147,14 +136,9 @@ export function usePendingPublicCommunityJoinController<SessionT extends Supabas
 
   const handleJoinDiscoverCommunity = useCallback(async (community: { slug: string }) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) {
-      current.setDiscoverError("Missing Supabase URL.");
-      return;
-    }
     current.setDiscoverError(null);
 
-    if (!current.supabaseSession) {
+    if (!current.session) {
       await openCommunityLandingExternal(community);
       return;
     }
@@ -164,16 +148,13 @@ export function usePendingPublicCommunityJoinController<SessionT extends Supabas
       const brandosAid = current.getBrandosAidForCommunitySlug(community.slug ?? null);
       const resolvedBrandosAid = brandosAid && current.isUuid(brandosAid) ? brandosAid : null;
       const joinedId = await joinPublicCommunityRpc({
-        url,
-        session: current.supabaseSession,
+        session: current.session,
         communitySlug: community.slug,
         brandosAid: resolvedBrandosAid,
-        fetchWithSupabaseAuth: current.fetchWithSupabaseAuth,
-        readSupabaseError: current.readSupabaseError,
       });
       clearPendingPublicJoin();
 
-      await current.loadCommunities(current.supabaseSession);
+      await current.loadCommunities(current.session);
       current.onJoinSuccess(joinedId);
     } catch (error) {
       const kind = classifyPublicCommunityJoinError(error);

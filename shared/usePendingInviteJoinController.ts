@@ -3,9 +3,7 @@ import {
   acceptCommunityInviteRpc,
   classifyInviteAcceptError,
   getErrorMessage,
-  type FetchWithSupabaseAuth,
-  type ReadSupabaseError,
-  type SupabaseSessionLike,
+  type CloudSessionLike,
 } from "./pay_first";
 
 type PendingInviteLike = {
@@ -34,18 +32,15 @@ type PendingInviteShellClient<PendingInviteT extends PendingInviteLike> = {
 };
 
 type UsePendingInviteJoinControllerArgs<
-  SessionT extends SupabaseSessionLike,
+  SessionT extends CloudSessionLike,
   PendingInviteT extends PendingInviteLike,
 > = {
   shellClient: PendingInviteShellClient<PendingInviteT>;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   pendingInvites: PendingInviteT[];
   activeInviteGateKey: string | null;
   autoJoinInvitesAttemptedRef: MutableRefObject<Set<string>>;
-  getSupabaseUrl: () => string | null;
   normalizeInviteCode: (inviteKey: string) => string;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<SessionT>;
-  readSupabaseError: ReadSupabaseError;
   loadCommunities: (session: SessionT) => Promise<void>;
   handleSignIn: () => Promise<void>;
   onJoinSuccess: (community: JoinedCommunity) => void;
@@ -54,12 +49,11 @@ type UsePendingInviteJoinControllerArgs<
   setIsJoiningInvite: Dispatch<SetStateAction<boolean>>;
   setActiveInviteGateKey: Dispatch<SetStateAction<string | null>>;
   inviteExpiredMessage?: string;
-  missingSupabaseUrlMessage?: string;
   joinFailureMessage?: string;
 };
 
 export function usePendingInviteJoinController<
-  SessionT extends SupabaseSessionLike,
+  SessionT extends CloudSessionLike,
   PendingInviteT extends PendingInviteLike,
 >(args: UsePendingInviteJoinControllerArgs<SessionT, PendingInviteT>) {
   const argsRef = useRef(args);
@@ -102,19 +96,12 @@ export function usePendingInviteJoinController<
     session: SessionT,
   ): Promise<JoinedCommunity> => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) {
-      throw new Error(current.missingSupabaseUrlMessage ?? "Missing Supabase URL.");
-    }
     const key = current.normalizeInviteCode(inviteKey);
     if (!key) throw new Error("Invite code is required.");
 
     const joined = await acceptCommunityInviteRpc({
-      url,
       session,
       inviteCode: key,
-      fetchWithSupabaseAuth: current.fetchWithSupabaseAuth,
-      readSupabaseError: current.readSupabaseError,
     });
     return { id: joined.community_id, slug: joined.community_slug, name: joined.community_name };
   }, []);
@@ -139,7 +126,7 @@ export function usePendingInviteJoinController<
     }
     current.setInviteJoinError(null);
 
-    if (!current.supabaseSession) {
+    if (!current.session) {
       try {
         await current.shellClient.requestJoinPendingInvite(cleaned);
         await loadPendingInvites();
@@ -155,7 +142,7 @@ export function usePendingInviteJoinController<
       await current.shellClient.upsertPendingInvite({ invite_key: cleaned, source: "manual" });
       await loadPendingInvites();
 
-      const joined = await joinCommunityForInviteKey(cleaned, current.supabaseSession);
+      const joined = await joinCommunityForInviteKey(cleaned, current.session);
       await current.shellClient.markPendingInviteJoined({
         invite_key: cleaned,
         community_id: joined.id,
@@ -163,7 +150,7 @@ export function usePendingInviteJoinController<
       });
       await loadPendingInvites();
 
-      await current.loadCommunities(current.supabaseSession);
+      await current.loadCommunities(current.session);
       current.onJoinSuccess(joined);
     } catch (error) {
       const kind = classifyInviteAcceptError(error);

@@ -1,5 +1,12 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
+import { listCloudPersonalMemoryRows } from "./cloudPersonalMemoryGateway";
+import {
+  isConvexCloudThreadsEnabled,
+  listConvexCloudThreadMessagesByThreadKey,
+  listConvexCloudThreadRows,
+} from "./daytonaCloudThreadsRead";
+
 type ThreadMessage = {
   id: string;
   thread_id: string;
@@ -28,10 +35,7 @@ type GuestThreadStorageV1 = {
 
 type UseWebWorkspaceActionsControllerArgs<SessionT, AttachmentT, ThreadMessageT extends ThreadMessage> = {
   getSession: () => SessionT | null;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAuthUid: (session: SessionT) => string;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getCloudAuthUid: (session: SessionT) => string;
   buildCsv: (headers: string[], rows: Array<Record<string, unknown>>) => string;
   downloadTextFile: (filename: string, content: string, mime?: string) => void;
   parseMessageText: (content: unknown) => string;
@@ -77,18 +81,27 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
     const current = argsRef.current;
     const session = current.getSession();
     if (!session) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    if (!isConvexCloudThreadsEnabled()) {
+      current.setExportError("Convex is required for cloud exports in this build.");
+      return;
+    }
     current.setExportError(null);
     current.setIsExporting(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,title,engine_id,model_id,project_id,community_id,created_at,updated_at&order=updated_at.desc&limit=1000`,
-        {},
-        session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      const threadRows = await listConvexCloudThreadRows(session as any);
+      if (!threadRows) {
+        throw new Error("Failed to load cloud threads from Convex.");
+      }
+      const rows = threadRows.map((row) => ({
+        id: row.id,
+        title: row.title ?? null,
+        engine_id: row.engine_id,
+        model_id: row.model_id ?? null,
+        project_id: row.project_id ?? null,
+        community_id: row.community_id ?? null,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
       const csv = current.buildCsv(
         ["id", "title", "engine_id", "model_id", "project_id", "community_id", "created_at", "updated_at"],
         rows,
@@ -105,18 +118,38 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
     const current = argsRef.current;
     const session = current.getSession();
     if (!session) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    if (!isConvexCloudThreadsEnabled()) {
+      current.setExportError("Convex is required for cloud exports in this build.");
+      return;
+    }
     current.setExportError(null);
     current.setIsExporting(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/messages?select=id,thread_id,seq,role,content_json,engine_id,model_id,run_id,created_at&order=thread_id.asc,seq.asc&limit=10000`,
-        {},
-        session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const rawRows = (await response.json()) as ThreadMessageT[];
+      const threads = await listConvexCloudThreadRows(session as any);
+      if (!threads) {
+        throw new Error("Failed to load cloud threads from Convex.");
+      }
+      const maxRows = 10_000;
+      const rawRows: ThreadMessageT[] = [];
+      for (const thread of threads) {
+        const remaining = maxRows - rawRows.length;
+        if (remaining <= 0) break;
+        const threadRows = await listConvexCloudThreadMessagesByThreadKey({
+          session: session as any,
+          threadKey: thread.id,
+          limit: remaining,
+        });
+        if (!threadRows) {
+          throw new Error("Failed to load cloud thread messages from Convex.");
+        }
+        rawRows.push(...(threadRows as unknown as ThreadMessageT[]));
+      }
+      rawRows.sort((a, b) => {
+        const threadA = String(a.thread_id ?? "");
+        const threadB = String(b.thread_id ?? "");
+        if (threadA !== threadB) return threadA.localeCompare(threadB);
+        return Number(a.seq ?? 0) - Number(b.seq ?? 0);
+      });
       const rows = rawRows.map((row) => ({
         id: row.id,
         thread_id: row.thread_id,
@@ -144,19 +177,15 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
     const current = argsRef.current;
     const session = current.getSession();
     if (!session) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setExportError(null);
     current.setIsExporting(true);
     try {
-      const userId = current.getSupabaseAuthUid(session);
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/personal_memory_items?select=id,content,scope,scope_id,pinned,created_at,updated_at&user_id=eq.${encodeURIComponent(userId)}&order=pinned.desc,updated_at.desc&limit=2000`,
-        {},
+      const userId = current.getCloudAuthUid(session);
+      const rows = (await listCloudPersonalMemoryRows({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
+        userId,
+        limit: 2000,
+      })) as Array<Record<string, unknown>>;
       const csv = current.buildCsv(
         ["id", "scope", "scope_id", "pinned", "content", "created_at", "updated_at"],
         rows,

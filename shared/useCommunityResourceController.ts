@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
-  abortAllScopedRequests,
-  beginScopedAbortRequest,
-  finishScopedAbortRequest,
-  isAbortError,
-} from "./communityFetchAbortScope";
+  abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
+
+import {
+  deleteCloudCommunityResource,
+  listCloudCommunityResourceRows,
+  saveCloudCommunityResource,
+} from "./cloudCommunityAdminGateway";
 
 type SessionLike = unknown;
 
@@ -22,13 +24,8 @@ type UseCommunityResourceControllerArgs<
   ResourceT extends ResourceLike,
 > = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  getSupabaseAnonKey?: () => string | null;
-  requireAnonKey: boolean;
-  missingConfigMessage: string;
+  session: SessionT | null;
   parseEmbedUrl: (url: string) => unknown;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
   includeCommunityIdOnPatch: boolean;
   includeFileKeyOnSave: boolean;
   clearErrorWhenEditingDeleted: boolean;
@@ -76,8 +73,6 @@ export function useCommunityResourceController<
 
   const loadCommunityResources = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     const generation = (resourceLoadGenerationRef.current += 1);
     const fetchController = beginScopedAbortRequest({
       inFlightByKind: fetchAbortControllersRef.current,
@@ -85,20 +80,18 @@ export function useCommunityResourceController<
     });
     current.setIsLoadingResources(true);
     try {
-      let response: Response;
       try {
-        response = await current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_resources?select=id,community_id,type,title,body_md,url,file_key,pinned,created_at&community_id=eq.${communityId}&order=pinned.desc,created_at.desc&limit=200`,
-          { signal: fetchController.signal },
+        const rows = await listCloudCommunityResourceRows<SessionT, ResourceT>({
           session,
-        );
+          communityId,
+          limit: 200,
+          init: { signal: fetchController.signal },
+        });
+        current.setCommunityResources(rows);
       } catch (error) {
         if (isAbortError(error)) return;
         return;
       }
-      if (!response.ok) return;
-      const rows = (await response.json()) as ResourceT[];
-      current.setCommunityResources(rows);
     } finally {
       finishScopedAbortRequest({
         inFlightByKind: fetchAbortControllersRef.current,
@@ -119,7 +112,8 @@ export function useCommunityResourceController<
 
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;
-    if (!current.supabaseSession || !current.activeCommunityId) return;
+    const session = current.session;
+    if (!session || !current.activeCommunityId) return;
 
     const title = current.resourceTitleInput.trim();
     if (!title) {
@@ -148,15 +142,6 @@ export function useCommunityResourceController<
 
     current.setResourceError(null);
     current.setIsSavingResource(true);
-
-    const url = current.getSupabaseUrl();
-    const anonKey = current.getSupabaseAnonKey?.();
-    if (!url || (current.requireAnonKey && !anonKey)) {
-      current.setResourceError(current.missingConfigMessage);
-      current.setIsSavingResource(false);
-      return;
-    }
-
     const basePayload: Record<string, unknown> = {
       type: resourceType,
       title,
@@ -180,28 +165,16 @@ export function useCommunityResourceController<
         };
 
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        isPatch
-          ? `${url}/rest/v1/community_resources?id=eq.${current.editingResourceId}`
-          : `${url}/rest/v1/community_resources`,
-        {
-          method: isPatch ? "PATCH" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation",
-          },
-          body: JSON.stringify(payload),
-        },
-        current.supabaseSession,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || current.saveFailureMessage);
-      }
+      await saveCloudCommunityResource({
+        session,
+        resourceId: isPatch ? current.editingResourceId : null,
+        isPatch,
+        payload,
+      });
 
       current.setShowResourceModal(false);
       resetResourceEditor(true);
-      await loadCommunityResources(current.activeCommunityId, current.supabaseSession);
+      await loadCommunityResources(current.activeCommunityId, session);
       current.setResourceSuccess(true);
       window.setTimeout(() => current.setResourceSuccess(false), 2000);
     } catch (error) {
@@ -218,19 +191,13 @@ export function useCommunityResourceController<
 
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
-    if (!current.supabaseSession || !current.activeCommunityId) return;
-
-    const url = current.getSupabaseUrl();
-    const anonKey = current.getSupabaseAnonKey?.();
-    if (!url || (current.requireAnonKey && !anonKey)) return;
-
-    let response: Response;
+    const session = current.session;
+    if (!session || !current.activeCommunityId) return;
     try {
-      response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_resources?id=eq.${resourceId}`,
-        { method: "DELETE" },
-        current.supabaseSession,
-      );
+      await deleteCloudCommunityResource({
+        session,
+        resourceId,
+      });
     } catch (error) {
       const message = typeof error === "string"
         ? error
@@ -240,15 +207,10 @@ export function useCommunityResourceController<
       current.setResourceError(message);
       return;
     }
-    if (!response.ok) {
-      const errText = await response.text();
-      current.setResourceError(errText || current.deleteFailureMessage);
-      return;
-    }
     if (current.editingResourceId === resourceId) {
       resetResourceEditor(current.clearErrorWhenEditingDeleted);
     }
-    await loadCommunityResources(current.activeCommunityId, current.supabaseSession);
+    await loadCommunityResources(current.activeCommunityId, session);
   }, [loadCommunityResources, resetResourceEditor]);
 
   return {

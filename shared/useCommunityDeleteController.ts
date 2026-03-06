@@ -1,5 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 
+import { deleteCloudCommunity } from "./cloudCommunityAdminGateway";
+
 type UseCommunityDeleteControllerArgs<
   SessionT,
   CommunityT,
@@ -7,11 +9,8 @@ type UseCommunityDeleteControllerArgs<
   ViewT extends string,
   TabT extends string,
 > = {
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   loadCommunities: (session: SessionT) => Promise<void>;
   setDeleteCommunityError: Dispatch<SetStateAction<string | null>>;
   setDeleteCommunityNameInput: Dispatch<SetStateAction<string>>;
@@ -48,11 +47,8 @@ export function useCommunityDeleteController<
   handleConfirmDeleteCommunity: () => Promise<void>;
 } {
   const {
-    supabaseSession,
+    session: session,
     activeCommunityId,
-    getSupabaseUrl,
-    fetchWithSupabaseAuth,
-    readSupabaseError,
     loadCommunities,
     setDeleteCommunityError,
     setDeleteCommunityNameInput,
@@ -85,19 +81,15 @@ export function useCommunityDeleteController<
   }, [setDeleteCommunityConfirmInput, setDeleteCommunityError, setDeleteCommunityNameInput, setIsDeletingCommunity, setShowDeleteCommunityModal]);
 
   const handleConfirmDeleteCommunity = useCallback(async () => {
-    if (!supabaseSession || !activeCommunityId) return;
-    const url = getSupabaseUrl();
-    if (!url) return;
+    if (!session || !activeCommunityId) return;
     setDeleteCommunityError(null);
     setIsDeletingCommunity(true);
     try {
       const deletedId = activeCommunityId;
-      const response = await fetchWithSupabaseAuth(
-        `${url}/rest/v1/communities?id=eq.${deletedId}`,
-        { method: "DELETE" },
-        supabaseSession,
-      );
-      if (!response.ok) throw new Error(await readSupabaseError(response));
+      await deleteCloudCommunity({
+        session,
+        communityId: deletedId,
+      });
       setShowDeleteCommunityModal(false);
       setActiveCommunityId(null);
       setActivePage("workspace" as PageT);
@@ -109,7 +101,7 @@ export function useCommunityDeleteController<
         delete next[deletedId];
         return next;
       });
-      await loadCommunities(supabaseSession);
+      await loadCommunities(session);
     } catch (error) {
       setDeleteCommunityError(
         getErrorMessage(error, deleteFailureMessage ?? "Failed to delete community."),
@@ -120,11 +112,8 @@ export function useCommunityDeleteController<
   }, [
     activeCommunityId,
     deleteFailureMessage,
-    fetchWithSupabaseAuth,
     getCommunityId,
-    getSupabaseUrl,
     loadCommunities,
-    readSupabaseError,
     setActiveCommunityId,
     setActivePage,
     setActiveView,
@@ -134,7 +123,7 @@ export function useCommunityDeleteController<
     setDeleteCommunityError,
     setIsDeletingCommunity,
     setShowDeleteCommunityModal,
-    supabaseSession,
+    session,
   ]);
 
   return {

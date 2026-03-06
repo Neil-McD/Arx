@@ -56,44 +56,26 @@ export async function readBannerFileAsWideDataUrlWithinLimit(
     const sourceHeight = img.naturalHeight || img.height;
     if (!sourceWidth || !sourceHeight) throw new Error("Invalid image dimensions.");
 
-    const candidates: Array<{ width: number; height: number; quality: number }> = [
-      { width: 960, height: 320, quality: 0.86 },
-      { width: 768, height: 256, quality: 0.82 },
-      { width: 576, height: 192, quality: 0.78 },
-      { width: 480, height: 160, quality: 0.74 },
+    const candidates: Array<{ maxEdge: number; quality: number }> = [
+      { maxEdge: 1600, quality: 0.88 },
+      { maxEdge: 1280, quality: 0.84 },
+      { maxEdge: 1024, quality: 0.8 },
+      { maxEdge: 768, quality: 0.76 },
     ];
-
-    const targetAspect = candidates[0].width / candidates[0].height;
-    const sourceAspect = sourceWidth / sourceHeight;
-    let sx = 0;
-    let sy = 0;
-    let sw = sourceWidth;
-    let sh = sourceHeight;
-
-    if (sourceAspect > targetAspect) {
-      // Source is wider: crop left/right.
-      sh = sourceHeight;
-      sw = Math.max(1, Math.floor(sourceHeight * targetAspect));
-      sx = Math.max(0, Math.floor((sourceWidth - sw) / 2));
-      sy = 0;
-    } else if (sourceAspect < targetAspect) {
-      // Source is taller: crop top/bottom.
-      sw = sourceWidth;
-      sh = Math.max(1, Math.floor(sourceWidth / targetAspect));
-      sx = 0;
-      sy = Math.max(0, Math.floor((sourceHeight - sh) / 2));
-    }
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas not supported.");
 
     let lastDataUrl = "";
-    for (const { width, height, quality } of candidates) {
+    for (const { maxEdge, quality } of candidates) {
+      const scale = Math.min(1, maxEdge / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
       canvas.width = width;
       canvas.height = height;
       ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+      ctx.drawImage(img, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
       lastDataUrl = dataUrl;
       if (dataUrl.length <= maxChars) return dataUrl;

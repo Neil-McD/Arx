@@ -1,9 +1,10 @@
-import type { ModelProviderId, ModelToggle } from "./modelCatalog";
+import type { ModelFundingSource, ModelProviderId, ModelToggle } from "./modelCatalog";
 
 type ModelRegistryRow = {
   id?: unknown;
   provider?: unknown;
   display_name?: unknown;
+  supported_sources?: unknown;
 };
 
 export type ModelRegistryParseDiagnostics = {
@@ -19,6 +20,7 @@ export type ModelRegistryParseDiagnostics = {
 export type ParsedModelRegistry = {
   catalog: ModelToggle[];
   providerById: Record<string, ModelProviderId>;
+  supportedSourcesById: Record<string, ModelFundingSource[]>;
   diagnostics: ModelRegistryParseDiagnostics;
 };
 
@@ -34,6 +36,15 @@ function normalizeProviderId(rawValue: unknown): ModelProviderId | null {
   if (value === "google") return "google";
   if (value === "x-ai" || value === "xai") return "x-ai";
   if (value === "openrouter") return "openrouter";
+  return null;
+}
+
+function normalizeFundingSource(rawValue: unknown): ModelFundingSource | null {
+  const value = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
+  if (value === "demo_public") return "demo_public";
+  if (value === "user_key") return "user_key";
+  if (value === "user_chatgpt" || value === "chatgpt") return "user_chatgpt";
+  if (value === "platform") return "platform";
   return null;
 }
 
@@ -54,6 +65,7 @@ export function parseModelRegistryRows(
   const seen = new Set<string>();
   const catalog: ModelToggle[] = [];
   const providerById: Record<string, ModelProviderId> = {};
+  const supportedSourcesById: Record<string, ModelFundingSource[]> = {};
 
   for (const row of list) {
     if (!row || typeof row !== "object") {
@@ -79,6 +91,14 @@ export function parseModelRegistryRows(
       diagnostics.unknown_provider += 1;
     }
     if (provider) providerById[id] = provider;
+    const supportedSources = Array.isArray(row.supported_sources)
+      ? row.supported_sources
+          .map((value) => normalizeFundingSource(value))
+          .filter((value): value is ModelFundingSource => value !== null)
+      : [];
+    if (supportedSources.length > 0) {
+      supportedSourcesById[id] = Array.from(new Set(supportedSources));
+    }
     const label =
       (typeof row.display_name === "string" ? row.display_name.trim() : "") ||
       (options.formatModelLabel?.(id)?.trim() ?? "") ||
@@ -88,5 +108,5 @@ export function parseModelRegistryRows(
     diagnostics.accepted_rows += 1;
   }
 
-  return { catalog, providerById, diagnostics };
+  return { catalog, providerById, supportedSourcesById, diagnostics };
 }

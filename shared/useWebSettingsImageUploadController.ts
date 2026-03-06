@@ -10,10 +10,14 @@ type UseWebSettingsImageUploadControllerArgs = {
   setIsProfileAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerZoom: Dispatch<SetStateAction<number>>;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUploadError: Dispatch<SetStateAction<string | null>>;
   setIsProcessingCommunitySettingsBanner: Dispatch<SetStateAction<boolean>>;
   markCommunitySettingsDirty: () => void;
+  onCommunityBannerUploadSuccess?: () => void;
   isLikelyImageFile: (file: File) => boolean;
   maxWebImageDataUrlChars: number;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
@@ -29,10 +33,14 @@ export function useWebSettingsImageUploadController(
     setIsProfileAvatarDragOver: args.setIsProfileAvatarDragOver,
     setCommunitySettingsAvatarUrl: args.setCommunitySettingsAvatarUrl,
     setCommunitySettingsBannerUrl: args.setCommunitySettingsBannerUrl,
+    setCommunitySettingsBannerFocusX: args.setCommunitySettingsBannerFocusX,
+    setCommunitySettingsBannerFocusY: args.setCommunitySettingsBannerFocusY,
+    setCommunitySettingsBannerZoom: args.setCommunitySettingsBannerZoom,
     setCommunitySettingsError: args.setCommunitySettingsError,
     setCommunitySettingsBannerUploadError: args.setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner: args.setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty: args.markCommunitySettingsDirty,
+    onCommunityBannerUploadSuccess: args.onCommunityBannerUploadSuccess,
     isLikelyCommunityBannerImageFile: args.isLikelyImageFile,
     maxCommunityImageDataUrlChars: args.maxWebImageDataUrlChars,
     setProfileAvatarUrl: args.setProfileAvatarUrl,

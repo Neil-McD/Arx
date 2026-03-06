@@ -14,14 +14,13 @@ type LifecycleParams<
 > = {
   activePage: string;
   communityTab: string;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   activeCommunityId: string | null;
   communities: CommunityT[];
   canInviteActiveCommunity: boolean;
   canReviewJoinRequestsActiveCommunity: boolean;
   membersCommunityHasPaidPlans: boolean | null;
   isJoinRequestsModalOpen: boolean;
-  getSupabaseUrl: () => string | null;
   loadCommunityInvites: (communityId: string, session: SessionT) => Promise<void> | void;
   loadCommunityHasPaidPlans: (communityId: string, session: SessionT) => Promise<boolean>;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
@@ -77,22 +76,22 @@ export function useCommunityMembersReviewLifecycle<
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "members") return;
-    if (!params.supabaseSession || !params.activeCommunityId || !params.canInviteActiveCommunity) {
+    if (!params.session || !params.activeCommunityId || !params.canInviteActiveCommunity) {
       params.setCommunityInvites([]);
       return;
     }
-    void loadCommunityInvitesRef.current(params.activeCommunityId, params.supabaseSession);
+    void loadCommunityInvitesRef.current(params.activeCommunityId, params.session);
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    params.session,
     params.activeCommunityId,
     params.canInviteActiveCommunity,
   ]);
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "members") return;
-    const session = params.supabaseSession;
+    const session = params.session;
     const communityId = params.activeCommunityId;
     if (!session || !communityId) {
       params.setMembersCommunityHasPaidPlans(null);
@@ -138,9 +137,6 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsJoinRequestsModalOpen(false);
       return;
     }
-
-    const url = params.getSupabaseUrl();
-    if (!url) return;
 
     let cancelled = false;
     params.setIsLoadingMembersCommunityPricing(true);
@@ -194,11 +190,10 @@ export function useCommunityMembersReviewLifecycle<
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    params.session,
     params.activeCommunityId,
     params.canReviewJoinRequestsActiveCommunity,
     params.communities,
-    params.getSupabaseUrl,
   ]);
 
   useEffect(() => {

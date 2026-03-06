@@ -4,8 +4,8 @@ import {
   buildBuilderConnectRequestPayload,
   buildBuilderPortalRequestPayload,
 } from "../../../../shared/builderBilling";
-import type { PendingAuthIntentInput } from "../../../../shared/supabaseAuthIntent";
-import type { SupabaseSession } from "../supabase";
+import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
+import type { CloudSession } from "../cloudAuth";
 import {
   useBuilderBillingActionsCore,
   type BuilderCheckoutTier,
@@ -13,10 +13,7 @@ import {
 } from "../../../../shared/useBuilderBillingActionsCore";
 
 type UseWebBuilderBillingActionsArgs = {
-  getSession: () => SupabaseSession | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getSession: () => CloudSession | null;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
@@ -28,9 +25,6 @@ type UseWebBuilderBillingActionsArgs = {
 export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArgs) {
   return useBuilderBillingActionsCore({
     getSession: args.getSession,
-    getSupabaseUrl: args.getSupabaseUrl,
-    fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-    readSupabaseError: args.readSupabaseError,
     setBuilderBillingError: args.setBuilderBillingError,
     setIsStartingBuilderCheckout: args.setIsStartingBuilderCheckout,
     setIsStartingBuilderPortal: args.setIsStartingBuilderPortal,

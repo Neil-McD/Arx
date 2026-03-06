@@ -282,9 +282,9 @@ No gate should require ad-hoc reads outside this set.
 11. `mutations/runtime.finishRun`
 12. `actions/daytona.executeTool` (network call to Daytona)
 
-## 6) Migration Mapping (Supabase -> Convex)
+## 6) Migration Mapping (Legacy Cloud -> Convex)
 
-| Supabase concept | Convex target |
+| Legacy Cloud concept | Convex target |
 |---|---|
 | `profiles.builder_tier` | `userEntitlements` current active row |
 | `entitlements` | `communityEntitlements` |
@@ -300,11 +300,11 @@ No gate should require ad-hoc reads outside this set.
 ## 7) Cutover Order (minimal risk)
 
 1. Implement schema and read-only parity queries.
-2. Implement gate resolvers and compare against current Supabase outputs.
+2. Implement gate resolvers and compare against current Legacy Cloud outputs.
 3. Switch thread/project reads to Convex.
 4. Switch runtime run/event writes to Convex.
 5. Switch entitlement reads/writes to Convex.
-6. Remove Supabase runtime/gate dependencies.
+6. Remove Legacy Cloud runtime/gate dependencies.
 
 ## 8) Explicit Non-Goals for v1
 

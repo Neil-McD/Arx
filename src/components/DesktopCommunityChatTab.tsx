@@ -5,7 +5,7 @@ import { partitionCommunityAttachments } from "../../shared/communityAttachmentU
 
 type DesktopCommunityChatTabProps = {
   showChat: boolean;
-  supabaseSession: { user: { id: string } } | null;
+  session: { user: { id: string } } | null;
   activeCommunity: { name: string } | null;
   isLoadingChat: boolean;
   communityMessages: any[];
@@ -69,7 +69,7 @@ type DesktopCommunityChatTabProps = {
 export function DesktopCommunityChatTab(props: DesktopCommunityChatTabProps) {
   const {
     showChat,
-    supabaseSession,
+    session,
     activeCommunity,
     isLoadingChat,
     communityMessages,
@@ -140,10 +140,10 @@ export function DesktopCommunityChatTab(props: DesktopCommunityChatTabProps) {
                     ref={communityChatListRef}
                     onScroll={handleChatScroll}
                   >
-                    {!supabaseSession && (
+                    {!session && (
                       <div className="chat-empty">Sign in to access community chat.</div>
                     )}
-                    {supabaseSession && !activeCommunity && (
+                    {session && !activeCommunity && (
                       <div className="chat-empty">Select a community to start chatting.</div>
                     )}
                     {activeCommunity && isLoadingChat && (
@@ -177,7 +177,7 @@ export function DesktopCommunityChatTab(props: DesktopCommunityChatTabProps) {
 	                    {activeCommunity &&
 	                      !isLoadingChat &&
 	                      communityMessages.map((message, index) => {
-                        const isOwn = message.sender_id === supabaseSession?.user.id;
+                        const isOwn = message.sender_id === session?.user.id;
                         const isPending = message.id.startsWith("pending-");
                         const showMeta = shouldShowCommunitySenderMeta(communityMessages, index, {
                           forceBeforeDateSeparator: true,
@@ -209,7 +209,7 @@ export function DesktopCommunityChatTab(props: DesktopCommunityChatTabProps) {
                             editingMessageText={editingMessageText}
                             reactionPickerMessageId={reactionPickerMessageId}
                             messageReactions={messageReactions}
-                            supabaseUserId={supabaseSession?.user.id}
+                            sessionUserId={session?.user.id}
                             replyToId={replyToId}
                             replyTarget={replyTarget}
                             reactionEmojis={REACTION_EMOJIS}

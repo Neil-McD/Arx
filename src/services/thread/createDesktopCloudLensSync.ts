@@ -1,20 +1,22 @@
-import type { ThreadRecord } from "../../runtime/arp/types";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import { ThreadRecord } from "../../runtime/arp/types";
+
+import { fetchCloudThreadContextById, setCloudThreadContext } from "../../../shared/cloudThreadContextGateway";
 import {
   syncThreadCommunityLensCloud,
   type ThreadContextCloudState,
 } from "../../../shared/threadContextCloudSync";
 
-type FetchWithSupabaseAuth = (
-  url: string,
-  init: RequestInit,
-  session: SupabaseSession,
-) => Promise<Response>;
+type DesktopCloudSession = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: {
+    id: string;
+    email?: string;
+  };
+};
 
 type CreateDesktopCloudLensSyncDeps = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth;
-  readSupabaseError: (response: Response) => Promise<string>;
   toUnixSecondsFromIso: (value: string | null | undefined) => number | null;
   getThreads: () => ThreadRecord[];
   setThreads: (updater: (prev: ThreadRecord[]) => ThreadRecord[]) => void;
@@ -23,7 +25,7 @@ type CreateDesktopCloudLensSyncDeps = {
 type SetThreadCommunityLensInCloudParams = {
   threadId: string;
   communityId: string | null;
-  session: SupabaseSession;
+  session: DesktopCloudSession;
   expectedContextVersion: number | null;
 };
 
@@ -37,9 +39,6 @@ export function createDesktopCloudLensSync(deps: CreateDesktopCloudLensSyncDeps)
   return async function setThreadCommunityLensInCloud(
     params: SetThreadCommunityLensInCloudParams,
   ): Promise<ThreadRecord | null> {
-    const url = deps.getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-
     const applyObservedContext = (context: ThreadContextCloudState): void => {
       const updatedAt = deps.toUnixSecondsFromIso(context.updated_at) ?? Math.floor(Date.now() / 1000);
       deps.setThreads((prev) =>
@@ -57,72 +56,21 @@ export function createDesktopCloudLensSync(deps: CreateDesktopCloudLensSyncDeps)
     };
 
     const loadLatestCloudContext = async (): Promise<ThreadContextCloudState | null> => {
-      const contextResponse = await deps.fetchWithSupabaseAuth(
-        `${url}/rest/v1/threads?select=id,community_id,context_version,updated_at&id=eq.${encodeURIComponent(params.threadId)}&limit=1`,
-        { method: "GET" },
-        params.session,
-      );
-      if (!contextResponse.ok) throw new Error(await deps.readSupabaseError(contextResponse));
-      const rows = (await contextResponse.json()) as Array<{
-        id: string;
-        community_id: string | null;
-        context_version: unknown;
-        updated_at: string;
-      }>;
-      const row = rows[0] ?? null;
-      if (!row?.id) return null;
-      const parsedVersion =
-        typeof row.context_version === "number"
-          ? row.context_version
-          : typeof row.context_version === "string"
-            ? Number(row.context_version)
-            : Number.NaN;
-      return {
-        thread_id: row.id,
-        community_id: row.community_id ?? null,
-        context_version: Number.isFinite(parsedVersion) ? parsedVersion : 0,
-        updated_at: row.updated_at,
-      };
+      return await fetchCloudThreadContextById({
+        session: params.session,
+        threadId: params.threadId,
+      });
     };
 
     const setCloudContext = async (
       expectedContextVersion: number,
     ): Promise<ThreadContextCloudState | null> => {
-      const response = await deps.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/set_thread_context`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_thread_id: params.threadId,
-            p_expected_context_version: expectedContextVersion,
-            p_community_id: params.communityId,
-            p_update_community_id: true,
-          }),
-        },
-        params.session,
-      );
-      if (!response.ok) throw new Error(await deps.readSupabaseError(response));
-      const rows = (await response.json()) as Array<{
-        thread_id: string;
-        community_id: string | null;
-        context_version: unknown;
-        updated_at: string;
-      }>;
-      const row = rows[0] ?? null;
-      if (!row?.thread_id) return null;
-      const parsedVersion =
-        typeof row.context_version === "number"
-          ? row.context_version
-          : typeof row.context_version === "string"
-            ? Number(row.context_version)
-            : Number.NaN;
-      return {
-        thread_id: row.thread_id,
-        community_id: row.community_id ?? null,
-        context_version: Number.isFinite(parsedVersion) ? parsedVersion : expectedContextVersion + 1,
-        updated_at: row.updated_at,
-      };
+      return await setCloudThreadContext({
+        session: params.session,
+        threadId: params.threadId,
+        expectedContextVersion,
+        communityId: params.communityId,
+      });
     };
 
     const updated = await syncThreadCommunityLensCloud({

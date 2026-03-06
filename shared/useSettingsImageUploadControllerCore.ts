@@ -10,10 +10,14 @@ type UseSettingsImageUploadControllerCoreArgs = {
   setIsProfileAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsBannerFocusX?: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerFocusY?: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsBannerZoom?: Dispatch<SetStateAction<number>>;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUploadError: Dispatch<SetStateAction<string | null>>;
   setIsProcessingCommunitySettingsBanner: Dispatch<SetStateAction<boolean>>;
   markCommunitySettingsDirty: () => void;
+  onCommunityBannerUploadSuccess?: () => void;
   isLikelyCommunityBannerImageFile: (file: File) => boolean;
   maxCommunityImageDataUrlChars: number;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
@@ -50,10 +54,14 @@ export function useSettingsImageUploadControllerCore(
     setIsProfileAvatarDragOver,
     setCommunitySettingsAvatarUrl,
     setCommunitySettingsBannerUrl,
+    setCommunitySettingsBannerFocusX,
+    setCommunitySettingsBannerFocusY,
+    setCommunitySettingsBannerZoom,
     setCommunitySettingsError,
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty,
+    onCommunityBannerUploadSuccess,
     isLikelyCommunityBannerImageFile,
     maxCommunityImageDataUrlChars,
     setProfileAvatarUrl,
@@ -102,7 +110,11 @@ export function useSettingsImageUploadControllerCore(
       try {
         const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, maxCommunityImageDataUrlChars);
         setCommunitySettingsBannerUrl(dataUrl);
+        setCommunitySettingsBannerFocusX?.(0.5);
+        setCommunitySettingsBannerFocusY?.(0.5);
+        setCommunitySettingsBannerZoom?.(1);
         markCommunitySettingsDirty();
+        onCommunityBannerUploadSuccess?.();
       } catch (error) {
         setCommunitySettingsBannerUploadError(getErrorMessage(error, communityBannerReadErrorFallback));
       } finally {
@@ -116,7 +128,11 @@ export function useSettingsImageUploadControllerCore(
       maxCommunityImageDataUrlChars,
       setCommunitySettingsBannerUploadError,
       setCommunitySettingsBannerUrl,
+      setCommunitySettingsBannerFocusX,
+      setCommunitySettingsBannerFocusY,
+      setCommunitySettingsBannerZoom,
       setIsProcessingCommunitySettingsBanner,
+      onCommunityBannerUploadSuccess,
     ],
   );
 

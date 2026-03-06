@@ -334,9 +334,9 @@ pub(crate) async fn submit_turn_cmd(
     input: String,
     user_content_json: String,
     community_name: Option<String>,
-    supabase_url: Option<String>,
-    supabase_anon_key: Option<String>,
-    supabase_access_token: Option<String>,
+    cloud_runtime_base_url: Option<String>,
+    cloud_publishable_key: Option<String>,
+    cloud_access_token: Option<String>,
 ) -> Result<crate::SendTurnResult, String> {
     let db_path = state.db_path.clone();
     let db_key = state.key.clone();
@@ -355,9 +355,9 @@ pub(crate) async fn submit_turn_cmd(
         &thread_id,
         &input,
         community_name,
-        supabase_url,
-        supabase_anon_key,
-        supabase_access_token,
+        cloud_runtime_base_url,
+        cloud_publishable_key,
+        cloud_access_token,
         cancel_rx,
     )
     .await

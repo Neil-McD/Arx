@@ -1,10 +1,10 @@
 import { type MutableRefObject } from "react";
 import {
-  type SupabaseSessionLike,
-  useSupabaseAuthSessionLifecycle,
-} from "../../../shared/useSupabaseSessionLifecycle";
+  type CloudSessionLike,
+  useCloudAuthSessionLifecycle,
+} from "../../../shared/useCloudSessionLifecycle";
 
-export function useDesktopAuthSessionLifecycle<TSession extends SupabaseSessionLike>(params: {
+export function useDesktopAuthSessionLifecycle<TSession extends CloudSessionLike>(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   threadsHydratedRef: MutableRefObject<boolean>;
@@ -14,7 +14,7 @@ export function useDesktopAuthSessionLifecycle<TSession extends SupabaseSessionL
   onSessionAvailable: (session: TSession) => void;
   onFocusWithSession: (session: TSession) => void;
 }) {
-  useSupabaseAuthSessionLifecycle({
+  useCloudAuthSessionLifecycle({
     session: params.session,
     sessionRef: params.sessionRef,
     refreshTimeoutRef: params.refreshTimeoutRef,

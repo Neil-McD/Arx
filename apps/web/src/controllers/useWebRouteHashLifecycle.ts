@@ -9,13 +9,19 @@ type PublicRouteLike = {
   kind: string;
 };
 
-export function useWebRouteHashLifecycle<PublicRouteT extends PublicRouteLike>(params: {
+export function useWebRouteHashLifecycle<
+  PublicRouteT extends PublicRouteLike,
+  PageT extends string,
+  ViewT extends string,
+  SettingsPageT extends string,
+  CommunityTabT extends string,
+>(params: {
   publicRouteKind: PublicRouteT["kind"];
-  activePage: string;
-  activeView: string;
-  settingsPage: string;
+  activePage: PageT;
+  activeView: ViewT;
+  settingsPage: SettingsPageT;
   activeCommunityId: string | null;
-  communityTab: string;
+  communityTab: CommunityTabT;
   activeThreadId: string | null;
   workspaceWantsNewChat: boolean;
   threadsHydratedRef: MutableRefObject<boolean>;
@@ -24,11 +30,11 @@ export function useWebRouteHashLifecycle<PublicRouteT extends PublicRouteLike>(p
   setFinalizeCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   readPublicRouteFromLocation: () => PublicRouteT;
   buildAppRouteHash: (state: {
-    page: string;
-    view: string;
-    settingsPage: string;
+    page: PageT;
+    view: ViewT;
+    settingsPage: SettingsPageT;
     communityId: string | null;
-    communityTab: string;
+    communityTab: CommunityTabT;
     threadToken?: string | null;
   }) => string;
 }) {

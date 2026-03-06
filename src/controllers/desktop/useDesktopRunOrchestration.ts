@@ -326,8 +326,6 @@ export function useDesktopRunOrchestration<
           tool_call_id: n.tool_call_id,
           tool_name: n.tool_name,
           args_json: n.args_json,
-          source: "local",
-          run_id: null,
         } as PendingToolApprovalT);
         scheduleToolCallsReload(n.session_id, { immediate: true, force: true });
         return;

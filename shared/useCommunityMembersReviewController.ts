@@ -1,5 +1,13 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
+import {
+  approveCloudCommunityJoinRequest,
+  denyCloudCommunityJoinRequest,
+  listCloudCommunityJoinRequestRows,
+  listCloudCommunityPricingRows,
+  setCloudCommunityFreeJoinRequiresApproval,
+} from "./cloudCommunityAdminGateway";
+
 type SessionLike = {
   user: {
     id: string;
@@ -27,12 +35,9 @@ type UseCommunityMembersReviewControllerArgs<
   CommunityT extends CommunityLike,
 > = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
+  session: SessionT | null;
   canManageMembersActiveCommunity: boolean;
   isSavingFreeJoinRequiresApproval: boolean;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
   loadCommunityMembers: (
     communityId: string,
@@ -59,22 +64,13 @@ export function useCommunityMembersReviewController<
 
   const loadCommunityJoinRequests = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setIsLoadingCommunityJoinRequests(true);
     current.setCommunityJoinRequestsError(null);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/list_community_join_requests`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId }),
-        },
+      const rows = await listCloudCommunityJoinRequestRows<SessionT, JoinRequestT>({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const rows = (await response.json()) as JoinRequestT[];
+        communityId,
+      });
       const normalizedRows = Array.isArray(rows) ? rows : [];
       current.setCommunityJoinRequests(normalizedRows);
       const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
@@ -94,43 +90,25 @@ export function useCommunityMembersReviewController<
   }, []);
 
   const loadCommunityHasPaidPlans = useCallback(async (communityId: string, session: SessionT): Promise<boolean> => {
-    const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return false;
-    const response = await current.fetchWithSupabaseAuth(
-      `${url}/rest/v1/rpc/get_community_pricing`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ p_community_id: communityId }),
-      },
+    const rows = await listCloudCommunityPricingRows<SessionT, CommunityPricingRow>({
       session,
-    );
-    if (!response.ok) throw new Error(await current.readSupabaseError(response));
-    const rows = (await response.json()) as CommunityPricingRow[] | null;
-    return Array.isArray(rows) && rows.length > 0;
+      communityId,
+    });
+    return rows.length > 0;
   }, []);
 
   const handleApproveCommunityJoinRequest = useCallback(async (requestId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.supabaseSession;
+    const session = current.session;
     if (!session || !communityId) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(requestId);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/approve_community_join_request`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_request_id: requestId }),
-        },
+      await approveCloudCommunityJoinRequest({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        requestId,
+      });
       await Promise.all([
         current.loadCommunityMembers(communityId, session, { includeStatus: current.canManageMembersActiveCommunity }),
         loadCommunityJoinRequests(communityId, session),
@@ -151,23 +129,15 @@ export function useCommunityMembersReviewController<
   const handleDenyCommunityJoinRequest = useCallback(async (requestId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.supabaseSession;
+    const session = current.session;
     if (!session || !communityId) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(requestId);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/deny_community_join_request`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_request_id: requestId }),
-        },
+      await denyCloudCommunityJoinRequest({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        requestId,
+      });
       await loadCommunityJoinRequests(communityId, session);
     } catch (error) {
       const message =
@@ -185,34 +155,17 @@ export function useCommunityMembersReviewController<
   const handleSetCommunityFreeJoinRequiresApproval = useCallback(async (nextRequiresApproval: boolean) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.supabaseSession;
+    const session = current.session;
     if (!session || !communityId) return;
     if (current.isSavingFreeJoinRequiresApproval) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     current.setCommunityJoinRequestsError(null);
     current.setIsSavingFreeJoinRequiresApproval(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/set_community_free_join_requires_approval`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_requires_approval: nextRequiresApproval,
-          }),
-        },
+      const row = await setCloudCommunityFreeJoinRequiresApproval({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-
-      const payload = (await response.json()) as unknown;
-      const row =
-        Array.isArray(payload) && payload.length > 0
-          ? (payload[0] as { community_id?: string; free_join_requires_approval?: boolean; updated_at?: string })
-          : (payload as { community_id?: string; free_join_requires_approval?: boolean; updated_at?: string });
+        communityId,
+        requiresApproval: nextRequiresApproval,
+      });
       const updatedCommunityId = typeof row?.community_id === "string" ? row.community_id : communityId;
       const updatedRequiresApproval =
         typeof row?.free_join_requires_approval === "boolean" ? row.free_join_requires_approval : nextRequiresApproval;

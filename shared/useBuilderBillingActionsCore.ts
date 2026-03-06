@@ -1,6 +1,12 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BuilderUpgradeContextValue } from "./builderBilling";
 
+import {
+  openCloudBuilderBillingPortal,
+  startCloudBuilderCheckout,
+  startCloudConnectOnboarding,
+} from "./cloudBuilderBillingGateway";
+
 export type BuilderCheckoutTier = "builder" | "pro";
 export type BuilderCheckoutRequestTier = "builder" | "pro";
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
@@ -9,9 +15,6 @@ type BillingActionKind = "checkout" | "portal" | "connect";
 
 type UseBuilderBillingActionsCoreArgs<SessionT> = {
   getSession: () => SessionT | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
   onMissingAuth: (
     kind: BillingActionKind,
     details: { tier?: BuilderCheckoutTier; context?: BuilderUpgradeContext },
@@ -56,8 +59,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
       const context: BuilderUpgradeContext = opts?.context ?? "builder";
       const current = argsRef.current;
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         await current.onMissingAuth("checkout", { tier, context });
         return;
       }
@@ -66,21 +68,12 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
       current.setIsStartingBuilderCheckout(true);
       try {
         const payload = current.buildCheckoutPayload({ tier, context });
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/functions/v1/builder_checkout_start`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tier: payload.tier,
-              success_url: payload.successUrl,
-              cancel_url: payload.cancelUrl,
-            }),
-          },
+        const data = await startCloudBuilderCheckout({
           session,
-        );
-        if (!response.ok) throw new Error(await current.readSupabaseError(response));
-        const data = (await response.json()) as unknown;
+          tier: payload.tier,
+          successUrl: payload.successUrl,
+          cancelUrl: payload.cancelUrl,
+        });
         const checkoutUrl = readRequiredStringField(data, "checkout_url", "Missing checkout_url.");
         const opened = await current.openUrl("checkout", checkoutUrl);
         if (!opened) throw new Error("Failed to open checkout.");
@@ -97,8 +90,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
     async (context: BuilderUpgradeContext = "builder"): Promise<void> => {
       const current = argsRef.current;
       const session = current.getSession();
-      const url = session ? current.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         await current.onMissingAuth("portal", { context });
         return;
       }
@@ -107,17 +99,10 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
       current.setIsStartingBuilderPortal(true);
       try {
         const payload = current.buildPortalPayload({ context });
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/functions/v1/builder_billing_portal`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ return_url: payload.returnUrl }),
-          },
+        const data = await openCloudBuilderBillingPortal({
           session,
-        );
-        if (!response.ok) throw new Error(await current.readSupabaseError(response));
-        const data = (await response.json()) as unknown;
+          returnUrl: payload.returnUrl,
+        });
         const portalUrl = readRequiredStringField(data, "url", "Missing portal URL.");
         const opened = await current.openUrl("portal", portalUrl);
         if (!opened) throw new Error("Failed to open billing portal.");
@@ -133,8 +118,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
   const startConnectOnboarding = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
     const session = current.getSession();
-    const url = session ? current.getSupabaseUrl() : null;
-    if (!session || !url) {
+    if (!session) {
       await current.onMissingAuth("connect", {});
       return;
     }
@@ -143,17 +127,11 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
     current.setIsStartingConnectOnboarding(true);
     try {
       const payload = current.buildConnectPayload();
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/functions/v1/connect_onboard_start`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ return_url: payload.returnUrl, refresh_url: payload.refreshUrl }),
-        },
+      const data = await startCloudConnectOnboarding({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-      const data = (await response.json()) as unknown;
+        returnUrl: payload.returnUrl,
+        refreshUrl: payload.refreshUrl,
+      });
       const linkUrl = readRequiredStringField(data, "url", "Missing onboarding URL.");
       const opened = await current.openUrl("connect", linkUrl);
       if (!opened) throw new Error("Failed to open onboarding.");

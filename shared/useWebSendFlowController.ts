@@ -136,7 +136,10 @@ export function useWebSendFlowController<
       return;
     }
 
-    const startedInDraft = !current.activeThreadId;
+    const hasActiveThreadInState = Boolean(
+      current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
+    );
+    const startedInDraft = !hasActiveThreadInState;
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
     const hasPersonalMemoryAccess =
@@ -147,13 +150,20 @@ export function useWebSendFlowController<
     current.autoScrollEnabledRef.current = true;
     current.setIsWorkspaceAtBottom(true);
     try {
-      let threadId = current.activeThreadId;
+      let threadId = hasActiveThreadInState ? current.activeThreadId : null;
       if (!threadId) {
         const created = await current.createThread(session);
         threadId = created?.id ?? null;
         createdThreadId = threadId;
+        if (!threadId) {
+          const retryCreated = await current.createThread(session);
+          threadId = retryCreated?.id ?? null;
+          if (!createdThreadId) createdThreadId = threadId;
+        }
       }
-      if (!threadId) throw new Error("No thread available.");
+      if (!threadId) {
+        throw new Error("No thread available. Failed to create a cloud thread; please retry.");
+      }
 
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
       const preferredModelSelection = resolvePreferredModelSelection();
@@ -248,11 +258,28 @@ export function useWebSendFlowController<
           communityPreflight,
         });
       } else {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "respond",
           runIdHint: `agent_web:${messageId}`,
+          userMessageKey: messageId,
+          systemPrompt,
+          inferenceSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "chatgpt"
+                : "platform",
+          requestedFundingSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "user_chatgpt"
+                : "platform",
+          requiresTools: false,
           replyToId: messageId,
+          messages: optimisticThreadMessages,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }
@@ -305,13 +332,13 @@ export function useWebSendFlowController<
       const preferredModelSelection = resolvePreferredModelSelection();
       const preferredModelId = preferredModelSelection.modelId;
       const usePublicModel = preferredModelSelection.lane === "public";
+      const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, session);
       }
 
       if (usePublicModel) {
         const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
         const communityPreflight = await resolveCommunityPreflight({
           threadId,
           session,
@@ -330,11 +357,28 @@ export function useWebSendFlowController<
           communityPreflight,
         });
       } else {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "respond",
           runIdHint: `agent_web:${lastUserMessageId}`,
+          userMessageKey: lastUserMessageId,
+          systemPrompt,
+          inferenceSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "chatgpt"
+                : "platform",
+          requestedFundingSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "user_chatgpt"
+                : "platform",
+          requiresTools: false,
           replyToId: lastUserMessageId,
+          messages: currentThreadMessages,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }
@@ -372,13 +416,15 @@ export function useWebSendFlowController<
       const preferredModelSelection = resolvePreferredModelSelection();
       const preferredModelId = preferredModelSelection.modelId;
       const usePublicModel = preferredModelSelection.lane === "public";
+      const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, session);
       }
 
+      let messagesForTurn = currentThreadMessages;
+
       if (usePublicModel) {
         const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
         let lastUserIndex = -1;
         for (let i = currentThreadMessages.length - 1; i >= 0; i--) {
           if (currentThreadMessages[i]?.role === "user") {
@@ -388,7 +434,7 @@ export function useWebSendFlowController<
         }
         if (lastUserIndex < 0) throw new Error("No user message available to regenerate.");
 
-        const messagesForTurn = currentThreadMessages.slice(0, lastUserIndex + 1);
+        messagesForTurn = currentThreadMessages.slice(0, lastUserIndex + 1);
         const trailingMessageIds = currentThreadMessages
           .slice(lastUserIndex + 1)
           .map((message) => message.id)
@@ -414,11 +460,28 @@ export function useWebSendFlowController<
           communityPreflight,
         });
       } else {
+        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "regenerate",
           runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
+          userMessageKey: lastUserMessageId,
+          systemPrompt,
+          inferenceSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "chatgpt"
+                : "platform",
+          requestedFundingSource:
+            preferredModelSelection.fundingSource === "user_key"
+              ? "user_key"
+              : preferredModelSelection.fundingSource === "user_chatgpt"
+                ? "user_chatgpt"
+                : "platform",
+          requiresTools: false,
           replyToId: lastUserMessageId,
+          messages: messagesForTurn,
         });
         if (turnResult.error) throw new Error(turnResult.error);
       }

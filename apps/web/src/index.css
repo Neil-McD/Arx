@@ -211,13 +211,15 @@
 
 /* Community tabs with their own headers on the right panel need a top safe area. */
 .resources-panel,
-.members-panel {
+.members-panel,
+.feed-panel {
   padding-top: calc(16px + var(--web-topbar-height));
 }
 
 @media (max-width: 700px) {
   .resources-panel,
-  .members-panel {
+  .members-panel,
+  .feed-panel {
     padding-top: calc(12px + var(--web-topbar-height));
   }
 }
@@ -1939,17 +1941,34 @@
 }
 
 .model-picker-row-title {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 4px;
   font-weight: 650;
   font-size: 13px;
+  max-width: 100%;
+}
+
+.model-picker-row-title-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.model-picker-row-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .model-picker-row-pill {
   font-size: 10px;
   font-weight: 700;
   padding: 3px 7px;
+  white-space: nowrap;
   border-radius: 999px;
   border: 1px solid var(--border-default);
   background: rgba(255, 255, 255, 0.06);
@@ -2069,6 +2088,7 @@
   }
 
   /* Members: reduce padding + allow invite controls to wrap cleanly */
+  .feed-panel,
   .members-panel {
     padding: 16px;
   }
@@ -2170,6 +2190,143 @@
 
 .web-community-settings-centered-pane {
   width: min(100%, 1020px);
+}
+
+.feed-panel {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 14px;
+  padding: 24px;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.feed-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-header-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.feed-header-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.feed-header-badge {
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-card-alt);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+
+.feed-composer {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 12px;
+}
+
+.feed-composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feed-composer textarea {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 86px;
+}
+
+.feed-composer textarea:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.feed-post-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding-right: 2px;
+}
+
+.feed-post-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.feed-post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.feed-post-type {
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.feed-post-type.observation {
+  border-color: color-mix(in srgb, var(--accent-gold) 35%, var(--border-default));
+}
+
+.feed-post-type.synthesis {
+  border-color: color-mix(in srgb, #60a5fa 35%, var(--border-default));
+}
+
+.feed-post-type.tension {
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--border-default));
+}
+
+.feed-post-pending {
+  color: var(--text-faint);
+}
+
+.feed-post-body {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Extra-tight windows: prevent community nav + feed from colliding */

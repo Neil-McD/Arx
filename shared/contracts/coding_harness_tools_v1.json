@@ -22,14 +22,7 @@
       "status": "active",
       "side_effect_class": "none",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:update_plan_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": false,
       "input_schema": {
@@ -73,14 +66,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:readonly_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -107,14 +93,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:readonly_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -135,14 +114,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:readonly_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -163,28 +135,7 @@
       "status": "active",
       "side_effect_class": "write",
       "approval_policy": {
-        "desktop": "required",
-        "cloud": {
-          "agent-full": {
-            "allowed": true,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_enabled_agent_full"
-          },
-          "agent": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_require_explicit_approval",
-            "denial_code": "tool_approval_required",
-            "denial_message": "Write tools require explicit approval. Switch to agent-full mode to allow cloud write/edit/bash for this run."
-          },
-          "read-only": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:read_only_mode",
-            "denial_code": "tool_denied_read_only_mode",
-            "denial_message": "Write tools are blocked in read-only mode."
-          }
-        }
+        "desktop": "required"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -233,28 +184,7 @@
       "status": "active",
       "side_effect_class": "write",
       "approval_policy": {
-        "desktop": "required",
-        "cloud": {
-          "agent-full": {
-            "allowed": true,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_enabled_agent_full"
-          },
-          "agent": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_require_explicit_approval",
-            "denial_code": "tool_approval_required",
-            "denial_message": "Write tools require explicit approval. Switch to agent-full mode to allow cloud write/edit/bash for this run."
-          },
-          "read-only": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:read_only_mode",
-            "denial_code": "tool_denied_read_only_mode",
-            "denial_message": "Write tools are blocked in read-only mode."
-          }
-        }
+        "desktop": "required"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -304,14 +234,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:readonly_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -335,14 +258,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
-        "cloud": {
-          "default": {
-            "allowed": true,
-            "requires_approval": false,
-            "policy_basis": "cloud_policy_v1:readonly_auto_allow"
-          }
-        }
+        "desktop": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -375,28 +291,7 @@
       "status": "active",
       "side_effect_class": "external",
       "approval_policy": {
-        "desktop": "required",
-        "cloud": {
-          "agent-full": {
-            "allowed": true,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_enabled_agent_full"
-          },
-          "agent": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:write_tools_require_explicit_approval",
-            "denial_code": "tool_approval_required",
-            "denial_message": "Write tools require explicit approval. Switch to agent-full mode to allow cloud write/edit/bash for this run."
-          },
-          "read-only": {
-            "allowed": false,
-            "requires_approval": true,
-            "policy_basis": "cloud_policy_v1:read_only_mode",
-            "denial_code": "tool_denied_read_only_mode",
-            "denial_message": "Write tools are blocked in read-only mode."
-          }
-        }
+        "desktop": "required"
       },
       "prompt_visible": true,
       "input_schema": {

@@ -1,30 +1,23 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
+import {
+  leaveCloudCommunity,
+  prepareCloudCommunityBrandingField,
+  saveCloudCommunityMemberSettings,
+  saveCloudCommunitySettings,
+  type CloudCommunitySettingsSaveResult,
+} from "./cloudCommunityAdminGateway";
+
 type SessionLike = {
   user: {
     id: string;
   };
 };
 
-type CommunitySettingsSaveRow = {
-  community_id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  avatar_url: string | null;
-  banner_url: string | null;
-  visibility: string;
-  updated_at: string;
-  monthly_plan_id: string | null;
-  yearly_plan_id: string | null;
-};
 type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  session: SessionT | null;
   confirmAction: (message: string) => boolean;
   loadCommunities: (session: SessionT) => Promise<void>;
   onLeaveCommunityLocalState: (leavingCommunityId: string) => void;
@@ -40,13 +33,20 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsVisibility: string;
   communitySettingsAvatarUrl: string | null;
   communitySettingsBannerUrl: string | null;
+  communitySettingsBannerFocusX: number;
+  communitySettingsBannerFocusY: number;
+  communitySettingsBannerZoom: number;
+  activeCommunityAvatarStorageId?: string | null;
+  activeCommunityBannerStorageId?: string | null;
+  activeCommunityAvatarUrl?: string | null;
+  activeCommunityBannerUrl?: string | null;
   communitySettingsPricingMode: string;
   communitySettingsPriceUsdMonthly: string;
   communitySettingsPriceUsdYearly: string;
   isValidCommunitySlug: (slug: string) => boolean;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setIsSavingCommunitySettings: Dispatch<SetStateAction<boolean>>;
-  onSaveCommunitySettingsSuccess: (result: CommunitySettingsSaveRow) => void;
+  onSaveCommunitySettingsSuccess: (result: CloudCommunitySettingsSaveResult) => void;
 };
 
 function parsePriceBaseUnits(raw: string): number | null {
@@ -67,34 +67,19 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleToggleCommunityMute = useCallback(async (nextMuted: boolean) => {
     const current = argsRef.current;
-    const session = current.supabaseSession;
+    const session = current.session;
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
-
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     current.setCommunityMemberSettingsError(null);
     current.setIsLoadingCommunityMemberSettings(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_member_settings?on_conflict=community_id,user_id`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "resolution=merge-duplicates,return=representation",
-          },
-          body: JSON.stringify({
-            community_id: communityId,
-            user_id: session.user.id,
-            muted: nextMuted,
-            muted_until: null,
-          }),
-        },
+      await saveCloudCommunityMemberSettings({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        communityId,
+        userId: session.user.id,
+        muted: nextMuted,
+        mutedUntil: null,
+      });
       current.setCommunityMemberMuted(nextMuted);
     } catch (error) {
       const message =
@@ -111,29 +96,19 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleLeaveCommunity = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.supabaseSession;
+    const session = current.session;
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
     const confirmed = current.confirmAction("Leave this community? You will lose access immediately.");
     if (!confirmed) return;
-
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     current.setCommunityMemberSettingsError(null);
     current.setIsLeavingCommunity(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/leave_community`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ p_community_id: communityId }),
-        },
+      await leaveCloudCommunity({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
+        communityId,
+      });
       current.onLeaveCommunityLocalState(communityId);
       await current.loadCommunities(session);
     } catch (error) {
@@ -151,20 +126,12 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleSaveCommunitySettings = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.supabaseSession;
+    const session = current.session;
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
     current.setCommunitySettingsError(null);
     current.setIsSavingCommunitySettings(true);
-
-    const url = current.getSupabaseUrl();
-    if (!url) {
-      current.setCommunitySettingsError("Missing Supabase URL.");
-      current.setIsSavingCommunitySettings(false);
-      return;
-    }
-
     const name = current.communitySettingsName.trim();
     const slug = current.communitySettingsSlug.trim().toLowerCase();
     if (!name || !slug) {
@@ -197,32 +164,40 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
       const yearlyAmount = yearlyEnabled ? parsePriceBaseUnits(current.communitySettingsPriceUsdYearly) : null;
       if (monthlyEnabled && monthlyAmount == null) throw new Error("Enter a monthly price.");
       if (yearlyEnabled && yearlyAmount == null) throw new Error("Enter an annual price.");
+      const [avatarField, bannerField] = await Promise.all([
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "avatar",
+          nextValue: current.communitySettingsAvatarUrl,
+          currentStorageId: current.activeCommunityAvatarStorageId ?? null,
+          currentResolvedUrl: current.activeCommunityAvatarUrl ?? null,
+        }),
+        prepareCloudCommunityBrandingField({
+          session,
+          kind: "banner",
+          nextValue: current.communitySettingsBannerUrl,
+          currentStorageId: current.activeCommunityBannerStorageId ?? null,
+          currentResolvedUrl: current.activeCommunityBannerUrl ?? null,
+        }),
+      ]);
 
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/rpc/save_community_settings`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            p_community_id: communityId,
-            p_name: name,
-            p_slug: slug,
-            p_description: current.communitySettingsDescription.trim() || null,
-            p_avatar_url: current.communitySettingsAvatarUrl?.trim() || null,
-            p_banner_url: current.communitySettingsBannerUrl?.trim() || null,
-            p_visibility: visibility,
-            p_monthly_amount_base_units: monthlyAmount,
-            p_yearly_amount_base_units: yearlyAmount,
-            p_currency: "usd",
-            p_currency_decimals: 2,
-          }),
-        },
+      const result = await saveCloudCommunitySettings({
         session,
-      );
-      if (!response.ok) throw new Error(await current.readSupabaseError(response));
-
-      const rows = (await response.json()) as CommunitySettingsSaveRow[];
-      const result = rows[0];
+        communityId,
+        name,
+        slug,
+        description: current.communitySettingsDescription.trim() || null,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        bannerStorageId: bannerField.storageId ?? null,
+        bannerUrl: bannerField.url ?? null,
+        bannerFocusX: current.communitySettingsBannerFocusX,
+        bannerFocusY: current.communitySettingsBannerFocusY,
+        bannerZoom: current.communitySettingsBannerZoom,
+        visibility,
+        monthlyAmountBaseUnits: monthlyAmount,
+        yearlyAmountBaseUnits: yearlyAmount,
+      });
       if (result?.community_id) {
         current.onSaveCommunitySettingsSuccess({
           ...result,

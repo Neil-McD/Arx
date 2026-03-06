@@ -21,7 +21,7 @@ const COMMUNITY_AGENT_PRIMARY_SLOT = 1;
 type DesktopCommunityAiAgentTabProps = {
   showAiAgent: boolean;
   activeCommunity: { name: string } | null;
-  supabaseSession: unknown | null;
+  session: unknown | null;
   canManageMembersActiveCommunity: boolean;
   isLoadingCommunityAgentDrafts: boolean;
   communityAgentDraftsError: string | null;
@@ -52,7 +52,7 @@ export function DesktopCommunityAiAgentTab(props: DesktopCommunityAiAgentTabProp
   const {
     showAiAgent,
     activeCommunity,
-    supabaseSession,
+    session,
     canManageMembersActiveCommunity,
     isLoadingCommunityAgentDrafts,
     communityAgentDraftsError,
@@ -85,7 +85,7 @@ export function DesktopCommunityAiAgentTab(props: DesktopCommunityAiAgentTabProp
                 <div className="settings-panel community-settings-panel">
                   {!activeCommunity ? (
                     <div className="chat-empty">Select a community to configure the AI agent.</div>
-                  ) : !supabaseSession ? (
+                  ) : !session ? (
                     <div className="chat-empty">Sign in to configure the AI agent.</div>
                   ) : !canManageMembersActiveCommunity ? (
                     <div className="chat-empty">Only owners and admins can configure the AI agent.</div>

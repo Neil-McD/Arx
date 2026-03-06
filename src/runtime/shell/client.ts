@@ -88,9 +88,9 @@ export interface DesktopShellClient {
   getExecPolicyRules(): Promise<string | null>;
   getApprovalMode(): Promise<string | null>;
 
-  getSupabaseSession(): Promise<string | null>;
-  setSupabaseSession(session_json: string): Promise<void>;
-  clearSupabaseSession(): Promise<void>;
+  getCloudSession(): Promise<string | null>;
+  setCloudSession(session_json: string): Promise<void>;
+  clearCloudSession(): Promise<void>;
 
   listPendingInvites(): Promise<ShellPendingInviteRecord[]>;
   upsertPendingInvite(args: { invite_key: string; source: "url" | "manual" | string }): Promise<void>;

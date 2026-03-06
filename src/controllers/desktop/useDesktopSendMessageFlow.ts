@@ -1,9 +1,11 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { executeSendMessageFlow } from "../../features/harness/sendTurn";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { CloudAuthSession } from "../../../shared/cloudAuthSession";
 import type { ThreadService, ThreadServiceTurnStreamEvent } from "../../../shared/threadService";
 import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "../../../shared/threadTitleUi";
 import type { StreamingMeta, StreamingTokens } from "../../features/harness/useStreamingState";
+
+type DesktopCloudSession = Exclude<CloudAuthSession, null>;
 
 type SendFlowThread = {
   id: string;
@@ -32,7 +34,7 @@ type SendFlowAttachment = {
 type UseDesktopSendMessageFlowArgs<
   ThreadT extends SendFlowThread,
   MessageT extends SendFlowMessage,
-  SessionT extends SupabaseSession | null,
+  SessionT extends DesktopCloudSession | null,
 > = {
   commandInput: string;
   attachments: SendFlowAttachment[];
@@ -62,18 +64,11 @@ type UseDesktopSendMessageFlowArgs<
   streamingContentRef: { current: string | null };
   streamingTokensRef: { current: StreamingTokens | null };
   streamingMetaRef: { current: StreamingMeta | null };
-  getSupabaseUrl: () => string | null;
-  getSupabaseAnonKey: () => string | null;
+  getCloudRuntimeBaseUrl: () => string | null;
+  getCloudPublishableKey: () => string | null;
   setMemoryToast: (message: string) => void;
   setAgentStatus: (value: null) => void;
   setRunningTools: (value: []) => void;
-  onCloudToolApprovalRequested?: (payload: {
-    session_id: string;
-    run_id: string | null;
-    tool_call_id: string;
-    tool_name: string;
-    args_json: string;
-  }) => void;
   onCloudRunLifecycleEvent?: (payload: {
     threadId: string;
     runId: string | null;
@@ -82,14 +77,13 @@ type UseDesktopSendMessageFlowArgs<
   getSendPolicySnapshot?: (threadId: string) => {
     selectedModelId?: string | null;
     hasChatgptAuth?: boolean;
-    approvalMode?: "read-only" | "agent" | "agent-full";
   } | null;
 };
 
 export function useDesktopSendMessageFlow<
   ThreadT extends SendFlowThread,
   MessageT extends SendFlowMessage,
-  SessionT extends SupabaseSession | null,
+  SessionT extends DesktopCloudSession | null,
 >(args: UseDesktopSendMessageFlowArgs<ThreadT, MessageT, SessionT>) {
   const handleSendMessage = useCallback(
     async (opts?: { text?: string }) => {
@@ -173,9 +167,9 @@ export function useDesktopSendMessageFlow<
           cwd,
           input,
           user_content_json,
-          supabase_url,
-          supabase_anon_key,
-          supabase_access_token,
+          cloud_runtime_base_url,
+          cloud_publishable_key,
+          cloud_access_token,
         }) => {
           const service = args.getThreadServiceById(thread_id);
           const isCloudChatLane = service.storageMode === "cloud" && service.threadLane === "chat";
@@ -230,32 +224,22 @@ export function useDesktopSendMessageFlow<
               args.clearStreamingState();
               return;
             }
-            if (event.type === "tool_approval_requested") {
-              args.dispatchRunPhase({ type: "approval_requested" });
-              args.onCloudToolApprovalRequested?.({
-                session_id: thread_id,
-                run_id: event.runId,
-                tool_call_id: event.toolCallId,
-                tool_name: event.toolName,
-                args_json: event.argsJson,
-              });
-            }
           };
           await service.sendTurn({
             threadId: thread_id,
             cwd: cwd ?? args.effectiveCwd,
             input,
             userContentJson: user_content_json,
-            supabaseUrl: supabase_url,
-            supabaseAnonKey: supabase_anon_key,
-            supabaseAccessToken: supabase_access_token,
+            cloudRuntimeBaseUrl: cloud_runtime_base_url,
+            cloudPublishableKey: cloud_publishable_key,
+            cloudAccessToken: cloud_access_token,
             sendPolicySnapshot,
             onStreamEvent,
           });
         },
-        getSupabaseUrl: args.getSupabaseUrl,
-        getSupabaseAnonKey: args.getSupabaseAnonKey,
-        getSupabaseAccessToken: (session) => session.access_token ?? "",
+        getCloudRuntimeBaseUrl: args.getCloudRuntimeBaseUrl,
+        getCloudPublishableKey: args.getCloudPublishableKey,
+        getCloudAccessToken: (session) => session.access_token ?? "",
         setMemoryToast: args.setMemoryToast,
         setAgentStatus: args.setAgentStatus,
         setRunningTools: args.setRunningTools,

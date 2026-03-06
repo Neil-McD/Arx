@@ -11,7 +11,7 @@ import {
   mergeVoiceTranscript,
   selectVoiceCaptureMimeType,
 } from "../../../shared/voiceCapture";
-import { getSupabaseUrl, readSupabaseError, type SupabaseSession } from "../../../shared/supabaseAuthCore";
+import { transcribeVoice as transcribeCloudVoice, type AuthSession as CloudSession } from "../../../shared/authSessionCore";
 
 type VoiceSupportState = {
   hasGetUserMedia: boolean;
@@ -67,10 +67,8 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 export function useDesktopVoiceInputController(params: {
   shellClient: DesktopShellClient;
-  supabaseSession: SupabaseSession | null;
-  supabaseSessionRef: { current: SupabaseSession | null };
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
+  session: CloudSession | null;
+  sessionRef: { current: CloudSession | null };
   handleSignIn: () => Promise<void> | void;
   showAppToastMessage: (message: string) => void;
   normalizedBuilderTier: string;
@@ -100,7 +98,7 @@ export function useDesktopVoiceInputController(params: {
       | "busy";
     title: string;
   } {
-    if (!params.supabaseSession) {
+    if (!params.session) {
       return {
         mode: "sign_in",
         title:
@@ -201,30 +199,16 @@ export function useDesktopVoiceInputController(params: {
   }
 
   async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
-    const url = getSupabaseUrl();
-    if (!url) throw new Error("Missing Supabase URL.");
-    const payload = JSON.stringify({
-      audio_base64: await blobToBase64(blob),
-      mime_type: blob.type || "audio/webm",
+    const session = params.sessionRef.current ?? params.session;
+    if (!session) throw new Error("Sign in to use voice input.");
+    return await transcribeCloudVoice({
+      session,
+      audioBase64: await blobToBase64(blob),
+      mimeType: blob.type || "audio/webm",
       language: getVoiceLanguageHint(),
-      // Allow server-side fallback if primary transcription returns empty/errors.
-      prefer_primary: false,
+      preferPrimary: false,
       surface,
     });
-    const session = params.supabaseSessionRef.current ?? params.supabaseSession;
-    if (!session) throw new Error("Sign in to use voice input.");
-    const response = await params.fetchWithSupabaseAuth(
-      `${url}/functions/v1/voice_transcribe`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      },
-      session,
-    );
-    if (!response.ok) throw new Error(await readSupabaseError(response));
-    const data = (await response.json()) as { text?: unknown };
-    return typeof data?.text === "string" ? data.text.trim() : "";
   }
 
   async function startVoiceCapture(surface: VoiceSurface): Promise<void> {

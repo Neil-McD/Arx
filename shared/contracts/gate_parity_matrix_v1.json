@@ -3,74 +3,74 @@
   "version": 1,
   "sharedParityScenarios": [
     {
-      "id": "anon_chat_free_model_cloud",
+      "id": "anon_chat_demo_public_cloud",
       "input": {
         "authState": "anonymous",
         "tier": "free",
         "executionMode": "cloud",
         "turnClass": "chat_only",
-        "modelClass": "free_model",
-        "hasDesktopChatGptAuth": false
+        "requestedFundingSource": "demo_public"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
         "lane": "public",
+        "fundingSource": "demo_public",
         "effectiveTier": "anon_free"
       }
     },
     {
-      "id": "auth_free_chat_free_model_cloud",
+      "id": "auth_free_chat_demo_public_cloud",
       "input": {
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
         "turnClass": "chat_only",
-        "modelClass": "free_model",
-        "hasDesktopChatGptAuth": false
+        "requestedFundingSource": "demo_public"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
         "lane": "public",
+        "fundingSource": "demo_public",
         "effectiveTier": "auth_free"
       }
     },
     {
-      "id": "auth_paid_chat_paid_model_cloud",
+      "id": "auth_paid_chat_platform_cloud",
       "input": {
         "authState": "authenticated",
         "tier": "builder",
         "executionMode": "cloud",
         "turnClass": "chat_only",
-        "modelClass": "paid_model",
-        "hasDesktopChatGptAuth": false
+        "requestedFundingSource": "platform"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
         "lane": "platform",
+        "fundingSource": "platform",
         "effectiveTier": "builder"
       }
     },
     {
-      "id": "auth_paid_tools_paid_model_cloud",
+      "id": "auth_paid_tools_platform_cloud",
       "input": {
         "authState": "authenticated",
         "tier": "architect",
         "executionMode": "cloud",
         "turnClass": "requires_tools",
-        "modelClass": "paid_model",
-        "hasDesktopChatGptAuth": false
+        "requestedFundingSource": "platform"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
         "lane": "daytona_cloud",
+        "fundingSource": "platform",
         "effectiveTier": "architect"
       }
     },
@@ -81,54 +81,75 @@
         "tier": "free",
         "executionMode": "cloud",
         "turnClass": "requires_tools",
-        "modelClass": "free_model",
-        "hasDesktopChatGptAuth": false
+        "requestedFundingSource": "demo_public"
       },
       "expected": {
         "allowed": false,
         "code": "tier_required",
         "cta": "upgrade",
         "lane": null,
+        "fundingSource": null,
         "effectiveTier": "auth_free"
       }
-    }
-  ],
-  "intentionalDivergenceScenarios": [
+    },
     {
-      "id": "auth_free_paid_model_desktop_chatgpt_lane",
-      "webInput": {
+      "id": "auth_free_user_key_requires_connection",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "requestedFundingSource": "user_key",
+        "hasUserKeyConnection": false
+      },
+      "expected": {
+        "allowed": false,
+        "code": "provider_connection_required",
+        "cta": "connect_provider",
+        "lane": null,
+        "fundingSource": null,
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_free_user_key_allowed_with_connection",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "requestedFundingSource": "user_key",
+        "hasUserKeyConnection": true
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "platform",
+        "fundingSource": "user_key",
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_free_platform_chatgpt_fallback",
+      "input": {
         "surface": "web",
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
         "turnClass": "chat_only",
-        "modelClass": "paid_model",
-        "hasDesktopChatGptAuth": true
+        "requestedFundingSource": "platform",
+        "hasUserChatGptConnection": true
       },
-      "desktopInput": {
-        "surface": "desktop",
-        "authState": "authenticated",
-        "tier": "free",
-        "executionMode": "cloud",
-        "turnClass": "chat_only",
-        "modelClass": "paid_model",
-        "hasDesktopChatGptAuth": true
-      },
-      "expectedWeb": {
-        "allowed": false,
-        "code": "tier_required",
-        "cta": "upgrade",
-        "lane": null,
-        "effectiveTier": "auth_free"
-      },
-      "expectedDesktop": {
+      "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
         "lane": "chatgpt_desktop",
+        "fundingSource": "user_chatgpt",
         "effectiveTier": "auth_free"
       }
     }
-  ]
+  ],
+  "intentionalDivergenceScenarios": []
 }
-

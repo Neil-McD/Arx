@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { prependCommunityPreludeMessages } from "./communityLaneMessageBuilder";
-import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer.mjs";
+import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 
 export type PlatformQuotaModalState = {
   reason: "quota" | "plan" | "misconfigured" | "disabled" | "unavailable";
@@ -24,10 +24,20 @@ export type UseWebTurnRunnerControllerArgs<
   HistoryUsedItemT,
   CommunityEvidenceUsedT,
 > = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  activeThreadId: string | null;
+  getCloudRuntimeBaseUrl: () => string | null;
+  getThreadById?: (threadId: string) => {
+    id: string;
+    title?: string | null;
+    engine_id?: string | null;
+    model_id?: string | null;
+    project_id?: string | null;
+    community_id?: string | null;
+    context_version?: number | null;
+    thread_lane?: string | null;
+  } | null;
+  fetchCloudPublic: (url: string, init?: RequestInit) => Promise<Response>;
+  fetchCloudAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
 
   extractTextFromContentJson: (value: unknown) => string;
   parseMemoryUsedArray: (value: unknown) => MemoryUsedItemT[];
@@ -76,8 +86,13 @@ export type RunAgentTurnParams = {
   preferredModelId: string;
   mode?: "respond" | "regenerate";
   runIdHint: string;
-  inferenceSource?: "platform" | "user";
+  userMessageKey?: string;
+  systemPrompt?: string | null;
+  inferenceSource?: "platform" | "user_key" | "chatgpt";
+  requestedFundingSource?: "platform" | "user_key" | "user_chatgpt";
+  requiresTools?: boolean;
   replyToId?: string;
+  messages?: PublicTurnThreadMessage[];
 };
 
 export type CreateThreadMessageParams = {

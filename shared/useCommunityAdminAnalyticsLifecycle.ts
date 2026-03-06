@@ -5,7 +5,7 @@ type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
 export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
   activePage: string;
   communityTab: string;
-  supabaseSession: TSession | null;
+  session: TSession | null;
   activeCommunityId: string | null;
   canViewActiveCommunityAnalytics: boolean;
   communityAnalyticsRange: AnalyticsRange;
@@ -36,21 +36,21 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "analytics") return;
-    if (!params.supabaseSession || !params.activeCommunityId || !params.canViewActiveCommunityAnalytics) {
+    if (!params.session || !params.activeCommunityId || !params.canViewActiveCommunityAnalytics) {
       resetCommunityAnalyticsRef.current();
       return;
     }
     const createdAt = getCommunityCreatedAtRef.current();
     void loadCommunityAnalyticsRef.current(
       params.activeCommunityId,
-      params.supabaseSession,
+      params.session,
       params.communityAnalyticsRange,
       createdAt,
     );
   }, [
     params.activePage,
     params.communityTab,
-    params.supabaseSession,
+    params.session,
     params.activeCommunityId,
     params.canViewActiveCommunityAnalytics,
     params.communityAnalyticsRange,

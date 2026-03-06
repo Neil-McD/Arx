@@ -1,4 +1,3 @@
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
 import { normalizeThreadLane } from "../../../shared/threadSidebarSelectors";
 import {
   resolveThreadServiceDomain,
@@ -13,26 +12,36 @@ import {
 import { createCloudChatThreadService } from "./cloudChatThreadService";
 import { createLocalAgentThreadService } from "./localAgentThreadService";
 
+type DesktopCloudSession = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: {
+    id: string;
+    email?: string;
+  };
+};
+
 type CreateDesktopThreadServiceRouterDeps = {
   threads: ThreadServiceThread[];
-  getSession: () => SupabaseSession | null;
-  listCloudThreads: (session: SupabaseSession) => Promise<ThreadServiceThread[]>;
-  getCloudThread: (threadId: string, session: SupabaseSession) => Promise<ThreadServiceThread | null>;
+  getSession: () => DesktopCloudSession | null;
+  listCloudThreads: (session: DesktopCloudSession) => Promise<ThreadServiceThread[]>;
+  getCloudThread: (threadId: string, session: DesktopCloudSession) => Promise<ThreadServiceThread | null>;
   createCloudThread: (
     input: ThreadServiceCreateInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
-  deleteCloudThread: (threadId: string, session: SupabaseSession) => Promise<void>;
+  deleteCloudThread: (threadId: string, session: DesktopCloudSession) => Promise<void>;
   setCloudLens: (
     input: ThreadServiceSetLensInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
-  addCloudMessage: (input: ThreadServiceMessageInput, session: SupabaseSession) => Promise<void>;
-  sendCloudTurn: (input: ThreadServiceSendTurnInput, session: SupabaseSession) => Promise<void>;
-  setCloudThreadTitle: (threadId: string, title: string, session: SupabaseSession) => Promise<void>;
+  addCloudMessage: (input: ThreadServiceMessageInput, session: DesktopCloudSession) => Promise<void>;
+  sendCloudTurn: (input: ThreadServiceSendTurnInput, session: DesktopCloudSession) => Promise<void>;
+  setCloudThreadTitle: (threadId: string, title: string, session: DesktopCloudSession) => Promise<void>;
   setCloudThreadEngine: (
     input: ThreadServiceSetEngineInput,
-    session: SupabaseSession,
+    session: DesktopCloudSession,
   ) => Promise<ThreadServiceThread | null>;
   listLocalThreads: () => Promise<ThreadServiceThread[]>;
   getLocalThread: (threadId: string) => Promise<ThreadServiceThread | null>;

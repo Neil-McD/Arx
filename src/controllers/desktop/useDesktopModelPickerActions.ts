@@ -20,7 +20,7 @@ type UseDesktopModelPickerActionsArgs = {
   freeModelLabels: Record<string, string>;
   premiumModelCatalog: PremiumModelCatalogEntry[];
   hasPaidAccess: boolean;
-  hasSupabaseSession: boolean;
+  hasCloudSession: boolean;
   hasChatgptAuth: boolean;
   handleSignIn: () => Promise<void> | void;
   openBuilderUpgrade: () => void;
@@ -39,7 +39,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
     freeModelLabels,
     premiumModelCatalog,
     hasPaidAccess,
-    hasSupabaseSession,
+    hasCloudSession,
     hasChatgptAuth,
     handleSignIn,
     openBuilderUpgrade,
@@ -120,7 +120,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
 
     if (!hasAccessToPickerModel(model)) {
       closeModelPicker();
-      if (!hasSupabaseSession) {
+      if (!hasCloudSession) {
         await handleSignIn();
         return;
       }
@@ -156,7 +156,7 @@ export function useDesktopModelPickerActions(args: UseDesktopModelPickerActionsA
     handleSignIn,
     hasChatgptAuth,
     hasPaidAccess,
-    hasSupabaseSession,
+    hasCloudSession,
     isModelReady,
     modelToggles,
     onApplyModelSelection,

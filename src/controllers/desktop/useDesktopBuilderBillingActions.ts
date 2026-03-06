@@ -4,7 +4,7 @@ import {
   buildBuilderConnectRequestPayload,
   buildBuilderPortalRequestPayload,
 } from "../../../shared/builderBilling";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { AuthSession as CloudSession } from "../../../shared/authSessionCore";
 import {
   useBuilderBillingActionsCore,
   type BuilderCheckoutTier,
@@ -12,10 +12,7 @@ import {
 } from "../../../shared/useBuilderBillingActionsCore";
 
 type UseDesktopBuilderBillingActionsArgs = {
-  getSession: () => SupabaseSession | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getSession: () => CloudSession | null;
   getPublicAppBaseUrl: () => string | null;
   openExternalUrl: (url: string) => Promise<boolean>;
   requireSignIn: (message: string) => Promise<void>;
@@ -28,9 +25,6 @@ type UseDesktopBuilderBillingActionsArgs = {
 export function useDesktopBuilderBillingActions(args: UseDesktopBuilderBillingActionsArgs) {
   return useBuilderBillingActionsCore({
     getSession: args.getSession,
-    getSupabaseUrl: args.getSupabaseUrl,
-    fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-    readSupabaseError: args.readSupabaseError,
     setBuilderBillingError: args.setBuilderBillingError,
     setIsStartingBuilderCheckout: args.setIsStartingBuilderCheckout,
     setIsStartingBuilderPortal: args.setIsStartingBuilderPortal,

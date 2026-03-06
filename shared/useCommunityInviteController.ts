@@ -1,6 +1,13 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { generateInviteCode } from "./communityInviteLinks";
 
+import {
+  createCloudCommunityInvite,
+  deleteCloudCommunityInvite,
+  listCloudCommunityInvites,
+  revokeCloudCommunityInvite,
+} from "./cloudCommunityInviteGateway";
+
 type SessionLike = {
   user: {
     id: string;
@@ -23,9 +30,7 @@ type UseCommunityInviteControllerArgs<
   InviteT extends InviteLike,
 > = {
   activeCommunityId: string | null;
-  supabaseSession: SessionT | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
+  session: SessionT | null;
   inviteMaxUsesPreset: string;
   inviteMaxUsesCustom: string;
   inviteExpiryPreset: string;
@@ -39,7 +44,6 @@ type UseCommunityInviteControllerArgs<
   setInviteExpiryPreset: Dispatch<SetStateAction<string>>;
   setInviteExpiryCustom: Dispatch<SetStateAction<string>>;
   onInviteCreated?: (invite: InviteT) => void | Promise<void>;
-  missingSupabaseUrlMessage?: string;
 };
 
 export function useCommunityInviteController<
@@ -51,21 +55,12 @@ export function useCommunityInviteController<
 
   const loadCommunityInvites = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
-
     current.setIsLoadingCommunityInvites(true);
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_invites?select=id,community_id,code,max_uses,expires_at,revoked_at,created_by,created_at&community_id=eq.${communityId}&order=created_at.desc`,
-        {},
+      const rows = await listCloudCommunityInvites<SessionT, InviteT>({
         session,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Failed to load invites.");
-      }
-      const rows = (await response.json()) as InviteT[];
+        communityId,
+      });
       current.setCommunityInvites(rows);
     } catch (error) {
       console.warn("Failed to load community invites:", error);
@@ -77,17 +72,11 @@ export function useCommunityInviteController<
 
   const handleCreateInvite = useCallback(async () => {
     const current = argsRef.current;
-    if (!current.supabaseSession || !current.activeCommunityId) return;
+    const session = current.session;
+    if (!session || !current.activeCommunityId) return;
 
     current.setInviteCreateError(null);
     current.setIsCreatingInvite(true);
-    const url = current.getSupabaseUrl();
-    if (!url) {
-      current.setInviteCreateError(current.missingSupabaseUrlMessage ?? "Missing Supabase URL.");
-      current.setIsCreatingInvite(false);
-      return;
-    }
-
     let maxUses: number | null = null;
     if (current.inviteMaxUsesPreset === "custom") {
       const raw = current.inviteMaxUsesCustom.trim();
@@ -127,31 +116,14 @@ export function useCommunityInviteController<
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const code = generateInviteCode(10);
       try {
-        const response = await current.fetchWithSupabaseAuth(
-          `${url}/rest/v1/community_invites`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Prefer: "return=representation",
-            },
-            body: JSON.stringify({
-              community_id: current.activeCommunityId,
-              code,
-              max_uses: maxUses,
-              expires_at: expiresAt,
-              created_by: current.supabaseSession.user.id,
-            }),
-          },
-          current.supabaseSession,
-        );
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text || "Failed to create invite.");
-        }
-
-        const created = (await response.json()) as InviteT[];
-        const invite = created[0] ?? null;
+        const invite = await createCloudCommunityInvite<SessionT, InviteT>({
+          session,
+          communityId: current.activeCommunityId,
+          code,
+          maxUses,
+          expiresAt,
+          createdBy: session.user.id,
+        });
         if (invite) {
           current.setCommunityInvites((prev) => [invite, ...prev]);
           current.setInviteMaxUsesPreset("unlimited");
@@ -181,28 +153,13 @@ export function useCommunityInviteController<
 
   const handleRevokeInvite = useCallback(async (inviteId: string) => {
     const current = argsRef.current;
-    if (!current.supabaseSession) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    const session = current.session;
+    if (!session) return;
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_invites?id=eq.${inviteId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Prefer: "return=representation",
-          },
-          body: JSON.stringify({ revoked_at: new Date().toISOString() }),
-        },
-        current.supabaseSession,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Failed to revoke invite.");
-      }
-      const updated = (await response.json()) as InviteT[];
-      const row = updated[0];
+      const row = await revokeCloudCommunityInvite<SessionT, InviteT>({
+        session,
+        inviteId,
+      });
       if (row) {
         current.setCommunityInvites((prev) => prev.map((invite) => (invite.id === inviteId ? row : invite)));
       }
@@ -213,19 +170,13 @@ export function useCommunityInviteController<
 
   const handleDeleteInvite = useCallback(async (inviteId: string) => {
     const current = argsRef.current;
-    if (!current.supabaseSession) return;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
+    const session = current.session;
+    if (!session) return;
     try {
-      const response = await current.fetchWithSupabaseAuth(
-        `${url}/rest/v1/community_invites?id=eq.${inviteId}`,
-        { method: "DELETE" },
-        current.supabaseSession,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Failed to delete invite.");
-      }
+      await deleteCloudCommunityInvite<SessionT>({
+        session,
+        inviteId,
+      });
       current.setCommunityInvites((prev) => prev.filter((invite) => invite.id !== inviteId));
     } catch (error) {
       console.warn("Failed to delete invite:", error);

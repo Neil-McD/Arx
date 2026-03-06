@@ -1,10 +1,11 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { listCloudDiscoverCommunities } from "./cloudDiscoverGateway";
 
 type UseWebDiscoverControllerArgs<DiscoverCommunityT> = {
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
-  toCanonicalCommunityVisibility: (value: string | null | undefined, fallback: string) => string;
+  toCanonicalCommunityVisibility: (
+    value: unknown,
+    fallback?: "published" | "unlisted",
+  ) => "published" | "unlisted";
   setIsLoadingDiscover: Dispatch<SetStateAction<boolean>>;
   setDiscoverError: Dispatch<SetStateAction<string | null>>;
   setDiscoverCommunities: Dispatch<SetStateAction<DiscoverCommunityT[]>>;
@@ -18,17 +19,13 @@ export function useWebDiscoverController<DiscoverCommunityT extends { visibility
 
   const loadDiscoverCommunities = useCallback(async () => {
     const current = argsRef.current;
-    const url = current.getSupabaseUrl();
-    if (!url) return;
     current.setIsLoadingDiscover(true);
     current.setDiscoverError(null);
     try {
-      const response = await current.fetchWithSupabasePublic(`${url}/functions/v1/public_discover?limit=60`, { method: "GET" });
-      if (!response.ok) {
-        const message = await current.readSupabaseError(response);
-        throw new Error(message);
-      }
-      const payload = (await response.json()) as { ok?: boolean; communities?: DiscoverCommunityT[] };
+      const payload = {
+        ok: true,
+        communities: await listCloudDiscoverCommunities<DiscoverCommunityT>({ limit: 60 }),
+      } as { ok?: boolean; communities?: DiscoverCommunityT[] };
       current.setDiscoverCommunities(
         Array.isArray(payload?.communities)
           ? payload.communities.map((community) => ({

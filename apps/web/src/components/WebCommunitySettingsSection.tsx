@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import type { DragEvent } from "react";
+import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 
 type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
 
@@ -29,7 +31,11 @@ type WebCommunitySettingsSectionProps = {
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
+    isCommunityBannerFocusModalOpen: boolean;
     communitySettingsBannerUrl: string | null;
+    communitySettingsBannerFocusX: number;
+    communitySettingsBannerFocusY: number;
+    communitySettingsBannerZoom: number;
     communitySettingsBannerUploadError: string | null;
     isSettingsAvatarDragOver: boolean;
     communitySettingsAvatarUrl: string | null;
@@ -55,7 +61,12 @@ type WebCommunitySettingsSectionProps = {
     handleSettingsBannerDrop: (event: DragEvent<HTMLDivElement>) => void;
     handleCommunityBannerUpload: (file: File | null) => Promise<void> | void;
     setCommunitySettingsBannerUrl: (value: string | null) => void;
+    setCommunitySettingsBannerFocusX: (value: number) => void;
+    setCommunitySettingsBannerFocusY: (value: number) => void;
+    setCommunitySettingsBannerZoom: (value: number) => void;
     setCommunitySettingsBannerUploadError: (value: string | null) => void;
+    openCommunityBannerFocusModal: () => void;
+    closeCommunityBannerFocusModal: () => void;
     markCommunitySettingsDirty: () => void;
     setIsSettingsAvatarDragOver: (value: boolean) => void;
     handleSettingsAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -93,6 +104,12 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
 
+  useEffect(() => {
+    if (!state.communitySettingsBannerUrl && state.isCommunityBannerFocusModalOpen) {
+      actions.closeCommunityBannerFocusModal();
+    }
+  }, [actions, state.communitySettingsBannerUrl, state.isCommunityBannerFocusModalOpen]);
+
   return (
     <div className="settings-panel community-settings-panel">
       {!activeCommunity ? (
@@ -126,11 +143,21 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 onDragLeave={() => actions.setIsSettingsBannerDragOver(false)}
                 onDrop={actions.handleSettingsBannerDrop}
               >
-                {state.communitySettingsBannerUrl ? (
-                  <img src={state.communitySettingsBannerUrl} alt="Community banner preview" />
-                ) : (
-                  <div className="create-community-banner-placeholder">Banner preview</div>
-                )}
+                <div className="create-community-banner-media">
+                  {state.communitySettingsBannerUrl ? (
+                    <img
+                      src={state.communitySettingsBannerUrl}
+                      alt="Community banner preview"
+                      style={getCommunityBannerImageStyle({
+                        focusX: state.communitySettingsBannerFocusX,
+                        focusY: state.communitySettingsBannerFocusY,
+                        zoom: state.communitySettingsBannerZoom,
+                      })}
+                    />
+                  ) : (
+                    <div className="create-community-banner-placeholder">Banner preview</div>
+                  )}
+                </div>
                 <label
                   className={`create-banner-btn${state.isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
                 >
@@ -147,18 +174,32 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   />
                 </label>
                 {state.communitySettingsBannerUrl && (
-                  <button
-                    className="create-banner-remove"
-                    type="button"
-                    disabled={state.isProcessingCommunitySettingsBanner}
-                    onClick={() => {
-                      actions.setCommunitySettingsBannerUrl(null);
-                      actions.setCommunitySettingsBannerUploadError(null);
-                      actions.markCommunitySettingsDirty();
-                    }}
-                  >
-                    Remove
-                  </button>
+                  <div className="banner-branding-actions">
+                    <button
+                      className="create-banner-btn"
+                      type="button"
+                      disabled={state.isProcessingCommunitySettingsBanner}
+                      onClick={actions.openCommunityBannerFocusModal}
+                    >
+                      Adjust banner
+                    </button>
+                    <button
+                      className="create-banner-remove"
+                      type="button"
+                      disabled={state.isProcessingCommunitySettingsBanner}
+                      onClick={() => {
+                        actions.setCommunitySettingsBannerUrl(null);
+                        actions.setCommunitySettingsBannerFocusX(0.5);
+                        actions.setCommunitySettingsBannerFocusY(0.5);
+                        actions.setCommunitySettingsBannerZoom(1);
+                        actions.setCommunitySettingsBannerUploadError(null);
+                        actions.closeCommunityBannerFocusModal();
+                        actions.markCommunitySettingsDirty();
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
                 {state.isProcessingCommunitySettingsBanner && (
                   <div className="create-upload-status">Processing banner…</div>

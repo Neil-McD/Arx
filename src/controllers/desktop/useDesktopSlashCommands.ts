@@ -1,7 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AgentMode } from "../../features/harness/runPhase";
 import type { RuntimeClient } from "../../runtime/arp/client";
-import type { SupabaseSession } from "../../../shared/supabaseAuthCore";
+import type { AuthSession as CloudSession } from "../../../shared/authSessionCore";
+
+import { createCloudPersonalMemoryItem } from "../../../shared/cloudPersonalMemoryGateway";
 
 type SlashPanelState = {
   kind: "status" | "approvals" | "info";
@@ -34,14 +36,11 @@ type UseDesktopSlashCommandsArgs = {
   runtimeClient: RuntimeClient;
   setSlashPanel: Dispatch<SetStateAction<SlashPanelState>>;
   setAgentMode: Dispatch<SetStateAction<AgentMode>>;
-  getSession: () => SupabaseSession | null;
-  getSupabaseUrl: () => string | null;
+  getSession: () => CloudSession | null;
   setAuthError: Dispatch<SetStateAction<string | null>>;
   handleSignIn: () => Promise<void>;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  getSupabaseAuthUid: (session: SupabaseSession) => string;
+  getCloudAuthUid: (session: CloudSession) => string;
   getEffectiveWorkspacePath: () => string;
-  readSupabaseError: (response: Response) => Promise<string>;
   setActiveView: Dispatch<SetStateAction<AppView>>;
   setSettingsPage: Dispatch<SetStateAction<SettingsPage>>;
   setPersonalMemoryQuery: Dispatch<SetStateAction<string>>;
@@ -174,29 +173,19 @@ export function useDesktopSlashCommands(args: UseDesktopSlashCommandsArgs) {
           }
 
           const session = args.getSession();
-          const url = session ? args.getSupabaseUrl() : null;
-          if (!session || !url) {
+          if (!session) {
             args.setAuthError("Sign in to save memory.");
             await args.handleSignIn();
             return true;
           }
-
-          const response = await args.fetchWithSupabaseAuth(
-            `${url}/rest/v1/personal_memory_items`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-              body: JSON.stringify({
-                user_id: args.getSupabaseAuthUid(session),
-                content,
-                scope,
-                scope_id: scope === "workspace" ? args.getEffectiveWorkspacePath() : null,
-                pinned: false,
-              }),
-            },
+          await createCloudPersonalMemoryItem({
             session,
-          );
-          if (!response.ok) throw new Error(await args.readSupabaseError(response));
+            userId: args.getCloudAuthUid(session),
+            content,
+            scope,
+            scopeId: scope === "workspace" ? args.getEffectiveWorkspacePath() : null,
+            pinned: false,
+          });
 
           args.setActiveView("settings");
           args.setSettingsPage("memory");

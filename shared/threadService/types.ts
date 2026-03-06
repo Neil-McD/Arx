@@ -12,13 +12,12 @@ export type ThreadServiceSendTurnInput = {
   userContentJson: string;
   communityName?: string | null;
   cwd?: string | null;
-  supabaseUrl?: string | null;
-  supabaseAnonKey?: string | null;
-  supabaseAccessToken?: string;
+  cloudRuntimeBaseUrl?: string | null;
+  cloudPublishableKey?: string | null;
+  cloudAccessToken?: string;
   sendPolicySnapshot?: {
     selectedModelId?: string | null;
     hasChatgptAuth?: boolean;
-    approvalMode?: "read-only" | "agent" | "agent-full";
   };
   onStreamEvent?: (event: ThreadServiceTurnStreamEvent) => void;
 };
@@ -41,13 +40,6 @@ export type ThreadServiceTurnStreamEvent =
       promptTokens: number | null;
       completionTokens: number | null;
       maxTokens: number | null;
-    }
-  | {
-      type: "tool_approval_requested";
-      runId: string | null;
-      toolCallId: string;
-      toolName: string;
-      argsJson: string;
     }
   | {
       type: "done";

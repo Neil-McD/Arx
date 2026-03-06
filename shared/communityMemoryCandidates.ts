@@ -1,16 +1,16 @@
-export type SupabaseSessionLike = {
+
+import {
+  listCloudCommunityMemoryCandidateRows,
+  promoteCloudCommunityMemoryCandidate,
+  proposeCloudCommunityMemoryCandidate,
+  rejectCloudCommunityMemoryCandidate,
+} from "./cloudCommunityMemoryCandidatesGateway";
+
+export type CloudSessionLike = {
   user: {
     id: string;
   };
 };
-
-export type FetchWithSupabaseAuth<S extends SupabaseSessionLike> = (
-  url: string,
-  init: RequestInit,
-  session: S,
-) => Promise<Response>;
-
-export type ReadSupabaseError = (response: Response) => Promise<string>;
 
 export type CommunityMemoryCandidateRow = {
   id: string;
@@ -83,104 +83,56 @@ export async function hashTeachCandidateContent(value: string): Promise<string> 
   }
 }
 
-export async function listCommunityMemoryCandidatesRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function listCommunityMemoryCandidatesRpc<S extends CloudSessionLike>(opts: {
   session: S;
   communityId: string;
   limit?: number;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<CommunityMemoryCandidateRow[]> {
-  const limit = typeof opts.limit === "number" && Number.isFinite(opts.limit) ? Math.max(1, Math.floor(opts.limit)) : 100;
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/community_memory_candidates?select=id,community_id,proposer_user_id,title,memory_text,evidence_json,router_state,signal_score,router_reason,promoted_memory_id,reviewed_by,reviewed_at,created_at,updated_at&community_id=eq.${encodeURIComponent(
-      opts.communityId,
-    )}&order=created_at.desc&limit=${encodeURIComponent(String(limit))}`,
-    { method: "GET" },
-    opts.session,
-  );
-  if (!response.ok) throw new Error(await opts.readSupabaseError(response));
-  const rows = (await response.json()) as CommunityMemoryCandidateRow[] | null;
-  return Array.isArray(rows) ? rows : [];
+  return await listCloudCommunityMemoryCandidateRows<S, CommunityMemoryCandidateRow>({
+    session: opts.session,
+    communityId: opts.communityId,
+    limit: opts.limit,
+  });
 }
 
-export async function proposeCommunityMemoryCandidateRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function proposeCommunityMemoryCandidateRpc<S extends CloudSessionLike>(opts: {
   session: S;
   communityId: string;
   title: string | null;
   memoryText: string;
   evidence: unknown;
   requestKey: string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<CommunityMemoryCandidateProposeResult> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/community_memory_candidate_propose`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        p_community_id: opts.communityId,
-        p_title: opts.title,
-        p_memory_text: opts.memoryText,
-        p_evidence: opts.evidence,
-        p_request_key: opts.requestKey,
-      }),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw new Error(await opts.readSupabaseError(response));
-  const rows = (await response.json()) as CommunityMemoryCandidateProposeResult[] | null;
-  const row = Array.isArray(rows) ? rows[0] ?? null : null;
-  if (!row?.candidate_id) throw new Error("Memory candidate was not created.");
-  return row;
+  return await proposeCloudCommunityMemoryCandidate<S>({
+    session: opts.session,
+    communityId: opts.communityId,
+    title: opts.title,
+    memoryText: opts.memoryText,
+    evidence: opts.evidence,
+    requestKey: opts.requestKey,
+  });
 }
 
-export async function promoteCommunityMemoryCandidateRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function promoteCommunityMemoryCandidateRpc<S extends CloudSessionLike>(opts: {
   session: S;
   candidateId: string;
   title: string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<void> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/community_memory_candidate_promote`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        p_candidate_id: opts.candidateId,
-        p_title: opts.title,
-      }),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw new Error(await opts.readSupabaseError(response));
+  await promoteCloudCommunityMemoryCandidate<S>({
+    session: opts.session,
+    candidateId: opts.candidateId,
+    title: opts.title,
+  });
 }
 
-export async function rejectCommunityMemoryCandidateRpc<S extends SupabaseSessionLike>(opts: {
-  url: string;
+export async function rejectCommunityMemoryCandidateRpc<S extends CloudSessionLike>(opts: {
   session: S;
   candidateId: string;
   reason?: string | null;
-  fetchWithSupabaseAuth: FetchWithSupabaseAuth<S>;
-  readSupabaseError: ReadSupabaseError;
 }): Promise<void> {
-  const response = await opts.fetchWithSupabaseAuth(
-    `${opts.url}/rest/v1/rpc/community_memory_candidate_reject`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        p_candidate_id: opts.candidateId,
-        p_reason: opts.reason ?? null,
-      }),
-    },
-    opts.session,
-  );
-  if (!response.ok) throw new Error(await opts.readSupabaseError(response));
+  await rejectCloudCommunityMemoryCandidate<S>({
+    session: opts.session,
+    candidateId: opts.candidateId,
+    reason: opts.reason ?? null,
+  });
 }

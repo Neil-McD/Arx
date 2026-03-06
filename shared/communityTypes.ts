@@ -17,7 +17,7 @@ export type CommunityChatMessage<TAttachment = unknown> = {
   sender_id: string;
   body: string;
   attachments?: TAttachment[];
-  reply_to_id?: string | null;
+  reply_to_id: string | null;
   created_at: string;
   seq: number;
 };
@@ -51,15 +51,27 @@ export type CommunityAccess = {
   can_manage_members: boolean;
 };
 
-export type CommunityAgentDraft = {
+export type CommunityAgentDraft<TLanding = unknown> = {
   id: string;
   community_id: string;
   slot: number;
   name: string | null;
-  landing_json: unknown;
+  landing_json: TLanding | null;
   system_prompt: string;
   is_active: boolean;
   updated_at: string;
+};
+
+export type CommunityAiFeedPostType = "observation" | "synthesis" | "tension";
+
+export type CommunityAiFeedPost = {
+  id: string;
+  community_id: string;
+  author_label: string;
+  post_type: CommunityAiFeedPostType;
+  body: string;
+  created_at: string;
+  pending?: boolean;
 };
 
 export type CommunityAnalyticsSummary = {

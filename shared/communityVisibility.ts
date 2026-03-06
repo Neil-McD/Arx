@@ -1,5 +1,4 @@
 export type CanonicalCommunityVisibility = "published" | "unlisted";
-export type LegacyCommunityVisibility = "public" | "unlisted" | "private";
 
 function normalizeVisibility(raw: unknown): string {
   return String(raw ?? "")
@@ -12,21 +11,9 @@ export function toCanonicalCommunityVisibility(
   fallback: CanonicalCommunityVisibility = "unlisted",
 ): CanonicalCommunityVisibility {
   const visibility = normalizeVisibility(raw);
-  if (visibility === "published" || visibility === "public") return "published";
-  if (visibility === "unlisted" || visibility === "private") return "unlisted";
+  if (visibility === "published") return "published";
+  if (visibility === "unlisted") return "unlisted";
   return fallback;
-}
-
-export function toLegacyCommunityVisibility(
-  raw: unknown,
-  fallback: LegacyCommunityVisibility = "unlisted",
-): LegacyCommunityVisibility {
-  const visibility = normalizeVisibility(raw);
-  if (visibility === "published" || visibility === "public") return "public";
-  if (visibility === "unlisted" || visibility === "private") return "unlisted";
-  if (fallback === "private") return "private";
-  if (fallback === "public") return "public";
-  return "unlisted";
 }
 
 export function isPublishedCommunityVisibility(raw: unknown): boolean {

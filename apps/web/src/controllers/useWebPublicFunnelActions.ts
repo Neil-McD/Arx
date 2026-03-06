@@ -1,16 +1,17 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import {
-  classifyPublicCommunityJoinError,
-  clearPendingPublicJoin,
-  getBrandosAidForCommunitySlug,
-  getErrorMessage,
-  joinPublicCommunityRpc,
-  readPendingPublicJoinBrandosAid,
-  storePendingPublicJoin,
-} from "../../../../shared/pay_first";
-import type { PendingAuthIntentInput } from "../../../../shared/supabaseAuthIntent";
+  classifyPublicCommunityJoinError, clearPendingPublicJoin, getBrandosAidForCommunitySlug, getErrorMessage, joinPublicCommunityRpc, readPendingPublicJoinBrandosAid, storePendingPublicJoin, } from "../../../../shared/pay_first";
+import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
-import type { SupabaseSession } from "../supabase";
+
+import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
+import {
+  fetchCloudMyJoinRequestBySlug,
+  requestCloudCommunityAccessBySlug,
+  resolveCloudPublicFunnel,
+  startCloudPublicFunnelCheckout,
+} from "../../../../shared/cloudPublicFunnelGateway";
+import type { CloudSession } from "../cloudAuth";
 import { isCommunityJoinMode } from "../communityJoinPolicy";
 
 type UseWebPublicFunnelActionsArgs<
@@ -18,14 +19,10 @@ type UseWebPublicFunnelActionsArgs<
   PublicPlanT extends { billing_period: string },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 > = {
-  getSession: () => SupabaseSession | null;
-  supabaseSession: SupabaseSession | null;
-  getSupabaseUrl: () => string | null;
-  fetchWithSupabaseAuth: (url: string, init: RequestInit, session: SupabaseSession) => Promise<Response>;
-  fetchWithSupabasePublic: (url: string, init?: RequestInit) => Promise<Response>;
-  readSupabaseError: (response: Response) => Promise<string>;
+  getSession: () => CloudSession | null;
+  session: CloudSession | null;
   openAuthGate: (intentInput: PendingAuthIntentInput) => void;
-  loadCommunities: (session: SupabaseSession) => Promise<void>;
+  loadCommunities: (session: CloudSession) => Promise<void>;
   openCommunityWorkspace: (communityId: string) => void;
   isUuid: (value: string) => boolean;
 
@@ -56,25 +53,16 @@ export function useWebPublicFunnelActions<
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 >(args: UseWebPublicFunnelActionsArgs<PublicCommunityT, PublicPlanT, MyCommunityJoinRequestT>) {
   const loadMyJoinRequestBySlug = useCallback(
-    async (communitySlug: string, session: SupabaseSession): Promise<void> => {
+    async (communitySlug: string, session: CloudSession): Promise<void> => {
       const trimmed = communitySlug.trim();
       if (!trimmed) return;
-      const url = args.getSupabaseUrl();
-      if (!url) return;
       args.setIsLoadingMyPublicCommunityJoinRequest(true);
       try {
-        const response = await args.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/get_my_join_request_by_slug`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_slug: trimmed }),
-          },
+        const row = await fetchCloudMyJoinRequestBySlug<CloudSession, MyCommunityJoinRequestT>({
           session,
-        );
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-        const rows = (await response.json()) as MyCommunityJoinRequestT[];
-        args.setMyPublicCommunityJoinRequest(rows[0] ?? null);
+          communitySlug: trimmed,
+        });
+        args.setMyPublicCommunityJoinRequest(row);
       } catch (error) {
         console.warn("Failed to load join request:", error);
         args.setMyPublicCommunityJoinRequest(null);
@@ -94,8 +82,7 @@ export function useWebPublicFunnelActions<
       const brandosAid = trimmedSlug ? getBrandosAidForCommunitySlug(trimmedSlug) : null;
 
       const session = args.getSession();
-      const url = session ? args.getSupabaseUrl() : null;
-      if (!session || !url) {
+      if (!session) {
         storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
         args.openAuthGate({
           reason: "join_public_community",
@@ -117,13 +104,10 @@ export function useWebPublicFunnelActions<
           (pendingBrandosAid && args.isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
 
         const joinedId = await joinPublicCommunityRpc({
-          url,
           session,
           communityId: trimmedId || undefined,
           communitySlug: trimmedSlug || undefined,
           brandosAid: resolvedBrandosAid,
-          fetchWithSupabaseAuth: args.fetchWithSupabaseAuth,
-          readSupabaseError: args.readSupabaseError,
         });
         clearPendingPublicJoin();
 
@@ -178,9 +162,8 @@ export function useWebPublicFunnelActions<
       if (!trimmedSlug) return;
       const message = typeof opts.message === "string" ? opts.message.trim() || null : null;
 
-      const session = args.getSession() ?? args.supabaseSession;
-      const url = session ? args.getSupabaseUrl() : null;
-      if (!session || !url) {
+      const session = args.getSession() ?? args.session;
+      if (!session) {
         args.openAuthGate({
           reason: "request_community_access",
           payload: { community_slug: trimmedSlug, message },
@@ -191,20 +174,13 @@ export function useWebPublicFunnelActions<
       args.setIsRequestingPublicCommunityAccess(true);
       args.setPublicRequestAccessError(null);
       try {
-        const response = await args.fetchWithSupabaseAuth(
-          `${url}/rest/v1/rpc/request_community_access_by_slug`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ p_community_slug: trimmedSlug, p_message: message }),
-          },
+        const row = await requestCloudCommunityAccessBySlug<CloudSession, MyCommunityJoinRequestT>({
           session,
-        );
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-        const rows = (await response.json()) as MyCommunityJoinRequestT[];
-        const row = rows[0] ?? null;
+          communitySlug: trimmedSlug,
+          message,
+        });
         args.setMyPublicCommunityJoinRequest(row);
-        if ((row?.status ?? "").trim().toLowerCase() === "approved") {
+        if (row && (row.status ?? "").trim().toLowerCase() === "approved") {
           args.openCommunityWorkspace(row.community_id);
           await args.loadCommunities(session);
         }
@@ -246,11 +222,6 @@ export function useWebPublicFunnelActions<
 
   const loadPublicCommunity = useCallback(
     async (slug: string): Promise<void> => {
-      const url = args.getSupabaseUrl();
-      if (!url) {
-        args.setPublicCommunityError("Missing Supabase URL.");
-        return;
-      }
       args.setIsLoadingPublicCommunity(true);
       args.setPublicCommunityError(null);
       args.setPublicJoinError(null);
@@ -260,40 +231,22 @@ export function useWebPublicFunnelActions<
       args.setSelectedPublicCommunityBillingPeriod(null);
       args.setMyPublicCommunityJoinRequest(null);
       try {
-        const response = await args.fetchWithSupabasePublic(`${url}/functions/v1/public_funnel`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent: "resolve", community_slug: slug }),
+        const payload = await resolveCloudPublicFunnel<CloudSession, PublicCommunityT, PublicPlanT>({
+          communitySlug: slug,
         });
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-        const payload = (await response.json()) as {
-          ok?: boolean;
-          community?: PublicCommunityT;
-          active_plan?: PublicPlanT | null;
-          active_plans?: PublicPlanT[] | null;
-        };
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
         const session = args.getSession();
         if (session) {
           try {
-            const accessResponse = await args.fetchWithSupabaseAuth(
-              `${url}/rest/v1/rpc/get_my_community_access_by_slug`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ p_community_slug: payload.community.slug }),
-              },
+            const access = await fetchCloudMyCommunityAccessBySlug<CloudSession, CommunityAccessRow>({
               session,
-            );
-            if (accessResponse.ok) {
-              const rows = (await accessResponse.json()) as CommunityAccessRow[];
-              const access = rows[0] ?? null;
-              if (access && (access.can_view || access.is_owner)) {
-                args.openCommunityWorkspace(access.community_id);
-                await args.loadCommunities(session);
-                return;
-              }
+              communitySlug: payload.community.slug,
+            });
+            if (access && (access.can_view || access.is_owner)) {
+              args.openCommunityWorkspace(access.community_id);
+              await args.loadCommunities(session);
+              return;
             }
           } catch {
             // ignore; fall back to public landing
@@ -341,12 +294,6 @@ export function useWebPublicFunnelActions<
 
   const startCheckoutForPlan = useCallback(
     async (communitySlug: string, billingPeriod: string, cancelPath: string): Promise<void> => {
-      const url = args.getSupabaseUrl();
-      if (!url) {
-        args.setCheckoutError("Missing Supabase URL.");
-        args.setCheckoutStatus("error");
-        return;
-      }
       args.setCheckoutStatus("loading");
       args.setCheckoutError(null);
       try {
@@ -354,28 +301,15 @@ export function useWebPublicFunnelActions<
         const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${origin}${cancelPath}`;
         const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
-        const body = JSON.stringify({
-          intent: "checkout",
-          community_slug: communitySlug,
-          billing_period: billingPeriod,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          tracking: brandosAid ? { brandos_aid: brandosAid } : undefined,
-        });
         const session = args.getSession();
-        const response = session
-          ? await args.fetchWithSupabaseAuth(
-              `${url}/functions/v1/public_funnel`,
-              { method: "POST", headers: { "Content-Type": "application/json" }, body },
-              session,
-            )
-          : await args.fetchWithSupabasePublic(`${url}/functions/v1/public_funnel`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body,
-            });
-        if (!response.ok) throw new Error(await args.readSupabaseError(response));
-        const data = (await response.json()) as { checkout_url?: unknown };
+        const data = await startCloudPublicFunnelCheckout<CloudSession>({
+          session,
+          communitySlug,
+          billingPeriod,
+          successUrl,
+          cancelUrl,
+          brandosAid,
+        });
         const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
         if (!checkoutUrl) throw new Error("Missing checkout_url.");
         args.navigateToUrl(checkoutUrl);

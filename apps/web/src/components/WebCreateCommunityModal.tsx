@@ -30,7 +30,6 @@ type WebCreateCommunityModalProps = {
   isStartingBuilderPortal: boolean;
   communityInitials: (value: string) => string;
   onClose: () => void;
-  onOpenAuthGate: () => void;
   onPrimaryAction: () => Promise<void> | void;
   onSetBannerDragOver: (value: boolean) => void;
   onSetAvatarDragOver: (value: boolean) => void;
@@ -68,7 +67,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     isStartingBuilderPortal,
     communityInitials,
     onClose,
-    onOpenAuthGate,
     onPrimaryAction,
     onSetBannerDragOver,
     onSetAvatarDragOver,
@@ -116,11 +114,13 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               onDragLeave={() => onSetBannerDragOver(false)}
               onDrop={onBannerDrop}
             >
-              {createCommunityBannerUrl ? (
-                <img src={createCommunityBannerUrl} alt="Community banner preview" />
-              ) : (
-                <div className="create-community-banner-placeholder">Banner preview</div>
-              )}
+              <div className="create-community-banner-media">
+                {createCommunityBannerUrl ? (
+                  <img src={createCommunityBannerUrl} alt="Community banner preview" />
+                ) : (
+                  <div className="create-community-banner-placeholder">Banner preview</div>
+                )}
+              </div>
               <label className="create-banner-btn">
                 Upload banner
                 <input
@@ -220,7 +220,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
         <div className="modal-footer">
           <div className="create-community-actions">
             {!hasSession ? (
-              <button className="create-community-primary" type="button" onClick={onOpenAuthGate}>
+              <button className="create-community-primary" type="button" onClick={() => void onPrimaryAction()}>
                 Sign in to create
               </button>
             ) : (

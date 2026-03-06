@@ -88,12 +88,20 @@ grep -q 'get_chatgpt_auth_for_inference_with_timeout' "$MAIN_RS" || {
 }
 
 echo "[5/11] Agent runtime must keep platform/public lane endpoints..."
-grep -q 'functions/v1/platform_agent_infer' "$MAIN_RS" || {
-  echo "FAIL: platform_agent_infer endpoint missing from desktop runtime"
+grep -q 'CLOUD_FUNCTION_PLATFORM_AGENT_INFER_PATH' "$MAIN_RS" || {
+  echo "FAIL: platform_agent_infer path constant missing from desktop runtime"
   exit 1
 }
-grep -q 'functions/v1/public_turn' "$MAIN_RS" || {
-  echo "FAIL: public_turn endpoint missing from desktop runtime"
+grep -q 'CLOUD_FUNCTION_PUBLIC_TURN_PATH' "$MAIN_RS" || {
+  echo "FAIL: public_turn path constant missing from desktop runtime"
+  exit 1
+}
+grep -Eq 'platform_agent_infer' "$MAIN_RS" || {
+  echo "FAIL: platform_agent_infer route marker missing from desktop runtime"
+  exit 1
+}
+grep -Eq 'public_turn' "$MAIN_RS" || {
+  echo "FAIL: public_turn route marker missing from desktop runtime"
   exit 1
 }
 
@@ -116,8 +124,16 @@ grep -q 'Runtime lane: `public` | `daytona` | `platform_fallback` | `chatgpt_des
   echo "FAIL: matrix runtime lane contract is out of sync"
   exit 1
 }
-grep -q 'Desktop | Chat | authenticated | free/builder/pro | OpenAI alias + ChatGPT auth | false | optional `chatgpt_desktop` override' "$MATRIX_DOC" || {
-  echo "FAIL: matrix desktop ChatGPT lane contract is out of sync"
+grep -q '| Web/Desktop | Chat | authenticated | free | `user_chatgpt` | false | `chatgpt_desktop` | `user_chatgpt` | denied | denied | denied |' "$MATRIX_DOC" || {
+  echo "FAIL: matrix free ChatGPT lane contract is out of sync"
+  exit 1
+}
+grep -q '| Web/Desktop | Chat | authenticated | builder/architect | `user_chatgpt` | false | `chatgpt_desktop` | `user_chatgpt` | not required | allowed | allowed |' "$MATRIX_DOC" || {
+  echo "FAIL: matrix paid ChatGPT lane contract is out of sync"
+  exit 1
+}
+grep -q 'ChatGPT auth is a user-funded lane and does not imply Daytona entitlement.' "$MATRIX_DOC" || {
+  echo "FAIL: matrix ChatGPT lane note is out of sync"
   exit 1
 }
 
