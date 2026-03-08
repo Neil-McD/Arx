@@ -64,9 +64,9 @@ class ErrorBoundary extends React.Component<
 
 try {
   const savedTheme = parseAppTheme(localStorage.getItem("arx-theme"));
-  applyAppThemeAttributes(savedTheme ?? "dark", document.documentElement);
+  applyAppThemeAttributes(savedTheme ?? "polynet", document.documentElement);
 } catch {
-  applyAppThemeAttributes("dark", document.documentElement);
+  applyAppThemeAttributes("polynet", document.documentElement);
 }
 
 bootConvexProbe();

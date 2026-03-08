@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5174,
       fs: {
-        // Allow importing the shared desktop CSS from repo root.
+        // Allow importing shared repo modules from the repo root.
         allow: [repoRoot]
       },
       ...(runtimeProxyTarget
