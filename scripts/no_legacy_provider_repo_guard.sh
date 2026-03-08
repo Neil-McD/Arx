@@ -21,7 +21,6 @@ CODE_TARGETS=(
   src
   apps
   shared
-  src-tauri
   convex
 )
 

@@ -2,7 +2,7 @@
 
 Status: active (contract freeze)  
 Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`  
-Goal: one canonical cloud agentic harness shared by web + desktop, executed against Daytona.
+Goal: one canonical cloud agentic harness for the Polynet web surface, executed against Daytona.
 
 ## 1) Irreducible Components
 
@@ -16,11 +16,11 @@ Everything else is adapter surface area.
 
 ## 2) First-Principles Rules
 
-1. Do not duplicate harness logic across web and desktop.
+1. Do not duplicate harness logic across web controllers and runtime routes.
 2. Cloud agent turns are project-bound and sandbox-backed.
 3. Tool calls are auditable lifecycle events, not implicit side effects.
 4. Fallback lanes are explicit and observable, never silent.
-5. Same request in web cloud and desktop cloud must produce the same run semantics.
+5. The same request must produce the same run semantics across every web entrypoint.
 
 ## 3) Canonical Loop (Cloud)
 
@@ -61,20 +61,20 @@ Minimum events for cloud-agent turns:
 
 1. `daytona`: canonical cloud agentic loop (tool-capable).
 2. `public`: free non-tool lane.
-3. `chatgpt_desktop`: desktop OpenAI authenticated lane (non-tool unless explicitly extended).
+3. `chatgpt`: user-funded OpenAI authenticated lane (non-tool unless explicitly extended).
 4. `platform_fallback`: explicit fallback lane only when contract says fallback is allowed.
 
 ## 7) Migration Sequence (from current state)
 
 1. Freeze contract (this document + runtime metadata).
 2. Replace Daytona probe/delegate behavior with full tool loop execution.
-3. Route cloud-agent turns from both web and desktop to `requires_tools=true`.
-4. Add parity tests (web cloud vs desktop cloud).
+3. Route cloud-agent turns from the web surface to `requires_tools=true`.
+4. Add parity tests across web entrypoints and gate contracts.
 5. Remove silent fallback paths for cloud-agent turns.
 
 ## 8) Acceptance Criteria
 
-1. Web cloud and desktop cloud show identical run lane + tool lifecycle behavior.
+1. Web cloud entrypoints show identical run lane + tool lifecycle behavior.
 2. Cloud-agent turns on Daytona do not silently execute via platform fallback.
 3. Every tool call has full request/approval/start/finish trace.
 4. A failed run exposes deterministic code/message + lane context.
@@ -83,7 +83,7 @@ Minimum events for cloud-agent turns:
 
 1. No multi-project execution in a single thread.
 2. No parallel tool calls in one run.
-3. No desktop local harness behavior changes in this contract.
+3. No local runtime behavior is in scope for this contract.
 
 ## 10) Tool Policy (Current vs Target)
 
@@ -94,7 +94,7 @@ Current implemented scope in `convex/http.ts`:
 3. Probe output is injected into the iterative inference loop as explicit tool-result context.
 4. Model-directed tool loop is active for cloud tool turns, with policy-evented `tool_call_requested` / `tool_call_approved|denied` / `tool_call_started` / `tool_call_finished`.
 5. Cloud tool turns use a single deterministic policy posture (auto-approved tool execution except explicit contract-denied tools like `update_plan`).
-6. Web and desktop cloud clients send the same minimal runtime turn payload shape (no cloud approval-mode branch state).
+6. Web clients send the same minimal runtime turn payload shape (no approval-mode branch state).
 
 Target scope (next slice, not complete yet):
 

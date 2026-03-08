@@ -1,6 +1,6 @@
-# Arx Web (Browser UI)
+# Polynet Web
 
-This is the browser version of Arx. It intentionally **reuses the desktop UI styling** by importing `src/index.css` from repo root, so the web UI matches the desktop look/layout.
+This is the canonical Polynet web app. It currently shares some shell styling with the legacy root `src` components while the web surface is being fully normalized.
 
 ## Local dev
 
@@ -47,6 +47,6 @@ Cloud Auth redirect allowlist:
 
 ## Current scope
 
-- Cloud-only agent threads/messages (no Tauri/local tools)
+- Cloud-only agent threads/messages
 - Community memberships rail + discover grid
-- Community chat/resources/members are planned next (desktop remains the power surface).
+- Community chat/resources/members/settings/analytics on the web surface

@@ -31,7 +31,7 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
 }) {
   useEffect(() => {
     try {
-      localStorage.setItem("arx-community-analytics-range", params.communityAnalyticsRange);
+      localStorage.setItem("polynet-community-analytics-range", params.communityAnalyticsRange);
     } catch {
       // ignore
     }
@@ -40,7 +40,7 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   useEffect(() => {
     try {
       applyAppThemeAttributes(params.appTheme, document.documentElement);
-      localStorage.setItem("arx-theme", params.appTheme);
+      localStorage.setItem("polynet-theme", params.appTheme);
     } catch {
       return;
     }

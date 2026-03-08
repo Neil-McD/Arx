@@ -11,7 +11,6 @@ TARGETS=(
   src
   apps
   shared
-  src-tauri
 )
 
 max_allowed_for_file() {

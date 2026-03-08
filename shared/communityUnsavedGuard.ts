@@ -20,25 +20,6 @@ export function confirmDiscardUnsavedCommunityChanges(
   return input.confirmDiscard(input.message ?? "You have unsaved changes. Discard changes?");
 }
 
-export type ConfirmDiscardUnsavedCommunitySettingsDesktopInput = {
-  isCommunitySettingsDirty: boolean;
-  activeCommunityId: string | null;
-  nextCommunityId: string | null;
-  confirmDiscard: (message: string) => boolean;
-};
-
-export function confirmDiscardUnsavedCommunitySettingsDesktop(
-  input: ConfirmDiscardUnsavedCommunitySettingsDesktopInput,
-): boolean {
-  return confirmDiscardUnsavedCommunityChanges({
-    hasUnsavedSettings: input.isCommunitySettingsDirty,
-    activeCommunityId: input.activeCommunityId,
-    nextCommunityId: input.nextCommunityId,
-    confirmDiscard: input.confirmDiscard,
-    message: "You have unsaved community settings. Discard changes?",
-  });
-}
-
 export type ConfirmDiscardUnsavedCommunitySettingsWebInput = {
   isCommunitySettingsDirty: boolean;
   isCommunityAgentDraftDirty: boolean;

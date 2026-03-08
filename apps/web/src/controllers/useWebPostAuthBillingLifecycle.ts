@@ -166,7 +166,6 @@ export function useWebPostAuthBillingLifecycle<
 
         if (cancelled) return;
         if (!wantsCreate) return;
-        if (params.builderBillingReturn?.source === "desktop") return;
         if (params.isFinalizingCreateCommunityFromBilling) return;
 
         const draft = params.loadCreateCommunityDraft();

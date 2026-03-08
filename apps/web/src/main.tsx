@@ -63,7 +63,7 @@ class ErrorBoundary extends React.Component<
 }
 
 try {
-  const savedTheme = parseAppTheme(localStorage.getItem("arx-theme"));
+  const savedTheme = parseAppTheme(localStorage.getItem("polynet-theme") ?? localStorage.getItem("arx-theme"));
   applyAppThemeAttributes(savedTheme ?? "polynet", document.documentElement);
 } catch {
   applyAppThemeAttributes("polynet", document.documentElement);

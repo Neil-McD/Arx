@@ -3,7 +3,7 @@ const DEFAULT_PUBLIC_MODEL_MAP: Record<string, string> = Object.freeze({
 });
 
 const DEFAULT_PLATFORM_MODEL_MAP: Record<string, string> = Object.freeze({
-  "gpt-5.2": "openai/gpt-5.2",
+  "gpt-5.4": "openai/gpt-5.4",
   "sonnet-4.6": "anthropic/claude-sonnet-4-5",
   "opus-4.6": "anthropic/claude-opus-4-1",
   "gemini-3-flash": "google/gemini-2.5-flash",

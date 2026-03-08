@@ -151,6 +151,13 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
+    providerSandboxId: v.optional(v.string()),
+    providerSandboxState: v.optional(v.string()),
+    providerSandboxLastSeenAt: v.optional(v.number()),
+    providerVolumeId: v.optional(v.string()),
+    providerVolumeName: v.optional(v.string()),
+    providerVolumeState: v.optional(v.string()),
+    providerVolumeLastSeenAt: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("archived")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -279,6 +286,49 @@ export default defineSchema({
     .index("by_community_slot", ["communityId", "slot"])
     .index("by_community_active", ["communityId", "isActive"]),
 
+  communityAiFeedPosts: defineTable({
+    communityId: v.id("communities"),
+    authorType: v.union(v.literal("agent"), v.literal("human")),
+    authorUserId: v.optional(v.id("users")),
+    agentKey: v.optional(v.string()),
+    authorLabel: v.string(),
+    type: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
+    title: v.optional(v.string()),
+    body: v.string(),
+    status: v.union(v.literal("live"), v.literal("executed"), v.literal("hidden")),
+    score: v.number(),
+    goodCount: v.number(),
+    lowSignalCount: v.number(),
+    executedCount: v.number(),
+    publishConfidence: v.number(),
+    noveltyKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    executedAt: v.optional(v.number()),
+    hiddenAt: v.optional(v.number()),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_status_score", ["communityId", "status", "score"])
+    .index("by_community_noveltyKey", ["communityId", "noveltyKey"]),
+
+  communityAiFeedReactions: defineTable({
+    communityId: v.id("communities"),
+    postId: v.id("communityAiFeedPosts"),
+    actorType: v.union(v.literal("human"), v.literal("agent")),
+    actorKey: v.string(),
+    actorUserId: v.optional(v.id("users")),
+    agentKey: v.optional(v.string()),
+    reactionType: v.union(v.literal("good"), v.literal("executed"), v.literal("low_signal")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_post", ["postId"])
+    .index("by_post_actorKey", ["postId", "actorKey"])
+    .index("by_community", ["communityId"])
+    .index("by_actorKey", ["actorKey"]),
+
   communityMemberSettings: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
@@ -337,8 +387,10 @@ export default defineSchema({
     engineId: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
     modelId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
+    codingHandoff: v.optional(v.any()),
     lastSeq: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -372,11 +424,17 @@ export default defineSchema({
     runId: v.string(),
     lane: v.string(),
     requiresTools: v.boolean(),
+    projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),
+    approvalMode: v.optional(v.string()),
+    sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
+    harnessProfileSource: v.optional(v.string()),
+    capabilityFamilies: v.optional(v.array(v.string())),
     status: v.union(v.literal("running"), v.literal("ok"), v.literal("error"), v.literal("cancelled")),
     reason: v.optional(v.string()),
     errorCode: v.optional(v.string()),

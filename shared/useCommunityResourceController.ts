@@ -192,7 +192,7 @@ export function useCommunityResourceController<
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
     const session = current.session;
-    if (!session || !current.activeCommunityId) return;
+    if (!session || !current.activeCommunityId) return false;
     try {
       await deleteCloudCommunityResource({
         session,
@@ -205,12 +205,13 @@ export function useCommunityResourceController<
           ? error.message
           : current.deleteFailureMessage;
       current.setResourceError(message);
-      return;
+      return false;
     }
     if (current.editingResourceId === resourceId) {
       resetResourceEditor(current.clearErrorWhenEditingDeleted);
     }
     await loadCommunityResources(current.activeCommunityId, session);
+    return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
   return {

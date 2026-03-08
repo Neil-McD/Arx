@@ -192,7 +192,7 @@ export default defineSchema({
     lane: v.union(
       v.literal("public"),
       v.literal("platform"),
-      v.literal("chatgpt_desktop"),
+      v.literal("chatgpt"),
       v.literal("daytona"),
       v.literal("local"),
     ),

@@ -310,7 +310,7 @@ export async function probeCloudChatgptConnection<SessionT>(
     status: Number.isFinite(statusRaw) ? Math.floor(statusRaw) : null,
     code: normalizeNullableString(payload?.code),
     message: normalizeNullableString(payload?.message) || "ChatGPT probe failed.",
-    model_id: normalizeNullableString(payload?.model_id) || "gpt-5.2",
+    model_id: normalizeNullableString(payload?.model_id) || "gpt-5.4",
     resolved_model_id: normalizeNullableString(payload?.resolved_model_id),
     elapsed_ms: Number.isFinite(elapsedRaw) ? Math.floor(elapsedRaw) : null,
     content_preview: normalizeNullableString(payload?.content_preview),

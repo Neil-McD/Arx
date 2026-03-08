@@ -1,5 +1,6 @@
 import { AnalyticsLineChart } from "../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../shared/contentFormatting";
+import { buildPlatformSwitcherStyle } from "../../shared/platformSwitcherUi";
 import type {
   CommunityAnalyticsActions,
   CommunityAnalyticsCapabilities,
@@ -14,6 +15,16 @@ type CommunityAnalyticsPanelProps = {
 
 export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
   const { capabilities, state, actions } = props;
+  const rangeOptions = ["7d", "30d", "90d", "1y", "all"] as const;
+  const metricOptions = ["members", "revenue"] as const;
+  const rangeSwitcherStyle = buildPlatformSwitcherStyle(
+    rangeOptions.length,
+    rangeOptions.findIndex((value) => value === state.communityAnalyticsRange),
+  );
+  const metricSwitcherStyle = buildPlatformSwitcherStyle(
+    metricOptions.length,
+    metricOptions.findIndex((value) => value === state.communityAnalyticsChartMode),
+  );
   if (!capabilities.hasActiveCommunity) {
     return <div className="chat-empty">Select a community to view analytics.</div>;
   }
@@ -28,11 +39,20 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
     <>
       <div className="analytics-header-row">
         <div className="panel-title">Community Analytics</div>
-        <div className="analytics-range-toggle" role="tablist" aria-label="Time range">
-          {(["7d", "30d", "90d", "1y", "all"] as const).map((value) => (
+        <div
+          className="platform-switcher platform-switcher-compact"
+          role="tablist"
+          aria-label="Time range"
+          style={rangeSwitcherStyle}
+        >
+          {rangeOptions.map((value) => (
             <button
               key={value}
-              className={value === state.communityAnalyticsRange ? "analytics-range-btn active" : "analytics-range-btn"}
+              className={
+                value === state.communityAnalyticsRange
+                  ? "platform-switcher-btn is-active"
+                  : "platform-switcher-btn"
+              }
               type="button"
               onClick={() => actions.setCommunityAnalyticsRange(value)}
               aria-pressed={value === state.communityAnalyticsRange}
@@ -68,11 +88,20 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
       <div className="settings-section">
         <div className="analytics-chart-card">
           <div className="analytics-chart-header">
-            <div className="analytics-range-toggle analytics-mode-toggle" role="tablist" aria-label="Metric">
-              {(["members", "revenue"] as const).map((value) => (
+            <div
+              className="platform-switcher platform-switcher-compact analytics-mode-toggle"
+              role="tablist"
+              aria-label="Metric"
+              style={metricSwitcherStyle}
+            >
+              {metricOptions.map((value) => (
                 <button
                   key={value}
-                  className={value === state.communityAnalyticsChartMode ? "analytics-range-btn active" : "analytics-range-btn"}
+                  className={
+                    value === state.communityAnalyticsChartMode
+                      ? "platform-switcher-btn is-active"
+                      : "platform-switcher-btn"
+                  }
                   type="button"
                   onClick={() => actions.setCommunityAnalyticsChartMode(value)}
                   aria-pressed={value === state.communityAnalyticsChartMode}

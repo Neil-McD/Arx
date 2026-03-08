@@ -56,7 +56,7 @@ Scope:
 
 Acceptance:
 1. Cloud tool turns emit canonical lifecycle semantics per active contract docs.
-2. Duplicate replay/idempotency behavior is deterministic across web and desktop cloud surfaces.
+2. Duplicate replay/idempotency behavior is deterministic across web cloud entrypoints.
 3. No silent lane drift for tool-capable cloud turns.
 
 ### A2. Gate and auth hardening

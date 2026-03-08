@@ -1,8 +1,8 @@
 const CANONICAL_TIER_SET = new Set(["free", "builder", "architect"]);
 const PAID_TIER_SET = new Set(["builder", "architect"]);
 const VALID_AUTH_STATE = new Set(["anonymous", "authenticated"]);
-const VALID_SURFACE = new Set(["web", "desktop", "mobile"]);
-const VALID_EXECUTION_MODE = new Set(["cloud", "local"]);
+const VALID_SURFACE = new Set(["web", "mobile"]);
+const VALID_EXECUTION_MODE = new Set(["cloud"]);
 const VALID_MODEL_CLASS = new Set(["free_model", "paid_model"]);
 const VALID_REQUESTED_FUNDING_SOURCE = new Set([
   "demo_public",
@@ -106,20 +106,59 @@ export function evaluateCanonicalGate(rawInput) {
     tier: rawInput?.tier,
   });
   const hasUserKeyConnection = Boolean(rawInput?.hasUserKeyConnection);
-  const hasUserChatGptConnection = Boolean(
-    rawInput?.hasUserChatGptConnection ?? rawInput?.hasDesktopChatGptAuth,
-  );
+  const hasUserChatGptConnection = Boolean(rawInput?.hasUserChatGptConnection);
   const isPaid = isPaidEffectiveTier(effectiveTier);
   const isAnonymous = effectiveTier === "anon_free";
 
-  if (executionMode === "local") {
-    return {
-      ...allow("local_runtime", null),
-      effectiveTier,
-    };
-  }
-
   if (turnClass === "requires_tools") {
+    if (requestedFundingSource === "user_chatgpt") {
+      if (isAnonymous) {
+        return {
+          ...deny("auth_required", "sign_in"),
+          effectiveTier,
+        };
+      }
+      if (!isPaid) {
+        return {
+          ...deny("tier_required", "upgrade"),
+          effectiveTier,
+        };
+      }
+      if (hasUserChatGptConnection) {
+        return {
+          ...allow("daytona_cloud", "user_chatgpt"),
+          effectiveTier,
+        };
+      }
+      return {
+        ...deny("provider_connection_required", "connect_provider"),
+        effectiveTier,
+      };
+    }
+    if (requestedFundingSource === "user_key") {
+      if (isAnonymous) {
+        return {
+          ...deny("auth_required", "sign_in"),
+          effectiveTier,
+        };
+      }
+      if (!isPaid) {
+        return {
+          ...deny("tier_required", "upgrade"),
+          effectiveTier,
+        };
+      }
+      if (hasUserKeyConnection) {
+        return {
+          ...allow("daytona_cloud", "user_key"),
+          effectiveTier,
+        };
+      }
+      return {
+        ...deny("provider_connection_required", "connect_provider"),
+        effectiveTier,
+      };
+    }
     if (isPaid) {
       return {
         ...allow("daytona_cloud", "platform"),
@@ -167,7 +206,7 @@ export function evaluateCanonicalGate(rawInput) {
     }
     if (hasUserChatGptConnection) {
       return {
-        ...allow("chatgpt_desktop", "user_chatgpt"),
+        ...allow("chatgpt", "user_chatgpt"),
         effectiveTier,
       };
     }
@@ -186,7 +225,7 @@ export function evaluateCanonicalGate(rawInput) {
 
   if (authState === "authenticated" && hasUserChatGptConnection) {
     return {
-      ...allow("chatgpt_desktop", "user_chatgpt"),
+      ...allow("chatgpt", "user_chatgpt"),
       effectiveTier,
     };
   }

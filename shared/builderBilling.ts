@@ -1,5 +1,5 @@
 export type BuilderBillingStatus = "success" | "cancel" | "return";
-export type BuilderBillingSource = "web" | "desktop" | "unknown";
+export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
 export type BuilderTierUi = "free" | "builder" | "architect";
@@ -95,7 +95,7 @@ export function formatBuilderTierLabel(value: string | null | undefined): "Free"
 
 function buildBuilderBillingRedirectUrls(args: {
   origin: string;
-  source: "web" | "desktop";
+  source: "web";
   context: BuilderUpgradeContextValue;
 }): { successUrl: string; cancelUrl: string; returnUrl: string } {
   const base = args.origin.replace(/\/+$/, "");
@@ -109,7 +109,7 @@ function buildBuilderBillingRedirectUrls(args: {
 
 export function buildBuilderCheckoutRequestPayload(args: {
   origin: string;
-  source: "web" | "desktop";
+  source: "web";
   context: BuilderUpgradeContextValue;
   tier: "builder" | "pro" | "architect";
 }): { tier: "builder" | "pro"; successUrl: string; cancelUrl: string } {
@@ -127,7 +127,7 @@ export function buildBuilderCheckoutRequestPayload(args: {
 
 export function buildBuilderPortalRequestPayload(args: {
   origin: string;
-  source: "web" | "desktop";
+  source: "web";
   context: BuilderUpgradeContextValue;
 }): { returnUrl: string } {
   const returnUrl = buildBuilderBillingRedirectUrls({
@@ -162,7 +162,7 @@ function normalizeBuilderBillingSource(
   fallbackSource: BuilderBillingSource,
 ): BuilderBillingSource {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "web" || normalized === "desktop") return normalized;
+  if (normalized === "web") return normalized;
   return fallbackSource;
 }
 

@@ -37,7 +37,7 @@ import {
   type DaytonaConfig,
 } from "./httpDaytona";
 
-type RuntimeSurface = "web" | "desktop" | "mobile";
+type RuntimeSurface = "web" | "mobile";
 type GateModelClass = "free_model" | "paid_model";
 type GateTurnClass = "chat_only" | "requires_tools";
 type GateCode =
@@ -51,7 +51,7 @@ type GateCode =
   | "project_required"
   | "runner_unavailable";
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
-type GateLane = "public" | "platform" | "chatgpt_desktop" | "daytona_cloud" | "local_runtime";
+type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 type ResolvedGateDecision = {
   allowed: boolean;
@@ -64,7 +64,7 @@ type ResolvedGateDecision = {
 type RuntimeTurnInput = {
   thread_id?: string;
   model_id?: string | null;
-  surface?: "web" | "desktop" | "mobile";
+  surface?: "web" | "mobile";
   requires_tools?: boolean;
   requested_funding_source?: "demo_public" | "user_key" | "user_chatgpt" | "platform" | "auto" | null;
   stream?: boolean;
@@ -324,7 +324,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
       const gateDecision = await resolveGateDecisionForAuthenticatedActor({
         ctx,
         authSubject: auth.actor.authSubject,
-        surface: normalizeSurface((input as { surface?: unknown }).surface, "desktop"),
+        surface: normalizeSurface((input as { surface?: unknown }).surface, "web"),
         modelClass: "paid_model",
         turnClass: "chat_only",
         requestedFundingSource: "platform",
@@ -560,7 +560,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
       runtimeTurnStage = "gate";
       const publicMap = loadPublicModelMap();
       const platformMap = loadPlatformModelMap();
-      const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.2";
+      const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.4";
       const publicRef = publicMap[requestedModelId];
       const turnClass: GateTurnClass = parseBoolish(input.requires_tools, false) ? "requires_tools" : "chat_only";
       const requestedFundingSource = parseRequestedFundingSource(
@@ -605,18 +605,9 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
         lane: gateDecision.lane,
       });
       const runId = String(input.idempotency_key ?? "").trim() || `convex_runtime:${crypto.randomUUID()}`;
-      if (turnClass === "requires_tools" && gateDecision.fundingSource === "user_chatgpt") {
-        return runtimeJsonResponse(503, {
-          ok: false,
-          code: "runner_unavailable",
-          error: "runner_unavailable",
-          message: "ChatGPT-authenticated tool runs are not available on web yet.",
-          run_id: runId,
-        });
-      }
       const fallbackPublicRef = Object.values(publicMap).find((value) => typeof value === "string" && value.trim().length > 0);
       const fallbackPlatformRef =
-        readEnv("ARX_PLATFORM_DEFAULT_MODEL") || platformMap["gpt-5.2"] || requestedModelId;
+        readEnv("ARX_PLATFORM_DEFAULT_MODEL") || platformMap["gpt-5.4"] || requestedModelId;
       const modelRef =
         lane === "public"
           ? publicRef || fallbackPublicRef || requestedModelId
@@ -756,6 +747,9 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
       let daytonaProviderSandboxId: string | null = null;
       let daytonaToolboxProxyUrl: string | null = null;
       let daytonaConfigForRun: DaytonaConfig | null = null;
+      let daytonaProjectVolumeId: string | null = null;
+      let daytonaProjectVolumeName: string | null = null;
+      let codingContinuationPrompt: string | null = null;
       if (turnClass === "requires_tools") {
         try {
           if (!runtimeProjectId) {
@@ -790,7 +784,23 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
               run_id: runId,
             });
           }
-  
+
+          const runtimeProject = (await ctx.runQuery((api as any).projects.getCloudProjectById as any, {
+            ownerId: userDbId,
+            projectId: runtimeProjectId,
+          })) as { providerVolumeId?: unknown; providerVolumeName?: unknown } | null;
+          daytonaProjectVolumeId = String(runtimeProject?.providerVolumeId ?? "").trim() || null;
+          daytonaProjectVolumeName = String(runtimeProject?.providerVolumeName ?? "").trim() || null;
+
+          if (!daytonaProjectVolumeId) {
+            const ensuredProject = (await ctx.runAction((api as any).projects.ensureCloudProjectVolume as any, {
+              authSubject,
+              projectId: runtimeProjectId,
+            })) as { providerVolumeId?: unknown; providerVolumeName?: unknown } | null;
+            daytonaProjectVolumeId = String(ensuredProject?.providerVolumeId ?? "").trim() || null;
+            daytonaProjectVolumeName = String(ensuredProject?.providerVolumeName ?? "").trim() || null;
+          }
+
           const loadedDaytonaConfig = loadDaytonaConfig();
           if (!loadedDaytonaConfig.ok) {
             await finishRunBestEffort({
@@ -820,7 +830,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
               tool_name: "bash",
               args: {
                 cmd: "pwd",
-                cwd: "workspace",
+                cwd: "/home/daytona/workspace",
               },
               requires_approval: false,
               policy_basis: "runtime_turn_daytona_probe",
@@ -834,11 +844,12 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
               run_id: runId,
               tool_call_id: toolCallId,
               attempt: 1,
-              cwd: "workspace",
+              cwd: "/home/daytona/workspace",
               workspace_scope_id: runtimeProjectId,
               sandbox: {
                 mode: "daytona",
                 project_id: runtimeProjectId,
+                ...(daytonaProjectVolumeId ? { volume_id: daytonaProjectVolumeId } : null),
               },
             },
           });
@@ -848,6 +859,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             userId,
             projectId: runtimeProjectId,
             runId,
+            projectVolumeId: daytonaProjectVolumeId,
           });
           if (!probe.ok) {
             await appendRunEvent({
@@ -926,6 +938,17 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           daytonaProbeOutput = String(probe.outputText ?? "").trim() || null;
           daytonaProviderSandboxId = probe.providerSandboxId;
           daytonaToolboxProxyUrl = probe.toolboxProxyUrl;
+          await ctx.runMutation(internal.projects.recordCloudProjectRuntimeState as any, {
+            projectId: runtimeProjectId,
+            providerSandboxId: daytonaProviderSandboxId,
+            providerSandboxState: "started",
+            providerSandboxLastSeenAt: Date.now(),
+            providerVolumeId: daytonaProjectVolumeId ?? undefined,
+            providerVolumeName: daytonaProjectVolumeName ?? undefined,
+            providerVolumeState: daytonaProjectVolumeId ? "ready" : undefined,
+            providerVolumeLastSeenAt: daytonaProjectVolumeId ? Date.now() : undefined,
+            nowMs: Date.now(),
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await finishRunBestEffort({
@@ -979,7 +1002,25 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           run_id: runId,
         });
       }
-  
+
+      if (turnClass === "requires_tools") {
+        try {
+          const continuation = (await ctx.runQuery(internal.threads.getCloudCodingContinuationContextInternal as any, {
+            ownerId: userDbId,
+            threadId: ownedThread._id,
+          })) as { prompt?: unknown } | null;
+          const nextPrompt = String(continuation?.prompt ?? "").trim();
+          codingContinuationPrompt = nextPrompt || null;
+        } catch (error) {
+          console.warn("coding_continuity_prompt_load_failed", {
+            requestId,
+            threadId: String(ownedThread._id),
+            runId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       if (turnClass === "requires_tools" && stream) {
         if (!runtimeProjectId || !daytonaConfigForRun || !daytonaProviderSandboxId || !daytonaToolboxProxyUrl) {
           await finishRunBestEffort({
@@ -1019,6 +1060,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             providerSandboxId: daytonaProviderSandboxId,
             toolboxProxyUrl: daytonaToolboxProxyUrl,
             initialProbeOutput: daytonaProbeOutput,
+            codingContinuationPrompt,
             appendRunEvent,
           });
           if (!loopResult.ok) {
@@ -1084,7 +1126,25 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             });
             return;
           }
-  
+
+          try {
+            await ctx.runMutation(internal.threads.updateCloudThreadCodingHandoffInternal as any, {
+              ownerId: userDbId,
+              threadId: ownedThread._id,
+              runId,
+              userText: latestUserText,
+              assistantText: content,
+              nowMs: Date.now(),
+            });
+          } catch (error) {
+            console.warn("coding_handoff_update_failed", {
+              requestId,
+              threadId: String(ownedThread._id),
+              runId,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+
           await finishRunBestEffort({
             status: "ok",
           });
@@ -1136,7 +1196,16 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           });
         }
         const loopResult = await executeDaytonaAgentLoop({
+          ctx,
           req,
+          userId: userDbId,
+          requestedModelId,
+          inferenceSource:
+            inferenceSource === "chatgpt"
+              ? "chatgpt"
+              : inferenceSource === "user_key"
+                ? "user_key"
+                : "platform",
           modelRef,
           messages,
           maxTokens,
@@ -1146,6 +1215,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           providerSandboxId: daytonaProviderSandboxId,
           toolboxProxyUrl: daytonaToolboxProxyUrl,
           initialProbeOutput: daytonaProbeOutput,
+          codingContinuationPrompt,
           appendRunEvent,
         });
         if (!loopResult.ok) {
@@ -1166,6 +1236,23 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
         content = loopResult.assistantText;
         promptTokens = loopResult.promptTokens;
         completionTokens = loopResult.completionTokens;
+        try {
+          await ctx.runMutation(internal.threads.updateCloudThreadCodingHandoffInternal as any, {
+            ownerId: userDbId,
+            threadId: ownedThread._id,
+            runId,
+            userText: latestUserText,
+            assistantText: content,
+            nowMs: Date.now(),
+          });
+        } catch (error) {
+          console.warn("coding_handoff_update_failed", {
+            requestId,
+            threadId: String(ownedThread._id),
+            runId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         const completion =
           gateDecision.fundingSource === "user_chatgpt"

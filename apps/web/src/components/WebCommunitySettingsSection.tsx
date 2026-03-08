@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { DragEvent } from "react";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
 type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
 
@@ -103,6 +104,16 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     state,
     actions,
   } = props;
+  const pricingOptions = [
+    { key: "free", label: "Free" },
+    { key: "monthly", label: "Monthly" },
+    { key: "yearly", label: "Annual" },
+    { key: "both", label: "Both" },
+  ] as Array<{ key: CommunityPricingMode; label: string }>;
+  const pricingSwitcherStyle = buildPlatformSwitcherStyle(
+    pricingOptions.length,
+    pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
+  );
 
   useEffect(() => {
     if (!state.communitySettingsBannerUrl && state.isCommunityBannerFocusModalOpen) {
@@ -280,7 +291,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   }}
                 />
                 <span className="create-community-hint">
-                  {`arx.com/c/${state.communitySettingsSlug.trim() || "your-community"}`}
+                  {`/c/${state.communitySettingsSlug.trim() || "your-community"}`}
                 </span>
               </label>
             </div>
@@ -323,19 +334,17 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               </label>
               <div className="create-community-field">
                 <span>Pricing</span>
-                <div className="analytics-range-toggle" role="tablist" aria-label="Pricing options">
-                  {(
-                    [
-                      { key: "free", label: "Free" },
-                      { key: "monthly", label: "Monthly" },
-                      { key: "yearly", label: "Annual" },
-                      { key: "both", label: "Both" },
-                    ] as Array<{ key: CommunityPricingMode; label: string }>
-                  ).map((opt) => (
+                <div
+                  className="platform-switcher platform-switcher-compact"
+                  role="tablist"
+                  aria-label="Pricing options"
+                  style={pricingSwitcherStyle}
+                >
+                  {pricingOptions.map((opt) => (
                     <button
                       key={opt.key}
                       type="button"
-                      className={`analytics-range-btn${
+                      className={`platform-switcher-btn${
                         state.communitySettingsPricingMode === opt.key ? " active" : ""
                       }`}
                       onClick={() => {

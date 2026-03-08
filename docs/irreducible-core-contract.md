@@ -14,8 +14,8 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
    - builder/architect ($100)
 2. Canonical chat + canonical community UX.
 3. Community agentic harness + community memory + community research.
-4. Desktop local coding harness.
-5. Desktop ChatGPT-auth lane for OpenAI inference.
+4. Daytona cloud coding harness.
+5. User-funded ChatGPT-auth lane for OpenAI inference.
 6. Voice UX.
 7. Builder monetization rails (including Stripe Connect onboarding).
 
@@ -38,9 +38,9 @@ Core AI-agent paths:
 
 ## Inference and Auth (Must Keep)
 
-- Desktop ChatGPT-first lane path for eligible OpenAI aliases.
+- User-funded ChatGPT lane path for eligible OpenAI aliases.
 - Platform and public fallback lanes.
-- Local agent harness remains available independent of cloud auth.
+- Daytona agent harness remains available independent of cloud auth.
 - Public and private edge routing contracts remain explicit.
 
 ## Monetization Rails (Must Keep)
@@ -53,7 +53,6 @@ Core AI-agent paths:
 
 ## Voice UX (Must Keep)
 
-- Desktop voice capture + transcription path.
 - Web voice capture + transcription path.
 - `voice_transcribe` edge endpoint deployment.
 

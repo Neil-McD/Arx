@@ -23,7 +23,7 @@ import {
 import {
   clearCreateCommunityDraft, createCommunityDraftId, loadCreateCommunityDraft, saveCreateCommunityDraft, } from "../../../shared/communityDraftStorage";
 import {
-  DEFAULT_EMPTY_THREAD_LANDING, buildDefaultCommunityEmptyThreadLanding, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
+  DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
@@ -32,6 +32,11 @@ import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 
 import { fetchActiveCloudCommunityAgentSystemPrompt } from "../../../shared/cloudCommunityAgentGateway";
+import {
+  listCloudCommunityAiFeedImportant,
+  listCloudCommunityAiFeedLive,
+  reactToCloudCommunityAiFeedPost,
+} from "../../../shared/cloudCommunityAiFeedGateway";
 import { deleteCloudPersonalMemoryItem, updateCloudPersonalMemoryPinned } from "../../../shared/cloudPersonalMemoryGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
@@ -68,7 +73,7 @@ import {
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
-  CommunityAiFeedPostType as SharedCommunityAiFeedPostType,
+  CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
   AnalyticsChartMode as SharedAnalyticsChartMode,
   AnalyticsPoint as SharedAnalyticsPoint,
   AnalyticsRange as SharedAnalyticsRange,
@@ -203,8 +208,6 @@ import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspac
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
-import { useCommunityAgentPreviewTabFallbackEffect } from "../../../shared/useCommunityAgentPreviewTabFallbackEffect";
-import { useCommunityAgentEditorUiController } from "../../../shared/useCommunityAgentEditorUiController";
 import { useAuthGateLifecycleEffects } from "../../../shared/useAuthGateLifecycleEffects";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityAgentDraftController } from "../../../shared/useCommunityAgentDraftController";
@@ -375,10 +378,21 @@ type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentDraft = SharedCommunityAgentDraft<CommunityAgentLanding>;
 
 const GUEST_THREAD_ID = "__guest__";
-const GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
-const GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
+const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
+const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
+const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
+const LEGACY_GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
 const GUEST_MODEL_ALLOWLIST = SHARED_FREE_MODEL_ALLOWLIST;
 const GUEST_MODEL_LABELS = SHARED_FREE_MODEL_LABELS;
+const MODEL_TOGGLES_STORAGE_KEY = "polynet_model_toggles";
+const ACTIVE_MODEL_STORAGE_KEY = "polynet_active_model_id";
+const LEGACY_ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
+const APP_THEME_STORAGE_KEY = "polynet-theme";
+const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
+const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
+const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
+const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
+const LEGACY_COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "arx-community-rail-order:web";
 
 type GuestStoredMessageV1 = {
   id: string;
@@ -394,9 +408,19 @@ type GuestThreadStorageV1 = {
   messages: GuestStoredMessageV1[];
 };
 
+function readFirstLocalStorageValue(keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = localStorage.getItem(key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function loadGuestModelId(): string {
   try {
-    const raw = (localStorage.getItem(GUEST_MODEL_STORAGE_KEY) ?? "").trim();
+    const raw = (
+      readFirstLocalStorageValue([GUEST_MODEL_STORAGE_KEY, LEGACY_GUEST_MODEL_STORAGE_KEY]) ?? ""
+    ).trim();
     return raw && isFreeModelId(raw, GUEST_MODEL_ALLOWLIST) ? raw : DEFAULT_GUEST_MODEL_ID;
   } catch {
     return DEFAULT_GUEST_MODEL_ID;
@@ -413,7 +437,7 @@ function storeGuestModelId(modelId: string): void {
 
 function loadGuestThreadStorage(): GuestThreadStorageV1 {
   try {
-    const raw = localStorage.getItem(GUEST_THREAD_STORAGE_KEY);
+    const raw = readFirstLocalStorageValue([GUEST_THREAD_STORAGE_KEY, LEGACY_GUEST_THREAD_STORAGE_KEY]);
     if (!raw) return { v: 1, model_id: loadGuestModelId(), messages: [] };
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return { v: 1, model_id: loadGuestModelId(), messages: [] };
@@ -551,7 +575,7 @@ type PersonalMemoryItem = {
 type PublicPlanSummary = SharedPublicPlanSummary;
 type DiscoverCommunity = SharedDiscoverCommunity<PublicCommunityRecord>;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
-type CommunityAiFeedPostType = SharedCommunityAiFeedPostType;
+type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type BuilderBillingStatus = {
   user_id: string;
@@ -578,9 +602,6 @@ const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("web");
-
-const MODEL_TOGGLES_STORAGE_KEY = "arx_model_toggles";
-const ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
 
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still compressed before sending)
@@ -633,7 +654,9 @@ export default function App() {
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
-      const stored = parseAppTheme(localStorage.getItem("arx-theme"));
+      const stored = parseAppTheme(
+        readFirstLocalStorageValue([APP_THEME_STORAGE_KEY, LEGACY_APP_THEME_STORAGE_KEY]),
+      );
       if (stored) return stored;
       return "dark";
     } catch {
@@ -709,7 +732,9 @@ export default function App() {
   const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
-      const stored = (localStorage.getItem(ACTIVE_MODEL_STORAGE_KEY) ?? "").trim();
+      const stored = (
+        readFirstLocalStorageValue([ACTIVE_MODEL_STORAGE_KEY, LEGACY_ACTIVE_MODEL_STORAGE_KEY]) ?? ""
+      ).trim();
       return stored || null;
     } catch {
       return null;
@@ -738,13 +763,18 @@ export default function App() {
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
   const communityRailOrderStorageKey = useMemo(
-    () => `arx-community-rail-order:web:${cloudSession?.user?.id ?? "local"}`,
+    () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`,
+    [cloudSession?.user?.id],
+  );
+  const legacyCommunityRailOrderStorageKeys = useMemo(
+    () => [`${LEGACY_COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`],
     [cloudSession?.user?.id],
   );
   const { orderedCommunities: railCommunities, moveCommunityToIndex: handleReorderCommunityRail } =
     useCommunityRailOrder<CommunityRecord>({
       communities,
       storageKey: communityRailOrderStorageKey,
+      legacyStorageKeys: legacyCommunityRailOrderStorageKeys,
     });
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
@@ -782,10 +812,18 @@ export default function App() {
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
-  const [communityFeedDraftBody, setCommunityFeedDraftBody] = useState("");
-  const [communityFeedDraftType, setCommunityFeedDraftType] = useState<CommunityAiFeedPostType>("observation");
-  const [communityFeedByCommunityId, setCommunityFeedByCommunityId] = useState<Record<string, CommunityAiFeedPost[]>>({});
-  const [communityFeedError, setCommunityFeedError] = useState<string | null>(null);
+  const [communityFeedByCommunityId, setCommunityFeedByCommunityId] = useState<
+    Record<
+      string,
+      {
+        live: CommunityAiFeedPost[];
+        important: CommunityAiFeedPost[];
+        isLoading: boolean;
+        error: string | null;
+      }
+    >
+  >({});
+  const [communityFeedReactingPostId, setCommunityFeedReactingPostId] = useState<string | null>(null);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -1088,7 +1126,10 @@ export default function App() {
   const [communityRevenueError, setCommunityRevenueError] = useState<string | null>(null);
   const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
     try {
-      const stored = localStorage.getItem("arx-community-analytics-range");
+      const stored = readFirstLocalStorageValue([
+        COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY,
+        LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY,
+      ]);
       if (stored && ["7d", "30d", "90d", "1y", "all"].includes(stored)) {
         return stored as AnalyticsRange;
       }
@@ -1132,43 +1173,24 @@ export default function App() {
   const [communityAgentDraftsError, setCommunityAgentDraftsError] = useState<string | null>(null);
   const communityAgentDraftsLoadedCommunityIdRef = useRef<string | null>(null);
 
-  const [communityAgentDraftName, setCommunityAgentDraftName] = useState("");
   const [communityAgentDraftLanding, setCommunityAgentDraftLanding] = useState<CommunityAgentLanding>(
     DEFAULT_EMPTY_THREAD_LANDING,
   );
   const [communityAgentDraftSystemPrompt, setCommunityAgentDraftSystemPrompt] = useState("");
-  const [communityAgentPreviewTabId, setCommunityAgentPreviewTabId] = useState<string>("");
-  type CommunityAgentLandingEdit =
-    | { kind: "title" }
-    | { kind: "subtitle" }
-    | { kind: "tab_label"; tabId: string }
-    | { kind: "prompt"; tabId: string; index: number }
-    | { kind: "add_prompt"; tabId: string };
-  const [communityAgentLandingEdit, setCommunityAgentLandingEdit] = useState<CommunityAgentLandingEdit | null>(null);
-  const [communityAgentLandingEditValue, setCommunityAgentLandingEditValue] = useState("");
   const [isSavingCommunityAgentDraft, setIsSavingCommunityAgentDraft] = useState(false);
   const [communityAgentDraftSaveError, setCommunityAgentDraftSaveError] = useState<string | null>(null);
   const communityAgentDraftDirtyRef = useRef(false);
-  const {
-    markCommunityAgentDraftDirty,
-    beginCommunityAgentLandingEdit,
-    clearCommunityAgentLandingEdit,
-    hydrateCommunityAgentEditor,
-  } = useCommunityAgentEditorUiController<CommunityAgentLanding, CommunityAgentLandingEdit, CommunityAgentDraft>({
-    activeCommunityId,
-    communities,
-    defaultLanding: DEFAULT_EMPTY_THREAD_LANDING,
-    buildDefaultCommunityLanding: buildDefaultCommunityEmptyThreadLanding,
-    normalizeCommunityAgentLanding,
-    setCommunityAgentDraftName,
-    setCommunityAgentDraftLanding,
-    setCommunityAgentDraftSystemPrompt,
-    setCommunityAgentDraftSaveError,
-    setCommunityAgentPreviewTabId,
-    setCommunityAgentLandingEdit,
-    setCommunityAgentLandingEditValue,
-    communityAgentDraftDirtyRef,
-  });
+  const markCommunityAgentDraftDirty = useCallback(() => {
+    communityAgentDraftDirtyRef.current = true;
+  }, []);
+  const hydrateCommunityAgentEditor = useCallback((_slot: number, drafts: CommunityAgentDraft[]) => {
+    const row = drafts.find((draft) => draft.slot === 1) ?? null;
+    const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
+    setCommunityAgentDraftLanding(landing);
+    setCommunityAgentDraftSystemPrompt(row?.system_prompt ?? "");
+    setCommunityAgentDraftSaveError(null);
+    communityAgentDraftDirtyRef.current = false;
+  }, []);
 
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
   const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
@@ -1260,33 +1282,10 @@ export default function App() {
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
   const [messageInput, setMessageInput] = useState("");
-  const DESKTOP_INSTALLED_KEY = "arx-desktop-installed";
-  const DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY = "arx-desktop-download-dismissed-until";
-  const DESKTOP_DOWNLOAD_DISMISS_MS = 12 * 60 * 60 * 1000;
-  const isTauriEnv = Boolean((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__);
-  const [desktopInstalled, setDesktopInstalled] = useState(() => {
-    if (isTauriEnv) return true;
-    try {
-      return localStorage.getItem(DESKTOP_INSTALLED_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const [desktopDownloadDismissedUntil, setDesktopDownloadDismissedUntil] = useState(() => {
-    try {
-      const raw = localStorage.getItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
-      const parsed = raw ? Number(raw) : NaN;
-      if (Number.isFinite(parsed) && parsed > 0) return parsed;
-      return 0;
-    } catch {
-      return 0;
-    }
-  });
   const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
   const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
   const activeCommunityIdRef = useRef<string | null>(null);
   const communityAgentLandingFetchSeqRef = useRef(0);
-  const [emptyThreadSection, setEmptyThreadSection] = useState<string>("community");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
@@ -1470,11 +1469,9 @@ export default function App() {
   const {
     loadCommunityAgentDrafts,
     handleSaveCommunityAgentDraft,
-    handleSetLiveCommunityAgentDraft,
   } = useCommunityAgentDraftController<CloudAuthSession, CommunityAgentLanding, CommunityAgentDraft>({
     activeCommunityId,
     ...cloudSessionArg,
-    communityAgentDraftName,
     communityAgentDraftLanding,
     communityAgentDraftSystemPrompt,
     communityAgentDrafts,
@@ -1491,10 +1488,9 @@ export default function App() {
     setCommunityAgentDrafts,
     setIsSavingCommunityAgentDraft,
     setCommunityAgentDraftSaveError,
-    saveValidationErrorMessage: "Add at least one tab with a label and one prompt.",
+    saveValidationErrorMessage: "Add at least one onboarding prompt.",
     loadFailureMessage: "Failed to load AI agent drafts.",
-    saveFailureMessage: "Failed to save AI agent draft.",
-    setLiveFailureMessage: "Failed to set live draft.",
+    saveFailureMessage: "Failed to save AI agent changes.",
   });
 
   const {
@@ -1838,52 +1834,6 @@ export default function App() {
       .trim()
       .toLowerCase() === "true",
   });
-
-  const desktopDownloadUrl = (((import.meta as any)?.env?.VITE_ARX_DESKTOP_DOWNLOAD_URL as string | undefined) ?? "").trim();
-  const dismissDesktopDownload = () => {
-    const until = Date.now() + DESKTOP_DOWNLOAD_DISMISS_MS;
-    try {
-      localStorage.setItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY, String(until));
-    } catch {
-      // ignore
-    }
-    setDesktopDownloadDismissedUntil(until);
-  };
-
-  useEffect(() => {
-    // If we're running inside the desktop app, remember it so the web app can hide the CTA
-    // when it shares storage/origin (e.g. hosted web app loaded by Tauri).
-    if (!isTauriEnv) return;
-    try {
-      localStorage.setItem(DESKTOP_INSTALLED_KEY, "1");
-      localStorage.removeItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
-    } catch {
-      // ignore
-    }
-    setDesktopInstalled(true);
-    setDesktopDownloadDismissedUntil(0);
-  }, [isTauriEnv]);
-
-  useEffect(() => {
-    if (!desktopDownloadDismissedUntil) return;
-    const remaining = desktopDownloadDismissedUntil - Date.now();
-    if (remaining <= 0) return;
-    const id = window.setTimeout(() => {
-      setDesktopDownloadDismissedUntil((current) => {
-        if (current && Date.now() >= current) {
-          try {
-            localStorage.removeItem(DESKTOP_DOWNLOAD_DISMISSED_UNTIL_KEY);
-          } catch {
-            // ignore
-          }
-          return 0;
-        }
-        return current;
-      });
-    }, remaining + 50);
-    return () => window.clearTimeout(id);
-  }, [desktopDownloadDismissedUntil]);
-
   useWebAuthSessionLifecycle<CloudAuthSession>({
     session: cloudSession,
     sessionRef,
@@ -2115,12 +2065,6 @@ export default function App() {
     keyTarget: "window",
   });
 
-  useCommunityAgentPreviewTabFallbackEffect({
-    tabs: communityAgentDraftLanding.tabs,
-    setPreviewTabId: setCommunityAgentPreviewTabId,
-    resetWhenNoTabs: true,
-  });
-
   useEffect(() => {
     setCloudProfile(null);
     setProfileSaveError(null);
@@ -2237,9 +2181,6 @@ export default function App() {
     resetCommunityChatDataState();
     clearPendingPrependAnchor();
     setOpenResourceEmbedId(null);
-    setCommunityFeedDraftBody("");
-    setCommunityFeedDraftType("observation");
-    setCommunityFeedError(null);
     if (chatInputRef.current) {
       chatInputRef.current.style.height = "auto";
     }
@@ -2283,44 +2224,90 @@ export default function App() {
   const [activeCommunityOwnerIsPro, setActiveCommunityOwnerIsPro] = useState<boolean | null>(null);
   const activeCommunityOwnerIsProLoadedCommunityIdRef = useRef<string | null>(null);
 
-  const handlePublishCommunityFeedPost = useCallback(() => {
-    const body = communityFeedDraftBody.trim();
-    if (!body) return;
-    if (!activeCommunityId) {
-      setCommunityFeedError("Select a community first.");
-      return;
-    }
+  const loadCommunityAiFeed = useCallback(async (communityId: string) => {
     if (!cloudSession) {
-      setCommunityFeedError("Sign in to publish.");
+      setCommunityFeedByCommunityId((prev) => ({
+        ...prev,
+        [communityId]: {
+          live: [],
+          important: [],
+          isLoading: false,
+          error: "Sign in to view the AI feed.",
+        },
+      }));
       return;
     }
-    if (!canPostMessagesActiveCommunity) {
-      setCommunityFeedError("You don't have permission to publish here.");
-      return;
-    }
-
-    const post: CommunityAiFeedPost = {
-      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      community_id: activeCommunityId,
-      author_label: "Agent",
-      post_type: communityFeedDraftType,
-      body,
-      created_at: new Date().toISOString(),
-      pending: true,
-    };
     setCommunityFeedByCommunityId((prev) => ({
       ...prev,
-      [activeCommunityId]: [post, ...(prev[activeCommunityId] ?? [])],
+      [communityId]: {
+        live: prev[communityId]?.live ?? [],
+        important: prev[communityId]?.important ?? [],
+        isLoading: true,
+        error: null,
+      },
     }));
-    setCommunityFeedDraftBody("");
-    setCommunityFeedError(null);
-  }, [
-    activeCommunityId,
-    canPostMessagesActiveCommunity,
-    communityFeedDraftBody,
-    communityFeedDraftType,
-    cloudSession,
-  ]);
+    try {
+      const [live, important] = await Promise.all([
+        listCloudCommunityAiFeedLive<CloudAuthSession, CommunityAiFeedPost>({
+          session: cloudSession,
+          communityId,
+          limit: 100,
+        }),
+        listCloudCommunityAiFeedImportant<CloudAuthSession, CommunityAiFeedPost>({
+          session: cloudSession,
+          communityId,
+          limit: 100,
+        }),
+      ]);
+      setCommunityFeedByCommunityId((prev) => ({
+        ...prev,
+        [communityId]: {
+          live,
+          important,
+          isLoading: false,
+          error: null,
+        },
+      }));
+    } catch (error) {
+      setCommunityFeedByCommunityId((prev) => ({
+        ...prev,
+        [communityId]: {
+          live: prev[communityId]?.live ?? [],
+          important: prev[communityId]?.important ?? [],
+          isLoading: false,
+          error: error instanceof Error ? error.message : "Failed to load AI feed.",
+        },
+      }));
+    }
+  }, [cloudSession]);
+
+  const handleReactToCommunityFeedPost = useCallback(
+    async (postId: string, reactionType: CommunityAiFeedReactionType) => {
+      if (!cloudSession || !activeCommunityId) return;
+      setCommunityFeedReactingPostId(postId);
+      try {
+        await reactToCloudCommunityAiFeedPost({
+          session: cloudSession,
+          postId,
+          reactionType,
+        });
+        await loadCommunityAiFeed(activeCommunityId);
+      } catch (error) {
+        setCommunityFeedByCommunityId((prev) => ({
+          ...prev,
+          [activeCommunityId]: {
+            live: prev[activeCommunityId]?.live ?? [],
+            important: prev[activeCommunityId]?.important ?? [],
+            isLoading: false,
+            error: error instanceof Error ? error.message : "Failed to update AI feed.",
+          },
+        }));
+      } finally {
+        setCommunityFeedReactingPostId(null);
+      }
+    },
+    [activeCommunityId, cloudSession, loadCommunityAiFeed],
+  );
 
   useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentDraft>({
     activePage,
@@ -2855,7 +2842,7 @@ export default function App() {
       const result = await probeCloudChatgptConnection({
         session,
         userId,
-        modelId: "gpt-5.2",
+        modelId: "gpt-5.4",
         prompt: "Reply with exactly the word OK.",
       });
       setChatgptProbeResult(result);
@@ -3913,10 +3900,30 @@ export default function App() {
     if (!activeCommunityId) return null;
     return communities.find((c) => c.id === activeCommunityId) ?? null;
   }, [activeCommunityId, communities]);
-  const activeCommunityFeedPosts = useMemo(() => {
-    if (!activeCommunityId) return [];
-    return communityFeedByCommunityId[activeCommunityId] ?? [];
+  const activeCommunityFeedState = useMemo(() => {
+    if (!activeCommunityId) {
+      return {
+        live: [] as CommunityAiFeedPost[],
+        important: [] as CommunityAiFeedPost[],
+        isLoading: false,
+        error: null as string | null,
+      };
+    }
+    return (
+      communityFeedByCommunityId[activeCommunityId] ?? {
+        live: [] as CommunityAiFeedPost[],
+        important: [] as CommunityAiFeedPost[],
+        isLoading: false,
+        error: null as string | null,
+      }
+    );
   }, [activeCommunityId, communityFeedByCommunityId]);
+
+  useEffect(() => {
+    if (communityTab !== "feed") return;
+    if (!activeCommunityId) return;
+    void loadCommunityAiFeed(activeCommunityId);
+  }, [activeCommunityId, communityTab, loadCommunityAiFeed]);
 
   const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
@@ -3938,7 +3945,6 @@ export default function App() {
         surface: "web",
         authState: cloudSession ? "authenticated" : "anonymous",
         builderTier: builderBillingStatus?.builder_tier ?? null,
-        hasDesktopChatgptAuth: false,
       }),
     [cloudSession, builderBillingStatus?.builder_tier],
   );
@@ -4117,25 +4123,29 @@ export default function App() {
       activeCommunityId &&
       activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
   );
+  const isEmptyWorkspaceThread = !threadMessages.some((message) => message.role !== "system");
 
   const emptyThreadLanding = useMemo(() => {
     const landingMatchesCommunity = Boolean(
       activeCommunityId && activeCommunityAgentLandingCommunityIdRef.current === activeCommunityId,
     );
     const communityLanding = landingMatchesCommunity ? normalizeCommunityAgentLanding(activeCommunityAgentLanding) : null;
-    if (communityLanding) return communityLanding;
-    const canViewCommunity = communityActionGuards.canViewCommunity;
-    if (activeCommunity && canViewCommunity) {
-      return buildDefaultCommunityEmptyThreadLanding(activeCommunity.name);
-    }
-    return DEFAULT_EMPTY_THREAD_LANDING;
-  }, [activeCommunity, communityActionGuards.canViewCommunity, activeCommunityAgentLanding, activeCommunityId]);
+    return communityLanding ?? DEFAULT_EMPTY_THREAD_LANDING;
+  }, [activeCommunityAgentLanding, activeCommunityId]);
 
-  useEffect(() => {
-    if (activeThreadId) return;
-    const first = emptyThreadLanding.tabs[0]?.id ?? "community";
-    setEmptyThreadSection(first);
-  }, [activeThreadId, emptyThreadLanding]);
+  const landingActionButtons = useMemo(() => {
+    const toButtons = (landing: CommunityAgentLanding) =>
+      landing.tabs
+        .map((tab) => ({
+          id: tab.id,
+          label: tab.label.trim(),
+          prompt: (tab.prompts[0] ?? "").trim(),
+        }))
+        .filter((button) => button.label && button.prompt)
+        .slice(0, 3);
+    const buttons = toButtons(emptyThreadLanding);
+    return buttons.length > 0 ? buttons : toButtons(DEFAULT_EMPTY_THREAD_LANDING);
+  }, [emptyThreadLanding]);
 
   const visibleThreads = useMemo(() => filterVisibleThreads(threads), [threads]);
   const cloudProjectById = useMemo(() => buildProjectByIdMap(cloudProjects), [cloudProjects]);
@@ -4658,6 +4668,10 @@ export default function App() {
 	  function openCommunityChat(nextCommunityId: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }): void {
 	    openCommunityTab(nextCommunityId, "chat", opts);
 	  }
+  const handleOpenLandingCommunity = () => {
+    if (!activeCommunityId) return;
+    openCommunityChat(activeCommunityId, { clearUnread: true });
+  };
 	  const handleOpenDiscover = () => {
 	    const transition = deriveOpenDiscoverTransition({ activePage });
 	    if (transition.shouldPushSnapshot) pushNavSnapshot();
@@ -4760,15 +4774,18 @@ export default function App() {
         activeCommunityName: activeCommunity?.name ?? null,
       },
       state: {
-        posts: activeCommunityFeedPosts,
-        draftBody: communityFeedDraftBody,
-        draftType: communityFeedDraftType,
-        error: communityFeedError,
+        livePosts: activeCommunityFeedState.live,
+        importantPosts: activeCommunityFeedState.important,
+        isLoading: activeCommunityFeedState.isLoading,
+        error: activeCommunityFeedState.error,
+        reactingPostId: communityFeedReactingPostId,
       },
       actions: {
-        setDraftBody: setCommunityFeedDraftBody,
-        setDraftType: setCommunityFeedDraftType,
-        publish: handlePublishCommunityFeedPost,
+        react: handleReactToCommunityFeedPost,
+        retry: () => {
+          if (!activeCommunityId) return;
+          void loadCommunityAiFeed(activeCommunityId);
+        },
       },
     },
     aiAgent: {
@@ -4782,23 +4799,16 @@ export default function App() {
       setBuilderUpgradeContext,
       setIsBuilderUpgradeOpen,
       landingEditorProps: {
-        communityAgentDrafts,
         communityAgentDraftDirtyRef,
         handleSaveCommunityAgentDraft,
         isSavingCommunityAgentDraft,
-        handleSetLiveCommunityAgentDraft,
+        communityAgentDraftSaveError,
         communityAgentDraftLanding,
-        communityAgentLandingEdit,
-        communityAgentLandingEditValue,
-        setCommunityAgentLandingEditValue,
         setCommunityAgentDraftLanding,
         markCommunityAgentDraftDirty,
-        clearCommunityAgentLandingEdit,
-        beginCommunityAgentLandingEdit,
-        communityAgentPreviewTabId,
-        setCommunityAgentPreviewTabId,
         communityAgentDraftSystemPrompt,
         setCommunityAgentDraftSystemPrompt,
+        previewCommunityName: activeCommunity?.name ?? "Community",
       },
     },
     analytics: {
@@ -5258,7 +5268,7 @@ export default function App() {
 		                      disabled={!guestThreadHasMessages}
 		                      onClick={() => {
 		                        if (!guestThreadHasMessages) return;
-		                        const confirmed = window.confirm("Clear this local guest chat history?");
+                        const confirmed = window.confirm("Clear this guest chat from this browser?");
 		                        if (!confirmed) return;
 		                        resetGuestThread();
 		                      }}
@@ -5843,7 +5853,7 @@ export default function App() {
 	                                  </div>
 	                                  <div className="invite-text">
 	                                    <div className="invite-code">{community.name}</div>
-	                                    <div className="invite-status">{`arx.com/c/${community.slug}`}</div>
+                                    <div className="invite-status">{`/c/${community.slug}`}</div>
 	                                  </div>
 	                                </div>
 	                                <div className="invite-actions">
@@ -5979,25 +5989,6 @@ export default function App() {
 
               {settingsGroup === "agent" && (
                 <>
-                  <div className="settings-section">
-                    <div className="settings-section-title">
-                      <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
-                      Desktop execution
-                    </div>
-                    <div className="settings-section-desc">
-                      Local tools (filesystem/shell) run only in the desktop app. Configure approvals and policies there.
-                    </div>
-                    <div className="auth-actions">
-                      <a className="secondary" href="arx://settings/execution">
-                        Open in desktop
-                      </a>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {settingsGroup === "agent" && (
-                <>
                   <div className="panel-title">Memory</div>
                   <div className="memory-panel">
                     {personalMemoryError &&
@@ -6041,21 +6032,6 @@ export default function App() {
 		                        </button>
 		                      </div>
 		                    </div>
-
-                    <div className="settings-section">
-                      <div className="settings-section-title">
-                        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>
-                        Local Cache
-                      </div>
-                      <div className="settings-section-desc">
-                        Clear local SQLite caches used by the desktop operator. Cloud data is unchanged.
-                      </div>
-                      <div className="export-actions">
-                        <button className="secondary" type="button" disabled>
-                          Reset local cache
-                        </button>
-                      </div>
-                    </div>
 
                     {(() => {
                       const tier = builderBillingStatus?.builder_tier ?? "free";
@@ -6131,7 +6107,6 @@ export default function App() {
                               onChange={(event) => setPersonalMemoryQuery(event.target.value)}
                               placeholder="Search memory…"
                             />
-                            <div className="memory-block-meta">Workspace scope is managed from the desktop app.</div>
                             <div className="memory-editor-actions">
                               <button
                                 className="secondary"
@@ -6266,124 +6241,204 @@ export default function App() {
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
 			                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 		                    <div className="message-list-inner">
-		                    {!threadMessages.some((m) => m.role !== "system") && (
+		                    {isEmptyWorkspaceThread && (
 		                      <>
 		                        {showEmptyThreadLandingSkeleton ? (
 		                          <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
+		                            <div className="web-empty-thread-avatar web-skeleton-block" aria-hidden="true" />
 		                            <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
 		                            <div className="web-skeleton-block web-skeleton-subtitle" aria-hidden="true" />
-	                            <div className="web-starter-tabs web-starter-tabs-skeleton" aria-hidden="true">
-	                              <div className="web-skeleton-pill" />
-	                              <div className="web-skeleton-pill" />
-	                              <div className="web-skeleton-pill" />
-	                            </div>
-	                            <div className="web-starter-list web-starter-list-skeleton" aria-hidden="true">
-	                              <div className="web-skeleton-row" />
-	                              <div className="web-skeleton-row" />
-	                              <div className="web-skeleton-row" />
-	                              <div className="web-skeleton-row" />
-	                            </div>
+		                            <div className="web-empty-thread-composer web-empty-thread-composer-skeleton" aria-hidden="true">
+		                              <div className="web-skeleton-composer web-skeleton-block" />
+		                            </div>
+		                            <div className="web-empty-thread-actions web-empty-thread-actions-skeleton" aria-hidden="true">
+		                              <div className="web-skeleton-card" />
+		                              <div className="web-skeleton-card" />
+		                              <div className="web-skeleton-card" />
+		                            </div>
 	                          </div>
 		                        ) : (
 		                          <div className="web-empty-thread" role="region" aria-label="Start a new thread">
-		                            <div className="web-empty-thread-title">{emptyThreadLanding.title}</div>
-		                            <div className="web-empty-thread-subtitle">{emptyThreadLanding.subtitle}</div>
-		                            {(() => {
-		                              const activeTab =
-		                                emptyThreadLanding.tabs.find((tab) => tab.id === emptyThreadSection) ??
-	                                emptyThreadLanding.tabs[0];
-	                              const prompts = activeTab?.prompts ?? [];
-	                              return (
-	                                <>
-	                                  {emptyThreadLanding.tabs.length > 1 && (
-	                                    <div className="web-starter-tabs" role="tablist" aria-label="Prompt categories">
-	                                      {emptyThreadLanding.tabs.map((tab) => (
-	                                        <button
-	                                          key={tab.id}
-	                                          type="button"
-	                                          className={`web-starter-tab${emptyThreadSection === tab.id ? " active" : ""}`}
-	                                          aria-pressed={emptyThreadSection === tab.id}
-	                                          onClick={() => setEmptyThreadSection(tab.id)}
-	                                        >
-	                                          {tab.label}
-	                                        </button>
-	                                      ))}
-	                                    </div>
-	                                  )}
-	                                  <div className="web-starter-list" role="list">
-	                                    {prompts.map((prompt) => (
-	                                      <button
-	                                        key={prompt}
-	                                        className="web-starter-row"
-	                                        type="button"
-	                                        disabled={isSendingMessage}
-	                                        onClick={() => {
-	                                          void sendUserMessage({ text: prompt });
-	                                          workspaceAskInputRef.current?.focus();
-	                                        }}
-	                                      >
-	                                        <span className="web-starter-row-text">{prompt}</span>
-	                                        <span className="web-starter-row-arrow" aria-hidden="true">
-	                                          <svg viewBox="0 0 24 24">
-	                                            <path d="M9 18l6-6-6-6" />
-	                                          </svg>
-	                                        </span>
-	                                      </button>
-	                                    ))}
-	                                  </div>
-	                                </>
-		                              );
-		                            })()}
-			                            {!desktopInstalled && !isTauriEnv && desktopDownloadDismissedUntil <= Date.now() && (
-			                              <div className="web-download-card" role="note" aria-label="Desktop app">
-			                                <button
-		                                  className="web-download-close"
-		                                  type="button"
-		                                  onClick={dismissDesktopDownload}
-		                                  title="Dismiss"
-		                                  aria-label="Dismiss"
-		                                >
-		                                  <svg viewBox="0 0 24 24" aria-hidden="true">
-		                                    <path d="M18 6L6 18M6 6l12 12" />
-		                                  </svg>
-		                                </button>
-		                                <div className="web-download-body">
-		                                  <div className="web-download-icon" aria-hidden="true">
-		                                    <svg viewBox="0 0 24 24">
-		                                      <path d="M4 6h16v10H4z" />
-		                                      <path d="M2 18h20" />
-		                                    </svg>
+		                            {activeCommunity && (
+		                              <div className="web-empty-thread-avatar" aria-hidden="true">
+		                                {activeCommunity.avatar_url ? (
+		                                  <img
+		                                    className="web-empty-thread-avatar-image"
+		                                    src={activeCommunity.avatar_url}
+		                                    alt={activeCommunity.name}
+		                                  />
+		                                ) : (
+		                                  <div className="web-empty-thread-avatar-fallback">
+		                                    {communityInitials(activeCommunity.name)}
 		                                  </div>
-		                                  <div className="web-download-copy">
-		                                    <div className="web-download-title">Download desktop app</div>
-		                                    <div className="web-download-subtitle">Get access to full agents on desktop.</div>
-		                                  </div>
-		                                </div>
-		                                <div className="web-download-actions">
-		                                  <button
-		                                    className="web-download-button"
-		                                    type="button"
-		                                    disabled={!desktopDownloadUrl}
-		                                    title={
-		                                      desktopDownloadUrl
-		                                        ? "Download desktop app"
-		                                        : "Configure desktop download URL to enable downloads in this build"
-		                                    }
-		                                    onClick={() => {
-		                                      if (!desktopDownloadUrl) return;
-		                                      window.open(desktopDownloadUrl, "_blank", "noopener,noreferrer");
-		                                    }}
-		                                  >
-		                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-		                                      <path d="M12 3v10" />
-		                                      <path d="M7 10l5 5 5-5" />
-		                                      <path d="M5 21h14" />
-		                                    </svg>
-		                                    Download
-		                                  </button>
-		                                </div>
+		                                )}
 		                              </div>
 		                            )}
+		                            <div className="web-empty-thread-title">
+		                              {activeCommunity ? (
+		                                <>
+		                                  Welcome to{" "}
+		                                  <button
+		                                    type="button"
+		                                    className="web-empty-thread-link web-empty-thread-title-accent"
+		                                    onClick={handleOpenLandingCommunity}
+		                                  >
+		                                    {activeCommunity.name}
+		                                  </button>
+		                                </>
+		                              ) : (
+		                                emptyThreadLanding.title
+		                              )}
+		                            </div>
+		                            <div className="web-empty-thread-composer">
+		                              <div className="ask-bar ask-bar-v2 ask-bar-landing">
+		                                <textarea
+		                                  ref={workspaceAskInputRef}
+		                                  className="ask-input ask-input-v2 ask-input-landing"
+		                                  placeholder="Describe what you need help with..."
+		                                  value={messageInput}
+		                                  onChange={(event) => setMessageInput(event.target.value)}
+		                                  onKeyDown={(event) => {
+		                                    if (event.key === "Enter" && !event.shiftKey) {
+		                                      event.preventDefault();
+		                                      void sendUserMessage();
+		                                    }
+		                                  }}
+		                                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+		                                  rows={1}
+		                                />
+		                                {workspaceAttachments.length > 0 && (
+		                                  <div className="attachments-preview workspace-attachments-preview">
+		                                    {workspaceAttachments.map((att) => (
+		                                      <div key={att.id} className="attachment-item">
+		                                        {att.type === "image" && att.data_url ? (
+		                                          <img src={att.data_url} alt={att.name} className="attachment-thumb" />
+		                                        ) : (
+		                                          <div className="attachment-icon" aria-hidden="true">
+		                                            <svg viewBox="0 0 24 24">
+		                                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+		                                              <path d="M14 2v6h6" />
+		                                              <path d="M16 13H8" />
+		                                              <path d="M16 17H8" />
+		                                              <path d="M10 9H8" />
+		                                            </svg>
+		                                          </div>
+		                                        )}
+		                                        <span className="attachment-name" title={att.name}>
+		                                          {att.name}
+		                                        </span>
+		                                        <button
+		                                          className="attachment-remove"
+		                                          type="button"
+		                                          onClick={() => removeWorkspaceAttachment(att.id)}
+		                                          title="Remove"
+		                                          aria-label={`Remove ${att.name}`}
+		                                        >
+		                                          <svg viewBox="0 0 24 24" aria-hidden="true">
+		                                            <path d="M18 6L6 18M6 6l12 12" />
+		                                          </svg>
+		                                        </button>
+		                                      </div>
+		                                    ))}
+		                                  </div>
+		                                )}
+		                                <div className="ask-footer ask-footer-landing">
+		                                  <div className="ask-footer-left">
+		                                    <button
+		                                      className="ask-icon-btn ask-plus"
+		                                      type="button"
+		                                      onClick={() => workspaceFileInputRef.current?.click()}
+		                                      disabled={!cloudSession || isSendingMessage || isStreamingWorkspaceTurn}
+		                                      aria-label="Attach files"
+		                                      title="Attach files"
+		                                    >
+		                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+		                                        <path d="M12 5v14M5 12h14" />
+		                                      </svg>
+		                                    </button>
+		                                    <input
+		                                      ref={workspaceFileInputRef}
+		                                      type="file"
+		                                      multiple
+		                                      accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+		                                      style={{ display: "none" }}
+		                                      onChange={handleWorkspaceFileInputChange}
+		                                    />
+		                                    <WebModelPickerPopover
+		                                      modelPickerRef={modelPickerRef}
+		                                      modelPickerSearchRef={modelPickerSearchRef}
+		                                      isOpen={isModelPickerOpen}
+		                                      activeModelLabel={activeModelLabel}
+		                                      curatedPickerModels={curatedPickerModels}
+		                                      modelPickerQuery={modelPickerQuery}
+		                                      setModelPickerQuery={setModelPickerQuery}
+		                                      modelPickerSection={modelPickerSection}
+		                                      setModelPickerSection={setModelPickerSection}
+		                                      visiblePickerModels={visiblePickerModels}
+		                                      selectedPickerModelId={selectedPickerModelId}
+		                                      modelToggles={modelToggles}
+		                                      hasPaidAccess={hasPaidAccess}
+		                                      hasUserKeyConnection={hasUserKeyConnection}
+		                                      hasUserChatgptConnection={hasUserChatgptConnection}
+		                                      hasSession={Boolean(cloudSession)}
+		                                      canSelectPickerModel={canSelectPickerModel}
+		                                      onSelectModel={handleSelectPickerModel}
+		                                      onOpen={openModelPicker}
+		                                      onClose={closeModelPicker}
+		                                    />
+		                                  </div>
+		                                  <div className="ask-actions ask-actions-landing">
+		                                    <VoiceInputButton
+		                                      state={workspaceVoiceUiState}
+		                                      title={workspaceVoiceIntent.title}
+		                                      onClick={() => void handleVoiceInputClick("workspace")}
+		                                    />
+		                                    <button
+		                                      className="chat-send ask-send-btn ask-send-btn-v2"
+		                                      type="button"
+		                                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+		                                      disabled={
+		                                        isStreamingWorkspaceTurn
+		                                          ? false
+		                                          : isSendingMessage ||
+		                                            (messageInput.trim().length === 0 && workspaceAttachments.length === 0)
+		                                      }
+		                                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+		                                      title={isStreamingWorkspaceTurn ? "Stop" : "Send"}
+		                                    >
+		                                      <svg viewBox="0 0 24 24" aria-hidden="true">
+		                                        {isStreamingWorkspaceTurn ? (
+		                                          <rect x="7" y="7" width="10" height="10" rx="2" />
+		                                        ) : (
+		                                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+		                                        )}
+		                                      </svg>
+		                                    </button>
+		                                  </div>
+		                                </div>
+		                              </div>
+		                            </div>
+		                            <div className="web-empty-thread-actions" role="list">
+		                              {landingActionButtons.map((button) => (
+		                                <button
+		                                  key={button.id}
+		                                  className="web-empty-thread-action"
+		                                  type="button"
+		                                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+		                                  onClick={() => {
+		                                    void sendUserMessage({ text: button.prompt });
+		                                    workspaceAskInputRef.current?.focus();
+		                                  }}
+		                                >
+		                                  <span className="web-empty-thread-action-text">{button.label}</span>
+		                                  <span className="web-empty-thread-action-arrow" aria-hidden="true">
+		                                    <svg viewBox="0 0 24 24">
+		                                      <path d="M9 18l6-6-6-6" />
+		                                    </svg>
+		                                  </span>
+		                                </button>
+		                              ))}
+		                            </div>
 	                          </div>
 	                        )}
 	                      </>
@@ -6506,10 +6561,10 @@ export default function App() {
                                   Thinking
                                 </span>
                               )}
-                            </div>
-		                          </div>
-		                        )}
-		                  </div>
+	                  </div>
+	                </div>
+				              )}
+              </div>
 		                </div>
                 {!isWorkspaceAtBottom && (
                   <button
@@ -6532,7 +6587,8 @@ export default function App() {
 		                  </button>
 		                )}
 		              </div>
-			              <div className="ask-bar ask-bar-v2">
+			              {!isEmptyWorkspaceThread && (
+			                <div className="ask-bar ask-bar-v2">
 		                <textarea
 		                  ref={workspaceAskInputRef}
                   className="ask-input ask-input-v2"
@@ -6663,6 +6719,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
+			              )}
             </>
           ) : (
             <div className="community-body">
@@ -6728,9 +6785,7 @@ export default function App() {
 		                        {!isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 && (
 		                          <div className="discover-empty">
 		                            <div className="discover-empty-title">No communities yet.</div>
-		                            <div className="discover-empty-text">
-	                              Create one on desktop to make discovery meaningful.
-	                            </div>
+		                            <div className="discover-empty-text">Create one to make discovery meaningful.</div>
 	                          </div>
 	                        )}
 	                        {filteredDiscoverCommunities.map((community) => {

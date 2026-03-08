@@ -145,7 +145,7 @@
         "allowed": true,
         "code": "ok",
         "cta": "none",
-        "lane": "chatgpt_desktop",
+        "lane": "chatgpt",
         "fundingSource": "user_chatgpt",
         "effectiveTier": "auth_free"
       }

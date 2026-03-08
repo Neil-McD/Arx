@@ -1,7 +1,7 @@
 import { api, internal } from "./_generated/api";
 
 type InferenceRole = "user" | "assistant" | "system";
-type RuntimeSurface = "web" | "desktop" | "mobile";
+type RuntimeSurface = "web" | "mobile";
 type GateModelClass = "free_model" | "paid_model";
 type GateTurnClass = "chat_only" | "requires_tools";
 type GateCode =
@@ -15,7 +15,7 @@ type GateCode =
   | "project_required"
   | "runner_unavailable";
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
-type GateLane = "public" | "platform" | "chatgpt_desktop" | "daytona_cloud" | "local_runtime";
+type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 type ResolvedGateDecision = {
   allowed: boolean;
@@ -84,7 +84,6 @@ export function normalizeSurface(raw: unknown, fallback: RuntimeSurface): Runtim
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (value === "desktop") return "desktop";
   if (value === "mobile") return "mobile";
   if (value === "web") return "web";
   return fallback;
@@ -126,9 +125,8 @@ function normalizeGateLane(raw: unknown): GateLane | null {
     .toLowerCase();
   if (value === "public") return "public";
   if (value === "platform") return "platform";
-  if (value === "chatgpt_desktop") return "chatgpt_desktop";
+  if (value === "chatgpt") return "chatgpt";
   if (value === "daytona_cloud") return "daytona_cloud";
-  if (value === "local_runtime") return "local_runtime";
   return null;
 }
 
@@ -191,7 +189,6 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     turnClass: params.turnClass,
     hasUserKeyConnection: Boolean(params.hasUserKeyConnection),
     hasUserChatGptConnection: Boolean(params.hasUserChatgptConnection),
-    hasDesktopChatGptAuth: false,
   })) as Record<string, unknown> | null;
 
   const allowed = raw?.allowed === true;
@@ -212,7 +209,7 @@ export function mapGateLaneToRuntimeLane(params: {
 }): "public" | "platform" | "daytona" | "chatgpt" {
   if (params.lane === "public") return "public";
   if (params.lane === "platform") return "platform";
-  if (params.lane === "chatgpt_desktop") return "chatgpt";
+  if (params.lane === "chatgpt") return "chatgpt";
   if (params.lane === "daytona_cloud") return "daytona";
   return params.turnClass === "requires_tools" ? "daytona" : "platform";
 }

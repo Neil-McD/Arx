@@ -1,25 +1,3 @@
-export type ThreadLane = "chat" | "agent";
-export type ThreadStorageMode = "cloud" | "local";
-
-export function storageModeForThreadLane(lane: ThreadLane): ThreadStorageMode {
-  return lane === "agent" ? "local" : "cloud";
-}
-
-export function normalizeThreadLane(value: unknown, engineId?: string | null): ThreadLane {
-  if (value === "chat" || value === "agent") return value;
-  if ((engineId ?? "").trim() === "community_chat") return "chat";
-  return "agent";
-}
-
-export function normalizeThreadStorageMode(
-  value: unknown,
-  threadLane: unknown,
-  engineId?: string | null,
-): ThreadStorageMode {
-  if (value === "cloud" || value === "local") return value;
-  return storageModeForThreadLane(normalizeThreadLane(threadLane, engineId));
-}
-
 export function filterVisibleThreads<T extends { last_seq?: number | null }>(threads: T[]): T[] {
   return threads.filter((thread) => (thread.last_seq ?? 0) > 0);
 }
@@ -63,12 +41,6 @@ export function buildProjectByIdMap<TProject extends { id: string }>(
   return map;
 }
 
-export function sortProjectsByRootPathLengthDesc<TProject extends { root_path: string }>(
-  projects: TProject[],
-): TProject[] {
-  return [...projects].sort((a, b) => (b.root_path?.length ?? 0) - (a.root_path?.length ?? 0));
-}
-
 type CloudProjectLike = { id: string; slug?: string | null };
 
 export function resolveGeneralCloudProjectId<TProject extends CloudProjectLike>(
@@ -104,34 +76,6 @@ export function resolveCloudThreadProjectId<
   const direct = String(thread.project_id ?? "").trim();
   if (direct && projectById.has(direct)) return direct;
   return generalProjectId;
-}
-
-export function resolveThreadProjectId<
-  TThread extends { project_id?: string | null; workspace_path?: string | null },
-  TProject extends { id: string; root_path: string },
->(
-  thread: TThread,
-  projectById: Map<string, TProject>,
-  sortedProjectsByRootDesc: TProject[],
-): string | null {
-  const direct = (thread.project_id ?? "").trim();
-  if (direct && projectById.has(direct)) return direct;
-  const workspacePath = (thread.workspace_path ?? "").trim();
-  if (!workspacePath) return null;
-  for (const project of sortedProjectsByRootDesc) {
-    const root = (project.root_path ?? "").trim();
-    if (!root) continue;
-    if (workspacePath === root || workspacePath.startsWith(`${root}/`)) {
-      return project.id;
-    }
-  }
-  return null;
-}
-
-export function filterThreadsByLane<
-  TThread extends { thread_lane?: unknown; engine_id?: string | null },
->(threads: TThread[], lane: ThreadLane): TThread[] {
-  return threads.filter((thread) => normalizeThreadLane(thread.thread_lane, thread.engine_id) === lane);
 }
 
 export function searchThreads<TThread>(

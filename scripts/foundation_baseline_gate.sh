@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=18
+TOTAL_STEPS=17
 CURRENT_STEP=1
 
 run_step() {
@@ -22,7 +22,6 @@ run_step() {
 
 run_step "Secret redaction contract check" bash scripts/secret_redaction_contract_check.sh
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
-run_step "Desktop agent lane contract" bash scripts/desktop_agent_lane_contract_guard.sh
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh
 run_step "Auth env contract guard" bash scripts/auth_env_contract_guard.sh

@@ -26,5 +26,5 @@ export type CommunityResourcesActions = {
   setOpenResourceEmbedId: (id: string | null) => void;
   openNewResourceModal: () => void;
   handleEditResource: (resource: CommunityResource) => void;
-  handleDeleteResource: (resourceId: string) => Promise<void> | void;
+  handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
 };

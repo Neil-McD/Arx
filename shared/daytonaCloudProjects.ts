@@ -26,6 +26,8 @@ export type DaytonaCloudProjectRecord = {
   slug: string | null;
   status: string;
   sandbox_status: DaytonaSandboxStatus | null;
+  provider_volume_id: string | null;
+  provider_volume_name: string | null;
   created_at: number;
   updated_at: number;
   root_path: string;
@@ -37,6 +39,9 @@ type ConvexCloudProjectRow = {
   description?: string | null;
   slug?: string | null;
   status?: string | null;
+  providerSandboxState?: string | null;
+  providerVolumeId?: string | null;
+  providerVolumeName?: string | null;
   createdAt?: number | null;
   updatedAt?: number | null;
 };
@@ -69,7 +74,9 @@ function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudPr
     description: typeof row.description === "string" ? row.description : null,
     slug,
     status: String(row.status ?? "active").trim().toLowerCase() || "active",
-    sandbox_status: null,
+    sandbox_status: normalizeDaytonaSandboxStatus(row.providerSandboxState ?? null),
+    provider_volume_id: typeof row.providerVolumeId === "string" ? row.providerVolumeId : null,
+    provider_volume_name: typeof row.providerVolumeName === "string" ? row.providerVolumeName : null,
     created_at: Number.isFinite(createdAtMs) ? Math.floor(createdAtMs / 1000) : Math.floor(Date.now() / 1000),
     updated_at: Number.isFinite(updatedAtMs) ? Math.floor(updatedAtMs / 1000) : Math.floor(Date.now() / 1000),
     root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
@@ -122,6 +129,8 @@ export function mapActiveDaytonaCloudProjects(params: {
         slug,
         status: String(row.status ?? "").trim().toLowerCase(),
         sandbox_status: sandboxStatusByProject.get(id) ?? null,
+        provider_volume_id: null,
+        provider_volume_name: null,
         created_at: params.toEpochSeconds(row.created_at) ?? nowEpochSeconds,
         updated_at: params.toEpochSeconds(row.updated_at) ?? nowEpochSeconds,
         root_path: slug ? `cloud/${slug}` : `cloud/${id}`,
@@ -144,7 +153,7 @@ export async function ensureDefaultCloudProjectId<TSession>(params: {
   session: TSession;
 }): Promise<string> {
   const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
-  const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
+  const row = (await client.action("projects:ensureDefaultCloudProjectWithVolumeForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow | null;
   const projectId = String(row?._id ?? "").trim();
@@ -167,7 +176,7 @@ export async function createDaytonaCloudProject<TSession>(params: {
   if (!cleanedName) throw new Error("project_name_required");
   const cleanedDescription = String(params.description ?? "").trim() || null;
   const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
-  const row = (await client.mutation("projects:createCloudProject" as any, {
+  const row = (await client.action("projects:createCloudProjectWithVolume" as any, {
     authSubject,
     name: cleanedName,
     description: cleanedDescription ?? undefined,
@@ -189,6 +198,26 @@ export async function renameDaytonaCloudProject<TSession>(params: {
     authSubject,
     projectId,
     name: cleanedName,
+  })) as ConvexCloudProjectRow;
+  return mapConvexProjectRowToRecord(row);
+}
+
+export async function attachDaytonaCloudProjectVolume<TSession>(params: {
+  session: TSession;
+  projectId: string;
+  providerVolumeId: string;
+  providerVolumeName?: string | null;
+}): Promise<DaytonaCloudProjectRecord | null> {
+  const projectId = String(params.projectId ?? "").trim();
+  const providerVolumeId = String(params.providerVolumeId ?? "").trim();
+  if (!projectId) throw new Error("project_id_required");
+  if (!providerVolumeId) throw new Error("provider_volume_id_required");
+  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const row = (await client.mutation("projects:attachCloudProjectVolume" as any, {
+    authSubject,
+    projectId,
+    providerVolumeId,
+    providerVolumeName: String(params.providerVolumeName ?? "").trim() || undefined,
   })) as ConvexCloudProjectRow;
   return mapConvexProjectRowToRecord(row);
 }
@@ -218,7 +247,7 @@ export async function probeDaytonaCloudProject<TSession>(params: {
   const projectId = String(params.projectId ?? "").trim();
   if (!projectId) throw new Error("project_id_required");
   const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
-  const payload = (await client.query("projects:probeCloudProject" as any, {
+  const payload = (await client.action("projects:probeCloudProject" as any, {
     authSubject,
     projectId,
   })) as ConvexCloudProjectProbePayload | null;

@@ -11,7 +11,7 @@ type ModelRegistryRow = {
 };
 
 const MODEL_REGISTRY_ROWS: readonly ModelRegistryRow[] = [
-  { id: "gpt-5.2", provider: "openai", display_name: "GPT 5.2", supported_sources: ["platform", "user_key", "user_chatgpt"], sort_order: 10, enabled: true },
+  { id: "gpt-5.4", provider: "openai", display_name: "GPT 5.4", supported_sources: ["platform", "user_key", "user_chatgpt"], sort_order: 10, enabled: true },
   { id: "sonnet-4.6", provider: "anthropic", display_name: "Sonnet 4.6", supported_sources: ["platform", "user_key"], sort_order: 20, enabled: true },
   { id: "opus-4.6", provider: "anthropic", display_name: "Opus 4.6", supported_sources: ["platform", "user_key"], sort_order: 30, enabled: true },
   { id: "gemini-3-flash", provider: "google", display_name: "Gemini 3 Flash", supported_sources: ["platform", "user_key"], sort_order: 40, enabled: true },

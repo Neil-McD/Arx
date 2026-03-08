@@ -4,22 +4,12 @@
   "lane": "chat",
   "intent": "Define the explicit community harness capability surface for read-first retrieval and governed community-memory curation.",
   "runtime_exposed_tools": {
-    "desktop": [
-      "community_search",
-      "community_memory_candidate_propose"
-    ],
     "web": [
       "community_search",
       "community_memory_candidate_propose"
     ]
   },
   "surface_contract": {
-    "desktop": {
-      "workspace_access": false,
-      "shell_access": false,
-      "file_read_access": false,
-      "file_write_access": false
-    },
     "web": {
       "workspace_access": false,
       "shell_access": false,
@@ -55,12 +45,10 @@
       "category": "context",
       "status": "active",
       "surfaces": [
-        "desktop",
         "web"
       ],
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never",
         "web": "never"
       },
       "entitlement": {
@@ -126,12 +114,10 @@
       "category": "action",
       "status": "active",
       "surfaces": [
-        "desktop",
         "web"
       ],
       "side_effect_class": "write",
       "approval_policy": {
-        "desktop": "required",
         "web": "required"
       },
       "entitlement": {

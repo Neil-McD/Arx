@@ -11,7 +11,6 @@ TARGETS=(
   src
   apps
   shared
-  src-tauri
 )
 
 echo "[1/2] Scanning runtime/product paths for removed compat-RPC primitives..."

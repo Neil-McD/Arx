@@ -3,8 +3,7 @@
   "version": 1,
   "lane": "agent",
   "runtime_exposed_tools": {
-    "desktop": [
-      "update_plan",
+    "web": [
       "read",
       "list_dir",
       "glob",
@@ -17,56 +16,12 @@
   },
   "capabilities": [
     {
-      "name": "update_plan",
-      "description": "Update the UI Plan panel for this session. Use a short plan with 3–6 steps and statuses: pending|in_progress|completed.",
-      "status": "active",
-      "side_effect_class": "none",
-      "approval_policy": {
-        "desktop": "never"
-      },
-      "prompt_visible": false,
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "explanation": {
-            "type": "string"
-          },
-          "plan": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "step": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "pending",
-                    "in_progress",
-                    "completed"
-                  ]
-                }
-              },
-              "required": [
-                "step",
-                "status"
-              ]
-            }
-          }
-        },
-        "required": [
-          "plan"
-        ]
-      }
-    },
-    {
       "name": "read",
       "description": "Read a file with line numbers. Use offset/limit for large files.",
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never"
+        "web": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -93,7 +48,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never"
+        "web": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -114,7 +69,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never"
+        "web": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -131,11 +86,11 @@
     },
     {
       "name": "write",
-      "description": "Write full content to a file (creates parent directories). expected_before_sha256 is optional (sha256 hex string to precondition overwrite). For multiple files, you can also pass writes: [{path, content}, ...]. If omitted, proceeds nano-style.",
+      "description": "Write full content to a single file (creates parent directories). expected_before_sha256 is optional (sha256 hex string to precondition overwrite). If omitted, proceeds nano-style.",
       "status": "active",
       "side_effect_class": "write",
       "approval_policy": {
-        "desktop": "required"
+        "web": "required"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -149,27 +104,6 @@
           },
           "expected_before_sha256": {
             "type": "string"
-          },
-          "writes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "type": "string"
-                },
-                "content": {
-                  "type": "string"
-                },
-                "expected_before_sha256": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path",
-                "content"
-              ]
-            }
           }
         },
         "required": [
@@ -184,7 +118,7 @@
       "status": "active",
       "side_effect_class": "write",
       "approval_policy": {
-        "desktop": "required"
+        "web": "required"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -234,7 +168,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never"
+        "web": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -258,7 +192,7 @@
       "status": "active",
       "side_effect_class": "read",
       "approval_policy": {
-        "desktop": "never"
+        "web": "never"
       },
       "prompt_visible": true,
       "input_schema": {
@@ -291,7 +225,7 @@
       "status": "active",
       "side_effect_class": "external",
       "approval_policy": {
-        "desktop": "required"
+        "web": "required"
       },
       "prompt_visible": true,
       "input_schema": {

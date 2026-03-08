@@ -1,12 +1,12 @@
 import type { MutableRefObject } from "react";
 import type { ComponentProps } from "react";
-import { CommunityAiFeedPanel } from "../../../../src/components/CommunityAiFeedPanel";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { buildCommunityInstantAccessLink } from "../../../../shared/communityInviteLinks";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import { formatCommunityVisibilityLabel } from "../../../../shared/communityVisibility";
 import type { WebCommunitySecondaryPanelsProps } from "../components/WebCommunitySecondaryPanels";
+import { CommunityAiFeedPanel } from "../components/CommunityAiFeedPanel";
 import { WebCommunityAiAgentSection } from "../components/WebCommunityAiAgentSection";
 import { WebCommunityAnalyticsSection } from "../components/WebCommunityAnalyticsSection";
 import { WebCommunityBannerEditorModal } from "../components/WebCommunityBannerEditorModal";

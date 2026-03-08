@@ -1,4 +1,5 @@
 import { WebAuthGateModal } from "./WebAuthGateModal";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
 type PublicRouteKind = "community_landing" | "checkout_success" | "claim";
 
@@ -127,6 +128,19 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
     onCloseAuthGate,
     onSignIn,
   } = props;
+  const billingPeriodOptions = [
+    ...publicCommunityPlans.slice().sort((a, b) => {
+      const ar = a.billing_period === "monthly" ? 0 : 1;
+      const br = b.billing_period === "monthly" ? 0 : 1;
+      return ar - br;
+    }),
+  ];
+  const selectedBillingPeriod =
+    selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlanBillingPeriod;
+  const billingPeriodSwitcherStyle = buildPlatformSwitcherStyle(
+    billingPeriodOptions.length,
+    billingPeriodOptions.findIndex((plan) => plan.billing_period === selectedBillingPeriod),
+  );
 
   return (
     <div className="app-root public-root">
@@ -136,7 +150,7 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
             <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            <span className="back-path">Arx</span>
+            <span className="back-path">Polynet</span>
           </button>
         </div>
         <div className="topbar-right">
@@ -159,7 +173,7 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
               <div className="discover-hero-copy">
                 <div className="discover-title">{publicCommunity?.name ?? publicRouteSlug}</div>
                 <div className="discover-subtitle">
-                  {publicCommunity?.description ?? "Join this community on Arx."}
+                  {publicCommunity?.description ?? "Join this community on Polynet."}
                 </div>
                 <div className="discover-subtitle">
                   {selectedPublicCommunityPlanLabel ?? "Free"} · {publicVisibilityLabel}
@@ -168,26 +182,24 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
               </div>
               <div className="discover-controls">
                 {publicCommunityPlans.length > 1 && (
-                  <div className="analytics-range-toggle" role="tablist" aria-label="Billing period">
-                    {[
-                      ...publicCommunityPlans.slice().sort((a, b) => {
-                        const ar = a.billing_period === "monthly" ? 0 : 1;
-                        const br = b.billing_period === "monthly" ? 0 : 1;
-                        return ar - br;
-                      }),
-                    ].map((plan) => (
+                  <div
+                    className="platform-switcher platform-switcher-compact"
+                    role="tablist"
+                    aria-label="Billing period"
+                    style={billingPeriodSwitcherStyle}
+                  >
+                    {billingPeriodOptions.map((plan) => (
                       <button
                         key={plan.billing_period}
                         type="button"
                         className={
                           plan.billing_period ===
-                          (selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlanBillingPeriod)
-                            ? "analytics-range-btn active"
-                            : "analytics-range-btn"
+                          selectedBillingPeriod
+                            ? "platform-switcher-btn active"
+                            : "platform-switcher-btn"
                         }
                         aria-pressed={
-                          plan.billing_period ===
-                          (selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlanBillingPeriod)
+                          plan.billing_period === selectedBillingPeriod
                         }
                         onClick={() => onSelectPublicCommunityBillingPeriod(plan.billing_period)}
                       >
@@ -278,7 +290,7 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
             )}
             <div className="chat-messages">
               <div className="discover-empty">
-                <div className="discover-empty-title">Powered by Arx</div>
+                <div className="discover-empty-title">Powered by Polynet</div>
                 <div className="discover-empty-text">
                   {publicCommunity
                     ? canJoinWithCheckout
@@ -366,13 +378,6 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
             )}
             {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
             {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
-            {pendingToken && (
-              <div className="chat-empty">
-                <a className="secondary" href={`arx://claim?token=${encodeURIComponent(pendingToken)}`}>
-                  Open in desktop
-                </a>
-              </div>
-            )}
           </div>
         )}
 
@@ -437,16 +442,6 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
             )}
             {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
             {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
-            {(pendingToken || manualClaimToken.trim()) && (
-              <div className="chat-empty">
-                <a
-                  className="secondary"
-                  href={`arx://claim?token=${encodeURIComponent((pendingToken || manualClaimToken).trim())}`}
-                >
-                  Open in desktop
-                </a>
-              </div>
-            )}
           </div>
         )}
       </main>

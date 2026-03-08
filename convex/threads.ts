@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
@@ -15,6 +15,7 @@ type ThreadLike = {
   communityId?: string;
   modelId?: string;
   contextVersion?: number;
+  codingHandoff?: unknown;
   lastSeq?: number;
   createdAt: number;
   updatedAt: number;
@@ -71,6 +72,21 @@ type RuntimeRunEventLike = {
   createdAt: number;
 };
 
+type CodingHandoffRecord = {
+  v: 1;
+  goal?: string;
+  latestAssistantSummary?: string;
+  discoveries?: string[];
+  accomplished?: string[];
+  relevantFiles?: string[];
+  openBlockers?: string[];
+  nextStep?: string;
+  lastCommandSummary?: string;
+  recentImportantActions?: string[];
+  sourceRunId?: string;
+  updatedAt: number;
+};
+
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -107,6 +123,14 @@ function normalizeThreadTitle(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!value) return undefined;
   return value.slice(0, 140);
+}
+
+function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
+  const value = String(raw ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!value) return null;
+  return value.slice(0, maxLen);
 }
 
 function normalizeRunId(raw: unknown): string {
@@ -246,6 +270,203 @@ async function getRuntimeRunByOwnerRunId(args: {
     .query("runtimeRuns")
     .withIndex("by_owner_runId", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", args.runId))
     .first()) as RuntimeRunLike | null;
+}
+
+function extractPathCandidatesFromArgs(args: Record<string, unknown>): string[] {
+  const candidates: string[] = [];
+  const pushCandidate = (raw: unknown) => {
+    const value = String(raw ?? "").trim();
+    if (!value) return;
+    candidates.push(value);
+  };
+  pushCandidate(args.path);
+  pushCandidate(args.cwd);
+  pushCandidate(args.file);
+  pushCandidate(args.target);
+  return candidates;
+}
+
+function summarizeToolActionFromRequestedEvent(payload: Record<string, unknown>): string | null {
+  const toolName = String(payload.tool_name ?? "").trim();
+  const args =
+    payload.args && typeof payload.args === "object" && !Array.isArray(payload.args)
+      ? (payload.args as Record<string, unknown>)
+      : {};
+  const [pathCandidate] = extractPathCandidatesFromArgs(args);
+  if (toolName === "read") return normalizeOptionalSummaryText(`Read ${pathCandidate || "a file"}`, 120);
+  if (toolName === "list_dir") return normalizeOptionalSummaryText(`Listed ${pathCandidate || "."}`, 120);
+  if (toolName === "glob") return normalizeOptionalSummaryText(`Globbed ${pathCandidate || "."}`, 120);
+  if (toolName === "grep") return normalizeOptionalSummaryText(`Searched ${pathCandidate || "."}`, 120);
+  if (toolName === "sha256") return normalizeOptionalSummaryText(`Hashed ${pathCandidate || "a file"}`, 120);
+  if (toolName === "edit") return normalizeOptionalSummaryText(`Edited ${pathCandidate || "a file"}`, 120);
+  if (toolName === "write") return normalizeOptionalSummaryText(`Wrote ${pathCandidate || "a file"}`, 120);
+  if (toolName === "bash") {
+    const cmd = normalizeOptionalSummaryText(args.cmd, 96);
+    return cmd ? `Ran ${cmd}` : "Ran a command";
+  }
+  return normalizeOptionalSummaryText(`Used ${toolName}`, 120);
+}
+
+function summarizeFailureFromFinishedEvent(args: {
+  payload: Record<string, unknown>;
+  requestedPayload?: Record<string, unknown> | null;
+}): string | null {
+  const status = String(args.payload.status ?? "").trim().toLowerCase();
+  if (!status || status === "ok") return null;
+  const toolName = String(args.requestedPayload?.tool_name ?? "").trim() || "tool";
+  const errorMessage =
+    normalizeOptionalSummaryText(args.payload.error_message, 160) ??
+    normalizeOptionalSummaryText(args.payload.output_preview, 160);
+  if (toolName === "bash") {
+    const cmd = normalizeOptionalSummaryText(args.requestedPayload?.args && typeof args.requestedPayload.args === "object"
+      ? (args.requestedPayload.args as Record<string, unknown>).cmd
+      : null, 96);
+    return normalizeOptionalSummaryText(
+      cmd ? `Command failed: ${cmd}${errorMessage ? ` — ${errorMessage}` : ""}` : `Command failed${errorMessage ? ` — ${errorMessage}` : ""}`,
+      220,
+    );
+  }
+  return normalizeOptionalSummaryText(
+    `${toolName} failed${errorMessage ? ` — ${errorMessage}` : ""}`,
+    220,
+  );
+}
+
+function mergeUniqueSummaryItems(items: Array<string | null | undefined>, limit: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const normalized = normalizeOptionalSummaryText(item, 220);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function buildCodingHandoffFromRun(args: {
+  previous: CodingHandoffRecord | null;
+  userText: string;
+  assistantText: string;
+  runId: string;
+  events: RuntimeRunEventLike[];
+  nowMs: number;
+}): CodingHandoffRecord {
+  const requestedByToolCallId = new Map<string, Record<string, unknown>>();
+  const recentActions: string[] = [];
+  const relevantFiles: string[] = [];
+  const blockers: string[] = [];
+  let lastCommandSummary: string | null = null;
+
+  for (const event of args.events) {
+    const payload =
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : null;
+    if (!payload) continue;
+
+    if (event.eventType === "tool_call_requested") {
+      const toolCallId = String(payload.tool_call_id ?? "").trim();
+      if (toolCallId) requestedByToolCallId.set(toolCallId, payload);
+      const action = summarizeToolActionFromRequestedEvent(payload);
+      if (action) recentActions.push(action);
+      const requestedArgs =
+        payload.args && typeof payload.args === "object" && !Array.isArray(payload.args)
+          ? (payload.args as Record<string, unknown>)
+          : {};
+      for (const candidate of extractPathCandidatesFromArgs(requestedArgs)) {
+        relevantFiles.push(candidate);
+      }
+      continue;
+    }
+
+    if (event.eventType === "tool_call_finished") {
+      const toolCallId = String(payload.tool_call_id ?? "").trim();
+      const requestedPayload = toolCallId ? requestedByToolCallId.get(toolCallId) ?? null : null;
+      const blocker = summarizeFailureFromFinishedEvent({ payload, requestedPayload });
+      if (blocker) blockers.push(blocker);
+      const requestedToolName = String(requestedPayload?.tool_name ?? "").trim();
+      if (requestedToolName === "bash") {
+        const status = String(payload.status ?? "").trim().toLowerCase() || "unknown";
+        const cmd = normalizeOptionalSummaryText(
+          requestedPayload?.args && typeof requestedPayload.args === "object"
+            ? (requestedPayload.args as Record<string, unknown>).cmd
+            : null,
+          96,
+        );
+        if (cmd) {
+          lastCommandSummary = normalizeOptionalSummaryText(
+            `${cmd} (${status}${typeof payload.exit_code === "number" ? `, exit ${payload.exit_code}` : ""})`,
+            180,
+          );
+        }
+      }
+    }
+  }
+
+  const userGoal = normalizeOptionalSummaryText(args.userText, 220);
+  const assistantSummary = normalizeOptionalSummaryText(args.assistantText, 260);
+  const previousRecord = args.previous ?? null;
+  const mergedActions = mergeUniqueSummaryItems(
+    [...recentActions, ...(previousRecord?.recentImportantActions ?? [])],
+    6,
+  );
+  const mergedFiles = mergeUniqueSummaryItems(
+    [...relevantFiles, ...(previousRecord?.relevantFiles ?? [])],
+    8,
+  );
+  const mergedBlockers = mergeUniqueSummaryItems(
+    [...blockers, ...(previousRecord?.openBlockers ?? [])],
+    4,
+  );
+  const discoveries = mergeUniqueSummaryItems(
+    [assistantSummary, ...(previousRecord?.discoveries ?? [])],
+    3,
+  );
+  const accomplished = mergeUniqueSummaryItems(
+    [...mergedActions, ...(previousRecord?.accomplished ?? [])],
+    4,
+  );
+
+  let nextStep = normalizeOptionalSummaryText(previousRecord?.nextStep, 180);
+  if (mergedBlockers.length > 0) {
+    nextStep = normalizeOptionalSummaryText(`Resolve blocker: ${mergedBlockers[0]}`, 180);
+  } else if (mergedActions.length > 0) {
+    nextStep = normalizeOptionalSummaryText(`Continue from ${mergedActions[0].toLowerCase()}`, 180);
+  }
+
+  return {
+    v: 1,
+    goal: userGoal ?? previousRecord?.goal,
+    latestAssistantSummary: assistantSummary ?? previousRecord?.latestAssistantSummary,
+    discoveries,
+    accomplished,
+    relevantFiles: mergedFiles,
+    openBlockers: mergedBlockers,
+    nextStep,
+    lastCommandSummary: lastCommandSummary ?? previousRecord?.lastCommandSummary,
+    recentImportantActions: mergedActions,
+    sourceRunId: args.runId,
+    updatedAt: args.nowMs,
+  };
+}
+
+function buildCodingContinuationPrompt(handoff: CodingHandoffRecord | null): string | null {
+  if (!handoff) return null;
+  const sections: string[] = [];
+  if (handoff.goal) sections.push(`Goal: ${handoff.goal}`);
+  if (handoff.latestAssistantSummary) sections.push(`Latest summary: ${handoff.latestAssistantSummary}`);
+  if (handoff.discoveries?.length) sections.push(`Discoveries:\n- ${handoff.discoveries.join("\n- ")}`);
+  if (handoff.accomplished?.length) sections.push(`Accomplished:\n- ${handoff.accomplished.join("\n- ")}`);
+  if (handoff.relevantFiles?.length) sections.push(`Relevant files:\n- ${handoff.relevantFiles.join("\n- ")}`);
+  if (handoff.openBlockers?.length) sections.push(`Open blockers:\n- ${handoff.openBlockers.join("\n- ")}`);
+  if (handoff.lastCommandSummary) sections.push(`Last command: ${handoff.lastCommandSummary}`);
+  if (handoff.nextStep) sections.push(`Next step: ${handoff.nextStep}`);
+  if (sections.length === 0) return null;
+  return ["CODING_CONTINUITY", ...sections].join("\n\n");
 }
 
 function deriveTitleFromContent(contentJson: unknown): string | undefined {
@@ -1080,5 +1301,83 @@ export const listCloudRuntimeRunEvents = query({
     const out = rows.sort((a: RuntimeRunEventLike, b: RuntimeRunEventLike) => a.seq - b.seq);
     if (!args.threadId) return out;
     return out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
+  },
+});
+
+export const getCloudCodingContinuationContextInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const handoff =
+      thread.codingHandoff && typeof thread.codingHandoff === "object" && !Array.isArray(thread.codingHandoff)
+        ? (thread.codingHandoff as CodingHandoffRecord)
+        : null;
+    return {
+      handoff,
+      prompt: buildCodingContinuationPrompt(handoff),
+    };
+  },
+});
+
+export const updateCloudThreadCodingHandoffInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    userText: v.string(),
+    assistantText: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) throw new Error("runtime_run_not_found");
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+
+    const events = ((await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
+      .collect()) as RuntimeRunEventLike[]).sort((a, b) => a.seq - b.seq);
+
+    const previous =
+      thread.codingHandoff && typeof thread.codingHandoff === "object" && !Array.isArray(thread.codingHandoff)
+        ? (thread.codingHandoff as CodingHandoffRecord)
+        : null;
+
+    const nextHandoff = buildCodingHandoffFromRun({
+      previous,
+      userText: args.userText,
+      assistantText: args.assistantText,
+      runId,
+      events,
+      nowMs,
+    });
+
+    await ctx.db.patch(thread._id, {
+      codingHandoff: nextHandoff,
+      updatedAt: nowMs,
+    });
+
+    return {
+      handoff: nextHandoff,
+      prompt: buildCodingContinuationPrompt(nextHandoff),
+    };
   },
 });

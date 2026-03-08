@@ -62,15 +62,38 @@ export type CommunityAgentDraft<TLanding = unknown> = {
   updated_at: string;
 };
 
-export type CommunityAiFeedPostType = "observation" | "synthesis" | "tension";
+export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
+
+export type CommunityAiFeedPostStatus = "live" | "executed" | "hidden";
+
+export type CommunityAiFeedReactionType = "good" | "executed" | "low_signal";
+
+export type CommunityAiFeedReactionCounts = {
+  good: number;
+  executed: number;
+  low_signal: number;
+};
 
 export type CommunityAiFeedPost = {
   id: string;
   community_id: string;
+  author_type: "agent" | "human";
+  author_user_id: string | null;
+  agent_key: string | null;
   author_label: string;
   post_type: CommunityAiFeedPostType;
+  title: string | null;
   body: string;
+  status: CommunityAiFeedPostStatus;
+  score: number;
+  effective_score: number;
+  publish_confidence: number;
+  reaction_counts: CommunityAiFeedReactionCounts;
+  viewer_reaction: CommunityAiFeedReactionType | null;
   created_at: string;
+  updated_at: string;
+  executed_at: string | null;
+  hidden_at: string | null;
   pending?: boolean;
 };
 

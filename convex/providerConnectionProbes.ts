@@ -33,7 +33,7 @@ export const probeChatgptConnection = action({
     });
     if (!userId) throw new Error("authenticated_user_required");
 
-    const modelId = normalizeString(args.modelId) || "gpt-5.2";
+    const modelId = normalizeString(args.modelId) || "gpt-5.4";
     const prompt = normalizeString(args.prompt) || "Reply with exactly the word OK.";
     const auth = await getFreshChatgptAuthForUser({
       ctx,

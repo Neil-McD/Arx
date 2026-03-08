@@ -8,7 +8,7 @@ echo "== Auth env contract guard =="
 
 AUTH_CORE_FILE="shared/cloudAuthCore.ts"
 AUTH_FLOW_FILE="shared/cloudAuthFlow.ts"
-DESKTOP_APP_FILE="src/App.tsx"
+WEB_APP_FILE="apps/web/src/App.tsx"
 AUTH_CONFIG_FILE="convex/auth.config.ts"
 AUTH_HTTP_FILE="convex/httpAuth.ts"
 ROOT_ENV_FILE=".env.example"
@@ -61,9 +61,9 @@ forbid_match_in_file "$AUTH_FLOW_FILE" 'Missing Cloud URL or anon key\.' \
 require_match_in_file "$AUTH_FLOW_FILE" 'readConvexUrl\(\)' \
   "OAuth sign-in checks Convex runtime URL availability"
 
-echo "[3/6] Validating desktop model readiness is not coupled to auth keys..."
-forbid_match_in_file "$DESKTOP_APP_FILE" 'getCloudUrl\(\) && getCloudAnonKey\(\)' \
-  "desktop model readiness must not require auth key presence"
+echo "[3/6] Validating web model readiness is not coupled to auth keys..."
+forbid_match_in_file "$WEB_APP_FILE" 'getCloudUrl\(\) && getCloudAnonKey\(\)' \
+  "web model readiness must not require auth key presence"
 
 echo "[4/6] Validating Convex JWT verifier contract..."
 require_match_in_file "$AUTH_CONFIG_FILE" 'const issuer = readEnv\("ARX_AUTH_JWT_ISSUER"\);' \

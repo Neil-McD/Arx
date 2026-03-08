@@ -41,6 +41,11 @@ import {
   researchCommunityContext as researchCommunityContextImpl,
 } from "./communityChat";
 import {
+  listCommunityAiFeedImportant as listCommunityAiFeedImportantImpl,
+  listCommunityAiFeedLive as listCommunityAiFeedLiveImpl,
+  reactToCommunityAiFeedPost as reactToCommunityAiFeedPostImpl,
+} from "./communityAiFeed";
+import {
   countCommunityResources as countCommunityResourcesImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
@@ -114,6 +119,9 @@ export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
 export const listThreadUserMessageSenderIds = listThreadUserMessageSenderIdsImpl;
+export const listCommunityAiFeedLive = listCommunityAiFeedLiveImpl;
+export const listCommunityAiFeedImportant = listCommunityAiFeedImportantImpl;
+export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const deleteCommunity = deleteCommunityImpl;
 export const listCommunityAgentDrafts = listCommunityAgentDraftsImpl;

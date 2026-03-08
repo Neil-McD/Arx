@@ -71,7 +71,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 
 ### Canonical Data
 - Cloud is canonical for users, communities, memberships/entitlements, billing state, threads/messages, and memory records.
-- Desktop local runtime storage is operational evidence and workspace policy state; it is not the product source of truth.
+- Runtime event storage is operational evidence and workspace policy state; it is not the product source of truth.
 
 ### Community Access + Visibility
 - Visibility has only two states: `Published` and `Unlisted`.
@@ -92,7 +92,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 
 ### Security and Tool Boundaries
 - Web runtime cannot execute local filesystem/shell tools.
-- Desktop local tools are workspace-bounded and approval-gated.
+- Daytona cloud tools are workspace-bounded and approval-gated.
 - Path traversal and symlink escape must fail closed.
 
 ---
@@ -130,7 +130,7 @@ Classification buckets for every candidate:
 
 All must be demonstrably true:
 
-- Auth/session works across web + desktop surfaces.
+- Auth/session works across the canonical web surface.
 - Founder can create/manage community and share landing link.
 - Member can discover/open landing, pass gate, and join community.
 - Community usage loop works: navigate, post/chat, voice, resources.

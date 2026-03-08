@@ -18,32 +18,6 @@ export function generateInviteCode(length = 10): string {
   return out;
 }
 
-function buildDesktopWebInviteLink(args: {
-  shareBaseUrl: string | null;
-  communityId?: string | null;
-  inviteCode: string;
-}): string | null {
-  if (!args.shareBaseUrl) return null;
-  const code = encodeURIComponent(normalizeInviteCode(args.inviteCode));
-  const communityPath = args.communityId ? `/c/${encodeURIComponent(args.communityId)}` : "";
-  return `${args.shareBaseUrl}${communityPath}?invite=${code}`;
-}
-
-function buildDesktopDeepInviteLink(inviteCode: string): string {
-  const code = encodeURIComponent(normalizeInviteCode(inviteCode));
-  return `arx://join?invite=${code}`;
-}
-
-export function buildDesktopBestInviteLink(args: {
-  shareBaseUrl: string | null;
-  communityId?: string | null;
-  inviteCode: string;
-}): { kind: "web" | "app"; link: string } {
-  const web = buildDesktopWebInviteLink(args);
-  if (web) return { kind: "web", link: web };
-  return { kind: "app", link: buildDesktopDeepInviteLink(args.inviteCode) };
-}
-
 function buildCommunityShareLink(origin: string, communitySlug: string): string {
   const slug = (communitySlug ?? "").trim().toLowerCase();
   const normalizedOrigin = (origin ?? "").trim().replace(/\/+$/, "");

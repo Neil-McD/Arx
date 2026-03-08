@@ -1,5 +1,5 @@
 export type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
-export type ModelCatalogSurface = "web" | "desktop";
+export type ModelCatalogSurface = "web";
 export type ModelProviderId = "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 export type ModelFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 
@@ -30,7 +30,7 @@ type FreeModelEntry = {
   supportedFundingSources: readonly ModelFundingSource[];
 };
 
-export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.2";
+export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.4";
 
 const FREE_MODELS: readonly FreeModelEntry[] = [
   {
@@ -43,12 +43,12 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
 ];
 
 const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
-  { id: "gpt-5.2", label: "GPT 5.2", section: "openai", description: "OpenAI", supportedFundingSources: ["platform", "user_key", "user_chatgpt"], surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
-  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["platform", "user_key"], surfaces: ["web", "desktop"], defaultEnabled: true },
+  { id: "gpt-5.4", label: "GPT 5.4", section: "openai", description: "OpenAI", supportedFundingSources: ["platform", "user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true },
+  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web"], defaultEnabled: true },
+  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["platform", "user_key"], surfaces: ["web"], defaultEnabled: true },
+  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web"], defaultEnabled: true },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["platform", "user_key"], surfaces: ["web"], defaultEnabled: true },
+  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["platform", "user_key"], surfaces: ["web"], defaultEnabled: true },
 ];
 
 export const DEFAULT_GUEST_MODEL_ID = FREE_MODELS[0]!.id;

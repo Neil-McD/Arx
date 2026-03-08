@@ -14,6 +14,7 @@ import type * as billing from "../billing.js";
 import type * as community from "../community.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
+import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCore from "../communityCore.js";
 import type * as communityExperience from "../communityExperience.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   community: typeof community;
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
+  communityAiFeed: typeof communityAiFeed;
   communityChat: typeof communityChat;
   communityCore: typeof communityCore;
   communityExperience: typeof communityExperience;

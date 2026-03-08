@@ -84,8 +84,8 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
             <div className="chatgpt-connect-field">
               <span>Fallback: browser login + paste callback URL</span>
               <div className="chatgpt-connect-hint">
-                This matches the desktop/OpenCode fallback path. It uses the localhost callback URL, then you paste the
-                final localhost callback URL back here if the browser cannot reach it.
+                This uses the localhost callback URL. If your browser cannot reach it, paste the final callback URL
+                back here to complete the connection.
               </div>
             </div>
             <div className="auth-actions">

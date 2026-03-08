@@ -19,7 +19,7 @@ test -f "$ENGINE_PATH" || {
   exit 1
 }
 
-echo "[2/4] Shared parity scenarios (web + desktop) must match expected outputs..."
+echo "[2/4] Canonical web scenarios must match expected outputs..."
 echo "[3/4] Intentional divergence scenarios must match expected outputs..."
 MATRIX_PATH="$MATRIX_PATH" ENGINE_PATH="$ENGINE_PATH" node --input-type=module <<'NODE'
 import fs from "node:fs";
@@ -55,8 +55,7 @@ const project = (value) => ({
 for (const scenario of matrix.sharedParityScenarios ?? []) {
   const input = scenario?.input ?? {};
   const expected = scenario?.expected ?? {};
-  const webResult = project(engine.evaluateCanonicalGate({ ...input, surface: "web" }));
-  const desktopResult = project(engine.evaluateCanonicalGate({ ...input, surface: "desktop" }));
+  const webResult = project(engine.evaluateCanonicalGate({ surface: "web", ...input }));
   const expectedProjected = project(expected);
   if (stable(webResult) !== stable(expectedProjected)) {
     console.error(`FAIL: shared scenario '${scenario.id}' mismatch for web.`);
@@ -64,32 +63,8 @@ for (const scenario of matrix.sharedParityScenarios ?? []) {
     console.error("Actual:  ", webResult);
     process.exit(1);
   }
-  if (stable(desktopResult) !== stable(expectedProjected)) {
-    console.error(`FAIL: shared scenario '${scenario.id}' mismatch for desktop.`);
-    console.error("Expected:", expectedProjected);
-    console.error("Actual:  ", desktopResult);
-    process.exit(1);
-  }
 }
 
-for (const scenario of matrix.intentionalDivergenceScenarios ?? []) {
-  const webResult = project(engine.evaluateCanonicalGate(scenario?.webInput ?? {}));
-  const desktopResult = project(engine.evaluateCanonicalGate(scenario?.desktopInput ?? {}));
-  const expectedWeb = project(scenario?.expectedWeb ?? {});
-  const expectedDesktop = project(scenario?.expectedDesktop ?? {});
-  if (stable(webResult) !== stable(expectedWeb)) {
-    console.error(`FAIL: divergence scenario '${scenario.id}' mismatch for web.`);
-    console.error("Expected:", expectedWeb);
-    console.error("Actual:  ", webResult);
-    process.exit(1);
-  }
-  if (stable(desktopResult) !== stable(expectedDesktop)) {
-    console.error(`FAIL: divergence scenario '${scenario.id}' mismatch for desktop.`);
-    console.error("Expected:", expectedDesktop);
-    console.error("Actual:  ", desktopResult);
-    process.exit(1);
-  }
-}
 NODE
 
 echo "[4/4] Contract id/version markers must be present..."

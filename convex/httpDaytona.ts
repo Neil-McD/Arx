@@ -1,6 +1,7 @@
 import {
   runOpenRouterCompletion,
 } from "./httpRuntimeSupport";
+import { runChatgptCompletion } from "./httpChatgpt";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -64,8 +65,7 @@ type DaytonaToolName =
   | "sha256"
   | "write"
   | "edit"
-  | "bash"
-  | "update_plan";
+  | "bash";
 
 type DaytonaToolCallDecision = {
   type: "tool_call";
@@ -123,9 +123,10 @@ function readEnv(name: string): string {
   return "";
 }
 
-const DAYTONA_AUTO_STOP_INTERVAL_DEFAULT_MINUTES = 20;
+const DAYTONA_AUTO_STOP_INTERVAL_DEFAULT_MINUTES = 1;
 const DAYTONA_AUTO_ARCHIVE_INTERVAL_DEFAULT_MINUTES = 0;
-const DAYTONA_AUTO_DELETE_INTERVAL_DEFAULT_MINUTES = -1;
+const DAYTONA_AUTO_DELETE_INTERVAL_DEFAULT_MINUTES = 5;
+const DAYTONA_WORKSPACE_ROOT = "/home/daytona/workspace";
 
 function parseIntegerEnv(name: string, fallback: number): number {
   const raw = readEnv(name);
@@ -293,6 +294,7 @@ async function createDaytonaSandbox(params: {
   userId: string;
   projectId: string;
   runId: string;
+  projectVolumeId?: string | null;
 }): Promise<
   | { ok: true; sandbox: DaytonaSandboxApiDto }
   | {
@@ -310,14 +312,23 @@ async function createDaytonaSandbox(params: {
       arx_run_id: params.runId,
       arx_source: "convex_runtime_turn",
     },
+    ephemeral: true,
   };
   if (params.config.target) payloadBase.target = params.config.target;
   if (params.config.snapshot) payloadBase.snapshot = params.config.snapshot;
+  if (params.projectVolumeId) {
+    payloadBase.volumes = [
+      {
+        volumeId: params.projectVolumeId,
+        mountPath: DAYTONA_WORKSPACE_ROOT,
+      },
+    ];
+  }
   const payloadWithLifecycle = {
     ...payloadBase,
-    auto_stop_interval: params.config.autoStopInterval,
-    auto_archive_interval: params.config.autoArchiveInterval,
-    auto_delete_interval: params.config.autoDeleteInterval,
+    autoStopInterval: params.config.autoStopInterval,
+    autoArchiveInterval: params.config.autoArchiveInterval,
+    autoDeleteInterval: params.config.autoDeleteInterval,
   };
   const createPrimary = await daytonaApiRequest<DaytonaSandboxApiDto>({
     config: params.config,
@@ -333,6 +344,9 @@ async function createDaytonaSandbox(params: {
   }
   const detailsText = String(createPrimary.details?.response_text ?? "").toLowerCase();
   const unsupportedLifecycleField =
+    detailsText.includes("autostopinterval") ||
+    detailsText.includes("autoarchiveinterval") ||
+    detailsText.includes("autodeleteinterval") ||
     detailsText.includes("auto_stop_interval") ||
     detailsText.includes("auto_archive_interval") ||
     detailsText.includes("auto_delete_interval") ||
@@ -648,12 +662,14 @@ async function executeDaytonaProbeToolCall(params: {
   userId: string;
   projectId: string;
   runId: string;
+  projectVolumeId?: string | null;
 }): Promise<DaytonaProbeExecution> {
   const created = await createDaytonaSandbox({
     config: params.config,
     userId: params.userId,
     projectId: params.projectId,
     runId: params.runId,
+    projectVolumeId: params.projectVolumeId ?? null,
   });
   if (!created.ok) return created;
   const providerSandboxId = String(created.sandbox.id ?? "").trim();
@@ -680,7 +696,7 @@ async function executeDaytonaProbeToolCall(params: {
     config: params.config,
     toolboxProxyUrl: toolbox.toolboxProxyUrl,
     sandboxId: providerSandboxId,
-    command: "mkdir -p workspace",
+    command: `mkdir -p ${DAYTONA_WORKSPACE_ROOT}`,
     timeoutSeconds: 15,
   });
   if (!ensureWorkspace.ok) return ensureWorkspace;
@@ -690,7 +706,7 @@ async function executeDaytonaProbeToolCall(params: {
     toolboxProxyUrl: toolbox.toolboxProxyUrl,
     sandboxId: providerSandboxId,
     command: "pwd",
-    cwd: "workspace",
+    cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 15,
     allowNonZero: true,
   });
@@ -716,8 +732,7 @@ function normalizeDaytonaToolName(value: unknown): DaytonaToolName | null {
     normalized === "sha256" ||
     normalized === "write" ||
     normalized === "edit" ||
-    normalized === "bash" ||
-    normalized === "update_plan"
+    normalized === "bash"
   ) {
     return normalized;
   }
@@ -777,14 +792,17 @@ function buildDaytonaAgentSystemPrompt(params: {
     "Return only strict JSON (no prose, no markdown).",
     "Allowed JSON outputs:",
     '1) {"type":"assistant","text":"..."}',
-    '2) {"type":"tool_call","tool_name":"read|list_dir|glob|grep|sha256|write|edit|bash|update_plan","args":{...},"reason":"..."}',
+    '2) {"type":"tool_call","tool_name":"read|list_dir|glob|grep|sha256|edit|write|bash","args":{...},"reason":"..."}',
     "Rules:",
     "- At most one tool_call per response.",
-    "- Prefer read/list_dir/glob/grep/sha256 before risky operations.",
+    "- Prefer read/list_dir/glob/grep/sha256 to inspect before taking action.",
+    "- Prefer edit/write for file creation and modification.",
+    "- Use bash only when direct file tools are not appropriate, such as builds, tests, or shell-only inspection.",
+    "- Never use bash to create or edit files if read/edit/write can do the job directly.",
     "- Never claim sandbox tools are unavailable in this lane.",
     "- Keep paths relative to workspace root ('.' for root).",
     "- If a tool result indicates denial/error, adapt and continue.",
-    "- write/edit/bash are available for this run.",
+    "- edit/write/bash are available for this run, but bash is the last resort.",
     `- Max ${params.maxIterations} tool iterations.`,
     `Context: project_id=${params.projectId}, sandbox_id=${params.sandboxId}`,
   ].join("\n");
@@ -804,15 +822,6 @@ function resolveDaytonaToolPolicy(toolName: DaytonaToolName): DaytonaToolPolicyD
       policyBasis: "runtime_daytona_policy_v1:read_allow",
       denialCode: null,
       denialMessage: null,
-    };
-  }
-  if (toolName === "update_plan") {
-    return {
-      allowed: false,
-      requiresApproval: false,
-      policyBasis: "runtime_daytona_policy_v1:update_plan_denied",
-      denialCode: "tool_not_enabled_for_cloud_daytona_v1",
-      denialMessage: "update_plan is not enabled for cloud Daytona.",
     };
   }
   return {
@@ -909,7 +918,7 @@ async function readWorkspaceFileSha256(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     command: cmd,
-    cwd: "workspace",
+    cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 15,
     allowNonZero: true,
   });
@@ -961,7 +970,7 @@ async function readWorkspaceFileContent(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     command: cmd,
-    cwd: "workspace",
+    cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 20,
     allowNonZero: true,
   });
@@ -1054,7 +1063,7 @@ async function writeWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     command: cmd,
-    cwd: "workspace",
+    cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 45,
     allowNonZero: true,
   });
@@ -1104,7 +1113,7 @@ async function executeDaytonaTool(params: {
         toolboxProxyUrl: params.toolboxProxyUrl,
         sandboxId: params.sandboxId,
         command: cmd,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 25,
         allowNonZero: true,
       });
@@ -1134,7 +1143,7 @@ async function executeDaytonaTool(params: {
         toolboxProxyUrl: params.toolboxProxyUrl,
         sandboxId: params.sandboxId,
         command: cmd,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 25,
         allowNonZero: true,
       });
@@ -1176,7 +1185,7 @@ async function executeDaytonaTool(params: {
         toolboxProxyUrl: params.toolboxProxyUrl,
         sandboxId: params.sandboxId,
         command: cmd,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 25,
         allowNonZero: true,
       });
@@ -1219,7 +1228,7 @@ async function executeDaytonaTool(params: {
         toolboxProxyUrl: params.toolboxProxyUrl,
         sandboxId: params.sandboxId,
         command: cmd,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 30,
         allowNonZero: true,
       });
@@ -1248,7 +1257,7 @@ async function executeDaytonaTool(params: {
         toolboxProxyUrl: params.toolboxProxyUrl,
         sandboxId: params.sandboxId,
         command: cmd,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 20,
         allowNonZero: true,
       });
@@ -1441,7 +1450,11 @@ async function executeDaytonaTool(params: {
 }
 
 async function executeDaytonaAgentLoop(params: {
+  ctx: any;
   req: Request;
+  userId: string;
+  requestedModelId: string;
+  inferenceSource: "platform" | "chatgpt" | "user_key";
   modelRef: string;
   messages: InferenceMessage[];
   maxTokens: number;
@@ -1451,6 +1464,7 @@ async function executeDaytonaAgentLoop(params: {
   providerSandboxId: string;
   toolboxProxyUrl: string;
   initialProbeOutput: string | null;
+  codingContinuationPrompt?: string | null;
   appendRunEvent: (params: {
     eventType: string;
     eventKey?: string;
@@ -1467,6 +1481,14 @@ async function executeDaytonaAgentLoop(params: {
         maxIterations,
       }),
     },
+    ...(params.codingContinuationPrompt
+      ? [
+          {
+            role: "system" as const,
+            content: params.codingContinuationPrompt,
+          },
+        ]
+      : []),
     ...params.messages,
   ];
   if (params.initialProbeOutput) {
@@ -1489,12 +1511,21 @@ async function executeDaytonaAgentLoop(params: {
   let lastCompletionTokens: number | null = null;
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const completion = await runOpenRouterCompletion({
-      req: params.req,
-      modelRef: params.modelRef,
-      messages: transcript,
-      maxTokens: params.maxTokens,
-    });
+    const completion =
+      params.inferenceSource === "chatgpt"
+        ? await runChatgptCompletion({
+            ctx: params.ctx,
+            userId: params.userId,
+            modelId: params.requestedModelId,
+            messages: transcript,
+            maxTokens: params.maxTokens,
+          })
+        : await runOpenRouterCompletion({
+            req: params.req,
+            modelRef: params.modelRef,
+            messages: transcript,
+            maxTokens: params.maxTokens,
+          });
     if ("ok" in completion && completion.ok === false) {
       return completion;
     }
@@ -1633,7 +1664,7 @@ async function executeDaytonaAgentLoop(params: {
         run_id: params.runId,
         tool_call_id: toolCallId,
         attempt: 1,
-        cwd: "workspace",
+        cwd: DAYTONA_WORKSPACE_ROOT,
         workspace_scope_id: params.projectId,
         sandbox: {
           mode: "daytona",

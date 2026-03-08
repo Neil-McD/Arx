@@ -12,7 +12,6 @@ TARGETS=(
   src
   apps
   shared
-  src-tauri
 )
 
 echo "[1/3] Scanning runtime/product paths for forbidden legacy provider references..."

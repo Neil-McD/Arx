@@ -15,7 +15,7 @@ type GateCode =
   | "project_required"
   | "runner_unavailable";
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
-type GateLane = "public" | "platform" | "chatgpt_desktop" | "daytona_cloud" | "local_runtime";
+type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 
 type GateDecision = {
@@ -97,20 +97,30 @@ function deny(code: Exclude<GateCode, "ok">, cta: GateCta): GateDecision {
 
 function evaluateDecision(input: {
   authState: "anonymous" | "authenticated";
-  surface: "web" | "desktop" | "mobile";
-  executionMode: "cloud" | "local";
+  surface: "web" | "mobile";
+  executionMode: "cloud";
   requestedFundingSource: RequestedFundingSource;
   turnClass: "chat_only" | "requires_tools";
   effectiveTier: EffectiveTier;
   hasUserKeyConnection: boolean;
   hasUserChatGptConnection: boolean;
 }): GateDecision {
-  if (input.executionMode === "local") return allow("local_runtime", null);
-
   const isAnonymous = input.effectiveTier === "anon_free";
   const isPaid = input.effectiveTier === "builder" || input.effectiveTier === "architect";
 
   if (input.turnClass === "requires_tools") {
+    if (input.requestedFundingSource === "user_chatgpt") {
+      if (isAnonymous) return deny("auth_required", "sign_in");
+      if (!isPaid) return deny("tier_required", "upgrade");
+      if (input.hasUserChatGptConnection) return allow("daytona_cloud", "user_chatgpt");
+      return deny("provider_connection_required", "connect_provider");
+    }
+    if (input.requestedFundingSource === "user_key") {
+      if (isAnonymous) return deny("auth_required", "sign_in");
+      if (!isPaid) return deny("tier_required", "upgrade");
+      if (input.hasUserKeyConnection) return allow("daytona_cloud", "user_key");
+      return deny("provider_connection_required", "connect_provider");
+    }
     if (isPaid) return allow("daytona_cloud", "platform");
     return deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade");
   }
@@ -126,7 +136,7 @@ function evaluateDecision(input: {
   if (input.requestedFundingSource === "user_chatgpt") {
     if (isAnonymous) return deny("auth_required", "sign_in");
     if (input.hasUserChatGptConnection) {
-      return allow("chatgpt_desktop", "user_chatgpt");
+      return allow("chatgpt", "user_chatgpt");
     }
     return deny(
       input.hasUserChatGptConnection ? "runner_unavailable" : "provider_connection_required",
@@ -137,7 +147,7 @@ function evaluateDecision(input: {
   if (isPaid) return allow("platform", "platform");
 
   if (input.authState === "authenticated" && input.hasUserChatGptConnection) {
-    return allow("chatgpt_desktop", "user_chatgpt");
+    return allow("chatgpt", "user_chatgpt");
   }
 
   return deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade");
@@ -181,8 +191,8 @@ export const resolveGateDecision = query({
   args: {
     authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
     authSubject: v.optional(v.string()),
-    surface: v.union(v.literal("web"), v.literal("desktop"), v.literal("mobile")),
-    executionMode: v.union(v.literal("cloud"), v.literal("local")),
+    surface: v.union(v.literal("web"), v.literal("mobile")),
+    executionMode: v.literal("cloud"),
     modelClass: v.optional(v.union(v.literal("free_model"), v.literal("paid_model"))),
     requestedFundingSource: v.optional(
       v.union(
@@ -195,7 +205,6 @@ export const resolveGateDecision = query({
     turnClass: v.union(v.literal("chat_only"), v.literal("requires_tools")),
     hasUserKeyConnection: v.optional(v.boolean()),
     hasUserChatGptConnection: v.optional(v.boolean()),
-    hasDesktopChatGptAuth: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -225,9 +234,7 @@ export const resolveGateDecision = query({
       turnClass: args.turnClass,
       effectiveTier,
       hasUserKeyConnection: Boolean(args.hasUserKeyConnection),
-      hasUserChatGptConnection: Boolean(
-        args.hasUserChatGptConnection ?? args.hasDesktopChatGptAuth,
-      ),
+      hasUserChatGptConnection: Boolean(args.hasUserChatGptConnection),
     });
 
     return {
@@ -245,10 +252,9 @@ export const resolveGateBundle = query({
   args: {
     authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
     authSubject: v.optional(v.string()),
-    surface: v.union(v.literal("web"), v.literal("desktop"), v.literal("mobile")),
+    surface: v.union(v.literal("web"), v.literal("mobile")),
     hasUserKeyConnection: v.optional(v.boolean()),
     hasUserChatGptConnection: v.optional(v.boolean()),
-    hasDesktopChatGptAuth: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -271,9 +277,7 @@ export const resolveGateBundle = query({
 
     const effectiveTier = resolveEffectiveTier(authState, canonicalTier);
     const hasUserKeyConnection = Boolean(args.hasUserKeyConnection);
-    const hasUserChatGptConnection = Boolean(
-      args.hasUserChatGptConnection ?? args.hasDesktopChatGptAuth,
-    );
+    const hasUserChatGptConnection = Boolean(args.hasUserChatGptConnection);
     const chatDemoPublic = evaluateDecision({
       authState,
       surface: args.surface,

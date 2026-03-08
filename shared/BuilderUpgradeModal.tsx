@@ -77,7 +77,7 @@ export function BuilderUpgradeModal({
               <ul className="plan-features plan-features-checks">
                 {feature(true, "AI chats (250MB cloud history)")}
                 {feature(true, "Access all included models")}
-                {feature(true, "Desktop app & local tools")}
+                {feature(true, "Daytona cloud tools")}
                 {feature(true, "Cloud sync")}
                 {feature(false, "Agent memory")}
                 {feature(false, "Create communities")}
@@ -104,7 +104,7 @@ export function BuilderUpgradeModal({
               <ul className="plan-features plan-features-checks">
                 {feature(true, "AI chats (5GB cloud history)")}
                 {feature(true, "Access all included models")}
-                {feature(true, "Desktop app & local tools")}
+                {feature(true, "Daytona cloud tools")}
                 {feature(true, "Cloud sync")}
                 {feature(true, "Agent memory")}
                 {feature(true, "Create 1 community")}
@@ -136,7 +136,7 @@ export function BuilderUpgradeModal({
               <ul className="plan-features plan-features-checks">
                 {feature(true, "AI chats (25GB cloud history)")}
                 {feature(true, "Access all included models")}
-                {feature(true, "Desktop app & local tools")}
+                {feature(true, "Daytona cloud tools")}
                 {feature(true, "Cloud sync")}
                 {feature(true, "Agent memory")}
                 {feature(true, "Create 3 communities")}

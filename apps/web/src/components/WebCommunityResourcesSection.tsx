@@ -3,7 +3,7 @@ import {
   type CommunityResourcesCapabilities,
   type CommunityResourcesState,
 } from "../../../../src/components/communityResourcesContracts";
-import { CommunityResourcesPanel } from "../../../../src/components/CommunityResourcesPanel";
+import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 
 type WebCommunityResourcesSectionProps = {
   capabilities: CommunityResourcesCapabilities;

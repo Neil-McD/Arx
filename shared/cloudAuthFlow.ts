@@ -57,7 +57,7 @@ export async function revokeCloudSessionRemote(accessToken: string | null | unde
   if (!trimmedAccessToken) return;
 
   try {
-    // Local scope prevents one surface (web/desktop) from revoking all sessions.
+    // Local scope prevents one browser flow from revoking every active session.
     await logoutCloudSessionRemote({
       accessToken: trimmedAccessToken,
       scope: "local",

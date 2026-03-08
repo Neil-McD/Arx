@@ -28,10 +28,10 @@ function formatPostTypeLabel(value: CommunityAiFeedPostType): string {
   switch (value) {
     case "observation":
       return "Observation";
-    case "synthesis":
-      return "Synthesis";
-    case "tension":
-      return "Tension";
+    case "recommendation":
+      return "Recommendation";
+    case "action":
+      return "Action";
   }
 }
 
@@ -72,8 +72,8 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
             disabled={!capabilities.hasSession || !capabilities.canPost}
           >
             <option value="observation">Observation</option>
-            <option value="synthesis">Synthesis</option>
-            <option value="tension">Tension</option>
+            <option value="recommendation">Recommendation</option>
+            <option value="action">Action</option>
           </select>
           <button
             className="secondary"

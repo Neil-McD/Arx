@@ -65,4 +65,4 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
 
 ## Goal
 
-Define canonical read contracts first so web and desktop can migrate with parity and minimal drift.
+Define canonical read contracts first so the web surface and runtime routes can migrate with minimal drift.

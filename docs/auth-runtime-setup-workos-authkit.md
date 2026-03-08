@@ -39,7 +39,6 @@ This app defaults OAuth redirect to `window.location.origin` when `VITE_AUTH_RED
 Local examples:
 
 1. Web: `http://localhost:5174`
-2. Desktop dev (Vite shell): `http://localhost:5273`
 
 If you set `VITE_AUTH_REDIRECT_URL`, add that exact value to your AuthKit allowed callback URLs.
 

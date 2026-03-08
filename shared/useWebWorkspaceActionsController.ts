@@ -106,7 +106,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         ["id", "title", "engine_id", "model_id", "project_id", "community_id", "created_at", "updated_at"],
         rows,
       );
-      current.downloadTextFile("arx_threads.csv", csv);
+      current.downloadTextFile("polynet_threads.csv", csv);
     } catch (error) {
       current.setExportError(toErrorMessage(error, "Failed to export threads."));
     } finally {
@@ -165,7 +165,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         ["id", "thread_id", "seq", "role", "content", "engine_id", "model_id", "run_id", "created_at"],
         rows,
       );
-      current.downloadTextFile("arx_messages.csv", csv);
+      current.downloadTextFile("polynet_messages.csv", csv);
     } catch (error) {
       current.setExportError(toErrorMessage(error, "Failed to export messages."));
     } finally {
@@ -190,7 +190,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         ["id", "scope", "scope_id", "pinned", "content", "created_at", "updated_at"],
         rows,
       );
-      current.downloadTextFile("arx_personal_memory.csv", csv);
+      current.downloadTextFile("polynet_personal_memory.csv", csv);
     } catch (error) {
       current.setExportError(toErrorMessage(error, "Failed to export memory."));
     } finally {

@@ -113,6 +113,15 @@ type WebCommunityMembersSectionProps = {
 
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
   const { activeCommunity, hasSession, capabilities, state, actions } = props;
+  const canReviewFreeMembers = Boolean(
+    activeCommunity &&
+      capabilities.canReviewJoinRequestsActiveCommunity &&
+      state.membersCommunityHasPaidPlans === false,
+  );
+  const showPendingApprovals =
+    canReviewFreeMembers &&
+    (state.activeCommunityJoinMode === "request_access" || state.communityJoinRequests.length > 0);
+  const pendingApprovalsCount = state.isLoadingCommunityJoinRequests ? "…" : String(state.communityJoinRequests.length);
 
   return (
     <>
@@ -128,11 +137,11 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
               </div>
             </div>
             {capabilities.canManageMembersActiveCommunity && (
-              <div className="invite-create-row" style={{ marginTop: 10 }}>
-                <label className="invite-field">
+              <div className="members-filter-row">
+                <label className="members-filter-field">
                   <span>Role</span>
                   <select
-                    className="select-styled"
+                    className="select-styled members-surface-select"
                     value={state.communityMembersRoleFilter}
                     onChange={(event) => actions.setCommunityMembersRoleFilter(event.target.value)}
                   >
@@ -143,10 +152,10 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <option value="member">Member</option>
                   </select>
                 </label>
-                <label className="invite-field">
+                <label className="members-filter-field">
                   <span>Plan</span>
                   <select
-                    className="select-styled"
+                    className="select-styled members-surface-select"
                     value={state.communityMembersPlanFilter}
                     onChange={(event) => actions.setCommunityMembersPlanFilter(event.target.value)}
                   >
@@ -167,48 +176,58 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 </label>
               </div>
             )}
-            {activeCommunity &&
-              capabilities.canReviewJoinRequestsActiveCommunity &&
-              state.membersCommunityHasPaidPlans === false && (
-                <div className="members-header-row" style={{ marginTop: 10 }}>
-                  <label
-                    className="resource-pin"
-                    style={{ cursor: state.isSavingFreeJoinRequiresApproval ? "not-allowed" : "pointer" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!activeCommunity.free_join_requires_approval}
-                      disabled={state.isLoadingMembersCommunityPricing || state.isSavingFreeJoinRequiresApproval}
-                      onChange={(event) => {
-                        const nextAutoApprove = event.target.checked;
-                        void actions.handleSetCommunityFreeJoinRequiresApproval(!nextAutoApprove);
-                      }}
-                    />
-                    Auto-approve new members
-                  </label>
+            {canReviewFreeMembers && activeCommunity && (
+              <div className="members-policy-row">
+                <div className="members-policy-copy">
+                  <div className="members-policy-title">Auto-approve new members</div>
+                  <div className="members-policy-text">
+                    Let free members join immediately instead of sending them to a review queue.
+                  </div>
                 </div>
-              )}
-            {activeCommunity &&
-              capabilities.canReviewJoinRequestsActiveCommunity &&
-              state.membersCommunityHasPaidPlans === false &&
-              (state.activeCommunityJoinMode === "request_access" || state.communityJoinRequests.length > 0) && (
-                <div className="members-header-row" style={{ marginTop: 10 }}>
-                  <button
-                    className="secondary"
-                    type="button"
-                    disabled={
-                      state.isLoadingMembersCommunityPricing ||
-                      state.isLoadingCommunityJoinRequests ||
-                      state.isSavingFreeJoinRequiresApproval
-                    }
-                    onClick={() => actions.setIsJoinRequestsModalOpen(true)}
-                  >
-                    Pending approvals ({state.isLoadingCommunityJoinRequests ? "…" : String(state.communityJoinRequests.length)})
-                  </button>
-                </div>
-              )}
+                <label
+                  className={`members-switch${
+                    state.isLoadingMembersCommunityPricing || state.isSavingFreeJoinRequiresApproval ? " is-disabled" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!activeCommunity.free_join_requires_approval}
+                    disabled={state.isLoadingMembersCommunityPricing || state.isSavingFreeJoinRequiresApproval}
+                    onChange={(event) => {
+                      const nextAutoApprove = event.target.checked;
+                      void actions.handleSetCommunityFreeJoinRequiresApproval(!nextAutoApprove);
+                    }}
+                  />
+                  <span className="members-switch-track">
+                    <span className="members-switch-thumb" />
+                  </span>
+                </label>
+              </div>
+            )}
+            {showPendingApprovals && (
+              <div className="members-queue-row">
+                <button
+                  className="members-queue-button"
+                  type="button"
+                  disabled={
+                    state.isLoadingMembersCommunityPricing ||
+                    state.isLoadingCommunityJoinRequests ||
+                    state.isSavingFreeJoinRequiresApproval
+                  }
+                  onClick={() => actions.setIsJoinRequestsModalOpen(true)}
+                >
+                  <div className="members-queue-copy">
+                    <div className="members-queue-title">Pending approvals</div>
+                    <div className="members-queue-text">
+                      Review people who asked to join before they can access the community.
+                    </div>
+                  </div>
+                  <div className="members-queue-count">{pendingApprovalsCount}</div>
+                </button>
+              </div>
+            )}
             {state.communityJoinRequestsError && (
-              <div className="auth-error" style={{ marginTop: 8 }}>
+              <div className="auth-error">
                 {state.communityJoinRequestsError}
               </div>
             )}
@@ -245,24 +264,26 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   const roleOptions = viewerIsOwner
                     ? ["member", "mod", "admin"]
                     : memberIsAdmin
-                      ? ["admin"]
+                    ? ["admin"]
                       : ["member", "mod"];
+                  const showDeclinedBadge =
+                    capabilities.canManageMembersActiveCommunity && member.access_status === "declined";
                   return (
                     <div key={member.id} className="member-item">
-                      <div className="member-avatar" style={{ backgroundColor: actions.getAvatarColor(member.user_id) }}>
+                      <div
+                        className={`member-avatar${avatarUrl ? " has-image" : ""}`}
+                        style={avatarUrl ? undefined : { backgroundColor: actions.getAvatarColor(member.user_id) }}
+                      >
                         {avatarUrl ? <img src={avatarUrl} alt={actions.displayName(member.user_id)} /> : initials}
                       </div>
                       <div className="member-info">
-                        <span className="member-name">
-                          {actions.displayName(member.user_id)}
-                          {capabilities.canManageMembersActiveCommunity && member.access_status === "declined" ? " (declined)" : ""}
-                        </span>
-                        {!capabilities.canManageMembersActiveCommunity || memberIsOwner ? (
-                          <span className="member-role">
-                            {memberIsOwner ? "owner" : member.role}
-                            {showPlanLabel ? ` • ${planLabel}` : ""}
-                          </span>
-                        ) : (
+                        <span className="member-name">{actions.displayName(member.user_id)}</span>
+                        <div className="member-meta">
+                          <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
+                          {showPlanLabel && <span className="member-access-badge">{planLabel}</span>}
+                          {showDeclinedBadge && <span className="member-access-badge is-warning">Declined</span>}
+                        </div>
+                        {!capabilities.canManageMembersActiveCommunity || memberIsOwner ? null : (
                           <div className="member-controls">
                             <select
                               className="select-styled"
@@ -305,70 +326,85 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 <div className="members-header">Invites</div>
               </div>
               <div className="invites-card">
-                <div className="invite-create-row invite-create-row-cta">
-                  <label className="invite-field">
-                    <span>Max uses</span>
-                    <select
-                      className="select-styled"
-                      value={state.inviteMaxUsesPreset}
-                      onChange={(event) => actions.setInviteMaxUsesPreset(event.target.value)}
-                    >
-                      <option value="unlimited">Unlimited</option>
-                      <option value="1">1 use</option>
-                      <option value="5">5 uses</option>
-                      <option value="10">10 uses</option>
-                      <option value="25">25 uses</option>
-                      <option value="100">100 uses</option>
-                      <option value="custom">Custom…</option>
-                    </select>
-                  </label>
-                  <label className="invite-field">
-                    <span>Expires</span>
-                    <select
-                      className="select-styled"
-                      value={state.inviteExpiryPreset}
-                      onChange={(event) => actions.setInviteExpiryPreset(event.target.value)}
-                    >
-                      <option value="never">Never</option>
-                      <option value="24h">24 hours</option>
-                      <option value="7d">7 days</option>
-                      <option value="30d">30 days</option>
-                      <option value="90d">90 days</option>
-                      <option value="custom">Custom…</option>
-                    </select>
-                  </label>
-                  <button className="invite-create-btn" onClick={() => void actions.handleCreateInvite()} disabled={state.isCreatingInvite}>
-                    {state.isCreatingInvite ? "Creating…" : "Create"}
+                <div className="invite-create-shell">
+                  <div className="members-policy-copy">
+                    <div className="members-policy-title">Create an invite</div>
+                    <div className="members-policy-text">
+                      Generate a controlled access link with usage limits and an optional expiry.
+                    </div>
+                  </div>
+                  <div className="members-filter-row">
+                    <label className="members-filter-field">
+                      <span>Max uses</span>
+                      <select
+                        className="select-styled members-surface-select"
+                        value={state.inviteMaxUsesPreset}
+                        onChange={(event) => actions.setInviteMaxUsesPreset(event.target.value)}
+                      >
+                        <option value="unlimited">Unlimited</option>
+                        <option value="1">1 use</option>
+                        <option value="5">5 uses</option>
+                        <option value="10">10 uses</option>
+                        <option value="25">25 uses</option>
+                        <option value="100">100 uses</option>
+                        <option value="custom">Custom…</option>
+                      </select>
+                    </label>
+                    <label className="members-filter-field">
+                      <span>Expires</span>
+                      <select
+                        className="select-styled members-surface-select"
+                        value={state.inviteExpiryPreset}
+                        onChange={(event) => actions.setInviteExpiryPreset(event.target.value)}
+                      >
+                        <option value="never">Never</option>
+                        <option value="24h">24 hours</option>
+                        <option value="7d">7 days</option>
+                        <option value="30d">30 days</option>
+                        <option value="90d">90 days</option>
+                        <option value="custom">Custom…</option>
+                      </select>
+                    </label>
+                  </div>
+                  {(state.inviteMaxUsesPreset === "custom" || state.inviteExpiryPreset === "custom") && (
+                    <div className="members-filter-row">
+                      {state.inviteMaxUsesPreset === "custom" && (
+                        <input
+                          className="members-surface-input"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Custom max uses"
+                          value={state.inviteMaxUsesCustom}
+                          onChange={(event) => actions.setInviteMaxUsesCustom(event.target.value)}
+                        />
+                      )}
+                      {state.inviteExpiryPreset === "custom" && (
+                        <input
+                          className="members-surface-input"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Custom expiry (days)"
+                          value={state.inviteExpiryCustom}
+                          onChange={(event) => actions.setInviteExpiryCustom(event.target.value)}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {state.inviteCreateError && <div className="auth-error">{state.inviteCreateError}</div>}
+                  <button
+                    className="invite-create-btn platform-save-button is-dirty"
+                    type="button"
+                    onClick={() => void actions.handleCreateInvite()}
+                    disabled={state.isCreatingInvite}
+                  >
+                    {state.isCreatingInvite ? "Creating…" : "Create invite"}
                   </button>
                 </div>
-                {(state.inviteMaxUsesPreset === "custom" || state.inviteExpiryPreset === "custom") && (
-                  <div className="invite-create-row invite-create-row-custom">
-                    {state.inviteMaxUsesPreset === "custom" && (
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Custom max uses"
-                        value={state.inviteMaxUsesCustom}
-                        onChange={(event) => actions.setInviteMaxUsesCustom(event.target.value)}
-                      />
-                    )}
-                    {state.inviteExpiryPreset === "custom" && (
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Custom expiry (days)"
-                        value={state.inviteExpiryCustom}
-                        onChange={(event) => actions.setInviteExpiryCustom(event.target.value)}
-                      />
-                    )}
-                  </div>
-                )}
-                {state.inviteCreateError && <div className="auth-error">{state.inviteCreateError}</div>}
                 <div className="invite-list">
                   {state.isLoadingCommunityInvites ? (
-                    <div className="chat-empty">Loading invites…</div>
+                    <div className="members-empty invites-empty">Loading invites…</div>
                   ) : state.communityInvites.length === 0 ? (
-                    <div className="chat-empty">No invites yet.</div>
+                    <div className="members-empty invites-empty">No invites yet.</div>
                   ) : (
                     state.communityInvites.map((invite) => {
                       const revoked = Boolean(invite.revoked_at);

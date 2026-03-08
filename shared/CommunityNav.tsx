@@ -78,11 +78,18 @@ export function CommunityNav({
         title={maybeTitle("AI Feed")}
       >
         <span className="nav-icon">
-          <svg viewBox="0 0 24 24">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M4 7h16" />
-            <path d="M4 12h16" />
-            <path d="M4 17h10" />
-            <circle cx="17" cy="17" r="2" />
+            <path d="M4 12h12" />
+            <path d="M4 17h8" />
+            <circle cx="18" cy="17" r="2" />
           </svg>
         </span>
         AI Feed

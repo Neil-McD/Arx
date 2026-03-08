@@ -200,9 +200,6 @@ export function formatToolLabel(
   if (details.toolName === "propose_memory_update") {
     return "update memory";
   }
-  if (details.toolName === "update_plan") {
-    return "update plan";
-  }
   if (details.toolName === "write_file") {
     return details.path ? `write file ${details.path}` : "write file";
   }

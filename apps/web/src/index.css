@@ -1,4 +1,4 @@
-/* Web-owned base styling extracted from the retired desktop shell. */
+/* Web-owned base styling extracted from the retired shell. */
 @import "./base.css";
 
 :root {
@@ -1006,7 +1006,7 @@
   color: var(--text-terminal);
 }
 
-/* Web readability pass: increase assistant output size versus desktop default. */
+/* Web readability pass: increase assistant output size versus the old shell default. */
 .message-item.assistant .message-text {
   font-size: 17px;
   line-height: 1.68;
@@ -1505,7 +1505,7 @@
   left: 0;
   bottom: calc(100% + 10px);
   z-index: 80;
-  width: min(300px, calc(100vw - 32px));
+  width: min(280px, calc(100vw - 48px), calc(100svw - 48px));
   transform: none;
 }
 
@@ -1995,7 +1995,7 @@
 
 .feed-panel {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   gap: 14px;
   padding: calc(16px + var(--web-topbar-height)) 24px 24px;
   flex: 1;
@@ -2110,11 +2110,11 @@
   border-color: color-mix(in srgb, var(--accent-gold) 35%, var(--border-default));
 }
 
-.feed-post-type.synthesis {
+.feed-post-type.recommendation {
   border-color: color-mix(in srgb, #60a5fa 35%, var(--border-default));
 }
 
-.feed-post-type.tension {
+.feed-post-type.action {
   border-color: color-mix(in srgb, #f59e0b 45%, var(--border-default));
 }
 

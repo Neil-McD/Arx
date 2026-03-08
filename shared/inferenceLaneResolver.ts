@@ -10,7 +10,7 @@ export type CloudInferenceLane = "chatgpt" | "public" | "platform" | "user_key";
 export function resolveCloudInferenceLane(params: {
   modelId: string | null | undefined;
   freeModelAllowlist?: ReadonlySet<string>;
-  surface?: "web" | "desktop";
+  surface?: "web";
   hasChatgptAuth?: boolean;
   hasUserKeyConnection?: boolean;
   hasPaidAccess?: boolean;
@@ -30,12 +30,6 @@ export function resolveCloudInferenceLane(params: {
   void hasPaidAccess;
   return "platform";
 }
-
-export type DesktopCloudInferenceExecutionPlan = {
-  primaryLane: CloudInferenceLane;
-  laneOrder: CloudInferenceLane[];
-  publicFallbackModelId: string;
-};
 
 function resolvePublicFallbackModelId(params: {
   requestedModelId: string | null | undefined;
@@ -63,38 +57,6 @@ function resolvePublicFallbackModelId(params: {
   return DEFAULT_GUEST_MODEL_ID;
 }
 
-export function resolveDesktopCloudInferenceExecutionPlan(params: {
-  modelId: string | null | undefined;
-  freeModelAllowlist?: ReadonlySet<string>;
-  hasChatgptAuth?: boolean;
-  defaultGuestModelId?: string | null | undefined;
-}): DesktopCloudInferenceExecutionPlan {
-  const allowlist = params.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST;
-  const primaryLane = resolveCloudInferenceLane({
-    modelId: params.modelId,
-    freeModelAllowlist: allowlist,
-    surface: "desktop",
-    hasChatgptAuth: params.hasChatgptAuth,
-  });
-
-  const laneOrder = (() => {
-    if (primaryLane === "public") return ["public"] as CloudInferenceLane[];
-    if (primaryLane === "chatgpt") return ["chatgpt", "platform", "public"] as CloudInferenceLane[];
-    if (primaryLane === "user_key") return ["user_key", "platform", "public"] as CloudInferenceLane[];
-    return ["platform", "public"] as CloudInferenceLane[];
-  })();
-
-  return {
-    primaryLane,
-    laneOrder,
-    publicFallbackModelId: resolvePublicFallbackModelId({
-      requestedModelId: params.modelId,
-      freeModelAllowlist: allowlist,
-      defaultGuestModelId: params.defaultGuestModelId,
-    }),
-  };
-}
-
 export type CloudModelSelectionResolution = {
   requestedModelId: string;
   modelId: string;
@@ -111,7 +73,7 @@ export function resolveCloudModelSelection(params: {
   hasPaidAccess: boolean;
   hasUserKeyConnection?: boolean;
   freeModelAllowlist?: ReadonlySet<string>;
-  surface?: "web" | "desktop";
+  surface?: "web";
   hasChatgptAuth?: boolean;
 }): CloudModelSelectionResolution {
   const allowlist = params.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST;

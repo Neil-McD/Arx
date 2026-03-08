@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
-import { CommunityAiFeedPanel } from "../../../../src/components/CommunityAiFeedPanel";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
+import { CommunityAiFeedPanel } from "./CommunityAiFeedPanel";
 import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";

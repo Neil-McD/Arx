@@ -1,12 +1,12 @@
 export type CanonicalTier = "free" | "builder" | "architect";
 export type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 export type AuthState = "anonymous" | "authenticated";
-export type Surface = "web" | "desktop" | "mobile";
-export type ExecutionMode = "cloud" | "local";
+export type Surface = "web" | "mobile";
+export type ExecutionMode = "cloud";
 export type ModelClass = "free_model" | "paid_model";
 export type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform" | "auto";
 export type TurnClass = "chat_only" | "requires_tools";
-export type RuntimeLane = "public" | "platform" | "chatgpt_desktop" | "daytona_cloud" | "local_runtime";
+export type RuntimeLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 export type GateCode = "ok" | "auth_required" | "tier_required" | "provider_connection_required" | "runner_unavailable";
 export type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider";
 
@@ -20,7 +20,6 @@ export type CanonicalGateInput = {
   tier?: string | null;
   hasUserKeyConnection?: boolean;
   hasUserChatGptConnection?: boolean;
-  hasDesktopChatGptAuth?: boolean;
 };
 
 export type CanonicalGateDecision = {

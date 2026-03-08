@@ -28,25 +28,25 @@ export function WebPlatformQuotaModal(props: WebPlatformQuotaModalProps) {
 
   const title =
     platformQuotaModal.reason === "quota"
-      ? "Arx AI quota reached"
+      ? "Polynet AI quota reached"
       : platformQuotaModal.reason === "plan"
         ? "Model not in your plan"
         : platformQuotaModal.reason === "misconfigured"
           ? "Model not configured"
           : platformQuotaModal.reason === "disabled"
             ? "Model temporarily disabled"
-            : "Arx AI unavailable";
+            : "Polynet AI unavailable";
 
   const primaryMessage =
     platformQuotaModal.reason === "quota"
-      ? "You've used your included Arx AI quota for this month."
+      ? "You've used your included Polynet AI quota for this month."
       : platformQuotaModal.reason === "plan"
         ? platformQuotaModal.message || "This model isn't included in your current plan."
         : platformQuotaModal.reason === "misconfigured"
-          ? platformQuotaModal.message || "Arx AI isn't configured for this model yet."
+          ? platformQuotaModal.message || "Polynet AI isn't configured for this model yet."
           : platformQuotaModal.reason === "disabled"
-            ? platformQuotaModal.message || "Arx AI is currently disabled for this model."
-            : platformQuotaModal.message || "Arx AI is temporarily unavailable.";
+            ? platformQuotaModal.message || "Polynet AI is currently disabled for this model."
+            : platformQuotaModal.message || "Polynet AI is temporarily unavailable.";
 
   const followupMessage =
     platformQuotaModal.reason === "quota"

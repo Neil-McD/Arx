@@ -30,7 +30,6 @@ type UseCommunityAgentDraftControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
-  communityAgentDraftName: string;
   communityAgentDraftLanding: LandingT;
   communityAgentDraftSystemPrompt: string;
   communityAgentDrafts: DraftT[];
@@ -46,7 +45,6 @@ type UseCommunityAgentDraftControllerArgs<
   saveValidationErrorMessage: string;
   loadFailureMessage: string;
   saveFailureMessage: string;
-  setLiveFailureMessage: string;
 };
 
 type UpsertDraftResponseRow = {
@@ -96,16 +94,16 @@ export function useCommunityAgentDraftController<
     }
   }, []);
 
-  const handleSaveCommunityAgentDraft = useCallback(async () => {
+  const handleSaveCommunityAgentDraft = useCallback(async (): Promise<boolean> => {
     const current = argsRef.current;
     const session = current.session;
     const communityId = current.activeCommunityId;
-    if (!session || !communityId) return;
+    if (!session || !communityId) return false;
 
     const normalized = current.normalizeDraftForSave(current.communityAgentDraftLanding);
     if (!normalized) {
       current.setCommunityAgentDraftSaveError(current.saveValidationErrorMessage);
-      return;
+      return false;
     }
 
     current.setIsSavingCommunityAgentDraft(true);
@@ -115,11 +113,16 @@ export function useCommunityAgentDraftController<
         session,
         communityId,
         slot: COMMUNITY_AGENT_PRIMARY_SLOT,
-        name: current.communityAgentDraftName,
+        name: null,
         landingJson: normalized,
         systemPrompt: current.communityAgentDraftSystemPrompt,
       })) as UpsertDraftResponseRow | null;
-      if (!row) return;
+      if (!row) return false;
+      await setActiveCloudCommunityAgentDraft({
+        session,
+        communityId,
+        slot: COMMUNITY_AGENT_PRIMARY_SLOT,
+      });
       current.setCommunityAgentDrafts((prev) => {
         const without = prev.filter((draft) => draft.slot !== row.slot);
         const next: DraftT[] = [
@@ -128,10 +131,10 @@ export function useCommunityAgentDraftController<
             id: row.id,
             community_id: communityId,
             slot: row.slot,
-            name: current.communityAgentDraftName.trim() ? current.communityAgentDraftName.trim() : null,
+            name: null,
             landing_json: normalized,
             system_prompt: current.communityAgentDraftSystemPrompt,
-            is_active: row.is_active,
+            is_active: true,
             updated_at: row.updated_at,
           } as DraftT,
         ];
@@ -139,6 +142,7 @@ export function useCommunityAgentDraftController<
         return next;
       });
       current.markDraftClean();
+      return true;
     } catch (error) {
       const message =
         typeof error === "string"
@@ -147,38 +151,7 @@ export function useCommunityAgentDraftController<
             ? error.message
             : current.saveFailureMessage;
       current.setCommunityAgentDraftSaveError(message);
-    } finally {
-      current.setIsSavingCommunityAgentDraft(false);
-    }
-  }, []);
-
-  const handleSetLiveCommunityAgentDraft = useCallback(async () => {
-    const current = argsRef.current;
-    const session = current.session;
-    const communityId = current.activeCommunityId;
-    if (!session || !communityId) return;
-
-    current.setIsSavingCommunityAgentDraft(true);
-    current.setCommunityAgentDraftSaveError(null);
-    try {
-      await setActiveCloudCommunityAgentDraft({
-        session,
-        communityId,
-        slot: COMMUNITY_AGENT_PRIMARY_SLOT,
-      });
-      current.setCommunityAgentDrafts((prev) =>
-        prev.map((draft) =>
-          draft.community_id === communityId ? { ...draft, is_active: draft.slot === COMMUNITY_AGENT_PRIMARY_SLOT } : draft,
-        ),
-      );
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : current.setLiveFailureMessage;
-      current.setCommunityAgentDraftSaveError(message);
+      return false;
     } finally {
       current.setIsSavingCommunityAgentDraft(false);
     }
@@ -187,6 +160,5 @@ export function useCommunityAgentDraftController<
   return {
     loadCommunityAgentDrafts,
     handleSaveCommunityAgentDraft,
-    handleSetLiveCommunityAgentDraft,
   };
 }

@@ -5,16 +5,15 @@ Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
 
 ## 1) Irreducible Core
 
-Canonical harness parity is now defined by two authoritative runtime surfaces:
+Canonical harness parity is now defined by one authoritative runtime surface:
 
-1. Desktop local runtime (`src-tauri` harness).
-2. Cloud runtime (`/runtime/runtime_turn` in `convex/http.ts`).
+1. Cloud runtime (`/runtime/runtime_turn` in `convex/http.ts`).
 
 For cloud behavior, the executable source of truth is runtime code, not a separate policy document.
 
 ## 2) Tool Surface
 
-Shared tool subset (desktop + cloud):
+Active cloud tool subset:
 
 1. `read`
 2. `list_dir`
@@ -25,13 +24,9 @@ Shared tool subset (desktop + cloud):
 7. `edit`
 8. `bash`
 
-Desktop-only for now:
+Contract-excluded tool:
 
-1. `update_plan`
-
-Cloud policy:
-
-1. `update_plan` is denied in cloud Daytona runtime.
+1. `update_plan` remains denied in cloud Daytona runtime.
 
 ## 3) Approval Policy (Cloud)
 

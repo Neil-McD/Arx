@@ -10,93 +10,85 @@ export type CommunityAgentLanding = {
   tabs: CommunityAgentLandingTab[];
 };
 
+type ParsedCommunityAgentLandingTab = {
+  id: string;
+  label: string;
+  prompts: string[];
+};
+
 export const DEFAULT_EMPTY_THREAD_LANDING: CommunityAgentLanding = {
   title: "How can I help?",
   subtitle: "Start with a prompt, or ask anything.",
   tabs: [
     {
-      id: "community",
-      label: "Community",
+      id: "business",
+      label: "Help me build a business",
       prompts: [
-        "What is a community, and why would I start one?",
-        "Help me pick a community topic people will care about.",
-        "Write my welcome message and simple rules.",
-        "How do I get my first 20 members? Give me a simple plan.",
+        "I’m exploring ideas that could become real businesses. Help me think through the strongest opportunities, which would fit me best, where I should begin, and how this platform could help me do it.",
       ],
     },
     {
-      id: "plan",
-      label: "Plan",
+      id: "platform",
+      label: "Tell me about the platform",
       prompts: [
-        "Help me plan my week so I actually ship.",
-        "Turn my big goal into 5 small steps. Ask me 2 questions first.",
-        "Make a simple 30-day plan for a launch.",
-        "What should I do first today? Ask me 3 questions.",
+        "I’m new here and want to understand what this actually is. Give me a clear overview of how it works, who it’s most useful for, and the best way to get oriented.",
       ],
     },
     {
-      id: "ops",
-      label: "Desktop",
+      id: "specific",
+      label: "Help me with something specific",
       prompts: [
-        "What can the desktop app do that the web can't?",
-        "Help me set up the desktop app in a safe way.",
-        "How do I use the desktop app with my project folder (simple steps)?",
-        "Should I use web or desktop for this? Ask me a few questions.",
-      ],
-    },
-    {
-      id: "learn",
-      label: "Learn",
-      prompts: [
-        "What is Arx, in plain English?",
-        "What does Arx remember, and what does it forget?",
-        "What gets saved online vs on my computer?",
-        "How do paid communities work here (simple version)?",
+        "I have something specific I want help with. Help me get clear on the problem, what matters most, and the best next step.",
       ],
     },
   ],
 };
 
-export function buildDefaultCommunityEmptyThreadLanding(
-  communityName: string,
-): CommunityAgentLanding {
-  const name = communityName.trim();
-  return {
-    title: name ? `Welcome to ${name}` : "Welcome",
-    subtitle: "Say hi in Chat, browse Resources, or ask the AI agent for help.",
-    tabs: [
-      {
-        id: "start",
-        label: "Start here",
-        prompts: [
-          "Where do I find Chat and Resources in this community?",
-          "Help me write a short intro message to post in Chat.",
-          "Ask me 5 questions so you can point me to the right place in this community.",
-          "What should I do first to get value here?",
-        ],
-      },
-      {
-        id: "community",
-        label: "Community",
-        prompts: [
-          "Help me write a post asking for feedback (short + clear).",
-          "Help me turn my idea into a good question for the community.",
-          "Write a friendly reply to someone who responded to my post.",
-          "Suggest 3 ways I can contribute here this week (even as a beginner).",
-        ],
-      },
-      {
-        id: "agent",
-        label: "AI Agent",
-        prompts: [
-          "What can the AI agent help me do here? Give me 5 simple examples.",
-          "Help me make a simple plan for the next 7 days.",
-          "Turn my notes into a clean outline, then a first draft.",
-          "Ask me 5 questions to scope my goal before we start.",
-        ],
-      },
-    ],
-  };
+function cloneDefaultLandingTabs(): CommunityAgentLandingTab[] {
+  return DEFAULT_EMPTY_THREAD_LANDING.tabs.map((tab) => ({
+    id: tab.id,
+    label: tab.label,
+    prompts: [...tab.prompts],
+  }));
+}
+
+function parseCommunityAgentLandingTabs(input: unknown): ParsedCommunityAgentLandingTab[] {
+  const tabsRaw = Array.isArray(input) ? input : [];
+  const tabs: ParsedCommunityAgentLandingTab[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < tabsRaw.length; i++) {
+    const tabRaw = tabsRaw[i];
+    if (!tabRaw || typeof tabRaw !== "object") continue;
+    const tab = tabRaw as Record<string, unknown>;
+    const promptsRaw = Array.isArray(tab.prompts) ? tab.prompts : [];
+    const prompts = promptsRaw
+      .map((prompt) => (typeof prompt === "string" ? prompt.trim() : ""))
+      .filter(Boolean)
+      .slice(0, 1);
+    if (prompts.length === 0) continue;
+    const label = typeof tab.label === "string" ? tab.label.trim() : "";
+    let id = typeof tab.id === "string" ? tab.id.trim() : "";
+    if (!id) id = `tab-${i + 1}`;
+    while (seenIds.has(id)) id = `${id}-x`;
+    seenIds.add(id);
+    tabs.push({ id, label, prompts });
+  }
+  return tabs;
+}
+
+function canonicalizeCommunityAgentLandingTabs(
+  input: unknown,
+): CommunityAgentLandingTab[] | null {
+  const candidates = parseCommunityAgentLandingTabs(input);
+  if (candidates.length === 0) return null;
+  return DEFAULT_EMPTY_THREAD_LANDING.tabs.map((defaultTab, index) => {
+    const source = candidates.find((tab) => tab.id === defaultTab.id) ?? candidates[index] ?? null;
+    return {
+      id: defaultTab.id,
+      label: source?.label || defaultTab.label,
+      prompts: [source?.prompts[0] ?? defaultTab.prompts[0]],
+    };
+  });
 }
 
 export function normalizeCommunityAgentLanding(
@@ -104,33 +96,11 @@ export function normalizeCommunityAgentLanding(
 ): CommunityAgentLanding | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as Record<string, unknown>;
-  const title = typeof raw.title === "string" ? raw.title.trim() : "";
-  const subtitle = typeof raw.subtitle === "string" ? raw.subtitle.trim() : "";
-  const tabsRaw = Array.isArray(raw.tabs) ? raw.tabs : [];
-  const tabs: CommunityAgentLandingTab[] = [];
-  const seenIds = new Set<string>();
-  for (let i = 0; i < tabsRaw.length; i++) {
-    if (tabs.length >= 4) break;
-    const tabRaw = tabsRaw[i];
-    if (!tabRaw || typeof tabRaw !== "object") continue;
-    const tab = tabRaw as Record<string, unknown>;
-    const label = typeof tab.label === "string" ? tab.label.trim() : "";
-    const promptsRaw = Array.isArray(tab.prompts) ? tab.prompts : [];
-    const prompts = promptsRaw
-      .map((p) => (typeof p === "string" ? p.trim() : ""))
-      .filter((p) => p)
-      .slice(0, 12);
-    if (!label || prompts.length === 0) continue;
-    let id = typeof tab.id === "string" ? tab.id.trim() : "";
-    if (!id) id = `tab-${i + 1}`;
-    while (seenIds.has(id)) id = `${id}-x`;
-    seenIds.add(id);
-    tabs.push({ id, label, prompts });
-  }
-  if (tabs.length === 0) return null;
+  const tabs = canonicalizeCommunityAgentLandingTabs(raw.tabs);
+  if (!tabs) return null;
   return {
-    title: title || DEFAULT_EMPTY_THREAD_LANDING.title,
-    subtitle: subtitle || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
+    title: DEFAULT_EMPTY_THREAD_LANDING.title,
+    subtitle: DEFAULT_EMPTY_THREAD_LANDING.subtitle,
     tabs,
   };
 }
@@ -138,18 +108,10 @@ export function normalizeCommunityAgentLanding(
 export function normalizeCommunityAgentDraftForSave(
   draft: CommunityAgentLanding,
 ): CommunityAgentLanding | null {
-  const tabs = draft.tabs
-    .map((tab) => ({
-      id: tab.id,
-      label: (tab.label ?? "").trim(),
-      prompts: (tab.prompts ?? []).map((p) => (p ?? "").trim()).filter(Boolean),
-    }))
-    .filter((tab) => tab.label && tab.prompts.length > 0)
-    .slice(0, 4);
-  if (tabs.length === 0) return null;
+  const tabs = canonicalizeCommunityAgentLandingTabs(draft.tabs) ?? cloneDefaultLandingTabs();
   return {
-    title: (draft.title ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.title,
-    subtitle: (draft.subtitle ?? "").trim() || DEFAULT_EMPTY_THREAD_LANDING.subtitle,
+    title: DEFAULT_EMPTY_THREAD_LANDING.title,
+    subtitle: DEFAULT_EMPTY_THREAD_LANDING.subtitle,
     tabs,
   };
 }

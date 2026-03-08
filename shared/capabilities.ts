@@ -3,10 +3,10 @@ import {
   resolveEffectiveTierForGate,
 } from "./canonicalGateEngine";
 
-export type AccessSurface = "web" | "desktop";
+export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
 export type BuilderTier = "free" | "builder" | "pro" | "unknown";
-export type ThreadMode = "single_guest" | "multi_local" | "multi_cloud";
+export type ThreadMode = "single_guest" | "multi_cloud";
 
 export type UserAccessPolicy = {
   surface: AccessSurface;
@@ -23,19 +23,19 @@ export type UserAccessPolicy = {
 };
 
 export function resolveUserAccessPolicy(input: {
-  surface: AccessSurface;
+  surface: "web";
   authState: AccessAuthState;
   builderTier?: string | null;
-  hasDesktopChatgptAuth?: boolean;
+  hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
   return resolveUserAccessPolicyViaCanonicalGate(input);
 }
 
 function resolveUserAccessPolicyViaCanonicalGate(input: {
-  surface: AccessSurface;
+  surface: "web";
   authState: AccessAuthState;
   builderTier?: string | null;
-  hasDesktopChatgptAuth?: boolean;
+  hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
   const paidModelDecision = evaluateCanonicalGate({
     surface: input.surface,
@@ -44,7 +44,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     requestedFundingSource: "platform",
     authState: input.authState,
     tier: input.builderTier ?? null,
-    hasDesktopChatGptAuth: Boolean(input.hasDesktopChatgptAuth),
+    hasUserChatGptConnection: Boolean(input.hasUserChatGptConnection),
   });
 
   const effectiveTier = resolveEffectiveTierForGate({
@@ -64,13 +64,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
         ? "pro"
         : "free";
 
-  const threadMode: ThreadMode = !isAuthenticated
-    ? input.surface === "web"
-      ? "single_guest"
-      : "multi_local"
-    : input.surface === "web"
-      ? "multi_cloud"
-      : "multi_local";
+  const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
 
   return {
     surface: input.surface,

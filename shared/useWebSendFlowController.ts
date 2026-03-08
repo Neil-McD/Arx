@@ -277,7 +277,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: false,
+          requiresTools: true,
           replyToId: messageId,
           messages: optimisticThreadMessages,
         });
@@ -376,7 +376,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: false,
+          requiresTools: true,
           replyToId: lastUserMessageId,
           messages: currentThreadMessages,
         });
@@ -479,7 +479,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: false,
+          requiresTools: true,
           replyToId: lastUserMessageId,
           messages: messagesForTurn,
         });
