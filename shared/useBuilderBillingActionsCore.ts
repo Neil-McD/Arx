@@ -7,8 +7,8 @@ import {
   startCloudConnectOnboarding,
 } from "./cloudBuilderBillingGateway";
 
-export type BuilderCheckoutTier = "builder" | "pro";
-export type BuilderCheckoutRequestTier = "builder" | "pro";
+export type BuilderCheckoutTier = "builder";
+export type BuilderCheckoutRequestTier = "builder";
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
 
 type BillingActionKind = "checkout" | "portal" | "connect";

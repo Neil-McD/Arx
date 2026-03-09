@@ -13,7 +13,7 @@ export function AttachmentChipButton({
   disabled = false,
   className = "attachment-item attachment-chip",
 }: AttachmentChipButtonProps) {
-  const isImage = typeof imageUrl === "string" && imageUrl.startsWith("data:image/");
+  const isImage = typeof imageUrl === "string" && imageUrl.trim().length > 0;
   const isDisabled = disabled || !onClick;
 
   return (

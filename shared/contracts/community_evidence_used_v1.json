@@ -7,7 +7,7 @@
     "contract_id": "string",
     "items": [
       {
-        "source_type": "chat|resource|memory",
+        "source_type": "chat|resource|ai_feed",
         "source_id": "string",
         "internal_source_id": "string (optional internal canonical id; not for user-facing display)",
         "title": "string",

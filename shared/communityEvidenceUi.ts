@@ -4,7 +4,7 @@ export function formatCommunityEvidenceTypeLabel(
   sourceType: CommunityEvidenceItem["source_type"],
 ): string {
   if (sourceType === "chat") return "Chat";
-  if (sourceType === "memory") return "Memory";
+  if (sourceType === "ai_feed") return "AI Feed";
   return "Resource";
 }
 

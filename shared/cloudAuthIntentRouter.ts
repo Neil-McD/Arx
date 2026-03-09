@@ -2,6 +2,7 @@ import type { PendingAuthIntent } from "./cloudAuthIntent";
 
 type PendingAuthIntentHandlers = {
   select_model: (payload: Extract<PendingAuthIntent, { reason: "select_model" }>["payload"]) => void;
+  connect_provider: (payload: Extract<PendingAuthIntent, { reason: "connect_provider" }>["payload"]) => void;
   create_community: (payload: Extract<PendingAuthIntent, { reason: "create_community" }>["payload"]) => void;
   redeem_purchase_claim: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_purchase_claim" }>["payload"],
@@ -24,18 +25,15 @@ type PendingAuthIntentHandlers = {
   redeem_pending_purchases: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_pending_purchases" }>["payload"],
   ) => void;
-  save_profile: (payload: Extract<PendingAuthIntent, { reason: "save_profile" }>["payload"]) => void;
-  create_memory: (payload: Extract<PendingAuthIntent, { reason: "create_memory" }>["payload"]) => void;
-  toggle_memory_pinned: (
-    payload: Extract<PendingAuthIntent, { reason: "toggle_memory_pinned" }>["payload"],
-  ) => void;
-  delete_memory: (payload: Extract<PendingAuthIntent, { reason: "delete_memory" }>["payload"]) => void;
 };
 
 export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: PendingAuthIntentHandlers): void {
   switch (intent.reason) {
     case "select_model":
       handlers.select_model(intent.payload);
+      return;
+    case "connect_provider":
+      handlers.connect_provider(intent.payload);
       return;
     case "create_community":
       handlers.create_community(intent.payload);
@@ -60,18 +58,6 @@ export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: Pend
       return;
     case "redeem_pending_purchases":
       handlers.redeem_pending_purchases(intent.payload);
-      return;
-    case "save_profile":
-      handlers.save_profile(intent.payload);
-      return;
-    case "create_memory":
-      handlers.create_memory(intent.payload);
-      return;
-    case "toggle_memory_pinned":
-      handlers.toggle_memory_pinned(intent.payload);
-      return;
-    case "delete_memory":
-      handlers.delete_memory(intent.payload);
       return;
   }
 }

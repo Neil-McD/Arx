@@ -73,10 +73,10 @@ export function WebCommunityAiAgentUpgradeGate(props: WebCommunityAiAgentUpgrade
 
       <div className="premium-gate-overlay">
         <div className="premium-gate-card">
-          <div className="premium-gate-eyebrow">ARCHITECT</div>
-          <div className="premium-gate-title">For Architect members only</div>
+          <div className="premium-gate-eyebrow">BUILDER</div>
+          <div className="premium-gate-title">For Builder members only</div>
           <div className="model-note" style={{ marginTop: 8 }}>
-            Upgrade to Architect ($100/mo) to customize the empty-thread landing page and a
+            Upgrade to Builder ($60/mo) to customize the empty-thread landing page and a
             community system prompt.
           </div>
           {isActiveCommunityOwner ? (
@@ -86,12 +86,12 @@ export function WebCommunityAiAgentUpgradeGate(props: WebCommunityAiAgentUpgrade
                 type="button"
                 onClick={onUpgrade}
               >
-                Upgrade to Architect
+                Upgrade to Builder
               </button>
             </div>
           ) : (
             <div className="model-note" style={{ marginTop: 12 }}>
-              Ask the community owner to upgrade to Architect.
+              Ask the community owner to upgrade to Builder.
             </div>
           )}
         </div>

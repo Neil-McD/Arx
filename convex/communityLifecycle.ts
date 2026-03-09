@@ -1,3 +1,4 @@
+import { api } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -10,18 +11,19 @@ import {
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
   type CommunityMessageReactionLike,
-  type CommunityPlanLike,
+  type CommunityPricePointLike,
   type CommunityResourceLike,
   maybeDeleteStorageAsset,
   normalizeBannerFocus,
+  normalizeEntryPolicy,
   normalizeBannerZoom,
-  normalizeJoinMode,
   normalizeName,
   normalizeOptionalCommunityImageUrl,
   normalizeOptionalText,
   normalizeSlug,
   normalizeVisibility,
   requireCommunityManager,
+  resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -42,12 +44,12 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   banner_focus_y: number;
   banner_zoom: number;
   visibility: string;
-  free_join_requires_approval: boolean;
-  join_mode: string;
+  entry_policy: string;
   created_at: string;
   updated_at: string;
 }> {
   const branding = await resolveCommunityBrandingFields(ctx, row);
+  const entryPolicy = resolveCommunityEntryPolicy(row);
   const userIdCache = new Map<string, string | null>();
   return {
     id: String(row._id),
@@ -63,8 +65,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     banner_focus_y: branding.banner_focus_y,
     banner_zoom: branding.banner_zoom,
     visibility: row.visibility,
-    free_join_requires_approval: Boolean(row.freeJoinRequiresApproval),
-    join_mode: row.joinMode,
+    entry_policy: entryPolicy,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
@@ -85,8 +86,7 @@ export const createCommunity = mutation({
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
-    freeJoinRequiresApproval: v.optional(v.boolean()),
-    joinMode: v.optional(v.string()),
+    entryPolicy: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -96,6 +96,21 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = args.nowMs ?? Date.now();
+    const billingStatus = await ctx.runQuery(api.auth.getBuilderBillingStatus, {
+      authSubject: args.authSubject ?? undefined,
+      nowMs,
+    });
+    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+      throw new Error("community_builder_required");
+    }
+    const ownedCommunities = await ctx.db
+      .query("communities")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    const maxCommunities = Math.max(0, Math.floor(Number(billingStatus.max_communities ?? 0)));
+    if (maxCommunities > 0 && ownedCommunities.length >= maxCommunities) {
+      throw new Error("community_owner_limit_reached");
+    }
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db
       .query("communities")
@@ -104,10 +119,7 @@ export const createCommunity = mutation({
     if (existing) throw new Error("community_slug_taken");
 
     const visibility = normalizeVisibility(args.visibility);
-    const freeJoinRequiresApproval =
-      typeof args.freeJoinRequiresApproval === "boolean" ? args.freeJoinRequiresApproval : true;
-    const defaultJoinMode = freeJoinRequiresApproval ? "request_access" : "join_free";
-    const joinMode = normalizeJoinMode(args.joinMode, defaultJoinMode);
+    const entryPolicy = normalizeEntryPolicy(args.entryPolicy, "approval");
     const avatarStorageId = args.avatarStorageId ?? undefined;
     const bannerStorageId = args.bannerStorageId ?? undefined;
     const communityId = await ctx.db.insert("communities", {
@@ -123,15 +135,7 @@ export const createCommunity = mutation({
       bannerFocusY: normalizeBannerFocus(args.bannerFocusY),
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
       visibility,
-      freeJoinRequiresApproval,
-      joinMode,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await ctx.db.insert("communityMemberships", {
-      communityId,
-      userId: ownerId,
-      role: "owner",
+      entryPolicy,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -212,11 +216,14 @@ export const saveCommunitySettings = mutation({
     const monthlyAmount = normalizePlanAmount(args.monthlyAmountBaseUnits);
     const yearlyAmount = normalizePlanAmount(args.yearlyAmountBaseUnits);
     const hasPaidPlan = monthlyAmount !== null || yearlyAmount !== null;
-    const nextJoinMode = hasPaidPlan
-      ? "checkout"
-      : community.freeJoinRequiresApproval
-        ? "request_access"
-        : "join_free";
+    const currentEntryPolicy = resolveCommunityEntryPolicy(community);
+    const nextEntryPolicy = hasPaidPlan
+      ? currentEntryPolicy === "paid_subscription"
+        ? "paid_subscription"
+        : "paid_unlock"
+      : currentEntryPolicy === "approval"
+        ? "approval"
+        : "open";
     const currency = String(args.currency ?? "usd")
       .trim()
       .toLowerCase() || "usd";
@@ -270,7 +277,7 @@ export const saveCommunitySettings = mutation({
       bannerFocusY: nextBannerFocusY,
       bannerZoom: nextBannerZoom,
       visibility: nextVisibility,
-      joinMode: nextJoinMode,
+      entryPolicy: nextEntryPolicy,
       updatedAt: nowMs,
     });
 
@@ -281,64 +288,82 @@ export const saveCommunitySettings = mutation({
       await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
     }
 
-    const upsertPlan = async (billingPeriod: "monthly" | "yearly", amountBaseUnits: number | null): Promise<string | null> => {
+    const upsertPricePoint = async (
+      billingPeriod: "monthly" | "yearly",
+      amountBaseUnits: number | null,
+    ): Promise<string | null> => {
       const rows = (await ctx.db
-        .query("communityPlans")
+        .query("communityPricePoints" as any)
         .withIndex("by_community_billingPeriod", (q: any) =>
           q.eq("communityId", args.communityId).eq("billingPeriod", billingPeriod),
         )
-        .collect()) as CommunityPlanLike[];
+        .collect()) as CommunityPricePointLike[];
       rows.sort((a, b) => b.updatedAt - a.updatedAt);
-      const primary = rows[0] ?? null;
+      const currentRows = rows.filter((row) => Boolean(row.isCurrent)).sort((a, b) => b.updatedAt - a.updatedAt);
+      const current = currentRows[0] ?? null;
 
       if (amountBaseUnits === null) {
-        for (const row of rows) {
-          if (!row.active) continue;
+        for (const row of currentRows) {
           await ctx.db.patch(row._id as any, {
-            active: false,
+            isCurrent: false,
+            archivedAt: row.archivedAt ?? nowMs,
             updatedAt: nowMs,
           });
         }
         return null;
       }
 
-      if (primary) {
-        await ctx.db.patch(primary._id as any, {
+      const hasMatchingCurrent = Boolean(
+        current &&
+          current.amountBaseUnits === amountBaseUnits &&
+          current.currency === currency &&
+          current.currencyDecimals === currencyDecimals,
+      );
+
+      if (hasMatchingCurrent && current) {
+        await ctx.db.patch(current._id as any, {
           name: nextName,
           description: nextDescription,
-          amountBaseUnits,
-          currency,
-          currencyDecimals,
-          active: true,
+          isCurrent: true,
+          archivedAt: undefined,
           updatedAt: nowMs,
         });
-        for (const extra of rows.slice(1)) {
-          if (!extra.active) continue;
+        for (const extra of currentRows.slice(1)) {
           await ctx.db.patch(extra._id as any, {
-            active: false,
+            isCurrent: false,
+            archivedAt: extra.archivedAt ?? nowMs,
             updatedAt: nowMs,
           });
         }
-        return String(primary._id);
+        return String(current._id);
       }
 
-      const planId = await ctx.db.insert("communityPlans", {
+      for (const row of currentRows) {
+        await ctx.db.patch(row._id as any, {
+          isCurrent: false,
+          archivedAt: row.archivedAt ?? nowMs,
+          updatedAt: nowMs,
+        });
+      }
+
+      const pricePointId = await ctx.db.insert("communityPricePoints" as any, {
         communityId: args.communityId,
+        kind: nextEntryPolicy === "paid_subscription" ? "subscription" : "unlock",
         billingPeriod,
         name: nextName,
         description: nextDescription,
         amountBaseUnits,
         currency,
         currencyDecimals,
-        active: true,
+        isCurrent: true,
         createdAt: nowMs,
         updatedAt: nowMs,
       });
-      return String(planId);
+      return String(pricePointId);
     };
 
-    const monthlyPlanId = await upsertPlan("monthly", monthlyAmount);
-    const yearlyPlanId = await upsertPlan("yearly", yearlyAmount);
+    await upsertPricePoint("monthly", monthlyAmount);
+    await upsertPricePoint("yearly", yearlyAmount);
 
     const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
     if (!updated) throw new Error("community_not_found");
@@ -357,8 +382,42 @@ export const saveCommunitySettings = mutation({
       banner_zoom: branding.banner_zoom,
       visibility: updated.visibility,
       updated_at: toIsoString(updated.updatedAt),
-      monthly_plan_id: monthlyPlanId,
-      yearly_plan_id: yearlyPlanId,
+    };
+  },
+});
+
+export const saveCommunityOneLiner = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    description: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const nowMs = args.nowMs ?? Date.now();
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const nextDescription = normalizeOptionalText(args.description);
+    await ctx.db.patch(community._id as any, {
+      description: nextDescription,
+      updatedAt: nowMs,
+    });
+    const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
+    if (!updated) throw new Error("community_not_found");
+    return {
+      community_id: String(updated._id),
+      description: updated.description ?? null,
+      updated_at: toIsoString(updated.updatedAt),
     };
   },
 });
@@ -401,12 +460,36 @@ export const deleteCommunity = mutation({
       await ctx.db.delete(row._id as any);
     }
 
-    const plans = (await ctx.db
-      .query("communityPlans")
+    const pricePoints = await ctx.db
+      .query("communityPricePoints" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityPlanLike[];
-    for (const row of plans) {
-      await ctx.db.delete(row._id as any);
+      .collect();
+    for (const row of pricePoints) {
+      await ctx.db.delete(row._id);
+    }
+
+    const subscriptions = await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
+      .collect();
+    for (const row of subscriptions) {
+      await ctx.db.delete(row._id);
+    }
+
+    const purchaseClaims = await ctx.db
+      .query("purchaseClaims")
+      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId))
+      .collect();
+    for (const row of purchaseClaims) {
+      await ctx.db.delete(row._id);
+    }
+
+    const checkoutSessions = await ctx.db
+      .query("checkoutSessions")
+      .collect();
+    for (const row of checkoutSessions) {
+      if (String(row.communityId ?? "") !== String(args.communityId)) continue;
+      await ctx.db.delete(row._id);
     }
 
     const invites = (await ctx.db

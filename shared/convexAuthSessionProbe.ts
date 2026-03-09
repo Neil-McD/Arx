@@ -9,8 +9,8 @@ export async function probeConvexAuthenticatedActorSession(
     const actor = (await client.query("auth:getActor" as any, {
       authState: "authenticated",
       authSubject,
-    })) as { userId?: string | null } | null;
-    return Boolean(String(actor?.userId ?? "").trim());
+    })) as { authSubject?: string | null } | null;
+    return String(actor?.authSubject ?? "").trim() === authSubject;
   } catch {
     return false;
   }

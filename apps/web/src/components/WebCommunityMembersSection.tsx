@@ -1,20 +1,18 @@
+import { deriveCommunityJoinMode, type CommunityEntryPolicy } from "../communityJoinPolicy";
+
 type CommunityMember = {
   id: string;
   user_id: string;
   role: string;
-  access_status?: string;
-  subscription_billing_period?: string | null;
-  subscription_amount_base_units?: number | string | null;
-  subscription_currency?: string | null;
-  subscription_currency_decimals?: number | null;
-};
-
-type CommunityInviteRecord = {
-  id: string;
-  code: string;
-  max_uses: number | null;
-  expires_at: string | null;
-  revoked_at: string | null;
+  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  is_entitled?: boolean;
+  entitlement_ends_at?: string | null;
+  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
+  subscription_cancel_at_period_end?: boolean | null;
+  billing_period?: string | null;
+  amount_base_units?: number | null;
+  currency?: string | null;
+  currency_decimals?: number | null;
 };
 
 type CommunityJoinRequest = {
@@ -28,26 +26,12 @@ type ActiveCommunity = {
   id: string;
   slug: string;
   owner_id: string;
-  free_join_requires_approval: boolean;
+  entry_policy?: CommunityEntryPolicy | null;
 };
 
 type UserProfile = {
   display_name?: string | null;
   avatar_url?: string | null;
-};
-
-type CommunityMemberPlanCohort = {
-  key: string;
-  value: string;
-  label: string;
-  count: number;
-};
-
-type FormatSubscriptionPriceInput = {
-  amountBaseUnits: number | string | null | undefined;
-  currency: string | null | undefined;
-  currencyDecimals: number | null | undefined;
-  billingPeriod: string | null | undefined;
 };
 
 type WebCommunityMembersSectionProps = {
@@ -63,8 +47,6 @@ type WebCommunityMembersSectionProps = {
     communityMembers: CommunityMember[];
     filteredCommunityMembers: CommunityMember[];
     communityMembersRoleFilter: string;
-    communityMembersPlanFilter: string;
-    communityMemberPlanCohorts: CommunityMemberPlanCohort[];
     membersCommunityHasPaidPlans: boolean | null;
     activeCommunityJoinMode: string | null;
     communityJoinRequests: CommunityJoinRequest[];
@@ -72,47 +54,96 @@ type WebCommunityMembersSectionProps = {
     decidingCommunityJoinRequestId: string | null;
     isLoadingMembersCommunityPricing: boolean;
     isLoadingCommunityJoinRequests: boolean;
-    isSavingFreeJoinRequiresApproval: boolean;
+    isSavingFreeAccessMode: boolean;
     isJoinRequestsModalOpen: boolean;
-    inviteMaxUsesPreset: string;
-    inviteMaxUsesCustom: string;
-    inviteExpiryPreset: string;
-    inviteExpiryCustom: string;
-    inviteCreateError: string | null;
-    isCreatingInvite: boolean;
-    isLoadingCommunityInvites: boolean;
-    communityInvites: CommunityInviteRecord[];
     profilesByUserId: Record<string, UserProfile>;
   };
   actions: {
     setCommunityMembersRoleFilter: (value: string) => void;
-    setCommunityMembersPlanFilter: (value: string) => void;
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
-    setInviteMaxUsesPreset: (value: string) => void;
-    setInviteMaxUsesCustom: (value: string) => void;
-    setInviteExpiryPreset: (value: string) => void;
-    setInviteExpiryCustom: (value: string) => void;
     displayName: (userId: string) => string;
-    handleSetCommunityFreeJoinRequiresApproval: (requiresApproval: boolean) => Promise<void> | void;
-    handleSetCommunityMemberRole: (userId: string, role: string) => Promise<void> | void;
+    handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
+    handleSetCommunityMemberRole: (userId: string, role: "admin" | "member") => Promise<void> | void;
     handleRemoveCommunityMember: (userId: string) => Promise<void> | void;
-    handleCreateInvite: () => Promise<void> | void;
-    handleRevokeInvite: (inviteId: string) => Promise<void> | void;
-    handleDeleteInvite: (inviteId: string) => Promise<void> | void;
     handleApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     handleDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     copyTextToClipboard: (value: string) => Promise<void> | void;
-    buildCommunityInstantAccessLink: (origin: string, slug: string, code: string) => string;
     getAvatarColor: (seed: string) => string;
     getInitials: (value: string) => string;
     communityInitials: (value: string) => string;
-    formatSubscriptionPrice: (input: FormatSubscriptionPriceInput) => string;
     formatRelativeTime: (value: string) => string;
   };
 };
 
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
   const { activeCommunity, hasSession, capabilities, state, actions } = props;
+  const joinPath = activeCommunity ? `/c/${encodeURIComponent(activeCommunity.slug)}` : "";
+  const joinUrl = activeCommunity
+    ? typeof window === "undefined"
+      ? joinPath
+      : new URL(joinPath, window.location.origin).toString()
+    : "";
+  const formatAmount = (member: CommunityMember): string | null => {
+    const amount = Number(member.amount_base_units);
+    const currency = String(member.currency ?? "").trim().toUpperCase();
+    const decimals = Number(member.currency_decimals ?? 2);
+    if (!Number.isFinite(amount) || amount < 0 || !currency) return null;
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency,
+        minimumFractionDigits: Math.max(0, decimals),
+        maximumFractionDigits: Math.max(0, decimals),
+      }).format(amount / 10 ** Math.max(0, decimals));
+    } catch {
+      return null;
+    }
+  };
+  const formatMemberAccess = (member: CommunityMember): string | null => {
+    const source = String(member.access_source ?? "").trim().toLowerCase();
+    const amount = formatAmount(member);
+    const period =
+      member.billing_period === "monthly" ? "/mo" : member.billing_period === "yearly" ? "/yr" : "";
+    const base =
+      source === "free_grant"
+        ? "free"
+        : source === "manual_grant"
+          ? "complimentary"
+          : source === "invite_bypass"
+            ? "invite"
+            : source === "paid_unlock"
+              ? amount ? `unlock ${amount}${period}` : "paid unlock"
+              : source === "paid_subscription"
+                ? amount ? `${amount}${period}` : "subscription"
+                : "";
+    const status = String(member.subscription_status ?? "").trim().toLowerCase();
+    const statusLabel =
+      status === "cancel_at_period_end"
+        ? "cancels at period end"
+        : status === "past_due"
+          ? "past due"
+          : status === "active"
+            ? "active"
+            : "";
+    if (base && statusLabel && source === "paid_subscription") return `${base} · ${statusLabel}`;
+    if (base) return base;
+    if (statusLabel) return statusLabel;
+    return null;
+  };
+  const formatEntitlementEnds = (member: CommunityMember): string | null => {
+    const raw = String(member.entitlement_ends_at ?? "").trim();
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return `through ${parsed.toLocaleDateString()}`;
+  };
+  const activeCommunityJoinMode = activeCommunity
+    ? deriveCommunityJoinMode({
+      entry_policy: activeCommunity.entry_policy,
+      })
+    : null;
+  const effectiveActiveCommunityJoinMode = activeCommunityJoinMode ?? state.activeCommunityJoinMode;
+  const autoApproveNewMembers = effectiveActiveCommunityJoinMode === "join_free";
   const canReviewFreeMembers = Boolean(
     activeCommunity &&
       capabilities.canReviewJoinRequestsActiveCommunity &&
@@ -120,7 +151,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   );
   const showPendingApprovals =
     canReviewFreeMembers &&
-    (state.activeCommunityJoinMode === "request_access" || state.communityJoinRequests.length > 0);
+    (effectiveActiveCommunityJoinMode === "request_access" || state.communityJoinRequests.length > 0);
   const pendingApprovalsCount = state.isLoadingCommunityJoinRequests ? "…" : String(state.communityJoinRequests.length);
 
   return (
@@ -131,7 +162,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             <div className="members-header-row">
               <div className="members-header">Members</div>
               <div className="members-count">
-                {state.communityMembersRoleFilter !== "all" || state.communityMembersPlanFilter !== "all"
+                {state.communityMembersRoleFilter !== "all"
                   ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
                   : state.communityMembers.length}
               </div>
@@ -148,30 +179,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <option value="all">All roles</option>
                     <option value="owner">Owner</option>
                     <option value="admin">Admin</option>
-                    <option value="mod">Moderator</option>
                     <option value="member">Member</option>
-                  </select>
-                </label>
-                <label className="members-filter-field">
-                  <span>Plan</span>
-                  <select
-                    className="select-styled members-surface-select"
-                    value={state.communityMembersPlanFilter}
-                    onChange={(event) => actions.setCommunityMembersPlanFilter(event.target.value)}
-                  >
-                    <option value="all">All plans</option>
-                    <option value="free">Free / none</option>
-                    <option value="monthly">Monthly (any)</option>
-                    <option value="yearly">Annual (any)</option>
-                    {state.communityMemberPlanCohorts.length > 0 && (
-                      <optgroup label="Price cohorts">
-                        {state.communityMemberPlanCohorts.map((cohort) => (
-                          <option key={cohort.key} value={cohort.value}>
-                            {cohort.label} ({cohort.count})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
                   </select>
                 </label>
               </div>
@@ -186,16 +194,16 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 </div>
                 <label
                   className={`members-switch${
-                    state.isLoadingMembersCommunityPricing || state.isSavingFreeJoinRequiresApproval ? " is-disabled" : ""
+                    state.isLoadingMembersCommunityPricing || state.isSavingFreeAccessMode ? " is-disabled" : ""
                   }`}
                 >
                   <input
                     type="checkbox"
-                    checked={!activeCommunity.free_join_requires_approval}
-                    disabled={state.isLoadingMembersCommunityPricing || state.isSavingFreeJoinRequiresApproval}
+                    checked={autoApproveNewMembers}
+                    disabled={state.isLoadingMembersCommunityPricing || state.isSavingFreeAccessMode}
                     onChange={(event) => {
                       const nextAutoApprove = event.target.checked;
-                      void actions.handleSetCommunityFreeJoinRequiresApproval(!nextAutoApprove);
+                      void actions.handleSetCommunityFreeAccessMode(nextAutoApprove ? "open" : "approval");
                     }}
                   />
                   <span className="members-switch-track">
@@ -212,7 +220,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   disabled={
                     state.isLoadingMembersCommunityPricing ||
                     state.isLoadingCommunityJoinRequests ||
-                    state.isSavingFreeJoinRequiresApproval
+                    state.isSavingFreeAccessMode
                   }
                   onClick={() => actions.setIsJoinRequestsModalOpen(true)}
                 >
@@ -244,30 +252,14 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     ? actions.communityInitials(profile.display_name)
                     : actions.getInitials(member.user_id);
                   const memberIsOwner = Boolean(
-                    (activeCommunity && activeCommunity.owner_id === member.user_id) || member.role === "owner",
+                    activeCommunity && activeCommunity.owner_id === member.user_id,
                   );
-                  const planPeriod = String(member.subscription_billing_period ?? "").trim().toLowerCase();
-                  const showPlanLabel = planPeriod === "monthly" || planPeriod === "yearly";
-                  const planLabel = showPlanLabel
-                    ? actions.formatSubscriptionPrice({
-                        amountBaseUnits: member.subscription_amount_base_units,
-                        currency: member.subscription_currency,
-                        currencyDecimals: member.subscription_currency_decimals,
-                        billingPeriod: planPeriod,
-                      })
-                    : "";
                   const viewerIsOwner = capabilities.isActiveCommunityOwner;
                   const viewerIsAdmin = capabilities.canManageMembersActiveCommunity && !viewerIsOwner;
                   const memberIsAdmin = member.role === "admin";
                   const canEditThisMember = viewerIsOwner || !memberIsAdmin;
                   const canRemoveThisMember = viewerIsOwner || (viewerIsAdmin && !memberIsAdmin && !memberIsOwner);
-                  const roleOptions = viewerIsOwner
-                    ? ["member", "mod", "admin"]
-                    : memberIsAdmin
-                    ? ["admin"]
-                      : ["member", "mod"];
-                  const showDeclinedBadge =
-                    capabilities.canManageMembersActiveCommunity && member.access_status === "declined";
+                  const roleOptions = viewerIsOwner ? ["member", "admin"] : memberIsAdmin ? ["admin"] : ["member"];
                   return (
                     <div key={member.id} className="member-item">
                       <div
@@ -280,8 +272,12 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         <span className="member-name">{actions.displayName(member.user_id)}</span>
                         <div className="member-meta">
                           <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
-                          {showPlanLabel && <span className="member-access-badge">{planLabel}</span>}
-                          {showDeclinedBadge && <span className="member-access-badge is-warning">Declined</span>}
+                          {formatMemberAccess(member) ? (
+                            <span className="member-role">{formatMemberAccess(member)}</span>
+                          ) : null}
+                          {formatEntitlementEnds(member) ? (
+                            <span className="member-role">{formatEntitlementEnds(member)}</span>
+                          ) : null}
                         </div>
                         {!capabilities.canManageMembersActiveCommunity || memberIsOwner ? null : (
                           <div className="member-controls">
@@ -323,143 +319,30 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
           {activeCommunity && hasSession && capabilities.canInviteActiveCommunity && (
             <section className="invites-section">
               <div className="members-header-row">
-                <div className="members-header">Invites</div>
+                <div className="members-header">Join path</div>
               </div>
               <div className="invites-card">
                 <div className="invite-create-shell">
                   <div className="members-policy-copy">
-                    <div className="members-policy-title">Create an invite</div>
+                    <div className="members-policy-title">Copy the normal join path</div>
                     <div className="members-policy-text">
-                      Generate a controlled access link with usage limits and an optional expiry.
+                      Share the standard community URL. It follows the normal join flow instead of bypassing the gate.
                     </div>
                   </div>
-                  <div className="members-filter-row">
-                    <label className="members-filter-field">
-                      <span>Max uses</span>
-                      <select
-                        className="select-styled members-surface-select"
-                        value={state.inviteMaxUsesPreset}
-                        onChange={(event) => actions.setInviteMaxUsesPreset(event.target.value)}
-                      >
-                        <option value="unlimited">Unlimited</option>
-                        <option value="1">1 use</option>
-                        <option value="5">5 uses</option>
-                        <option value="10">10 uses</option>
-                        <option value="25">25 uses</option>
-                        <option value="100">100 uses</option>
-                        <option value="custom">Custom…</option>
-                      </select>
-                    </label>
-                    <label className="members-filter-field">
-                      <span>Expires</span>
-                      <select
-                        className="select-styled members-surface-select"
-                        value={state.inviteExpiryPreset}
-                        onChange={(event) => actions.setInviteExpiryPreset(event.target.value)}
-                      >
-                        <option value="never">Never</option>
-                        <option value="24h">24 hours</option>
-                        <option value="7d">7 days</option>
-                        <option value="30d">30 days</option>
-                        <option value="90d">90 days</option>
-                        <option value="custom">Custom…</option>
-                      </select>
-                    </label>
-                  </div>
-                  {(state.inviteMaxUsesPreset === "custom" || state.inviteExpiryPreset === "custom") && (
-                    <div className="members-filter-row">
-                      {state.inviteMaxUsesPreset === "custom" && (
-                        <input
-                          className="members-surface-input"
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="Custom max uses"
-                          value={state.inviteMaxUsesCustom}
-                          onChange={(event) => actions.setInviteMaxUsesCustom(event.target.value)}
-                        />
-                      )}
-                      {state.inviteExpiryPreset === "custom" && (
-                        <input
-                          className="members-surface-input"
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="Custom expiry (days)"
-                          value={state.inviteExpiryCustom}
-                          onChange={(event) => actions.setInviteExpiryCustom(event.target.value)}
-                        />
-                      )}
+                  <div className="invite-row">
+                    <div className="invite-main">
+                      <div className="invite-code">{joinPath}</div>
+                      <div className="invite-status active">standard join route</div>
                     </div>
-                  )}
-                  {state.inviteCreateError && <div className="auth-error">{state.inviteCreateError}</div>}
+                  </div>
                   <button
                     className="invite-create-btn platform-save-button is-dirty"
                     type="button"
-                    onClick={() => void actions.handleCreateInvite()}
-                    disabled={state.isCreatingInvite}
+                    onClick={() => void actions.copyTextToClipboard(joinUrl)}
+                    disabled={!joinUrl}
                   >
-                    {state.isCreatingInvite ? "Creating…" : "Create invite"}
+                    Copy join path
                   </button>
-                </div>
-                <div className="invite-list">
-                  {state.isLoadingCommunityInvites ? (
-                    <div className="members-empty invites-empty">Loading invites…</div>
-                  ) : state.communityInvites.length === 0 ? (
-                    <div className="members-empty invites-empty">No invites yet.</div>
-                  ) : (
-                    state.communityInvites.map((invite) => {
-                      const revoked = Boolean(invite.revoked_at);
-                      const expired = Boolean(invite.expires_at && new Date(invite.expires_at).getTime() < Date.now());
-                      const status = revoked ? "revoked" : expired ? "expired" : "active";
-                      const inviteLink = actions.buildCommunityInstantAccessLink(
-                        window.location.origin,
-                        activeCommunity.slug,
-                        invite.code,
-                      );
-                      return (
-                        <div key={invite.id} className="invite-row">
-                          <div className="invite-main">
-                            <div className="invite-code">{invite.code}</div>
-                            <div className={`invite-status ${status}`}>
-                              {status}
-                              {invite.max_uses ? ` • max ${invite.max_uses}` : ""}
-                              {invite.expires_at ? ` • exp ${new Date(invite.expires_at).toLocaleDateString()}` : ""}
-                            </div>
-                          </div>
-                          <div className="invite-actions">
-                            <button
-                              className="secondary"
-                              onClick={() => void actions.copyTextToClipboard(inviteLink)}
-                              title="Copy instant access link"
-                            >
-                              Copy link
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => void actions.copyTextToClipboard(invite.code)}
-                              title="Copy invite code"
-                            >
-                              Copy code
-                            </button>
-                            <button
-                              className="secondary"
-                              onClick={() => void actions.handleRevokeInvite(invite.id)}
-                              disabled={revoked}
-                              title="Revoke invite"
-                            >
-                              Revoke
-                            </button>
-                            <button
-                              className="danger"
-                              onClick={() => void actions.handleDeleteInvite(invite.id)}
-                              title="Delete invite"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
                 </div>
               </div>
             </section>

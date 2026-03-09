@@ -29,6 +29,17 @@ require_multiline_match() {
   echo "OK: $description"
 }
 
+reject_multiline_match() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if rg -n -U --pcre2 "$pattern" "$file" >/dev/null; then
+    echo "FAIL: unexpected contract marker: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
 echo "[1/5] Ensuring browser-facing auth/billing queries resolve authenticated subject..."
 require_multiline_match "$AUTH_FILE" \
   'export const getBuilderBillingStatus = query\([\s\S]*?const subject = await resolveAuthenticatedSubject\(\{\s*ctx,\s*authSubject: args\.authSubject \?\? null,' \
@@ -39,10 +50,13 @@ require_multiline_match "$AUTH_FILE" \
   'export const getBuilderBillingStatus = query\([\s\S]*?user_id: String\(user\.authSubject \?\? subject\)\.trim\(\) \|\| String\(user\._id\)' \
   "getBuilderBillingStatus returns public user_id"
 
-echo "[3/5] Ensuring dev-tier override response also avoids leaking internal IDs..."
+echo "[3/5] Ensuring dev-tier override response stays minimal and avoids public userId residue..."
 require_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?userId: String\(user\.authSubject \?\? subject\)\.trim\(\) \|\| String\(user\._id\)' \
-  "setDevTierOverride returns public userId"
+  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTier' \
+  "setDevTierOverride returns tier-only payload"
+reject_multiline_match "$AUTH_FILE" \
+  'export const setDevTierOverride = mutation\([\s\S]*?return \{[\s\S]*?userId:' \
+  "setDevTierOverride omits userId"
 
 echo "[4/5] Ensuring browser billing gateway uses the canonical auth query seam..."
 require_multiline_match "$GATEWAY_FILE" \

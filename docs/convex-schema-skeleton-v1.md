@@ -10,7 +10,7 @@ Goal: define a minimal Convex data shape that preserves current product contract
 2. Keep projections explicit (`runtimeRuns`, entitlement snapshots) and rebuildable.
 3. One canonical source for gates (`userEntitlements` + community role membership).
 4. Keep cloud project/thread/sandbox relationship explicit and indexed.
-5. Canonical tier enum is `free | builder | architect` (`pro` is legacy alias only).
+5. Canonical tier enum is `free | builder` (`architect` / `pro` normalize to `builder` during migration).
 
 ## 2) Suggested Convex Module Layout
 
@@ -48,7 +48,7 @@ export default defineSchema({
   // ---------- Entitlements / Tier ----------
   userEntitlements: defineTable({
     userId: v.id("users"),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("builder")),
     source: v.union(
       v.literal("default"),
       v.literal("stripe"),
@@ -234,7 +234,7 @@ export default defineSchema({
     provider: v.literal("stripe"),
     providerSubscriptionId: v.string(),
     status: v.string(),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("builder")),
     currentPeriodEnd: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -318,11 +318,10 @@ No gate should require ad-hoc reads outside this set.
 Use this normalization at all migration and API boundaries:
 
 ```ts
-function normalizeTier(raw: string | null | undefined): "free" | "builder" | "architect" {
+function normalizeTier(raw: string | null | undefined): "free" | "builder" {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "builder") return "builder";
-  if (value === "architect") return "architect";
-  if (value === "pro") return "architect"; // legacy alias
+  if (value === "architect" || value === "pro") return "builder"; // legacy aliases
   return "free";
 }
 ```

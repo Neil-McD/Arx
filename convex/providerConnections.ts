@@ -251,7 +251,7 @@ async function resolveActionUser(args: {
   const actor = (await args.ctx.runQuery(api.auth.getActor as any, {
     authState: "authenticated",
     authSubject: args.authSubject ?? undefined,
-  })) as { userId?: unknown; authSubject?: unknown } | null;
+  })) as { authSubject?: unknown } | null;
   const authSubject = normalizeString(actor?.authSubject);
   if (!authSubject) throw new Error("authenticated_user_required");
   const userId = await args.ctx.runQuery(internal.providerConnections.getUserIdByAuthSubjectInternal as any, {

@@ -9,7 +9,7 @@ type WebCommunityAiAgentSectionProps = {
   communityAgentDraftsError: string | null;
   isActiveCommunityOwner: boolean;
   onOpenAuthGate: () => void;
-  onUpgradeToArchitect: () => void;
+  onUpgradeToBuilder: () => void;
   landingEditorProps: WebCommunityAiAgentLandingEditorProps;
 };
 
@@ -22,7 +22,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     communityAgentDraftsError,
     isActiveCommunityOwner,
     onOpenAuthGate,
-    onUpgradeToArchitect,
+    onUpgradeToBuilder,
     landingEditorProps,
   } = props;
 
@@ -47,10 +47,10 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
       ) : isLoadingCommunityAgentDrafts ? (
         <div className="chat-empty">Loading…</div>
       ) : communityAgentDraftsError &&
-        communityAgentDraftsError.toLowerCase().includes("pro_plan_required") ? (
+        communityAgentDraftsError.toLowerCase().includes("builder_plan_required") ? (
         <WebCommunityAiAgentUpgradeGate
           isActiveCommunityOwner={isActiveCommunityOwner}
-          onUpgrade={onUpgradeToArchitect}
+          onUpgrade={onUpgradeToBuilder}
         />
       ) : communityAgentDraftsError ? (
         <div className="auth-error">{communityAgentDraftsError}</div>

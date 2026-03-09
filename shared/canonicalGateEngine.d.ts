@@ -1,5 +1,5 @@
-export type CanonicalTier = "free" | "builder" | "architect";
-export type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+export type CanonicalTier = "free" | "builder";
+export type EffectiveTier = "anon_free" | "auth_free" | "builder";
 export type AuthState = "anonymous" | "authenticated";
 export type Surface = "web" | "mobile";
 export type ExecutionMode = "cloud";

@@ -4,8 +4,7 @@ import {
   approveCloudCommunityJoinRequest,
   denyCloudCommunityJoinRequest,
   listCloudCommunityJoinRequestRows,
-  listCloudCommunityPricingRows,
-  setCloudCommunityFreeJoinRequiresApproval,
+  setCloudCommunityFreeAccessMode,
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = {
@@ -21,12 +20,8 @@ type JoinRequestLike = {
 
 type CommunityLike = {
   id: string;
-  free_join_requires_approval: boolean;
+  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
   updated_at: string;
-};
-
-type CommunityPricingRow = {
-  billing_period?: string;
 };
 
 type UseCommunityMembersReviewControllerArgs<
@@ -37,7 +32,7 @@ type UseCommunityMembersReviewControllerArgs<
   activeCommunityId: string | null;
   session: SessionT | null;
   canManageMembersActiveCommunity: boolean;
-  isSavingFreeJoinRequiresApproval: boolean;
+  isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
   loadCommunityMembers: (
     communityId: string,
@@ -49,7 +44,7 @@ type UseCommunityMembersReviewControllerArgs<
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
   setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
-  setIsSavingFreeJoinRequiresApproval: Dispatch<SetStateAction<boolean>>;
+  setIsSavingFreeAccessMode: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useCommunityMembersReviewController<
@@ -87,14 +82,6 @@ export function useCommunityMembersReviewController<
     } finally {
       current.setIsLoadingCommunityJoinRequests(false);
     }
-  }, []);
-
-  const loadCommunityHasPaidPlans = useCallback(async (communityId: string, session: SessionT): Promise<boolean> => {
-    const rows = await listCloudCommunityPricingRows<SessionT, CommunityPricingRow>({
-      session,
-      communityId,
-    });
-    return rows.length > 0;
   }, []);
 
   const handleApproveCommunityJoinRequest = useCallback(async (requestId: string) => {
@@ -152,23 +139,28 @@ export function useCommunityMembersReviewController<
     }
   }, [loadCommunityJoinRequests]);
 
-  const handleSetCommunityFreeJoinRequiresApproval = useCallback(async (nextRequiresApproval: boolean) => {
+  const handleSetCommunityFreeAccessMode = useCallback(async (nextMode: "open" | "approval") => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
     const session = current.session;
     if (!session || !communityId) return;
-    if (current.isSavingFreeJoinRequiresApproval) return;
+    if (current.isSavingFreeAccessMode) return;
     current.setCommunityJoinRequestsError(null);
-    current.setIsSavingFreeJoinRequiresApproval(true);
+    current.setIsSavingFreeAccessMode(true);
     try {
-      const row = await setCloudCommunityFreeJoinRequiresApproval({
+      const row = await setCloudCommunityFreeAccessMode({
         session,
         communityId,
-        requiresApproval: nextRequiresApproval,
+        mode: nextMode,
       });
       const updatedCommunityId = typeof row?.community_id === "string" ? row.community_id : communityId;
-      const updatedRequiresApproval =
-        typeof row?.free_join_requires_approval === "boolean" ? row.free_join_requires_approval : nextRequiresApproval;
+      const updatedEntryPolicy =
+        row?.entry_policy === "approval" ||
+        row?.entry_policy === "open" ||
+        row?.entry_policy === "paid_unlock" ||
+        row?.entry_policy === "paid_subscription"
+          ? row.entry_policy
+          : nextMode;
       const updatedAt = typeof row?.updated_at === "string" ? row.updated_at : null;
 
       current.setCommunities((prev) =>
@@ -176,14 +168,14 @@ export function useCommunityMembersReviewController<
           community.id === updatedCommunityId
             ? {
                 ...community,
-                free_join_requires_approval: updatedRequiresApproval,
+                entry_policy: updatedEntryPolicy,
                 updated_at: updatedAt ?? community.updated_at,
               }
             : community,
         ),
       );
 
-      if (updatedRequiresApproval) {
+      if (updatedEntryPolicy === "approval") {
         await loadCommunityJoinRequests(updatedCommunityId, session);
       } else {
         current.setCommunityJoinRequestsError(null);
@@ -198,15 +190,14 @@ export function useCommunityMembersReviewController<
             : "Failed to update join approvals.";
       current.setCommunityJoinRequestsError(message);
     } finally {
-      current.setIsSavingFreeJoinRequiresApproval(false);
+      current.setIsSavingFreeAccessMode(false);
     }
   }, [loadCommunityJoinRequests]);
 
   return {
-    loadCommunityHasPaidPlans,
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
-    handleSetCommunityFreeJoinRequiresApproval,
+    handleSetCommunityFreeAccessMode,
   };
 }

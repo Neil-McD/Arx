@@ -7,7 +7,6 @@ import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGate
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, CommunityAccessT, UserProfileT> = {
-  getCloudAuthUid: (session: SessionT) => string;
   toCanonicalCommunityVisibility: (
     value: unknown,
     fallback?: "published" | "unlisted",
@@ -45,12 +44,10 @@ export function useWebCommunityAccessController<
       inFlightByKind: fetchAbortControllersRef.current,
       kind: "community_access_list",
     });
-    const userId = current.getCloudAuthUid(session);
     try {
       current.setIsLoadingCommunities(true);
       const rows = await listCloudCommunityMembershipRows<SessionT, CommunityRecordT>({
         session,
-        userId,
         selectMode: "full",
         init: { signal: fetchController.signal },
       });

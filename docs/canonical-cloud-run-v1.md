@@ -93,7 +93,7 @@ Current implemented scope in `convex/http.ts`:
 2. Runner failures are fail-closed (no silent fallback when Daytona execution fails).
 3. Probe output is injected into the iterative inference loop as explicit tool-result context.
 4. Model-directed tool loop is active for cloud tool turns, with policy-evented `tool_call_requested` / `tool_call_approved|denied` / `tool_call_started` / `tool_call_finished`.
-5. Cloud tool turns use a single deterministic policy posture (auto-approved tool execution except explicit contract-denied tools like `update_plan`).
+5. Cloud tool turns use a single deterministic policy posture over the active cloud tool subset.
 6. Web clients send the same minimal runtime turn payload shape (no approval-mode branch state).
 
 Target scope (next slice, not complete yet):

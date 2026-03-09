@@ -320,7 +320,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
       const auth = await requireAuthenticatedActor(ctx, req);
       if (!auth.ok) return auth.response;
-      void auth.actor.userId;
+      void auth.actor.authSubject;
 
       try {
         const input = await readJsonBounded<VoiceTranscribeInput>(req);

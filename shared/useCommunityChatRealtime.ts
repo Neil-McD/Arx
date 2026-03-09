@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction, } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction, } from "react";
 
-import { listCloudMessageReactions, listCloudThreadMessages } from "./cloudCommunityChatGateway";
+import {
+  createCloudCommunityChatLiveClient,
+  subscribeCloudMessageReactions,
+  subscribeCloudThreadMessages,
+  type CloudCommunityChatLiveClient,
+} from "./cloudCommunityChatGateway";
 
 type SessionLike = {
   access_token: string;
@@ -43,28 +48,32 @@ type UseCommunityChatRealtimeArgs<
   pollIntervalMs?: number;
 };
 
-function mergeMessagesById<ChatMessageT extends ChatMessageLike>(
+function reconcileLatestMessages<ChatMessageT extends ChatMessageLike>(
   prev: ChatMessageT[],
   nextRows: ChatMessageT[],
 ): ChatMessageT[] {
-  if (nextRows.length === 0) return prev;
-  const byId = new Map<string, ChatMessageT>();
-  for (const message of prev) byId.set(message.id, message);
-  for (const incoming of nextRows) {
-    const existing = byId.get(incoming.id);
-    byId.set(incoming.id, existing ? { ...existing, ...incoming } : incoming);
-  }
-  return Array.from(byId.values()).sort((a, b) => a.seq - b.seq);
+  const pending = prev.filter((message) => String(message.id).startsWith("pending-"));
+  if (nextRows.length === 0) return pending;
+  const incomingIds = new Set(nextRows.map((message) => message.id));
+  const minIncomingSeq = nextRows.reduce((min, message) => Math.min(min, message.seq), Number.POSITIVE_INFINITY);
+  const older = prev.filter((message) => {
+    if (String(message.id).startsWith("pending-")) return false;
+    if (incomingIds.has(message.id)) return false;
+    return message.seq < minIncomingSeq;
+  });
+  return [...older, ...nextRows, ...pending].sort((a, b) => a.seq - b.seq);
 }
 
-function mergeReactionsById<ReactionT extends ReactionLike>(prev: ReactionT[], rows: ReactionT[]): ReactionT[] {
-  if (rows.length === 0) return prev;
+function reconcileWatchedReactions<ReactionT extends ReactionLike>(
+  prev: ReactionT[],
+  rows: ReactionT[],
+  watchedMessageIds: Set<string>,
+): ReactionT[] {
+  const keep = prev.filter((reaction) => !watchedMessageIds.has(reaction.message_id));
+  if (rows.length === 0) return keep;
   const byId = new Map<string, ReactionT>();
-  for (const reaction of prev) byId.set(reaction.id, reaction);
-  for (const reaction of rows) {
-    const existing = byId.get(reaction.id);
-    byId.set(reaction.id, existing ? { ...existing, ...reaction } : reaction);
-  }
+  for (const reaction of keep) byId.set(reaction.id, reaction);
+  for (const reaction of rows) byId.set(reaction.id, reaction);
   return Array.from(byId.values());
 }
 
@@ -76,25 +85,16 @@ export function useCommunityChatRealtime<
 >(args: UseCommunityChatRealtimeArgs<SessionT, MessageRowT, ChatMessageT, ReactionT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
-  const [communityTypingUserIds, setCommunityTypingUserIds] = useState<string[]>([]);
   const onLoadProfilesRef = useRef(args.onLoadProfiles);
-  const pollTimerRef = useRef<number | null>(null);
-  const pollInFlightRef = useRef(false);
+  const liveClientRef = useRef<CloudCommunityChatLiveClient | null>(null);
 
   useEffect(() => {
     onLoadProfilesRef.current = args.onLoadProfiles;
   }, [args.onLoadProfiles]);
 
   const clearRuntimeState = useCallback(() => {
-    if (pollTimerRef.current) {
-      window.clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-    setCommunityTypingUserIds((prev) => (prev.length === 0 ? prev : []));
-  }, []);
-
-  const maybeBroadcastCommunityTyping = useCallback((_nextValue: string) => {
-    // Typing broadcast is intentionally disabled during the Convex realtime lane cut.
+    liveClientRef.current?.close();
+    liveClientRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -105,91 +105,102 @@ export function useCommunityChatRealtime<
     }
 
     let cancelled = false;
+    let disposeMessages: (() => void) | null = null;
+    let disposeReactions: (() => void) | null = null;
+    let watchedReactionKey = "";
 
-    const pollOnce = async () => {
-      if (cancelled || pollInFlightRef.current) return;
-      pollInFlightRef.current = true;
+    const subscribe = async () => {
       try {
         const latestArgs = argsRef.current;
         const threadId = await latestArgs.ensureCommunityChatThread(args.activeCommunityId!, session);
         if (cancelled) return;
 
-        const rowsDesc = await listCloudThreadMessages<SessionT, MessageRowT>({
-          session,
+        const liveClient = createCloudCommunityChatLiveClient({ session });
+        liveClientRef.current?.close();
+        liveClientRef.current = liveClient;
+
+        const refreshReactionSubscription = (messageIds: string[]) => {
+          const normalizedIds = Array.from(new Set(messageIds.filter(Boolean)));
+          const nextKey = normalizedIds.join("|");
+          if (nextKey === watchedReactionKey) return;
+          watchedReactionKey = nextKey;
+          disposeReactions?.();
+          disposeReactions = null;
+          if (normalizedIds.length === 0) {
+            latestArgs.setMessageReactions([]);
+            return;
+          }
+          const watchedMessageIds = new Set(normalizedIds);
+          disposeReactions = subscribeCloudMessageReactions<ReactionT>({
+            liveClient,
+            messageIds: normalizedIds,
+            onUpdate: (rows) => {
+              if (cancelled) return;
+              latestArgs.setMessageReactions((prev) =>
+                reconcileWatchedReactions(prev, rows, watchedMessageIds),
+              );
+            },
+          });
+        };
+
+        disposeMessages = subscribeCloudThreadMessages<MessageRowT>({
+          liveClient,
           threadId,
           limit: 100,
-        });
-        if (cancelled) return;
-        const mappedRows = rowsDesc
-          .map((row) => latestArgs.toCommunityChatMessage(row))
-          .filter(Boolean) as ChatMessageT[];
-        mappedRows.sort((a, b) => a.seq - b.seq);
+          onUpdate: (rowsDesc) => {
+            if (cancelled) return;
+            const mappedRows = rowsDesc
+              .map((row) => latestArgs.toCommunityChatMessage(row))
+              .filter(Boolean) as ChatMessageT[];
+            mappedRows.sort((a, b) => a.seq - b.seq);
 
-        if (mappedRows.length > 0) {
-          const knownIds = latestArgs.communityMessageIdsRef.current;
-          const newSenderIds = mappedRows
-            .filter((message) => !knownIds.has(message.id))
-            .map((message) => message.sender_id);
-          if (newSenderIds.length > 0) {
-            const uniqueSenders = Array.from(new Set(newSenderIds));
-            void onLoadProfilesRef.current?.(uniqueSenders, session);
-          }
-
-          let unreadDelta = 0;
-          if (!latestArgs.isUserAtBottomRef.current) {
-            for (const message of mappedRows) {
-              if (knownIds.has(message.id)) continue;
-              if (message.sender_id === session.user.id) continue;
-              unreadDelta += 1;
+            const knownIds = latestArgs.communityMessageIdsRef.current;
+            const newMessages = mappedRows.filter((message) => !knownIds.has(message.id));
+            if (newMessages.length > 0) {
+              const uniqueSenders = Array.from(new Set(newMessages.map((message) => message.sender_id)));
+              if (uniqueSenders.length > 0) {
+                void onLoadProfilesRef.current?.(uniqueSenders, session);
+              }
             }
-          }
 
-          latestArgs.setCommunityMessages((prev) => mergeMessagesById(prev, mappedRows));
-          if (unreadDelta > 0) {
-            latestArgs.setUnreadCount((prev) => prev + unreadDelta);
-          }
+            let unreadDelta = 0;
+            if (!latestArgs.isUserAtBottomRef.current) {
+              for (const message of newMessages) {
+                if (message.sender_id === session.user.id) continue;
+                unreadDelta += 1;
+              }
+            }
 
-          const messageIds = mappedRows.map((message) => message.id);
-          const reactionRowsRaw = await listCloudMessageReactions<SessionT, ReactionT>({
-            session,
-            messageIds,
-          });
-          if (!cancelled) {
-            const messageIdSet = new Set(messageIds);
-            const reactionRows = reactionRowsRaw.filter((row) =>
-              messageIdSet.has(row.message_id),
-            );
-            latestArgs.setMessageReactions((prev) => mergeReactionsById(prev, reactionRows));
-          }
-        }
+            latestArgs.setCommunityMessages((prev) => reconcileLatestMessages(prev, mappedRows));
+            for (const message of mappedRows) knownIds.add(message.id);
+            if (unreadDelta > 0) {
+              latestArgs.setUnreadCount((prev) => prev + unreadDelta);
+            }
+
+            refreshReactionSubscription(mappedRows.map((message) => message.id));
+          },
+        });
       } catch {
-        // Poll failures are soft; next tick retries.
-      } finally {
-        pollInFlightRef.current = false;
+        // Live subscription failures are soft; initial load remains the primary UX path.
       }
     };
 
-    void pollOnce();
-    const intervalMs = Math.max(1000, Math.floor(args.pollIntervalMs ?? 2500));
-    pollTimerRef.current = window.setInterval(() => {
-      void pollOnce();
-    }, intervalMs);
+    void subscribe();
 
     return () => {
       cancelled = true;
+      disposeReactions?.();
+      disposeMessages?.();
       clearRuntimeState();
     };
   }, [
     args.activeCommunityId,
     args.ensureCommunityChatThread,
     args.isEnabled,
-    args.pollIntervalMs,
     args.session,
     clearRuntimeState,
   ]);
 
   return {
-    communityTypingUserIds,
-    maybeBroadcastCommunityTyping,
   };
 }

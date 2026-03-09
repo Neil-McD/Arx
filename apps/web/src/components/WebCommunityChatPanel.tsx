@@ -30,6 +30,7 @@ export type WebCommunityChatPanelProps = {
   sessionUserId: string | null;
   canPostMessages: boolean;
   isLoadingChat: boolean;
+  hasResolvedCommunityChat: boolean;
   isLoadingMoreChat: boolean;
   communityChatHasMore: boolean;
   communityMessages: CommunityChatMessage[];
@@ -43,7 +44,6 @@ export type WebCommunityChatPanelProps = {
   reactionPickerMessageId: string | null;
   replyingToMessage: CommunityChatMessage | null;
   communityAttachments: CommunityMessageAttachment[];
-  communityTypingUserIds: string[];
   communityMessageInput: string;
   isSendingCommunityMessage: boolean;
   communityChatError: string | null;
@@ -92,6 +92,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     sessionUserId,
     canPostMessages,
     isLoadingChat,
+    hasResolvedCommunityChat,
     isLoadingMoreChat,
     communityChatHasMore,
     communityMessages,
@@ -105,7 +106,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     reactionPickerMessageId,
     replyingToMessage,
     communityAttachments,
-    communityTypingUserIds,
     communityMessageInput,
     isSendingCommunityMessage,
     communityChatError,
@@ -168,13 +168,18 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             {hasSession && !activeCommunity && (
               <div className="chat-empty">Select a community to start chatting.</div>
             )}
-            {activeCommunity && isLoadingChat && (
+            {activeCommunity && (isLoadingChat || (!hasResolvedCommunityChat && communityMessages.length === 0)) && (
               <div className="chat-loading">
                 <div className="loading-spinner" />
                 <span>Loading messages...</span>
               </div>
             )}
-            {activeCommunity && !isLoadingChat && communityMessages.length === 0 && (
+            {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && communityChatError && (
+              <div className="chat-empty">
+                <div>{communityChatError}</div>
+              </div>
+            )}
+            {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && !communityChatError && (
               <div className="chat-empty-state">
                 <div className="chat-empty-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -357,20 +362,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </div>
           );
         })()}
-
-        {communityTypingUserIds.length > 0 && (
-          <div className="chat-typing-indicator" aria-live="polite">
-            {communityTypingUserIds.length === 1
-              ? `${displayName(communityTypingUserIds[0] ?? "")} is typing…`
-              : communityTypingUserIds.length === 2
-                ? `${displayName(communityTypingUserIds[0] ?? "")} and ${displayName(
-                    communityTypingUserIds[1] ?? "",
-                  )} are typing…`
-                : `${displayName(communityTypingUserIds[0] ?? "")} and ${
-                    communityTypingUserIds.length - 1
-                  } others are typing…`}
-          </div>
-        )}
 
         <div className="chat-input-bar">
           <button

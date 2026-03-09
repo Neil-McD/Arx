@@ -34,6 +34,7 @@ import {
   executeDaytonaAgentLoop,
   executeDaytonaProbeToolCall,
   loadDaytonaConfig,
+  stopDaytonaSandbox,
   type DaytonaConfig,
 } from "./httpDaytona";
 
@@ -299,7 +300,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
   
       const auth = await requireAuthenticatedActor(ctx, req);
       if (!auth.ok) return auth.response;
-      void auth.actor.userId;
+      void auth.actor.authSubject;
   
       const requestRaw = input.request;
       if (!requestRaw || typeof requestRaw !== "object" || Array.isArray(requestRaw)) {
@@ -519,7 +520,6 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
       try {
       const auth = await requireAuthenticatedActor(ctx, req);
       if (!auth.ok) return auth.response;
-      const userId = auth.actor.userId;
       const userDbId = auth.actor.dbUserId;
       const authSubject = auth.actor.authSubject;
   
@@ -750,6 +750,46 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
       let daytonaProjectVolumeId: string | null = null;
       let daytonaProjectVolumeName: string | null = null;
       let codingContinuationPrompt: string | null = null;
+      let codingRelevantFiles: string[] | null = null;
+      const stopDaytonaSandboxBestEffort = async (state: "stopped" | "error" = "stopped") => {
+        if (!runtimeProjectId || !daytonaConfigForRun || !daytonaProviderSandboxId) return;
+        try {
+          const stopResult = await stopDaytonaSandbox({
+            config: daytonaConfigForRun,
+            sandboxId: daytonaProviderSandboxId,
+          });
+          if (!stopResult.ok) {
+            console.warn("daytona_sandbox_stop_failed", {
+              requestId,
+              runId,
+              projectId: runtimeProjectId,
+              providerSandboxId: daytonaProviderSandboxId,
+              code: stopResult.code,
+              message: stopResult.message,
+            });
+            return;
+          }
+          await ctx.runMutation(internal.projects.recordCloudProjectRuntimeState as any, {
+            projectId: runtimeProjectId,
+            providerSandboxId: daytonaProviderSandboxId,
+            providerSandboxState: state,
+            providerSandboxLastSeenAt: Date.now(),
+            providerVolumeId: daytonaProjectVolumeId ?? undefined,
+            providerVolumeName: daytonaProjectVolumeName ?? undefined,
+            providerVolumeState: daytonaProjectVolumeId ? "ready" : undefined,
+            providerVolumeLastSeenAt: daytonaProjectVolumeId ? Date.now() : undefined,
+            nowMs: Date.now(),
+          });
+        } catch (error) {
+          console.warn("daytona_sandbox_stop_failed", {
+            requestId,
+            runId,
+            projectId: runtimeProjectId,
+            providerSandboxId: daytonaProviderSandboxId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      };
       if (turnClass === "requires_tools") {
         try {
           if (!runtimeProjectId) {
@@ -856,7 +896,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
   
           const probe = await executeDaytonaProbeToolCall({
             config: daytonaConfigForRun,
-            userId,
+            userId: userDbId,
             projectId: runtimeProjectId,
             runId,
             projectVolumeId: daytonaProjectVolumeId,
@@ -1008,9 +1048,16 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           const continuation = (await ctx.runQuery(internal.threads.getCloudCodingContinuationContextInternal as any, {
             ownerId: userDbId,
             threadId: ownedThread._id,
-          })) as { prompt?: unknown } | null;
+          })) as { prompt?: unknown; handoff?: { relevantFiles?: unknown } | null } | null;
           const nextPrompt = String(continuation?.prompt ?? "").trim();
           codingContinuationPrompt = nextPrompt || null;
+          const handoffRelevantFiles = Array.isArray(continuation?.handoff?.relevantFiles)
+            ? continuation.handoff?.relevantFiles
+            : [];
+          codingRelevantFiles = handoffRelevantFiles
+            .map((value) => String(value ?? "").trim())
+            .filter((value) => value.length > 0)
+            .slice(0, 8);
         } catch (error) {
           console.warn("coding_continuity_prompt_load_failed", {
             requestId,
@@ -1061,6 +1108,8 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             toolboxProxyUrl: daytonaToolboxProxyUrl,
             initialProbeOutput: daytonaProbeOutput,
             codingContinuationPrompt,
+            codingRelevantFiles,
+            communityId: ownedThread.communityId ?? null,
             appendRunEvent,
           });
           if (!loopResult.ok) {
@@ -1078,6 +1127,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
               tool_call_id: loopResult.pendingToolCallId ?? null,
               tool_name: loopResult.pendingToolName ?? null,
             });
+            await stopDaytonaSandboxBestEffort("error");
             return;
           }
   
@@ -1172,6 +1222,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             assistant_message_key: assistantMessageKey,
             assistant_message_seq: assistantMessageSeq,
           });
+          await stopDaytonaSandboxBestEffort("stopped");
         });
       }
   
@@ -1216,6 +1267,8 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           toolboxProxyUrl: daytonaToolboxProxyUrl,
           initialProbeOutput: daytonaProbeOutput,
           codingContinuationPrompt,
+          codingRelevantFiles,
+          communityId: ownedThread.communityId ?? null,
           appendRunEvent,
         });
         if (!loopResult.ok) {
@@ -1225,6 +1278,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             errorCode: loopResult.code,
             errorMessage: loopResult.message,
           });
+          await stopDaytonaSandboxBestEffort("error");
           return runtimeJsonResponse(loopResult.status, {
             ok: false,
             code: loopResult.code,
@@ -1337,10 +1391,13 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           run_id: runId,
         });
       }
-  
+
       await finishRunBestEffort({
         status: "ok",
       });
+      if (turnClass === "requires_tools") {
+        await stopDaytonaSandboxBestEffort("stopped");
+      }
       return successResponse({
         content,
         promptTokens,

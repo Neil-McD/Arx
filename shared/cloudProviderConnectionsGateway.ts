@@ -2,7 +2,6 @@ import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexA
 
 type CloudProviderConnectionsGatewayParams<SessionT> = {
   session: SessionT;
-  userId: string;
 };
 
 export type CloudOpenRouterConnectionStatus = {
@@ -126,7 +125,6 @@ function normalizeChatgptConnection(payload: unknown): CloudChatgptConnectionSta
 export async function loadCloudProviderConnections<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.query("providerConnections:getCurrentUserProviderConnections" as any, {
     authSubject,
@@ -142,7 +140,6 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
     apiKey: string;
   },
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:connectOpenRouterApiKey" as any, {
     authSubject,
@@ -157,7 +154,6 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
 export async function disconnectCloudOpenRouterApiKey<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:disconnectOpenRouterApiKey" as any, {
     authSubject,
@@ -173,7 +169,6 @@ export async function beginCloudChatgptConnect<SessionT>(
     returnToPath?: string | null;
   },
 ): Promise<CloudChatgptConnectStart> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:beginChatgptConnect" as any, {
     authSubject,
@@ -207,7 +202,6 @@ export async function beginCloudChatgptManualConnect<SessionT>(
     returnToPath?: string | null;
   },
 ): Promise<CloudChatgptManualConnectStart> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:beginChatgptManualConnect" as any, {
     authSubject,
@@ -231,7 +225,6 @@ export async function pollCloudChatgptConnect<SessionT>(
     loginId: string;
   },
 ): Promise<CloudChatgptConnectPollResult> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:pollChatgptConnect" as any, {
     authSubject,
@@ -251,7 +244,6 @@ export async function completeCloudChatgptConnect<SessionT>(
     callbackInput: string;
   },
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:completeChatgptConnect" as any, {
     authSubject,
@@ -266,7 +258,6 @@ export async function completeCloudChatgptConnect<SessionT>(
 export async function disconnectCloudChatgpt<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnections:disconnectChatgpt" as any, {
     authSubject,
@@ -283,7 +274,6 @@ export async function probeCloudChatgptConnection<SessionT>(
     prompt?: string | null;
   },
 ): Promise<CloudChatgptProbeResult> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = (await client.action("providerConnectionProbes:probeChatgptConnection" as any, {
     authSubject,

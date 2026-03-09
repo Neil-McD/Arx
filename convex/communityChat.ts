@@ -4,8 +4,6 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityLike,
-  type CommunityMembershipLike,
-  type CommunityMemoryCandidateLike,
   type CommunityMessageReactionLike,
   type CommunityResourceLike,
   parseIsoMs,
@@ -14,6 +12,136 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+
+type CommunityAiFeedPostResearchLike = {
+  _id: any;
+  communityId: any;
+  title?: string;
+  body: string;
+  status?: string;
+  score?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type StoredCommunityChatAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file";
+  mime: string | null;
+  size: number;
+  storageId?: string | null;
+  dataUrl?: string | null;
+  text?: string | null;
+  truncated?: boolean | null;
+};
+
+async function listCommunityChatThreadsForCommunity(
+  ctx: any,
+  communityId: any,
+): Promise<CommunityChatThreadLike[]> {
+  const rows = (await ctx.db
+    .query("communityChatThreads")
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityChatThreadLike[];
+  return rows
+    .slice()
+    .sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt);
+}
+
+async function getCanonicalCommunityChatThread(
+  ctx: any,
+  communityId: any,
+): Promise<CommunityChatThreadLike | null> {
+  const rows = await listCommunityChatThreadsForCommunity(ctx, communityId);
+  return rows[0] ?? null;
+}
+
+function createAttachmentId(): string {
+  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
+  const resolvedStorageId = String(storageId ?? "").trim();
+  if (!resolvedStorageId) return null;
+  const resolved = await ctx.storage.getUrl(resolvedStorageId as any);
+  return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
+}
+
+function normalizeStoredChatAttachment(raw: unknown): StoredCommunityChatAttachment | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : createAttachmentId();
+  const name = typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, 256) : "attachment";
+  const type = record.type === "image" ? "image" : "file";
+  const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim().slice(0, 160) : null;
+  const sizeRaw = Number(record.size);
+  const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
+  const storageIdRaw =
+    typeof record.storageId === "string"
+      ? record.storageId
+      : typeof record.storage_id === "string"
+        ? record.storage_id
+        : "";
+  const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : null;
+  const dataUrl =
+    typeof record.data_url === "string" && record.data_url.trim().startsWith("data:")
+      ? record.data_url.trim()
+      : null;
+  const text = typeof record.text === "string" && record.text.trim() ? record.text.slice(0, 20_000) : null;
+  const truncated = typeof record.truncated === "boolean" ? record.truncated : null;
+  if (!storageId && !dataUrl) return null;
+  return {
+    id,
+    name,
+    type,
+    mime,
+    size,
+    ...(storageId ? { storageId } : null),
+    ...(dataUrl ? { dataUrl } : null),
+    ...(text ? { text } : null),
+    ...(truncated !== null ? { truncated } : null),
+  };
+}
+
+function normalizeStoredChatAttachments(raw: unknown): StoredCommunityChatAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StoredCommunityChatAttachment[] = [];
+  for (const item of raw) {
+    const normalized = normalizeStoredChatAttachment(item);
+    if (normalized) out.push(normalized);
+  }
+  return out;
+}
+
+async function mapMessageContentJsonForRead(ctx: any, contentJson: unknown): Promise<unknown> {
+  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) {
+    return contentJson;
+  }
+  const record = contentJson as Record<string, unknown>;
+  const attachments = normalizeStoredChatAttachments(record.attachments);
+  if (attachments.length === 0) return contentJson;
+  const resolvedAttachments = await Promise.all(
+    attachments.map(async (attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      mime: attachment.mime,
+      size: attachment.size,
+      ...(attachment.storageId ? { storage_id: attachment.storageId } : null),
+      ...(attachment.storageId ? { url: await maybeResolveStorageUrl(ctx, attachment.storageId) } : null),
+      ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : null),
+      ...(attachment.text ? { text: attachment.text } : null),
+      ...(attachment.truncated !== null && typeof attachment.truncated !== "undefined"
+        ? { truncated: attachment.truncated }
+        : null),
+    })),
+  );
+  return {
+    ...record,
+    attachments: resolvedAttachments,
+  };
+}
 
 function normalizeEmoji(raw: unknown): string {
   const emoji = String(raw ?? "").trim();
@@ -31,7 +159,7 @@ async function mapCommunityChatMessageRow(
     thread_id: String(row.threadId),
     seq: Math.max(0, Math.floor(row.seq)),
     role: row.role,
-    content_json: row.contentJson,
+    content_json: await mapMessageContentJsonForRead(ctx, row.contentJson),
     sender_id: await resolvePublicUserId(ctx, row.senderUserId, userIdCache),
     reply_to_id: row.replyToMessageId ? String(row.replyToMessageId) : null,
     created_at: toIsoString(row.createdAt),
@@ -127,11 +255,13 @@ export const researchCommunityContext = query({
       };
     }
 
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
-    if (!membership) {
+    try {
+      await requireCommunityChatAccess({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+    } catch {
       return {
         ok: false,
         reason_code: "not_entitled",
@@ -140,13 +270,13 @@ export const researchCommunityContext = query({
     }
 
     const sourceTypes = new Set(
-      (Array.isArray(args.sourceTypes) ? args.sourceTypes : ["chat", "resource", "memory"])
+      (Array.isArray(args.sourceTypes) ? args.sourceTypes : ["chat", "resource", "ai_feed"])
         .map((value) => String(value ?? "").trim().toLowerCase())
         .filter(Boolean),
     );
     const includeChat = sourceTypes.has("chat");
     const includeResource = sourceTypes.has("resource");
-    const includeMemory = sourceTypes.has("memory");
+    const includeAiFeed = sourceTypes.has("ai_feed");
     const normalizedQuery = normalizeResearchText(args.query, 240);
     const queryTokens = tokenizeResearchQuery(normalizedQuery);
     const limit = Math.max(1, Math.min(24, Math.floor(args.limit ?? 12)));
@@ -174,12 +304,8 @@ export const researchCommunityContext = query({
       _created_at_ms: number;
     }> = [];
     if (includeChat) {
-      const threads = (await ctx.db
-        .query("communityChatThreads")
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect()) as CommunityChatThreadLike[];
-      threads.sort((a, b) => b.updatedAt - a.updatedAt);
-      for (const thread of threads.slice(0, 8)) {
+      const thread = await getCanonicalCommunityChatThread(ctx, args.communityId);
+      if (thread) {
         const messages = (await ctx.db
           .query("communityChatMessages")
           .withIndex("by_thread", (q: any) => q.eq("threadId", thread._id))
@@ -240,55 +366,55 @@ export const researchCommunityContext = query({
     }
     resourceRows.sort((a, b) => b.score - a.score || b._created_at_ms - a._created_at_ms);
 
-    const memoryRows: Array<{
-      source_type: "memory";
+    const aiFeedRows: Array<{
+      source_type: "ai_feed";
       source_id: string;
       internal_source_id: string;
       title: string;
       created_at: string;
-      updated_at: string;
       snippet: string;
+      url: null;
       score: number;
       _created_at_ms: number;
     }> = [];
-    if (includeMemory) {
-      const candidates = (await ctx.db
-        .query("communityMemoryCandidates")
+    if (includeAiFeed) {
+      const posts = (await ctx.db
+        .query("communityAiFeedPosts")
         .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect()) as CommunityMemoryCandidateLike[];
-      for (const candidate of candidates) {
-        const status = String(candidate.routerState ?? "")
+        .collect()) as CommunityAiFeedPostResearchLike[];
+      for (const post of posts) {
+        const status = String(post.status ?? "")
           .trim()
           .toLowerCase();
-        if (status && status !== "promoted" && status !== "accepted") continue;
-        const title = normalizeResearchText(candidate.title ?? "Community memory", 100) || "Community memory";
-        const snippet = normalizeResearchText(candidate.memoryText, 220);
+        if (status === "hidden") continue;
+        const title = normalizeResearchText(post.title ?? "AI feed item", 100) || "AI feed item";
+        const snippet = normalizeResearchText(post.body ?? "", 220);
         if (!snippet) continue;
         const score = scoreResearchSnippet(`${title}\n${snippet}`, queryTokens);
         if (queryTokens.length > 0 && score <= 0) continue;
-        memoryRows.push({
-          source_type: "memory",
-          source_id: String(candidate._id),
-          internal_source_id: String(candidate._id),
+        aiFeedRows.push({
+          source_type: "ai_feed",
+          source_id: String(post._id),
+          internal_source_id: String(post._id),
           title,
-          created_at: toIsoString(candidate.createdAt),
-          updated_at: toIsoString(candidate.updatedAt),
+          created_at: toIsoString(post.createdAt),
           snippet,
+          url: null,
           score,
-          _created_at_ms: candidate.createdAt,
+          _created_at_ms: post.updatedAt ?? post.createdAt,
         });
       }
     }
-    memoryRows.sort((a, b) => b.score - a.score || b._created_at_ms - a._created_at_ms);
+    aiFeedRows.sort((a, b) => b.score - a.score || b._created_at_ms - a._created_at_ms);
 
     const chatLimited = chatRows.slice(0, Math.max(1, Math.min(limit, 6))).map(({ _created_at_ms, ...row }) => row);
     const resourceLimited = resourceRows
       .slice(0, Math.max(1, Math.min(limit, 5)))
       .map(({ _created_at_ms, ...row }) => row);
-    const memoryLimited = memoryRows
+    const aiFeedLimited = aiFeedRows
       .slice(0, Math.max(1, Math.min(limit, 5)))
       .map(({ _created_at_ms, ...row }) => row);
-    const compiledItemsUsed = chatLimited.length + resourceLimited.length + memoryLimited.length;
+    const compiledItemsUsed = chatLimited.length + resourceLimited.length + aiFeedLimited.length;
 
     return {
       ok: true,
@@ -299,7 +425,8 @@ export const researchCommunityContext = query({
         compile_version: 1,
         fallback_used: false,
         chat_fetch_ok: includeChat,
-        resource_fetch_ok: includeResource || includeMemory,
+        resource_fetch_ok: includeResource,
+        ai_feed_fetch_ok: includeAiFeed,
         retrieval_latency_ms: Math.max(0, Date.now() - startedAt),
         failure_class: "none",
       },
@@ -307,7 +434,7 @@ export const researchCommunityContext = query({
       rows: {
         chat: chatLimited,
         resources: resourceLimited,
-        memory: memoryLimited,
+        ai_feed: aiFeedLimited,
       },
     };
   },
@@ -333,14 +460,8 @@ export const ensureCommunityChatThread = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const existing = (await ctx.db
-      .query("communityChatThreads" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .first()) as CommunityChatThreadLike | null;
+    const existing = await getCanonicalCommunityChatThread(ctx, args.communityId);
     if (existing) {
-      if (existing.updatedAt < nowMs - 5_000) {
-        await ctx.db.patch(existing._id as any, { updatedAt: nowMs });
-      }
       return { thread_id: String(existing._id) };
     }
 
@@ -351,6 +472,29 @@ export const ensureCommunityChatThread = mutation({
       updatedAt: nowMs,
     });
     return { thread_id: String(threadId) };
+  },
+});
+
+export const generateCommunityChatAttachmentUploadUrl = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return {
+      uploadUrl: await ctx.storage.generateUploadUrl(),
+    };
   },
 });
 
@@ -422,7 +566,8 @@ export const createThreadUserMessage = mutation({
 
     const seq = Math.max(0, Math.floor(thread.lastSeq ?? 0) + 1);
     const text = String(args.text ?? "").trim();
-    if (!text) throw new Error("message_text_required");
+    const attachments = normalizeStoredChatAttachments(args.attachments);
+    if (!text && attachments.length === 0) throw new Error("message_payload_required");
 
     let replyToMessageId: any | undefined = undefined;
     const replyToRaw = String(args.replyToId ?? "").trim();
@@ -433,10 +578,7 @@ export const createThreadUserMessage = mutation({
       }
     }
 
-    const contentJson =
-      Array.isArray(args.attachments) && args.attachments.length > 0
-        ? { text, attachments: args.attachments }
-        : { text };
+    const contentJson = attachments.length > 0 ? { text, attachments } : { text };
 
     const messageId = await ctx.db.insert("communityChatMessages" as any, {
       threadId: thread._id,
@@ -486,8 +628,16 @@ export const patchOwnMessageContent = mutation({
     if (!message.senderUserId || String(message.senderUserId) !== String(args.userId)) {
       throw new Error("message_forbidden");
     }
+    const nextText = extractMessageText(args.contentJson);
+    const nextAttachments =
+      args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)
+        ? normalizeStoredChatAttachments((args.contentJson as Record<string, unknown>).attachments)
+        : [];
+    if (!nextText && nextAttachments.length === 0) {
+      throw new Error("message_payload_required");
+    }
     await ctx.db.patch(message._id as any, {
-      contentJson: args.contentJson,
+      contentJson: nextAttachments.length > 0 ? { text: nextText, attachments: nextAttachments } : { text: nextText },
       updatedAt: nowMs,
     });
     return { ok: true };
@@ -530,14 +680,7 @@ export const deleteOwnMessage = mutation({
       await ctx.db.delete(reaction._id as any);
     }
     await ctx.db.delete(message._id as any);
-
-    const remaining = (await ctx.db
-      .query("communityChatMessages" as any)
-      .withIndex("by_thread", (q: any) => q.eq("threadId", thread._id))
-      .collect()) as CommunityChatMessageLike[];
-    const lastSeq = remaining.reduce((max, row) => Math.max(max, Math.floor(row.seq ?? 0)), 0);
     await ctx.db.patch(thread._id as any, {
-      lastSeq,
       updatedAt: nowMs,
     });
 

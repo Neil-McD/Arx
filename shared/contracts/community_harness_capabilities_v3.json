@@ -2,11 +2,11 @@
   "version": 3,
   "id": "community_harness_capabilities_v3",
   "lane": "chat",
-  "intent": "Define the explicit community harness capability surface for read-first retrieval and governed community-memory curation.",
+  "intent": "Define the explicit community harness capability surface for compiled community read context and live feed publishing.",
   "runtime_exposed_tools": {
     "web": [
       "community_search",
-      "community_memory_candidate_propose"
+      "community_write"
     ]
   },
   "surface_contract": {
@@ -70,7 +70,7 @@
               "enum": [
                 "chat",
                 "resource",
-                "memory"
+                "ai_feed"
               ]
             },
             "minItems": 1,
@@ -86,8 +86,7 @@
       "verification": {
         "type": "composite_rpc_response",
         "rpcs": [
-          "search_compiled_community_context",
-          "search_community_memory_items"
+          "search_compiled_community_context"
         ],
         "success_condition": "http_2xx_and_json_payload",
         "rpc": "search_compiled_community_context"
@@ -110,15 +109,15 @@
       }
     },
     {
-      "name": "community_memory_candidate_propose",
-      "category": "action",
+      "name": "community_write",
+      "category": "publication",
       "status": "active",
       "surfaces": [
         "web"
       ],
       "side_effect_class": "write",
       "approval_policy": {
-        "web": "required"
+        "web": "never"
       },
       "entitlement": {
         "auth_required": true,
@@ -127,105 +126,72 @@
       "input_schema": {
         "type": "object",
         "required": [
-          "memory_text",
+          "body",
           "evidence"
         ],
         "properties": {
+          "post_type": {
+            "type": "string",
+            "enum": [
+              "observation",
+              "recommendation",
+              "action"
+            ]
+          },
           "title": {
             "type": "string",
-            "maxLength": 160
+            "maxLength": 180
           },
-          "memory_text": {
+          "body": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 32000
+            "maxLength": 12000
+          },
+          "why_now": {
+            "type": "string",
+            "maxLength": 280
           },
           "evidence": {
-            "type": "object",
-            "required": [
-              "items"
-            ],
-            "properties": {
-              "v": {
-                "type": "integer"
-              },
-              "contract_id": {
-                "type": "string",
-                "maxLength": 128
-              },
-              "items": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 32,
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "source_type",
-                    "source_id"
-                  ],
-                  "properties": {
-                    "source_type": {
-                      "type": "string",
-                      "enum": [
-                        "chat",
-                        "resource",
-                        "memory"
-                      ]
-                    },
-                    "source_id": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 256
-                    },
-                    "title": {
-                      "type": "string",
-                      "maxLength": 240
-                    },
-                    "snippet": {
-                      "type": "string",
-                      "maxLength": 2400
-                    },
-                    "url": {
-                      "type": "string",
-                      "maxLength": 2048
-                    },
-                    "score": {
-                      "type": "number"
-                    },
-                    "rank": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 128
-                    }
-                  }
-                }
-              }
-            }
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 180
+            },
+            "minItems": 1,
+            "maxItems": 4
           },
-          "request_key": {
+          "publish_confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "novelty_key": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 256
           }
         }
       },
       "verification": {
-        "type": "post_write_readback",
-        "rpc": "community_memory_candidate_propose",
-        "success_condition": "candidate_created_or_deduped"
+        "type": "composite_rpc_response",
+        "rpcs": [
+          "write_community_live_feed_item"
+        ],
+        "success_condition": "http_2xx_and_json_payload",
+        "rpc": "write_community_live_feed_item"
       },
       "idempotency": {
-        "strategy": "request_key",
+        "strategy": "write_with_optional_semantic_dedupe",
         "key_fields": [
-          "memory_text",
-          "request_key"
+          "novelty_key",
+          "post_type",
+          "title",
+          "body"
         ]
       },
       "slo": {
-        "timeout_ms": 10000,
-        "max_attempts": 2,
+        "timeout_ms": 9000,
+        "max_attempts": 1,
         "retry_backoff_ms": [
-          200,
-          500
+          0
         ]
       }
     }
@@ -235,6 +201,6 @@
     "requires_idempotency_keys_for_writes": true,
     "requires_verification_for_side_effects": true,
     "requires_event_audit_trail": true,
-    "requires_memory_router": true
+    "requires_memory_router": false
   }
 }

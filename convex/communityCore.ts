@@ -14,17 +14,25 @@ export type CommunityLike = {
   bannerFocusY?: number;
   bannerZoom?: number;
   visibility: "published" | "unlisted";
-  freeJoinRequiresApproval: boolean;
-  joinMode: "join_free" | "request_access" | "checkout";
+  entryPolicy?: CommunityEntryPolicy;
   createdAt: number;
   updatedAt: number;
 };
+
+export type CommunityEntryPolicy = "open" | "approval" | "paid_unlock" | "paid_subscription";
+export type CommunityAccessRelation = "visitor" | "pending" | "member" | "admin" | "owner";
+export type CommunityPrimaryCta = "open_community" | "join" | "request_access" | "checkout";
 
 export type CommunityMembershipLike = {
   _id: any;
   communityId: any;
   userId: any;
   role: string;
+  accessSource?: string;
+  pricePointId?: any;
+  active?: boolean;
+  revokedAt?: number;
+  revokedReason?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -41,7 +49,7 @@ export type CommunityChatMessageLike = {
   _id: any;
   threadId: any;
   seq: number;
-  role: "user" | "assistant" | "system";
+  role: "user";
   contentJson: unknown;
   senderUserId?: any;
   replyToMessageId?: any;
@@ -79,18 +87,45 @@ export type CommunityJoinRequestLike = {
   updatedAt: number;
 };
 
-export type CommunityPlanLike = {
+export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
+  kind: "unlock" | "subscription";
   billingPeriod: string;
   name: string;
   description?: string;
   amountBaseUnits: number;
   currency: string;
   currencyDecimals: number;
-  active: boolean;
+  isCurrent: boolean;
+  archivedAt?: number;
+  providerPriceId?: string;
   createdAt: number;
   updatedAt: number;
+};
+
+export type CommunitySubscriptionLike = {
+  _id: any;
+  communityId: any;
+  userId: any;
+  membershipId: any;
+  pricePointId: any;
+  status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  providerSubscriptionId?: string;
+  providerCustomerId?: string;
+  currentPeriodStartAt?: number;
+  currentPeriodEndAt?: number;
+  cancelAtPeriodEnd: boolean;
+  endedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CommunityMembershipEntitlementState = {
+  isEntitled: boolean;
+  accessSource: string | null;
+  subscriptionStatus: CommunitySubscriptionLike["status"] | null;
+  subscriptionCurrentPeriodEndAt: number | null;
 };
 
 export type CommunityInviteLike = {
@@ -143,24 +178,6 @@ export type CommunityResourceLike = {
   url?: string;
   fileKey?: string;
   pinned: boolean;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type CommunityMemoryCandidateLike = {
-  _id: any;
-  communityId: any;
-  proposerUserId: any;
-  title?: string;
-  memoryText: string;
-  evidenceJson: unknown;
-  routerState: string;
-  signalScore: number;
-  routerReason?: string;
-  promotedMemoryId?: string;
-  reviewedBy?: any;
-  reviewedAt?: number;
-  requestKey?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -289,6 +306,49 @@ export function normalizeRole(raw: unknown): string {
     .toLowerCase();
 }
 
+export function normalizeMembershipAccessSource(
+  raw: unknown,
+): "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | "" {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    value === "free_grant" ||
+    value === "manual_grant" ||
+    value === "invite_bypass" ||
+    value === "paid_unlock" ||
+    value === "paid_subscription"
+  ) {
+    return value;
+  }
+  return "";
+}
+
+export function normalizeCommunitySubscriptionStatus(
+  raw: unknown,
+): CommunitySubscriptionLike["status"] | null {
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    value === "active" ||
+    value === "past_due" ||
+    value === "cancel_at_period_end" ||
+    value === "canceled" ||
+    value === "ended"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+export function normalizeCommunityRoleForOutput(raw: unknown): "admin" | "member" | "" {
+  const role = normalizeRole(raw);
+  if (role === "admin" || role === "member") return role;
+  if (role === "mod") return "member";
+  return "";
+}
+
 export function normalizeSlug(raw: unknown): string {
   const slug = String(raw ?? "")
     .trim()
@@ -311,15 +371,23 @@ export function normalizeVisibility(raw: unknown): "published" | "unlisted" {
   return visibility === "unlisted" ? "unlisted" : "published";
 }
 
-export function normalizeJoinMode(
-  raw: unknown,
-  fallback: "join_free" | "request_access" | "checkout",
-): "join_free" | "request_access" | "checkout" {
-  const joinMode = String(raw ?? "")
+export function normalizeEntryPolicy(raw: unknown, fallback: CommunityEntryPolicy): CommunityEntryPolicy {
+  const entryPolicy = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (joinMode === "checkout" || joinMode === "request_access" || joinMode === "join_free") return joinMode;
+  if (
+    entryPolicy === "open" ||
+    entryPolicy === "approval" ||
+    entryPolicy === "paid_unlock" ||
+    entryPolicy === "paid_subscription"
+  ) {
+    return entryPolicy;
+  }
   return fallback;
+}
+
+export function resolveCommunityEntryPolicy(community: Pick<CommunityLike, "entryPolicy">): CommunityEntryPolicy {
+  return normalizeEntryPolicy(community.entryPolicy, "approval");
 }
 
 export function normalizeOptionalText(raw: unknown, maxLen = 4000): string | undefined {
@@ -354,24 +422,39 @@ export function normalizeOptionalFileKey(raw: unknown): string | undefined {
   return value.slice(0, 4096);
 }
 
-function canManageCommunityInvites(args: {
-  community: CommunityLike;
-  membership: CommunityMembershipLike | null;
-  userId: any;
-}): boolean {
-  if (args.community.ownerId === args.userId) return true;
-  const role = normalizeRole(args.membership?.role);
-  return role === "owner" || role === "admin";
-}
-
-export function normalizeRoleAssignment(raw: unknown): "owner" | "admin" | "mod" | "member" {
+export function normalizeRoleAssignment(raw: unknown): "admin" | "member" {
   const role = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (role === "owner" || role === "admin" || role === "mod" || role === "member") {
+  if (role === "admin" || role === "member") {
     return role;
   }
   throw new Error("member_role_invalid");
+}
+
+export function communityMembershipRowIsActive(membership: CommunityMembershipLike | null | undefined): boolean {
+  if (!membership) return false;
+  if (membership.active === false) return false;
+  if (typeof membership.revokedAt === "number" && membership.revokedAt > 0) return false;
+  return true;
+}
+
+export function communitySubscriptionStatusGrantsAccess(
+  status: CommunitySubscriptionLike["status"] | null,
+): boolean {
+  return status === "active" || status === "past_due" || status === "cancel_at_period_end";
+}
+
+function communityAccessSourceIsDurable(
+  source: ReturnType<typeof normalizeMembershipAccessSource>,
+): boolean {
+  return (
+    source === "" ||
+    source === "free_grant" ||
+    source === "manual_grant" ||
+    source === "invite_bypass" ||
+    source === "paid_unlock"
+  );
 }
 
 export function isActiveEntitlementWindow(nowMs: number, startsAt: unknown, endsAt: unknown): boolean {
@@ -382,7 +465,7 @@ export function isActiveEntitlementWindow(nowMs: number, startsAt: unknown, ends
   return true;
 }
 
-export function tierHasProAccess(rawTier: unknown): boolean {
+export function tierHasBuilderAccess(rawTier: unknown): boolean {
   const tier = String(rawTier ?? "")
     .trim()
     .toLowerCase();
@@ -424,18 +507,11 @@ export async function listCommunityMembershipRowsForManager(args: {
     .query("communityMemberships")
     .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
     .collect()) as CommunityMembershipLike[];
-  if (!rows.some((row) => String(row.userId) === String(community.ownerId))) {
-    rows.push({
-      _id: (`synthetic-owner:${String(community._id)}` as any),
-      communityId: community._id,
-      userId: community.ownerId,
-      role: "owner",
-      createdAt: community.createdAt,
-      updatedAt: community.updatedAt,
-    } as CommunityMembershipLike);
-  }
-  rows.sort((a, b) => a.createdAt - b.createdAt);
-  return { community, rows };
+  const activeRows = rows.filter(
+    (row) => communityMembershipRowIsActive(row) && String(row.userId) !== String(community.ownerId),
+  );
+  activeRows.sort((a, b) => a.createdAt - b.createdAt);
+  return { community, rows: activeRows };
 }
 
 export async function mapCommunityInviteRow(
@@ -455,9 +531,9 @@ export async function mapCommunityInviteRow(
   };
 }
 
-export function mapCommunityPricingRow(row: CommunityPlanLike) {
+export function mapCommunityPricingRow(row: CommunityPricePointLike) {
   return {
-    plan_id: String(row._id),
+    price_point_id: String(row._id),
     community_id: String(row.communityId),
     billing_period: String(row.billingPeriod ?? "").trim() || "monthly",
     name: row.name,
@@ -465,7 +541,7 @@ export function mapCommunityPricingRow(row: CommunityPlanLike) {
     amount_base_units: Math.max(0, Math.floor(row.amountBaseUnits)),
     currency: row.currency,
     currency_decimals: Math.max(0, Math.floor(row.currencyDecimals)),
-    active: Boolean(row.active),
+    active: Boolean(row.isCurrent) && !row.archivedAt,
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -506,32 +582,6 @@ export async function mapCommunityResourceRow(
   };
 }
 
-export async function mapCommunityMemoryCandidateRow(
-  ctx: any,
-  row: CommunityMemoryCandidateLike,
-  userIdCache?: Map<string, string | null>,
-) {
-  return {
-    id: String(row._id),
-    community_id: String(row.communityId),
-    proposer_user_id:
-      (await resolvePublicUserId(ctx, row.proposerUserId, userIdCache)) ?? String(row.proposerUserId),
-    title: row.title ?? null,
-    memory_text: row.memoryText,
-    evidence_json: row.evidenceJson ?? null,
-    router_state: String(row.routerState ?? "").trim().toLowerCase() || "proposed",
-    signal_score: Number.isFinite(Number(row.signalScore)) ? Number(row.signalScore) : 0,
-    router_reason: row.routerReason ?? null,
-    promoted_memory_id: row.promotedMemoryId ?? null,
-    reviewed_by: row.reviewedBy
-      ? (await resolvePublicUserId(ctx, row.reviewedBy, userIdCache)) ?? String(row.reviewedBy)
-      : null,
-    reviewed_at: typeof row.reviewedAt === "number" ? toIsoString(row.reviewedAt) : null,
-    created_at: toIsoString(row.createdAt),
-    updated_at: toIsoString(row.updatedAt),
-  };
-}
-
 export async function getCommunityAndMembership(args: {
   ctx: any;
   communityId: any;
@@ -547,6 +597,74 @@ export async function getCommunityAndMembership(args: {
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
     .first()) as CommunityMembershipLike | null;
   return { community, membership };
+}
+
+async function resolveMostRelevantCommunitySubscription(args: {
+  ctx: any;
+  membershipId: any;
+}): Promise<CommunitySubscriptionLike | null> {
+  const rows = (await args.ctx.db
+    .query("communitySubscriptions" as any)
+    .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))
+    .collect()) as CommunitySubscriptionLike[];
+  return (
+    rows
+      .slice()
+      .sort((a, b) => {
+        const aStatus = normalizeCommunitySubscriptionStatus(a.status);
+        const bStatus = normalizeCommunitySubscriptionStatus(b.status);
+        if (communitySubscriptionStatusGrantsAccess(aStatus) !== communitySubscriptionStatusGrantsAccess(bStatus)) {
+          return communitySubscriptionStatusGrantsAccess(aStatus) ? -1 : 1;
+        }
+        return b.updatedAt - a.updatedAt;
+      })[0] ?? null
+  );
+}
+
+export async function resolveCommunityMembershipEntitlementState(args: {
+  ctx: any;
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null;
+  userId: any;
+}): Promise<CommunityMembershipEntitlementState> {
+  if (args.community.ownerId === args.userId) {
+    return {
+      isEntitled: true,
+      accessSource: "manual_grant",
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
+  if (!communityMembershipRowIsActive(args.membership)) {
+    return {
+      isEntitled: false,
+      accessSource: normalizeMembershipAccessSource(args.membership?.accessSource) || null,
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
+  const entryPolicy = resolveCommunityEntryPolicy(args.community);
+  const accessSource = normalizeMembershipAccessSource(args.membership?.accessSource);
+  if (entryPolicy !== "paid_subscription" || communityAccessSourceIsDurable(accessSource)) {
+    return {
+      isEntitled: true,
+      accessSource: accessSource || null,
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
+  const subscription = await resolveMostRelevantCommunitySubscription({
+    ctx: args.ctx,
+    membershipId: args.membership!._id,
+  });
+  const subscriptionStatus = normalizeCommunitySubscriptionStatus(subscription?.status);
+  return {
+    isEntitled: communitySubscriptionStatusGrantsAccess(subscriptionStatus),
+    accessSource: accessSource || null,
+    subscriptionStatus,
+    subscriptionCurrentPeriodEndAt:
+      typeof subscription?.currentPeriodEndAt === "number" ? subscription.currentPeriodEndAt : null,
+  };
 }
 
 export function mapJoinRequestRow(args: {
@@ -568,7 +686,14 @@ export async function requireCommunityInviteManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
-  if (!canManageCommunityInvites({ community, membership, userId: args.userId })) {
+  const entitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  const role = normalizeCommunityRoleForOutput(membership?.role);
+  if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
     throw new Error("community_forbidden");
   }
   return { community };
@@ -581,51 +706,100 @@ export function inviteIsExpired(invite: CommunityInviteLike, nowMs: number): boo
   return false;
 }
 
-function hasCommunityEntitlement(args: {
-  community: CommunityLike;
-  membership: CommunityMembershipLike | null;
-  userId: any;
-}): boolean {
-  if (args.community.ownerId === args.userId) return true;
-  return Boolean(args.membership);
-}
-
 export async function requireCommunityChatAccess(args: {
   ctx: any;
   communityId: any;
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
-  if (!hasCommunityEntitlement({ community, membership, userId: args.userId })) {
+  const entitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  if (!entitlement.isEntitled) {
     throw new Error("community_entitlement_required");
   }
   return { community };
 }
 
-export async function mapCommunityAccessRow(args: {
+export async function resolveCommunityAccessBundle(args: {
   ctx: any;
   community: CommunityLike;
   membership: CommunityMembershipLike | null;
   userId: any;
 }) {
-  const role = args.membership?.role ? String(args.membership.role).trim().toLowerCase() : "";
-  const isOwner = args.community.ownerId === args.userId || role === "owner";
-  const isAdmin = role === "admin";
-  const isMember = isOwner || Boolean(args.membership);
-  const canView = isMember || args.community.visibility === "published";
+  const role = normalizeCommunityRoleForOutput(args.membership?.role);
+  const isOwner = args.community.ownerId === args.userId;
+  const entryPolicy = resolveCommunityEntryPolicy(args.community);
+  const entitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community: args.community,
+    membership: args.membership,
+    userId: args.userId,
+  });
+  const isEntitled = entitlement.isEntitled;
+  const isAdmin = !isOwner && isEntitled && role === "admin";
+  let joinRequestStatus: string | null = null;
+  if (!isEntitled) {
+    const joinRequest = (await args.ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.community._id).eq("userId", args.userId),
+      )
+      .first()) as CommunityJoinRequestLike | null;
+    joinRequestStatus = joinRequest ? String(joinRequest.status ?? "").trim().toLowerCase() || "pending" : null;
+  }
+  const relation: CommunityAccessRelation = isOwner
+    ? "owner"
+    : isAdmin
+      ? "admin"
+      : isEntitled
+        ? "member"
+        : joinRequestStatus === "pending"
+          ? "pending"
+          : "visitor";
+  const canViewLanding = true;
+  const canEnterCommunity = isEntitled;
+  const canReadChat = isEntitled;
+  const canPostChat = isEntitled;
+  const canView = isEntitled || args.community.visibility === "published";
   const canManageMembers = isOwner || isAdmin;
   const canManageResources = isOwner || isAdmin;
   const canInvite = isOwner || isAdmin;
-  const canCreateResource = isMember;
-  const canPostMessage = isMember;
+  const canCreateResource = isEntitled;
+  const canPostMessage = isEntitled;
+  const primaryCta: CommunityPrimaryCta = isEntitled
+    ? "open_community"
+    : entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription"
+      ? "checkout"
+      : entryPolicy === "approval"
+        ? "request_access"
+        : "join";
+
   return {
     community_id: String(args.community._id),
     user_id: (await resolvePublicUserId(args.ctx, args.userId)) ?? String(args.userId),
+    relation,
+    entry_policy: entryPolicy,
+    visibility: args.community.visibility,
+    join_request_status: joinRequestStatus,
+    primary_cta: primaryCta,
     is_owner: isOwner,
-    is_entitled: isMember,
+    is_entitled: isEntitled,
+    access_source: entitlement.accessSource,
+    subscription_status: entitlement.subscriptionStatus,
     entitlement_role: isOwner ? "owner" : role || null,
-    entitlement_ends_at: null,
+    entitlement_ends_at:
+      typeof entitlement.subscriptionCurrentPeriodEndAt === "number"
+        ? toIsoString(entitlement.subscriptionCurrentPeriodEndAt)
+        : null,
     effective_role: isOwner ? "owner" : role || null,
+    can_view_landing: canViewLanding,
+    can_enter_community: canEnterCommunity,
+    can_read_chat: canReadChat,
+    can_post_chat: canPostChat,
     can_view: canView,
     can_post_message: canPostMessage,
     can_create_resource: canCreateResource,
@@ -635,14 +809,13 @@ export async function mapCommunityAccessRow(args: {
   };
 }
 
-function canManageCommunity(args: {
+export async function mapCommunityAccessRow(args: {
+  ctx: any;
   community: CommunityLike;
   membership: CommunityMembershipLike | null;
   userId: any;
-}): boolean {
-  if (args.community.ownerId === args.userId) return true;
-  const role = normalizeRole(args.membership?.role);
-  return role === "owner" || role === "admin";
+}) {
+  return await resolveCommunityAccessBundle(args);
 }
 
 export async function requireCommunityManager(args: {
@@ -651,21 +824,30 @@ export async function requireCommunityManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
-  if (!canManageCommunity({ community, membership, userId: args.userId })) {
+  const entitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  const role = normalizeCommunityRoleForOutput(membership?.role);
+  if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
     throw new Error("community_forbidden");
   }
   return { community };
 }
 
-export function canCreateCommunityResource(args: {
-  community: CommunityLike;
-  membership: CommunityMembershipLike | null;
-  userId: any;
-}): boolean {
-  return hasCommunityEntitlement(args);
-}
-
-export function mapActivePlanSummaries(plans: CommunityPlanLike[]): PublicPlanSummaryLike[] {
+export function mapActivePlanSummaries<
+  TPlan extends {
+    name: string;
+    description?: string;
+    amountBaseUnits: number;
+    currency: string;
+    currencyDecimals: number;
+    billingPeriod: string;
+    updatedAt: number;
+  },
+>(plans: TPlan[]): PublicPlanSummaryLike[] {
   return plans
     .slice()
     .sort((a, b) => a.updatedAt - b.updatedAt)

@@ -5,7 +5,7 @@ import {
 
 export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
-export type BuilderTier = "free" | "builder" | "pro" | "unknown";
+export type BuilderTier = "free" | "builder" | "unknown";
 export type ThreadMode = "single_guest" | "multi_cloud";
 
 export type UserAccessPolicy = {
@@ -54,15 +54,13 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
 
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
-  const isPaid = effectiveTier === "builder" || effectiveTier === "architect";
+  const isPaid = effectiveTier === "builder";
 
   const tier: BuilderTier = isAnonymous
     ? "unknown"
     : effectiveTier === "builder"
       ? "builder"
-      : effectiveTier === "architect"
-        ? "pro"
-        : "free";
+      : "free";
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
 

@@ -1,5 +1,5 @@
-const CANONICAL_TIER_SET = new Set(["free", "builder", "architect"]);
-const PAID_TIER_SET = new Set(["builder", "architect"]);
+const CANONICAL_TIER_SET = new Set(["free", "builder"]);
+const PAID_TIER_SET = new Set(["builder"]);
 const VALID_AUTH_STATE = new Set(["anonymous", "authenticated"]);
 const VALID_SURFACE = new Set(["web", "mobile"]);
 const VALID_EXECUTION_MODE = new Set(["cloud"]);
@@ -55,7 +55,7 @@ function normalizeTurnClass(rawTurnClass) {
 
 function normalizeCanonicalTier(rawTier) {
   const normalized = toLowerTrimmed(rawTier);
-  if (normalized === "pro") return "architect";
+  if (normalized === "pro" || normalized === "architect") return "builder";
   if (CANONICAL_TIER_SET.has(normalized)) return normalized;
   return "free";
 }

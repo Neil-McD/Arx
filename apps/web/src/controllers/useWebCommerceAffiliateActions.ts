@@ -11,7 +11,7 @@ import type { CloudSession } from "../cloudAuth";
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect" | "pro";
+  builder_tier: "free" | "builder";
   max_communities: number;
   platform_fee_bps: number;
   has_payouts: boolean;

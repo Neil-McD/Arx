@@ -45,7 +45,7 @@ type CommunitySearchPayloadChatRow = {
 };
 
 type CommunitySearchPayloadResourceRow = {
-  source_type: "resource" | "memory";
+  source_type: "resource";
   source_id: string;
   internal_source_id?: string | null;
   title: string;
@@ -55,25 +55,60 @@ type CommunitySearchPayloadResourceRow = {
   score?: number | string | null;
 };
 
-type CommunitySearchPayloadMemoryRow = {
-  source_type: "memory";
+type CommunitySearchPayloadAiFeedRow = {
+  source_type: "ai_feed";
   source_id: string;
   internal_source_id?: string | null;
   title: string;
   created_at: string;
-  updated_at: string;
   snippet: string;
+  url: null;
   score: number | string | null;
 };
 
 type CommunityResearchSuccessPayload = {
   ok: true;
+  compiled?: {
+    summary?: string | null;
+    repeated_questions?: Array<{
+      label?: string | null;
+      count_hint?: number | string | null;
+      supporting_chat_message_ids?: string[];
+    }>;
+    relevant_resources?: Array<{
+      resource_id?: string | null;
+      title?: string | null;
+      why_relevant?: string | null;
+      url?: string | null;
+      snippet?: string | null;
+      score?: number | string | null;
+    }>;
+    ranked_insights?: Array<{
+      post_id?: string | null;
+      title?: string | null;
+      body?: string | null;
+      effective_score?: number | string | null;
+      created_at?: string | null;
+    }>;
+    recent_chat_signals?: Array<{
+      message_id?: string | null;
+      sender_label?: string | null;
+      snippet?: string | null;
+      score?: number | string | null;
+      created_at?: string | null;
+    }>;
+    diagnostics?: {
+      version?: number | string | null;
+      fallback_used?: boolean | null;
+      compiler_latency_ms?: number | string | null;
+    } | null;
+  } | null;
   diagnostics?: Record<string, unknown> | null;
   meta_recent_fallback_used?: boolean;
   rows?: {
     chat?: CommunitySearchPayloadChatRow[];
     resources?: CommunitySearchPayloadResourceRow[];
-    memory?: CommunitySearchPayloadMemoryRow[];
+    ai_feed?: CommunitySearchPayloadAiFeedRow[];
   };
 };
 
@@ -179,18 +214,15 @@ function normalizeResourceRows(value: unknown): CommunitySearchPayloadResourceRo
   for (const entry of value) {
     const row = asRecord(entry);
     if (!row) continue;
-    const sourceTypeRaw = toTrimmedString(row.source_type).toLowerCase();
-    const sourceType: "resource" | "memory" = sourceTypeRaw === "memory" ? "memory" : "resource";
     const sourceId = toTrimmedString(row.source_id);
     if (!sourceId) continue;
     const snippet = toTrimmedString(row.snippet);
     if (!snippet) continue;
     rows.push({
-      source_type: sourceType,
+      source_type: "resource",
       source_id: sourceId,
       internal_source_id: toOptionalString(row.internal_source_id),
-      title:
-        toTrimmedString(row.title) || (sourceType === "memory" ? "Community memory" : "Community resource"),
+      title: toTrimmedString(row.title) || "Community resource",
       created_at: toTrimmedString(row.created_at),
       snippet,
       url: toOptionalString(row.url),
@@ -200,9 +232,9 @@ function normalizeResourceRows(value: unknown): CommunitySearchPayloadResourceRo
   return rows.slice(0, LIMITS.resourceLimit);
 }
 
-function normalizeMemoryRows(value: unknown): CommunitySearchPayloadMemoryRow[] {
+function normalizeAiFeedRows(value: unknown): CommunitySearchPayloadAiFeedRow[] {
   if (!Array.isArray(value)) return [];
-  const rows: CommunitySearchPayloadMemoryRow[] = [];
+  const rows: CommunitySearchPayloadAiFeedRow[] = [];
   for (const entry of value) {
     const row = asRecord(entry);
     if (!row) continue;
@@ -211,13 +243,13 @@ function normalizeMemoryRows(value: unknown): CommunitySearchPayloadMemoryRow[] 
     const snippet = toTrimmedString(row.snippet);
     if (!snippet) continue;
     rows.push({
-      source_type: "memory",
+      source_type: "ai_feed",
       source_id: sourceId,
       internal_source_id: toOptionalString(row.internal_source_id),
-      title: toTrimmedString(row.title) || "Community memory",
+      title: toTrimmedString(row.title) || "AI feed item",
       created_at: toTrimmedString(row.created_at),
-      updated_at: toTrimmedString(row.updated_at),
       snippet,
+      url: null,
       score: parseNumberOrNull(row.score),
     });
   }
@@ -228,6 +260,7 @@ function buildCommunityContextDiagnostics(params: {
   rawDiagnostics: unknown;
   fallbackUsed: boolean;
   chatItemsUsed: number;
+  aiFeedItemsUsed: number;
   resourceItemsUsed: number;
   failureClassOverride?: string | null;
 }): Record<string, unknown> {
@@ -241,11 +274,13 @@ function buildCommunityContextDiagnostics(params: {
       compileVersion: parseNumberOrNull(base.compile_version),
       fallbackUsed: parseBool(base.fallback_used) || params.fallbackUsed,
       chatFetchOk: parseNullableBool(base.chat_fetch_ok),
+      aiFeedFetchOk: parseNullableBool(base.ai_feed_fetch_ok),
       resourceFetchOk: parseNullableBool(base.resource_fetch_ok),
       retrievalLatencyMs: parseNumberOrNull(base.retrieval_latency_ms),
       ...(failureClass ? { failureClass } : null),
     },
     params.chatItemsUsed,
+    params.aiFeedItemsUsed,
     params.resourceItemsUsed,
   );
 }
@@ -258,8 +293,10 @@ function buildNotEntitledDiagnostics(): Record<string, unknown> {
     compile_version: null,
     fallback_used: false,
     chat_fetch_ok: null,
+    ai_feed_fetch_ok: null,
     resource_fetch_ok: null,
     chat_items_used: 0,
+    ai_feed_items_used: 0,
     resource_items_used: 0,
     retrieval_latency_ms: null,
     failure_class: "not_entitled",
@@ -278,8 +315,10 @@ function buildFailureDiagnostics(reasonCode: string | null): Record<string, unkn
     compile_version: null,
     fallback_used: false,
     chat_fetch_ok: null,
+    ai_feed_fetch_ok: null,
     resource_fetch_ok: null,
     chat_items_used: 0,
+    ai_feed_items_used: 0,
     resource_items_used: 0,
     retrieval_latency_ms: null,
     failure_class: failureClass,
@@ -304,7 +343,7 @@ function normalizeCommunityResearchFailureClass(params: {
 function buildCommunityEvidenceUsedV1(params: {
   chatRows: CommunitySearchPayloadChatRow[];
   resourceRows: CommunitySearchPayloadResourceRow[];
-  memoryRows: CommunitySearchPayloadMemoryRow[];
+  aiFeedRows: CommunitySearchPayloadAiFeedRow[];
 }): CommunityEvidenceUsedV1 | null {
   const items: CommunityEvidenceUsedV1["items"] = [];
   const seen = new Set<string>();
@@ -336,47 +375,46 @@ function buildCommunityEvidenceUsedV1(params: {
     });
   }
 
-  for (const row of params.resourceRows.slice(0, LIMITS.resourceLimit)) {
-    const sourceType = row.source_type === "memory" ? "memory" : "resource";
+  for (const row of params.aiFeedRows.slice(0, LIMITS.resourceLimit)) {
+    const sourceType = "ai_feed";
     const sourceId = toTrimmedString(row.source_id);
     const internalSourceId = toTrimmedString(row.internal_source_id) || sourceId;
     if (!sourceId) continue;
     const title =
       truncateUtf8ForPrompt(
-        toTrimmedString(row.title) || (sourceType === "memory" ? "Community memory" : "Community resource"),
+        toTrimmedString(row.title) || "AI feed item",
         LIMITS.resourceTitleMaxChars,
-      ).trim() || (sourceType === "memory" ? "Community memory" : "Community resource");
+      ).trim() || "AI feed item";
     const snippet =
       truncateUtf8ForPrompt(toTrimmedString(row.snippet) || title, LIMITS.resourceSnippetMaxChars).trim() || title;
-    const url = toOptionalString(truncateUtf8ForPrompt(toTrimmedString(row.url), LIMITS.resourceUrlMaxChars));
     addItem({
       source_type: sourceType,
       source_id: sourceId,
       internal_source_id: internalSourceId,
       title,
       snippet,
-      url,
+      url: null,
       score: parseNumberOrNull(row.score),
       rank: 0,
     });
   }
 
-  for (const row of params.memoryRows.slice(0, LIMITS.resourceLimit)) {
+  for (const row of params.resourceRows.slice(0, LIMITS.resourceLimit)) {
     const sourceId = toTrimmedString(row.source_id);
     const internalSourceId = toTrimmedString(row.internal_source_id) || sourceId;
     if (!sourceId) continue;
     const title =
-      truncateUtf8ForPrompt(toTrimmedString(row.title) || "Community memory", LIMITS.resourceTitleMaxChars).trim() ||
-      "Community memory";
+      truncateUtf8ForPrompt(toTrimmedString(row.title) || "Community resource", LIMITS.resourceTitleMaxChars).trim() ||
+      "Community resource";
     const snippet =
       truncateUtf8ForPrompt(toTrimmedString(row.snippet) || title, LIMITS.resourceSnippetMaxChars).trim() || title;
     addItem({
-      source_type: "memory",
+      source_type: "resource",
       source_id: sourceId,
       internal_source_id: internalSourceId,
       title,
       snippet,
-      url: null,
+      url: toOptionalString(truncateUtf8ForPrompt(toTrimmedString(row.url), LIMITS.resourceUrlMaxChars)),
       score: parseNumberOrNull(row.score),
       rank: 0,
     });
@@ -466,7 +504,82 @@ function classifyConvexResearchError(error: unknown): {
   };
 }
 
-async function callCommunityResearch<SessionT>(params: {
+function normalizeCompiledChatRows(
+  value: unknown,
+): CommunitySearchPayloadChatRow[] {
+  if (!Array.isArray(value)) return [];
+  const rows: CommunitySearchPayloadChatRow[] = [];
+  for (const entry of value) {
+    const row = asRecord(entry);
+    if (!row) continue;
+    const sourceId = toTrimmedString(row.message_id);
+    const snippet = toTrimmedString(row.snippet);
+    if (!sourceId || !snippet) continue;
+    rows.push({
+      source_type: "chat",
+      source_id: sourceId,
+      internal_source_id: sourceId,
+      sender_display: toTrimmedString(row.sender_label) || "member",
+      created_at: toTrimmedString(row.created_at),
+      snippet,
+      score: parseNumberOrNull(row.score),
+    });
+  }
+  return rows.slice(0, LIMITS.chatLimit);
+}
+
+function normalizeCompiledResourceRows(
+  value: unknown,
+): CommunitySearchPayloadResourceRow[] {
+  if (!Array.isArray(value)) return [];
+  const rows: CommunitySearchPayloadResourceRow[] = [];
+  for (const entry of value) {
+    const row = asRecord(entry);
+    if (!row) continue;
+    const sourceId = toTrimmedString(row.resource_id);
+    const title = toTrimmedString(row.title) || "Community resource";
+    const snippet = toTrimmedString(row.snippet);
+    if (!sourceId || !snippet) continue;
+    rows.push({
+      source_type: "resource",
+      source_id: sourceId,
+      internal_source_id: sourceId,
+      title,
+      created_at: "",
+      snippet,
+      url: toOptionalString(row.url),
+      score: parseNumberOrNull(row.score),
+    });
+  }
+  return rows.slice(0, LIMITS.resourceLimit);
+}
+
+function normalizeCompiledAiFeedRows(
+  value: unknown,
+): CommunitySearchPayloadAiFeedRow[] {
+  if (!Array.isArray(value)) return [];
+  const rows: CommunitySearchPayloadAiFeedRow[] = [];
+  for (const entry of value) {
+    const row = asRecord(entry);
+    if (!row) continue;
+    const sourceId = toTrimmedString(row.post_id);
+    const snippet = toTrimmedString(row.body);
+    if (!sourceId || !snippet) continue;
+    rows.push({
+      source_type: "ai_feed",
+      source_id: sourceId,
+      internal_source_id: sourceId,
+      title: toTrimmedString(row.title) || "AI feed item",
+      created_at: toTrimmedString(row.created_at),
+      snippet,
+      url: null,
+      score: parseNumberOrNull(row.effective_score),
+    });
+  }
+  return rows.slice(0, LIMITS.resourceLimit);
+}
+
+async function callCommunityCompiler<SessionT>(params: {
   session: SessionT;
   communityId: string;
   communityName: string | null;
@@ -477,12 +590,11 @@ async function callCommunityResearch<SessionT>(params: {
   try {
     const { client, authSubject: verifiedAuthSubject } = await bootstrapConvexAuthenticatedClient(session);
 
-    const payload = await client.query("community:researchCommunityContext" as any, {
+    const payload = await client.query("community:readCompiledCommunityContext" as any, {
       authSubject: verifiedAuthSubject,
       communityId: params.communityId,
       communityName: params.communityName,
       query: truncateUtf8ForPrompt(params.query, LIMITS.queryMaxChars),
-      sourceTypes: ["chat", "resource", "memory"],
       limit: LIMITS.compiledLimit,
       nowMs: Date.now(),
     });
@@ -551,7 +663,7 @@ export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloud
 
   let searchResult: CommunityResearchCallResult;
   try {
-    searchResult = await callCommunityResearch({
+    searchResult = await callCommunityCompiler({
       session: params.session,
       communityId,
       communityName,
@@ -601,21 +713,27 @@ export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloud
   }
 
   const payload = searchResult.payload;
-  const chatRows = normalizeChatRows(payload.rows?.chat);
-  const resourceRows = normalizeResourceRows(payload.rows?.resources);
-  const memoryRows = normalizeMemoryRows(payload.rows?.memory);
+  const compiledChatRows = normalizeCompiledChatRows(payload.compiled?.recent_chat_signals);
+  const compiledAiFeedRows = normalizeCompiledAiFeedRows(payload.compiled?.ranked_insights);
+  const compiledResourceRows = normalizeCompiledResourceRows(payload.compiled?.relevant_resources);
+  const chatRows = compiledChatRows.length > 0 ? compiledChatRows : normalizeChatRows(payload.rows?.chat);
+  const aiFeedRows = compiledAiFeedRows.length > 0 ? compiledAiFeedRows : normalizeAiFeedRows(payload.rows?.ai_feed);
+  const resourceRows =
+    compiledResourceRows.length > 0 ? compiledResourceRows : normalizeResourceRows(payload.rows?.resources);
 
   const promptBundle = buildCanonicalCommunityContextSystemPrompt({
     communityName: truncateUtf8ForPrompt(communityName || "active community", LIMITS.communityLabelMaxChars),
     chatItems: chatRows,
+    aiFeedItems: aiFeedRows,
     resourceItems: resourceRows,
   });
   const evidenceUserMessage = buildCommunityEvidenceUserMessage(promptBundle.prompt);
 
   const diagnostics = buildCommunityContextDiagnostics({
-    rawDiagnostics: payload.diagnostics,
-    fallbackUsed: parseBool(payload.meta_recent_fallback_used),
+    rawDiagnostics: payload.diagnostics ?? payload.compiled?.diagnostics,
+    fallbackUsed: parseBool(payload.meta_recent_fallback_used ?? payload.compiled?.diagnostics?.fallback_used),
     chatItemsUsed: promptBundle.chatItemsUsed,
+    aiFeedItemsUsed: promptBundle.aiFeedItemsUsed,
     resourceItemsUsed: promptBundle.resourceItemsUsed,
   });
 
@@ -624,8 +742,8 @@ export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloud
     communityEvidenceUserMessage: evidenceUserMessage,
     communityEvidenceUsedV1: buildCommunityEvidenceUsedV1({
       chatRows,
+      aiFeedRows,
       resourceRows,
-      memoryRows,
     }),
     communityContextDiagnostics: diagnostics,
   };

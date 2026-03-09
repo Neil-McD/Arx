@@ -24,10 +24,6 @@ Active cloud tool subset:
 7. `edit`
 8. `bash`
 
-Contract-excluded tool:
-
-1. `update_plan` remains denied in cloud Daytona runtime.
-
 ## 3) Approval Policy (Cloud)
 
 Authoritative implementation:
@@ -37,7 +33,6 @@ Authoritative implementation:
 Current cloud policy posture:
 
 1. Single deterministic mode: write tools are auto-approved by cloud policy.
-2. Explicit cloud denials remain for contract-excluded tools (`update_plan`).
 
 ## 4) Event Parity
 

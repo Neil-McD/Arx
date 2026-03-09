@@ -1,12 +1,9 @@
 import { WebAuthGateModal } from "./WebAuthGateModal";
-import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { WebPublicCommunityLanding, type PublicCommunityLandingCommunityLike } from "./WebPublicCommunityLanding";
 
 type PublicRouteKind = "community_landing" | "checkout_success" | "claim";
-
-type PublicCommunityLike = {
+type PublicCommunityLike = PublicCommunityLandingCommunityLike & {
   slug: string;
-  name: string;
-  description: string | null;
 };
 
 type PublicCommunityPlanLike = {
@@ -80,9 +77,6 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
     publicRouteKind,
     publicRouteSlug,
     showSignIn,
-    onBackToApp,
-    onOpenAuthGate,
-    onSignOut,
     publicCommunity,
     selectedPublicCommunityPlanLabel,
     publicVisibilityLabel,
@@ -128,323 +122,200 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
     onCloseAuthGate,
     onSignIn,
   } = props;
-  const billingPeriodOptions = [
-    ...publicCommunityPlans.slice().sort((a, b) => {
-      const ar = a.billing_period === "monthly" ? 0 : 1;
-      const br = b.billing_period === "monthly" ? 0 : 1;
-      return ar - br;
-    }),
-  ];
-  const selectedBillingPeriod =
-    selectedPublicCommunityBillingPeriod ?? selectedPublicCommunityPlanBillingPeriod;
-  const billingPeriodSwitcherStyle = buildPlatformSwitcherStyle(
-    billingPeriodOptions.length,
-    billingPeriodOptions.findIndex((plan) => plan.billing_period === selectedBillingPeriod),
-  );
 
   return (
     <div className="app-root public-root">
-      <header className="app-topbar">
-        <div className="topbar-left">
-          <button className="back-to-workspace" type="button" onClick={onBackToApp}>
-            <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            <span className="back-path">Polynet</span>
-          </button>
-        </div>
-        <div className="topbar-right">
-          {showSignIn ? (
-            <button className="secondary" type="button" onClick={onOpenAuthGate}>
-              Sign in
-            </button>
-          ) : (
-            <button className="secondary" type="button" onClick={onSignOut}>
-              Sign out
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main className="workspace community-mode">
+      <main className="workspace community-mode public-route-workspace">
         {publicRouteKind === "community_landing" && (
-          <div className="community-panel discover-panel">
-            <div className="discover-hero">
-              <div className="discover-hero-copy">
-                <div className="discover-title">{publicCommunity?.name ?? publicRouteSlug}</div>
-                <div className="discover-subtitle">
-                  {publicCommunity?.description ?? "Join this community on Polynet."}
-                </div>
-                <div className="discover-subtitle">
-                  {selectedPublicCommunityPlanLabel ?? "Free"} · {publicVisibilityLabel}
-                </div>
-                {publicCommunity && <div className="discover-empty-text">{publicVisibilityHint}</div>}
-              </div>
-              <div className="discover-controls">
-                {publicCommunityPlans.length > 1 && (
-                  <div
-                    className="platform-switcher platform-switcher-compact"
-                    role="tablist"
-                    aria-label="Billing period"
-                    style={billingPeriodSwitcherStyle}
-                  >
-                    {billingPeriodOptions.map((plan) => (
-                      <button
-                        key={plan.billing_period}
-                        type="button"
-                        className={
-                          plan.billing_period ===
-                          selectedBillingPeriod
-                            ? "platform-switcher-btn active"
-                            : "platform-switcher-btn"
-                        }
-                        aria-pressed={
-                          plan.billing_period === selectedBillingPeriod
-                        }
-                        onClick={() => onSelectPublicCommunityBillingPeriod(plan.billing_period)}
-                      >
-                        {plan.billing_period === "monthly" ? "Monthly" : "Annual"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  className="discover-refresh"
-                  type="button"
-                  disabled={
-                    isLoadingPublicCommunity ||
-                    !publicCommunity ||
-                    checkoutStatus === "loading" ||
-                    isJoiningPublicCommunity ||
-                    isRequestingPublicCommunityAccess ||
-                    isLoadingMyPublicCommunityJoinRequest ||
-                    (canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
-                    (!canJoinWithCheckout && !canJoinForFree && !canRequestAccessForFree) ||
-                    (canRequestAccessForFree && (requestPending || requestCooldownActive))
-                  }
-                  onClick={onPrimaryJoinAction}
-                >
-                  {canJoinWithCheckout
-                    ? "Join now"
-                    : canRequestAccessForFree
-                      ? isRequestingPublicCommunityAccess
-                        ? "Requesting…"
-                        : requestPending
-                          ? "Request pending"
-                          : requestCooldownActive
-                            ? "Request denied"
-                            : "Request access"
-                      : isJoiningPublicCommunity
-                        ? "Joining…"
-                        : canJoinForFree
-                          ? "Join free"
-                          : "Invite only"}
-                </button>
-                {canRequestAccessForFree && !showSignIn && requestPending && (
-                  <div className="model-note" style={{ marginTop: 8 }}>
-                    Awaiting approval by the community admins.
-                  </div>
-                )}
-                {canRequestAccessForFree && !showSignIn && requestCooldownActive && (
-                  <div className="auth-error" style={{ marginTop: 8 }}>
-                    Request denied. Try again on {requestDeniedDateLabel}.
-                  </div>
-                )}
-              </div>
-            </div>
-            {isLoadingPublicCommunity && <div className="chat-empty">Loading…</div>}
-            {!isLoadingPublicCommunity && publicCommunityError && (
-              <div className="auth-error">{publicCommunityError}</div>
-            )}
-            {publicJoinError && <div className="auth-error">{publicJoinError}</div>}
-            {publicRequestAccessError && <div className="auth-error">{publicRequestAccessError}</div>}
-            {checkoutError && <div className="auth-error">{checkoutError}</div>}
-            {showSignIn && publicCommunity && (canJoinForFree || canRequestAccessForFree) && (
-              <div className="chat-empty">
-                <div className="discover-empty-text">
-                  Or {canRequestAccessForFree ? "request access" : "join"} with a magic link:
-                </div>
-                <div className="discover-controls">
-                  <input
-                    className="discover-search"
-                    type="email"
-                    inputMode="email"
-                    placeholder="you@example.com"
-                    value={magicLinkEmail}
-                    onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                  />
-                  <button
-                    className="discover-refresh"
-                    type="button"
-                    disabled={magicLinkStatus === "sending"}
-                    onClick={onSendLandingMagicLink}
-                  >
-                    {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-                  </button>
-                </div>
-                {magicLinkStatus === "sent" && (
-                  <div className="chat-empty">Check your email for a sign-in link.</div>
-                )}
-                {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-              </div>
-            )}
-            <div className="chat-messages">
-              <div className="discover-empty">
-                <div className="discover-empty-title">Powered by Polynet</div>
-                <div className="discover-empty-text">
-                  {publicCommunity
-                    ? canJoinWithCheckout
-                      ? "Preview this community, then choose a plan to join."
-                      : canRequestAccessForFree
-                        ? "This community is gated. Request access to enter."
-                        : "Join to participate in chat, resources, and voice."
-                    : "Join to access chat, resources, and the community copilot."}
-                </div>
-                <button className="secondary" type="button" onClick={onNavigateToClaim}>
-                  Paid but can&apos;t access? Recover
-                </button>
-              </div>
-            </div>
-          </div>
+          <WebPublicCommunityLanding
+            publicRouteSlug={publicRouteSlug}
+            publicCommunity={publicCommunity}
+            publicVisibilityLabel={publicVisibilityLabel}
+            publicVisibilityHint={publicVisibilityHint}
+            selectedPublicCommunityPlanLabel={selectedPublicCommunityPlanLabel}
+            publicCommunityPlans={publicCommunityPlans}
+            selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
+            selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlanBillingPeriod}
+            onSelectPublicCommunityBillingPeriod={onSelectPublicCommunityBillingPeriod}
+            hasSelectedPublicCommunityPlan={hasSelectedPublicCommunityPlan}
+            isLoadingPublicCommunity={isLoadingPublicCommunity}
+            canJoinForFree={canJoinForFree}
+            canRequestAccessForFree={canRequestAccessForFree}
+            canJoinWithCheckout={canJoinWithCheckout}
+            checkoutStatus={checkoutStatus}
+            isJoiningPublicCommunity={isJoiningPublicCommunity}
+            isRequestingPublicCommunityAccess={isRequestingPublicCommunityAccess}
+            isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
+            requestPending={requestPending}
+            requestCooldownActive={requestCooldownActive}
+            requestDeniedDateLabel={requestDeniedDateLabel}
+            onPrimaryJoinAction={onPrimaryJoinAction}
+            onSendLandingMagicLink={onSendLandingMagicLink}
+            onNavigateToClaim={onNavigateToClaim}
+            publicCommunityError={publicCommunityError}
+            publicJoinError={publicJoinError}
+            publicRequestAccessError={publicRequestAccessError}
+            checkoutError={checkoutError}
+            showSignIn={showSignIn}
+            magicLinkEmail={magicLinkEmail}
+            onChangeMagicLinkEmail={onChangeMagicLinkEmail}
+            magicLinkStatus={magicLinkStatus}
+            magicLinkError={magicLinkError}
+          />
         )}
 
         {publicRouteKind === "checkout_success" && (
-          <div className="community-panel discover-panel">
-            <div className="discover-hero">
-              <div className="discover-hero-copy">
-                <div className="discover-title">
+          <div className="public-funnel-page">
+            <div className="public-funnel-shell public-funnel-shell-narrow">
+              <section className="public-funnel-state-card">
+                <div className="public-funnel-state-kicker">Checkout</div>
+                <h1 className="public-funnel-state-title">
                   {checkoutStatus === "loading"
                     ? "Setting up your access…"
                     : checkoutStatus === "pending"
                       ? "Payment pending"
                       : checkoutStatus === "succeeded"
-                        ? "You're in!"
+                        ? "You&apos;re in"
                         : "Checkout error"}
-                </div>
-                <div className="discover-subtitle">
+                </h1>
+                <p className="public-funnel-state-copy">
                   {checkoutStatus === "pending"
-                    ? "It can take a moment. We'll keep checking."
+                    ? "It can take a moment. We'll keep checking in the background."
                     : checkoutStatus === "succeeded"
-                      ? "Continue to access the community."
-                      : checkoutError ?? ""}
-                </div>
-              </div>
-              <div className="discover-controls">
-                <button
-                  className="discover-refresh"
-                  type="button"
-                  disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
-                  onClick={onContinueCheckout}
-                >
-                  Continue
-                </button>
-                {(checkoutStatus === "pending" || checkoutStatus === "error") && (
+                      ? "Continue to unlock the community workspace."
+                      : checkoutError ?? "There was a problem finalizing checkout."}
+                </p>
+                <div className="public-funnel-state-actions">
                   <button
-                    className="secondary"
+                    className="public-funnel-primary"
                     type="button"
-                    onClick={onRetryCheckoutFinalize}
+                    disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
+                    onClick={onContinueCheckout}
                   >
-                    {checkoutStatus === "pending" ? "Check again" : "Retry"}
+                    Continue
                   </button>
-                )}
-              </div>
-            </div>
-            {showSignIn && (
-              <div className="chat-empty">
-                <div className="discover-empty-text">Or get a magic link:</div>
-                <div className="discover-controls">
-                  <input
-                    className="discover-search"
-                    type="email"
-                    inputMode="email"
-                    placeholder="you@example.com"
-                    value={magicLinkEmail}
-                    onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                  />
-                  <button
-                    className="discover-refresh"
-                    type="button"
-                    disabled={magicLinkStatus === "sending"}
-                    onClick={onSendMagicLink}
-                  >
-                    {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-                  </button>
+                  {(checkoutStatus === "pending" || checkoutStatus === "error") && (
+                    <button className="public-funnel-secondary" type="button" onClick={onRetryCheckoutFinalize}>
+                      {checkoutStatus === "pending" ? "Check again" : "Retry"}
+                    </button>
+                  )}
                 </div>
-                {magicLinkStatus === "sent" && (
-                  <div className="chat-empty">Check your email for a sign-in link.</div>
-                )}
-                {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-              </div>
-            )}
-            {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
-            {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
-          </div>
-        )}
+                {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
+                {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
+              </section>
 
-        {publicRouteKind === "claim" && (
-          <div className="community-panel discover-panel">
-            <div className="discover-hero">
-              <div className="discover-hero-copy">
-                <div className="discover-title">Claim access</div>
-                <div className="discover-subtitle">Continue to unlock your community.</div>
-              </div>
-              <div className="discover-controls">
-                <button
-                  className="discover-refresh"
-                  type="button"
-                  disabled={!(pendingToken || manualClaimToken.trim()) || isRedeemingClaim}
-                  onClick={onContinueClaim}
-                >
-                  Continue
-                </button>
+              {showSignIn && (
+                <section className="public-funnel-support-card">
+                  <div className="public-funnel-support-copy">
+                    <div className="public-funnel-support-title">Need a magic link?</div>
+                    <p className="public-funnel-support-body">
+                      We&apos;ll email a sign-in link so you can finish checkout from the right account.
+                    </p>
+                  </div>
+                  <div className="public-funnel-support-form">
+                    <input
+                      className="public-funnel-input"
+                      type="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={magicLinkEmail}
+                      onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
+                    />
+                    <button
+                      className="public-funnel-secondary"
+                      type="button"
+                      disabled={magicLinkStatus === "sending"}
+                      onClick={onSendMagicLink}
+                    >
+                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+                    </button>
+                  </div>
+                  {magicLinkStatus === "sent" && <div className="auth-success">Check your email for a sign-in link.</div>}
+                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+                </section>
+              )}
+            </div>
+          </div>
+        )
+        }
+
+        {
+          publicRouteKind === "claim" && (
+            <div className="public-funnel-page">
+              <div className="public-funnel-shell public-funnel-shell-narrow">
+                <section className="public-funnel-state-card">
+                  <div className="public-funnel-state-kicker">Claim access</div>
+                  <h1 className="public-funnel-state-title">Unlock your community</h1>
+                  <p className="public-funnel-state-copy">
+                    Continue with your claim token to finish access to the community.
+                  </p>
+
+                  {!pendingToken && (
+                    <div className="public-funnel-manual-claim">
+                      <label className="public-funnel-input-label" htmlFor="public-claim-token">
+                        Claim token
+                      </label>
+                      <input
+                        id="public-claim-token"
+                        className="public-funnel-input"
+                        type="text"
+                        placeholder="Paste token"
+                        value={manualClaimToken}
+                        onChange={(event) => onChangeManualClaimToken(event.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="public-funnel-state-actions">
+                    <button
+                      className="public-funnel-primary"
+                      type="button"
+                      disabled={!(pendingToken || manualClaimToken.trim()) || isRedeemingClaim}
+                      onClick={onContinueClaim}
+                    >
+                      Continue
+                    </button>
+                  </div>
+
+                  {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
+                  {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
+                </section>
+
+                {showSignIn && (
+                  <section className="public-funnel-support-card">
+                    <div className="public-funnel-support-copy">
+                      <div className="public-funnel-support-title">Need a magic link?</div>
+                      <p className="public-funnel-support-body">
+                        We&apos;ll email a sign-in link so you can continue with the correct account.
+                      </p>
+                    </div>
+                    <div className="public-funnel-support-form">
+                      <input
+                        className="public-funnel-input"
+                        type="email"
+                        inputMode="email"
+                        placeholder="you@example.com"
+                        value={magicLinkEmail}
+                        onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
+                      />
+                      <button
+                        className="public-funnel-secondary"
+                        type="button"
+                        disabled={magicLinkStatus === "sending"}
+                        onClick={onSendMagicLink}
+                      >
+                        {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
+                      </button>
+                    </div>
+                    {magicLinkStatus === "sent" && <div className="auth-success">Check your email for a sign-in link.</div>}
+                    {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
+                  </section>
+                )}
               </div>
             </div>
-            {!pendingToken && (
-              <div className="chat-empty">
-                <div className="discover-empty-text">Paste your claim token:</div>
-                <div className="discover-controls">
-                  <input
-                    className="discover-search"
-                    type="text"
-                    placeholder="Paste token"
-                    value={manualClaimToken}
-                    onChange={(event) => onChangeManualClaimToken(event.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            {showSignIn && (
-              <div className="chat-empty">
-                <div className="discover-empty-text">Or get a magic link:</div>
-                <div className="discover-controls">
-                  <input
-                    className="discover-search"
-                    type="email"
-                    inputMode="email"
-                    placeholder="you@example.com"
-                    value={magicLinkEmail}
-                    onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                  />
-                  <button
-                    className="discover-refresh"
-                    type="button"
-                    disabled={magicLinkStatus === "sending"}
-                    onClick={onSendMagicLink}
-                  >
-                    {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-                  </button>
-                </div>
-                {magicLinkStatus === "sent" && (
-                  <div className="chat-empty">Check your email for a sign-in link.</div>
-                )}
-                {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-              </div>
-            )}
-            {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
-            {isRedeemingClaim && <div className="chat-empty">Claiming access…</div>}
-          </div>
-        )}
-      </main>
+          )
+        }
+      </main >
 
       <WebAuthGateModal
         hasSession={!showSignIn}
@@ -453,6 +324,6 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
         onClose={onCloseAuthGate}
         onSignIn={onSignIn}
       />
-    </div>
+    </div >
   );
 }

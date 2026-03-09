@@ -25,6 +25,10 @@ import {
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import {
+  DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+  normalizeCommunityFunnelConfig,
+} from "../../../shared/communityFunnel";
+import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
   formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderBillingReturn, } from "../../../shared/builderBilling";
@@ -33,11 +37,15 @@ import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinali
 
 import { fetchActiveCloudCommunityAgentSystemPrompt } from "../../../shared/cloudCommunityAgentGateway";
 import {
-  listCloudCommunityAiFeedImportant,
   listCloudCommunityAiFeedLive,
+  listCloudCommunityAiFeedRanked,
   reactToCloudCommunityAiFeedPost,
 } from "../../../shared/cloudCommunityAiFeedGateway";
-import { deleteCloudPersonalMemoryItem, updateCloudPersonalMemoryPinned } from "../../../shared/cloudPersonalMemoryGateway";
+import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
+import {
+  saveCloudCommunityPublicPage,
+  uploadCloudCommunityFunnelMediaFile,
+} from "../../../shared/cloudCommunityFunnelGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
   beginCloudChatgptConnect,
@@ -48,8 +56,6 @@ import {
   disconnectCloudOpenRouterApiKey,
   loadCloudProviderConnections,
   pollCloudChatgptConnect,
-  probeCloudChatgptConnection,
-  type CloudChatgptProbeResult,
   type CloudChatgptConnectionStatus,
   type CloudOpenRouterConnectionStatus,
 } from "../../../shared/cloudProviderConnectionsGateway";
@@ -82,8 +88,9 @@ import type {
   CommunityAgentDraft as SharedCommunityAgentDraft,
   CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
   CommunityChatMessage as SharedCommunityChatMessage,
+  CommunityFunnelConfig as SharedCommunityFunnelConfig,
   CommunityPricingMode as SharedCommunityPricingMode,
-  DiscoverCommunity as SharedDiscoverCommunity,
+  DiscoverCommunitySnapshot as SharedDiscoverCommunitySnapshot,
   MessageReaction as SharedMessageReaction,
   PublicPlanSummary as SharedPublicPlanSummary,
   UserProfile as SharedUserProfile,
@@ -186,7 +193,6 @@ import { useCommunityChatLightbox } from "../../../shared/useCommunityChatLightb
 import { useMessageAttachmentInputController } from "../../../shared/useMessageAttachmentInputController";
 import { useCommunityChatDataController } from "../../../shared/useCommunityChatDataController";
 import { useCommunityChatMutationController } from "../../../shared/useCommunityChatMutationController";
-import { useCommunityInviteController } from "../../../shared/useCommunityInviteController";
 import { useCommunityResourceController } from "../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../shared/useCommunityResourceEditorController";
 import { useCommunityCreateController } from "../../../shared/useCommunityCreateController";
@@ -211,6 +217,7 @@ import { useWebThreadDataController } from "../../../shared/useWebThreadDataCont
 import { useAuthGateLifecycleEffects } from "../../../shared/useAuthGateLifecycleEffects";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityAgentDraftController } from "../../../shared/useCommunityAgentDraftController";
+import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
 import { useCommunitySettingsDataController } from "../../../shared/useCommunitySettingsDataController";
 import { useCommunitySettingsFormController } from "../../../shared/useCommunitySettingsFormController";
@@ -233,7 +240,10 @@ import {
   truncateReplyPreview,
   type CommunityMessageAttachment,
 } from "../../../shared/communityMessageParsing";
-import { buildCommunityInstantAccessLink } from "../../../shared/communityInviteLinks";
+import {
+  loadCachedCommunityChatMessages,
+  saveCachedCommunityChatMessages,
+} from "../../../shared/communityChatCache";
 import { isValidCommunitySlug, slugifyCommunityName } from "../../../shared/communitySlug";
 import {
   MessageCopyAction,
@@ -258,7 +268,7 @@ import {
 } from "../../../shared/modelAttributionUi";
 import { setDevBuilderTierCanonical } from "../../../shared/builderBillingStatusGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import { isCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
+import { deriveCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
 import { useWebBuilderBillingActions } from "./controllers/useWebBuilderBillingActions";
 import { useWebCommerceAffiliateActions } from "./controllers/useWebCommerceAffiliateActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
@@ -280,13 +290,21 @@ import { BuilderUpgradeModal } from "../../../shared/BuilderUpgradeModal";
 import { DiscoverCommunityCard } from "../../../shared/DiscoverCommunityCard";
 import { SettingsNavList } from "../../../shared/SettingsNavList";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
+import {
+  EXTERNAL_MEMORY_IMPORT_PROMPT,
+  normalizeImportedMemoryContentKey,
+  parseExternalMemoryImport,
+  type ExternalMemoryImportItem,
+} from "../../../shared/externalMemoryImport";
 import { WebCreateCommunityModal } from "./components/WebCreateCommunityModal";
 import { WebCommunityChatPanel } from "./components/WebCommunityChatPanel";
 import { WebDeleteCommunityModal } from "./components/WebDeleteCommunityModal";
 import { WebMessageContextModal } from "./components/WebMessageContextModal";
+import { WebMemoryImportModal } from "./components/WebMemoryImportModal";
 import { WebPlatformQuotaModal } from "./components/WebPlatformQuotaModal";
 import { WebAuthGateModal } from "./components/WebAuthGateModal";
 import { WebChatgptConnectModal } from "./components/WebChatgptConnectModal";
+import { WebChatgptEmptyStateCard } from "./components/WebChatgptEmptyStateCard";
 import { WebCommunitySecondaryPanels } from "./components/WebCommunitySecondaryPanels";
 import { WebModelPickerPopover } from "./components/WebModelPickerPopover";
 import { WebPublicRouteView } from "./components/WebPublicRouteView";
@@ -304,7 +322,7 @@ type CommunityRecord = {
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
   visibility: string;
-  free_join_requires_approval: boolean;
+  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
   owner_id: string;
   created_at: string;
   updated_at: string;
@@ -320,10 +338,17 @@ type PublicCommunityRecord = {
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
   visibility: string;
-  free_join_requires_approval: boolean;
-  join_mode?: CommunityJoinMode | null;
+  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
   created_at: string;
   updated_at: string;
+  funnel?: SharedCommunityFunnelConfig | null;
+  member_count?: number | null;
+  admin_count?: number | null;
+  featured_faces?: Array<{
+    user_id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }> | null;
 };
 
 type ThreadRecord = {
@@ -371,11 +396,14 @@ type UserModelSettings = {
   system_prompt: string;
 };
 
-type MessageAttachment = CommunityMessageAttachment;
+type MessageAttachment = CommunityMessageAttachment & {
+  file?: File | null;
+};
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentDraft = SharedCommunityAgentDraft<CommunityAgentLanding>;
+type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
 const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
@@ -393,6 +421,7 @@ const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const LEGACY_COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "arx-community-rail-order:web";
+const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
   id: string;
@@ -511,15 +540,16 @@ type CommunityMember = {
   community_id: string;
   user_id: string;
   role: string;
+  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
   created_at: string;
   is_entitled?: boolean;
   entitlement_ends_at?: string | null;
-  access_status?: string;
-  subscription_plan_id?: string | null;
-  subscription_billing_period?: string | null;
-  subscription_amount_base_units?: number | string | null;
-  subscription_currency?: string | null;
-  subscription_currency_decimals?: number | null;
+  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
+  subscription_cancel_at_period_end?: boolean | null;
+  billing_period?: string | null;
+  amount_base_units?: number | null;
+  currency?: string | null;
+  currency_decimals?: number | null;
 };
 
 type CommunityAccess = SharedCommunityAccess;
@@ -530,17 +560,6 @@ type AnalyticsChartMode = SharedAnalyticsChartMode;
 type CommunityPricingMode = SharedCommunityPricingMode;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
-
-type CommunityInviteRecord = {
-  id: string;
-  community_id: string;
-  code: string;
-  max_uses: number | null;
-  expires_at: string | null;
-  revoked_at: string | null;
-  created_by: string;
-  created_at: string;
-};
 
 type CommunityJoinRequest = {
   id: string;
@@ -573,13 +592,13 @@ type PersonalMemoryItem = {
 };
 
 type PublicPlanSummary = SharedPublicPlanSummary;
-type DiscoverCommunity = SharedDiscoverCommunity<PublicCommunityRecord>;
+type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect" | "pro";
+  builder_tier: "free" | "builder";
   max_communities: number;
   platform_fee_bps: number;
   has_payouts: boolean;
@@ -758,10 +777,40 @@ export default function App() {
   const [newPersonalMemoryContent, setNewPersonalMemoryContent] = useState("");
   const newPersonalMemoryScope: "global" = "global";
   const [newPersonalMemoryPinned, setNewPersonalMemoryPinned] = useState(false);
+  const [isMemoryImportModalOpen, setIsMemoryImportModalOpen] = useState(false);
+  const [memoryImportText, setMemoryImportText] = useState("");
+  const [memoryImportError, setMemoryImportError] = useState<string | null>(null);
+  const [isImportingMemory, setIsImportingMemory] = useState(false);
+  const memoryImportPlan = useMemo(() => {
+    const parsedItems = parseExternalMemoryImport(memoryImportText);
+    const existingKeys = new Set(personalMemoryItems.map((item) => normalizeImportedMemoryContentKey(item.content)));
+    const uniqueKeys = new Set<string>();
+    const uniqueItems: ExternalMemoryImportItem[] = [];
+    let duplicateCount = 0;
+    for (const item of parsedItems) {
+      const key = normalizeImportedMemoryContentKey(item.memoryContent);
+      if (!key) continue;
+      if (existingKeys.has(key) || uniqueKeys.has(key)) {
+        duplicateCount += 1;
+        continue;
+      }
+      uniqueKeys.add(key);
+      uniqueItems.push(item);
+    }
+    return {
+      parsedItems,
+      duplicateCount,
+      uniqueItems,
+    };
+  }, [memoryImportText, personalMemoryItems]);
   const [isLoadingCommunities, setIsLoadingCommunities] = useState<boolean>(() => Boolean(cloudSession));
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
+  const activeCommunity = useMemo(() => {
+    if (!activeCommunityId) return null;
+    return communities.find((community) => community.id === activeCommunityId) ?? null;
+  }, [activeCommunityId, communities]);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`,
     [cloudSession?.user?.id],
@@ -806,6 +855,15 @@ export default function App() {
     () => deriveCommunityActionGuards(communityAccessCapabilities),
     [communityAccessCapabilities],
   );
+  const canInviteActiveCommunity = communityActionGuards.canInvite;
+  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
+  const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
+  const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
+  const canCreateResourcesActiveCommunity = communityActionGuards.canCreateResources;
+  const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
+  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
+  const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
+  const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
@@ -817,7 +875,7 @@ export default function App() {
       string,
       {
         live: CommunityAiFeedPost[];
-        important: CommunityAiFeedPost[];
+        ranked: CommunityAiFeedPost[];
         isLoading: boolean;
         error: string | null;
       }
@@ -854,7 +912,7 @@ export default function App() {
     attachmentsRef: workspaceAttachmentsRef,
     setAttachments: setWorkspaceAttachments,
     setError: setThreadError,
-    ingestAttachmentsFromFileList: ingestAttachmentsFromFileList,
+    ingestAttachmentsFromFileList: ingestWorkspaceAttachmentsFromFileList,
   });
   const {
     handleAttachmentFileInputChange: handleCommunityFileInputChange,
@@ -863,7 +921,7 @@ export default function App() {
     attachmentsRef: communityAttachmentsRef,
     setAttachments: setCommunityAttachments,
     setError: setCommunityChatError,
-    ingestAttachmentsFromFileList: ingestAttachmentsFromFileList,
+    ingestAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
   });
   const [replyingToMessage, setReplyingToMessage] = useState<Pick<CommunityChatMessage, "id" | "sender_id" | "body"> | null>(null);
   const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
@@ -878,6 +936,7 @@ export default function App() {
     isLoadingChat,
     isLoadingMoreChat,
     communityChatHasMore,
+    hasResolvedCommunityChat,
     toCommunityChatMessage,
     ensureCommunityChatThread,
     loadCommunityChat,
@@ -905,6 +964,9 @@ export default function App() {
     },
     onLoadChatStart: () => {
       setCommunityChatError(null);
+    },
+    onLoadChatError: (message) => {
+      setCommunityChatError(message);
     },
     onHydrateProfiles: (userIds, session) => {
       void loadUserProfiles(userIds, session);
@@ -945,7 +1007,7 @@ export default function App() {
     void loadOlderCommunityChat(activeCommunityId, cloudSession);
   };
 
-  const { communityTypingUserIds, maybeBroadcastCommunityTyping } = useCommunityChatRealtime({
+  useCommunityChatRealtime({
     isEnabled: activePage === "community" && communityTab === "chat",
     session: cloudSession,
     activeCommunityId,
@@ -978,6 +1040,8 @@ export default function App() {
     loadCommunityChat,
     parseReplyPrefix,
     buildReplyPrefix,
+    prepareAttachmentsForSend: prepareCommunityAttachmentsForSend,
+    serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
     onOptimisticSendScrollIntent: () => {
       setIsUserAtBottom(true);
       isUserAtBottomRef.current = true;
@@ -1019,7 +1083,6 @@ export default function App() {
 
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
   const [communityMembersRoleFilter, setCommunityMembersRoleFilter] = useState<string>("all");
-  const [communityMembersPlanFilter, setCommunityMembersPlanFilter] = useState<string>("all");
   const [membersCommunityHasPaidPlans, setMembersCommunityHasPaidPlans] = useState<boolean | null>(null);
   const [isLoadingMembersCommunityPricing, setIsLoadingMembersCommunityPricing] = useState(false);
   const [communityJoinRequests, setCommunityJoinRequests] = useState<CommunityJoinRequest[]>([]);
@@ -1027,43 +1090,7 @@ export default function App() {
   const [communityJoinRequestsError, setCommunityJoinRequestsError] = useState<string | null>(null);
   const [decidingCommunityJoinRequestId, setDecidingCommunityJoinRequestId] = useState<string | null>(null);
   const [isJoinRequestsModalOpen, setIsJoinRequestsModalOpen] = useState(false);
-  const [isSavingFreeJoinRequiresApproval, setIsSavingFreeJoinRequiresApproval] = useState(false);
-  const [communityInvites, setCommunityInvites] = useState<CommunityInviteRecord[]>([]);
-  const [isLoadingCommunityInvites, setIsLoadingCommunityInvites] = useState(false);
-  const [inviteMaxUsesPreset, setInviteMaxUsesPreset] = useState("unlimited");
-  const [inviteMaxUsesCustom, setInviteMaxUsesCustom] = useState("");
-  const [inviteExpiryPreset, setInviteExpiryPreset] = useState("7d");
-  const [inviteExpiryCustom, setInviteExpiryCustom] = useState("");
-  const [inviteCreateError, setInviteCreateError] = useState<string | null>(null);
-  const [isCreatingInvite, setIsCreatingInvite] = useState(false);
-  const {
-    loadCommunityInvites,
-    handleCreateInvite,
-    handleRevokeInvite,
-    handleDeleteInvite,
-  } = useCommunityInviteController<CloudAuthSession, CommunityInviteRecord>({
-    activeCommunityId,
-    ...cloudSessionArg,
-    inviteMaxUsesPreset,
-    inviteMaxUsesCustom,
-    inviteExpiryPreset,
-    inviteExpiryCustom,
-    setCommunityInvites,
-    setIsLoadingCommunityInvites,
-    setInviteCreateError,
-    setIsCreatingInvite,
-    setInviteMaxUsesPreset,
-    setInviteMaxUsesCustom,
-    setInviteExpiryPreset,
-    setInviteExpiryCustom,
-    onInviteCreated: async (invite) => {
-      const communitySlug =
-        communities.find((community) => community.id === activeCommunityId)?.slug ?? "";
-      await copyTextToClipboard(
-        buildCommunityInstantAccessLink(window.location.origin, communitySlug, invite.code),
-      );
-    },
-  });
+  const [isSavingFreeAccessMode, setIsSavingFreeAccessMode] = useState(false);
 
   const {
     loadCommunityResources,
@@ -1150,8 +1177,6 @@ export default function App() {
   const [communitySettingsBannerFocusX, setCommunitySettingsBannerFocusX] = useState(0.5);
   const [communitySettingsBannerFocusY, setCommunitySettingsBannerFocusY] = useState(0.5);
   const [communitySettingsBannerZoom, setCommunitySettingsBannerZoom] = useState(1);
-  const [, setCommunitySettingsMonthlyPlanId] = useState<string | null>(null);
-  const [, setCommunitySettingsYearlyPlanId] = useState<string | null>(null);
   const [communitySettingsPricingMode, setCommunitySettingsPricingMode] = useState<CommunityPricingMode>("free");
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
   const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
@@ -1191,6 +1216,50 @@ export default function App() {
     setCommunityAgentDraftSaveError(null);
     communityAgentDraftDirtyRef.current = false;
   }, []);
+  const handleResetCommunityAgentDraft = useCallback(() => {
+    hydrateCommunityAgentEditor(1, communityAgentDrafts);
+  }, [communityAgentDrafts, hydrateCommunityAgentEditor]);
+
+  const [communityFunnelConfig, setCommunityFunnelConfig] = useState<CommunityFunnelConfig>(
+    DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+  );
+  const [isLoadingCommunityFunnel, setIsLoadingCommunityFunnel] = useState(false);
+  const [communityFunnelError, setCommunityFunnelError] = useState<string | null>(null);
+  const [isSavingCommunityFunnel, setIsSavingCommunityFunnel] = useState(false);
+  const [communityFunnelSaveError, setCommunityFunnelSaveError] = useState<string | null>(null);
+  const communityFunnelLoadedCommunityIdRef = useRef<string | null>(null);
+  const communityFunnelSavedConfigRef = useRef<CommunityFunnelConfig>(DEFAULT_COMMUNITY_FUNNEL_CONFIG);
+  const communityFunnelSavedOneLinerRef = useRef("");
+  const communityFunnelDirtyRef = useRef(false);
+  const [communityFunnelOneLiner, setCommunityFunnelOneLiner] = useState("");
+  const markCommunityFunnelDirty = useCallback(() => {
+    communityFunnelDirtyRef.current = true;
+  }, []);
+  const hydrateCommunityFunnelEditor = useCallback((config: CommunityFunnelConfig | null) => {
+    const normalized = normalizeCommunityFunnelConfig(config);
+    setCommunityFunnelConfig(normalized);
+    communityFunnelSavedConfigRef.current = normalized;
+    setCommunityFunnelSaveError(null);
+    communityFunnelDirtyRef.current = false;
+  }, []);
+  const handleResetCommunityFunnel = useCallback(() => {
+    setCommunityFunnelConfig(communityFunnelSavedConfigRef.current);
+    setCommunityFunnelOneLiner(communityFunnelSavedOneLinerRef.current);
+    setCommunityFunnelSaveError(null);
+    communityFunnelDirtyRef.current = false;
+  }, []);
+  const handleUploadCommunityFunnelMedia = useCallback(
+    async (file: File) => {
+      if (!cloudSession) {
+        throw new Error("Sign in to upload funnel media.");
+      }
+      return uploadCloudCommunityFunnelMediaFile({
+        session: cloudSession,
+        file,
+      });
+    },
+    [cloudSession],
+  );
 
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
   const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
@@ -1280,6 +1349,10 @@ export default function App() {
   const threadsHydratedRef = useRef(false);
   const lastCloudStatusRefreshAtRef = useRef(0);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
+  const [loadingThreadMessagesThreadId, setLoadingThreadMessagesThreadId] = useState<string | null>(() => {
+    const initialThreadId = initialAppRoute?.threadId ?? null;
+    return initialThreadId && initialThreadId !== GUEST_THREAD_ID ? initialThreadId : null;
+  });
   const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
   const [messageInput, setMessageInput] = useState("");
   const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
@@ -1316,10 +1389,10 @@ export default function App() {
   } | null>(null);
   const [isPlatformQuotaModalRunning] = useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
-    memory_mode: "off",
+    memory_mode: "auto",
     remember_intent_enabled: true,
   });
-  const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
+  const [, setIsLoadingUserMemorySettings] = useState(false);
   const [userModelSettings, setUserModelSettings] = useState<UserModelSettings>({ system_prompt: "" });
   const [systemPromptDraft, setSystemPromptDraft] = useState("");
   const [isLoadingUserModelSettings, setIsLoadingUserModelSettings] = useState(false);
@@ -1359,10 +1432,8 @@ export default function App() {
   const [isConnectingChatgpt, setIsConnectingChatgpt] = useState(false);
   const [isPollingChatgptConnection, setIsPollingChatgptConnection] = useState(false);
   const [isCompletingChatgptConnection, setIsCompletingChatgptConnection] = useState(false);
-  const [isProbingChatgptConnection, setIsProbingChatgptConnection] = useState(false);
   const [chatgptConnectionError, setChatgptConnectionError] = useState<string | null>(null);
   const [chatgptConnectionSuccess, setChatgptConnectionSuccess] = useState<string | null>(null);
-  const [chatgptProbeResult, setChatgptProbeResult] = useState<CloudChatgptProbeResult | null>(null);
   const [contextModal, setContextModal] = useState<
     MessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion> | null
   >(null);
@@ -1397,7 +1468,6 @@ export default function App() {
     CommunityAccess,
     UserProfile
   >({
-    getCloudAuthUid,
     toCanonicalCommunityVisibility,
     activeCommunityId,
     setIsLoadingCommunities,
@@ -1441,7 +1511,7 @@ export default function App() {
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
-      openAuthGate({ reason: "save_profile", payload: {} });
+      openAuthGate();
     },
     applyLoadedProfileToLocal: (profile) => {
       setProfileName((prev) => (prev.trim() ? prev : profile.display_name ?? ""));
@@ -1494,8 +1564,55 @@ export default function App() {
   });
 
   const {
+    loadCommunityFunnelConfig,
+    handleSaveCommunityFunnel,
+  } = useCommunityFunnelController<CloudAuthSession, CommunityFunnelConfig>({
+    activeCommunityId,
+    session: cloudSession,
+    communityFunnelConfig,
+    normalizeConfigForSave: normalizeCommunityFunnelConfig,
+    saveConfig: async ({ session, communityId, normalizedConfig }) => {
+      const saved = await saveCloudCommunityPublicPage<CloudAuthSession, CommunityFunnelConfig>({
+        session,
+        communityId,
+        description: communityFunnelOneLiner.trim() || null,
+        config: normalizedConfig,
+      });
+      const resolvedDescription = saved?.description ?? null;
+      communityFunnelSavedOneLinerRef.current = resolvedDescription ?? "";
+      setCommunityFunnelOneLiner(resolvedDescription ?? "");
+      setCommunitySettingsDescription(resolvedDescription ?? "");
+      setCommunities((prev) =>
+        prev.map((community) =>
+          community.id === communityId
+            ? {
+                ...community,
+                description: resolvedDescription,
+                updated_at: saved?.updated_at || community.updated_at,
+              }
+            : community,
+        ),
+      );
+      return saved?.funnel ?? normalizedConfig;
+    },
+    hydrateEditor: hydrateCommunityFunnelEditor,
+    setLoadedCommunityId: (communityId) => {
+      communityFunnelLoadedCommunityIdRef.current = communityId;
+    },
+    markDraftClean: () => {
+      communityFunnelDirtyRef.current = false;
+    },
+    setIsLoadingCommunityFunnel,
+    setCommunityFunnelError,
+    setCommunityFunnelSaveError,
+    setIsSavingCommunityFunnel,
+    loadFailureMessage: "Failed to load funnel settings.",
+    saveFailureMessage: "Failed to save funnel settings.",
+  });
+
+  const {
     syncCommunitySettingsSelection,
-  } = useCommunitySettingsFormController<CommunityRecord, CommunityInviteRecord>({
+  } = useCommunitySettingsFormController<CommunityRecord>({
     slugifyCommunityName,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
@@ -1511,14 +1628,10 @@ export default function App() {
     setCommunitySettingsBannerFocusX,
     setCommunitySettingsBannerFocusY,
     setCommunitySettingsBannerZoom,
-    setCommunitySettingsMonthlyPlanId,
-    setCommunitySettingsYearlyPlanId,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdYearly,
     setCommunityMemberMuted,
-    setCommunityInvites,
-    setInviteCreateError,
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
   });
@@ -1532,16 +1645,12 @@ export default function App() {
     setCommunityMemberMuted,
     setIsLoadingCommunityMemberSettings,
     setCommunityMemberSettingsError,
-    setCommunitySettingsMonthlyPlanId,
-    setCommunitySettingsYearlyPlanId,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdYearly,
   });
 
-  const activeCommunitySettingsSource = activeCommunityId
-    ? communities.find((community) => community.id === activeCommunityId) ?? null
-    : null;
+  const activeCommunitySettingsSource = activeCommunity;
 
   const {
     handleToggleCommunityMute,
@@ -1604,8 +1713,6 @@ export default function App() {
             : community,
         ),
       );
-      setCommunitySettingsMonthlyPlanId(result.monthly_plan_id);
-      setCommunitySettingsYearlyPlanId(result.yearly_plan_id);
       communitySettingsDirtyRef.current = false;
       communityPricingDirtyRef.current = false;
     },
@@ -1639,11 +1746,10 @@ export default function App() {
   });
 
   const {
-    loadCommunityHasPaidPlans,
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,
-    handleSetCommunityFreeJoinRequiresApproval,
+    handleSetCommunityFreeAccessMode,
   } = useCommunityMembersReviewController<
     CloudAuthSession,
     CommunityJoinRequest,
@@ -1652,7 +1758,7 @@ export default function App() {
     activeCommunityId,
     ...cloudSessionArg,
     canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
-    isSavingFreeJoinRequiresApproval,
+    isSavingFreeAccessMode,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
     loadCommunityMembers,
     setCommunities,
@@ -1660,7 +1766,7 @@ export default function App() {
     setIsLoadingCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
-    setIsSavingFreeJoinRequiresApproval,
+    setIsSavingFreeAccessMode,
   });
 
   const [exportError, setExportError] = useState<string | null>(null);
@@ -1709,7 +1815,6 @@ export default function App() {
     searchPersonalMemoryItems,
   } = useWebMemorySettingsDataController<CloudAuthSession>({
     getSession: () => sessionRef.current,
-    getCloudAuthUid,
     setIsLoadingUserMemorySettings,
     setUserMemorySettings,
     setIsLoadingUserModelSettings,
@@ -1722,7 +1827,6 @@ export default function App() {
   });
 
   const {
-    saveUserMemorySettings,
     saveUserModelSettings,
     createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
@@ -1730,7 +1834,6 @@ export default function App() {
     handleDeletePersonalMemoryItem,
   } = useWebMemoryMutationController<CloudAuthSession>({
     getSession: () => sessionRef.current,
-    getCloudAuthUid,
     openAuthGate,
     loadPersonalMemoryItems,
     newPersonalMemoryContent,
@@ -1762,7 +1865,7 @@ export default function App() {
       setActiveThreadId,
     });
 
-  const { loadDiscoverCommunities } = useWebDiscoverController<DiscoverCommunity>({
+  const { loadDiscoverCommunities } = useWebDiscoverController({
     toCanonicalCommunityVisibility,
     setIsLoadingDiscover,
     setDiscoverError,
@@ -1782,6 +1885,72 @@ export default function App() {
     appToastTimeoutRef,
     setAppToast,
   });
+
+  const resetMemoryImportModal = useCallback(() => {
+    setIsMemoryImportModalOpen(false);
+    setMemoryImportText("");
+    setMemoryImportError(null);
+  }, []);
+
+  const closeMemoryImportModal = useCallback(() => {
+    if (isImportingMemory) return;
+    resetMemoryImportModal();
+  }, [isImportingMemory, resetMemoryImportModal]);
+
+  const handleImportExternalMemory = useCallback(async (): Promise<void> => {
+    if (!cloudSession) {
+      openAuthGate();
+      return;
+    }
+
+    const importItems = memoryImportPlan.uniqueItems;
+    if (importItems.length === 0) {
+      setMemoryImportError(
+        memoryImportPlan.parsedItems.length === 0
+          ? "No memory entries found. Paste the provider export, ideally including the code block."
+          : "Everything in this import is already in your personal memory.",
+      );
+      return;
+    }
+
+    setMemoryImportError(null);
+    setIsImportingMemory(true);
+    try {
+      let importedCount = 0;
+      for (const item of importItems) {
+        const created = await createPersonalMemoryItemDirect({
+          content: item.memoryContent,
+          pinned: false,
+        });
+        if (created) importedCount += 1;
+      }
+      await loadPersonalMemoryItems();
+      resetMemoryImportModal();
+      const duplicateCount = memoryImportPlan.duplicateCount;
+      const importedLabel = `${importedCount} memory item${importedCount === 1 ? "" : "s"}`;
+      const duplicateLabel =
+        duplicateCount > 0 ? ` · skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}` : "";
+      showMemoryToastMessage(`Imported ${importedLabel}${duplicateLabel}`);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to import memory.";
+      setMemoryImportError(message);
+    } finally {
+      setIsImportingMemory(false);
+    }
+  }, [
+    cloudSession,
+    createPersonalMemoryItemDirect,
+    loadPersonalMemoryItems,
+    memoryImportPlan,
+    openAuthGate,
+    resetMemoryImportModal,
+    showMemoryToastMessage,
+  ]);
 
   const refreshCloudProjectStatuses = useCallback(() => {
     if (!cloudSession) return;
@@ -1922,6 +2091,7 @@ export default function App() {
       setWorkspaceWantsNewChatMode(false);
       setActiveThreadId(null);
       threadsHydratedRef.current = false;
+      setLoadingThreadMessagesThreadId(null);
       setThreadMessages([]);
       setPersonalMemoryItems([]);
       setPendingPurchaseClaims([]);
@@ -1995,6 +2165,28 @@ export default function App() {
     communityAgentLandingFetchSeqRef,
     setActiveCommunityAgentLanding,
   });
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "funnel") return;
+    if (!cloudSession || !activeCommunityId || !canManageMembersActiveCommunity) {
+      setCommunityFunnelError(null);
+      setIsLoadingCommunityFunnel(false);
+      communityFunnelLoadedCommunityIdRef.current = null;
+      communityFunnelSavedConfigRef.current = DEFAULT_COMMUNITY_FUNNEL_CONFIG;
+      setCommunityFunnelConfig(DEFAULT_COMMUNITY_FUNNEL_CONFIG);
+      communityFunnelDirtyRef.current = false;
+      return;
+    }
+    if (communityFunnelLoadedCommunityIdRef.current === activeCommunityId) return;
+    void loadCommunityFunnelConfig(activeCommunityId, cloudSession);
+  }, [
+    activePage,
+    communityTab,
+    cloudSession,
+    activeCommunityId,
+    canManageMembersActiveCommunity,
+    loadCommunityFunnelConfig,
+  ]);
 
   useEffect(() => {
     captureBrandosAidFromLocation();
@@ -2122,6 +2314,7 @@ export default function App() {
     autoScrollEnabledRef,
     lastWorkspaceScrollTopRef,
     setIsWorkspaceAtBottom,
+    setLoadingThreadMessagesThreadId,
     setThreadMessages,
     loadThreadMessages,
     loadDiscoverCommunities,
@@ -2168,7 +2361,10 @@ export default function App() {
 
   useEffect(() => {
     setCommunityChatError(null);
-    setCommunityMessages([]);
+    const cachedCommunityMessages = activeCommunityId
+      ? loadCachedCommunityChatMessages(activeCommunityId)
+      : [];
+    setCommunityMessages(cachedCommunityMessages);
     setMessageReactions([]);
     setReplyingToMessage(null);
     setEditingMessageId(null);
@@ -2188,8 +2384,12 @@ export default function App() {
 
   useEffect(() => {
     setCommunityMembersRoleFilter("all");
-    setCommunityMembersPlanFilter("all");
   }, [activeCommunityId]);
+
+  useEffect(() => {
+    if (!activeCommunityId) return;
+    saveCachedCommunityChatMessages(activeCommunityId, communityMessages);
+  }, [activeCommunityId, communityMessages]);
 
   useCommunitySettingsAccessLifecycle<CloudAuthSession, CommunityRecord>({
     activePage,
@@ -2203,8 +2403,6 @@ export default function App() {
     loadCommunityPricing,
     loadCommunityAccess,
     setCommunityMemberMuted,
-    setCommunitySettingsMonthlyPlanId,
-    setCommunitySettingsYearlyPlanId,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdYearly,
@@ -2212,17 +2410,8 @@ export default function App() {
     setIsLoadingCommunityAccess,
   });
 
-  const canInviteActiveCommunity = communityActionGuards.canInvite;
-  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
-  const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
-  const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
-  const canCreateResourcesActiveCommunity = communityActionGuards.canCreateResources;
-  const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
-  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
-  const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
-  const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
-  const [activeCommunityOwnerIsPro, setActiveCommunityOwnerIsPro] = useState<boolean | null>(null);
-  const activeCommunityOwnerIsProLoadedCommunityIdRef = useRef<string | null>(null);
+  const [activeCommunityOwnerHasBuilderAccess, setActiveCommunityOwnerHasBuilderAccess] = useState<boolean | null>(null);
+  const activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef = useRef<string | null>(null);
 
   const loadCommunityAiFeed = useCallback(async (communityId: string) => {
     if (!cloudSession) {
@@ -2230,7 +2419,7 @@ export default function App() {
         ...prev,
         [communityId]: {
           live: [],
-          important: [],
+          ranked: [],
           isLoading: false,
           error: "Sign in to view the AI feed.",
         },
@@ -2241,19 +2430,19 @@ export default function App() {
       ...prev,
       [communityId]: {
         live: prev[communityId]?.live ?? [],
-        important: prev[communityId]?.important ?? [],
+        ranked: prev[communityId]?.ranked ?? [],
         isLoading: true,
         error: null,
       },
     }));
     try {
-      const [live, important] = await Promise.all([
+      const [live, ranked] = await Promise.all([
         listCloudCommunityAiFeedLive<CloudAuthSession, CommunityAiFeedPost>({
           session: cloudSession,
           communityId,
           limit: 100,
         }),
-        listCloudCommunityAiFeedImportant<CloudAuthSession, CommunityAiFeedPost>({
+        listCloudCommunityAiFeedRanked<CloudAuthSession, CommunityAiFeedPost>({
           session: cloudSession,
           communityId,
           limit: 100,
@@ -2263,7 +2452,7 @@ export default function App() {
         ...prev,
         [communityId]: {
           live,
-          important,
+          ranked,
           isLoading: false,
           error: null,
         },
@@ -2273,7 +2462,7 @@ export default function App() {
         ...prev,
         [communityId]: {
           live: prev[communityId]?.live ?? [],
-          important: prev[communityId]?.important ?? [],
+          ranked: prev[communityId]?.ranked ?? [],
           isLoading: false,
           error: error instanceof Error ? error.message : "Failed to load AI feed.",
         },
@@ -2297,7 +2486,7 @@ export default function App() {
           ...prev,
           [activeCommunityId]: {
             live: prev[activeCommunityId]?.live ?? [],
-            important: prev[activeCommunityId]?.important ?? [],
+            ranked: prev[activeCommunityId]?.ranked ?? [],
             isLoading: false,
             error: error instanceof Error ? error.message : "Failed to update AI feed.",
           },
@@ -2315,9 +2504,9 @@ export default function App() {
     ...cloudSessionArg,
     activeCommunityId,
     canManageMembersActiveCommunity,
-    activeCommunityOwnerIsPro,
-    setActiveCommunityOwnerIsPro,
-    activeCommunityOwnerIsProLoadedCommunityIdRef,
+    activeCommunityOwnerHasBuilderAccess,
+    setActiveCommunityOwnerHasBuilderAccess,
+    activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef,
     loadCommunityAgentDrafts,
     communityAgentDraftsLoadedCommunityIdRef,
     setCommunityAgentDrafts,
@@ -2327,7 +2516,6 @@ export default function App() {
 
   useCommunityMembersReviewLifecycle<
     CloudAuthSession,
-    CommunityInviteRecord,
     CommunityJoinRequest,
     CommunityRecord
   >({
@@ -2336,14 +2524,10 @@ export default function App() {
     ...cloudSessionArg,
     activeCommunityId,
     communities,
-    canInviteActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
     membersCommunityHasPaidPlans,
     isJoinRequestsModalOpen,
-    loadCommunityInvites,
-    loadCommunityHasPaidPlans,
     loadCommunityJoinRequests,
-    setCommunityInvites,
     setMembersCommunityHasPaidPlans,
     setIsLoadingMembersCommunityPricing,
     setCommunityJoinRequests,
@@ -2415,6 +2599,15 @@ export default function App() {
         if (!modelId) return;
         setActiveModelId(modelId);
       },
+      connect_provider: (payload) => {
+        if (payload.provider === "chatgpt") {
+          void handleConnectChatgpt();
+          return;
+        }
+        setActiveView("settings");
+        setSettingsPage("account");
+        showAppToastMessage("Add your OpenRouter key in Settings to finish connecting.");
+      },
       create_community: () => {
         openCreateCommunityModal();
       },
@@ -2444,50 +2637,6 @@ export default function App() {
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
-      },
-      save_profile: () => {
-        void saveProfileToCloud();
-      },
-      create_memory: (payload) => {
-        void createPersonalMemoryItemDirect({ content: payload.content, pinned: payload.pinned })
-          .then(() => loadPersonalMemoryItems())
-          .then(() => showMemoryToastMessage("Memory updated"))
-          .catch((error) => console.warn("Failed to create memory:", error));
-      },
-      toggle_memory_pinned: (payload) => {
-        void (async () => {
-          try {
-            const session = sessionRef.current ?? cloudSession;
-            const url = getCloudUrl();
-            if (!session || !url) return;
-            await updateCloudPersonalMemoryPinned({
-              session,
-              id: payload.id,
-              pinned: payload.pinned,
-            });
-            await loadPersonalMemoryItems();
-            showMemoryToastMessage("Memory updated");
-          } catch (error) {
-            console.warn("Failed to toggle memory pin:", error);
-          }
-        })();
-      },
-      delete_memory: (payload) => {
-        void (async () => {
-          try {
-            const session = sessionRef.current ?? cloudSession;
-            const url = getCloudUrl();
-            if (!session || !url) return;
-            await deleteCloudPersonalMemoryItem({
-              session,
-              id: payload.id,
-            });
-            await loadPersonalMemoryItems();
-            showMemoryToastMessage("Memory deleted");
-          } catch (error) {
-            console.warn("Failed to delete memory:", error);
-          }
-        })();
       },
     });
   }
@@ -2530,34 +2679,11 @@ export default function App() {
   }
 
   const loadOpenRouterConnection = useCallback(async (session: CloudAuthSession): Promise<void> => {
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setOpenRouterConnection({
-        provider: "openrouter",
-        auth_kind: "api_key",
-        connected: false,
-        key_last_four: null,
-        validated_at: null,
-        updated_at: null,
-      });
-      setChatgptConnection({
-        provider: "chatgpt",
-        auth_kind: "oauth_tokens",
-        connected: false,
-        email: null,
-        account_id: null,
-        access_token_expires_at: null,
-        validated_at: null,
-        updated_at: null,
-      });
-      return;
-    }
     setIsLoadingOpenRouterConnection(true);
     setIsLoadingChatgptConnection(true);
     try {
       const result = await loadCloudProviderConnections({
         session,
-        userId,
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
@@ -2579,11 +2705,6 @@ export default function App() {
       openAuthGate({ reason: "connect_provider", payload: { provider: "openrouter" } });
       return;
     }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setOpenRouterConnectionError("User identity is unavailable.");
-      return;
-    }
     const apiKey = openRouterApiKeyDraft.trim();
     if (!apiKey) {
       setOpenRouterConnectionError("OpenRouter API key is required.");
@@ -2596,7 +2717,6 @@ export default function App() {
     try {
       const result = await connectCloudOpenRouterApiKey({
         session,
-        userId,
         apiKey,
       });
       setOpenRouterConnection(result.openrouter);
@@ -2613,18 +2733,12 @@ export default function App() {
   const handleDisconnectOpenRouter = useCallback(async (): Promise<void> => {
     const session = sessionRef.current ?? cloudSession;
     if (!session) return;
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setOpenRouterConnectionError("User identity is unavailable.");
-      return;
-    }
     setIsSavingOpenRouterConnection(true);
     setOpenRouterConnectionError(null);
     setOpenRouterConnectionSuccess(null);
     try {
       const result = await disconnectCloudOpenRouterApiKey({
         session,
-        userId,
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
@@ -2637,24 +2751,46 @@ export default function App() {
     }
   }, [cloudSession]);
 
-  const handleConnectChatgpt = useCallback(async (): Promise<void> => {
+  const resetChatgptConnectFlowState = useCallback((): void => {
+    if (chatgptConnectPollTimeoutRef.current) {
+      window.clearTimeout(chatgptConnectPollTimeoutRef.current);
+      chatgptConnectPollTimeoutRef.current = null;
+    }
+    setChatgptDeviceLoginId(null);
+    setChatgptDeviceVerificationUrl(null);
+    setChatgptDeviceUserCode(null);
+    setChatgptDevicePollIntervalSeconds(5);
+    setChatgptManualAuthorizeUrl(null);
+    setChatgptManualCallbackInput("");
+  }, []);
+
+  const handleConnectChatgpt = useCallback((): void => {
     const session = sessionRef.current ?? cloudSession;
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
     }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
+    setChatgptConnectionError(null);
+    setChatgptConnectionSuccess(null);
+    if (!chatgptDeviceLoginId && !chatgptManualAuthorizeUrl) {
+      resetChatgptConnectFlowState();
+    }
+    setIsChatgptConnectModalOpen(true);
+  }, [chatgptDeviceLoginId, chatgptManualAuthorizeUrl, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
+
+  const handleStartChatgptDeviceConnect = useCallback(async (): Promise<void> => {
+    const session = sessionRef.current ?? cloudSession;
+    if (!session) {
+      openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
     }
+    resetChatgptConnectFlowState();
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
     setChatgptConnectionSuccess(null);
     try {
       const result = await beginCloudChatgptConnect({
         session,
-        userId,
         returnToPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
       });
       setChatgptDeviceLoginId(result.login_id);
@@ -2667,7 +2803,7 @@ export default function App() {
     } finally {
       setIsConnectingChatgpt(false);
     }
-  }, [cloudSession, openAuthGate]);
+  }, [cloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleOpenChatgptAuthorizePage = useCallback(() => {
     if (!chatgptDeviceVerificationUrl) return;
@@ -2680,18 +2816,12 @@ export default function App() {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
     }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
-      return;
-    }
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
     setChatgptConnectionSuccess(null);
     try {
       const result = await beginCloudChatgptManualConnect({
         session,
-        userId,
         returnToPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
       });
       setChatgptManualAuthorizeUrl(result.authorize_url);
@@ -2715,11 +2845,6 @@ export default function App() {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return false;
     }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
-      return false;
-    }
     const loginId = String(chatgptDeviceLoginId ?? "").trim();
     if (!loginId) {
       setChatgptConnectionError("ChatGPT sign-in is not active. Start the connection flow again.");
@@ -2731,38 +2856,32 @@ export default function App() {
     try {
       const result = await pollCloudChatgptConnect({
         session,
-        userId,
         loginId,
       });
       if (result.status !== "connected") return false;
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
       setIsChatgptConnectModalOpen(false);
-      setChatgptDeviceLoginId(null);
-      setChatgptDeviceVerificationUrl(null);
-      setChatgptDeviceUserCode(null);
-      setChatgptDevicePollIntervalSeconds(5);
-      setChatgptManualAuthorizeUrl(null);
-      setChatgptManualCallbackInput("");
+      resetChatgptConnectFlowState();
       setChatgptConnectionSuccess("ChatGPT connected.");
       return true;
     } catch (error) {
-      setChatgptConnectionError(error instanceof Error ? error.message : "Failed to complete ChatGPT sign-in.");
+      const message = error instanceof Error ? error.message : "Failed to complete ChatGPT sign-in.";
+      setChatgptConnectionError(message);
+      const normalized = message.toLowerCase();
+      if (normalized.includes("expired") || normalized.includes("invalid")) {
+        resetChatgptConnectFlowState();
+      }
       return false;
     } finally {
       setIsPollingChatgptConnection(false);
     }
-  }, [chatgptDeviceLoginId, cloudSession, openAuthGate]);
+  }, [chatgptDeviceLoginId, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleCompleteChatgptManualConnect = useCallback(async (): Promise<void> => {
     const session = sessionRef.current ?? cloudSession;
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
-      return;
-    }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
       return;
     }
     const callbackInput = chatgptManualCallbackInput.trim();
@@ -2776,45 +2895,32 @@ export default function App() {
     try {
       const result = await completeCloudChatgptConnect({
         session,
-        userId,
         callbackInput,
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
       setIsChatgptConnectModalOpen(false);
-      setChatgptDeviceLoginId(null);
-      setChatgptDeviceVerificationUrl(null);
-      setChatgptDeviceUserCode(null);
-      setChatgptDevicePollIntervalSeconds(5);
-      setChatgptManualAuthorizeUrl(null);
-      setChatgptManualCallbackInput("");
+      resetChatgptConnectFlowState();
       setChatgptConnectionSuccess("ChatGPT connected.");
     } catch (error) {
       setChatgptConnectionError(error instanceof Error ? error.message : "Failed to complete ChatGPT browser login.");
     } finally {
       setIsCompletingChatgptConnection(false);
     }
-  }, [chatgptManualCallbackInput, cloudSession, openAuthGate]);
+  }, [chatgptManualCallbackInput, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleDisconnectChatgpt = useCallback(async (): Promise<void> => {
     const session = sessionRef.current ?? cloudSession;
     if (!session) return;
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
-      return;
-    }
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
     setChatgptConnectionSuccess(null);
     try {
       const result = await disconnectCloudChatgpt({
         session,
-        userId,
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
-      setChatgptProbeResult(null);
       setChatgptConnectionSuccess("ChatGPT disconnected.");
     } catch (error) {
       setChatgptConnectionError(error instanceof Error ? error.message : "Failed to disconnect ChatGPT.");
@@ -2823,48 +2929,26 @@ export default function App() {
     }
   }, [cloudSession]);
 
-  const handleProbeChatgpt = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
-    if (!session) {
-      openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
-      return;
-    }
-    const userId = String(getCloudAuthUid(session) ?? session.user.id ?? "").trim();
-    if (!userId) {
-      setChatgptConnectionError("User identity is unavailable.");
-      return;
-    }
-    setIsProbingChatgptConnection(true);
+  const handleCloseChatgptConnectModal = useCallback((): void => {
+    if (isConnectingChatgpt || isCompletingChatgptConnection) return;
+    setIsChatgptConnectModalOpen(false);
     setChatgptConnectionError(null);
-    setChatgptConnectionSuccess(null);
-    setChatgptProbeResult(null);
-    try {
-      const result = await probeCloudChatgptConnection({
-        session,
-        userId,
-        modelId: "gpt-5.4",
-        prompt: "Reply with exactly the word OK.",
-      });
-      setChatgptProbeResult(result);
-      if (result.ok) {
-        setChatgptConnectionSuccess("ChatGPT probe succeeded.");
-      } else {
-        setChatgptConnectionError(
-          `${result.message}${result.code ? ` (${result.code})` : ""}${result.status ? ` [HTTP ${result.status}]` : ""}`,
-        );
-      }
-    } catch (error) {
-      setChatgptConnectionError(error instanceof Error ? error.message : "Failed to probe ChatGPT connection.");
-    } finally {
-      setIsProbingChatgptConnection(false);
+    if (!chatgptDeviceLoginId && !chatgptManualAuthorizeUrl) {
+      resetChatgptConnectFlowState();
     }
-  }, [cloudSession, openAuthGate]);
+  }, [
+    chatgptDeviceLoginId,
+    chatgptManualAuthorizeUrl,
+    isCompletingChatgptConnection,
+    isConnectingChatgpt,
+    resetChatgptConnectFlowState,
+  ]);
 
   useEffect(() => {
     const session = cloudSession;
     if (!session) {
       navStackRef.current = [];
-      setUserMemorySettings({ memory_mode: "off", remember_intent_enabled: true });
+      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
       setUserModelSettings({ system_prompt: "" });
       setSystemPromptDraft("");
       setOpenRouterConnection({
@@ -2890,7 +2974,6 @@ export default function App() {
       setIsConnectingChatgpt(false);
       setIsPollingChatgptConnection(false);
       setIsCompletingChatgptConnection(false);
-      setIsProbingChatgptConnection(false);
       setIsChatgptConnectModalOpen(false);
       setChatgptDeviceLoginId(null);
       setChatgptDeviceVerificationUrl(null);
@@ -2903,7 +2986,6 @@ export default function App() {
       setOpenRouterConnectionSuccess(null);
       setChatgptConnectionError(null);
       setChatgptConnectionSuccess(null);
-      setChatgptProbeResult(null);
       return;
     }
     void loadUserMemorySettings(session);
@@ -2912,7 +2994,7 @@ export default function App() {
   }, [cloudSession, loadOpenRouterConnection]);
 
   useEffect(() => {
-    if (!isChatgptConnectModalOpen || !chatgptDeviceLoginId || !cloudSession) return;
+    if (!chatgptDeviceLoginId || !cloudSession || chatgptConnection.connected) return;
     if (isPollingChatgptConnection) return;
     if (chatgptConnectPollTimeoutRef.current) {
       window.clearTimeout(chatgptConnectPollTimeoutRef.current);
@@ -2929,11 +3011,11 @@ export default function App() {
       }
     };
   }, [
+    chatgptConnection.connected,
     chatgptDeviceLoginId,
     chatgptDevicePollIntervalSeconds,
     cloudSession,
     handlePollChatgptConnect,
-    isChatgptConnectModalOpen,
     isPollingChatgptConnection,
   ]);
 
@@ -2992,14 +3074,6 @@ export default function App() {
       setResourceSuccess,
       setOpenResourceEmbedId,
       setCommunityMembers,
-      setCommunityInvites,
-      setIsLoadingCommunityInvites,
-      setInviteMaxUsesPreset,
-      setInviteMaxUsesCustom,
-      setInviteExpiryPreset,
-      setInviteExpiryCustom,
-      setInviteCreateError,
-      setIsCreatingInvite,
       setCommunitySettingsName,
       setCommunitySettingsSlug,
       setCommunitySettingsDescription,
@@ -3148,7 +3222,7 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+  async function setDevBuilderTier(tier: "free" | "builder"): Promise<void> {
     const session = sessionRef.current ?? cloudSession;
     if (!session || !canUseDevTierOverride) return;
     setIsSettingDevBuilderTier(true);
@@ -3441,7 +3515,6 @@ export default function App() {
       try {
         const prompt = await fetchActiveCloudCommunityAgentSystemPrompt({
           session: params.session,
-          userId: getCloudAuthUid(params.session),
           communityId,
         });
         return prompt?.systemPrompt ?? null;
@@ -3714,7 +3787,7 @@ export default function App() {
     return null;
   }
 
-  async function ingestAttachmentsFromFileList(
+  async function ingestWorkspaceAttachmentsFromFileList(
     files: FileList,
     existing: MessageAttachment[],
     onError: (message: string) => void,
@@ -3778,9 +3851,128 @@ export default function App() {
     return [...existing, ...next];
   }
 
+  async function ingestCommunityAttachmentsFromFileList(
+    files: FileList,
+    existing: MessageAttachment[],
+    onError: (message: string) => void,
+  ): Promise<MessageAttachment[]> {
+    if (files.length === 0) return existing;
+    const remaining = Math.max(0, MAX_WEB_ATTACHMENTS_PER_MESSAGE - existing.length);
+    if (remaining === 0) {
+      onError(`You can attach up to ${MAX_WEB_ATTACHMENTS_PER_MESSAGE} files per message.`);
+      return existing;
+    }
+
+    const picked = Array.from(files).slice(0, remaining);
+    const next: MessageAttachment[] = [];
+    for (const file of picked) {
+      if (!file) continue;
+      const name = (file.name ?? "").trim() || "attachment";
+      const isImage = isLikelyImageFile(file);
+      const maxBytes = isImage ? MAX_WEB_IMAGE_UPLOAD_BYTES : MAX_WEB_FILE_UPLOAD_BYTES;
+      if (file.size > maxBytes) {
+        onError(`${name} is too large (max ${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`);
+        continue;
+      }
+      const base: MessageAttachment = {
+        id: crypto.randomUUID(),
+        name,
+        type: "file",
+        mime: (file.type ?? "").trim() || null,
+        size: file.size,
+        file,
+      };
+      try {
+        if (isImage) {
+          if (!isSupportedChatRasterImage(file)) {
+            onError(`${name}: unsupported image format. Please use PNG, JPG, GIF, WEBP, or AVIF.`);
+            continue;
+          }
+          base.type = "image";
+          base.data_url = await readChatImageAsDataUrl(file, MAX_WEB_IMAGE_DATA_URL_CHARS);
+          next.push(base);
+          continue;
+        }
+        if (isLikelyTextFile(file)) {
+          const { text, truncated } = await readTextAttachmentPreview(file, MAX_WEB_TEXT_ATTACHMENT_BYTES);
+          base.text = text;
+          base.truncated = truncated;
+          next.push(base);
+          continue;
+        }
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to read file.";
+        onError(`${name}: ${message}`);
+        continue;
+      }
+      next.push(base);
+    }
+
+    return [...existing, ...next];
+  }
+
+  async function prepareCommunityAttachmentsForSend(
+    attachments: MessageAttachment[],
+    session: CloudAuthSession,
+    communityId: string,
+  ): Promise<MessageAttachment[]> {
+    const prepared: MessageAttachment[] = [];
+    for (const attachment of attachments) {
+      const currentStorageId = String(attachment.storage_id ?? "").trim();
+      let nextStorageId = currentStorageId || null;
+      if (!nextStorageId && attachment.file instanceof File) {
+        nextStorageId = await uploadCloudCommunityChatAttachmentFile({
+          session,
+          communityId,
+          file: attachment.file,
+        });
+      }
+      prepared.push({
+        ...attachment,
+        storage_id: nextStorageId,
+        file: null,
+      });
+    }
+    return prepared;
+  }
+
+  function serializeCommunityAttachmentsForWrite(attachments: MessageAttachment[]): unknown[] {
+    const out: unknown[] = [];
+    for (const attachment of attachments) {
+      const storageId = String(attachment.storage_id ?? "").trim();
+      const dataUrl =
+        typeof attachment.data_url === "string" && attachment.data_url.trim().startsWith("data:")
+          ? attachment.data_url.trim()
+          : "";
+      if (!storageId && !dataUrl) continue;
+      out.push({
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        mime: attachment.mime ?? null,
+        size: attachment.size,
+        ...(storageId ? { storageId } : null),
+        ...(dataUrl ? { data_url: dataUrl } : null),
+        ...(attachment.text ? { text: attachment.text } : null),
+        ...(typeof attachment.truncated === "boolean" ? { truncated: attachment.truncated } : null),
+      });
+    }
+    return out;
+  }
+
   const hasPaidAccess = Boolean(cloudSession) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
   const hasUserKeyConnection = Boolean(cloudSession) && openRouterConnection.connected;
   const hasUserChatgptConnection = Boolean(cloudSession) && chatgptConnection.connected;
+  const hasPendingChatgptAuth = Boolean(chatgptDeviceLoginId || chatgptManualAuthorizeUrl);
+  const shouldShowEmptyThreadChatgptCard =
+    Boolean(cloudSession) &&
+    !hasUserChatgptConnection &&
+    !isLoadingChatgptConnection;
 
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     CloudAuthSession,
@@ -3849,7 +4041,6 @@ export default function App() {
   const { resetGuestThread, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
     useWebWorkspaceActionsController<CloudAuthSession, MessageAttachment, ThreadMessage>({
       getSession: () => sessionRef.current,
-      getCloudAuthUid,
       buildCsv,
       downloadTextFile,
       parseMessageText,
@@ -3896,15 +4087,16 @@ export default function App() {
     setAuthError,
   });
 
-  const activeCommunity = useMemo(() => {
-    if (!activeCommunityId) return null;
-    return communities.find((c) => c.id === activeCommunityId) ?? null;
-  }, [activeCommunityId, communities]);
+  useEffect(() => {
+    const nextOneLiner = activeCommunity?.description ?? "";
+    communityFunnelSavedOneLinerRef.current = nextOneLiner;
+    setCommunityFunnelOneLiner(nextOneLiner);
+  }, [activeCommunity?.description, activeCommunityId]);
   const activeCommunityFeedState = useMemo(() => {
     if (!activeCommunityId) {
       return {
         live: [] as CommunityAiFeedPost[],
-        important: [] as CommunityAiFeedPost[],
+        ranked: [] as CommunityAiFeedPost[],
         isLoading: false,
         error: null as string | null,
       };
@@ -3912,12 +4104,12 @@ export default function App() {
     return (
       communityFeedByCommunityId[activeCommunityId] ?? {
         live: [] as CommunityAiFeedPost[],
-        important: [] as CommunityAiFeedPost[],
-        isLoading: false,
+        ranked: [] as CommunityAiFeedPost[],
+        isLoading: communityTab === "feed",
         error: null as string | null,
       }
     );
-  }, [activeCommunityId, communityFeedByCommunityId]);
+  }, [activeCommunityId, communityFeedByCommunityId, communityTab]);
 
   useEffect(() => {
     if (communityTab !== "feed") return;
@@ -3925,11 +4117,10 @@ export default function App() {
     void loadCommunityAiFeed(activeCommunityId);
   }, [activeCommunityId, communityTab, loadCommunityAiFeed]);
 
-  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
+  const normalizedBuilderTier = useMemo<"free" | "builder">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
   );
-  const normalizedBuilderTierForVoice = normalizedBuilderTier === "architect" ? "pro" : normalizedBuilderTier;
   const canUseDevTierOverride = useMemo(
     () =>
       canUseCreatorDevTierOverride({
@@ -3951,18 +4142,10 @@ export default function App() {
 
 		  const activeCommunityJoinMode = useMemo<CommunityJoinMode | null>(() => {
 		    if (!activeCommunity) return null;
-		    if (membersCommunityHasPaidPlans === null) return null;
-		    if (membersCommunityHasPaidPlans) return "checkout";
-        const rawVisibility = String(activeCommunity.visibility ?? "").trim().toLowerCase();
-        if (rawVisibility && !["published", "unlisted"].includes(rawVisibility)) {
-          return "request_access";
-        }
-        const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
-        if (visibility === "published" || visibility === "unlisted") {
-          return activeCommunity.free_join_requires_approval ? "request_access" : "join_free";
-        }
-		    return "request_access";
-		  }, [activeCommunity, membersCommunityHasPaidPlans]);
+        return deriveCommunityJoinMode({
+          entry_policy: activeCommunity.entry_policy,
+        });
+		  }, [activeCommunity]);
 
   const {
     workspaceVoiceIntent,
@@ -3976,7 +4159,7 @@ export default function App() {
     activeCommunity,
     activeCommunityJoinMode,
     canPostMessagesActiveCommunity,
-    normalizedBuilderTier: normalizedBuilderTierForVoice,
+    normalizedBuilderTier,
     openAuthGate: () => openAuthGate(),
     showAppToastMessage,
     setWorkspaceInput: setMessageInput,
@@ -3985,104 +4168,16 @@ export default function App() {
     chatInputRef,
   });
 
-  const communityMemberPlanCohorts = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        planId: string;
-        billingPeriod: string;
-        amountBaseUnits: number | null;
-        currency: string;
-        currencyDecimals: number;
-        count: number;
-      }
-    >();
-    for (const member of communityMembers) {
-      const planId = String(member.subscription_plan_id ?? "").trim();
-      const billingPeriod = String(member.subscription_billing_period ?? "").trim().toLowerCase();
-      if (!planId) continue;
-      if (billingPeriod !== "monthly" && billingPeriod !== "yearly") continue;
-
-      const rawAmount = String(member.subscription_amount_base_units ?? "").trim();
-      const parsedAmount = Number(rawAmount);
-      const amountBaseUnits = Number.isFinite(parsedAmount) ? parsedAmount : null;
-      const currency = String(member.subscription_currency ?? "USD").trim().toUpperCase() || "USD";
-      const currencyDecimals = Number(member.subscription_currency_decimals ?? 2);
-
-      const key = `${planId}:${billingPeriod}`;
-      const existing = map.get(key);
-      if (existing) {
-        existing.count += 1;
-        continue;
-      }
-      map.set(key, {
-        planId,
-        billingPeriod,
-        amountBaseUnits,
-        currency,
-        currencyDecimals: Number.isFinite(currencyDecimals) ? currencyDecimals : 2,
-        count: 1,
-      });
-    }
-    return Array.from(map.entries())
-      .map(([key, cohort]) => ({
-        key,
-        value: `cohort:${cohort.planId}:${cohort.billingPeriod}`,
-        label: formatSubscriptionPrice({
-          amountBaseUnits: cohort.amountBaseUnits,
-          currency: cohort.currency,
-          currencyDecimals: cohort.currencyDecimals,
-          billingPeriod: cohort.billingPeriod,
-        }),
-        sortPeriod: cohort.billingPeriod,
-        sortAmount: cohort.amountBaseUnits ?? Number.POSITIVE_INFINITY,
-        count: cohort.count,
-      }))
-      .sort((a, b) => {
-        const ap = a.sortPeriod === "monthly" ? 0 : 1;
-        const bp = b.sortPeriod === "monthly" ? 0 : 1;
-        if (ap !== bp) return ap - bp;
-        if (a.sortAmount !== b.sortAmount) return a.sortAmount - b.sortAmount;
-        return a.key.localeCompare(b.key);
-      });
-  }, [communityMembers]);
-
   const filteredCommunityMembers = useMemo(() => {
     const roleFilter = (communityMembersRoleFilter ?? "all").trim().toLowerCase();
-    const planFilter = (communityMembersPlanFilter ?? "all").trim().toLowerCase();
     const ownerId = activeCommunity?.owner_id ?? null;
     return communityMembers.filter((member) => {
-      const memberIsOwner = Boolean((ownerId && member.user_id === ownerId) || member.role === "owner");
+      const memberIsOwner = Boolean(ownerId && member.user_id === ownerId);
       const effectiveRole = memberIsOwner ? "owner" : String(member.role ?? "").trim().toLowerCase();
       if (roleFilter !== "all" && effectiveRole !== roleFilter) return false;
-
-      if (planFilter.startsWith("cohort:")) {
-        const rest = planFilter.slice("cohort:".length);
-        const [cohortPlanId, cohortPeriod] = rest.split(":");
-        const memberPlanId = String(member.subscription_plan_id ?? "").trim();
-        const billingPeriod = String(member.subscription_billing_period ?? "").trim().toLowerCase();
-        if (!cohortPlanId) return false;
-        if (!memberPlanId || memberPlanId !== cohortPlanId) return false;
-        if (cohortPeriod) return billingPeriod === cohortPeriod;
-        return true;
-      }
-
-      const billingPeriod = String(member.subscription_billing_period ?? "").trim().toLowerCase();
-      if (planFilter === "monthly" || planFilter === "yearly") {
-        return billingPeriod === planFilter;
-      }
-      if (planFilter === "free") {
-        const memberPlanId = String(member.subscription_plan_id ?? "").trim();
-        return !billingPeriod && !memberPlanId;
-      }
       return true;
     });
-  }, [
-    activeCommunity?.owner_id,
-    communityMembers,
-    communityMembersPlanFilter,
-    communityMembersRoleFilter,
-  ]);
+  }, [activeCommunity?.owner_id, communityMembers, communityMembersRoleFilter]);
 
   const communityMessageById = useMemo(() => {
     const map = new Map<string, CommunityChatMessage>();
@@ -4123,6 +4218,12 @@ export default function App() {
       activeCommunityId &&
       activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
   );
+  const isHydratingActiveWorkspaceThread = Boolean(
+    cloudSession &&
+      activeThreadId &&
+      activeThreadId !== GUEST_THREAD_ID &&
+      loadingThreadMessagesThreadId === activeThreadId,
+  );
   const isEmptyWorkspaceThread = !threadMessages.some((message) => message.role !== "system");
 
   const emptyThreadLanding = useMemo(() => {
@@ -4153,6 +4254,14 @@ export default function App() {
     () => resolveGeneralCloudProjectId(cloudProjects),
     [cloudProjects],
   );
+  const resolvedActiveCloudProjectName = useMemo(() => {
+    const activeName = resolvedActiveCloudProjectId
+      ? String(cloudProjectById.get(resolvedActiveCloudProjectId)?.name ?? "").trim()
+      : "";
+    if (activeName) return activeName;
+    if (!generalCloudProjectId) return "";
+    return String(cloudProjectById.get(generalCloudProjectId)?.name ?? "").trim();
+  }, [cloudProjectById, generalCloudProjectId, resolvedActiveCloudProjectId]);
   const resolveCloudThreadProjectId = useCallback(
     (thread: ThreadRecord): string | null => {
       return resolveCloudThreadProjectIdShared(thread, cloudProjectById, generalCloudProjectId);
@@ -4360,6 +4469,11 @@ export default function App() {
               !hasUserChatgptConnection &&
               (supportsUserKey || supportsUserChatgpt)
             ) {
+			        if (supportsUserChatgpt && !supportsUserKey) {
+                closeModelPicker();
+                void handleConnectChatgpt();
+                return;
+              }
 			        closeModelPicker();
               setActiveView("settings");
               setSettingsPage("account");
@@ -4492,11 +4606,11 @@ export default function App() {
 	      null;
 	    const publicVisibility = toCanonicalCommunityVisibility(publicCommunity?.visibility, "unlisted");
 	    const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
-		    const publicJoinMode: CommunityJoinMode | null = publicCommunity
-		      ? isCommunityJoinMode(publicCommunity.join_mode)
-		        ? publicCommunity.join_mode
-		        : "request_access"
-		      : null;
+	    const publicJoinMode: CommunityJoinMode | null = publicCommunity
+          ? deriveCommunityJoinMode({
+              entry_policy: publicCommunity.entry_policy,
+            })
+          : null;
 	    const publicVisibilityHint =
 	      publicVisibility === "published"
 	        ? publicJoinMode === "request_access"
@@ -4668,14 +4782,18 @@ export default function App() {
 	  function openCommunityChat(nextCommunityId: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }): void {
 	    openCommunityTab(nextCommunityId, "chat", opts);
 	  }
-  const handleOpenLandingCommunity = () => {
-    if (!activeCommunityId) return;
-    openCommunityChat(activeCommunityId, { clearUnread: true });
-  };
-	  const handleOpenDiscover = () => {
-	    const transition = deriveOpenDiscoverTransition({ activePage });
-	    if (transition.shouldPushSnapshot) pushNavSnapshot();
-	    setActiveView(transition.nextView);
+	  const handleOpenLandingCommunity = () => {
+	    if (!activeCommunityId) return;
+	    openCommunityChat(activeCommunityId, { clearUnread: true });
+	  };
+	  const handleOpenLandingProject = () => {
+	    if (!resolvedActiveCloudProjectId) return;
+	    handleStartDraftInCloudProject(resolvedActiveCloudProjectId);
+	  };
+		  const handleOpenDiscover = () => {
+		    const transition = deriveOpenDiscoverTransition({ activePage });
+		    if (transition.shouldPushSnapshot) pushNavSnapshot();
+		    setActiveView(transition.nextView);
 	    setActivePage(transition.nextPage);
 	  };
 	  const handleToggleWorkspaceSettings = () => {
@@ -4684,6 +4802,23 @@ export default function App() {
 	    setActivePage(transition.nextPage);
 	    setActiveView(transition.nextView);
 	  };
+  const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
+  const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
+  const funnelPreviewJoinMode = deriveCommunityJoinMode({
+    entry_policy: activeCommunity?.entry_policy,
+  });
+  const funnelPreviewVisibilityHint =
+    funnelPreviewVisibility === "published"
+      ? funnelPreviewJoinMode === "request_access"
+        ? "Preview is available. Request access to participate."
+        : funnelPreviewJoinMode === "join_free"
+          ? "Preview is available. Join to participate."
+          : "Preview is available. Select a plan to continue."
+      : funnelPreviewJoinMode === "request_access"
+        ? "Not listed in discovery. Request access to participate."
+        : funnelPreviewJoinMode === "join_free"
+          ? "Not listed in discovery. Share the link when you're ready."
+          : "Not listed in discovery. Select a plan to continue.";
   const communitySecondaryPanelsProps = buildWebCommunitySecondaryPanelsProps({
     communityTab,
     settings: {
@@ -4766,7 +4901,6 @@ export default function App() {
       setIsCommunityBannerFocusModalOpen,
     },
     feed: {
-      className: "web-community-centered-pane",
       capabilities: {
         hasActiveCommunity: Boolean(activeCommunity),
         hasSession: Boolean(cloudSession),
@@ -4775,7 +4909,7 @@ export default function App() {
       },
       state: {
         livePosts: activeCommunityFeedState.live,
-        importantPosts: activeCommunityFeedState.important,
+        rankedPosts: activeCommunityFeedState.ranked,
         isLoading: activeCommunityFeedState.isLoading,
         error: activeCommunityFeedState.error,
         reactingPostId: communityFeedReactingPostId,
@@ -4801,14 +4935,52 @@ export default function App() {
       landingEditorProps: {
         communityAgentDraftDirtyRef,
         handleSaveCommunityAgentDraft,
-        isSavingCommunityAgentDraft,
-        communityAgentDraftSaveError,
-        communityAgentDraftLanding,
-        setCommunityAgentDraftLanding,
-        markCommunityAgentDraftDirty,
-        communityAgentDraftSystemPrompt,
-        setCommunityAgentDraftSystemPrompt,
-        previewCommunityName: activeCommunity?.name ?? "Community",
+	        handleResetCommunityAgentDraft,
+	        isSavingCommunityAgentDraft,
+	        communityAgentDraftSaveError,
+	        communityAgentDraftLanding,
+	        setCommunityAgentDraftLanding,
+	        markCommunityAgentDraftDirty,
+	        communityAgentDraftSystemPrompt,
+	        setCommunityAgentDraftSystemPrompt,
+	        previewCommunityName: activeCommunity?.name ?? "Community",
+	        previewProjectName: resolvedActiveCloudProjectName,
+	      },
+	    },
+    funnel: {
+      activeCommunity,
+      hasSession: Boolean(cloudSession),
+      canManageMembersActiveCommunity,
+      isLoadingCommunityFunnel,
+      communityFunnelError,
+      onOpenAuthGate: openAuthGate,
+      editorProps: {
+        communityFunnelDirtyRef,
+        handleSaveCommunityFunnel,
+        handleResetCommunityFunnel,
+        handleUploadCommunityFunnelMedia,
+        communityOneLiner: communityFunnelOneLiner,
+        setCommunityOneLiner: setCommunityFunnelOneLiner,
+        isSavingCommunityFunnel,
+        communityFunnelSaveError,
+        communityFunnelConfig,
+        setCommunityFunnelConfig,
+        markCommunityFunnelDirty,
+        previewCommunity: {
+          slug: activeCommunity?.slug ?? null,
+          name: activeCommunity?.name ?? "Community",
+          description: activeCommunity?.description ?? null,
+          avatar_url: activeCommunity?.avatar_url ?? null,
+          banner_url: activeCommunity?.banner_url ?? null,
+          banner_focus_x: activeCommunity?.banner_focus_x ?? null,
+          banner_focus_y: activeCommunity?.banner_focus_y ?? null,
+          banner_zoom: activeCommunity?.banner_zoom ?? null,
+          visibility: activeCommunity?.visibility ?? "unlisted",
+        },
+        previewVisibilityLabel: funnelPreviewVisibilityLabel,
+        previewVisibilityHint: funnelPreviewVisibilityHint,
+        previewMemberCount: activeCommunity ? communityMembers.length : null,
+        previewJoinMode: funnelPreviewJoinMode,
       },
     },
     analytics: {
@@ -4865,8 +5037,6 @@ export default function App() {
         communityMembers,
         filteredCommunityMembers,
         communityMembersRoleFilter,
-        communityMembersPlanFilter,
-        communityMemberPlanCohorts,
         membersCommunityHasPaidPlans,
         activeCommunityJoinMode,
         communityJoinRequests,
@@ -4874,33 +5044,17 @@ export default function App() {
         decidingCommunityJoinRequestId,
         isLoadingMembersCommunityPricing,
         isLoadingCommunityJoinRequests,
-        isSavingFreeJoinRequiresApproval,
+        isSavingFreeAccessMode,
         isJoinRequestsModalOpen,
-        inviteMaxUsesPreset,
-        inviteMaxUsesCustom,
-        inviteExpiryPreset,
-        inviteExpiryCustom,
-        inviteCreateError,
-        isCreatingInvite,
-        isLoadingCommunityInvites,
-        communityInvites,
         profilesByUserId,
       },
       actions: {
         setCommunityMembersRoleFilter,
-        setCommunityMembersPlanFilter,
         setIsJoinRequestsModalOpen,
-        setInviteMaxUsesPreset,
-        setInviteMaxUsesCustom,
-        setInviteExpiryPreset,
-        setInviteExpiryCustom,
         displayName,
-        handleSetCommunityFreeJoinRequiresApproval,
+        handleSetCommunityFreeAccessMode,
         handleSetCommunityMemberRole,
         handleRemoveCommunityMember,
-        handleCreateInvite,
-        handleRevokeInvite,
-        handleDeleteInvite,
         handleApproveCommunityJoinRequest,
         handleDenyCommunityJoinRequest,
         copyTextToClipboard,
@@ -4940,6 +5094,7 @@ export default function App() {
     sessionUserId: cloudSession?.user.id ?? null,
     canPostMessages: canPostMessagesActiveCommunity,
     isLoadingChat,
+    hasResolvedCommunityChat,
     isLoadingMoreChat,
     communityChatHasMore,
     communityMessages,
@@ -4953,7 +5108,6 @@ export default function App() {
     reactionPickerMessageId,
     replyingToMessage,
     communityAttachments,
-    communityTypingUserIds,
     communityMessageInput,
     isSendingCommunityMessage,
     communityChatError,
@@ -4979,7 +5133,6 @@ export default function App() {
     onCommunityFileInputChange: handleCommunityFileInputChange,
     onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => {
       setCommunityMessageInput(value);
-      maybeBroadcastCommunityTyping(value);
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     },
@@ -5422,7 +5575,7 @@ export default function App() {
             canViewActiveCommunitySettings={canViewActiveCommunitySettings}
             canManageMembersActiveCommunity={canManageMembersActiveCommunity}
             canViewActiveCommunityAnalytics={canViewActiveCommunityAnalytics}
-            activeCommunityOwnerIsPro={activeCommunityOwnerIsPro}
+            activeCommunityOwnerHasBuilderAccess={activeCommunityOwnerHasBuilderAccess}
             buttonType="button"
             includeButtonTitles={true}
             onSelectTab={(tab) => {
@@ -5529,7 +5682,7 @@ export default function App() {
 	                      </div>
 	                      <div className="auth-actions">
 	                        <button
-                            className={profileNeedsSave ? "profile-save-btn needs-save" : "profile-save-btn synced"}
+                            className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
 	                          type="button"
 	                          onClick={() => void saveProfileToCloud()}
 	                          disabled={!cloudSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
@@ -5613,13 +5766,17 @@ export default function App() {
                               className="secondary"
                               type="button"
                               onClick={() => void handleConnectChatgpt()}
-                              disabled={isConnectingChatgpt || isPollingChatgptConnection}
+                              disabled={isConnectingChatgpt}
                             >
-                              {isConnectingChatgpt ? "Starting…" : isPollingChatgptConnection ? "Waiting…" : "Connect ChatGPT"}
+                              {isConnectingChatgpt
+                                ? "Starting…"
+                                : hasPendingChatgptAuth || isPollingChatgptConnection
+                                  ? "Continue auth"
+                                  : "Connect ChatGPT"}
                             </button>
                           )}
                         </div>
-                        {!chatgptConnection.connected && isChatgptConnectModalOpen && chatgptDeviceUserCode && (
+                        {!chatgptConnection.connected && chatgptDeviceUserCode && (
                           <div className="auth-status">Waiting for OpenAI verification code {chatgptDeviceUserCode}.</div>
                         )}
                         {chatgptConnection.connected && (
@@ -5629,54 +5786,8 @@ export default function App() {
                               : "Ready for GPT-family models on the ChatGPT lane."}
                           </div>
                         )}
-                        {chatgptConnection.connected && (
-                          <div className="auth-actions">
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => void handleProbeChatgpt()}
-                              disabled={isProbingChatgptConnection}
-                            >
-                              {isProbingChatgptConnection ? "Running probe…" : "Run probe"}
-                            </button>
-                          </div>
-                        )}
                         {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
                         {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
-                        {chatgptProbeResult && (
-                          <div className={chatgptProbeResult.ok ? "auth-success" : "auth-error"}>
-                            <div>
-                              Probe {chatgptProbeResult.ok ? "ok" : "failed"}
-                              {chatgptProbeResult.status ? ` · HTTP ${chatgptProbeResult.status}` : ""}
-                              {chatgptProbeResult.code ? ` · ${chatgptProbeResult.code}` : ""}
-                            </div>
-                            <div>{chatgptProbeResult.message}</div>
-                            <div>
-                              Model: {chatgptProbeResult.model_id}
-                              {chatgptProbeResult.resolved_model_id ? ` -> ${chatgptProbeResult.resolved_model_id}` : ""}
-                            </div>
-                            {chatgptProbeResult.elapsed_ms != null && (
-                              <div>Elapsed: {chatgptProbeResult.elapsed_ms} ms</div>
-                            )}
-                            {chatgptProbeResult.content_type && (
-                              <div>Content-Type: {chatgptProbeResult.content_type}</div>
-                            )}
-                            {chatgptProbeResult.upstream_request_id && (
-                              <div>Upstream request ID: {chatgptProbeResult.upstream_request_id}</div>
-                            )}
-                            {chatgptProbeResult.cf_ray && <div>Cloudflare ray: {chatgptProbeResult.cf_ray}</div>}
-                            {chatgptProbeResult.content_preview && (
-                              <div>Preview: {chatgptProbeResult.content_preview}</div>
-                            )}
-                            {chatgptProbeResult.body_preview && (
-                              <div>Body: {chatgptProbeResult.body_preview}</div>
-                            )}
-                            {chatgptProbeResult.email && <div>Account: {chatgptProbeResult.email}</div>}
-                            {chatgptProbeResult.token_expires_at && (
-                              <div>Token expires: {chatgptProbeResult.token_expires_at}</div>
-                            )}
-                          </div>
-                        )}
                         <div className="account-row">
                           <div className="account-identity">
                             <span>OpenRouter</span>
@@ -5685,22 +5796,13 @@ export default function App() {
                                 ? "Checking…"
                                 : openRouterConnection.connected
                                   ? `Connected${openRouterConnection.key_last_four ? ` ·••••${openRouterConnection.key_last_four}` : ""}`
-                                  : "Not connected"}
+                                : "Not connected"}
                             </strong>
                           </div>
-                          {openRouterConnection.connected && (
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => void handleDisconnectOpenRouter()}
-                              disabled={isSavingOpenRouterConnection}
-                            >
-                              {isSavingOpenRouterConnection ? "Disconnecting…" : "Disconnect"}
-                            </button>
-                          )}
                         </div>
                         <div className="provider-connection-stack">
                           <input
+                            className="provider-connection-input"
                             type="password"
                             placeholder="Paste OpenRouter API key"
                             value={openRouterApiKeyDraft}
@@ -5708,8 +5810,9 @@ export default function App() {
                             autoComplete="off"
                             spellCheck={false}
                           />
-                          <div className="auth-actions">
+                          <div className="provider-connection-actions">
                             <button
+                              className="platform-save-button"
                               type="button"
                               onClick={() => void handleConnectOpenRouter()}
                               disabled={isSavingOpenRouterConnection || openRouterApiKeyDraft.trim().length === 0}
@@ -5718,6 +5821,16 @@ export default function App() {
                                 ? (openRouterConnection.connected ? "Updating…" : "Connecting…")
                                 : (openRouterConnection.connected ? "Update key" : "Connect key")}
                             </button>
+                            {openRouterConnection.connected && (
+                              <button
+                                className="secondary provider-disconnect-btn"
+                                type="button"
+                                onClick={() => void handleDisconnectOpenRouter()}
+                                disabled={isSavingOpenRouterConnection}
+                              >
+                                {isSavingOpenRouterConnection ? "Disconnecting…" : "Disconnect"}
+                              </button>
+                            )}
                           </div>
                         </div>
                         {openRouterConnection.connected && openRouterConnection.updated_at && (
@@ -5800,14 +5913,6 @@ export default function App() {
                                     disabled={isSettingDevBuilderTier || tier === "builder"}
                                   >
                                     Builder
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={tier === "pro" || tier === "architect" ? "" : "secondary"}
-                                    onClick={() => void setDevBuilderTier("architect")}
-                                    disabled={isSettingDevBuilderTier || tier === "pro" || tier === "architect"}
-                                  >
-                                    Architect
                                   </button>
                                 </div>
                               </div>
@@ -5949,20 +6054,21 @@ export default function App() {
 		                  <div className="settings-section">
 		                    <div className="settings-section-title">
 		                      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-		                      System prompt
+		                      Agent Soul
 		                    </div>
 		                    <div className="settings-section-desc">
-	                      Applied to every model run (global). Use this to set tone, format, and defaults.
+	                      Shape the agent&apos;s personality, voice, and default way of thinking across every conversation.
 	                    </div>
 	                    <textarea
 	                      className="exec-policy-input"
 	                      value={systemPromptDraft}
 	                      onChange={(event) => setSystemPromptDraft(event.target.value)}
-	                      placeholder="e.g. Be concise. Use Markdown. Prefer bullet points. Ask clarifying questions when needed."
+	                      placeholder="e.g. You are Soul: incisive, imaginative, and calmly opinionated. See patterns early, turn ambiguity into crisp direction, and speak like a trusted strategist who can also build."
 	                      disabled={!cloudSession || isLoadingUserModelSettings}
 	                    />
 	                    <div className="exec-policy-actions">
 	                      <button
+	                        className="platform-save-button"
 	                        type="button"
 	                        onClick={() => void saveUserModelSettings({ system_prompt: systemPromptDraft })}
 	                        disabled={!cloudSession || isLoadingUserModelSettings || isSavingUserModelSettings}
@@ -6045,7 +6151,7 @@ export default function App() {
                               Personal memory
                             </div>
                             <div className="settings-section-desc">
-                              Personal memory is included with Builder and Architect.
+                              Personal memory is included with Builder.
                             </div>
                             <div className="auth-actions" style={{ paddingLeft: 0 }}>
                               <button
@@ -6064,35 +6170,6 @@ export default function App() {
 
                       return (
                         <>
-                          <div className="settings-section">
-                            <div className="settings-section-title">
-                              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.5.5 1.21.67 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51c.61.34 1.32.17 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.62.85 1.04 1.51 1.08H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-                              Memory behavior
-                            </div>
-                            <div className="settings-section-desc">
-                              Control how PolyNet suggests and stores personal memory.
-                            </div>
-                            <div className="export-actions">
-                              <label className="model-toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={userMemorySettings.memory_mode === "auto"}
-                                  onChange={(event) =>
-                                    void saveUserMemorySettings({
-                                      ...userMemorySettings,
-                                      memory_mode: event.target.checked ? "auto" : "off",
-                                    })
-                                  }
-                                  disabled={isLoadingUserMemorySettings}
-                                />
-                                <span>Auto memory</span>
-                              </label>
-                            </div>
-                            <div className="memory-block-meta">
-                              When enabled, PolyNet may save useful preferences/facts to your personal memory. You can delete anything later.
-                            </div>
-                          </div>
-
                           <div className="memory-editor">
                             <div className="memory-editor-header">
                               <div className="memory-editor-title">Personal memory</div>
@@ -6160,6 +6237,19 @@ export default function App() {
                             )}
                           </div>
 
+                          <div className="memory-import-launch">
+                            <button
+                              className="memory-import-trigger"
+                              type="button"
+                              onClick={() => {
+                                setMemoryImportError(null);
+                                setIsMemoryImportModalOpen(true);
+                              }}
+                            >
+                              Upload import memory from other AI providers
+                            </button>
+                          </div>
+
                           <div className="memory-editor">
                             <div className="memory-editor-header">
                               <div className="memory-editor-title">Add memory</div>
@@ -6171,6 +6261,7 @@ export default function App() {
                             />
                             <div className="memory-editor-actions">
                               <button
+                                className="platform-save-button"
                                 type="button"
                                 onClick={() => void handleCreatePersonalMemoryItem()}
                                 disabled={!newPersonalMemoryContent.trim()}
@@ -6239,11 +6330,11 @@ export default function App() {
 		              <div className="workspace-body">
                     {inferenceToast && <div className="memory-toast success-toast">{inferenceToast}</div>}
                     {memoryToast && <div className="memory-toast success-toast">{memoryToast}</div>}
-			                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
+		                <div className="message-list" ref={workspaceMessageListRef} onScroll={handleWorkspaceScroll}>
 		                    <div className="message-list-inner">
 		                    {isEmptyWorkspaceThread && (
 		                      <>
-		                        {showEmptyThreadLandingSkeleton ? (
+		                        {showEmptyThreadLandingSkeleton || isHydratingActiveWorkspaceThread ? (
 		                          <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
 		                            <div className="web-empty-thread-avatar web-skeleton-block" aria-hidden="true" />
 		                            <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
@@ -6274,24 +6365,37 @@ export default function App() {
 		                                )}
 		                              </div>
 		                            )}
-		                            <div className="web-empty-thread-title">
-		                              {activeCommunity ? (
-		                                <>
-		                                  Welcome to{" "}
+			                            <div className="web-empty-thread-title">
+			                              {activeCommunity ? (
+			                                <>
+			                                  Welcome to{" "}
 		                                  <button
 		                                    type="button"
 		                                    className="web-empty-thread-link web-empty-thread-title-accent"
 		                                    onClick={handleOpenLandingCommunity}
 		                                  >
 		                                    {activeCommunity.name}
-		                                  </button>
-		                                </>
-		                              ) : (
-		                                emptyThreadLanding.title
-		                              )}
-		                            </div>
-		                            <div className="web-empty-thread-composer">
-		                              <div className="ask-bar ask-bar-v2 ask-bar-landing">
+			                                  </button>
+			                                </>
+			                              ) : (
+			                                emptyThreadLanding.title
+			                              )}
+			                            </div>
+			                            {activeCommunity && resolvedActiveCloudProjectName ? (
+			                              <div className="web-empty-thread-subtitle">
+			                                You are in{" "}
+			                                <button
+			                                  type="button"
+			                                  className="web-empty-thread-link web-empty-thread-subtitle-accent"
+			                                  onClick={handleOpenLandingProject}
+			                                >
+			                                  {resolvedActiveCloudProjectName}
+			                                </button>{" "}
+			                                workspace
+			                              </div>
+			                            ) : null}
+			                            <div className="web-empty-thread-composer">
+			                              <div className="ask-bar ask-bar-v2 ask-bar-landing">
 		                                <textarea
 		                                  ref={workspaceAskInputRef}
 		                                  className="ask-input ask-input-v2 ask-input-landing"
@@ -6439,6 +6543,19 @@ export default function App() {
 		                                </button>
 		                              ))}
 		                            </div>
+                                {shouldShowEmptyThreadChatgptCard ? (
+                                  <WebChatgptEmptyStateCard
+                                    buttonLabel={
+                                      isConnectingChatgpt
+                                        ? "Starting..."
+                                        : hasPendingChatgptAuth || isPollingChatgptConnection
+                                          ? "Continue auth"
+                                          : "Authenticate"
+                                    }
+                                    disabled={isConnectingChatgpt}
+                                    onConnect={() => void handleConnectChatgpt()}
+                                  />
+                                ) : null}
 	                          </div>
 	                        )}
 	                      </>
@@ -6875,6 +6992,22 @@ export default function App() {
           }}
         />
 
+        <WebMemoryImportModal
+          isOpen={isMemoryImportModalOpen}
+          importPrompt={EXTERNAL_MEMORY_IMPORT_PROMPT}
+          importText={memoryImportText}
+          parsedCount={memoryImportPlan.parsedItems.length}
+          duplicateCount={memoryImportPlan.duplicateCount}
+          error={memoryImportError}
+          isImporting={isImportingMemory}
+          onChangeImportText={(value) => {
+            setMemoryImportText(value);
+            if (memoryImportError) setMemoryImportError(null);
+          }}
+          onClose={closeMemoryImportModal}
+          onImport={() => void handleImportExternalMemory()}
+        />
+
 	      <WebAuthGateModal
           hasSession={Boolean(cloudSession)}
           isOpen={isAuthGateOpen}
@@ -6885,29 +7018,22 @@ export default function App() {
 
         <WebChatgptConnectModal
           isOpen={isChatgptConnectModalOpen}
+          isStarting={isConnectingChatgpt}
           verificationUrl={chatgptDeviceVerificationUrl}
           userCode={chatgptDeviceUserCode}
           isPolling={isPollingChatgptConnection}
+          securitySettingsUrl={CHATGPT_SECURITY_SETTINGS_URL}
           manualAuthorizeUrl={chatgptManualAuthorizeUrl}
           manualCallbackInput={chatgptManualCallbackInput}
           isCompletingManual={isCompletingChatgptConnection}
           error={chatgptConnectionError}
+          onStartDeviceFlow={() => void handleStartChatgptDeviceConnect()}
           onOpenVerificationPage={handleOpenChatgptAuthorizePage}
           onStartManualFlow={() => void handleStartChatgptManualConnect()}
           onOpenManualAuthPage={handleOpenChatgptManualAuthPage}
           onChangeManualCallbackInput={setChatgptManualCallbackInput}
           onCompleteManual={() => void handleCompleteChatgptManualConnect()}
-          onPollNow={() => void handlePollChatgptConnect()}
-          onClose={() => {
-            if (isConnectingChatgpt || isPollingChatgptConnection || isCompletingChatgptConnection) return;
-            setIsChatgptConnectModalOpen(false);
-            setChatgptDeviceLoginId(null);
-            setChatgptDeviceVerificationUrl(null);
-            setChatgptDeviceUserCode(null);
-            setChatgptDevicePollIntervalSeconds(5);
-            setChatgptManualAuthorizeUrl(null);
-            setChatgptManualCallbackInput("");
-          }}
+          onClose={handleCloseChatgptConnectModal}
         />
 
 			      <WebPlatformQuotaModal
@@ -6939,7 +7065,7 @@ export default function App() {
             onClose={() => setIsBuilderUpgradeOpen(false)}
             onModalBodyScroll={updateBuilderUpgradeScrollHint}
             onStartBuilderPlanCheckout={(tier) => {
-              void startBuilderPlanCheckout(tier === "architect" ? "pro" : tier, { context: builderUpgradeContext });
+              void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
             }}
           />
         )}
@@ -7019,7 +7145,7 @@ export default function App() {
               <div className="modal-footer">
                 <div className="create-community-actions">
                   <button
-                    className="create-community-primary"
+                    className="platform-save-button"
                     type="button"
                     onClick={() => void handleConfirmRenameCloudProject()}
                     disabled={isRenamingCloudProject || renameCloudProjectName.trim().length === 0}

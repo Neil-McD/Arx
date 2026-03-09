@@ -13,6 +13,7 @@ export const COMMUNITY_TABS = [
   "members",
   "settings",
   "ai_agent",
+  "funnel",
   "analytics",
 ] as const;
 
@@ -21,6 +22,7 @@ export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
   "ai_agent",
+  "funnel",
   "analytics",
 ]);
 
@@ -42,6 +44,8 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
       return "settings";
     case "ai_agent":
       return "ai_agent";
+    case "funnel":
+      return "funnel";
     case "analytics":
       return "analytics";
     default:

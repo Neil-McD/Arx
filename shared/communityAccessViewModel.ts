@@ -34,12 +34,13 @@ export function deriveCommunityAccessCapabilities(
 ): CommunityAccessCapabilities {
   const isOwner = Boolean(access?.is_owner);
   const canManageMembers = Boolean(access?.can_manage_members);
+  const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : true;
   return {
-    canViewCommunity: access ? Boolean(access.can_view) : true,
+    canViewCommunity: canEnterCommunity,
     isOwner,
     canInvite: Boolean(access?.can_invite),
-    canViewSettings: Boolean(access?.can_view),
-    canPostMessages: Boolean(access?.can_post_message),
+    canViewSettings: canEnterCommunity,
+    canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
     canCreateResources: Boolean(access?.can_create_resource),
     canManageResources: Boolean(access?.can_manage_resources),
     canManageMembers,

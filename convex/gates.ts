@@ -2,8 +2,8 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "builder";
+type EffectiveTier = "anon_free" | "auth_free" | "builder";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -31,7 +31,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "architect";
+  if (normalized === "architect" || normalized === "pro") return "builder";
   return "free";
 }
 
@@ -106,7 +106,7 @@ function evaluateDecision(input: {
   hasUserChatGptConnection: boolean;
 }): GateDecision {
   const isAnonymous = input.effectiveTier === "anon_free";
-  const isPaid = input.effectiveTier === "builder" || input.effectiveTier === "architect";
+  const isPaid = input.effectiveTier === "builder";
 
   if (input.turnClass === "requires_tools") {
     if (input.requestedFundingSource === "user_chatgpt") {

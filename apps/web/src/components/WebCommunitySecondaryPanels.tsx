@@ -5,6 +5,7 @@ import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityMembersSection } from "./WebCommunityMembersSection";
+import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
 import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
@@ -15,6 +16,7 @@ export type WebCommunitySecondaryPanelsProps = {
   bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal>;
   feedPanelProps: ComponentProps<typeof CommunityAiFeedPanel>;
   aiAgentSectionProps: ComponentProps<typeof WebCommunityAiAgentSection>;
+  funnelSectionProps: ComponentProps<typeof WebCommunityFunnelSection>;
   analyticsSectionProps: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resourcesSectionProps: ComponentProps<typeof WebCommunityResourcesSection>;
   membersSectionProps: ComponentProps<typeof WebCommunityMembersSection>;
@@ -36,6 +38,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     bannerEditorModalProps,
     feedPanelProps,
     aiAgentSectionProps,
+    funnelSectionProps,
     analyticsSectionProps,
     resourcesSectionProps,
     membersSectionProps,
@@ -48,10 +51,13 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
         renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
       <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
 
-      {communityTab === "feed" && <CommunityAiFeedPanel {...feedPanelProps} />}
+      {communityTab === "feed" && renderCenteredPane(<CommunityAiFeedPanel {...feedPanelProps} />)}
 
       {communityTab === "ai_agent" &&
         renderCenteredPane(<WebCommunityAiAgentSection {...aiAgentSectionProps} />)}
+
+      {communityTab === "funnel" &&
+        renderCenteredPane(<WebCommunityFunnelSection {...funnelSectionProps} />)}
 
       {communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...analyticsSectionProps} />)}

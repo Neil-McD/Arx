@@ -7,6 +7,7 @@ type CommunityMessageAttachment = {
   id: string;
   type: string;
   name: string;
+  url?: string | null;
   data_url?: string | null;
 };
 
@@ -167,7 +168,10 @@ export function CommunityChatMessageRow({
                 rows={1}
               />
               <div className="chat-edit-actions">
-                <button className="chat-edit-btn save" onClick={() => void onSaveEdit()}>
+                <button
+                  className="platform-save-button platform-save-button--compact"
+                  onClick={() => void onSaveEdit()}
+                >
                   Save
                 </button>
                 <button className="chat-edit-btn cancel" onClick={onCancelEdit}>
@@ -191,9 +195,17 @@ export function CommunityChatMessageRow({
                     const thumb = replyTarget.attachments?.find(
                       (attachment) =>
                         attachment.type === "image" &&
-                        typeof attachment.data_url === "string" &&
-                        attachment.data_url.startsWith("data:image/"),
+                        (
+                          (typeof attachment.url === "string" && attachment.url.trim().length > 0) ||
+                          (typeof attachment.data_url === "string" && attachment.data_url.trim().length > 0)
+                        ),
                     );
+                    const thumbUrl =
+                      typeof thumb?.url === "string" && thumb.url.trim()
+                        ? thumb.url.trim()
+                        : typeof thumb?.data_url === "string" && thumb.data_url.trim()
+                          ? thumb.data_url.trim()
+                          : null;
                     const text = truncateReplyPreview(
                       (parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body).trim() ||
                       (thumb ? "Image" : "Message"),
@@ -204,10 +216,10 @@ export function CommunityChatMessageRow({
                           <polyline points="9 14 4 9 9 4" />
                           <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
                         </svg>
-                        {thumb?.data_url && (
+                        {thumbUrl && (
                           <img
                             className="chat-reply-thumb"
-                            src={thumb.data_url}
+                            src={thumbUrl}
                             alt=""
                             aria-hidden="true"
                             loading="lazy"
@@ -247,7 +259,14 @@ export function CommunityChatMessageRow({
                 <AttachmentChipButton
                   key={attachment.id}
                   name={attachment.name}
-                  disabled
+                  onClick={
+                    typeof attachment.url === "string" && attachment.url.trim().length > 0
+                      ? () => {
+                          window.open(attachment.url!, "_blank", "noopener,noreferrer");
+                        }
+                      : null
+                  }
+                  disabled={!(typeof attachment.url === "string" && attachment.url.trim().length > 0)}
                 />
               ))}
             </div>

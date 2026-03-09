@@ -3,12 +3,12 @@ import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
 type CommunityLike = {
   id: string;
+  entry_policy?: string | null;
   visibility?: string | null;
 };
 
 type LifecycleParams<
   SessionT,
-  InviteT,
   JoinRequestT,
   CommunityT extends CommunityLike,
 > = {
@@ -17,14 +17,10 @@ type LifecycleParams<
   session: SessionT | null;
   activeCommunityId: string | null;
   communities: CommunityT[];
-  canInviteActiveCommunity: boolean;
   canReviewJoinRequestsActiveCommunity: boolean;
   membersCommunityHasPaidPlans: boolean | null;
   isJoinRequestsModalOpen: boolean;
-  loadCommunityInvites: (communityId: string, session: SessionT) => Promise<void> | void;
-  loadCommunityHasPaidPlans: (communityId: string, session: SessionT) => Promise<boolean>;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
-  setCommunityInvites: Dispatch<SetStateAction<InviteT[]>>;
   setMembersCommunityHasPaidPlans: Dispatch<SetStateAction<boolean | null>>;
   setIsLoadingMembersCommunityPricing: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
@@ -36,23 +32,12 @@ type LifecycleParams<
 
 export function useCommunityMembersReviewLifecycle<
   SessionT,
-  InviteT,
   JoinRequestT,
   CommunityT extends CommunityLike,
 >(
-  params: LifecycleParams<SessionT, InviteT, JoinRequestT, CommunityT>,
+  params: LifecycleParams<SessionT, JoinRequestT, CommunityT>,
 ) {
-  const loadCommunityInvitesRef = useRef(params.loadCommunityInvites);
-  const loadCommunityHasPaidPlansRef = useRef(params.loadCommunityHasPaidPlans);
   const loadCommunityJoinRequestsRef = useRef(params.loadCommunityJoinRequests);
-
-  useEffect(() => {
-    loadCommunityInvitesRef.current = params.loadCommunityInvites;
-  }, [params.loadCommunityInvites]);
-
-  useEffect(() => {
-    loadCommunityHasPaidPlansRef.current = params.loadCommunityHasPaidPlans;
-  }, [params.loadCommunityHasPaidPlans]);
 
   useEffect(() => {
     loadCommunityJoinRequestsRef.current = params.loadCommunityJoinRequests;
@@ -73,21 +58,6 @@ export function useCommunityMembersReviewLifecycle<
     if (params.communityTab === "members") return;
     params.setIsJoinRequestsModalOpen(false);
   }, [params.activePage, params.communityTab]);
-
-  useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "members") return;
-    if (!params.session || !params.activeCommunityId || !params.canInviteActiveCommunity) {
-      params.setCommunityInvites([]);
-      return;
-    }
-    void loadCommunityInvitesRef.current(params.activeCommunityId, params.session);
-  }, [
-    params.activePage,
-    params.communityTab,
-    params.session,
-    params.activeCommunityId,
-    params.canInviteActiveCommunity,
-  ]);
 
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "members") return;
@@ -138,55 +108,39 @@ export function useCommunityMembersReviewLifecycle<
       return;
     }
 
-    let cancelled = false;
     params.setIsLoadingMembersCommunityPricing(true);
     params.setCommunityJoinRequestsError(null);
+    const entryPolicy = String(activeCommunityRecord?.entry_policy ?? "").trim().toLowerCase();
+    const hasPaidPlans = entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription";
+    params.setMembersCommunityHasPaidPlans(hasPaidPlans);
+    if (hasPaidPlans) {
+      params.setCommunityJoinRequests([]);
+      params.setIsLoadingCommunityJoinRequests(false);
+      params.setCommunityJoinRequestsError(null);
+      params.setDecidingCommunityJoinRequestId(null);
+      params.setIsJoinRequestsModalOpen(false);
+      params.setIsLoadingMembersCommunityPricing(false);
+      return;
+    }
 
-    void (async () => {
-      try {
-        const hasPaidPlans = await loadCommunityHasPaidPlansRef.current(
-          communityId,
-          session,
-        );
-        if (cancelled) return;
-
-        params.setMembersCommunityHasPaidPlans(hasPaidPlans);
-        if (hasPaidPlans) {
-          params.setCommunityJoinRequests([]);
-          params.setIsLoadingCommunityJoinRequests(false);
-          params.setCommunityJoinRequestsError(null);
-          params.setDecidingCommunityJoinRequestId(null);
-          params.setIsJoinRequestsModalOpen(false);
-          return;
-        }
-
-        await loadCommunityJoinRequestsRef.current(
-          communityId,
-          session,
-        );
-      } catch (error) {
-        if (cancelled) return;
+    void Promise.resolve(loadCommunityJoinRequestsRef.current(communityId, session))
+      .catch((error) => {
         const message =
           typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
-              : "Failed to load pricing.";
+              : "Failed to load join requests.";
         params.setMembersCommunityHasPaidPlans(null);
         params.setCommunityJoinRequests([]);
         params.setIsLoadingCommunityJoinRequests(false);
         params.setCommunityJoinRequestsError(message);
         params.setDecidingCommunityJoinRequestId(null);
         params.setIsJoinRequestsModalOpen(false);
-      } finally {
-        if (cancelled) return;
+      })
+      .finally(() => {
         params.setIsLoadingMembersCommunityPricing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      });
   }, [
     params.activePage,
     params.communityTab,

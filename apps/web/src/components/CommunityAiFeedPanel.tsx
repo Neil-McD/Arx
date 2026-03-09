@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type {
   CommunityAiFeedPost,
+  CommunityAiFeedPostType,
   CommunityAiFeedReactionType,
 } from "../../../../shared/communityTypes";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
@@ -14,7 +15,7 @@ type CommunityAiFeedPanelProps = {
   };
   state: {
     livePosts: CommunityAiFeedPost[];
-    importantPosts: CommunityAiFeedPost[];
+    rankedPosts: CommunityAiFeedPost[];
     isLoading: boolean;
     error: string | null;
     reactingPostId: string | null;
@@ -43,19 +44,23 @@ function formatPostTimestamp(value: string): string {
   return date.toLocaleString();
 }
 
+function hasEvidence(post: CommunityAiFeedPost): boolean {
+  return Array.isArray(post.evidence) && post.evidence.length > 0;
+}
+
 export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
   const { capabilities, state, actions, className } = props;
   const panelClassName = className
     ? `community-panel feed-panel ${className}`
     : "community-panel feed-panel";
-  const [viewMode, setViewMode] = useState<"live" | "important">("live");
-  const switcherStyle = buildPlatformSwitcherStyle(2, viewMode === "live" ? 0 : 1);
+  const [viewMode, setViewMode] = useState<"live" | "ranked">("ranked");
+  const switcherStyle = buildPlatformSwitcherStyle(2, viewMode === "ranked" ? 0 : 1);
 
   if (!capabilities.hasActiveCommunity) {
     return <div className={panelClassName}>Select a community.</div>;
   }
 
-  const posts = viewMode === "important" ? state.importantPosts : state.livePosts;
+  const posts = viewMode === "ranked" ? state.rankedPosts : state.livePosts;
   const isEmpty = !state.isLoading && posts.length === 0;
 
   return (
@@ -74,6 +79,14 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
             style={switcherStyle}
           >
             <button
+              className={`platform-switcher-btn${viewMode === "ranked" ? " is-active" : ""}`}
+              type="button"
+              onClick={() => setViewMode("ranked")}
+              aria-pressed={viewMode === "ranked"}
+            >
+              Ranked
+            </button>
+            <button
               className={`platform-switcher-btn${viewMode === "live" ? " is-active" : ""}`}
               type="button"
               onClick={() => setViewMode("live")}
@@ -81,46 +94,47 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
             >
               Live
             </button>
-            <button
-              className={`platform-switcher-btn${viewMode === "important" ? " is-active" : ""}`}
-              type="button"
-              onClick={() => setViewMode("important")}
-              aria-pressed={viewMode === "important"}
-            >
-              Important
-            </button>
           </div>
         </div>
       </div>
 
       <div className={`feed-post-list ${isEmpty ? "ai-feed-list-empty" : ""}`}>
         {state.error ? (
-          <div className="feed-error-card">
-            <div className="feed-error-title">Couldn&apos;t load the AI feed.</div>
-            <div className="feed-error-body">{state.error}</div>
-            <button className="secondary" type="button" onClick={actions.retry}>
-              Retry
-            </button>
+          <div className="community-panel-state-shell">
+            <div className="feed-error-card">
+              <div className="feed-error-title">Couldn&apos;t load the AI feed.</div>
+              <div className="feed-error-body">{state.error}</div>
+              <button className="secondary" type="button" onClick={actions.retry}>
+                Retry
+              </button>
+            </div>
           </div>
         ) : state.isLoading ? (
-          <div className="feed-loading-state">Loading AI feed…</div>
+          <div className="community-panel-state-shell">
+            <div className="chat-loading">
+              <div className="loading-spinner" />
+              <span>Loading AI feed...</span>
+            </div>
+          </div>
         ) : isEmpty ? (
-          <div className="chat-empty-state">
-            <div className="chat-empty-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 7h16" />
-                <path d="M4 12h12" />
-                <path d="M4 17h8" />
-                <circle cx="18" cy="17" r="2" />
-              </svg>
-            </div>
-            <div className="chat-empty-title">
-              Welcome to {capabilities.activeCommunityName ?? "your"} AI feed
-            </div>
-            <div className="chat-empty-text">
-              {viewMode === "important"
-                ? "High-signal observations, recommendations, and actions will rise here as the community judges what matters."
-                : "Fresh observations, recommendations, and actions will show up here as the community starts to publish them."}
+          <div className="community-panel-state-shell">
+            <div className="chat-empty-state">
+              <div className="chat-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 7h16" />
+                  <path d="M4 12h12" />
+                  <path d="M4 17h8" />
+                  <circle cx="18" cy="17" r="2" />
+                </svg>
+              </div>
+              <div className="chat-empty-title">
+                Welcome to {capabilities.activeCommunityName ?? "your"} AI feed
+              </div>
+              <div className="chat-empty-text">
+                {viewMode === "ranked"
+                  ? "High-signal observations, recommendations, and actions will rise here as the community filters what matters."
+                  : "Fresh observations, recommendations, and actions will show up here as the community starts to publish them."}
+              </div>
             </div>
           </div>
         ) : (
@@ -131,7 +145,7 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
                   <span className={`ai-feed-item-type ${post.post_type}`}>
                     {formatPostTypeLabel(post.post_type)}
                   </span>
-                  {viewMode === "important" ? (
+                  {viewMode === "ranked" ? (
                     <span className="ai-feed-item-confidence">Signal {post.effective_score}</span>
                   ) : null}
                 </div>
@@ -143,32 +157,43 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
               </div>
               {post.title ? <h3 className="ai-feed-item-title">{post.title}</h3> : null}
               <p className="ai-feed-item-summary">{post.body}</p>
+              {post.why_now ? (
+                <div className="ai-feed-item-section">
+                  <div className="ai-feed-item-section-label">Why now</div>
+                  <div className="ai-feed-item-section-body">{post.why_now}</div>
+                </div>
+              ) : null}
+              {hasEvidence(post) ? (
+                <div className="ai-feed-item-section">
+                  <div className="ai-feed-item-section-label">Evidence</div>
+                  <ul className="ai-feed-item-section-body">
+                    {post.evidence.map((entry, index) => (
+                      <li key={`${post.id}:evidence:${index}`}>
+                        {entry}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="ai-feed-signal-row">
                 <button
-                  className={`ai-feed-signal-button promote${post.viewer_reaction === "good" ? " is-active" : ""}`}
+                  className={`ai-feed-signal-button good${post.viewer_reaction === "good" ? " is-active" : ""}`}
                   type="button"
                   disabled={!capabilities.hasSession || state.reactingPostId === post.id}
                   onClick={() => actions.react(post.id, "good")}
+                  aria-label="Fire"
                 >
-                  Good
+                  🔥
                   <span className="ai-feed-signal-count">{post.reaction_counts.good}</span>
-                </button>
-                <button
-                  className={`ai-feed-signal-button resolved${post.viewer_reaction === "executed" ? " is-active" : ""}`}
-                  type="button"
-                  disabled={!capabilities.hasSession || state.reactingPostId === post.id}
-                  onClick={() => actions.react(post.id, "executed")}
-                >
-                  Executed
-                  <span className="ai-feed-signal-count">{post.reaction_counts.executed}</span>
                 </button>
                 <button
                   className={`ai-feed-signal-button noise${post.viewer_reaction === "low_signal" ? " is-active" : ""}`}
                   type="button"
                   disabled={!capabilities.hasSession || state.reactingPostId === post.id}
                   onClick={() => actions.react(post.id, "low_signal")}
+                  aria-label="Poop"
                 >
-                  Low signal
+                  💩
                   <span className="ai-feed-signal-count">{post.reaction_counts.low_signal}</span>
                 </button>
               </div>

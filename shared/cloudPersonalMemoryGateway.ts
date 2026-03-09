@@ -43,13 +43,11 @@ function normalizeScopeId(scopeId: string | null | undefined): string | undefine
 
 export async function listCloudPersonalMemoryRows<SessionT>(
   params: CloudPersonalMemoryGatewayParams<SessionT> & {
-    userId: string;
     scope?: CloudPersonalMemoryScope;
     scopeId?: string | null;
     limit?: number;
   },
 ): Promise<CloudPersonalMemoryRow[]> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = await client.query("personalMemory:listPersonalMemoryItems" as any, {
     authSubject,
@@ -62,7 +60,6 @@ export async function listCloudPersonalMemoryRows<SessionT>(
 
 export async function listCloudPersonalMemoryRowsByScopes<SessionT>(
   params: CloudPersonalMemoryGatewayParams<SessionT> & {
-    userId: string;
     workspaceScopeId?: string | null;
     limitPerScope?: number;
   },
@@ -70,13 +67,11 @@ export async function listCloudPersonalMemoryRowsByScopes<SessionT>(
   const [globalRows, workspaceRows] = await Promise.all([
     listCloudPersonalMemoryRows({
       session: params.session,
-      userId: params.userId,
       scope: "global",
       limit: params.limitPerScope,
     }),
     listCloudPersonalMemoryRows({
       session: params.session,
-      userId: params.userId,
       scope: "workspace",
       scopeId: params.workspaceScopeId,
       limit: params.limitPerScope,
@@ -87,7 +82,6 @@ export async function listCloudPersonalMemoryRowsByScopes<SessionT>(
 
 export async function createCloudPersonalMemoryItem<SessionT>(
   params: CloudPersonalMemoryGatewayParams<SessionT> & {
-    userId: string;
     content: string;
     scope: CloudPersonalMemoryScope;
     scopeId: string | null;
@@ -95,7 +89,6 @@ export async function createCloudPersonalMemoryItem<SessionT>(
     returnRepresentation?: boolean;
   },
 ): Promise<CloudPersonalMemoryRow[] | null> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = await client.mutation("personalMemory:createPersonalMemoryItem" as any, {
     authSubject,

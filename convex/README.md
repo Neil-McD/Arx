@@ -44,7 +44,7 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
    - `ARX_AUTH_JWT_JWKS_URL` (required or derivable from issuer)
    - `ARX_AUTH_JWT_AUDIENCE` (optional but recommended)
    - `ARX_AUTH_JWT_ALGORITHM` (`RS256` default)
-   - `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false` (recommended; fail closed on missing verified identity)
+   - `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false` (recommended; dev/test-only override, fail closed on missing verified identity)
    - WorkOS/AuthKit example:
      - `ARX_AUTH_JWT_ISSUER=https://<AUTHKIT_DOMAIN>`
      - `ARX_AUTH_JWT_JWKS_URL=https://<AUTHKIT_DOMAIN>/oauth2/jwks`

@@ -25,13 +25,17 @@ export type CloudCommunitySettingsSaveResult = {
   banner_zoom?: number | null;
   visibility: string;
   updated_at: string;
-  monthly_plan_id: string | null;
-  yearly_plan_id: string | null;
 };
 
-type CloudCommunityToggleRequiresApprovalResult = {
+export type CloudCommunityOneLinerSaveResult = {
+  community_id: string;
+  description: string | null;
+  updated_at: string;
+};
+
+type CloudCommunityFreeAccessModeResult = {
   community_id?: string;
-  free_join_requires_approval?: boolean;
+  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription";
   updated_at?: string;
 };
 
@@ -190,36 +194,22 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
   return coerceObjectRows<CloudCommunityRevenueSeriesRow>(payload);
 }
 
-export async function fetchCloudCommunityOwnerIsPro<SessionT>(
+export async function fetchCloudCommunityOwnerHasBuilderAccess<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
   },
 ): Promise<boolean | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:communityOwnerIsPro" as any, {
+  const payload = await client.query("community:communityOwnerHasBuilderAccess" as any, {
     authSubject,
     communityId: params.communityId,
   });
   if (typeof payload === "boolean") return payload;
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const maybe = (payload as Record<string, unknown>).community_owner_is_pro;
+    const maybe = (payload as Record<string, unknown>).community_owner_has_builder_access;
     if (typeof maybe === "boolean") return maybe;
   }
   return null;
-}
-
-export async function listCloudCommunityMembersAdminRows<SessionT, TMember = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<TMember[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityMembershipsAdmin" as any, {
-    authSubject,
-    communityId: params.communityId,
-    limit: 200,
-  });
-  return coerceObjectRows<TMember>(payload);
 }
 
 export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
@@ -244,7 +234,7 @@ export async function setCloudCommunityMemberRole<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     userId: string;
-    role: string;
+    role: "admin" | "member";
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -344,13 +334,13 @@ export async function denyCloudCommunityJoinRequest<SessionT>(
   });
 }
 
-export async function listCloudCommunityPricingRows<SessionT, TPricingRow = unknown>(
+export async function listCloudCommunityPricePointRows<SessionT, TPricingRow = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
   },
 ): Promise<TPricingRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityPricing" as any, {
+  const payload = await client.query("community:listCommunityPricePoints" as any, {
     authSubject,
     communityId: params.communityId,
     activeOnly: true,
@@ -440,19 +430,19 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
   return rows[0] ?? null;
 }
 
-export async function setCloudCommunityFreeJoinRequiresApproval<SessionT>(
+export async function setCloudCommunityFreeAccessMode<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    requiresApproval: boolean;
+    mode: "open" | "approval";
   },
-): Promise<CloudCommunityToggleRequiresApprovalResult | null> {
+): Promise<CloudCommunityFreeAccessModeResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:setCommunityFreeJoinRequiresApproval" as any, {
+  const payload = await client.mutation("community:setCommunityFreeAccessMode" as any, {
     authSubject,
     communityId: params.communityId,
-    requiresApproval: params.requiresApproval,
+    mode: params.mode,
   });
-  const rows = coerceObjectRows<CloudCommunityToggleRequiresApprovalResult>(payload);
+  const rows = coerceObjectRows<CloudCommunityFreeAccessModeResult>(payload);
   return rows[0] ?? null;
 }
 
@@ -507,6 +497,22 @@ export async function saveCloudCommunitySettings<SessionT>(
     currencyDecimals: 2,
   });
   const rows = coerceObjectRows<CloudCommunitySettingsSaveResult>(payload);
+  return rows[0] ?? null;
+}
+
+export async function saveCloudCommunityOneLiner<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    description: string | null;
+  },
+): Promise<CloudCommunityOneLinerSaveResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:saveCommunityOneLiner" as any, {
+    authSubject,
+    communityId: params.communityId,
+    description: params.description,
+  });
+  const rows = coerceObjectRows<CloudCommunityOneLinerSaveResult>(payload);
   return rows[0] ?? null;
 }
 

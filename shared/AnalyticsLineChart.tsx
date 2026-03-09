@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatCount } from "./contentFormatting";
 
 export type AnalyticsLineChartPoint = {
@@ -13,17 +13,42 @@ export function AnalyticsLineChart({
   points: AnalyticsLineChartPoint[];
   valueFormatter?: (value: number) => string;
 }) {
-  const width = 720;
   const height = 180;
   const paddingX = 22;
   const paddingY = 22;
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [chartWidth, setChartWidth] = useState(720);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
+
+  useEffect(() => {
+    const node = chartRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      const nextWidth = Math.round(node.clientWidth);
+      if (nextWidth > 0) {
+        setChartWidth((current) => (current === nextWidth ? current : nextWidth));
+      }
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   if (!points || points.length === 0) {
     return <div className="analytics-line-chart analytics-line-chart-empty">No trend data yet.</div>;
   }
 
+  const width = Math.max(chartWidth, paddingX * 2 + 1);
   const maxValue = Math.max(1, ...points.map((point) => point.value));
   const innerWidth = width - paddingX * 2;
   const innerHeight = height - paddingY * 2;
@@ -51,15 +76,16 @@ export function AnalyticsLineChart({
   const activePoint = activeIndex == null ? null : points[activeIndex];
   const activeLabel = activePoint?.label ?? "";
   const activeValue = activePoint?.value ?? null;
+  const shouldFlipTooltip =
+    activeCoord != null && activeCoord.x >= paddingX + innerWidth * (2 / 3);
 
   return (
-    <div className="analytics-line-chart">
+    <div className="analytics-line-chart" ref={chartRef}>
       <svg
         className="analytics-chart-svg"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="Trend chart"
-        preserveAspectRatio="none"
         onPointerLeave={() => setHoverIndex(null)}
         onPointerMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
@@ -87,12 +113,13 @@ export function AnalyticsLineChart({
               y1={y}
               x2={width - paddingX}
               y2={y}
+              vectorEffect="non-scaling-stroke"
             />
           );
         })}
 
         <path className="analytics-chart-area" d={areaPath} fill={`url(#${gradientId})`} />
-        <path className="analytics-chart-line" d={linePath} />
+        <path className="analytics-chart-line" d={linePath} vectorEffect="non-scaling-stroke" />
 
         {activeCoord && (
           <>
@@ -102,20 +129,33 @@ export function AnalyticsLineChart({
               y1={paddingY}
               x2={activeCoord.x}
               y2={height - paddingY}
+              vectorEffect="non-scaling-stroke"
             />
-            <circle className="analytics-chart-hover-dot" cx={activeCoord.x} cy={activeCoord.y} r="4" />
+            <circle
+              className="analytics-chart-hover-dot"
+              cx={activeCoord.x}
+              cy={activeCoord.y}
+              r="4"
+              vectorEffect="non-scaling-stroke"
+            />
           </>
         )}
 
         {coords.length > 0 && !activeCoord && (
-          <circle className="analytics-chart-dot" cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3" />
+          <circle
+            className="analytics-chart-dot"
+            cx={coords[coords.length - 1].x}
+            cy={coords[coords.length - 1].y}
+            r="3"
+            vectorEffect="non-scaling-stroke"
+          />
         )}
       </svg>
       {activeCoord && (
         <div
-          className="analytics-chart-tooltip"
+          className={`analytics-chart-tooltip${shouldFlipTooltip ? " is-flipped" : ""}`}
           style={{
-            left: `${(activeCoord.x / width) * 100}%`,
+            left: `${activeCoord.x}px`,
             top: "50%",
           }}
         >

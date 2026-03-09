@@ -4,7 +4,7 @@ const COMMUNITY_EVIDENCE_RESOURCE_LIMIT = 5;
 export const COMMUNITY_EVIDENCE_TOTAL_LIMIT =
   COMMUNITY_EVIDENCE_CHAT_LIMIT + COMMUNITY_EVIDENCE_RESOURCE_LIMIT;
 
-export type CommunityEvidenceSourceType = "chat" | "resource" | "memory";
+export type CommunityEvidenceSourceType = "chat" | "resource" | "ai_feed";
 
 export type CommunityEvidenceItem = {
   source_type: CommunityEvidenceSourceType;
@@ -50,7 +50,7 @@ function normalizeSourceType(value: unknown): CommunityEvidenceSourceType | null
   const normalized = asTrimmedString(value).toLowerCase();
   if (normalized === "chat") return "chat";
   if (normalized === "resource") return "resource";
-  if (normalized === "memory") return "memory";
+  if (normalized === "ai_feed") return "ai_feed";
   return null;
 }
 

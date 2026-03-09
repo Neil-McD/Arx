@@ -14,7 +14,7 @@ type CommunityLike = {
   banner_zoom?: number | null;
 };
 
-type UseCommunitySettingsFormControllerArgs<InviteT> = {
+type UseCommunitySettingsFormControllerArgs = {
   slugifyCommunityName: (value: string) => string;
   communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
   communitySettingsDirtyRef: MutableRefObject<boolean>;
@@ -31,14 +31,10 @@ type UseCommunitySettingsFormControllerArgs<InviteT> = {
   setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerZoom: Dispatch<SetStateAction<number>>;
-  setCommunitySettingsMonthlyPlanId: Dispatch<SetStateAction<string | null>>;
-  setCommunitySettingsYearlyPlanId: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "yearly" | "both">>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
-  setCommunityInvites: Dispatch<SetStateAction<InviteT[]>>;
-  setInviteCreateError: Dispatch<SetStateAction<string | null>>;
 
   setCommunitySettingsBannerUploadError?: Dispatch<SetStateAction<string | null>>;
   setIsProcessingCommunitySettingsBanner?: Dispatch<SetStateAction<boolean>>;
@@ -47,8 +43,8 @@ type UseCommunitySettingsFormControllerArgs<InviteT> = {
   onNoCommunitySelected?: () => void;
 };
 
-export function useCommunitySettingsFormController<CommunityT extends CommunityLike, InviteT>(
-  args: UseCommunitySettingsFormControllerArgs<InviteT>,
+export function useCommunitySettingsFormController<CommunityT extends CommunityLike>(
+  args: UseCommunitySettingsFormControllerArgs,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
@@ -68,8 +64,6 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
       current.communitySettingsDirtyRef.current = false;
       current.communityPricingDirtyRef.current = false;
-      current.setCommunitySettingsMonthlyPlanId(null);
-      current.setCommunitySettingsYearlyPlanId(null);
       current.setCommunitySettingsPricingMode("free");
       current.setCommunitySettingsPriceUsdMonthly("");
       current.setCommunitySettingsPriceUsdYearly("");
@@ -90,13 +84,9 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsBannerFocusX(0.5);
       current.setCommunitySettingsBannerFocusY(0.5);
       current.setCommunitySettingsBannerZoom(1);
-      current.setCommunitySettingsMonthlyPlanId(null);
-      current.setCommunitySettingsYearlyPlanId(null);
       current.setCommunitySettingsPriceUsdMonthly("");
       current.setCommunitySettingsPriceUsdYearly("");
       current.setCommunityMemberMuted(false);
-      current.setCommunityInvites([]);
-      current.setInviteCreateError(null);
       current.onNoCommunitySelected?.();
       return;
     }
@@ -127,7 +117,6 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
         ? Math.max(1, Math.min(2.5, selectedCommunity.banner_zoom))
         : 1,
     );
-    current.setInviteCreateError(null);
   }, [clearBannerState]);
 
   return {

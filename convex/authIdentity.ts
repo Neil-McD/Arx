@@ -17,8 +17,13 @@ function readBoolEnv(name: string): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
+function isExplicitLocalDevEnvironment(): boolean {
+  const nodeEnv = readEnv("NODE_ENV").toLowerCase();
+  return nodeEnv === "development" || nodeEnv === "test";
+}
+
 function allowUnverifiedAuthSubjectFallback(): boolean {
-  return readBoolEnv("ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT");
+  return readBoolEnv("ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT") && isExplicitLocalDevEnvironment();
 }
 
 async function readVerifiedIdentitySubject(ctx: any): Promise<string | null> {

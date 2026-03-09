@@ -10,10 +10,9 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
 1. Tier system:
    - anonymous free
    - authenticated free
-   - paid ($20)
-   - builder/architect ($100)
+   - builder ($60)
 2. Canonical chat + canonical community UX.
-3. Community agentic harness + community memory + community research.
+3. Community agentic harness + community AI feed + community research.
 4. Daytona cloud coding harness.
 5. User-funded ChatGPT-auth lane for OpenAI inference.
 6. Voice UX.

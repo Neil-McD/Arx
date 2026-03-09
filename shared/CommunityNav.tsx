@@ -15,7 +15,7 @@ type CommunityNavProps = {
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
-  activeCommunityOwnerIsPro: boolean | null;
+  activeCommunityOwnerHasBuilderAccess: boolean | null;
   onSelectTab: (tab: CommunityTab) => void;
   buttonType?: "button" | "submit" | "reset";
   includeButtonTitles?: boolean;
@@ -27,7 +27,7 @@ export function CommunityNav({
   canViewActiveCommunitySettings,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
-  activeCommunityOwnerIsPro,
+  activeCommunityOwnerHasBuilderAccess,
   onSelectTab,
   buttonType,
   includeButtonTitles = false,
@@ -149,11 +149,11 @@ export function CommunityNav({
           {canManageMembersActiveCommunity && (
             <button
               className={`${communityTab === "ai_agent" ? "nav-item active" : "nav-item"}${
-                activeCommunityOwnerIsPro === false ? " premium-locked" : ""
+                activeCommunityOwnerHasBuilderAccess === false ? " premium-locked" : ""
               }`}
               type={buttonType}
               onClick={() => onSelectTab("ai_agent")}
-              title={activeCommunityOwnerIsPro === false ? "AI Agent (Architect)" : "AI Agent"}
+              title={activeCommunityOwnerHasBuilderAccess === false ? "AI Agent (Builder)" : "AI Agent"}
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -169,13 +169,30 @@ export function CommunityNav({
                 </svg>
               </span>
               AI Agent
-              {activeCommunityOwnerIsPro === false && (
+              {activeCommunityOwnerHasBuilderAccess === false && (
                 <span className="nav-premium-badge" aria-hidden="true">
                   <svg viewBox="0 0 24 24">
                     <path d="M4 7l4 4 4-6 4 6 4-4-2 13H6L4 7z" />
                   </svg>
                 </span>
               )}
+            </button>
+          )}
+          {canManageMembersActiveCommunity && (
+            <button
+              className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
+              type={buttonType}
+              onClick={() => onSelectTab("funnel")}
+              title={maybeTitle("Funnel")}
+            >
+              <span className="nav-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 6h16" />
+                  <path d="M7 11h10" />
+                  <path d="M10 16h4" />
+                </svg>
+              </span>
+              Funnel
             </button>
           )}
           {canViewActiveCommunityAnalytics && (

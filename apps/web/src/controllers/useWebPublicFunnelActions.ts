@@ -12,10 +12,14 @@ import {
   startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
 import type { CloudSession } from "../cloudAuth";
-import { isCommunityJoinMode } from "../communityJoinPolicy";
+import { deriveCommunityJoinMode } from "../communityJoinPolicy";
 
 type UseWebPublicFunnelActionsArgs<
-  PublicCommunityT extends { slug: string; visibility: string; join_mode?: unknown; free_join_requires_approval?: boolean },
+  PublicCommunityT extends {
+    slug: string;
+    visibility: string;
+    entry_policy?: unknown;
+  },
   PublicPlanT extends { billing_period: string },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 > = {
@@ -45,10 +49,14 @@ type UseWebPublicFunnelActionsArgs<
   navigateToUrl: (url: string) => void;
 };
 
-type CommunityAccessRow = { community_id: string; can_view: boolean; is_owner: boolean };
+type CommunityAccessRow = { community_id: string; can_enter_community?: boolean; is_owner: boolean };
 
 export function useWebPublicFunnelActions<
-  PublicCommunityT extends { slug: string; visibility: string; join_mode?: unknown; free_join_requires_approval?: boolean },
+  PublicCommunityT extends {
+    slug: string;
+    visibility: string;
+    entry_policy?: unknown;
+  },
   PublicPlanT extends { billing_period: string },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 >(args: UseWebPublicFunnelActionsArgs<PublicCommunityT, PublicPlanT, MyCommunityJoinRequestT>) {
@@ -124,8 +132,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  free_join_requires_approval: true,
-                  join_mode: "request_access",
+                  entry_policy: "approval",
                 } as PublicCommunityT)
               : prev,
           );
@@ -142,7 +149,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  join_mode: "checkout",
+                  entry_policy: "paid_unlock",
                 } as PublicCommunityT)
               : prev,
           );
@@ -193,7 +200,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  join_mode: "checkout",
+                  entry_policy: "paid_unlock",
                 } as PublicCommunityT)
               : prev,
           );
@@ -205,8 +212,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  free_join_requires_approval: false,
-                  join_mode: "join_free",
+                  entry_policy: "open",
                 } as PublicCommunityT)
               : prev,
           );
@@ -243,7 +249,7 @@ export function useWebPublicFunnelActions<
               session,
               communitySlug: payload.community.slug,
             });
-            if (access && (access.can_view || access.is_owner)) {
+            if (access && (access.can_enter_community || access.is_owner)) {
               args.openCommunityWorkspace(access.community_id);
               await args.loadCommunities(session);
               return;
@@ -258,12 +264,9 @@ export function useWebPublicFunnelActions<
           : payload.active_plan
             ? [payload.active_plan]
             : [];
-        const payloadJoinMode = isCommunityJoinMode(payload.community.join_mode) ? payload.community.join_mode : null;
-        const effectiveJoinMode = payloadJoinMode ?? "request_access";
         args.setPublicCommunity({
           ...payload.community,
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
-          join_mode: effectiveJoinMode,
         } as PublicCommunityT);
         args.setPublicCommunityPlans(plans);
         const preferred =
@@ -273,7 +276,10 @@ export function useWebPublicFunnelActions<
           null;
         args.setSelectedPublicCommunityBillingPeriod(preferred?.billing_period ?? null);
 
-        if (session && effectiveJoinMode === "request_access") {
+        if (
+          session &&
+          deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "request_access"
+        ) {
           void loadMyJoinRequestBySlug(payload.community.slug, session);
         }
 

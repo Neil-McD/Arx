@@ -57,10 +57,10 @@
       }
     },
     {
-      "id": "auth_paid_tools_platform_cloud",
+      "id": "auth_builder_tools_platform_cloud",
       "input": {
         "authState": "authenticated",
-        "tier": "architect",
+        "tier": "builder",
         "executionMode": "cloud",
         "turnClass": "requires_tools",
         "requestedFundingSource": "platform"
@@ -71,7 +71,7 @@
         "cta": "none",
         "lane": "daytona_cloud",
         "fundingSource": "platform",
-        "effectiveTier": "architect"
+        "effectiveTier": "builder"
       }
     },
     {

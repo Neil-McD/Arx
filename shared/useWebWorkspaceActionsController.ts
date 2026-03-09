@@ -35,7 +35,6 @@ type GuestThreadStorageV1 = {
 
 type UseWebWorkspaceActionsControllerArgs<SessionT, AttachmentT, ThreadMessageT extends ThreadMessage> = {
   getSession: () => SessionT | null;
-  getCloudAuthUid: (session: SessionT) => string;
   buildCsv: (headers: string[], rows: Array<Record<string, unknown>>) => string;
   downloadTextFile: (filename: string, content: string, mime?: string) => void;
   parseMessageText: (content: unknown) => string;
@@ -180,10 +179,8 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
     current.setExportError(null);
     current.setIsExporting(true);
     try {
-      const userId = current.getCloudAuthUid(session);
       const rows = (await listCloudPersonalMemoryRows({
         session,
-        userId,
         limit: 2000,
       })) as Array<Record<string, unknown>>;
       const csv = current.buildCsv(

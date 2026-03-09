@@ -298,9 +298,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
 
             <div className="settings-section">
               <label className="create-community-field">
-                <span>Description</span>
+                <span>One-liner</span>
                 <textarea
-                  placeholder="Optional description for your community page"
+                  placeholder="Short one-liner for the public landing card"
                   rows={3}
                   value={state.communitySettingsDescription}
                   onChange={(event) => {
@@ -436,6 +436,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
             <div className="create-community-actions">
               <button
+                className="platform-save-button"
                 onClick={() => void actions.handleSaveCommunitySettings()}
                 disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
               >

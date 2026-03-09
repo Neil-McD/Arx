@@ -91,16 +91,10 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityMemberSettingsRow\([\s\S]*?user_id: \(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\? String\(row\.userId\)' \
   "member settings rows resolve public user IDs"
 
-echo "[7/9] Ensuring resource and memory-candidate payloads resolve public IDs..."
+echo "[7/9] Ensuring resource payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityResourceRow\([\s\S]*?created_by: \(await resolvePublicUserId\(ctx, row\.createdByUserId, userIdCache\)\) \?\? String\(row\.createdByUserId\)' \
   "resource rows resolve public creator IDs"
-require_multiline_match "$COMMUNITY_CORE_FILE" \
-  'export async function mapCommunityMemoryCandidateRow\([\s\S]*?proposer_user_id:\s*\(await resolvePublicUserId\(ctx, row\.proposerUserId, userIdCache\)\) \?\? String\(row\.proposerUserId\)' \
-  "memory candidates resolve public proposer IDs"
-require_multiline_match "$COMMUNITY_CORE_FILE" \
-  'export async function mapCommunityMemoryCandidateRow\([\s\S]*?reviewed_by:[\s\S]*?resolvePublicUserId\(ctx, row\.reviewedBy, userIdCache\)[\s\S]*?String\(row\.reviewedBy\)[\s\S]*?: null' \
-  "memory candidates resolve public reviewer IDs"
 
 echo "[8/9] Ensuring sender-ID list hydration stays in the same public namespace..."
 require_multiline_match "$COMMUNITY_CHAT_FILE" \

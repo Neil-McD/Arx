@@ -117,7 +117,7 @@ Rules:
 1. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-money-access-matrix.md` is the active auth + funding contract.
 2. Superseded pre-funding-source docs must be clearly marked as historical.
 3. Docs must not describe removed UI surfaces such as `Library`.
-4. Tier names must stay canonical: `free | builder | architect`.
+4. Tier names must stay canonical: `free | builder`.
 
 ## 5) Execution Order
 

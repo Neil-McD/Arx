@@ -14,7 +14,7 @@ export const COMMUNITY_CONTEXT_BUNDLE_V1: {
   readonly sourceTypes: {
     readonly chat: string;
     readonly resource: string;
-    readonly memory: string;
+    readonly ai_feed: string;
   };
 };
 
@@ -26,10 +26,12 @@ export function truncateUtf8ForPrompt(input: unknown, maxChars: number): string;
 export function buildCommunityContextSystemPrompt(params: {
   communityName?: unknown;
   chatItems?: unknown[];
+  aiFeedItems?: unknown[];
   resourceItems?: unknown[];
 }): {
   prompt: string | null;
   chatItemsUsed: number;
+  aiFeedItemsUsed: number;
   resourceItemsUsed: number;
 };
 export function buildCommunityContextDiagnostics(
@@ -40,11 +42,13 @@ export function buildCommunityContextDiagnostics(
     compileVersion?: unknown;
     fallbackUsed?: unknown;
     chatFetchOk?: unknown;
+    aiFeedFetchOk?: unknown;
     resourceFetchOk?: unknown;
     retrievalLatencyMs?: unknown;
     failureClass?: unknown;
   },
   chatItemsUsed: number,
+  aiFeedItemsUsed: number,
   resourceItemsUsed: number,
 ): Record<string, unknown>;
 export function buildCommunityEvidenceUserMessage(communityContextPrompt: unknown): string | null;

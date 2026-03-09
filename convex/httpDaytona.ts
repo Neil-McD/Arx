@@ -1,7 +1,12 @@
+import { api } from "./_generated/api";
 import {
   runOpenRouterCompletion,
 } from "./httpRuntimeSupport";
 import { runChatgptCompletion } from "./httpChatgpt";
+import {
+  buildFoundationContextPrompt,
+  joinPromptBlocks,
+} from "../shared/doctrinePrompt";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -63,6 +68,8 @@ type DaytonaToolName =
   | "glob"
   | "grep"
   | "sha256"
+  | "community_search"
+  | "community_write"
   | "write"
   | "edit"
   | "bash";
@@ -127,6 +134,9 @@ const DAYTONA_AUTO_STOP_INTERVAL_DEFAULT_MINUTES = 1;
 const DAYTONA_AUTO_ARCHIVE_INTERVAL_DEFAULT_MINUTES = 0;
 const DAYTONA_AUTO_DELETE_INTERVAL_DEFAULT_MINUTES = 5;
 const DAYTONA_WORKSPACE_ROOT = "/home/daytona/workspace";
+const CODING_INSTRUCTION_FILENAMES = ["AGENTS.md", "CLAUDE.md"] as const;
+const MAX_CODING_INSTRUCTION_DOCS = 3;
+const MAX_CODING_INSTRUCTION_BYTES = 1800;
 
 function parseIntegerEnv(name: string, fallback: number): number {
   const raw = readEnv(name);
@@ -312,7 +322,7 @@ async function createDaytonaSandbox(params: {
       arx_run_id: params.runId,
       arx_source: "convex_runtime_turn",
     },
-    ephemeral: true,
+    ephemeral: false,
   };
   if (params.config.target) payloadBase.target = params.config.target;
   if (params.config.snapshot) payloadBase.snapshot = params.config.snapshot;
@@ -364,6 +374,28 @@ async function createDaytonaSandbox(params: {
     ok: true,
     sandbox: fallbackCreate.payload,
   };
+}
+
+export async function stopDaytonaSandbox(params: {
+  config: DaytonaConfig;
+  sandboxId: string;
+}): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const res = await daytonaApiRequest<Record<string, unknown>>({
+    config: params.config,
+    path: `/sandbox/${encodeURIComponent(params.sandboxId)}/stop`,
+    method: "POST",
+  });
+  if (!res.ok) return res;
+  return { ok: true };
 }
 
 async function fetchDaytonaSandbox(params: {
@@ -730,6 +762,8 @@ function normalizeDaytonaToolName(value: unknown): DaytonaToolName | null {
     normalized === "glob" ||
     normalized === "grep" ||
     normalized === "sha256" ||
+    normalized === "community_search" ||
+    normalized === "community_write" ||
     normalized === "write" ||
     normalized === "edit" ||
     normalized === "bash"
@@ -786,16 +820,26 @@ function buildDaytonaAgentSystemPrompt(params: {
   projectId: string;
   sandboxId: string;
   maxIterations: number;
+  communityId?: string | null;
 }): string {
-  return [
+  const communityToolList = params.communityId ? "|community_search|community_write" : "";
+  const workspacePrompt = [
+    "WORKSPACE_MODE",
     "You are the Arx cloud coding agent running inside a Daytona sandbox.",
     "Return only strict JSON (no prose, no markdown).",
     "Allowed JSON outputs:",
     '1) {"type":"assistant","text":"..."}',
-    '2) {"type":"tool_call","tool_name":"read|list_dir|glob|grep|sha256|edit|write|bash","args":{...},"reason":"..."}',
+    `2) {"type":"tool_call","tool_name":"read|list_dir|glob|grep|sha256${communityToolList}|edit|write|bash","args":{...},"reason":"..."}`,
     "Rules:",
     "- At most one tool_call per response.",
     "- Prefer read/list_dir/glob/grep/sha256 to inspect before taking action.",
+      ...(params.communityId
+        ? [
+          "- Use community_search to ground community-specific questions in compiled community context.",
+          "- Use community_write only to publish a grounded community insight into the live AI feed.",
+          '- community_write args should use: {"post_type":"observation|recommendation|action","title":"optional","body":"required","why_now":"optional","evidence":["1-4 grounding bullets"],"publish_confidence":0-6,"novelty_key":"optional"}.',
+        ]
+      : []),
     "- Prefer edit/write for file creation and modification.",
     "- Use bash only when direct file tools are not appropriate, such as builds, tests, or shell-only inspection.",
     "- Never use bash to create or edit files if read/edit/write can do the job directly.",
@@ -806,6 +850,13 @@ function buildDaytonaAgentSystemPrompt(params: {
     `- Max ${params.maxIterations} tool iterations.`,
     `Context: project_id=${params.projectId}, sandbox_id=${params.sandboxId}`,
   ].join("\n");
+  return joinPromptBlocks([
+    buildFoundationContextPrompt({
+      communityId: params.communityId,
+      workspaceMode: "coding",
+    }),
+    workspacePrompt,
+  ]);
 }
 
 function resolveDaytonaToolPolicy(toolName: DaytonaToolName): DaytonaToolPolicyDecision {
@@ -814,7 +865,8 @@ function resolveDaytonaToolPolicy(toolName: DaytonaToolName): DaytonaToolPolicyD
     toolName === "list_dir" ||
     toolName === "glob" ||
     toolName === "grep" ||
-    toolName === "sha256"
+    toolName === "sha256" ||
+    toolName === "community_search"
   ) {
     return {
       allowed: true,
@@ -869,6 +921,87 @@ function normalizeOptionalWorkspaceDir(raw: unknown): string {
   const candidate = String(raw ?? "").trim();
   if (!candidate || candidate === ".") return ".";
   return normalizeRelativeWorkspacePath(candidate);
+}
+
+function listInstructionDirectoriesForRelevantFiles(relevantFiles: string[] | null | undefined): string[] {
+  const directories = new Set<string>(["."]);
+  for (const raw of relevantFiles ?? []) {
+    const candidate = String(raw ?? "").trim();
+    if (!candidate) continue;
+    let normalized = ".";
+    try {
+      normalized = normalizeRelativeWorkspacePath(candidate);
+    } catch {
+      continue;
+    }
+    if (normalized === ".") continue;
+    const parts = normalized.split("/").filter(Boolean);
+    const last = parts[parts.length - 1] ?? "";
+    const treatAsFile = last.includes(".");
+    const limit = treatAsFile ? parts.length - 1 : parts.length;
+    for (let index = 1; index <= limit; index += 1) {
+      const nextDir = parts.slice(0, index).join("/");
+      if (nextDir) directories.add(nextDir);
+    }
+  }
+  return Array.from(directories);
+}
+
+function buildCodingInstructionCandidatePaths(relevantFiles: string[] | null | undefined): string[] {
+  const candidates: string[] = [];
+  for (const directory of listInstructionDirectoriesForRelevantFiles(relevantFiles)) {
+    for (const filename of CODING_INSTRUCTION_FILENAMES) {
+      candidates.push(directory === "." ? filename : `${directory}/${filename}`);
+    }
+  }
+  return candidates;
+}
+
+type CodingInstructionDoc = {
+  path: string;
+  content: string;
+  truncated: boolean;
+};
+
+async function loadCodingInstructionDocs(params: {
+  config: DaytonaConfig;
+  toolboxProxyUrl: string;
+  sandboxId: string;
+  relevantFiles?: string[] | null;
+}): Promise<CodingInstructionDoc[]> {
+  const docs: CodingInstructionDoc[] = [];
+  for (const candidatePath of buildCodingInstructionCandidatePaths(params.relevantFiles)) {
+    if (docs.length >= MAX_CODING_INSTRUCTION_DOCS) break;
+    const result = await executeDaytonaCommand({
+      config: params.config,
+      toolboxProxyUrl: params.toolboxProxyUrl,
+      sandboxId: params.sandboxId,
+      cwd: DAYTONA_WORKSPACE_ROOT,
+      command: `if [ -f ${shellQuote(candidatePath)} ]; then head -c ${MAX_CODING_INSTRUCTION_BYTES} -- ${shellQuote(candidatePath)}; fi`,
+    });
+    if (!result.ok) continue;
+    const content = String(result.stdout ?? "").trim();
+    if (!content) continue;
+    docs.push({
+      path: candidatePath,
+      content,
+      truncated: content.length >= MAX_CODING_INSTRUCTION_BYTES,
+    });
+  }
+  return docs;
+}
+
+function buildCodingInstructionPrompt(docs: CodingInstructionDoc[]): string | null {
+  if (!docs.length) return null;
+  return [
+    "PROJECT_INSTRUCTIONS",
+    "These local project instruction files apply to the current coding context.",
+    "Prefer more specific instructions over broader ones if they conflict.",
+    ...docs.flatMap((doc) => [
+      `[path=${doc.path}${doc.truncated ? "; truncated=true" : ""}]`,
+      doc.content,
+    ]),
+  ].join("\n\n");
 }
 
 type NormalizedExpectedBeforeSha = {
@@ -1089,11 +1222,14 @@ async function writeWorkspaceFile(params: {
 }
 
 async function executeDaytonaTool(params: {
+  ctx: any;
   config: DaytonaConfig;
   toolboxProxyUrl: string;
   sandboxId: string;
   toolName: DaytonaToolName;
   args: Record<string, unknown>;
+  userId: string;
+  communityId?: string | null;
 }): Promise<DaytonaToolExecutionResult> {
   try {
     if (params.toolName === "read") {
@@ -1389,6 +1525,111 @@ async function executeDaytonaTool(params: {
         errorMessage: null,
       };
     }
+    if (params.toolName === "community_search") {
+      const communityId = String(params.communityId ?? "").trim();
+      if (!communityId) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "community_context_required",
+          errorMessage: "community_search requires an active community context.",
+        };
+      }
+      const query = String(params.args.query ?? "").trim();
+      if (!query) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "invalid_tool_args",
+          errorMessage: "community_search requires query.",
+        };
+      }
+      const limitRaw = Number(params.args.limit ?? 8);
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(12, Math.floor(limitRaw))) : 8;
+      const payload = await params.ctx.runQuery(api.community.readCompiledCommunityContext as any, {
+        userId: params.userId,
+        communityId,
+        query,
+        limit,
+      });
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: JSON.stringify(payload ?? { ok: false }),
+        errorCode: null,
+        errorMessage: null,
+      };
+    }
+    if (params.toolName === "community_write") {
+      const communityId = String(params.communityId ?? "").trim();
+      if (!communityId) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "community_context_required",
+          errorMessage: "community_write requires an active community context.",
+        };
+      }
+      const body = String(params.args.body ?? "").trim();
+      if (!body) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "invalid_tool_args",
+          errorMessage: "community_write requires body.",
+        };
+      }
+      const postTypeRaw = String(params.args.post_type ?? "").trim().toLowerCase();
+      const postType =
+        postTypeRaw === "recommendation" || postTypeRaw === "action" ? postTypeRaw : "observation";
+      const title = String(params.args.title ?? "").trim() || null;
+      const whyNow = String(params.args.why_now ?? "").trim() || null;
+      const evidence = Array.isArray(params.args.evidence)
+        ? params.args.evidence
+            .map((entry) => String(entry ?? "").trim())
+            .filter((entry): entry is string => entry.length > 0)
+            .slice(0, 4)
+        : [];
+      const authorLabel = String(params.args.author_label ?? "").trim() || null;
+      const noveltyKey = String(params.args.novelty_key ?? "").trim() || null;
+      const publishConfidenceRaw = Number(params.args.publish_confidence);
+      const publishConfidence = Number.isFinite(publishConfidenceRaw)
+        ? Math.max(0, Math.min(6, Math.round(publishConfidenceRaw)))
+        : undefined;
+      if (evidence.length === 0) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "invalid_tool_args",
+          errorMessage: "community_write requires evidence.",
+        };
+      }
+      const payload = await params.ctx.runMutation(api.community.publishCommunityAiFeedAgentPost as any, {
+        userId: params.userId,
+        communityId,
+        agentKey: "community_write",
+        authorLabel,
+        postType,
+        title,
+        body,
+        whyNow,
+        evidence,
+        publishConfidence,
+        noveltyKey,
+      });
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: JSON.stringify(payload ?? { ok: false }),
+        errorCode: null,
+        errorMessage: null,
+      };
+    }
     if (params.toolName === "bash") {
       const command = String(params.args.cmd ?? params.args.command ?? "").trim();
       if (!command) {
@@ -1465,6 +1706,8 @@ async function executeDaytonaAgentLoop(params: {
   toolboxProxyUrl: string;
   initialProbeOutput: string | null;
   codingContinuationPrompt?: string | null;
+  codingRelevantFiles?: string[] | null;
+  communityId?: string | null;
   appendRunEvent: (params: {
     eventType: string;
     eventKey?: string;
@@ -1472,6 +1715,14 @@ async function executeDaytonaAgentLoop(params: {
   }) => Promise<void>;
 }): Promise<DaytonaAgentLoopSuccess | DaytonaAgentLoopFailure> {
   const maxIterations = 8;
+  const codingInstructionPrompt = buildCodingInstructionPrompt(
+    await loadCodingInstructionDocs({
+      config: params.daytonaConfig,
+      toolboxProxyUrl: params.toolboxProxyUrl,
+      sandboxId: params.providerSandboxId,
+      relevantFiles: params.codingRelevantFiles,
+    }),
+  );
   const transcript: InferenceMessage[] = [
     {
       role: "system",
@@ -1479,6 +1730,7 @@ async function executeDaytonaAgentLoop(params: {
         projectId: params.projectId,
         sandboxId: params.providerSandboxId,
         maxIterations,
+        communityId: params.communityId,
       }),
     },
     ...(params.codingContinuationPrompt
@@ -1486,6 +1738,14 @@ async function executeDaytonaAgentLoop(params: {
           {
             role: "system" as const,
             content: params.codingContinuationPrompt,
+          },
+        ]
+      : []),
+    ...(codingInstructionPrompt
+      ? [
+          {
+            role: "system" as const,
+            content: codingInstructionPrompt,
           },
         ]
       : []),
@@ -1674,11 +1934,14 @@ async function executeDaytonaAgentLoop(params: {
     });
 
     const toolResult = await executeDaytonaTool({
+      ctx: params.ctx,
       config: params.daytonaConfig,
       toolboxProxyUrl: params.toolboxProxyUrl,
       sandboxId: params.providerSandboxId,
       toolName: decision.tool_name,
       args: normalizedArgs,
+      userId: params.userId,
+      communityId: params.communityId ?? null,
     });
 
     await params.appendRunEvent({

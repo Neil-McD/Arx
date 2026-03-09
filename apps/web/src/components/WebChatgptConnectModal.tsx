@@ -1,39 +1,54 @@
+import { useEffect, useState } from "react";
+
 type WebChatgptConnectModalProps = {
   isOpen: boolean;
+  isStarting: boolean;
   verificationUrl: string | null;
   userCode: string | null;
   isPolling: boolean;
+  securitySettingsUrl: string;
   manualAuthorizeUrl: string | null;
   manualCallbackInput: string;
   isCompletingManual: boolean;
   error: string | null;
+  onStartDeviceFlow: () => void;
   onOpenVerificationPage: () => void;
   onStartManualFlow: () => void;
   onOpenManualAuthPage: () => void;
   onChangeManualCallbackInput: (value: string) => void;
   onCompleteManual: () => void;
   onClose: () => void;
-  onPollNow: () => void;
 };
 
 export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
   const {
     isOpen,
+    isStarting,
     verificationUrl,
     userCode,
     isPolling,
+    securitySettingsUrl,
     manualAuthorizeUrl,
     manualCallbackInput,
     isCompletingManual,
     error,
+    onStartDeviceFlow,
     onOpenVerificationPage,
     onStartManualFlow,
     onOpenManualAuthPage,
     onChangeManualCallbackInput,
     onCompleteManual,
     onClose,
-    onPollNow,
   } = props;
+  const [showRecovery, setShowRecovery] = useState(false);
+
+  const hasDeviceCode = Boolean(verificationUrl && userCode);
+
+  useEffect(() => {
+    if (!isOpen || !hasDeviceCode) {
+      setShowRecovery(false);
+    }
+  }, [hasDeviceCode, isOpen]);
 
   if (!isOpen) return null;
 
@@ -48,77 +63,118 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
         </div>
         <div className="modal-body">
           <div className="chatgpt-connect-stack">
-            {verificationUrl && userCode ? (
+            {!hasDeviceCode ? (
               <>
-                <p className="chatgpt-connect-copy">
-                  Preferred method: OpenAI device-code login. Open the verification page, enter the one-time code
-                  below, then come back while the app checks for completion.
-                </p>
-                <ol className="chatgpt-connect-steps">
-                  <li>Open the OpenAI verification page.</li>
-                  <li>Enter the one-time code shown below.</li>
-                  <li>Finish login and approval in OpenAI.</li>
-                  <li>Return here. The app will keep checking automatically.</li>
-                </ol>
-                <div className="chatgpt-connect-field">
-                  <span>One-time code</span>
-                  <code className="chatgpt-connect-code">{userCode}</code>
+                <div className="chatgpt-connect-stage">
+                  <div className="chatgpt-connect-stage-eyebrow">Before you connect</div>
+                  <div className="chatgpt-connect-stage-title">Enable device code authorization for Codex</div>
+                  <ul className="chatgpt-connect-bullets">
+                    <li>Open your ChatGPT Security settings.</li>
+                    <li>Turn on <strong>Enable device code authorization for Codex</strong>.</li>
+                    <li>Come back here and click <strong>Authenticate</strong>.</li>
+                  </ul>
                 </div>
-                <div className="auth-actions">
-                  <button className="secondary" type="button" onClick={onOpenVerificationPage}>
-                    Open verification page
+                <div className="chatgpt-connect-actions">
+                  <a
+                    className="chatgpt-connect-settings-link"
+                    href={securitySettingsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open ChatGPT Security settings
+                  </a>
+                  <button
+                    className="platform-save-button"
+                    type="button"
+                    onClick={onStartDeviceFlow}
+                    disabled={isStarting}
+                  >
+                    {isStarting ? "Starting..." : "Authenticate"}
                   </button>
-                  <button className="secondary" type="button" onClick={onPollNow} disabled={isPolling}>
-                    {isPolling ? "Checking…" : "Check again"}
-                  </button>
-                </div>
-                <div className="chatgpt-connect-hint">
-                  Verification URL: <code>{verificationUrl}</code>
                 </div>
               </>
             ) : (
-              <p className="chatgpt-connect-copy">Start a ChatGPT / Codex connection method below.</p>
-            )}
-
-            <div className="chatgpt-connect-divider" />
-            <div className="chatgpt-connect-field">
-              <span>Fallback: browser login + paste callback URL</span>
-              <div className="chatgpt-connect-hint">
-                This uses the localhost callback URL. If your browser cannot reach it, paste the final callback URL
-                back here to complete the connection.
-              </div>
-            </div>
-            <div className="auth-actions">
-              {manualAuthorizeUrl ? (
-                <button className="secondary" type="button" onClick={onOpenManualAuthPage}>
-                  Open browser login
-                </button>
-              ) : (
-                <button className="secondary" type="button" onClick={onStartManualFlow}>
-                  Start browser login fallback
-                </button>
-              )}
-            </div>
-            {manualAuthorizeUrl ? (
               <>
-                <div className="chatgpt-connect-hint">
-                  If OpenAI redirects to `http://localhost:1455/auth/callback` and the page fails to load, copy the
-                  full URL from the address bar and paste it below.
+                <div className="chatgpt-connect-stage">
+                  <div className="chatgpt-connect-stage-eyebrow">Step 2</div>
+                  <div className="chatgpt-connect-stage-title">Enter this code in OpenAI</div>
+                  <p className="chatgpt-connect-copy">
+                    Open the verification page, paste in the one-time code below, and approve the connection. The app
+                    will keep checking automatically.
+                  </p>
                 </div>
-                <textarea
-                  className="system-prompt-input"
-                  placeholder="Paste the full localhost callback URL here"
-                  value={manualCallbackInput}
-                  onChange={(event) => onChangeManualCallbackInput(event.target.value)}
-                  rows={4}
-                />
-                <div className="auth-actions">
-                  <button className="secondary" type="button" onClick={onCompleteManual} disabled={isCompletingManual}>
-                    {isCompletingManual ? "Finishing…" : "Finish browser login"}
+                <div className="chatgpt-connect-field chatgpt-connect-device-field">
+                  <span>One-time code</span>
+                  <code className="chatgpt-connect-code">{userCode}</code>
+                </div>
+                <div className="chatgpt-connect-actions">
+                  <button className="platform-save-button" type="button" onClick={onOpenVerificationPage}>
+                    Open verification page
                   </button>
                 </div>
+                <div className="chatgpt-connect-status" aria-live="polite">
+                  {isPolling ? "Waiting for approval..." : "Ready to verify."}
+                </div>
+                <div className="chatgpt-connect-inline-actions">
+                  <button
+                    className="chatgpt-connect-inline-link"
+                    type="button"
+                    onClick={() => setShowRecovery((value) => !value)}
+                  >
+                    {showRecovery ? "Hide recovery options" : "Having trouble?"}
+                  </button>
+                </div>
+                {showRecovery ? (
+                  <div className="chatgpt-connect-callout">
+                    <div className="chatgpt-connect-callout-title">Browser fallback</div>
+                    <div className="chatgpt-connect-copy">
+                      If device-code approval does not work, use browser login and paste the localhost callback URL
+                      back here to finish manually.
+                    </div>
+                    <div className="auth-actions">
+                      {manualAuthorizeUrl ? (
+                        <button className="secondary" type="button" onClick={onOpenManualAuthPage}>
+                          Open browser login
+                        </button>
+                      ) : (
+                        <button className="secondary" type="button" onClick={onStartManualFlow}>
+                          Start browser fallback
+                        </button>
+                      )}
+                      <button
+                        className="secondary"
+                        type="button"
+                        onClick={onStartDeviceFlow}
+                        disabled={isStarting}
+                      >
+                        {isStarting ? "Starting..." : "Get a new code"}
+                      </button>
+                    </div>
+                    {manualAuthorizeUrl ? (
+                      <>
+                        <textarea
+                          className="system-prompt-input"
+                          placeholder="Paste the full localhost callback URL here"
+                          value={manualCallbackInput}
+                          onChange={(event) => onChangeManualCallbackInput(event.target.value)}
+                          rows={4}
+                        />
+                        <div className="auth-actions">
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={onCompleteManual}
+                            disabled={isCompletingManual}
+                          >
+                            {isCompletingManual ? "Finishing..." : "Finish browser login"}
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </>
-            ) : null}
+            )}
             {error && <div className="auth-error">{error}</div>}
           </div>
         </div>

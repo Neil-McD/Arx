@@ -10,7 +10,6 @@ import {
 import {
   countCloudCommunityResourceRows,
   fetchCloudCommunityEntitledMemberCount,
-  listCloudCommunityMembersAdminRows,
   listCloudCommunityRevenueSeriesRows,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
@@ -90,28 +89,16 @@ export function useCommunityAdminController<
     opts?: { includeStatus?: boolean },
   ) => {
     const current = argsRef.current;
+    void opts;
     let rows: CommunityMemberT[] | null = null;
-    if (opts?.includeStatus) {
-      try {
-        rows = await listCloudCommunityMembersAdminRows<SessionT, CommunityMemberT>({
-          session,
-          communityId,
-        });
-      } catch {
-        rows = null;
-      }
-    }
-
-    if (!rows) {
-      try {
-        rows = (await listCloudCommunityMembershipAdminRows({
-          session,
-          communityId,
-          limit: 200,
-        })) as unknown as CommunityMemberT[];
-      } catch {
-        return;
-      }
+    try {
+      rows = (await listCloudCommunityMembershipAdminRows({
+        session,
+        communityId,
+        limit: 200,
+      })) as unknown as CommunityMemberT[];
+    } catch {
+      return;
     }
 
     current.setCommunityMembers(rows);
@@ -387,7 +374,7 @@ export function useCommunityAdminController<
     await current.reloadCommunityAccess(communityId, session);
   }, [loadCommunityMembers]);
 
-  const handleSetCommunityMemberRole = useCallback(async (userId: string, role: string) => {
+  const handleSetCommunityMemberRole = useCallback(async (userId: string, role: "admin" | "member") => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
     const session = current.session;

@@ -28,17 +28,17 @@ type RuntimeCommunityResearchInput = {
   limit?: unknown;
 };
 
-type RuntimeCommunityMemoryCandidateInput = {
-  p_community_id?: unknown;
+type RuntimeCommunityLiveFeedWriteInput = {
   community_id?: unknown;
-  p_title?: unknown;
+  agent_key?: unknown;
+  author_label?: unknown;
+  post_type?: unknown;
   title?: unknown;
-  p_memory_text?: unknown;
-  memory_text?: unknown;
-  p_evidence?: unknown;
+  body?: unknown;
+  why_now?: unknown;
   evidence?: unknown;
-  p_request_key?: unknown;
-  request_key?: unknown;
+  publish_confidence?: unknown;
+  novelty_key?: unknown;
 };
 
 type HttpRouterLike = {
@@ -51,17 +51,17 @@ type HttpRouterLike = {
 
 type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
 
-type RequireAuthenticatedUserId = (
+type RequireAuthenticatedSubject = (
   ctx: unknown,
   req: Request,
-) => Promise<{ ok: true; userId: string } | { ok: false; response: Response }>;
+) => Promise<{ ok: true; authSubject: string } | { ok: false; response: Response }>;
 
 type RegisterRuntimeContextRoutesArgs = {
   http: HttpRouterLike;
   httpAction: HttpActionLike;
   jsonResponse: (req: Request, status: number, payload: unknown) => Response;
   optionsResponse: (req: Request) => Response;
-  requireAuthenticatedUserId: RequireAuthenticatedUserId;
+  requireAuthenticatedSubject: RequireAuthenticatedSubject;
 };
 
 function parseIsoToEpochSeconds(raw: unknown): number | null {
@@ -79,7 +79,7 @@ function parseIsoToEpochSeconds(raw: unknown): number | null {
 }
 
 export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesArgs): void {
-  const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedUserId } = args;
+  const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedSubject } = args;
 
   http.route({
     path: "/runtime/list_enabled_model_registry",
@@ -100,7 +100,7 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
   });
 
   http.route({
-    path: "/runtime/community_memory_candidate_propose",
+    path: "/runtime/community_live_feed_write",
     method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
@@ -116,9 +116,9 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
         input = {};
       }
 
-      const auth = await requireAuthenticatedUserId(ctx, req);
+      const auth = await requireAuthenticatedSubject(ctx, req);
       if (!auth.ok) return auth.response;
-      void auth.userId;
+      void auth.authSubject;
 
       const enabledOnly = parseBoolish(input.enabled, true);
       const requestedId = parseOptionalString(input.model_id ?? input.id, 160);
@@ -178,14 +178,14 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
         input = {};
       }
 
-      const auth = await requireAuthenticatedUserId(ctx, req);
+      const auth = await requireAuthenticatedSubject(ctx, req);
       if (!auth.ok) return auth.response;
       const scopeRaw = parseOptionalString(input.scope, 24);
       const scope = scopeRaw === "global" || scopeRaw === "workspace" ? scopeRaw : undefined;
       const scopeId = parseOptionalString(input.scope_id, 240) ?? undefined;
       const limit = normalizePositiveInt(input.limit, 200, 1000);
       const rows = (await (ctx as any).runQuery(api.personalMemory.listPersonalMemoryItems as any, {
-        userId: auth.userId,
+        authSubject: auth.authSubject,
         scope,
         scopeId,
         limit,
@@ -233,7 +233,7 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
         });
       }
 
-      const auth = await requireAuthenticatedUserId(ctx, req);
+      const auth = await requireAuthenticatedSubject(ctx, req);
       if (!auth.ok) return auth.response;
 
       const communityId = parseOptionalString(input.community_id, 200);
@@ -248,19 +248,14 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
       }
       const communityName = parseOptionalString(input.community_name, 200);
       const limit = normalizePositiveInt(input.limit, 12, 24);
-      const sourceTypes = Array.isArray(input.source_types)
-        ? input.source_types
-            .map((value) => String(value ?? "").trim().toLowerCase())
-            .filter((value) => value === "chat" || value === "resource" || value === "memory")
-        : [];
+      void input.source_types;
 
       try {
-        const payload = await (ctx as any).runQuery(api.community.researchCommunityContext as any, {
-          userId: auth.userId,
+        const payload = await (ctx as any).runQuery(api.community.readCompiledCommunityContext as any, {
+          authSubject: auth.authSubject,
           communityId,
           communityName: communityName ?? null,
           query,
-          sourceTypes,
           limit,
         });
         return jsonResponse(req, 200, (payload ?? { ok: false }) as Record<string, unknown>);
@@ -277,12 +272,12 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
   });
 
   http.route({
-    path: "/runtime/community_memory_candidate_propose",
+    path: "/runtime/community_live_feed_write",
     method: "POST",
     handler: httpAction(async (ctx, req) => {
-      let input: RuntimeCommunityMemoryCandidateInput;
+      let input: RuntimeCommunityLiveFeedWriteInput;
       try {
-        input = (await req.json()) as RuntimeCommunityMemoryCandidateInput;
+        input = (await req.json()) as RuntimeCommunityLiveFeedWriteInput;
       } catch {
         return jsonResponse(req, 400, {
           ok: false,
@@ -291,42 +286,75 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
         });
       }
 
-      const auth = await requireAuthenticatedUserId(ctx, req);
+      const auth = await requireAuthenticatedSubject(ctx, req);
       if (!auth.ok) return auth.response;
 
-      const communityId = parseOptionalString(input.p_community_id ?? input.community_id, 200);
-      const memoryText = parseOptionalString(input.p_memory_text ?? input.memory_text, 8000);
-      if (!communityId || !memoryText) {
+      const communityId = parseOptionalString(input.community_id, 200);
+      const body = parseOptionalString(input.body, 12_000);
+      if (!communityId || !body) {
         return jsonResponse(req, 400, {
           ok: false,
           error: "invalid_request",
           code: "invalid_request",
-          message: "community_id and memory_text are required.",
+          message: "community_id and body are required.",
         });
       }
-      const title = parseOptionalString(input.p_title ?? input.title, 120);
-      const requestKey = parseOptionalString(input.p_request_key ?? input.request_key, 256);
-      const evidence = input.p_evidence ?? input.evidence ?? null;
+
+      const postTypeRaw = parseOptionalString(input.post_type, 32)?.toLowerCase();
+      const postType =
+        postTypeRaw === "recommendation" || postTypeRaw === "action" ? postTypeRaw : "observation";
+      const title = parseOptionalString(input.title, 180);
+      const whyNow = parseOptionalString(input.why_now, 280);
+      const evidence = Array.isArray(input.evidence)
+        ? input.evidence
+            .map((entry) => parseOptionalString(entry, 180))
+            .filter((entry): entry is string => Boolean(entry))
+            .slice(0, 4)
+        : [];
+      const authorLabel = parseOptionalString(input.author_label, 80);
+      const agentKey = parseOptionalString(input.agent_key, 120);
+      const noveltyKey = parseOptionalString(input.novelty_key, 256);
+      const publishConfidenceRaw = Number(input.publish_confidence);
+      const publishConfidence = Number.isFinite(publishConfidenceRaw)
+        ? Math.max(0, Math.min(6, Math.round(publishConfidenceRaw)))
+        : undefined;
+      if (evidence.length === 0) {
+        return jsonResponse(req, 400, {
+          ok: false,
+          error: "invalid_request",
+          code: "invalid_request",
+          message: "evidence is required for community live feed writes.",
+        });
+      }
 
       try {
-        const payload = await (ctx as any).runMutation(api.community.proposeCommunityMemoryCandidate as any, {
-          userId: auth.userId,
+        const payload = await (ctx as any).runMutation(api.community.publishCommunityAiFeedAgentPost as any, {
+          authSubject: auth.authSubject,
           communityId,
+          agentKey: agentKey ?? null,
+          authorLabel: authorLabel ?? null,
+          postType,
           title: title ?? null,
-          memoryText,
+          body,
+          whyNow: whyNow ?? null,
           evidence,
-          requestKey: requestKey ?? null,
+          publishConfidence,
+          noveltyKey: noveltyKey ?? null,
         });
-        return jsonResponse(req, 200, (payload ?? { ok: false }) as Record<string, unknown>);
+        return jsonResponse(req, 200, {
+          ok: true,
+          post: payload ?? null,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return jsonResponse(req, 400, {
           ok: false,
-          error: "community_memory_candidate_propose_failed",
-          code: "community_memory_candidate_propose_failed",
+          error: "community_live_feed_write_failed",
+          code: "community_live_feed_write_failed",
           message,
         });
       }
     }),
   });
+
 }

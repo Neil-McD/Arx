@@ -2,8 +2,8 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "builder";
+type EffectiveTier = "anon_free" | "auth_free" | "builder";
 type AuthState = "anonymous" | "authenticated";
 
 type BuilderTierMeta = {
@@ -14,13 +14,6 @@ type BuilderTierMeta = {
 
 function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
   if (tier === "builder") {
-    return {
-      maxCommunities: 1,
-      platformFeeBps: 1000,
-      hasPayouts: true,
-    };
-  }
-  if (tier === "architect") {
     return {
       maxCommunities: 3,
       platformFeeBps: 300,
@@ -39,7 +32,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "architect";
+  if (normalized === "architect" || normalized === "pro") return "builder";
   return "free";
 }
 
@@ -166,7 +159,6 @@ export const bootstrapActor = mutation({
     return {
       authState: args.authState,
       authSubject: subject,
-      userId: String(user?.authSubject ?? subject).trim() || String(userId),
       canonicalTier,
       effectiveTier,
       email: user?.email ?? null,
@@ -203,7 +195,6 @@ export const getActor = query({
       return {
         authState: args.authState,
         authSubject: subject,
-        userId: null,
         canonicalTier,
         effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
       };
@@ -212,7 +203,6 @@ export const getActor = query({
     return {
       authState: args.authState,
       authSubject: subject,
-      userId: String(user.authSubject ?? subject).trim() || String(user._id),
       canonicalTier,
       effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
       email: user.email ?? null,
@@ -225,7 +215,7 @@ export const getActor = query({
 export const setDevTierOverride = mutation({
   args: {
     authSubject: v.optional(v.string()),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("builder")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -251,7 +241,6 @@ export const setDevTierOverride = mutation({
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, user._id, nowMs);
     return {
       ok: true,
-      userId: String(user.authSubject ?? subject).trim() || String(user._id),
       canonicalTier,
       effectiveTier: resolveEffectiveTier({ authState: "authenticated", canonicalTier }),
     };

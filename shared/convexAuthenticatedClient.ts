@@ -11,7 +11,6 @@ import { readConvexUrl } from "./convexRuntime";
 export type ConvexAuthenticatedClientContext = {
   client: ConvexHttpClient;
   authSubject: string;
-  userId: string;
   convexUrl: string;
 };
 
@@ -99,7 +98,7 @@ export async function bootstrapConvexAuthenticatedClient(
     client.setAuth(accessToken);
   }
 
-  let actor: { userId?: string | null; authSubject?: string | null } | null = null;
+  let actor: { authSubject?: string | null } | null = null;
   try {
     actor = (await client.mutation("auth:bootstrapActor" as any, {
       authState: "authenticated",
@@ -107,7 +106,7 @@ export async function bootstrapConvexAuthenticatedClient(
       email: resolveCloudSessionEmail(session),
       displayName: resolveCloudSessionDisplayName(session),
       avatarUrl: resolveCloudSessionAvatarUrl(session),
-    })) as { userId?: string | null; authSubject?: string | null };
+    })) as { authSubject?: string | null };
   } catch (error) {
     rethrowBootstrapActorError(error);
   }
@@ -116,18 +115,9 @@ export async function bootstrapConvexAuthenticatedClient(
   if (actorAuthSubject && actorAuthSubject !== authSubject) {
     throw new Error("convex_auth_subject_mismatch");
   }
-  const userId = String(actor?.userId ?? "").trim();
-  if (!userId) {
-    throw new Error("convex_owner_not_found");
-  }
-  if (userId !== authSubject) {
-    throw new Error("convex_auth_subject_mismatch");
-  }
-
   return {
     client,
     authSubject,
-    userId,
     convexUrl,
   };
 }

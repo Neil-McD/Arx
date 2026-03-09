@@ -2,6 +2,7 @@ import { api, internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
+import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
@@ -229,13 +230,13 @@ async function requireVerifiedIdentity(
   };
 }
 
-async function requireAuthenticatedUserId(
+async function requireAuthenticatedSubject(
   ctx: any,
   req: Request,
-): Promise<{ ok: true; userId: string } | { ok: false; response: Response }> {
+): Promise<{ ok: true; authSubject: string } | { ok: false; response: Response }> {
   const auth = await requireAuthenticatedActor(ctx, req);
   if (!auth.ok) return auth;
-  return { ok: true, userId: auth.actor.userId };
+  return { ok: true, authSubject: auth.actor.authSubject };
 }
 
 async function requireAuthenticatedActor(
@@ -245,9 +246,8 @@ async function requireAuthenticatedActor(
   | {
       ok: true;
       actor: {
-        userId: string;
-        dbUserId: any;
         authSubject: string;
+        dbUserId: any;
         email: string | null;
         displayName: string | null;
         avatarUrl: string | null;
@@ -264,9 +264,9 @@ async function requireAuthenticatedActor(
     ...(email ? { email } : null),
     ...(displayName ? { displayName } : null),
     ...(avatarUrl ? { avatarUrl } : null),
-  })) as { userId?: string | null };
-  const userId = String(actor?.userId ?? "").trim();
-  if (!userId) {
+  })) as { authSubject?: string | null };
+  const actorAuthSubject = String(actor?.authSubject ?? "").trim();
+  if (actorAuthSubject && actorAuthSubject !== authSubject) {
     return {
       ok: false,
       response: jsonResponse(req, 401, {
@@ -294,9 +294,8 @@ async function requireAuthenticatedActor(
   return {
     ok: true,
     actor: {
-      userId,
-      dbUserId,
       authSubject,
+      dbUserId,
       email,
       displayName,
       avatarUrl,
@@ -316,6 +315,13 @@ registerRuntimeAuthRoutes({
   parseBoolish,
 });
 
+registerRuntimeBillingRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+});
+
 registerRuntimeVoiceRoutes({
   http,
   httpAction,
@@ -329,7 +335,7 @@ registerRuntimeContextRoutes({
   httpAction,
   jsonResponse,
   optionsResponse,
-  requireAuthenticatedUserId,
+  requireAuthenticatedSubject,
 });
 
 registerRuntimeTurnRoutes({

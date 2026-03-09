@@ -1,6 +1,6 @@
 [
   {
-    "name": "mixed_chat_resource_memory_with_scores",
+    "name": "mixed_chat_resource_ai_feed_with_scores",
     "chat_rows": [
       {
         "message_id": "chat-1",
@@ -14,6 +14,15 @@
         "snippet": "Pin the onboarding checklist in welcome."
       }
     ],
+    "ai_feed_rows": [
+      {
+        "resource_id": "feed-1",
+        "resource_type": "ai_feed",
+        "title": "Onboarding friction is recurring",
+        "snippet": "Multiple new members are asking where to start.",
+        "rank_score": 0.66
+      }
+    ],
     "resource_rows": [
       {
         "resource_id": "res-1",
@@ -22,14 +31,6 @@
         "snippet": "Checklist and templates.",
         "url": "https://example.com/onboarding",
         "score": "0.72"
-      },
-      {
-        "source_id": "mem-1",
-        "resource_type": "memory",
-        "title": "",
-        "snippet": "",
-        "url": "",
-        "rank_score": 0.66
       }
     ],
     "expected": {
@@ -55,21 +56,21 @@
           "rank": 2
         },
         {
+          "source_type": "ai_feed",
+          "source_id": "feed-1",
+          "title": "Onboarding friction is recurring",
+          "snippet": "Multiple new members are asking where to start.",
+          "url": null,
+          "score": 0.66,
+          "rank": 3
+        },
+        {
           "source_type": "resource",
           "source_id": "res-1",
           "title": "Onboarding doc",
           "snippet": "Checklist and templates.",
           "url": "https://example.com/onboarding",
           "score": 0.72,
-          "rank": 3
-        },
-        {
-          "source_type": "memory",
-          "source_id": "mem-1",
-          "title": "Community memory",
-          "snippet": "Community memory",
-          "url": null,
-          "score": 0.66,
           "rank": 4
         }
       ]
@@ -89,6 +90,7 @@
         "snippet": "Use thread id when message id is missing."
       }
     ],
+    "ai_feed_rows": [],
     "resource_rows": [
       {
         "source_id": "resource-fallback",
@@ -138,6 +140,7 @@
         "snippet": ""
       }
     ],
+    "ai_feed_rows": [],
     "resource_rows": [
       {
         "resource_id": "",

@@ -2,7 +2,6 @@ import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient"
 
 type CloudCommunityMembershipGatewayParams<SessionT> = {
   session: SessionT;
-  userId: string;
 };
 
 export type CloudCommunityMembershipCommunitySelect = "full" | "minimal";
@@ -41,7 +40,6 @@ export async function listCloudCommunityMembershipRows<SessionT, TCommunity = un
   },
 ): Promise<Array<CloudCommunityMembershipRow<TCommunity>>> {
   const selectMode = params.selectMode ?? "full";
-  void params.userId;
   void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listCommunityMemberships" as any, {
@@ -56,6 +54,15 @@ export type CloudCommunityMembershipAdminRow = {
   community_id: string;
   user_id: string;
   role: string;
+  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  is_entitled?: boolean;
+  entitlement_ends_at?: string | null;
+  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
+  subscription_cancel_at_period_end?: boolean | null;
+  billing_period?: string | null;
+  amount_base_units?: number | null;
+  currency?: string | null;
+  currency_decimals?: number | null;
   created_at: string;
 };
 

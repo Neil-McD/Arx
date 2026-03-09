@@ -1,6 +1,7 @@
 export type AttachmentWithOptionalImageData = {
   type: string;
   name: string;
+  url?: string | null;
   data_url?: string | null;
 };
 
@@ -24,14 +25,16 @@ export function partitionCommunityAttachments<T extends AttachmentWithOptionalIm
   const fileAttachments: T[] = [];
 
   for (const attachment of attachments) {
-    if (
-      attachment.type === "image" &&
-      typeof attachment.data_url === "string" &&
-      attachment.data_url.startsWith("data:image/")
-    ) {
+    const imageUrl =
+      typeof attachment.url === "string" && attachment.url.trim()
+        ? attachment.url.trim()
+        : typeof attachment.data_url === "string" && attachment.data_url.trim()
+          ? attachment.data_url.trim()
+          : null;
+    if (attachment.type === "image" && imageUrl) {
       imageAttachments.push({
         attachment,
-        url: attachment.data_url,
+        url: imageUrl,
         name: attachment.name,
       });
       continue;

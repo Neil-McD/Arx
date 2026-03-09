@@ -49,6 +49,12 @@ type UseCommunityChatMutationControllerArgs<
   parseReplyPrefix: (body: string) => ReplyPrefixLike | null;
   buildReplyPrefix: (sender: string, preview: string) => string;
   beforeSendValidate?: (text: string) => Promise<string | null>;
+  prepareAttachmentsForSend?: (
+    attachments: AttachmentT[],
+    session: SessionT,
+    communityId: string,
+  ) => Promise<AttachmentT[]>;
+  serializeAttachmentsForWrite?: (attachments: AttachmentT[]) => unknown[];
   onOptimisticSendScrollIntent: () => void;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
@@ -182,6 +188,9 @@ export function useCommunityChatMutationController<
     const text = current.editingMessageText.trim();
     if (!text) return;
     const existingAttachments = current.communityMessages.find((message) => message.id === current.editingMessageId)?.attachments ?? [];
+    const serializedAttachments = current.serializeAttachmentsForWrite
+      ? current.serializeAttachmentsForWrite(existingAttachments)
+      : existingAttachments;
     const bodyToSave = current.editingMessagePrefix ? current.editingMessagePrefix + text : text;
 
     current.setCommunityMessages((prev) => prev.map((message) => (
@@ -198,7 +207,7 @@ export function useCommunityChatMutationController<
         senderId: session.user.id,
         contentJson: {
           text: bodyToSave,
-          ...(existingAttachments.length > 0 ? { attachments: existingAttachments } : {}),
+          ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
         },
       });
     } catch {
@@ -280,12 +289,18 @@ export function useCommunityChatMutationController<
     current.setIsSendingCommunityMessage(true);
     current.setCommunityChatError(null);
     try {
+      const preparedAttachments = current.prepareAttachmentsForSend
+        ? await current.prepareAttachmentsForSend(attachmentsToSend, session, current.activeCommunityId)
+        : attachmentsToSend;
+      const serializedAttachments = current.serializeAttachmentsForWrite
+        ? current.serializeAttachmentsForWrite(preparedAttachments)
+        : preparedAttachments;
       const threadId = await current.ensureCommunityChatThread(current.activeCommunityId, session);
       const created = await createCloudThreadUserMessageRows<SessionT, RowT>({
         session,
         threadId,
         text: bodyToSend,
-        attachments: attachmentsToSend,
+        attachments: serializedAttachments,
         replyToId,
       });
       const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;

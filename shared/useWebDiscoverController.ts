@@ -1,19 +1,18 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { listCloudDiscoverCommunities } from "./cloudDiscoverGateway";
+import type { DiscoverCommunitySnapshot } from "./communityTypes";
 
-type UseWebDiscoverControllerArgs<DiscoverCommunityT> = {
+type UseWebDiscoverControllerArgs = {
   toCanonicalCommunityVisibility: (
     value: unknown,
     fallback?: "published" | "unlisted",
   ) => "published" | "unlisted";
   setIsLoadingDiscover: Dispatch<SetStateAction<boolean>>;
   setDiscoverError: Dispatch<SetStateAction<string | null>>;
-  setDiscoverCommunities: Dispatch<SetStateAction<DiscoverCommunityT[]>>;
+  setDiscoverCommunities: Dispatch<SetStateAction<DiscoverCommunitySnapshot[]>>;
 };
 
-export function useWebDiscoverController<DiscoverCommunityT extends { visibility: string }>(
-  args: UseWebDiscoverControllerArgs<DiscoverCommunityT>,
-) {
+export function useWebDiscoverController(args: UseWebDiscoverControllerArgs) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
@@ -22,17 +21,12 @@ export function useWebDiscoverController<DiscoverCommunityT extends { visibility
     current.setIsLoadingDiscover(true);
     current.setDiscoverError(null);
     try {
-      const payload = {
-        ok: true,
-        communities: await listCloudDiscoverCommunities<DiscoverCommunityT>({ limit: 60 }),
-      } as { ok?: boolean; communities?: DiscoverCommunityT[] };
+      const communities = await listCloudDiscoverCommunities({ limit: 60 });
       current.setDiscoverCommunities(
-        Array.isArray(payload?.communities)
-          ? payload.communities.map((community) => ({
-              ...community,
-              visibility: current.toCanonicalCommunityVisibility(community.visibility, "unlisted"),
-            }))
-          : [],
+        communities.map((community) => ({
+          ...community,
+          visibility: current.toCanonicalCommunityVisibility(community.visibility, "unlisted"),
+        })),
       );
     } catch (error) {
       const message =

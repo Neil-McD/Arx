@@ -202,7 +202,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
         <div className="modal-footer">
           <div className="resource-modal-actions">
             <button
-              className="resource-modal-save"
+              className="platform-save-button"
               onClick={() => void onSave()}
               disabled={
                 !hasActiveCommunity ||

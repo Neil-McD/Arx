@@ -14,7 +14,7 @@ export const COMMUNITY_CONTEXT_BUNDLE_V1 = Object.freeze({
   sourceTypes: Object.freeze({
     chat: "chat_message",
     resource: "community_resource",
-    memory: "community_memory",
+    ai_feed: "ai_feed_item",
   }),
 });
 export const COMMUNITY_EVIDENCE_USER_MESSAGE_PREFIX =
@@ -43,6 +43,7 @@ export function normalizeCompiledCommunityRows(compiledRows, communityId) {
   const rows = Array.isArray(compiledRows) ? compiledRows : [];
   const nowIso = new Date().toISOString();
   const chatRows = [];
+  const aiFeedRows = [];
   const resourceRows = [];
   let compileVersion = null;
 
@@ -84,11 +85,11 @@ export function normalizeCompiledCommunityRows(compiledRows, communityId) {
       continue;
     }
 
-    if (sourceType === COMMUNITY_CONTEXT_BUNDLE_V1.sourceTypes.memory) {
-      const title = typeof row?.title === "string" ? row.title : "memory";
-      resourceRows.push({
+    if (sourceType === COMMUNITY_CONTEXT_BUNDLE_V1.sourceTypes.ai_feed) {
+      const title = typeof row?.title === "string" ? row.title : "AI feed item";
+      aiFeedRows.push({
         resource_id: row?.source_id ?? "",
-        resource_type: "memory",
+        resource_type: "ai_feed",
         title,
         created_at: row?.source_updated_at ?? row?.source_created_at ?? nowIso,
         pinned: Boolean(row?.pinned),
@@ -101,6 +102,7 @@ export function normalizeCompiledCommunityRows(compiledRows, communityId) {
 
   return {
     chatRows: chatRows.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit),
+    aiFeedRows: aiFeedRows.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit),
     resourceRows: resourceRows.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit),
     compileVersion,
     compiledItemsUsed: rows.length,
@@ -112,10 +114,12 @@ export function buildCommunityContextSystemPrompt(params) {
   const communityName = communityNameRaw.trim();
   const communityLabel = communityName || "active community";
   const chatItems = Array.isArray(params?.chatItems) ? params.chatItems : [];
+  const aiFeedItems = Array.isArray(params?.aiFeedItems) ? params.aiFeedItems : [];
   const resourceItems = Array.isArray(params?.resourceItems) ? params.resourceItems : [];
 
   const lines = [];
   let chatItemsUsed = 0;
+  let aiFeedItemsUsed = 0;
   let resourceItemsUsed = 0;
 
   for (const [idx, item] of chatItems.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit).entries()) {
@@ -130,11 +134,22 @@ export function buildCommunityContextSystemPrompt(params) {
     chatItemsUsed += 1;
   }
 
+  for (const [idx, item] of aiFeedItems
+    .slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)
+    .entries()) {
+    const titleRaw = typeof item?.title === "string" ? item.title : "AI feed item";
+    const title = titleRaw.trim();
+    const snippet = (typeof item?.snippet === "string" ? item.snippet : "").trim();
+    if (!title && !snippet) continue;
+    const titleShort = truncateUtf8ForPrompt(title, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceTitleMaxChars).trim();
+    const snippetShort = truncateUtf8ForPrompt(snippet, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceSnippetMaxChars);
+    lines.push(`- [ai_feed:${idx + 1}] ${titleShort || "AI feed item"}: ${snippetShort}`);
+    aiFeedItemsUsed += 1;
+  }
+
   for (const [idx, item] of resourceItems
     .slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)
     .entries()) {
-    const resourceTypeRaw = typeof item?.resource_type === "string" ? item.resource_type : "resource";
-    const resourceType = resourceTypeRaw.trim().toLowerCase() === "memory" ? "memory" : "resource";
     const titleRaw = typeof item?.title === "string" ? item.title : "resource";
     const title = titleRaw.trim();
     const snippet = (typeof item?.snippet === "string" ? item.snippet : "").trim();
@@ -144,22 +159,23 @@ export function buildCommunityContextSystemPrompt(params) {
     const snippetShort = truncateUtf8ForPrompt(snippet, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceSnippetMaxChars);
     const urlShort = truncateUtf8ForPrompt(urlRaw.trim(), COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceUrlMaxChars).trim();
     const suffix = urlShort ? ` (${urlShort})` : "";
-    lines.push(`- [${resourceType}:${idx + 1}] ${titleShort || resourceType}: ${snippetShort}${suffix}`);
+    lines.push(`- [resource:${idx + 1}] ${titleShort || "Community resource"}: ${snippetShort}${suffix}`);
     resourceItemsUsed += 1;
   }
 
   if (lines.length === 0) {
-    return { prompt: null, chatItemsUsed, resourceItemsUsed };
+    return { prompt: null, chatItemsUsed, aiFeedItemsUsed, resourceItemsUsed };
   }
 
   return {
     prompt: `Community evidence (${communityLabel})\n${lines.join("\n")}`,
     chatItemsUsed,
+    aiFeedItemsUsed,
     resourceItemsUsed,
   };
 }
 
-export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resourceItemsUsed) {
+export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, aiFeedItemsUsed, resourceItemsUsed) {
   const attempted = Boolean(bundle?.compiledAttempted);
   const compiledFetchOk = Boolean(bundle?.compiledFetchOk);
   const fallbackUsed = Boolean(bundle?.fallbackUsed);
@@ -171,6 +187,10 @@ export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resource
     bundle?.resourceFetchOk === null || bundle?.resourceFetchOk === undefined
       ? null
       : Boolean(bundle.resourceFetchOk);
+  const aiFeedFetchOk =
+    bundle?.aiFeedFetchOk === null || bundle?.aiFeedFetchOk === undefined
+      ? null
+      : Boolean(bundle.aiFeedFetchOk);
   const retrievalLatencyMs =
     Number.isFinite(bundle?.retrievalLatencyMs) && bundle.retrievalLatencyMs >= 0
       ? Math.floor(bundle.retrievalLatencyMs)
@@ -179,14 +199,15 @@ export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resource
     typeof bundle?.failureClass === "string" ? bundle.failureClass.trim() : "";
 
   const chatUsed = Number.isFinite(chatItemsUsed) ? Math.max(0, Math.floor(chatItemsUsed)) : 0;
+  const aiFeedUsed = Number.isFinite(aiFeedItemsUsed) ? Math.max(0, Math.floor(aiFeedItemsUsed)) : 0;
   const resourceUsed = Number.isFinite(resourceItemsUsed) ? Math.max(0, Math.floor(resourceItemsUsed)) : 0;
-  const usedCount = chatUsed + resourceUsed;
+  const usedCount = chatUsed + aiFeedUsed + resourceUsed;
   const fallbackOutcome =
     usedCount <= 0
-      ? chatFetchOk === false && resourceFetchOk === false
+      ? chatFetchOk === false && resourceFetchOk === false && aiFeedFetchOk === false
         ? "failed"
         : "empty"
-      : chatFetchOk === true && resourceFetchOk === true
+      : chatFetchOk === true && resourceFetchOk === true && aiFeedFetchOk === true
         ? "ok"
         : "partial";
 
@@ -207,9 +228,9 @@ export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resource
     failureClass = "compiled_fetch_failed_fallback_failed";
   }
 
-  let qualityScore = chatUsed * 12 + resourceUsed * 16;
+  let qualityScore = chatUsed * 12 + aiFeedUsed * 14 + resourceUsed * 16;
   if (compiledFetchOk && !fallbackUsed && usedCount > 0) qualityScore += 20;
-  else if (fallbackUsed && (chatFetchOk === true || resourceFetchOk === true) && usedCount > 0)
+  else if (fallbackUsed && (chatFetchOk === true || resourceFetchOk === true || aiFeedFetchOk === true) && usedCount > 0)
     qualityScore += 10;
   if (qualityScore > 100) qualityScore = 100;
   const qualityBand =
@@ -225,8 +246,10 @@ export function buildCommunityContextDiagnostics(bundle, chatItemsUsed, resource
         : parseNumberOrNull(bundle.compileVersion),
     fallback_used: fallbackUsed,
     chat_fetch_ok: chatFetchOk,
+    ai_feed_fetch_ok: aiFeedFetchOk,
     resource_fetch_ok: resourceFetchOk,
     chat_items_used: chatUsed,
+    ai_feed_items_used: aiFeedUsed,
     resource_items_used: resourceUsed,
     retrieval_latency_ms: retrievalLatencyMs,
     failure_class: failureClass,
@@ -244,8 +267,9 @@ function parseEvidenceScore(row) {
   );
 }
 
-export function buildCommunityEvidenceUsedV1(chatRows, resourceRows) {
+export function buildCommunityEvidenceUsedV1(chatRows, aiFeedRows, resourceRows) {
   const chat = Array.isArray(chatRows) ? chatRows : [];
+  const aiFeed = Array.isArray(aiFeedRows) ? aiFeedRows : [];
   const resources = Array.isArray(resourceRows) ? resourceRows : [];
   const items = [];
   const totalLimit = COMMUNITY_CONTEXT_BUNDLE_V1.limits.chatLimit + COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit;
@@ -275,14 +299,38 @@ export function buildCommunityEvidenceUsedV1(chatRows, resourceRows) {
     });
   }
 
+  for (const row of aiFeed.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)) {
+    if (items.length >= totalLimit) break;
+    const sourceId = String(row?.resource_id ?? row?.source_id ?? "").trim();
+    if (!sourceId) continue;
+    const titleRaw = String(row?.title ?? "AI feed item").trim();
+    const snippetRaw = String(row?.snippet ?? "").trim();
+    const title = truncateUtf8ForPrompt(
+      titleRaw || "AI feed item",
+      COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceTitleMaxChars,
+    ).trim() || "AI feed item";
+    const snippet = truncateUtf8ForPrompt(
+      snippetRaw || title,
+      COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceSnippetMaxChars,
+    ).trim() || title;
+    items.push({
+      source_type: "ai_feed",
+      source_id: sourceId,
+      title,
+      snippet,
+      url: null,
+      score: parseEvidenceScore(row),
+      rank: items.length + 1,
+    });
+  }
+
   for (const row of resources.slice(0, COMMUNITY_CONTEXT_BUNDLE_V1.limits.resourceLimit)) {
     if (items.length >= totalLimit) break;
     const sourceId = String(row?.resource_id ?? row?.source_id ?? "").trim();
     if (!sourceId) continue;
 
-    const sourceTypeRaw = String(row?.resource_type ?? "").trim().toLowerCase();
-    const sourceType = sourceTypeRaw === "memory" ? "memory" : "resource";
-    const fallbackTitle = sourceType === "memory" ? "Community memory" : "Community resource";
+    const sourceType = "resource";
+    const fallbackTitle = "Community resource";
     const titleRaw = String(row?.title ?? sourceType).trim();
     const snippetRaw = String(row?.snippet ?? "").trim();
     const urlRaw = String(row?.url ?? "").trim();

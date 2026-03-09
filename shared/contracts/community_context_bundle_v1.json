@@ -15,7 +15,7 @@
   "source_types": {
     "chat": "chat_message",
     "resource": "community_resource",
-    "memory": "community_memory"
+    "ai_feed": "ai_feed_item"
   },
   "prompt": {
     "header_format": "Community evidence ({community_id})"
@@ -28,6 +28,7 @@
       "compile_version",
       "fallback_used",
       "chat_items_used",
+      "ai_feed_items_used",
       "resource_items_used"
     ]
   }

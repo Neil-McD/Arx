@@ -51,10 +51,39 @@ type UseCommunityChatDataControllerArgs<
   clearPendingPrependAnchor: () => void;
 
   onLoadChatStart?: () => void;
+  onLoadChatError?: (message: string) => void;
   onHydrateProfiles?: (userIds: string[], session: SessionT) => void | Promise<void>;
 };
 
 type LoadOlderStatus = "appended" | "noop" | "error";
+
+function formatCommunityChatLoadError(error: unknown): string {
+  const raw =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "Failed to load community chat.";
+  const normalized = raw.trim().toLowerCase();
+  if (
+    normalized.includes("community_entitlement_required") ||
+    normalized.includes("community_forbidden") ||
+    normalized.includes("not_entitled")
+  ) {
+    return "Join this community to access chat.";
+  }
+  if (
+    normalized.includes("not authenticated") ||
+    normalized.includes("authentication") ||
+    normalized.includes("user_not_found")
+  ) {
+    return "Sign in to access community chat.";
+  }
+  if (normalized.includes("thread_not_found")) {
+    return "Community chat is unavailable right now. Try again.";
+  }
+  return "Failed to load community chat.";
+}
 
 export function useCommunityChatDataController<
   SessionT,
@@ -80,6 +109,7 @@ export function useCommunityChatDataController<
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [isLoadingMoreChat, setIsLoadingMoreChat] = useState(false);
   const [communityChatHasMore, setCommunityChatHasMore] = useState(true);
+  const [hasResolvedCommunityChat, setHasResolvedCommunityChat] = useState(false);
 
   const isLoadingChatRef = useRef(false);
   const isLoadingMoreChatRef = useRef(false);
@@ -123,6 +153,8 @@ export function useCommunityChatDataController<
     (row: CommunityChatRow): MessageT | null => {
       const threadId = (row.thread_id ?? "").trim();
       if (!threadId) return null;
+      const communityId = (activeCommunityIdRef.current ?? "").trim();
+      if (!communityId) return null;
       const id = (row.id ?? "").trim();
       if (!id) return null;
       if ((row.role ?? "").trim() !== "user") return null;
@@ -131,7 +163,7 @@ export function useCommunityChatDataController<
       const attachments = argsRef.current.parseMessageAttachments(row.content_json);
       return {
         id,
-        community_id: threadId,
+        community_id: communityId,
         sender_id: senderId,
         body,
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -147,6 +179,7 @@ export function useCommunityChatDataController<
     async (communityId: string, session: SessionT): Promise<string> => {
       const normalizedCommunityId = String(communityId ?? "").trim();
       if (!normalizedCommunityId) throw new Error("Missing community id.");
+      activeCommunityIdRef.current = normalizedCommunityId;
 
       const sessionUserId = (
         session as { user?: { id?: unknown } } | null
@@ -286,6 +319,7 @@ export function useCommunityChatDataController<
           }
         } catch (error) {
           if (isAbortError(error)) return;
+          argsRef.current.onLoadChatError?.(formatCommunityChatLoadError(error));
           return;
         } finally {
           finishScopedAbortRequest({
@@ -294,11 +328,13 @@ export function useCommunityChatDataController<
             controller: messagesFetchController,
           });
         }
-      } catch {
+      } catch (error) {
+        argsRef.current.onLoadChatError?.(formatCommunityChatLoadError(error));
         // Keep behavior fail-safe: best-effort fetch paths should not crash the shell.
       } finally {
         if (!isStale(communityId, generation)) {
           setIsLoadingChatTracked(false);
+          setHasResolvedCommunityChat(true);
         }
       }
     },
@@ -420,6 +456,7 @@ export function useCommunityChatDataController<
     setIsLoadingChatTracked(false);
     setIsLoadingMoreChatTracked(false);
     setCommunityChatHasMoreTracked(true);
+    setHasResolvedCommunityChat(false);
   }, [setCommunityChatHasMoreTracked, setIsLoadingChatTracked, setIsLoadingMoreChatTracked]);
 
   useEffect(() => {
@@ -432,6 +469,7 @@ export function useCommunityChatDataController<
     isLoadingChat,
     isLoadingMoreChat,
     communityChatHasMore,
+    hasResolvedCommunityChat,
     toCommunityChatMessage,
     ensureCommunityChatThread,
     loadCommunityChat,

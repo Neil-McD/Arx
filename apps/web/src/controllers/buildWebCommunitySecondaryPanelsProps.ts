@@ -1,7 +1,6 @@
 import type { MutableRefObject } from "react";
 import type { ComponentProps } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
-import { buildCommunityInstantAccessLink } from "../../../../shared/communityInviteLinks";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import { formatCommunityVisibilityLabel } from "../../../../shared/communityVisibility";
@@ -10,6 +9,7 @@ import { CommunityAiFeedPanel } from "../components/CommunityAiFeedPanel";
 import { WebCommunityAiAgentSection } from "../components/WebCommunityAiAgentSection";
 import { WebCommunityAnalyticsSection } from "../components/WebCommunityAnalyticsSection";
 import { WebCommunityBannerEditorModal } from "../components/WebCommunityBannerEditorModal";
+import { WebCommunityFunnelSection } from "../components/WebCommunityFunnelSection";
 import { WebCommunityMembersSection } from "../components/WebCommunityMembersSection";
 import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
 import { WebCommunityResourcesSection } from "../components/WebCommunityResourcesSection";
@@ -19,6 +19,7 @@ type SettingsSectionProps = ComponentProps<typeof WebCommunitySettingsSection>;
 type BannerEditorModalProps = ComponentProps<typeof WebCommunityBannerEditorModal>;
 type FeedPanelProps = ComponentProps<typeof CommunityAiFeedPanel>;
 type AiAgentSectionProps = ComponentProps<typeof WebCommunityAiAgentSection>;
+type FunnelSectionProps = ComponentProps<typeof WebCommunityFunnelSection>;
 type AnalyticsSectionProps = ComponentProps<typeof WebCommunityAnalyticsSection>;
 type ResourcesSectionProps = ComponentProps<typeof WebCommunityResourcesSection>;
 type MembersSectionProps = ComponentProps<typeof WebCommunityMembersSection>;
@@ -44,10 +45,11 @@ type BuildWebCommunitySecondaryPanelsPropsArgs = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   feed: FeedPanelProps;
-  aiAgent: Omit<AiAgentSectionProps, "onUpgradeToArchitect"> & {
+  aiAgent: Omit<AiAgentSectionProps, "onUpgradeToBuilder"> & {
     setBuilderUpgradeContext: (value: string) => void;
     setIsBuilderUpgradeOpen: (value: boolean) => void;
   };
+  funnel: FunnelSectionProps;
   analytics: AnalyticsSectionProps;
   resources: ResourcesSectionProps;
   members: MembersSectionProps;
@@ -81,7 +83,7 @@ export function buildWebCommunitySecondaryPanelsProps(
 
   const aiAgentSectionProps: AiAgentSectionProps = {
     ...args.aiAgent,
-    onUpgradeToArchitect: () => {
+    onUpgradeToBuilder: () => {
       args.aiAgent.setBuilderUpgradeContext("builder");
       args.aiAgent.setIsBuilderUpgradeOpen(true);
     },
@@ -91,7 +93,6 @@ export function buildWebCommunitySecondaryPanelsProps(
     ...args.members,
     actions: {
       ...args.members.actions,
-      buildCommunityInstantAccessLink,
       communityInitials,
     },
   };
@@ -102,6 +103,7 @@ export function buildWebCommunitySecondaryPanelsProps(
     bannerEditorModalProps,
     feedPanelProps: args.feed,
     aiAgentSectionProps,
+    funnelSectionProps: args.funnel,
     analyticsSectionProps: args.analytics,
     resourcesSectionProps: args.resources,
     membersSectionProps,

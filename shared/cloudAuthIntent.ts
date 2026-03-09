@@ -14,6 +14,13 @@ export type PendingAuthIntent =
     }
   | {
       v: 1;
+      reason: "connect_provider";
+      return_to: string;
+      created_at_ms: number;
+      payload: { provider: "chatgpt" | "openrouter" };
+    }
+  | {
+      v: 1;
       reason: "create_community";
       return_to: string;
       created_at_ms: number;
@@ -45,7 +52,7 @@ export type PendingAuthIntent =
       reason: "start_builder_checkout";
       return_to: string;
       created_at_ms: number;
-      payload: { tier: "builder" | "pro"; context: BuilderUpgradeContext };
+      payload: { tier: "builder"; context: BuilderUpgradeContext };
     }
   | {
       v: 1;
@@ -67,34 +74,6 @@ export type PendingAuthIntent =
       return_to: string;
       created_at_ms: number;
       payload: { navigate: boolean; silent_noop: boolean };
-    }
-  | {
-      v: 1;
-      reason: "save_profile";
-      return_to: string;
-      created_at_ms: number;
-      payload: Record<string, never>;
-    }
-  | {
-      v: 1;
-      reason: "create_memory";
-      return_to: string;
-      created_at_ms: number;
-      payload: { content: string; pinned: boolean };
-    }
-  | {
-      v: 1;
-      reason: "toggle_memory_pinned";
-      return_to: string;
-      created_at_ms: number;
-      payload: { id: string; pinned: boolean };
-    }
-  | {
-      v: 1;
-      reason: "delete_memory";
-      return_to: string;
-      created_at_ms: number;
-      payload: { id: string };
     };
 
 export type PendingAuthIntentInput = PendingAuthIntent extends infer T
@@ -123,6 +102,12 @@ function normalizePendingAuthIntent(
     const model_id = typeof payload.model_id === "string" ? payload.model_id.trim() : "";
     if (!model_id) return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { model_id } };
+  }
+
+  if (reason === "connect_provider") {
+    const provider = payload.provider;
+    if (provider !== "chatgpt" && provider !== "openrouter") return null;
+    return { v: 1, reason, return_to, created_at_ms, payload: { provider } };
   }
 
   if (reason === "create_community") {
@@ -161,7 +146,7 @@ function normalizePendingAuthIntent(
     const rawTier = payload.tier;
     const context = payload.context;
     const tier =
-      rawTier === "architect" ? "pro" : rawTier === "builder" || rawTier === "pro" ? rawTier : null;
+      rawTier === "builder" || rawTier === "pro" || rawTier === "architect" ? "builder" : null;
     if (!tier) return null;
     if (context !== "builder" && context !== "create_community") return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { tier, context } };
@@ -183,32 +168,6 @@ function normalizePendingAuthIntent(
     if (typeof navigate !== "boolean") return null;
     if (typeof silent_noop !== "boolean") return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { navigate, silent_noop } };
-  }
-
-  if (reason === "save_profile") {
-    return { v: 1, reason, return_to, created_at_ms, payload: {} };
-  }
-
-  if (reason === "create_memory") {
-    const content = typeof payload.content === "string" ? payload.content.trim() : "";
-    const pinned = payload.pinned;
-    if (!content) return null;
-    if (typeof pinned !== "boolean") return null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { content, pinned } };
-  }
-
-  if (reason === "toggle_memory_pinned") {
-    const id = typeof payload.id === "string" ? payload.id.trim() : "";
-    const pinned = payload.pinned;
-    if (!id) return null;
-    if (typeof pinned !== "boolean") return null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { id, pinned } };
-  }
-
-  if (reason === "delete_memory") {
-    const id = typeof payload.id === "string" ? payload.id.trim() : "";
-    if (!id) return null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { id } };
   }
 
   return null;

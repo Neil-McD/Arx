@@ -2,7 +2,6 @@ import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexA
 
 type CloudUserSettingsGatewayParams<SessionT> = {
   session: SessionT;
-  userId: string;
 };
 
 export type CloudUserMemorySettingsRow = {
@@ -39,7 +38,6 @@ function firstObjectRow(payload: unknown): Record<string, unknown> | null {
 export async function loadCloudUserMemorySettings<SessionT>(
   params: CloudUserSettingsGatewayParams<SessionT>,
 ): Promise<CloudUserMemorySettingsRow | null> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = await client.query("settings:getUserMemorySettings" as any, {
     authSubject,
@@ -58,7 +56,6 @@ export async function saveCloudUserMemorySettings<SessionT>(
     rememberIntentEnabled: boolean;
   },
 ): Promise<void> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   await client.mutation("settings:saveUserMemorySettings" as any, {
     authSubject,
@@ -70,7 +67,6 @@ export async function saveCloudUserMemorySettings<SessionT>(
 export async function loadCloudUserModelSettings<SessionT>(
   params: CloudUserSettingsGatewayParams<SessionT>,
 ): Promise<CloudUserModelSettingsRow | null> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = await client.query("settings:getUserModelSettings" as any, {
     authSubject,
@@ -87,7 +83,6 @@ export async function saveCloudUserModelSettings<SessionT>(
     systemPrompt: string;
   },
 ): Promise<void> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexUser(params.session);
   await client.mutation("settings:saveUserModelSettings" as any, {
     authSubject,

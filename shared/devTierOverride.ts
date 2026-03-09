@@ -1,4 +1,4 @@
-export type DevBuilderTierUi = "free" | "builder" | "architect";
+export type DevBuilderTierUi = "free" | "builder";
 
 const CREATOR_EMAIL_ALLOWLIST = new Set<string>([
   "neilmcdevitt@gmail.com",
@@ -25,4 +25,3 @@ export function canUseCreatorDevTierOverride(input: {
   if (!email || !CREATOR_EMAIL_ALLOWLIST.has(email)) return false;
   return input.isDev || isTruthyFlag(input.featureFlag);
 }
-

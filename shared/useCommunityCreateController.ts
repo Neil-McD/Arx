@@ -86,6 +86,21 @@ function defaultOwnedCount<CommunityT extends CommunityLike>(
   );
 }
 
+function mapCreateCommunityErrorMessage(error: unknown): string {
+  const message = typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : "Failed to create community.";
+  if (message === "community_builder_required") {
+    return "Builder is required to create a community.";
+  }
+  if (message === "community_owner_limit_reached") {
+    return "You've reached your Builder community limit.";
+  }
+  return message;
+}
+
 export function useCommunityCreateController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
@@ -126,7 +141,7 @@ export function useCommunityCreateController<
     const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
-    if (tier === "pro" && max > 0 && ownedCount >= max) {
+    if (tier === "builder" && max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
       return;
     }
@@ -228,12 +243,7 @@ export function useCommunityCreateController<
       current.onDraftCreatedCommunitySuccess?.();
       return community;
     } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : "Failed to create community.";
-      current.setFinalizeCreateCommunityError(message);
+      current.setFinalizeCreateCommunityError(mapCreateCommunityErrorMessage(error));
       return null;
     } finally {
       current.setIsFinalizingCreateCommunityFromBilling(false);
@@ -305,12 +315,7 @@ export function useCommunityCreateController<
       current.clearCreateDraft();
       closeCreateCommunityModal();
     } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : "Failed to create community.";
-      current.setCreateCommunityError(message);
+      current.setCreateCommunityError(mapCreateCommunityErrorMessage(error));
     } finally {
       current.setIsCreatingCommunity(false);
     }

@@ -24,8 +24,6 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   }) => Promise<void>;
   loadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
-  setCommunitySettingsMonthlyPlanId: Dispatch<SetStateAction<string | null>>;
-  setCommunitySettingsYearlyPlanId: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
@@ -47,7 +45,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
       params.setCommunityMemberMuted(false);
       return;
     }
-    if (!params.activeCommunityAccess?.can_view) return;
+    if (!(params.activeCommunityAccess?.can_enter_community ?? params.activeCommunityAccess?.can_view)) return;
     if (params.activeCommunityAccess.is_owner || params.activeCommunityAccess.can_manage_members) return;
     void params.loadCommunityMemberSettings({
       communityId: params.activeCommunityId,
@@ -58,6 +56,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     params.communityTab,
     session,
     params.activeCommunityId,
+    params.activeCommunityAccess?.can_enter_community,
     params.activeCommunityAccess?.can_view,
     params.activeCommunityAccess?.is_owner,
     params.activeCommunityAccess?.can_manage_members,
@@ -67,8 +66,6 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   useEffect(() => {
     if (params.activePage !== "community" || params.communityTab !== "settings") return;
     if (!session || !params.activeCommunityId) {
-      params.setCommunitySettingsMonthlyPlanId(null);
-      params.setCommunitySettingsYearlyPlanId(null);
       params.setCommunitySettingsPricingMode("free");
       params.setCommunitySettingsPriceUsdMonthly("");
       params.setCommunitySettingsPriceUsdYearly("");

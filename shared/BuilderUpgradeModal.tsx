@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { isBuilderTierArchitect, isBuilderTierBuilder, isBuilderTierFree } from "./builderBilling";
+import { isBuilderTierBuilder, isBuilderTierFree } from "./builderBilling";
 
 type BuilderUpgradeContext = "builder" | "create_community";
 
@@ -13,7 +13,7 @@ type BuilderUpgradeModalProps = {
   builderUpgradeModalBodyRef: RefObject<HTMLDivElement>;
   onClose: () => void;
   onModalBodyScroll: () => void;
-  onStartBuilderPlanCheckout: (tier: "builder" | "architect") => void;
+  onStartBuilderPlanCheckout: (tier: "builder") => void;
 };
 
 export function BuilderUpgradeModal({
@@ -32,7 +32,6 @@ export function BuilderUpgradeModal({
 
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = isBuilderTierBuilder(builderTier);
-  const architectIsCurrent = isBuilderTierArchitect(builderTier);
   const feature = (included: boolean, label: string) => (
     <li className={`plan-feature${included ? " on" : " off"}`}>
       <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
@@ -73,18 +72,16 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$0</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">0 communities</div>
+              <div className="plan-subtitle">For trying the platform</div>
               <ul className="plan-features plan-features-checks">
-                {feature(true, "AI chats (250MB cloud history)")}
-                {feature(true, "Access all included models")}
-                {feature(true, "Daytona cloud tools")}
+                {feature(true, "Free public chat model")}
+                {feature(true, "Use your own ChatGPT or OpenRouter connection")}
                 {feature(true, "Cloud sync")}
+                {feature(true, "Join communities as a member")}
+                {feature(false, "Platform-funded premium models")}
+                {feature(false, "Daytona cloud tools")}
                 {feature(false, "Agent memory")}
                 {feature(false, "Create communities")}
-                {feature(false, "Stripe payouts")}
-                {feature(false, "Analytics")}
-                {feature(false, "Automations")}
-                {feature(false, "Early feature access")}
               </ul>
               <button type="button" className="plan-cta" disabled>
                 {freeIsCurrent ? "Current plan" : "Free"}
@@ -97,21 +94,19 @@ export function BuilderUpgradeModal({
                 {builderIsCurrent && <div className="plan-badge">Current</div>}
               </div>
               <div className="plan-price">
-                <span className="plan-price-amount">$20</span>
+                <span className="plan-price-amount">$60</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">10% take · 1 community</div>
+              <div className="plan-subtitle">Premium build tier</div>
               <ul className="plan-features plan-features-checks">
-                {feature(true, "AI chats (5GB cloud history)")}
-                {feature(true, "Access all included models")}
+                {feature(true, "Platform-funded premium models")}
                 {feature(true, "Daytona cloud tools")}
-                {feature(true, "Cloud sync")}
-                {feature(true, "Agent memory")}
-                {feature(true, "Create 1 community")}
+                {feature(true, "Project-bound build runtime")}
+                {feature(true, "Personal memory")}
+                {feature(true, "Create up to 3 communities")}
                 {feature(true, "Stripe payouts")}
-                {feature(false, "Analytics")}
-                {feature(false, "Automations")}
-                {feature(false, "Early feature access")}
+                {feature(true, "Community AI agent customization")}
+                {feature(true, "Analytics and automations")}
               </ul>
               <button
                 type="button"
@@ -120,38 +115,6 @@ export function BuilderUpgradeModal({
                 disabled={isStartingBuilderCheckout || builderIsCurrent}
               >
                 {builderIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Builder"}
-              </button>
-            </div>
-
-            <div className={`plan-card${architectIsCurrent ? " current" : ""}`}>
-              <div className="plan-card-header">
-                <div className="plan-name">Architect</div>
-                {architectIsCurrent && <div className="plan-badge">Current</div>}
-              </div>
-              <div className="plan-price">
-                <span className="plan-price-amount">$100</span>
-                <span className="plan-price-period">/mo</span>
-              </div>
-              <div className="plan-subtitle">3% take · 3 communities</div>
-              <ul className="plan-features plan-features-checks">
-                {feature(true, "AI chats (25GB cloud history)")}
-                {feature(true, "Access all included models")}
-                {feature(true, "Daytona cloud tools")}
-                {feature(true, "Cloud sync")}
-                {feature(true, "Agent memory")}
-                {feature(true, "Create 3 communities")}
-                {feature(true, "Stripe payouts")}
-                {feature(true, "Analytics")}
-                {feature(true, "Automations")}
-                {feature(true, "Early feature access")}
-              </ul>
-              <button
-                type="button"
-                className="plan-cta"
-                onClick={() => onStartBuilderPlanCheckout("architect")}
-                disabled={isStartingBuilderCheckout || architectIsCurrent}
-              >
-                {architectIsCurrent ? "Current plan" : isStartingBuilderCheckout ? "Starting…" : "Get Architect"}
               </button>
             </div>
           </div>

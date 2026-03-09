@@ -62,11 +62,9 @@ export type CloudCommunityAgentDraftMutationResult = {
 
 export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {
-    userId: string;
     communityId: string;
   },
 ): Promise<CloudCommunityAgentSystemPromptResult | null> {
-  void params.userId;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = (await client.query("community:getActiveCommunityAgentSystemPrompt" as any, {
     authSubject,

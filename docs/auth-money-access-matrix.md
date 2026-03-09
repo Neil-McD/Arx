@@ -10,7 +10,7 @@ The platform behavior is defined by 6 inputs:
 1. Surface: `web` | `mobile`
 2. Product lane: `chat` | `agent`
 3. Auth state: `anonymous` | `authenticated`
-4. Builder tier: `free` | `builder` | `architect`
+4. Builder tier: `free` | `builder`
 5. Requested funding source: `demo_public` | `user_key` | `user_chatgpt` | `platform`
 6. Turn class: `requires_tools=false` | `requires_tools=true`
 
@@ -32,7 +32,7 @@ And 6 outputs:
 4. `demo_public` is an optional low-reliability shared lane, not the default authenticated free strategy.
 5. Daytona sandbox is paid-only:
    - `free` tier: never create or use Daytona sandbox
-   - `builder` / `architect`: Daytona sandbox allowed
+   - `builder`: Daytona sandbox allowed
 6. Tool-capable turns (`requires_tools=true`) route to `daytona` only when paid platform compute is present.
 7. Chat-only turns may route to:
    - `public` for `demo_public`
@@ -52,10 +52,10 @@ And 6 outputs:
 | Web/Mobile | Chat | authenticated | free | `user_key` | false | `platform_fallback` | `user_key` | denied | denied | denied |
 | Web/Mobile | Chat | authenticated | free | `user_chatgpt` | false | `chatgpt` | `user_chatgpt` | denied | denied | denied |
 | Web/Mobile | Chat | authenticated | free | `platform` | false | denied (`platform_inference_not_allowed`) | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | builder/architect | `platform` | false | `platform_fallback` | `platform` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | builder/architect | `user_key` | false | `platform_fallback` | `user_key` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | builder/architect | `user_chatgpt` | false | `chatgpt` | `user_chatgpt` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | builder/architect | any | true | `daytona` | `platform` | allowed | allowed | allowed |
+| Web/Mobile | Chat | authenticated | builder | `platform` | false | `platform_fallback` | `platform` | not required | allowed | allowed |
+| Web/Mobile | Chat | authenticated | builder | `user_key` | false | `platform_fallback` | `user_key` | not required | allowed | allowed |
+| Web/Mobile | Chat | authenticated | builder | `user_chatgpt` | false | `chatgpt` | `user_chatgpt` | not required | allowed | allowed |
+| Web/Mobile | Chat | authenticated | builder | any | true | `daytona` | `platform` | allowed | allowed | allowed |
 
 Notes:
 - `daytona` is only for paid tiers and only when tool-capable execution is requested.

@@ -2151,7 +2151,7 @@
     overflow: hidden;
   }
 
-  .app-root.community-shell-open .back-to-workspace {
+  .back-to-workspace {
     width: 28px;
     height: 28px;
     justify-content: center;
@@ -2160,12 +2160,12 @@
     border-radius: 8px;
   }
 
-  .app-root.community-shell-open .back-to-workspace .back-icon {
+  .back-to-workspace .back-icon {
     width: 18px;
     height: 18px;
   }
 
-  .app-root.community-shell-open .back-to-workspace .back-path {
+  .back-to-workspace .back-path {
     display: none;
   }
 

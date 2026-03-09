@@ -1,7 +1,7 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
 
-import { fetchCloudCommunityOwnerIsPro } from "./cloudCommunityAdminGateway";
+import { fetchCloudCommunityOwnerHasBuilderAccess } from "./cloudCommunityAdminGateway";
 
 export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT>(params: {
   activePage: AppPage;
@@ -9,9 +9,9 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
   session: SessionT | null;
   activeCommunityId: string | null;
   canManageMembersActiveCommunity: boolean;
-  activeCommunityOwnerIsPro: boolean | null;
-  setActiveCommunityOwnerIsPro: Dispatch<SetStateAction<boolean | null>>;
-  activeCommunityOwnerIsProLoadedCommunityIdRef: MutableRefObject<string | null>;
+  activeCommunityOwnerHasBuilderAccess: boolean | null;
+  setActiveCommunityOwnerHasBuilderAccess: Dispatch<SetStateAction<boolean | null>>;
+  activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef: MutableRefObject<string | null>;
   loadCommunityAgentDrafts: (communityId: string, session: SessionT) => Promise<void>;
   communityAgentDraftsLoadedCommunityIdRef: MutableRefObject<string | null>;
   setCommunityAgentDrafts: Dispatch<SetStateAction<CommunityAgentDraftT[]>>;
@@ -21,28 +21,28 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
     session: SessionT,
     options?: { includeStatus?: boolean },
   ) => Promise<void>;
-  enforceProDraftGate?: boolean;
+  enforceBuilderDraftGate?: boolean;
 }) {
   const session = params.session;
 
   useEffect(() => {
     if (!session || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
-      params.setActiveCommunityOwnerIsPro(null);
-      params.activeCommunityOwnerIsProLoadedCommunityIdRef.current = null;
+      params.setActiveCommunityOwnerHasBuilderAccess(null);
+      params.activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef.current = null;
       return;
     }
     const communityId = params.activeCommunityId;
-    if (params.activeCommunityOwnerIsProLoadedCommunityIdRef.current === params.activeCommunityId) return;
-    params.activeCommunityOwnerIsProLoadedCommunityIdRef.current = params.activeCommunityId;
+    if (params.activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef.current === params.activeCommunityId) return;
+    params.activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef.current = params.activeCommunityId;
     void (async () => {
       try {
-        const isPro = await fetchCloudCommunityOwnerIsPro({
+        const hasBuilderAccess = await fetchCloudCommunityOwnerHasBuilderAccess({
           session,
           communityId,
         });
-        params.setActiveCommunityOwnerIsPro(isPro);
+        params.setActiveCommunityOwnerHasBuilderAccess(hasBuilderAccess);
       } catch {
-        params.setActiveCommunityOwnerIsPro(null);
+        params.setActiveCommunityOwnerHasBuilderAccess(null);
       }
     })();
   }, [
@@ -60,9 +60,9 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
       return;
     }
     const communityId = params.activeCommunityId;
-    if ((params.enforceProDraftGate ?? true) && params.activeCommunityOwnerIsPro === false) {
+    if ((params.enforceBuilderDraftGate ?? true) && params.activeCommunityOwnerHasBuilderAccess === false) {
       params.setCommunityAgentDrafts([]);
-      params.setCommunityAgentDraftsError("pro_plan_required");
+      params.setCommunityAgentDraftsError("builder_plan_required");
       params.communityAgentDraftsLoadedCommunityIdRef.current = communityId;
       return;
     }
@@ -74,9 +74,9 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentDraftT
     session,
     params.activeCommunityId,
     params.canManageMembersActiveCommunity,
-    params.activeCommunityOwnerIsPro,
+    params.activeCommunityOwnerHasBuilderAccess,
     params.loadCommunityAgentDrafts,
-    params.enforceProDraftGate,
+    params.enforceBuilderDraftGate,
   ]);
 
   useEffect(() => {

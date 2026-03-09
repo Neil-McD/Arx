@@ -2,7 +2,7 @@ export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
-export type BuilderTierUi = "free" | "builder" | "architect";
+export type BuilderTierUi = "free" | "builder";
 
 export type BuilderBillingReturn = {
   status: BuilderBillingStatus;
@@ -51,12 +51,6 @@ export function formatSubscriptionPrice(args: {
   return `${value.toFixed(0)} ${currency}${suffix}`;
 }
 
-function normalizeBuilderCheckoutTier(
-  tier: "builder" | "pro" | "architect",
-): "builder" | "pro" {
-  return tier === "architect" ? "pro" : tier;
-}
-
 function normalizeBuilderTierRaw(value: string | null | undefined): string {
   return String(value ?? "")
     .trim()
@@ -65,8 +59,7 @@ function normalizeBuilderTierRaw(value: string | null | undefined): string {
 
 export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
   const raw = normalizeBuilderTierRaw(value);
-  if (raw === "builder") return "builder";
-  if (raw === "pro" || raw === "architect") return "architect";
+  if (raw === "builder" || raw === "pro" || raw === "architect") return "builder";
   return "free";
 }
 
@@ -75,20 +68,15 @@ export function isBuilderTierFree(value: string | null | undefined): boolean {
 }
 
 export function isBuilderTierBuilder(value: string | null | undefined): boolean {
-  return normalizeBuilderTierRaw(value) === "builder";
-}
-
-export function isBuilderTierArchitect(value: string | null | undefined): boolean {
   const raw = normalizeBuilderTierRaw(value);
-  return raw === "pro" || raw === "architect";
+  return raw === "builder" || raw === "pro" || raw === "architect";
 }
 
 export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
-  return isBuilderTierBuilder(value) || isBuilderTierArchitect(value);
+  return isBuilderTierBuilder(value);
 }
 
-export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" | "Architect" {
-  if (isBuilderTierArchitect(value)) return "Architect";
+export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" {
   if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
 }
@@ -111,15 +99,15 @@ export function buildBuilderCheckoutRequestPayload(args: {
   origin: string;
   source: "web";
   context: BuilderUpgradeContextValue;
-  tier: "builder" | "pro" | "architect";
-}): { tier: "builder" | "pro"; successUrl: string; cancelUrl: string } {
+  tier: "builder";
+}): { tier: "builder"; successUrl: string; cancelUrl: string } {
   const urls = buildBuilderBillingRedirectUrls({
     origin: args.origin,
     source: args.source,
     context: args.context,
   });
   return {
-    tier: normalizeBuilderCheckoutTier(args.tier),
+    tier: args.tier,
     successUrl: urls.successUrl,
     cancelUrl: urls.cancelUrl,
   };

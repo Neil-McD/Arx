@@ -24,7 +24,6 @@ type PersonalMemoryItem = {
 
 type UseWebMemorySettingsDataControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
-  getCloudAuthUid: (session: SessionT) => string;
   setIsLoadingUserMemorySettings: Dispatch<SetStateAction<boolean>>;
   setUserMemorySettings: Dispatch<SetStateAction<UserMemorySettings>>;
 
@@ -56,7 +55,6 @@ export function useWebMemorySettingsDataController<SessionT>(
     const current = argsRef.current;
     const rows = await listCloudPersonalMemoryRowsByScopes({
       session,
-      userId: current.getCloudAuthUid(session),
       limitPerScope: 1000,
     });
     return rows.map((row) => ({
@@ -74,18 +72,15 @@ export function useWebMemorySettingsDataController<SessionT>(
     const current = argsRef.current;
     current.setIsLoadingUserMemorySettings(true);
     try {
-      const userId = current.getCloudAuthUid(session);
       const row = (await loadCloudUserMemorySettings({
         session,
-        userId,
       })) as Partial<UserMemorySettings> | null;
-      const mode = row?.memory_mode;
       current.setUserMemorySettings({
-        memory_mode: mode === "suggest" || mode === "auto" ? mode : "off",
+        memory_mode: "auto",
         remember_intent_enabled: row?.remember_intent_enabled !== false,
       });
     } catch {
-      current.setUserMemorySettings({ memory_mode: "off", remember_intent_enabled: true });
+      current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
     } finally {
       current.setIsLoadingUserMemorySettings(false);
     }
@@ -96,10 +91,8 @@ export function useWebMemorySettingsDataController<SessionT>(
     current.setIsLoadingUserModelSettings(true);
     current.setUserModelSettingsError(null);
     try {
-      const userId = current.getCloudAuthUid(session);
       const row = (await loadCloudUserModelSettings({
         session,
-        userId,
       })) as Partial<UserModelSettings> | null;
       const prompt = typeof row?.system_prompt === "string" ? row.system_prompt : "";
       current.setUserModelSettings({ system_prompt: prompt });

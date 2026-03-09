@@ -10,12 +10,11 @@ import {
 } from "./communityCore";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const IMPORTANT_THRESHOLD = 4;
-const HIDE_THRESHOLD = -3;
-const HUMAN_GOOD_WEIGHT = 2;
-const HUMAN_LOW_SIGNAL_WEIGHT = -2;
-const AGENT_GOOD_WEIGHT = 1;
-const AGENT_LOW_SIGNAL_WEIGHT = -1;
+const DECAY_WINDOW_DAYS = 3;
+const RANKED_THRESHOLD = 2;
+const HIDE_THRESHOLD = -2;
+const GOOD_WEIGHT = 1;
+const LOW_SIGNAL_WEIGHT = -1;
 
 type FeedPostRow = {
   _id: any;
@@ -27,16 +26,16 @@ type FeedPostRow = {
   type: "observation" | "recommendation" | "action";
   title?: string;
   body: string;
-  status: "live" | "executed" | "hidden";
+  whyNow?: string;
+  evidence?: string[];
+  status: "live" | "hidden";
   score: number;
   goodCount: number;
   lowSignalCount: number;
-  executedCount: number;
   publishConfidence: number;
   noveltyKey?: string;
   createdAt: number;
   updatedAt: number;
-  executedAt?: number;
   hiddenAt?: number;
 };
 
@@ -48,7 +47,7 @@ type FeedReactionRow = {
   actorKey: string;
   actorUserId?: any;
   agentKey?: string;
-  reactionType: "good" | "executed" | "low_signal";
+  reactionType: "good" | "low_signal";
   createdAt: number;
   updatedAt: number;
 };
@@ -59,15 +58,15 @@ function normalizeFeedPostType(raw: unknown): "observation" | "recommendation" |
   return "observation";
 }
 
-function normalizeFeedReactionType(raw: unknown): "good" | "executed" | "low_signal" {
+function normalizeFeedReactionType(raw: unknown): "good" | "low_signal" {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "good" || value === "executed" || value === "low_signal") return value;
+  if (value === "good" || value === "low_signal") return value;
   throw new Error("community_ai_feed_reaction_invalid");
 }
 
-function normalizeFeedStatus(raw: unknown): "live" | "executed" | "hidden" {
+function normalizeFeedStatus(raw: unknown): "live" | "hidden" {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "executed" || value === "hidden") return value;
+  if (value === "hidden") return value;
   return "live";
 }
 
@@ -83,19 +82,36 @@ function normalizeNoveltyKey(raw: unknown): string | undefined {
   return value.slice(0, 256);
 }
 
+function normalizeFeedEvidence(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const value = normalizeOptionalText(entry, 180);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    deduped.push(value);
+    if (deduped.length >= 4) break;
+  }
+  return deduped;
+}
+
 function reactionWeight(args: {
   actorType: "human" | "agent";
-  reactionType: "good" | "executed" | "low_signal";
+  reactionType: "good" | "low_signal";
 }): number {
-  if (args.reactionType === "executed") return 0;
+  void args.actorType;
   if (args.reactionType === "good") {
-    return args.actorType === "agent" ? AGENT_GOOD_WEIGHT : HUMAN_GOOD_WEIGHT;
+    return GOOD_WEIGHT;
   }
-  return args.actorType === "agent" ? AGENT_LOW_SIGNAL_WEIGHT : HUMAN_LOW_SIGNAL_WEIGHT;
+  return LOW_SIGNAL_WEIGHT;
 }
 
 function decayForPost(post: FeedPostRow, nowMs: number): number {
-  return Math.max(0, Math.floor((Math.max(nowMs, post.createdAt) - post.createdAt) / DAY_MS));
+  return Math.max(
+    0,
+    Math.floor((Math.max(nowMs, post.createdAt) - post.createdAt) / (DAY_MS * DECAY_WINDOW_DAYS)),
+  );
 }
 
 function effectiveScoreForPost(post: FeedPostRow, nowMs: number): number {
@@ -119,19 +135,19 @@ async function mapFeedPostRow(args: {
     post_type: post.type,
     title: String(post.title ?? "").trim() || null,
     body: post.body,
+    why_now: String(post.whyNow ?? "").trim() || null,
+    evidence: normalizeFeedEvidence(post.evidence),
     status: normalizeFeedStatus(post.status),
     score: Number(post.score ?? 0),
     effective_score: effectiveScoreForPost(post, nowMs),
     publish_confidence: Number(post.publishConfidence ?? 0),
     reaction_counts: {
       good: Math.max(0, Number(post.goodCount ?? 0)),
-      executed: Math.max(0, Number(post.executedCount ?? 0)),
       low_signal: Math.max(0, Number(post.lowSignalCount ?? 0)),
     },
     viewer_reaction: viewerReaction?.reactionType ?? null,
     created_at: toIsoString(post.createdAt),
     updated_at: toIsoString(post.updatedAt),
-    executed_at: post.executedAt ? toIsoString(post.executedAt) : null,
     hidden_at: post.hiddenAt ? toIsoString(post.hiddenAt) : null,
   };
 }
@@ -161,18 +177,88 @@ async function getFeedPostOrThrow(ctx: any, postId: string): Promise<FeedPostRow
   return row;
 }
 
+async function insertFeedPost(args: {
+  ctx: any;
+  communityId: any;
+  authorType: "agent" | "human";
+  authorUserId?: any;
+  agentKey?: string | null;
+  authorLabel: string;
+  postType: "observation" | "recommendation" | "action";
+  title?: string | null;
+  body: string;
+  whyNow?: string | null;
+  evidence?: string[] | null;
+  publishConfidence?: number;
+  noveltyKey?: string | null;
+  nowMs: number;
+}) {
+  const noveltyKey = normalizeNoveltyKey(args.noveltyKey);
+  if (noveltyKey) {
+    const existingRows = (await args.ctx.db
+      .query("communityAiFeedPosts" as any)
+      .withIndex("by_community_noveltyKey", (q: any) =>
+        q.eq("communityId", args.communityId).eq("noveltyKey", noveltyKey),
+      )
+      .collect()) as FeedPostRow[];
+    const existing = existingRows.find((row) => row.status === "live");
+    if (existing) {
+      return await mapFeedPostRow({
+        ctx: args.ctx,
+        post: existing,
+        viewerReaction: null,
+        nowMs: args.nowMs,
+      });
+    }
+  }
+
+  const title = normalizeOptionalText(args.title, 180);
+  const body = normalizeOptionalText(args.body, 12_000);
+  if (!body) throw new Error("community_ai_feed_body_required");
+  const whyNow = normalizeOptionalText(args.whyNow, 280);
+  const evidence = normalizeFeedEvidence(args.evidence);
+  const authorLabel = normalizeName(args.authorLabel);
+  const normalizedConfidence = normalizeFeedConfidence(args.publishConfidence);
+  const id = await args.ctx.db.insert("communityAiFeedPosts" as any, {
+    communityId: args.communityId,
+    authorType: args.authorType,
+    authorUserId: args.authorUserId,
+    agentKey: normalizeNoveltyKey(args.agentKey),
+    authorLabel,
+    type: normalizeFeedPostType(args.postType),
+    title,
+    body,
+    whyNow,
+    evidence,
+    status: "live",
+    score: 0,
+    goodCount: 0,
+    lowSignalCount: 0,
+    publishConfidence: normalizedConfidence,
+    noveltyKey,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const created = await getFeedPostOrThrow(args.ctx, normalizeIdValue(id));
+  return await mapFeedPostRow({
+    ctx: args.ctx,
+    post: created,
+    viewerReaction: null,
+    nowMs: args.nowMs,
+  });
+}
+
 async function recomputeReactionState(args: {
   ctx: any;
   post: FeedPostRow;
   oldReaction: FeedReactionRow | null;
-  nextReactionType: "good" | "executed" | "low_signal";
+  nextReactionType: "good" | "low_signal";
   actorType: "human" | "agent";
   nowMs: number;
 }) {
   const nextCounts = {
     good: Math.max(0, Number(args.post.goodCount ?? 0)),
     lowSignal: Math.max(0, Number(args.post.lowSignalCount ?? 0)),
-    executed: Math.max(0, Number(args.post.executedCount ?? 0)),
   };
   let nextScore = Number(args.post.score ?? 0);
 
@@ -181,8 +267,6 @@ async function recomputeReactionState(args: {
       nextCounts.good = Math.max(0, nextCounts.good - 1);
     } else if (args.oldReaction.reactionType === "low_signal") {
       nextCounts.lowSignal = Math.max(0, nextCounts.lowSignal - 1);
-    } else if (args.oldReaction.reactionType === "executed") {
-      nextCounts.executed = Math.max(0, nextCounts.executed - 1);
     }
     nextScore -= reactionWeight({
       actorType: args.oldReaction.actorType,
@@ -192,10 +276,8 @@ async function recomputeReactionState(args: {
 
   if (args.nextReactionType === "good") {
     nextCounts.good += 1;
-  } else if (args.nextReactionType === "low_signal") {
-    nextCounts.lowSignal += 1;
   } else {
-    nextCounts.executed += 1;
+    nextCounts.lowSignal += 1;
   }
 
   nextScore += reactionWeight({
@@ -203,25 +285,11 @@ async function recomputeReactionState(args: {
     reactionType: args.nextReactionType,
   });
 
-  if (args.nextReactionType === "executed") {
-    await args.ctx.db.patch(args.post._id as any, {
-      score: nextScore,
-      goodCount: nextCounts.good,
-      lowSignalCount: nextCounts.lowSignal,
-      executedCount: nextCounts.executed,
-      status: "executed",
-      executedAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-    return;
-  }
-
   const nextStatus = nextScore <= HIDE_THRESHOLD ? "hidden" : "live";
   await args.ctx.db.patch(args.post._id as any, {
     score: nextScore,
     goodCount: nextCounts.good,
     lowSignalCount: nextCounts.lowSignal,
-    executedCount: nextCounts.executed,
     status: nextStatus,
     hiddenAt: nextStatus === "hidden" ? args.nowMs : undefined,
     updatedAt: args.nowMs,
@@ -277,7 +345,7 @@ export const listCommunityAiFeedLive = query({
   },
 });
 
-export const listCommunityAiFeedImportant = query({
+export const listCommunityAiFeedRanked = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -304,7 +372,7 @@ export const listCommunityAiFeedImportant = query({
       )
       .collect()) as FeedPostRow[];
     const selected = rows
-      .filter((post) => effectiveScoreForPost(post, nowMs) >= IMPORTANT_THRESHOLD)
+      .filter((post) => effectiveScoreForPost(post, nowMs) >= RANKED_THRESHOLD)
       .sort((a, b) => {
         const scoreDelta = effectiveScoreForPost(b, nowMs) - effectiveScoreForPost(a, nowMs);
         if (scoreDelta !== 0) return scoreDelta;
@@ -330,12 +398,14 @@ export const listCommunityAiFeedImportant = query({
   },
 });
 
+export const listCommunityAiFeedImportant = listCommunityAiFeedRanked;
+
 export const reactToCommunityAiFeedPost = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     postId: v.id("communityAiFeedPosts"),
-    reactionType: v.union(v.literal("good"), v.literal("executed"), v.literal("low_signal")),
+    reactionType: v.union(v.literal("good"), v.literal("low_signal")),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -404,6 +474,53 @@ export const reactToCommunityAiFeedPost = mutation({
   },
 });
 
+export const publishCommunityAiFeedAgentPost = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    agentKey: v.optional(v.union(v.string(), v.null())),
+    authorLabel: v.optional(v.union(v.string(), v.null())),
+    postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
+    title: v.optional(v.union(v.string(), v.null())),
+    body: v.string(),
+    whyNow: v.optional(v.union(v.string(), v.null())),
+    evidence: v.optional(v.union(v.array(v.string()), v.null())),
+    publishConfidence: v.optional(v.number()),
+    noveltyKey: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    return await insertFeedPost({
+      ctx,
+      communityId: args.communityId,
+      authorType: "agent",
+      authorUserId: userId,
+      agentKey: args.agentKey ?? null,
+      authorLabel: normalizeOptionalText(args.authorLabel, 80) || "Community agent",
+      postType: args.postType,
+      title: args.title ?? null,
+      body: args.body,
+      whyNow: args.whyNow ?? null,
+      evidence: args.evidence ?? null,
+      publishConfidence: args.publishConfidence,
+      noveltyKey: args.noveltyKey ?? null,
+      nowMs,
+    });
+  },
+});
+
 export const publishCommunityAiFeedPost = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -414,49 +531,29 @@ export const publishCommunityAiFeedPost = internalMutation({
     postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     title: v.optional(v.union(v.string(), v.null())),
     body: v.string(),
+    whyNow: v.optional(v.union(v.string(), v.null())),
+    evidence: v.optional(v.union(v.array(v.string()), v.null())),
     publishConfidence: v.optional(v.number()),
     noveltyKey: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const noveltyKey = normalizeNoveltyKey(args.noveltyKey);
-    if (noveltyKey) {
-      const existingRows = (await ctx.db
-        .query("communityAiFeedPosts" as any)
-        .withIndex("by_community_noveltyKey", (q: any) =>
-          q.eq("communityId", args.communityId).eq("noveltyKey", noveltyKey),
-        )
-        .collect()) as FeedPostRow[];
-      const existing = existingRows.find((row) => row.status === "live");
-      if (existing) return await mapFeedPostRow({ ctx, post: existing, viewerReaction: null, nowMs });
-    }
-
-    const title = normalizeOptionalText(args.title, 180);
-    const body = normalizeOptionalText(args.body, 12_000);
-    if (!body) throw new Error("community_ai_feed_body_required");
-    const authorLabel = normalizeName(args.authorLabel);
-    const id = await ctx.db.insert("communityAiFeedPosts" as any, {
+    return await insertFeedPost({
+      ctx,
       communityId: args.communityId,
       authorType: args.authorType,
       authorUserId: args.authorUserId,
-      agentKey: normalizeNoveltyKey(args.agentKey),
-      authorLabel,
-      type: normalizeFeedPostType(args.postType),
-      title,
-      body,
-      status: "live",
-      score: normalizeFeedConfidence(args.publishConfidence),
-      goodCount: 0,
-      lowSignalCount: 0,
-      executedCount: 0,
-      publishConfidence: normalizeFeedConfidence(args.publishConfidence),
-      noveltyKey,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      agentKey: args.agentKey ?? null,
+      authorLabel: args.authorLabel,
+      postType: args.postType,
+      title: args.title ?? null,
+      body: args.body,
+      whyNow: args.whyNow ?? null,
+      evidence: args.evidence ?? null,
+      publishConfidence: args.publishConfidence,
+      noveltyKey: args.noveltyKey ?? null,
+      nowMs: args.nowMs ?? Date.now(),
     });
-    const created = await getFeedPostOrThrow(ctx, normalizeIdValue(id));
-    return await mapFeedPostRow({ ctx, post: created, viewerReaction: null, nowMs });
   },
 });
 
@@ -475,9 +572,6 @@ export const reactToCommunityAiFeedPostAsAgent = internalMutation({
     }
 
     const reactionType = normalizeFeedReactionType(args.reactionType);
-    if (reactionType === "executed") {
-      throw new Error("community_ai_feed_agent_executed_forbidden");
-    }
     const agentKey = normalizeNoveltyKey(args.agentKey);
     if (!agentKey) throw new Error("community_ai_feed_agent_key_required");
     const actorKey = `agent:${agentKey}`;

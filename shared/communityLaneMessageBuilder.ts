@@ -12,7 +12,7 @@ function buildChatgptCommunityEvidenceSystemMessage(evidenceUserMessage: string)
   if (!evidence) return "";
   return [
     "Community evidence is already available for this turn.",
-    "Do not claim you cannot access community chat/resources/memory when this evidence is present.",
+    "Do not claim you cannot access community chat/AI feed/resources when this evidence is present.",
     "Answer community-scoped questions directly from this evidence.",
     "If evidence is insufficient, state what is missing and ask one concise follow-up.",
     "",

@@ -28,7 +28,6 @@ type PersonalMemoryItem = {
 
 type UseWebMemoryMutationControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
-  getCloudAuthUid: (session: SessionT) => string;
   openAuthGate: (intentInput?: unknown) => void;
   loadPersonalMemoryItems: () => Promise<void>;
 
@@ -60,10 +59,8 @@ export function useWebMemoryMutationController<SessionT>(
     if (!session) return;
     current.setIsLoadingUserMemorySettings(true);
     try {
-      const userId = current.getCloudAuthUid(session);
       await saveCloudUserMemorySettings({
         session,
-        userId,
         memoryMode: next.memory_mode,
         rememberIntentEnabled: Boolean(next.remember_intent_enabled),
       });
@@ -82,10 +79,8 @@ export function useWebMemoryMutationController<SessionT>(
     current.setIsSavingUserModelSettings(true);
     current.setUserModelSettingsError(null);
     try {
-      const userId = current.getCloudAuthUid(session);
       await saveCloudUserModelSettings({
         session,
-        userId,
         systemPrompt: String(next.system_prompt ?? ""),
       });
       current.setUserModelSettings({ system_prompt: String(next.system_prompt ?? "") });
@@ -107,7 +102,6 @@ export function useWebMemoryMutationController<SessionT>(
       if (!session) return null;
       const rows = (await createCloudPersonalMemoryItem({
         session,
-        userId: current.getCloudAuthUid(session),
         content,
         scope: "global",
         scopeId: null,
@@ -127,12 +121,11 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = current.getSession();
       if (!session) {
-        current.openAuthGate({ reason: "create_memory", payload: { content, pinned: Boolean(current.newPersonalMemoryPinned) } });
+        current.openAuthGate();
         return;
       }
       await createCloudPersonalMemoryItem({
         session,
-        userId: current.getCloudAuthUid(session),
         content,
         scope: current.newPersonalMemoryScope,
         scopeId: null,
@@ -154,7 +147,7 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = current.getSession();
       if (!session) {
-        current.openAuthGate({ reason: "toggle_memory_pinned", payload: { id: item.id, pinned: !item.pinned } });
+        current.openAuthGate();
         return;
       }
       await updateCloudPersonalMemoryPinned({
@@ -176,7 +169,7 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = current.getSession();
       if (!session) {
-        current.openAuthGate({ reason: "delete_memory", payload: { id } });
+        current.openAuthGate();
         return;
       }
       await deleteCloudPersonalMemoryItem({

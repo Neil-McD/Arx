@@ -15,7 +15,7 @@ export default defineSchema({
 
   userEntitlements: defineTable({
     userId: v.id("users"),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("builder")),
     source: v.union(
       v.literal("default"),
       v.literal("stripe"),
@@ -35,7 +35,11 @@ export default defineSchema({
     mode: v.union(v.literal("community_join"), v.literal("builder_upgrade")),
     communityId: v.optional(v.id("communities")),
     billingPeriod: v.optional(v.string()),
-    targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"))),
+    pricePointId: v.optional(v.id("communityPricePoints")),
+    amountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    currencyDecimals: v.optional(v.number()),
+    targetTier: v.optional(v.literal("builder")),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),
@@ -50,6 +54,11 @@ export default defineSchema({
   purchaseClaims: defineTable({
     claimToken: v.string(),
     communityId: v.id("communities"),
+    billingPeriod: v.optional(v.string()),
+    pricePointId: v.optional(v.id("communityPricePoints")),
+    amountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    currencyDecimals: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
     status: v.union(v.literal("pending"), v.literal("redeemed"), v.literal("expired")),
     sourceSessionId: v.optional(v.string()),
@@ -179,18 +188,36 @@ export default defineSchema({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
-    freeJoinRequiresApproval: v.boolean(),
-    joinMode: v.union(v.literal("join_free"), v.literal("request_access"), v.literal("checkout")),
+    entryPolicy: v.union(
+      v.literal("open"),
+      v.literal("approval"),
+      v.literal("paid_unlock"),
+      v.literal("paid_subscription"),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_slug", ["slug"]),
+    .index("by_slug", ["slug"])
+    .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
   communityMemberships: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    role: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+    accessSource: v.optional(
+      v.union(
+        v.literal("free_grant"),
+        v.literal("manual_grant"),
+        v.literal("invite_bypass"),
+        v.literal("paid_unlock"),
+        v.literal("paid_subscription"),
+      ),
+    ),
+    pricePointId: v.optional(v.id("communityPricePoints")),
+    active: v.optional(v.boolean()),
+    revokedAt: v.optional(v.number()),
+    revokedReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -210,21 +237,60 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"]),
 
-  communityPlans: defineTable({
+  communityFunnels: defineTable({
     communityId: v.id("communities"),
+    heroMediaUrl: v.optional(v.string()),
+    heroMediaStorageId: v.optional(v.id("_storage")),
+    heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    about: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
+  communityPricePoints: defineTable({
+    communityId: v.id("communities"),
+    kind: v.union(v.literal("unlock"), v.literal("subscription")),
     billingPeriod: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     amountBaseUnits: v.number(),
     currency: v.string(),
     currencyDecimals: v.number(),
-    active: v.boolean(),
+    isCurrent: v.boolean(),
+    archivedAt: v.optional(v.number()),
+    providerPriceId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
-    .index("by_community_active", ["communityId", "active"])
-    .index("by_community_billingPeriod", ["communityId", "billingPeriod"]),
+    .index("by_community_billingPeriod", ["communityId", "billingPeriod"])
+    .index("by_community_current", ["communityId", "isCurrent"]),
+
+  communitySubscriptions: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    membershipId: v.id("communityMemberships"),
+    pricePointId: v.id("communityPricePoints"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancel_at_period_end"),
+      v.literal("canceled"),
+      v.literal("ended"),
+    ),
+    providerSubscriptionId: v.optional(v.string()),
+    providerCustomerId: v.optional(v.string()),
+    currentPeriodStartAt: v.optional(v.number()),
+    currentPeriodEndAt: v.optional(v.number()),
+    cancelAtPeriodEnd: v.boolean(),
+    endedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_membership", ["membershipId"])
+    .index("by_pricePoint", ["pricePointId"])
+    .index("by_community_user", ["communityId", "userId"]),
 
   communityInvites: defineTable({
     communityId: v.id("communities"),
@@ -251,7 +317,7 @@ export default defineSchema({
   communityChatMessages: defineTable({
     threadId: v.id("communityChatThreads"),
     seq: v.number(),
-    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    role: v.literal("user"),
     contentJson: v.any(),
     senderUserId: v.optional(v.id("users")),
     replyToMessageId: v.optional(v.id("communityChatMessages")),
@@ -295,16 +361,16 @@ export default defineSchema({
     type: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     title: v.optional(v.string()),
     body: v.string(),
-    status: v.union(v.literal("live"), v.literal("executed"), v.literal("hidden")),
+    whyNow: v.optional(v.string()),
+    evidence: v.optional(v.array(v.string())),
+    status: v.union(v.literal("live"), v.literal("hidden")),
     score: v.number(),
     goodCount: v.number(),
     lowSignalCount: v.number(),
-    executedCount: v.number(),
     publishConfidence: v.number(),
     noveltyKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-    executedAt: v.optional(v.number()),
     hiddenAt: v.optional(v.number()),
   })
     .index("by_community", ["communityId"])
@@ -320,7 +386,7 @@ export default defineSchema({
     actorKey: v.string(),
     actorUserId: v.optional(v.id("users")),
     agentKey: v.optional(v.string()),
-    reactionType: v.union(v.literal("good"), v.literal("executed"), v.literal("low_signal")),
+    reactionType: v.union(v.literal("good"), v.literal("low_signal")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -356,27 +422,6 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
-
-  communityMemoryCandidates: defineTable({
-    communityId: v.id("communities"),
-    proposerUserId: v.id("users"),
-    title: v.optional(v.string()),
-    memoryText: v.string(),
-    evidenceJson: v.any(),
-    routerState: v.string(),
-    signalScore: v.number(),
-    routerReason: v.optional(v.string()),
-    promotedMemoryId: v.optional(v.string()),
-    reviewedBy: v.optional(v.id("users")),
-    reviewedAt: v.optional(v.number()),
-    requestKey: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_community_requestKey", ["communityId", "requestKey"])
-    .index("by_proposer", ["proposerUserId"]),
 
   threads: defineTable({
     ownerId: v.id("users"),

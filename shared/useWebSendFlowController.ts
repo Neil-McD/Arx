@@ -34,6 +34,12 @@ export function useWebSendFlowController<
 
   const resolvePreferredModelSelection = useCallback(() => resolvePreferredModelSelectionFromArgs(argsRef.current), []);
 
+  const shouldRequestToolsForAuthenticatedTurn = useCallback((): boolean => {
+    const current = argsRef.current;
+    // Free authenticated users stay chat-only; Builder remains tool-capable by entitlement.
+    return current.hasPaidAccess === true;
+  }, []);
+
   const persistGuestFromMessages = useCallback((messages: ThreadMessageT[]): void => {
     persistGuestThreadStorageFromMessages(argsRef.current, messages);
   }, []);
@@ -142,8 +148,7 @@ export function useWebSendFlowController<
     const startedInDraft = !hasActiveThreadInState;
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
-    const hasPersonalMemoryAccess =
-      current.builderTier === "builder" || current.builderTier === "pro";
+    const hasPersonalMemoryAccess = current.builderTier === "builder";
 
     current.setThreadError(null);
     current.setIsSendingMessage(true);
@@ -259,6 +264,7 @@ export function useWebSendFlowController<
         });
       } else {
         const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
+        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "respond",
@@ -277,7 +283,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: true,
+          requiresTools,
           replyToId: messageId,
           messages: optimisticThreadMessages,
         });
@@ -303,6 +309,7 @@ export function useWebSendFlowController<
     resolveScopedSystemPrompt,
     resolveCommunityPreflight,
     resolvePreferredModelSelection,
+    shouldRequestToolsForAuthenticatedTurn,
     syncThreadModelSelection,
   ]);
 
@@ -358,6 +365,7 @@ export function useWebSendFlowController<
         });
       } else {
         const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
+        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "respond",
@@ -376,7 +384,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: true,
+          requiresTools,
           replyToId: lastUserMessageId,
           messages: currentThreadMessages,
         });
@@ -390,7 +398,14 @@ export function useWebSendFlowController<
     } finally {
       current.setIsSendingMessage(false);
     }
-  }, [maybeShowBuilderLimitUpgrade, resolveScopedSystemPrompt, resolveCommunityPreflight, resolvePreferredModelSelection, syncThreadModelSelection]);
+  }, [
+    maybeShowBuilderLimitUpgrade,
+    resolveScopedSystemPrompt,
+    resolveCommunityPreflight,
+    resolvePreferredModelSelection,
+    shouldRequestToolsForAuthenticatedTurn,
+    syncThreadModelSelection,
+  ]);
 
   const regenerateLastTurn = useCallback(async () => {
     const current = argsRef.current;
@@ -461,6 +476,7 @@ export function useWebSendFlowController<
         });
       } else {
         const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
+        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
         const turnResult = await current.runAgentTurn(session, threadId, {
           preferredModelId,
           mode: "regenerate",
@@ -479,7 +495,7 @@ export function useWebSendFlowController<
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "user_chatgpt"
                 : "platform",
-          requiresTools: true,
+          requiresTools,
           replyToId: lastUserMessageId,
           messages: messagesForTurn,
         });
@@ -493,7 +509,14 @@ export function useWebSendFlowController<
     } finally {
       current.setIsSendingMessage(false);
     }
-  }, [maybeShowBuilderLimitUpgrade, resolveScopedSystemPrompt, resolveCommunityPreflight, resolvePreferredModelSelection, syncThreadModelSelection]);
+  }, [
+    maybeShowBuilderLimitUpgrade,
+    resolveScopedSystemPrompt,
+    resolveCommunityPreflight,
+    resolvePreferredModelSelection,
+    shouldRequestToolsForAuthenticatedTurn,
+    syncThreadModelSelection,
+  ]);
 
   return {
     sendUserMessage,

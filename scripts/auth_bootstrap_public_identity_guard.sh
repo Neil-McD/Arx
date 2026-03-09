@@ -28,36 +28,42 @@ require_multiline_match() {
   echo "OK: $description"
 }
 
-echo "[1/6] Ensuring bootstrapActor returns public userId for authenticated sessions..."
-require_multiline_match "$AUTH_FILE" \
-  'export const bootstrapActor = mutation\([\s\S]*?authSubject: subject,[\s\S]*?userId: String\(user\?\.authSubject \?\? subject\)\.trim\(\) \|\| String\(userId\)' \
-  "bootstrapActor returns public userId"
+reject_multiline_match() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if rg -n -U --pcre2 "$pattern" "$file" >/dev/null; then
+    echo "FAIL: unexpected contract marker: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
 
-echo "[2/6] Ensuring getActor returns public userId for authenticated sessions..."
+echo "[1/4] Ensuring bootstrapActor returns authSubject for authenticated sessions..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getActor = query\([\s\S]*?authSubject: subject,[\s\S]*?userId: String\(user\.authSubject \?\? subject\)\.trim\(\) \|\| String\(user\._id\)' \
-  "getActor returns public userId"
+  'export const bootstrapActor = mutation\([\s\S]*?authSubject: subject,' \
+  "bootstrapActor returns authSubject"
 
-echo "[3/6] Ensuring authenticated bootstrap client expects authSubject-aligned user IDs..."
+echo "[2/4] Ensuring getActor returns authSubject for authenticated sessions..."
+require_multiline_match "$AUTH_FILE" \
+  'export const getActor = query\([\s\S]*?authSubject: subject,' \
+  "getActor returns authSubject"
+
+echo "[3/4] Ensuring authenticated bootstrap client expects authSubject-aligned actor payloads..."
 require_multiline_match "$CLIENT_FILE" \
   'const actorAuthSubject = String\(actor\?\.authSubject \?\? ""\)\.trim\(\);' \
   "bootstrap client reads actor authSubject"
 require_multiline_match "$CLIENT_FILE" \
   'if \(actorAuthSubject && actorAuthSubject !== authSubject\) \{\s*throw new Error\("convex_auth_subject_mismatch"\);' \
   "bootstrap client rejects authSubject mismatch"
-require_multiline_match "$CLIENT_FILE" \
-  'if \(userId !== authSubject\) \{\s*throw new Error\("convex_auth_subject_mismatch"\);' \
-  "bootstrap client rejects non-public bootstrap userId"
+reject_multiline_match "$CLIENT_FILE" \
+  'if \(userId !== authSubject\)' \
+  "bootstrap client no longer uses public userId comparison"
 
-echo "[4/6] Ensuring bootstrap client still fails closed if no bootstrap userId is returned..."
-require_multiline_match "$CLIENT_FILE" \
-  'if \(!userId\) \{\s*throw new Error\("convex_owner_not_found"\);' \
-  "bootstrap client requires bootstrap userId"
-
-echo "[5/6] Ensuring the probe uses the canonical auth:getActor seam..."
+echo "[4/4] Ensuring the probe uses the canonical auth:getActor seam..."
 require_multiline_match "$PROBE_FILE" \
   'client\.query\("auth:getActor" as any, \{\s*authState: "authenticated",\s*authSubject,' \
   "auth session probe uses auth:getActor"
 
-echo "[6/6] Guard passed."
-echo "PASS: authenticated bootstrap identity contract is normalized to public IDs."
+echo "Guard passed."
+echo "PASS: authenticated bootstrap identity contract is normalized to authSubject."

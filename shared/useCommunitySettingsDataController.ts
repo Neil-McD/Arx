@@ -2,7 +2,7 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 
 import {
   fetchCloudCommunityMemberSettingsRow,
-  listCloudCommunityPricingRows,
+  listCloudCommunityPricePointRows,
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = {
@@ -19,7 +19,6 @@ type CommunityMemberSettingsRow = {
 
 type CommunityPricingRow = {
   billing_period: string;
-  plan_id: string;
   amount_base_units: number | string;
   currency: string;
   currency_decimals: number;
@@ -33,8 +32,6 @@ type UseCommunitySettingsDataControllerArgs = {
   setIsLoadingCommunityMemberSettings: Dispatch<SetStateAction<boolean>>;
   setCommunityMemberSettingsError: Dispatch<SetStateAction<string | null>>;
 
-  setCommunitySettingsMonthlyPlanId: Dispatch<SetStateAction<string | null>>;
-  setCommunitySettingsYearlyPlanId: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
@@ -75,7 +72,7 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
     async (params: { communityId: string; session: SessionT; shouldIgnore?: () => boolean }) => {
       const current = argsRef.current;
       try {
-        const rows = await listCloudCommunityPricingRows<SessionT, CommunityPricingRow>({
+        const rows = await listCloudCommunityPricePointRows<SessionT, CommunityPricingRow>({
           session: params.session,
           communityId: params.communityId,
         });
@@ -85,8 +82,6 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
 
         const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
         const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
-        current.setCommunitySettingsMonthlyPlanId(monthly?.plan_id ?? null);
-        current.setCommunitySettingsYearlyPlanId(yearly?.plan_id ?? null);
         current.setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
         current.setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
         current.setCommunitySettingsPricingMode(monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free");

@@ -142,7 +142,7 @@ export function WebMessageContextModal(props: WebMessageContextModalProps) {
                           <div className="memory-block-label">{item.pinned ? "Pinned memory" : "Memory"}</div>
                           <div className="memory-block-actions">
                             <button
-                              className="secondary"
+                              className="platform-save-button platform-save-button--compact"
                               type="button"
                               disabled={!hasSession}
                               onClick={() => void onSaveSuggestion(item)}
