@@ -1,10 +1,12 @@
+import { useEffect, useRef, useState } from "react";
+
 import { deriveCommunityJoinMode, type CommunityEntryPolicy } from "../communityJoinPolicy";
 
 type CommunityMember = {
   id: string;
   user_id: string;
   role: string;
-  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
   is_entitled?: boolean;
   entitlement_ends_at?: string | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
@@ -38,7 +40,6 @@ type WebCommunityMembersSectionProps = {
   activeCommunity: ActiveCommunity | null;
   hasSession: boolean;
   capabilities: {
-    canInviteActiveCommunity: boolean;
     canManageMembersActiveCommunity: boolean;
     canReviewJoinRequestsActiveCommunity: boolean;
     isActiveCommunityOwner: boolean;
@@ -63,7 +64,7 @@ type WebCommunityMembersSectionProps = {
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
     displayName: (userId: string) => string;
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
-    handleSetCommunityMemberRole: (userId: string, role: "admin" | "member") => Promise<void> | void;
+    handleSetCommunityMemberRole: (userId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
     handleRemoveCommunityMember: (userId: string) => Promise<void> | void;
     handleApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     handleDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
@@ -77,12 +78,34 @@ type WebCommunityMembersSectionProps = {
 
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
   const { activeCommunity, hasSession, capabilities, state, actions } = props;
+  const [didCopyJoinPath, setDidCopyJoinPath] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
   const joinPath = activeCommunity ? `/c/${encodeURIComponent(activeCommunity.slug)}` : "";
   const joinUrl = activeCommunity
     ? typeof window === "undefined"
       ? joinPath
       : new URL(joinPath, window.location.origin).toString()
     : "";
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyJoinPath = async () => {
+    if (!joinUrl) return;
+    await actions.copyTextToClipboard(joinUrl);
+    setDidCopyJoinPath(true);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setDidCopyJoinPath(false);
+      copyResetTimeoutRef.current = null;
+    }, 1400);
+  };
   const formatAmount = (member: CommunityMember): string | null => {
     const amount = Number(member.amount_base_units);
     const currency = String(member.currency ?? "").trim().toUpperCase();
@@ -109,9 +132,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
         ? "free"
         : source === "manual_grant"
           ? "complimentary"
-          : source === "invite_bypass"
-            ? "invite"
-            : source === "paid_unlock"
+          : source === "paid_unlock"
               ? amount ? `unlock ${amount}${period}` : "paid unlock"
               : source === "paid_subscription"
                 ? amount ? `${amount}${period}` : "subscription"
@@ -157,7 +178,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   return (
     <>
       <div className="community-panel members-panel">
-        <div className={`members-layout${capabilities.canInviteActiveCommunity ? " with-invites" : ""}`}>
+        <div className={`members-layout${capabilities.canManageMembersActiveCommunity ? " with-invites" : ""}`}>
           <section className="members-section">
             <div className="members-header-row">
               <div className="members-header">Members</div>
@@ -179,6 +200,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <option value="all">All roles</option>
                     <option value="owner">Owner</option>
                     <option value="admin">Admin</option>
+                    <option value="moderator">Moderator</option>
                     <option value="member">Member</option>
                   </select>
                 </label>
@@ -256,17 +278,25 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   );
                   const viewerIsOwner = capabilities.isActiveCommunityOwner;
                   const viewerIsAdmin = capabilities.canManageMembersActiveCommunity && !viewerIsOwner;
+                  const memberIsModerator = member.role === "moderator";
                   const memberIsAdmin = member.role === "admin";
-                  const canEditThisMember = viewerIsOwner || !memberIsAdmin;
-                  const canRemoveThisMember = viewerIsOwner || (viewerIsAdmin && !memberIsAdmin && !memberIsOwner);
-                  const roleOptions = viewerIsOwner ? ["member", "admin"] : memberIsAdmin ? ["admin"] : ["member"];
+                  const canEditThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
+                  const canRemoveThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
+                  const roleOptions =
+                    viewerIsOwner || viewerIsAdmin
+                      ? (["member", "moderator", "admin"] as const)
+                      : memberIsAdmin
+                        ? (["admin"] as const)
+                        : memberIsModerator
+                          ? (["moderator"] as const)
+                          : (["member"] as const);
                   return (
                     <div key={member.id} className="member-item">
                       <div
                         className={`member-avatar${avatarUrl ? " has-image" : ""}`}
                         style={avatarUrl ? undefined : { backgroundColor: actions.getAvatarColor(member.user_id) }}
                       >
-                        {avatarUrl ? <img src={avatarUrl} alt={actions.displayName(member.user_id)} /> : initials}
+                        {avatarUrl ? <img src={avatarUrl} alt={actions.displayName(member.user_id)} draggable={false} /> : initials}
                       </div>
                       <div className="member-info">
                         <span className="member-name">{actions.displayName(member.user_id)}</span>
@@ -286,7 +316,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                               value={member.role}
                               disabled={!canEditThisMember}
                               onChange={(event) => {
-                                const next = event.target.value;
+                                const next = event.target.value as "admin" | "moderator" | "member";
                                 if (next === member.role) return;
                                 void actions.handleSetCommunityMemberRole(member.user_id, next);
                               }}
@@ -316,7 +346,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             </div>
           </section>
 
-          {activeCommunity && hasSession && capabilities.canInviteActiveCommunity && (
+          {activeCommunity && hasSession && capabilities.canManageMembersActiveCommunity && (
             <section className="invites-section">
               <div className="members-header-row">
                 <div className="members-header">Join path</div>
@@ -334,15 +364,26 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                       <div className="invite-code">{joinPath}</div>
                       <div className="invite-status active">standard join route</div>
                     </div>
+                    <button
+                      className={`invite-inline-copy${didCopyJoinPath ? " is-copied" : ""}`}
+                      type="button"
+                      onClick={() => void handleCopyJoinPath()}
+                      disabled={!joinUrl}
+                      title={didCopyJoinPath ? "Copied" : "Copy join path"}
+                      aria-label={didCopyJoinPath ? "Copied" : "Copy join path"}
+                    >
+                      {didCopyJoinPath ? (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="9" y="9" width="11" height="11" rx="2" />
+                          <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    className="invite-create-btn platform-save-button is-dirty"
-                    type="button"
-                    onClick={() => void actions.copyTextToClipboard(joinUrl)}
-                    disabled={!joinUrl}
-                  >
-                    Copy join path
-                  </button>
                 </div>
               </div>
             </section>

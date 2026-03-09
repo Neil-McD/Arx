@@ -1,22 +1,17 @@
 import {
-  acceptCommunityInvite as acceptCommunityInviteImpl,
   approveCommunityJoinRequest as approveCommunityJoinRequestImpl,
-  communityOwnerHasBuilderAccess as communityOwnerHasBuilderAccessImpl,
+  communityOwnerHasArchitectAccess as communityOwnerHasArchitectAccessImpl,
   countCommunityMemberships as countCommunityMembershipsImpl,
-  createCommunityInvite as createCommunityInviteImpl,
-  deleteCommunityInvite as deleteCommunityInviteImpl,
   denyCommunityJoinRequest as denyCommunityJoinRequestImpl,
   getCommunityMemberSettings as getCommunityMemberSettingsImpl,
   listCommunityPricePoints as listCommunityPricePointsImpl,
   leaveCommunity as leaveCommunityImpl,
-  listCommunityInvites as listCommunityInvitesImpl,
   listCommunityJoinRequests as listCommunityJoinRequestsImpl,
   listCommunityMembershipCreatedAtRows as listCommunityMembershipCreatedAtRowsImpl,
   listCommunityMemberships as listCommunityMembershipsImpl,
   listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
   listCommunityRevenueSeries as listCommunityRevenueSeriesImpl,
   removeCommunityMember as removeCommunityMemberImpl,
-  revokeCommunityInvite as revokeCommunityInviteImpl,
   saveCommunityMemberSettings as saveCommunityMemberSettingsImpl,
   setCommunityFreeAccessMode as setCommunityFreeAccessModeImpl,
   setCommunityMemberRole as setCommunityMemberRoleImpl,
@@ -24,13 +19,12 @@ import {
 import {
   getActiveCommunityAgentLanding as getActiveCommunityAgentLandingImpl,
   getActiveCommunityAgentSystemPrompt as getActiveCommunityAgentSystemPromptImpl,
-  listCommunityAgentDrafts as listCommunityAgentDraftsImpl,
-  setActiveCommunityAgentDraft as setActiveCommunityAgentDraftImpl,
-  upsertCommunityAgentDraft as upsertCommunityAgentDraftImpl,
+  getCommunityAgentConfig as getCommunityAgentConfigImpl,
+  saveCommunityAgentConfig as saveCommunityAgentConfigImpl,
 } from "./communityAgent";
 import {
   getCommunityFunnelConfig as getCommunityFunnelConfigImpl,
-  saveCommunityPublicPage as saveCommunityPublicPageImpl,
+  saveCommunityFunnel as saveCommunityFunnelImpl,
   upsertCommunityFunnelConfig as upsertCommunityFunnelConfigImpl,
 } from "./communityFunnel";
 import {
@@ -55,7 +49,9 @@ import {
   reactToCommunityAiFeedPost as reactToCommunityAiFeedPostImpl,
 } from "./communityAiFeed";
 import {
+  getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   countCommunityResources as countCommunityResourcesImpl,
+  heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
   getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
@@ -82,7 +78,7 @@ export const listCommunityMemberships = listCommunityMembershipsImpl;
 export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
-export const communityOwnerHasBuilderAccess = communityOwnerHasBuilderAccessImpl;
+export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
 export const researchCommunityContext = researchCommunityContextImpl;
 export const readCompiledCommunityContext = readCompiledCommunityContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
@@ -96,19 +92,16 @@ export const listCommunityPricePoints = listCommunityPricePointsImpl;
 export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
 export const leaveCommunity = leaveCommunityImpl;
 export const listCommunityRevenueSeries = listCommunityRevenueSeriesImpl;
-export const listCommunityInvites = listCommunityInvitesImpl;
-export const createCommunityInvite = createCommunityInviteImpl;
-export const revokeCommunityInvite = revokeCommunityInviteImpl;
-export const deleteCommunityInvite = deleteCommunityInviteImpl;
-export const acceptCommunityInvite = acceptCommunityInviteImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;
 export const getMyCommunityAccess = getMyCommunityAccessImpl;
 export const getMyCommunityAccessBySlug = getMyCommunityAccessBySlugImpl;
+export const getCommunityPresenceSummary = getCommunityPresenceSummaryImpl;
 export const resolvePublicFunnelBySlug = resolvePublicFunnelBySlugImpl;
 export const listPublicDiscoverCommunities = listPublicDiscoverCommunitiesImpl;
+export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
 export const getMyJoinRequestBySlug = getMyJoinRequestBySlugImpl;
 export const requestCommunityAccessBySlug = requestCommunityAccessBySlugImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
@@ -131,11 +124,10 @@ export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const deleteCommunity = deleteCommunityImpl;
-export const listCommunityAgentDrafts = listCommunityAgentDraftsImpl;
-export const upsertCommunityAgentDraft = upsertCommunityAgentDraftImpl;
-export const setActiveCommunityAgentDraft = setActiveCommunityAgentDraftImpl;
+export const getCommunityAgentConfig = getCommunityAgentConfigImpl;
+export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;
 export const getActiveCommunityAgentLanding = getActiveCommunityAgentLandingImpl;
 export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
-export const saveCommunityPublicPage = saveCommunityPublicPageImpl;
+export const saveCommunityFunnel = saveCommunityFunnelImpl;
 export const upsertCommunityFunnelConfig = upsertCommunityFunnelConfigImpl;

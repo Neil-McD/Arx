@@ -5,7 +5,6 @@ import {
   type CommunityAgentDraftLike,
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
-  type CommunityInviteLike,
   type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
@@ -100,8 +99,8 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? undefined,
       nowMs,
     });
-    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() !== "builder") {
-      throw new Error("community_builder_required");
+    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() !== "architect") {
+      throw new Error("community_architect_required");
     }
     const ownedCommunities = await ctx.db
       .query("communities")
@@ -490,14 +489,6 @@ export const deleteCommunity = mutation({
     for (const row of checkoutSessions) {
       if (String(row.communityId ?? "") !== String(args.communityId)) continue;
       await ctx.db.delete(row._id);
-    }
-
-    const invites = (await ctx.db
-      .query("communityInvites" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityInviteLike[];
-    for (const row of invites) {
-      await ctx.db.delete(row._id as any);
     }
 
     const resources = (await ctx.db

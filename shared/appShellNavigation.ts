@@ -1,6 +1,6 @@
-export type SettingsPage = "account" | "models" | "execution" | "memory" | "appearance";
+export type SettingsPage = "profile" | "account" | "agent" | "appearance";
 
-export type SettingsGroup = "account" | "agent" | "appearance";
+export type SettingsGroup = "profile" | "account" | "agent" | "appearance";
 
 export type AppPage = "workspace" | "community" | "discover";
 
@@ -8,7 +8,7 @@ export type AppView = "home" | "settings";
 
 export const COMMUNITY_TABS = [
   "chat",
-  "feed",
+  "ai_feed",
   "resources",
   "members",
   "settings",
@@ -32,8 +32,12 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 
 export function parseCommunityTab(value: string | null | undefined): CommunityTab {
   switch ((value ?? "").trim()) {
+    case "ai-feed":
+      return "ai_feed";
+    case "ai_feed":
+      return "ai_feed";
     case "feed":
-      return "feed";
+      return "ai_feed";
     case "library":
       return "resources";
     case "resources":
@@ -54,6 +58,7 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
 }
 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
+  if (page === "profile") return "profile";
   if (page === "appearance") return "appearance";
   if (page === "account") return "account";
   return "agent";
@@ -61,6 +66,8 @@ export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
 
 export function settingsGroupLabel(group: SettingsGroup): string {
   switch (group) {
+    case "profile":
+      return "Profile";
     case "account":
       return "Account";
     case "agent":

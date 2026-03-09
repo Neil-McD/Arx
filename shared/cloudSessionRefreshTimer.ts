@@ -16,6 +16,9 @@ function computeCloudRefreshDelayMs(params: {
   const nowSec = params.nowSec ?? Math.floor(Date.now() / 1000);
   const leadSec = params.leadSec ?? 90;
   const minSec = params.minSec ?? 5;
+  if (params.expiresAtSec <= nowSec + leadSec) {
+    return 0;
+  }
   const refreshAtSec = Math.max(params.expiresAtSec - leadSec, nowSec + minSec);
   return Math.max((refreshAtSec - nowSec) * 1000, 0);
 }

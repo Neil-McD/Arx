@@ -62,24 +62,6 @@
           "query": {
             "type": "string",
             "maxLength": 240
-          },
-          "source_types": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "chat",
-                "resource",
-                "ai_feed"
-              ]
-            },
-            "minItems": 1,
-            "maxItems": 3
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 12
           }
         }
       },
@@ -94,9 +76,7 @@
       "idempotency": {
         "strategy": "pure_read",
         "key_fields": [
-          "query",
-          "source_types",
-          "limit"
+          "query"
         ]
       },
       "slo": {

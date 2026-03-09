@@ -1,5 +1,5 @@
-const CANONICAL_TIER_SET = new Set(["free", "builder"]);
-const PAID_TIER_SET = new Set(["builder"]);
+const CANONICAL_TIER_SET = new Set(["free", "builder", "architect"]);
+const WORKBENCH_TIER_SET = new Set(["builder", "architect"]);
 const VALID_AUTH_STATE = new Set(["anonymous", "authenticated"]);
 const VALID_SURFACE = new Set(["web", "mobile"]);
 const VALID_EXECUTION_MODE = new Set(["cloud"]);
@@ -55,7 +55,7 @@ function normalizeTurnClass(rawTurnClass) {
 
 function normalizeCanonicalTier(rawTier) {
   const normalized = toLowerTrimmed(rawTier);
-  if (normalized === "pro" || normalized === "architect") return "builder";
+  if (normalized === "pro" || normalized === "architect") return "architect";
   if (CANONICAL_TIER_SET.has(normalized)) return normalized;
   return "free";
 }
@@ -69,7 +69,7 @@ function resolveEffectiveTier(input) {
 }
 
 function isPaidEffectiveTier(effectiveTier) {
-  return PAID_TIER_SET.has(effectiveTier);
+  return WORKBENCH_TIER_SET.has(effectiveTier);
 }
 
 function deny(code, cta) {
@@ -107,7 +107,7 @@ export function evaluateCanonicalGate(rawInput) {
   });
   const hasUserKeyConnection = Boolean(rawInput?.hasUserKeyConnection);
   const hasUserChatGptConnection = Boolean(rawInput?.hasUserChatGptConnection);
-  const isPaid = isPaidEffectiveTier(effectiveTier);
+  const hasWorkbenchAccess = isPaidEffectiveTier(effectiveTier);
   const isAnonymous = effectiveTier === "anon_free";
 
   if (turnClass === "requires_tools") {
@@ -118,7 +118,7 @@ export function evaluateCanonicalGate(rawInput) {
           effectiveTier,
         };
       }
-      if (!isPaid) {
+      if (!hasWorkbenchAccess) {
         return {
           ...deny("tier_required", "upgrade"),
           effectiveTier,
@@ -142,7 +142,7 @@ export function evaluateCanonicalGate(rawInput) {
           effectiveTier,
         };
       }
-      if (!isPaid) {
+      if (!hasWorkbenchAccess) {
         return {
           ...deny("tier_required", "upgrade"),
           effectiveTier,
@@ -159,7 +159,7 @@ export function evaluateCanonicalGate(rawInput) {
         effectiveTier,
       };
     }
-    if (isPaid) {
+    if (hasWorkbenchAccess) {
       return {
         ...allow("daytona_cloud", "platform"),
         effectiveTier,
@@ -216,7 +216,7 @@ export function evaluateCanonicalGate(rawInput) {
     };
   }
 
-  if (isPaid) {
+  if (hasWorkbenchAccess) {
     return {
       ...allow("platform", "platform"),
       effectiveTier,
@@ -230,8 +230,18 @@ export function evaluateCanonicalGate(rawInput) {
     };
   }
 
+  if (authState === "authenticated" && hasUserKeyConnection) {
+    return {
+      ...allow("platform", "user_key"),
+      effectiveTier,
+    };
+  }
+
   return {
-    ...deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade"),
+    ...deny(
+      isAnonymous ? "auth_required" : "provider_connection_required",
+      isAnonymous ? "sign_in" : "connect_provider",
+    ),
     effectiveTier,
   };
 }

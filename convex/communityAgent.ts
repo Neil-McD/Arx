@@ -8,37 +8,38 @@ import {
   toIsoString,
 } from "./communityCore";
 
-function normalizeDraftSlot(raw: unknown): number {
-  const slot = Math.max(1, Math.min(3, Math.floor(Number(raw))));
-  if (!Number.isFinite(slot)) return 1;
-  return slot;
-}
-
 function normalizeSystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
   return prompt.slice(0, 40_000);
 }
 
-function normalizeOptionalName(raw: unknown): string | undefined {
-  const name = String(raw ?? "").trim();
-  if (!name) return undefined;
-  return name.slice(0, 120);
-}
-
-function mapCommunityAgentDraftRow(row: CommunityAgentDraftLike) {
+function mapCommunityAgentConfigRow(row: CommunityAgentDraftLike) {
   return {
     id: String(row._id),
     community_id: String(row.communityId),
-    slot: Math.max(1, Math.floor(row.slot)),
-    name: row.name ?? null,
     landing_json: row.landingJson ?? null,
     system_prompt: row.systemPrompt,
-    is_active: Boolean(row.isActive),
     updated_at: toIsoString(row.updatedAt),
   };
 }
 
-export const listCommunityAgentDrafts = query({
+async function listCommunityAgentRows(ctx: any, communityId: any): Promise<CommunityAgentDraftLike[]> {
+  return (await ctx.db
+    .query("communityAgentDrafts" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityAgentDraftLike[];
+}
+
+function selectCanonicalCommunityAgentRow(rows: CommunityAgentDraftLike[]): CommunityAgentDraftLike | null {
+  if (rows.length === 0) return null;
+  const active = rows.find((row) => Boolean(row.isActive));
+  if (active) return active;
+  return rows
+    .slice()
+    .sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)[0] ?? null;
+}
+
+export const getCommunityAgentConfig = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -51,29 +52,17 @@ export const listCommunityAgentDrafts = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const rows = (await ctx.db
-      .query("communityAgentDrafts" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityAgentDraftLike[];
-    return rows
-      .slice()
-      .sort((a, b) => Math.floor(a.slot) - Math.floor(b.slot))
-      .map((row) => mapCommunityAgentDraftRow(row));
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
+    const row = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
+    return row ? mapCommunityAgentConfigRow(row) : null;
   },
 });
 
-export const upsertCommunityAgentDraft = mutation({
+export const saveCommunityAgentConfig = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    slot: v.number(),
-    name: v.optional(v.union(v.string(), v.null())),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
     nowMs: v.optional(v.number()),
@@ -86,85 +75,41 @@ export const upsertCommunityAgentDraft = mutation({
     });
     (args as { userId?: any }).userId = userId;
     const nowMs = args.nowMs ?? Date.now();
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const slot = normalizeDraftSlot(args.slot);
-    const nextName = normalizeOptionalName(args.name);
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const nextSystemPrompt = normalizeSystemPrompt(args.systemPrompt);
-    const existing = (await ctx.db
-      .query("communityAgentDrafts" as any)
-      .withIndex("by_community_slot", (q: any) => q.eq("communityId", args.communityId).eq("slot", slot))
-      .first()) as CommunityAgentDraftLike | null;
+    const rows = await listCommunityAgentRows(ctx, args.communityId);
+    const existing = selectCanonicalCommunityAgentRow(rows);
 
     if (existing) {
       await ctx.db.patch(existing._id as any, {
-        name: nextName,
         landingJson: args.landingJson ?? null,
         systemPrompt: nextSystemPrompt,
+        slot: 1,
+        isActive: true,
         updatedAt: nowMs,
       });
+      for (const row of rows) {
+        if (row._id === existing._id) continue;
+        await ctx.db.delete(row._id as any);
+      }
       const updated = (await ctx.db.get(existing._id as any)) as CommunityAgentDraftLike | null;
       if (!updated) throw new Error("community_agent_draft_not_found");
-      return mapCommunityAgentDraftRow(updated);
+      return mapCommunityAgentConfigRow(updated);
     }
 
     const id = await ctx.db.insert("communityAgentDrafts" as any, {
       communityId: args.communityId,
-      slot,
-      name: nextName,
+      slot: 1,
+      name: undefined,
       landingJson: args.landingJson ?? null,
       systemPrompt: nextSystemPrompt,
-      isActive: false,
+      isActive: true,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
     const created = (await ctx.db.get(id as any)) as CommunityAgentDraftLike | null;
-    if (!created) throw new Error("community_agent_draft_create_failed");
-    return mapCommunityAgentDraftRow(created);
-  },
-});
-
-export const setActiveCommunityAgentDraft = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    slot: v.number(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const slot = normalizeDraftSlot(args.slot);
-    const rows = (await ctx.db
-      .query("communityAgentDrafts" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityAgentDraftLike[];
-    const target = rows.find((row) => Math.floor(row.slot) === slot) ?? null;
-    if (!target) throw new Error("community_agent_draft_not_found");
-
-    for (const row of rows) {
-      const nextIsActive = row._id === target._id;
-      if (Boolean(row.isActive) === nextIsActive) continue;
-      await ctx.db.patch(row._id as any, {
-        isActive: nextIsActive,
-        updatedAt: nowMs,
-      });
-    }
-    return { ok: true };
+    if (!created) throw new Error("community_agent_config_create_failed");
+    return mapCommunityAgentConfigRow(created);
   },
 });
 
@@ -186,10 +131,7 @@ export const getActiveCommunityAgentSystemPrompt = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const active = (await ctx.db
-      .query("communityAgentDrafts" as any)
-      .withIndex("by_community_active", (q: any) => q.eq("communityId", args.communityId).eq("isActive", true))
-      .first()) as CommunityAgentDraftLike | null;
+    const active = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
     if (!active) return null;
     return {
       system_prompt: active.systemPrompt,
@@ -216,11 +158,8 @@ export const getActiveCommunityAgentLanding = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const active = (await ctx.db
-      .query("communityAgentDrafts" as any)
-      .withIndex("by_community_active", (q: any) => q.eq("communityId", args.communityId).eq("isActive", true))
-      .first()) as CommunityAgentDraftLike | null;
+    const active = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
     if (!active) return null;
-    return mapCommunityAgentDraftRow(active);
+    return mapCommunityAgentConfigRow(active);
   },
 });

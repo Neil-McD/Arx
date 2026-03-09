@@ -295,8 +295,8 @@ Keep community membership as its own canonical table:
 
 4. `communityMemberships`
 5. `communityJoinRequests`
-6. `communityInvites`
-7. `communityPlans`
+6. `communityPricePoints`
+7. `communitySubscriptions`
 
 Do not add new chat surface tables unless necessary.
 

@@ -1,15 +1,12 @@
 import { WebCommunityAiAgentLandingEditor, type WebCommunityAiAgentLandingEditorProps } from "./WebCommunityAiAgentLandingEditor";
-import { WebCommunityAiAgentUpgradeGate } from "./WebCommunityAiAgentUpgradeGate";
 
 type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
   hasSession: boolean;
   canManageMembersActiveCommunity: boolean;
-  isLoadingCommunityAgentDrafts: boolean;
-  communityAgentDraftsError: string | null;
-  isActiveCommunityOwner: boolean;
+  isLoadingCommunityAgentConfig: boolean;
+  communityAgentConfigError: string | null;
   onOpenAuthGate: () => void;
-  onUpgradeToBuilder: () => void;
   landingEditorProps: WebCommunityAiAgentLandingEditorProps;
 };
 
@@ -18,11 +15,9 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     activeCommunity,
     hasSession,
     canManageMembersActiveCommunity,
-    isLoadingCommunityAgentDrafts,
-    communityAgentDraftsError,
-    isActiveCommunityOwner,
+    isLoadingCommunityAgentConfig,
+    communityAgentConfigError,
     onOpenAuthGate,
-    onUpgradeToBuilder,
     landingEditorProps,
   } = props;
 
@@ -44,16 +39,10 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
         </div>
       ) : !canManageMembersActiveCommunity ? (
         <div className="chat-empty">Only owners and admins can configure the AI agent.</div>
-      ) : isLoadingCommunityAgentDrafts ? (
+      ) : isLoadingCommunityAgentConfig ? (
         <div className="chat-empty">Loading…</div>
-      ) : communityAgentDraftsError &&
-        communityAgentDraftsError.toLowerCase().includes("builder_plan_required") ? (
-        <WebCommunityAiAgentUpgradeGate
-          isActiveCommunityOwner={isActiveCommunityOwner}
-          onUpgrade={onUpgradeToBuilder}
-        />
-      ) : communityAgentDraftsError ? (
-        <div className="auth-error">{communityAgentDraftsError}</div>
+      ) : communityAgentConfigError ? (
+        <div className="auth-error">{communityAgentConfigError}</div>
       ) : (
         <>
           <WebCommunityAiAgentLandingEditor {...landingEditorProps} />

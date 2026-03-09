@@ -62,6 +62,7 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
 
   const posts = viewMode === "ranked" ? state.rankedPosts : state.livePosts;
   const isEmpty = !state.isLoading && posts.length === 0;
+  const skeletonPosts = Array.from({ length: 3 }, (_, index) => index);
 
   return (
     <div className={panelClassName}>
@@ -111,9 +112,35 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
           </div>
         ) : state.isLoading ? (
           <div className="community-panel-state-shell">
-            <div className="chat-loading">
-              <div className="loading-spinner" />
-              <span>Loading AI feed...</span>
+            <div className="feed-skeleton-list" aria-busy="true">
+              {skeletonPosts.map((index) => (
+                <article key={`feed-skeleton-${index}`} className="ai-feed-item-card ai-feed-item-card-skeleton" aria-hidden="true">
+                  <div className="ai-feed-item-meta">
+                    <div className="ai-feed-item-meta-left">
+                      <span className="web-skeleton-pill ai-feed-skeleton-pill" />
+                      <span className="web-skeleton-pill ai-feed-skeleton-pill ai-feed-skeleton-pill-short" />
+                    </div>
+                    <div className="ai-feed-item-meta-right">
+                      <span className="web-skeleton-row ai-feed-skeleton-meta" />
+                    </div>
+                  </div>
+                  <div className="web-skeleton-row ai-feed-skeleton-title" />
+                  <div className="ai-feed-skeleton-copy">
+                    <div className="web-skeleton-row ai-feed-skeleton-row" />
+                    <div className="web-skeleton-row ai-feed-skeleton-row" />
+                    <div className="web-skeleton-row ai-feed-skeleton-row ai-feed-skeleton-row-short" />
+                  </div>
+                  <div className="ai-feed-skeleton-copy">
+                    <div className="web-skeleton-row ai-feed-skeleton-label" />
+                    <div className="web-skeleton-row ai-feed-skeleton-row" />
+                    <div className="web-skeleton-row ai-feed-skeleton-row ai-feed-skeleton-row-short" />
+                  </div>
+                  <div className="ai-feed-signal-row">
+                    <span className="web-skeleton-pill ai-feed-skeleton-button" />
+                    <span className="web-skeleton-pill ai-feed-skeleton-button" />
+                  </div>
+                </article>
+              ))}
             </div>
           </div>
         ) : isEmpty ? (

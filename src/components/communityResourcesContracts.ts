@@ -11,8 +11,7 @@ export type CommunityResource = {
 export type CommunityResourcesCapabilities = {
   hasActiveCommunity: boolean;
   activeCommunityName: string | null;
-  canCreateResources: boolean;
-  canManageResources: boolean;
+  canOperateResources: boolean;
 };
 
 export type CommunityResourcesState = {

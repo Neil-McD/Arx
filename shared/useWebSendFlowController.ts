@@ -148,7 +148,8 @@ export function useWebSendFlowController<
     const startedInDraft = !hasActiveThreadInState;
     let createdThreadId: string | null = null;
     let postedUserMessage = false;
-    const hasPersonalMemoryAccess = current.builderTier === "builder";
+    const hasPersonalMemoryAccess =
+      current.builderTier === "builder" || current.builderTier === "architect";
 
     current.setThreadError(null);
     current.setIsSendingMessage(true);

@@ -112,7 +112,6 @@ Action:
 - keep access provenance explicit:
   - `free_grant`
   - `manual_grant`
-  - `invite_bypass`
   - `paid_unlock`
   - `paid_subscription`
 - keep recurring lifecycle in `communitySubscriptions`, not on the roster row itself

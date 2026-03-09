@@ -9,10 +9,8 @@ type RawCloudCommunityAgentPromptRow = {
   draft_id?: unknown;
 };
 
-type CloudCommunityAgentDraftMutationRow = {
+type CloudCommunityAgentConfigMutationRow = {
   id?: unknown;
-  slot?: unknown;
-  is_active?: unknown;
   updated_at?: unknown;
 };
 
@@ -53,10 +51,8 @@ export type CloudCommunityAgentSystemPromptResult = {
   draftId: string | null;
 };
 
-export type CloudCommunityAgentDraftMutationResult = {
+export type CloudCommunityAgentConfigMutationResult = {
   id: string;
-  slot: number;
-  is_active: boolean;
   updated_at: string;
 };
 
@@ -93,64 +89,44 @@ export async function fetchActiveCloudCommunityAgentLanding<SessionT>(
   });
 }
 
-export async function listCloudCommunityAgentDraftRows<SessionT, TDraft = unknown>(
+export async function fetchCloudCommunityAgentConfig<SessionT, TConfig = unknown>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {
     communityId: string;
   },
-): Promise<TDraft[]> {
+): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityAgentDrafts" as any, {
+  const payload = await client.query("community:getCommunityAgentConfig" as any, {
     authSubject,
     communityId: params.communityId,
   });
-  return coerceObjectRows<TDraft>(payload);
+  const rows = coerceObjectRows<TConfig>(payload);
+  return rows[0] ?? null;
 }
 
-function parseDraftMutationResult(payload: unknown): CloudCommunityAgentDraftMutationResult | null {
-  const row = firstObjectRow(payload) as CloudCommunityAgentDraftMutationRow | null;
+function parseConfigMutationResult(payload: unknown): CloudCommunityAgentConfigMutationResult | null {
+  const row = firstObjectRow(payload) as CloudCommunityAgentConfigMutationRow | null;
   const id = toOptionalString(row?.id);
   const updatedAt = toOptionalString(row?.updated_at);
-  const slot = Number(row?.slot);
-  if (!id || !updatedAt || !Number.isFinite(slot)) return null;
+  if (!id || !updatedAt) return null;
   return {
     id,
-    slot,
-    is_active: Boolean(row?.is_active),
     updated_at: updatedAt,
   };
 }
 
-export async function upsertCloudCommunityAgentDraft<SessionT>(
+export async function saveCloudCommunityAgentConfig<SessionT>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {
     communityId: string;
-    slot: number;
-    name: string | null;
     landingJson: unknown;
     systemPrompt: string;
   },
-): Promise<CloudCommunityAgentDraftMutationResult | null> {
+): Promise<CloudCommunityAgentConfigMutationResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:upsertCommunityAgentDraft" as any, {
+  const payload = await client.mutation("community:saveCommunityAgentConfig" as any, {
     authSubject,
     communityId: params.communityId,
-    slot: params.slot,
-    name: params.name,
     landingJson: params.landingJson,
     systemPrompt: params.systemPrompt,
   });
-  return parseDraftMutationResult(payload);
-}
-
-export async function setActiveCloudCommunityAgentDraft<SessionT>(
-  params: CloudCommunityAgentGatewayParams<SessionT> & {
-    communityId: string;
-    slot: number;
-  },
-): Promise<void> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:setActiveCommunityAgentDraft" as any, {
-    authSubject,
-    communityId: params.communityId,
-    slot: params.slot,
-  });
+  return parseConfigMutationResult(payload);
 }

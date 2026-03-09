@@ -4,7 +4,7 @@ type CloudCommunityFunnelGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-export type CloudCommunityPublicPageSaveResult<TConfig = unknown> = {
+export type CloudCommunityFunnelSaveResult<TConfig = unknown> = {
   community_id: string;
   description: string | null;
   updated_at: string;
@@ -39,31 +39,15 @@ export async function fetchCloudCommunityFunnelConfig<SessionT, TConfig = unknow
   return (row as TConfig | null) ?? null;
 }
 
-export async function upsertCloudCommunityFunnelConfig<SessionT, TConfig = unknown>(
-  params: CloudCommunityFunnelGatewayParams<SessionT> & {
-    communityId: string;
-    config: TConfig;
-  },
-): Promise<TConfig | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:upsertCommunityFunnelConfig" as any, {
-    authSubject,
-    communityId: params.communityId,
-    config: params.config,
-  });
-  const row = firstObjectRow(payload);
-  return (row as TConfig | null) ?? null;
-}
-
-export async function saveCloudCommunityPublicPage<SessionT, TConfig = unknown>(
+export async function saveCloudCommunityFunnel<SessionT, TConfig = unknown>(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
     description: string | null;
     config: TConfig;
   },
-): Promise<CloudCommunityPublicPageSaveResult<TConfig> | null> {
+): Promise<CloudCommunityFunnelSaveResult<TConfig> | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityPublicPage" as any, {
+  const payload = await client.mutation("community:saveCommunityFunnel" as any, {
     authSubject,
     communityId: params.communityId,
     description: params.description,

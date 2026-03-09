@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { isBuilderTierFree } from "../../../../shared/builderBilling";
+import { hasArchitectAccess } from "../../../../shared/builderBilling";
 
 type CommunityRecordForModal = {
   id: string;
@@ -91,8 +91,9 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   );
   const tier = builderBillingStatus?.builder_tier ?? "unknown";
   const max = builderBillingStatus?.max_communities ?? 0;
-  const needsPlan = Boolean(hasSession && isBuilderTierFree(tier));
-  const limitReached = Boolean(hasSession && !isBuilderTierFree(tier) && max > 0 && ownedCount >= max);
+  const hasArchitectTier = hasArchitectAccess(tier);
+  const needsPlan = Boolean(hasSession && !hasArchitectTier);
+  const limitReached = Boolean(hasSession && hasArchitectTier && max > 0 && ownedCount >= max);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -116,7 +117,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
             >
               <div className="create-community-banner-media">
                 {createCommunityBannerUrl ? (
-                  <img src={createCommunityBannerUrl} alt="Community banner preview" />
+                  <img src={createCommunityBannerUrl} alt="Community banner preview" draggable={false} />
                 ) : (
                   <div className="create-community-banner-placeholder">Banner preview</div>
                 )}
@@ -150,7 +151,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 onDrop={onAvatarDrop}
               >
                 {createCommunityAvatarUrl ? (
-                  <img src={createCommunityAvatarUrl} alt="Community avatar preview" />
+                  <img src={createCommunityAvatarUrl} alt="Community avatar preview" draggable={false} />
                 ) : (
                   <span>{communityInitials(createCommunityName || "Community")}</span>
                 )}
@@ -233,7 +234,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 {isCreatingCommunity
                   ? "Creating..."
                   : needsPlan
-                    ? "Continue to checkout"
+                    ? "Upgrade to Architect"
                     : limitReached
                       ? "Upgrade plan"
                       : "Create community"}

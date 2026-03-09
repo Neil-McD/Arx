@@ -14,6 +14,7 @@ import {
 
 type UseWebBuilderBillingActionsArgs = {
   getSession: () => CloudSession | null;
+  ensureSession?: () => Promise<CloudSession | null>;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
@@ -25,6 +26,7 @@ type UseWebBuilderBillingActionsArgs = {
 export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArgs) {
   return useBuilderBillingActionsCore({
     getSession: args.getSession,
+    ensureSession: args.ensureSession,
     setBuilderBillingError: args.setBuilderBillingError,
     setIsStartingBuilderCheckout: args.setIsStartingBuilderCheckout,
     setIsStartingBuilderPortal: args.setIsStartingBuilderPortal,

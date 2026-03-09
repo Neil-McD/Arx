@@ -299,7 +299,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             <div className="feed-header-badge" aria-label={`${state.resources.length} resources`}>
               {state.resources.length}
             </div>
-            {capabilities.hasActiveCommunity && capabilities.canCreateResources ? (
+            {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
               <button className="resources-add-btn" onClick={actions.openNewResourceModal} title="Add resource">
                 +
               </button>
@@ -331,7 +331,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 Welcome to {capabilities.activeCommunityName ?? "your"} resources
               </div>
               <div className="chat-empty-text">
-                Share links, videos, and notes that members can come back to.
+                {capabilities.canOperateResources
+                  ? "Share links, videos, and notes that members can come back to."
+                  : "Resources shared by the moderators will show up here."}
               </div>
             </div>
           </div>
@@ -345,7 +347,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   onOpenViewer={() => setViewerResourceId(resource.id)}
                   onEdit={() => actions.handleEditResource(resource)}
                   onDelete={() => setPendingDeleteResourceId(resource.id)}
-                  canManage={capabilities.canManageResources}
+                  canManage={capabilities.canOperateResources}
                 />
               ))}
             </div>

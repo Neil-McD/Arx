@@ -158,7 +158,7 @@ export const upsertCommunityFunnelConfig = mutation({
   },
 });
 
-export const saveCommunityPublicPage = mutation({
+export const saveCommunityFunnel = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),

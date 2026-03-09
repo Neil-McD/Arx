@@ -2,8 +2,8 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
-type CanonicalTier = "free" | "builder";
-type EffectiveTier = "anon_free" | "auth_free" | "builder";
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -31,7 +31,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "builder";
+  if (normalized === "architect" || normalized === "pro") return "architect";
   return "free";
 }
 
@@ -106,22 +106,23 @@ function evaluateDecision(input: {
   hasUserChatGptConnection: boolean;
 }): GateDecision {
   const isAnonymous = input.effectiveTier === "anon_free";
-  const isPaid = input.effectiveTier === "builder";
+  const hasWorkbenchAccess = input.effectiveTier === "builder" || input.effectiveTier === "architect";
+  const hasPlatformInference = hasWorkbenchAccess;
 
   if (input.turnClass === "requires_tools") {
     if (input.requestedFundingSource === "user_chatgpt") {
       if (isAnonymous) return deny("auth_required", "sign_in");
-      if (!isPaid) return deny("tier_required", "upgrade");
+      if (!hasWorkbenchAccess) return deny("tier_required", "upgrade");
       if (input.hasUserChatGptConnection) return allow("daytona_cloud", "user_chatgpt");
       return deny("provider_connection_required", "connect_provider");
     }
     if (input.requestedFundingSource === "user_key") {
       if (isAnonymous) return deny("auth_required", "sign_in");
-      if (!isPaid) return deny("tier_required", "upgrade");
+      if (!hasWorkbenchAccess) return deny("tier_required", "upgrade");
       if (input.hasUserKeyConnection) return allow("daytona_cloud", "user_key");
       return deny("provider_connection_required", "connect_provider");
     }
-    if (isPaid) return allow("daytona_cloud", "platform");
+    if (hasWorkbenchAccess) return allow("daytona_cloud", "platform");
     return deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade");
   }
 
@@ -144,13 +145,17 @@ function evaluateDecision(input: {
     );
   }
 
-  if (isPaid) return allow("platform", "platform");
+  if (hasPlatformInference) return allow("platform", "platform");
 
   if (input.authState === "authenticated" && input.hasUserChatGptConnection) {
     return allow("chatgpt", "user_chatgpt");
   }
 
-  return deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade");
+  if (input.authState === "authenticated" && input.hasUserKeyConnection) {
+    return allow("platform", "user_key");
+  }
+
+  return deny(isAnonymous ? "auth_required" : "provider_connection_required", isAnonymous ? "sign_in" : "connect_provider");
 }
 
 export const resolveGateContext = query({
@@ -354,6 +359,8 @@ export const resolveGateBundle = query({
           (chatUserKey.allowed && chatUserKey.fundingSource === "user_key") ||
           (chatUserChatgpt.allowed && chatUserChatgpt.fundingSource === "user_chatgpt"),
         allowCloudTools: toolsPlatform.allowed && toolsPlatform.lane === "daytona_cloud",
+        allowCommunityCreate: effectiveTier === "architect",
+        allowPersonalMemory: effectiveTier === "builder" || effectiveTier === "architect",
       },
     };
   },

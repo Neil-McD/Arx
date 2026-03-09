@@ -92,11 +92,12 @@ export function normalizeBillingPeriod(raw: unknown): "monthly" | "yearly" {
   return "monthly";
 }
 
-export function normalizeBuilderTier(raw: unknown): "builder" {
+export function normalizeBuilderTier(raw: unknown): "builder" | "architect" {
   const tier = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (tier === "builder" || tier === "architect" || tier === "pro") return "builder";
+  if (tier === "builder") return "builder";
+  if (tier === "architect" || tier === "pro") return "architect";
   throw new Error("builder_tier_invalid");
 }
 

@@ -8,6 +8,7 @@ import {
   type CommunityResourceLike,
   parseIsoMs,
   requireCommunityChatAccess,
+  requireCommunityModerator,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -625,8 +626,13 @@ export const patchOwnMessageContent = mutation({
       communityId: thread.communityId,
       userId: args.userId,
     });
-    if (!message.senderUserId || String(message.senderUserId) !== String(args.userId)) {
-      throw new Error("message_forbidden");
+    const isOwnMessage = Boolean(message.senderUserId) && String(message.senderUserId) === String(args.userId);
+    if (!isOwnMessage) {
+      await requireCommunityModerator({
+        ctx,
+        communityId: thread.communityId,
+        userId: args.userId,
+      });
     }
     const nextText = extractMessageText(args.contentJson);
     const nextAttachments =
@@ -668,8 +674,13 @@ export const deleteOwnMessage = mutation({
       communityId: thread.communityId,
       userId: args.userId,
     });
-    if (!message.senderUserId || String(message.senderUserId) !== String(args.userId)) {
-      throw new Error("message_forbidden");
+    const isOwnMessage = Boolean(message.senderUserId) && String(message.senderUserId) === String(args.userId);
+    if (!isOwnMessage) {
+      await requireCommunityModerator({
+        ctx,
+        communityId: thread.communityId,
+        userId: args.userId,
+      });
     }
 
     const reactions = (await ctx.db

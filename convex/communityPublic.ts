@@ -12,6 +12,7 @@ import {
   normalizeOptionalText,
   normalizeSlug,
   pickPreferredActivePlan,
+  requireCommunityChatAccess,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
   resolveUserIdForAuthenticatedRequest,
@@ -25,6 +26,8 @@ type PublicCommunityFace = {
   avatar_url: string | null;
 };
 
+const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
+
 async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Promise<PublicPlanSummaryLike[]> {
   const currentPricePoints = (await ctx.db
     .query("communityPricePoints" as any)
@@ -32,6 +35,71 @@ async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Pr
     .collect()) as CommunityPricePointLike[];
   const activePricePoints = currentPricePoints.filter((row) => !row.archivedAt);
   return mapActivePlanSummaries(activePricePoints);
+}
+
+async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): Promise<{
+  memberCount: number;
+  adminCount: number;
+  onlineCount: number;
+  onlineFaces: PublicCommunityFace[];
+}> {
+  const memberships = (await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community", (q) => q.eq("communityId", community._id))
+    .collect()) as CommunityMembershipLike[];
+  const activeMemberships = memberships.filter((row) => communityMembershipRowIsActive(row));
+  const memberCount = activeMemberships.length;
+
+  const eligibleUserIds = new Set<string>([String(community.ownerId)]);
+  const adminUserIds = new Set<string>([String(community.ownerId)]);
+  for (const membership of activeMemberships) {
+    const normalizedUserId = String(membership.userId);
+    eligibleUserIds.add(normalizedUserId);
+    if (String(membership.role ?? "").trim().toLowerCase() === "admin") {
+      adminUserIds.add(normalizedUserId);
+    }
+  }
+
+  const cutoff = Date.now() - COMMUNITY_ONLINE_WINDOW_MS;
+  const recentPresenceRows = (await ctx.db
+    .query("communityPresence" as any)
+    .withIndex("by_community_lastSeenAt", (q: any) => q.eq("communityId", community._id).gte("lastSeenAt", cutoff))
+    .collect()) as Array<{
+    userId: any;
+    lastSeenAt: number;
+  }>;
+
+  const onlineUserIds: any[] = [];
+  const seenOnlineUserIds = new Set<string>();
+  for (const row of recentPresenceRows) {
+    const normalizedUserId = String(row.userId ?? "").trim();
+    if (!normalizedUserId || seenOnlineUserIds.has(normalizedUserId) || !eligibleUserIds.has(normalizedUserId)) {
+      continue;
+    }
+    seenOnlineUserIds.add(normalizedUserId);
+    onlineUserIds.push(row.userId);
+  }
+
+  const onlineFaces = (
+    await Promise.all(
+      onlineUserIds.slice(0, 8).map(async (userId): Promise<PublicCommunityFace | null> => {
+        const user = await ctx.db.get(userId);
+        if (!user) return null;
+        return {
+          user_id: String(user._id),
+          display_name: user.displayName ?? null,
+          avatar_url: user.avatarUrl ?? null,
+        };
+      }),
+    )
+  ).filter(Boolean) as PublicCommunityFace[];
+
+  return {
+    memberCount,
+    adminCount: adminUserIds.size,
+    onlineCount: onlineUserIds.length,
+    onlineFaces,
+  };
 }
 
 export const resolvePublicFunnelBySlug = query({
@@ -51,42 +119,7 @@ export const resolvePublicFunnelBySlug = query({
     const branding = await resolveCommunityBrandingFields(ctx, community);
     const entryPolicy = resolveCommunityEntryPolicy(community);
     const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
-    const memberships = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community", (q) => q.eq("communityId", community._id))
-      .collect()) as CommunityMembershipLike[];
-    const activeMemberships = memberships.filter((row) => communityMembershipRowIsActive(row));
-    const memberCount = activeMemberships.length;
-    const adminUserIds = new Set<string>([String(community.ownerId)]);
-    for (const membership of activeMemberships) {
-      if (String(membership.role ?? "").trim().toLowerCase() === "admin") {
-        adminUserIds.add(String(membership.userId));
-      }
-    }
-    const featuredUserIds: any[] = [];
-    const featuredUserKeys = new Set<string>();
-    const appendFeaturedUserId = (userId: unknown) => {
-      const normalized = String(userId ?? "").trim();
-      if (!normalized || featuredUserKeys.has(normalized)) return;
-      featuredUserKeys.add(normalized);
-      featuredUserIds.push(userId);
-    };
-    appendFeaturedUserId(community.ownerId);
-    for (const userId of adminUserIds) appendFeaturedUserId(userId);
-    for (const membership of activeMemberships) appendFeaturedUserId(membership.userId);
-    const featuredFaces = (
-      await Promise.all(
-        featuredUserIds.slice(0, 8).map(async (userId): Promise<PublicCommunityFace | null> => {
-          const user = await ctx.db.get(userId);
-          if (!user) return null;
-          return {
-            user_id: String(user._id),
-            display_name: user.displayName ?? null,
-            avatar_url: user.avatarUrl ?? null,
-          };
-        }),
-      )
-    ).filter(Boolean) as PublicCommunityFace[];
+    const stats = await resolvePublicCommunityStats(ctx, community);
 
     return {
       ok: true,
@@ -104,12 +137,81 @@ export const resolvePublicFunnelBySlug = query({
         created_at: toIsoString(community.createdAt),
         updated_at: toIsoString(community.updatedAt),
         funnel,
-        member_count: memberCount,
-        admin_count: adminUserIds.size,
-        featured_faces: featuredFaces,
+        member_count: stats.memberCount,
+        admin_count: stats.adminCount,
+        online_count: stats.onlineCount,
+        online_faces: stats.onlineFaces,
       },
       active_plan: activePlan,
       active_plans: mappedPlans,
+    };
+  },
+});
+
+export const heartbeatCommunityPresence = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const existing = await ctx.db
+      .query("communityPresence" as any)
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        lastSeenAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { ok: true };
+    }
+    await ctx.db.insert("communityPresence" as any, {
+      communityId: args.communityId,
+      userId,
+      lastSeenAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const getCommunityPresenceSummary = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const stats = await resolvePublicCommunityStats(ctx, community);
+    return {
+      member_count: stats.memberCount,
+      admin_count: stats.adminCount,
+      online_count: stats.onlineCount,
+      online_faces: stats.onlineFaces,
     };
   },
 });

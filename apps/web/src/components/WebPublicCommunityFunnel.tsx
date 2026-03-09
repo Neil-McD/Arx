@@ -6,11 +6,11 @@ import type {
 } from "../../../../shared/communityTypes";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
-type LandingMode = "join_free" | "request_access" | "checkout" | "invite_only";
+type FunnelMode = "join_free" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
-export type PublicCommunityLandingCommunityLike = {
+export type PublicCommunityFunnelCommunityLike = {
   slug?: string;
   name: string;
   description: string | null;
@@ -21,7 +21,8 @@ export type PublicCommunityLandingCommunityLike = {
   banner_zoom?: number | null;
   member_count?: number | null;
   admin_count?: number | null;
-  featured_faces?: Array<{
+  online_count?: number | null;
+  online_faces?: Array<{
     user_id: string;
     display_name: string | null;
     avatar_url: string | null;
@@ -33,11 +34,10 @@ type PublicCommunityPlanLike = {
   billing_period: string;
 };
 
-type WebPublicCommunityLandingProps = {
-  publicCommunity: PublicCommunityLandingCommunityLike | null;
+type WebPublicCommunityFunnelProps = {
+  publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
   publicVisibilityLabel: string;
-  publicVisibilityHint: string;
   selectedPublicCommunityPlanLabel: string | null;
   publicCommunityPlans: PublicCommunityPlanLike[];
   selectedPublicCommunityBillingPeriod: string | null;
@@ -56,23 +56,16 @@ type WebPublicCommunityLandingProps = {
   requestCooldownActive: boolean;
   requestDeniedDateLabel: string;
   onPrimaryJoinAction: () => void;
-  onSendLandingMagicLink: () => void;
-  onNavigateToClaim: () => void;
   publicCommunityError: string | null;
   publicJoinError: string | null;
   publicRequestAccessError: string | null;
   checkoutError: string | null;
   showSignIn: boolean;
-  magicLinkEmail: string;
-  onChangeMagicLinkEmail: (value: string) => void;
-  magicLinkStatus: MagicLinkStatus;
-  magicLinkError: string | null;
   funnelConfigOverride?: CommunityFunnelConfig | null;
   memberCountOverride?: number | null;
-  hideHelperActions?: boolean;
 };
 
-type LandingCopy = {
+type FunnelCopy = {
   eyebrow: string;
   body: string;
 };
@@ -104,7 +97,7 @@ function formatCommunityLink(slug: string): string {
   return `polynet.com/c/${slug}`;
 }
 
-function buildHeroStyle(community: PublicCommunityLandingCommunityLike | null): CSSProperties | undefined {
+function buildHeroStyle(community: PublicCommunityFunnelCommunityLike | null): CSSProperties | undefined {
   if (!community?.banner_url) return undefined;
   const x = typeof community.banner_focus_x === "number" ? community.banner_focus_x : 50;
   const y = typeof community.banner_focus_y === "number" ? community.banner_focus_y : 50;
@@ -117,7 +110,7 @@ function buildHeroStyle(community: PublicCommunityLandingCommunityLike | null): 
 }
 
 function buildActionCardArtStyle(
-  community: PublicCommunityLandingCommunityLike | null,
+  community: PublicCommunityFunnelCommunityLike | null,
   funnel: CommunityFunnelConfig | null,
 ): CSSProperties | undefined {
   if (funnel?.hero_media_kind === "image" && funnel.hero_media_url) {
@@ -130,18 +123,18 @@ function buildActionCardArtStyle(
   return buildHeroStyle(community);
 }
 
-function deriveLandingMode(args: {
+function deriveFunnelMode(args: {
   canJoinWithCheckout: boolean;
   canRequestAccessForFree: boolean;
   canJoinForFree: boolean;
-}): LandingMode {
+}): FunnelMode {
   if (args.canJoinWithCheckout) return "checkout";
   if (args.canRequestAccessForFree) return "request_access";
   if (args.canJoinForFree) return "join_free";
-  return "invite_only";
+  return "private";
 }
 
-function buildLandingCopy(mode: LandingMode, selectedPlanLabel: string | null): LandingCopy {
+function buildFunnelCopy(mode: FunnelMode, selectedPlanLabel: string | null): FunnelCopy {
   switch (mode) {
     case "checkout":
       return {
@@ -167,7 +160,7 @@ function buildLandingCopy(mode: LandingMode, selectedPlanLabel: string | null): 
 }
 
 function buildPrimaryActionLabel(args: {
-  mode: LandingMode;
+  mode: FunnelMode;
   isJoiningPublicCommunity: boolean;
   isRequestingPublicCommunityAccess: boolean;
   requestPending: boolean;
@@ -175,18 +168,18 @@ function buildPrimaryActionLabel(args: {
 }): string {
   if (args.mode === "checkout") return "Join now";
   if (args.mode === "request_access") {
-    if (args.isRequestingPublicCommunityAccess) return "Requesting…";
-    if (args.requestPending) return "Request pending";
-    if (args.requestCooldownActive) return "Request denied";
-    return "Request access";
+    if (args.isRequestingPublicCommunityAccess) return "Joining…";
+    if (args.requestPending) return "Pending";
+    if (args.requestCooldownActive) return "Denied";
+    return "Join now";
   }
-  if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join free";
-  return "Invite only";
+  if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
+  return "Private community";
 }
 
 function renderAvatar(name: string, imageUrl: string | null | undefined, className: string, fallbackClassName: string) {
   if (imageUrl) {
-    return <img className={className} src={imageUrl} alt={`${name} avatar`} />;
+    return <img className={className} src={imageUrl} alt={`${name} avatar`} draggable={false} />;
   }
   return <span className={fallbackClassName}>{getCommunityInitials(name)}</span>;
 }
@@ -208,12 +201,12 @@ function renderHeroMedia(kind: CommunityFunnelHeroMediaKind, url: string | null)
   }
   return (
     <div className="public-funnel-media-shell">
-      <img className="public-funnel-media-image" src={url} alt="" />
+      <img className="public-funnel-media-image" src={url} alt="" draggable={false} />
     </div>
   );
 }
 
-export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps) {
+export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const {
     publicCommunity,
     publicRouteSlug,
@@ -236,20 +229,13 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
     requestCooldownActive,
     requestDeniedDateLabel,
     onPrimaryJoinAction,
-    onSendLandingMagicLink,
-    onNavigateToClaim,
     publicCommunityError,
     publicJoinError,
     publicRequestAccessError,
     checkoutError,
     showSignIn,
-    magicLinkEmail,
-    onChangeMagicLinkEmail,
-    magicLinkStatus,
-    magicLinkError,
     funnelConfigOverride,
     memberCountOverride,
-    hideHelperActions = false,
   } = props;
 
   const billingPeriodOptions = [
@@ -277,19 +263,21 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
         : null;
   const adminCount =
     typeof publicCommunity?.admin_count === "number" ? publicCommunity.admin_count : null;
-  const featuredFaces =
-    publicCommunity?.featured_faces?.filter(Boolean).slice(0, 8) ?? [];
+  const onlineCount =
+    typeof publicCommunity?.online_count === "number" ? publicCommunity.online_count : null;
+  const onlineFaces =
+    publicCommunity?.online_faces?.filter(Boolean).slice(0, 8) ?? [];
   const communityLink = publicCommunity?.slug ? formatCommunityLink(publicCommunity.slug) : null;
 
-  const landingMode = deriveLandingMode({
+  const funnelMode = deriveFunnelMode({
     canJoinWithCheckout,
     canRequestAccessForFree,
     canJoinForFree,
   });
-  const landingCopy = buildLandingCopy(landingMode, selectedPublicCommunityPlanLabel);
-  const cardBlurb = publicCommunity?.description ?? landingCopy.body;
+  const funnelCopy = buildFunnelCopy(funnelMode, selectedPublicCommunityPlanLabel);
+  const cardBlurb = publicCommunity?.description ?? funnelCopy.body;
   const primaryActionLabel = buildPrimaryActionLabel({
-    mode: landingMode,
+    mode: funnelMode,
     isJoiningPublicCommunity,
     isRequestingPublicCommunityAccess,
     requestPending,
@@ -307,11 +295,61 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
     (canRequestAccessForFree && (requestPending || requestCooldownActive));
   const heroStyle = buildHeroStyle(publicCommunity);
   const actionCardArtStyle = buildActionCardArtStyle(publicCommunity, funnel);
-  const showLandingMagicLink = showSignIn && publicCommunity && (canJoinForFree || canRequestAccessForFree);
-  const showClaimRecovery = Boolean(publicCommunity) && !hideHelperActions;
-  const landingErrors = [publicCommunityError, publicJoinError, publicRequestAccessError, checkoutError].filter(
+  const funnelErrors = [publicCommunityError, publicJoinError, publicRequestAccessError, checkoutError].filter(
     Boolean,
   ) as string[];
+
+  if (isLoadingPublicCommunity && !publicCommunity) {
+    return (
+      <div className="public-funnel-page">
+        <div className="public-funnel-shell public-funnel-shell-split public-funnel-shell-loading" aria-busy="true">
+          <article className="public-funnel-main-column public-funnel-main-column-loading">
+            <div className="public-funnel-loading-title web-skeleton-block" aria-hidden="true" />
+            <div className="public-funnel-media-shell public-funnel-media-shell-skeleton web-skeleton-block" aria-hidden="true" />
+            <div className="public-funnel-loading-metadata" aria-hidden="true">
+              <div className="public-funnel-loading-chip web-skeleton-pill" />
+              <div className="public-funnel-loading-chip web-skeleton-pill" />
+              <div className="public-funnel-loading-chip web-skeleton-pill" />
+            </div>
+            <div className="public-funnel-loading-copy" aria-hidden="true">
+              <div className="web-skeleton-row public-funnel-loading-row" />
+              <div className="web-skeleton-row public-funnel-loading-row" />
+              <div className="web-skeleton-row public-funnel-loading-row public-funnel-loading-row-short" />
+            </div>
+          </article>
+
+          <aside className="public-funnel-sidebar">
+            <div className="public-funnel-action-card public-funnel-action-card-skeleton" aria-hidden="true">
+              <div className="public-funnel-hero-art public-funnel-hero-art-skeleton web-skeleton-block" />
+              <div className="public-funnel-action-content">
+                <div className="public-funnel-avatar public-funnel-avatar-skeleton web-skeleton-block" />
+                <div className="public-funnel-loading-copy">
+                  <div className="web-skeleton-row public-funnel-loading-row public-funnel-loading-row-medium" />
+                  <div className="web-skeleton-row public-funnel-loading-row public-funnel-loading-row-short" />
+                  <div className="web-skeleton-row public-funnel-loading-row" />
+                </div>
+                <div className="public-funnel-action-stats public-funnel-action-stats-skeleton">
+                  <div className="public-funnel-action-stat">
+                    <div className="web-skeleton-row public-funnel-loading-stat-value" />
+                    <div className="web-skeleton-row public-funnel-loading-stat-label" />
+                  </div>
+                  <div className="public-funnel-action-stat">
+                    <div className="web-skeleton-row public-funnel-loading-stat-value" />
+                    <div className="web-skeleton-row public-funnel-loading-stat-label" />
+                  </div>
+                  <div className="public-funnel-action-stat">
+                    <div className="web-skeleton-row public-funnel-loading-stat-value" />
+                    <div className="web-skeleton-row public-funnel-loading-stat-label" />
+                  </div>
+                </div>
+                <div className="public-funnel-loading-button web-skeleton-block" />
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="public-funnel-page">
@@ -340,7 +378,7 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
 
           {aboutText ? <div className="public-funnel-about">{aboutText}</div> : null}
 
-          {isLoadingPublicCommunity && (
+          {isLoadingPublicCommunity && publicCommunity && (
             <section className="public-funnel-state-card">
               <div className="public-funnel-state-kicker">Loading</div>
               <h2 className="public-funnel-state-title">Preparing this community</h2>
@@ -348,9 +386,9 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
             </section>
           )}
 
-          {!isLoadingPublicCommunity && landingErrors.length > 0 && (
+          {!isLoadingPublicCommunity && funnelErrors.length > 0 && (
             <div className="public-funnel-alert-stack">
-              {landingErrors.map((message) => (
+              {funnelErrors.map((message) => (
                 <div key={message} className="public-funnel-alert public-funnel-alert-error">
                   {message}
                 </div>
@@ -358,34 +396,6 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
             </div>
           )}
 
-          {showLandingMagicLink && (
-            <section className="public-funnel-support-card">
-              <div className="public-funnel-support-copy">
-                <div className="public-funnel-support-title">Prefer a magic link?</div>
-                <p className="public-funnel-support-body">
-                  We&apos;ll email you a sign-in link so you can continue from the same funnel.
-                </p>
-              </div>
-              <div className="public-funnel-support-form">
-                <input
-                  className="public-funnel-input"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={magicLinkEmail}
-                  onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                />
-                <button
-                  className="public-funnel-secondary"
-                  type="button"
-                  disabled={!magicLinkEmail.trim() || magicLinkStatus === "sending"}
-                  onClick={onSendLandingMagicLink}
-                >
-                  {magicLinkStatus === "sending" ? "Sending…" : magicLinkStatus === "sent" ? "Sent" : "Send link"}
-                </button>
-              </div>
-              {magicLinkError ? <div className="public-funnel-status public-funnel-status-error">{magicLinkError}</div> : null}
-            </section>
-          )}
         </article>
 
         <aside className="public-funnel-sidebar">
@@ -419,29 +429,30 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
                     <div className="public-funnel-action-stat-label">Members</div>
                   </div>
                 ) : null}
+                {typeof onlineCount === "number" ? (
+                  <div className="public-funnel-action-stat">
+                    <div className="public-funnel-action-stat-value">{formatCompactStat(onlineCount)}</div>
+                    <div className="public-funnel-action-stat-label">Online</div>
+                  </div>
+                ) : null}
                 {typeof adminCount === "number" ? (
                   <div className="public-funnel-action-stat">
                     <div className="public-funnel-action-stat-value">{formatCompactStat(adminCount)}</div>
                     <div className="public-funnel-action-stat-label">Admins</div>
                   </div>
                 ) : null}
-                <div className="public-funnel-action-stat">
-                  <div className="public-funnel-action-stat-value">
-                    {selectedPublicCommunityPlanLabel ?? "Free"}
-                  </div>
-                  <div className="public-funnel-action-stat-label">Price</div>
-                </div>
               </div>
 
-              {featuredFaces.length > 0 ? (
+              {onlineFaces.length > 0 ? (
                 <div className="public-funnel-face-strip" aria-label="Community members">
-                  {featuredFaces.map((face) =>
+                  {onlineFaces.map((face) =>
                     face.avatar_url ? (
                       <img
                         key={face.user_id}
                         className="public-funnel-face"
                         src={face.avatar_url}
                         alt={face.display_name ?? "Community member"}
+                        draggable={false}
                       />
                     ) : (
                       <span key={face.user_id} className="public-funnel-face public-funnel-face-fallback">
@@ -478,7 +489,7 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
               )}
 
               <button
-                className="public-funnel-primary"
+                className="public-funnel-primary platform-save-button"
                 type="button"
                 disabled={isPrimaryActionDisabled}
                 onClick={onPrimaryJoinAction}
@@ -494,19 +505,14 @@ export function WebPublicCommunityLanding(props: WebPublicCommunityLandingProps)
                   Request denied. Try again on {requestDeniedDateLabel}.
                 </div>
               )}
-
-              {showClaimRecovery && (
-                <button
-                  className="public-funnel-helper"
-                  type="button"
-                  onClick={onNavigateToClaim}
-                >
-                  Already paid? Recover access
-                </button>
-              )}
             </div>
           </div>
-          <div className="public-funnel-powered-by">Powered by Polynet</div>
+          <div className="public-funnel-powered-by">
+            Powered by{" "}
+            <a className="public-funnel-powered-by-link" href="/">
+              Polynet
+            </a>
+          </div>
         </aside>
       </div>
     </div>

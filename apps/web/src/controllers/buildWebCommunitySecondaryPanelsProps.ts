@@ -45,10 +45,7 @@ type BuildWebCommunitySecondaryPanelsPropsArgs = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   feed: FeedPanelProps;
-  aiAgent: Omit<AiAgentSectionProps, "onUpgradeToBuilder"> & {
-    setBuilderUpgradeContext: (value: string) => void;
-    setIsBuilderUpgradeOpen: (value: boolean) => void;
-  };
+  aiAgent: AiAgentSectionProps;
   funnel: FunnelSectionProps;
   analytics: AnalyticsSectionProps;
   resources: ResourcesSectionProps;
@@ -81,14 +78,6 @@ export function buildWebCommunitySecondaryPanelsProps(
     onClose: () => args.bannerEditor.setIsCommunityBannerFocusModalOpen(false),
   };
 
-  const aiAgentSectionProps: AiAgentSectionProps = {
-    ...args.aiAgent,
-    onUpgradeToBuilder: () => {
-      args.aiAgent.setBuilderUpgradeContext("builder");
-      args.aiAgent.setIsBuilderUpgradeOpen(true);
-    },
-  };
-
   const membersSectionProps: MembersSectionProps = {
     ...args.members,
     actions: {
@@ -102,7 +91,7 @@ export function buildWebCommunitySecondaryPanelsProps(
     settingsSectionProps,
     bannerEditorModalProps,
     feedPanelProps: args.feed,
-    aiAgentSectionProps,
+    aiAgentSectionProps: args.aiAgent,
     funnelSectionProps: args.funnel,
     analyticsSectionProps: args.analytics,
     resourcesSectionProps: args.resources,

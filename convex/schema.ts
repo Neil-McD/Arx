@@ -15,7 +15,7 @@ export default defineSchema({
 
   userEntitlements: defineTable({
     userId: v.id("users"),
-    tier: v.union(v.literal("free"), v.literal("builder")),
+    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
     source: v.union(
       v.literal("default"),
       v.literal("stripe"),
@@ -39,7 +39,7 @@ export default defineSchema({
     amountBaseUnits: v.optional(v.number()),
     currency: v.optional(v.string()),
     currencyDecimals: v.optional(v.number()),
-    targetTier: v.optional(v.literal("builder")),
+    targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"))),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),
@@ -204,12 +204,11 @@ export default defineSchema({
   communityMemberships: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    role: v.union(v.literal("admin"), v.literal("member")),
+    role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
     accessSource: v.optional(
       v.union(
         v.literal("free_grant"),
         v.literal("manual_grant"),
-        v.literal("invite_bypass"),
         v.literal("paid_unlock"),
         v.literal("paid_subscription"),
       ),
@@ -224,6 +223,17 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"]),
+
+  communityPresence: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    lastSeenAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_lastSeenAt", ["communityId", "lastSeenAt"])
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_user", ["userId"]),
 
   communityJoinRequests: defineTable({
     communityId: v.id("communities"),
@@ -291,21 +301,6 @@ export default defineSchema({
     .index("by_membership", ["membershipId"])
     .index("by_pricePoint", ["pricePointId"])
     .index("by_community_user", ["communityId", "userId"]),
-
-  communityInvites: defineTable({
-    communityId: v.id("communities"),
-    code: v.string(),
-    maxUses: v.optional(v.number()),
-    usesCount: v.number(),
-    expiresAt: v.optional(v.number()),
-    revokedAt: v.optional(v.number()),
-    createdByUserId: v.id("users"),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_code", ["code"])
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   communityChatThreads: defineTable({
     communityId: v.id("communities"),

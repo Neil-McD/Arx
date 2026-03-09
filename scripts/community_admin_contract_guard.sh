@@ -52,9 +52,6 @@ require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
   'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.query\("community:countCommunityMemberships" as any, \{\s*authSubject,\s*communityId:' \
   "member count gateway forwards authSubject"
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function fetchCloudCommunityOwnerHasBuilderAccess<[\s\S]*?client\.query\("community:communityOwnerHasBuilderAccess" as any, \{\s*authSubject,\s*communityId:' \
-  "owner builder-access gateway forwards authSubject"
-require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function listCloudCommunityRevenueSeriesRows<[\s\S]*?client\.query\("community:listCommunityRevenueSeries" as any, \{\s*authSubject,\s*communityId:' \
   "revenue series gateway forwards authSubject"
 
@@ -69,8 +66,8 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipCreatedAtRows accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasBuilderAccess = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "communityOwnerHasBuilderAccess accepts authSubject"
+  'export const communityOwnerHasArchitectAccess = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
+  "communityOwnerHasArchitectAccess accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityRevenueSeries accepts authSubject"
@@ -98,16 +95,16 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 
 echo "[6/9] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasBuilderAccess = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "communityOwnerHasBuilderAccess resolves authenticated subject"
+  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
+  "communityOwnerHasArchitectAccess resolves authenticated subject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityRevenueSeries resolves authenticated subject"
 
 echo "[7/9] Ensuring analytics queries still require manager access..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasBuilderAccess = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
-  "communityOwnerHasBuilderAccess requires manager access"
+  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
+  "communityOwnerHasArchitectAccess requires manager access"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
   "listCommunityRevenueSeries requires manager access"

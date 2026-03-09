@@ -92,11 +92,11 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
     : error instanceof Error
       ? error.message
       : "Failed to create community.";
-  if (message === "community_builder_required") {
-    return "Builder is required to create a community.";
+  if (message === "community_architect_required") {
+    return "Architect is required to create a community.";
   }
   if (message === "community_owner_limit_reached") {
-    return "You've reached your Builder community limit.";
+    return "You've reached your Architect community limit.";
   }
   return message;
 }
@@ -141,7 +141,7 @@ export function useCommunityCreateController<
     const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
-    if (tier === "builder" && max > 0 && ownedCount >= max) {
+    if (tier === "architect" && max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
       return;
     }
@@ -340,8 +340,8 @@ export function useCommunityCreateController<
     const tier = (status.builder_tier ?? "free").toLowerCase();
     const max = status.max_communities ?? 0;
     const ownedCount = getOwnedCountForPrimary();
-    const needsPlan = tier === "free";
-    const limitReached = tier !== "free" && max > 0 && ownedCount >= max;
+    const needsPlan = tier !== "architect";
+    const limitReached = tier === "architect" && max > 0 && ownedCount >= max;
     const canCreate = !needsPlan && !limitReached;
     if (canCreate) {
       await handleCreateCommunity();

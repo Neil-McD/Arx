@@ -374,7 +374,10 @@ export function useCommunityAdminController<
     await current.reloadCommunityAccess(communityId, session);
   }, [loadCommunityMembers]);
 
-  const handleSetCommunityMemberRole = useCallback(async (userId: string, role: "admin" | "member") => {
+  const handleSetCommunityMemberRole = useCallback(async (
+    userId: string,
+    role: "admin" | "moderator" | "member",
+  ) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
     const session = current.session;

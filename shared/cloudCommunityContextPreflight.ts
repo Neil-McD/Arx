@@ -582,7 +582,6 @@ function normalizeCompiledAiFeedRows(
 async function callCommunityCompiler<SessionT>(params: {
   session: SessionT;
   communityId: string;
-  communityName: string | null;
   query: string;
 }): Promise<CommunityResearchCallResult> {
   const session = params.session as unknown as CloudAuthSession;
@@ -593,7 +592,6 @@ async function callCommunityCompiler<SessionT>(params: {
     const payload = await client.query("community:readCompiledCommunityContext" as any, {
       authSubject: verifiedAuthSubject,
       communityId: params.communityId,
-      communityName: params.communityName,
       query: truncateUtf8ForPrompt(params.query, LIMITS.queryMaxChars),
       limit: LIMITS.compiledLimit,
       nowMs: Date.now(),
@@ -658,7 +656,6 @@ export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloud
       communityContextDiagnostics: null,
     };
   }
-
   const communityName = toOptionalString(params.communityName);
 
   let searchResult: CommunityResearchCallResult;
@@ -666,7 +663,6 @@ export async function loadCloudCommunityContextPreflight<SessionT = DefaultCloud
     searchResult = await callCommunityCompiler({
       session: params.session,
       communityId,
-      communityName,
       query: toTrimmedString(params.query),
     });
   } catch {

@@ -66,6 +66,7 @@ export function DiscoverCommunityCard({
             alt=""
             loading="lazy"
             decoding="async"
+            draggable={false}
             style={getCommunityBannerImageStyle({
               focusX: bannerFocusX,
               focusY: bannerFocusY,
@@ -77,7 +78,7 @@ export function DiscoverCommunityCard({
       <div className="discover-card-body">
         <div className="discover-card-header">
           {avatarUrl ? (
-            <img className="discover-card-avatar" src={avatarUrl} alt={name} loading="lazy" />
+            <img className="discover-card-avatar" src={avatarUrl} alt={name} loading="lazy" draggable={false} />
           ) : (
             <div className="discover-card-avatar fallback">{communityInitials(name)}</div>
           )}

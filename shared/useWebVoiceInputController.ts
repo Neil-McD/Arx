@@ -32,7 +32,7 @@ type UseWebVoiceInputControllerArgs<CloudSessionT> = {
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "request_access" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "builder";
+  normalizedBuilderTier: "free" | "builder" | "architect";
   openAuthGate: () => void;
   showAppToastMessage: (message: string) => void;
   setWorkspaceInput: Dispatch<SetStateAction<string>>;
@@ -101,8 +101,8 @@ export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInput
     return {
       mode: "start_recording",
       title:
-        args.normalizedBuilderTier === "builder"
-          ? "Start voice input ($60 plan)."
+        args.normalizedBuilderTier === "builder" || args.normalizedBuilderTier === "architect"
+          ? "Start voice input (paid plan)."
           : "Start voice input.",
     };
   }

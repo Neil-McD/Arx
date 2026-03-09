@@ -3,6 +3,7 @@ const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 const AUTH_RETURN_TO_STORAGE_KEY = "arx_auth_return_to_v1";
 
 export type BuilderUpgradeContext = "builder" | "create_community";
+export type BuilderCheckoutTier = "builder" | "architect";
 
 export type PendingAuthIntent =
   | {
@@ -52,7 +53,7 @@ export type PendingAuthIntent =
       reason: "start_builder_checkout";
       return_to: string;
       created_at_ms: number;
-      payload: { tier: "builder"; context: BuilderUpgradeContext };
+      payload: { tier: BuilderCheckoutTier; context: BuilderUpgradeContext };
     }
   | {
       v: 1;
@@ -146,7 +147,11 @@ function normalizePendingAuthIntent(
     const rawTier = payload.tier;
     const context = payload.context;
     const tier =
-      rawTier === "builder" || rawTier === "pro" || rawTier === "architect" ? "builder" : null;
+      rawTier === "builder"
+        ? "builder"
+        : rawTier === "architect" || rawTier === "pro"
+          ? "architect"
+          : null;
     if (!tier) return null;
     if (context !== "builder" && context !== "create_community") return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { tier, context } };

@@ -54,7 +54,7 @@ export type CloudCommunityMembershipAdminRow = {
   community_id: string;
   user_id: string;
   role: string;
-  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
   is_entitled?: boolean;
   entitlement_ends_at?: string | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;

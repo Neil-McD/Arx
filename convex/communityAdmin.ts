@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  type CommunityInviteLike,
   type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
@@ -11,18 +10,14 @@ import {
   type UserEntitlementLike,
   communityMembershipRowIsActive,
   isActiveEntitlementWindow,
-  inviteIsExpired,
   listCommunityMembershipRowsForManager,
-  mapCommunityInviteRow,
   mapCommunityMemberSettingsRow,
   mapCommunityPricingRow,
-  normalizeInviteCode,
   normalizeCommunityRoleForOutput,
-  normalizeOptionalPositiveInt,
   normalizeRoleAssignment,
   parseIsoMs,
   requireCommunityChatAccess,
-  requireCommunityInviteManager,
+  requireCommunityModerator,
   requireCommunityManager,
   resolveCommunityEntryPolicy,
   resolveCommunityMembershipEntitlementState,
@@ -30,6 +25,7 @@ import {
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   tierHasBuilderAccess,
+  tierHasArchitectAccess,
   toIsoString,
 } from "./communityCore";
 
@@ -264,7 +260,7 @@ export const listCommunityMembershipCreatedAtRows = query({
   },
 });
 
-export const communityOwnerHasBuilderAccess = query({
+export const communityOwnerHasArchitectAccess = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -291,7 +287,7 @@ export const communityOwnerHasBuilderAccess = query({
     const active = entitlements
       .filter((row) => isActiveEntitlementWindow(nowMs, row.startsAt, row.endsAt))
       .sort((a, b) => b.startsAt - a.startsAt);
-    return tierHasBuilderAccess(active[0]?.tier);
+    return tierHasArchitectAccess(active[0]?.tier);
   },
 });
 
@@ -310,7 +306,7 @@ export const listCommunityJoinRequests = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    await requireCommunityManager({
+    await requireCommunityModerator({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
@@ -358,7 +354,7 @@ export const approveCommunityJoinRequest = mutation({
     const nowMs = args.nowMs ?? Date.now();
     const request = (await ctx.db.get(args.requestId as any)) as CommunityJoinRequestLike | null;
     if (!request) throw new Error("join_request_not_found");
-    await requireCommunityManager({
+    await requireCommunityModerator({
       ctx,
       communityId: request.communityId,
       userId: args.userId,
@@ -413,7 +409,7 @@ export const denyCommunityJoinRequest = mutation({
     const nowMs = args.nowMs ?? Date.now();
     const request = (await ctx.db.get(args.requestId as any)) as CommunityJoinRequestLike | null;
     if (!request) throw new Error("join_request_not_found");
-    await requireCommunityManager({
+    await requireCommunityModerator({
       ctx,
       communityId: request.communityId,
       userId: args.userId,
@@ -432,7 +428,7 @@ export const setCommunityMemberRole = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     targetUserId: v.id("users"),
-    role: v.union(v.literal("admin"), v.literal("member")),
+    role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -553,7 +549,7 @@ export const getCommunityMemberSettings = query({
         userId: args.userId,
       });
     } else {
-      await requireCommunityManager({
+      await requireCommunityModerator({
         ctx,
         communityId: args.communityId,
         userId: args.userId,
@@ -593,7 +589,7 @@ export const saveCommunityMemberSettings = mutation({
         userId: args.userId,
       });
     } else {
-      await requireCommunityManager({
+      await requireCommunityModerator({
         ctx,
         communityId: args.communityId,
         userId: args.userId,
@@ -785,217 +781,5 @@ export const listCommunityRevenueSeries = query({
       currency: string;
       currency_decimals: number;
     }>;
-  },
-});
-
-export const listCommunityInvites = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityInviteManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const rows = (await ctx.db
-      .query("communityInvites" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityInviteLike[];
-    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 200)));
-    const userIdCache = new Map<string, string | null>();
-    return await Promise.all(
-      rows
-        .slice()
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, limit)
-        .map((row) => mapCommunityInviteRow(ctx, row, userIdCache)),
-    );
-  },
-});
-
-export const createCommunityInvite = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    code: v.string(),
-    maxUses: v.optional(v.union(v.number(), v.null())),
-    expiresAt: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    await requireCommunityInviteManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const code = normalizeInviteCode(args.code);
-    const maxUses = normalizeOptionalPositiveInt(args.maxUses);
-    const expiresAtMs = parseIsoMs(args.expiresAt);
-    if (typeof expiresAtMs === "number" && expiresAtMs <= nowMs) {
-      throw new Error("invite_expired");
-    }
-
-    const existingByCode = (await ctx.db
-      .query("communityInvites" as any)
-      .withIndex("by_code", (q: any) => q.eq("code", code))
-      .first()) as CommunityInviteLike | null;
-    if (existingByCode) throw new Error("invite_code_taken");
-
-    const inviteId = await ctx.db.insert("communityInvites" as any, {
-      communityId: args.communityId,
-      code,
-      maxUses,
-      usesCount: 0,
-      ...(typeof expiresAtMs === "number" ? { expiresAt: expiresAtMs } : null),
-      createdByUserId: args.userId,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const created = (await ctx.db.get(inviteId as any)) as CommunityInviteLike | null;
-    if (!created) throw new Error("invite_create_failed");
-    return await mapCommunityInviteRow(ctx, created);
-  },
-});
-
-export const revokeCommunityInvite = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    inviteId: v.string(),
-    revokedAtIso: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const invite = (await ctx.db.get(args.inviteId as any)) as CommunityInviteLike | null;
-    if (!invite) throw new Error("invite_not_found");
-    await requireCommunityInviteManager({
-      ctx,
-      communityId: invite.communityId,
-      userId: args.userId,
-    });
-    const revokedAtMs = parseIsoMs(args.revokedAtIso) ?? nowMs;
-    await ctx.db.patch(invite._id as any, {
-      revokedAt: revokedAtMs,
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(invite._id as any)) as CommunityInviteLike | null;
-    if (!updated) throw new Error("invite_not_found");
-    return await mapCommunityInviteRow(ctx, updated);
-  },
-});
-
-export const deleteCommunityInvite = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    inviteId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const invite = (await ctx.db.get(args.inviteId as any)) as CommunityInviteLike | null;
-    if (!invite) throw new Error("invite_not_found");
-    await requireCommunityInviteManager({
-      ctx,
-      communityId: invite.communityId,
-      userId: args.userId,
-    });
-    await ctx.db.delete(invite._id as any);
-    return { ok: true };
-  },
-});
-
-export const acceptCommunityInvite = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    inviteCode: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const inviteCode = normalizeInviteCode(args.inviteCode);
-    const invite = (await ctx.db
-      .query("communityInvites" as any)
-      .withIndex("by_code", (q: any) => q.eq("code", inviteCode))
-      .first()) as CommunityInviteLike | null;
-    if (!invite) throw new Error("invite_not_found");
-    if (inviteIsExpired(invite, nowMs)) throw new Error("invite_expired");
-
-    const community = (await ctx.db.get(invite.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-
-    const existingMembership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
-    if (!existingMembership) {
-      await ctx.db.insert("communityMemberships", {
-        communityId: community._id,
-        userId: args.userId,
-        role: "member",
-        accessSource: "invite_bypass",
-        active: true,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      await ctx.db.patch(invite._id as any, {
-        usesCount: Math.max(0, Math.floor(invite.usesCount)) + 1,
-        updatedAt: nowMs,
-      });
-    } else if (!communityMembershipRowIsActive(existingMembership)) {
-      await ctx.db.patch(existingMembership._id as any, {
-        accessSource: "invite_bypass",
-        active: true,
-        revokedAt: undefined,
-        revokedReason: undefined,
-        updatedAt: nowMs,
-      });
-      await ctx.db.patch(invite._id as any, {
-        usesCount: Math.max(0, Math.floor(invite.usesCount)) + 1,
-        updatedAt: nowMs,
-      });
-    }
-
-    return {
-      community_id: String(community._id),
-      community_slug: community.slug,
-      community_name: community.name,
-    };
   },
 });

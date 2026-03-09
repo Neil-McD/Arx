@@ -159,6 +159,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     <img
                       src={state.communitySettingsBannerUrl}
                       alt="Community banner preview"
+                      draggable={false}
                       style={getCommunityBannerImageStyle({
                         focusX: state.communitySettingsBannerFocusX,
                         focusY: state.communitySettingsBannerFocusY,
@@ -230,7 +231,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   onDrop={actions.handleSettingsAvatarDrop}
                 >
                   {state.communitySettingsAvatarUrl ? (
-                    <img src={state.communitySettingsAvatarUrl} alt="Community avatar preview" />
+                    <img src={state.communitySettingsAvatarUrl} alt="Community avatar preview" draggable={false} />
                   ) : (
                     <span>
                       {actions.communityInitials(
@@ -297,10 +298,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             </div>
 
             <div className="settings-section">
+              <div className="settings-section-title">Profile</div>
               <label className="create-community-field">
                 <span>One-liner</span>
                 <textarea
-                  placeholder="Short one-liner for the public landing card"
+                  placeholder="Short one-liner for the public funnel card"
                   rows={3}
                   value={state.communitySettingsDescription}
                   onChange={(event) => {
@@ -312,7 +314,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             </div>
 
             <div className="settings-section">
-              <div className="settings-section-title">Access</div>
+              <div className="settings-section-title">Access & Pricing</div>
               <label className="create-community-field">
                 <span>Visibility</span>
                 <select
@@ -433,6 +435,41 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               </div>
             </div>
 
+            <div className="settings-section">
+              <div className="settings-section-title">Personal</div>
+              <div className="model-list">
+                <label className="model-toggle">
+                  <span>Mute community</span>
+                  <input
+                    type="checkbox"
+                    checked={state.communityMemberMuted}
+                    disabled={state.isLoadingCommunityMemberSettings || state.isLeavingCommunity}
+                    onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
+                  />
+                </label>
+              </div>
+              <div className="model-note">
+                Muted communities won't send notifications (when notifications ship).
+              </div>
+              {!state.activeCommunityAccess?.is_owner && (
+                <div className="create-community-actions" style={{ marginTop: 12 }}>
+                  <button
+                    className="danger"
+                    type="button"
+                    disabled={state.isLeavingCommunity || state.isLoadingCommunityMemberSettings}
+                    onClick={() => void actions.handleLeaveCommunity()}
+                  >
+                    {state.isLeavingCommunity ? "Leaving…" : "Leave community"}
+                  </button>
+                </div>
+              )}
+              {state.communityMemberSettingsError && (
+                <div className="auth-error" style={{ marginTop: 10 }}>
+                  {state.communityMemberSettingsError}
+                </div>
+              )}
+            </div>
+
             {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
             <div className="create-community-actions">
               <button
@@ -467,7 +504,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         </>
       ) : (
         <>
-          <div className="panel-title">Community</div>
+          <div className="panel-title">Personal settings</div>
           <div className="settings-section">
             <div className="settings-section-title">Access</div>
             <div className="settings-section-desc">
@@ -495,7 +532,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ))}
             </div>
             <div className="model-note">
-              Only owners and admins can edit community details right now.
+              Owners and admins manage community and commerce settings. Moderators and members manage their own settings here.
             </div>
           </div>
           <div className="settings-section">

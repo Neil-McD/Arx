@@ -158,8 +158,8 @@ export function useWebPostAuthBillingLifecycle<
           lastStatus = status;
           const tier = (status?.builder_tier ?? "free").toLowerCase();
           const max = status?.max_communities ?? 0;
-          const hasCapacity = tier !== "free" && max > 0 && ownedCount < max;
-          if (tier !== "free" && (!wantsCreate || hasCapacity)) break;
+          const hasCapacity = tier === "architect" && max > 0 && ownedCount < max;
+          if (tier !== "free" && (!wantsCreate || tier === "architect" && hasCapacity)) break;
           if (params.builderBillingReturn?.status !== "success" && !wantsCreate) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
         }
@@ -179,8 +179,8 @@ export function useWebPostAuthBillingLifecycle<
         }
         const tier = (lastStatus?.builder_tier ?? params.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
         const max = lastStatus?.max_communities ?? params.builderBillingStatus?.max_communities ?? 0;
-        if (tier === "free") {
-          params.setFinalizeCreateCommunityError("Still finalizing your plan. Wait a moment and try again.");
+        if (tier !== "architect") {
+          params.setFinalizeCreateCommunityError("Architect is required to create a community.");
           return;
         }
         if (max > 0 && ownedCount >= max) {

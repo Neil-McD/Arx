@@ -20,7 +20,7 @@ export type CommunityLike = {
 };
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_unlock" | "paid_subscription";
-export type CommunityAccessRelation = "visitor" | "pending" | "member" | "admin" | "owner";
+export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
 export type CommunityPrimaryCta = "open_community" | "join" | "request_access" | "checkout";
 
 export type CommunityMembershipLike = {
@@ -126,19 +126,6 @@ export type CommunityMembershipEntitlementState = {
   accessSource: string | null;
   subscriptionStatus: CommunitySubscriptionLike["status"] | null;
   subscriptionCurrentPeriodEndAt: number | null;
-};
-
-export type CommunityInviteLike = {
-  _id: any;
-  communityId: any;
-  code: string;
-  maxUses?: number;
-  usesCount: number;
-  expiresAt?: number;
-  revokedAt?: number;
-  createdByUserId: any;
-  createdAt: number;
-  updatedAt: number;
 };
 
 export type UserEntitlementLike = {
@@ -282,24 +269,6 @@ export function parseIsoMs(raw: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function normalizeInviteCode(raw: unknown): string {
-  const code = String(raw ?? "")
-    .trim()
-    .toUpperCase();
-  if (!code) throw new Error("invite_code_required");
-  if (!/^[A-Z0-9-]{4,80}$/.test(code)) throw new Error("invite_code_invalid");
-  return code;
-}
-
-export function normalizeOptionalPositiveInt(raw: unknown): number | undefined {
-  if (raw === null || raw === undefined) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
-    throw new Error("invite_max_uses_invalid");
-  }
-  return parsed;
-}
-
 export function normalizeRole(raw: unknown): string {
   return String(raw ?? "")
     .trim()
@@ -308,14 +277,13 @@ export function normalizeRole(raw: unknown): string {
 
 export function normalizeMembershipAccessSource(
   raw: unknown,
-): "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | "" {
+): "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | "" {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
   if (
     value === "free_grant" ||
     value === "manual_grant" ||
-    value === "invite_bypass" ||
     value === "paid_unlock" ||
     value === "paid_subscription"
   ) {
@@ -342,10 +310,10 @@ export function normalizeCommunitySubscriptionStatus(
   return null;
 }
 
-export function normalizeCommunityRoleForOutput(raw: unknown): "admin" | "member" | "" {
+export function normalizeCommunityRoleForOutput(raw: unknown): "admin" | "moderator" | "member" | "" {
   const role = normalizeRole(raw);
-  if (role === "admin" || role === "member") return role;
-  if (role === "mod") return "member";
+  if (role === "admin" || role === "moderator" || role === "member") return role;
+  if (role === "mod") return "moderator";
   return "";
 }
 
@@ -422,11 +390,11 @@ export function normalizeOptionalFileKey(raw: unknown): string | undefined {
   return value.slice(0, 4096);
 }
 
-export function normalizeRoleAssignment(raw: unknown): "admin" | "member" {
+export function normalizeRoleAssignment(raw: unknown): "admin" | "moderator" | "member" {
   const role = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (role === "admin" || role === "member") {
+  if (role === "admin" || role === "moderator" || role === "member") {
     return role;
   }
   throw new Error("member_role_invalid");
@@ -452,7 +420,6 @@ function communityAccessSourceIsDurable(
     source === "" ||
     source === "free_grant" ||
     source === "manual_grant" ||
-    source === "invite_bypass" ||
     source === "paid_unlock"
   );
 }
@@ -470,6 +437,13 @@ export function tierHasBuilderAccess(rawTier: unknown): boolean {
     .trim()
     .toLowerCase();
   return tier === "builder" || tier === "architect" || tier === "pro";
+}
+
+export function tierHasArchitectAccess(rawTier: unknown): boolean {
+  const tier = String(rawTier ?? "")
+    .trim()
+    .toLowerCase();
+  return tier === "architect" || tier === "pro";
 }
 
 export async function resolvePublicUserId(
@@ -512,23 +486,6 @@ export async function listCommunityMembershipRowsForManager(args: {
   );
   activeRows.sort((a, b) => a.createdAt - b.createdAt);
   return { community, rows: activeRows };
-}
-
-export async function mapCommunityInviteRow(
-  ctx: any,
-  row: CommunityInviteLike,
-  userIdCache?: Map<string, string | null>,
-) {
-  return {
-    id: String(row._id),
-    community_id: String(row.communityId),
-    code: row.code,
-    max_uses: typeof row.maxUses === "number" ? Math.floor(row.maxUses) : null,
-    expires_at: typeof row.expiresAt === "number" ? toIsoString(row.expiresAt) : null,
-    revoked_at: typeof row.revokedAt === "number" ? toIsoString(row.revokedAt) : null,
-    created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),
-    created_at: toIsoString(row.createdAt),
-  };
 }
 
 export function mapCommunityPricingRow(row: CommunityPricePointLike) {
@@ -680,32 +637,6 @@ export function mapJoinRequestRow(args: {
   };
 }
 
-export async function requireCommunityInviteManager(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-}): Promise<{ community: CommunityLike }> {
-  const { community, membership } = await getCommunityAndMembership(args);
-  const entitlement = await resolveCommunityMembershipEntitlementState({
-    ctx: args.ctx,
-    community,
-    membership,
-    userId: args.userId,
-  });
-  const role = normalizeCommunityRoleForOutput(membership?.role);
-  if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
-    throw new Error("community_forbidden");
-  }
-  return { community };
-}
-
-export function inviteIsExpired(invite: CommunityInviteLike, nowMs: number): boolean {
-  if (typeof invite.revokedAt === "number") return true;
-  if (typeof invite.expiresAt === "number" && nowMs > invite.expiresAt) return true;
-  if (typeof invite.maxUses === "number" && invite.maxUses > 0 && invite.usesCount >= invite.maxUses) return true;
-  return false;
-}
-
 export async function requireCommunityChatAccess(args: {
   ctx: any;
   communityId: any;
@@ -741,6 +672,7 @@ export async function resolveCommunityAccessBundle(args: {
   });
   const isEntitled = entitlement.isEntitled;
   const isAdmin = !isOwner && isEntitled && role === "admin";
+  const isModerator = !isOwner && isEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
   if (!isEntitled) {
     const joinRequest = (await args.ctx.db
@@ -755,6 +687,8 @@ export async function resolveCommunityAccessBundle(args: {
     ? "owner"
     : isAdmin
       ? "admin"
+      : isModerator
+        ? "moderator"
       : isEntitled
         ? "member"
         : joinRequestStatus === "pending"
@@ -766,9 +700,8 @@ export async function resolveCommunityAccessBundle(args: {
   const canPostChat = isEntitled;
   const canView = isEntitled || args.community.visibility === "published";
   const canManageMembers = isOwner || isAdmin;
-  const canManageResources = isOwner || isAdmin;
-  const canInvite = isOwner || isAdmin;
-  const canCreateResource = isEntitled;
+  const canManageResources = isOwner || isAdmin || isModerator;
+  const canReviewJoinRequests = isOwner || isAdmin || isModerator;
   const canPostMessage = isEntitled;
   const primaryCta: CommunityPrimaryCta = isEntitled
     ? "open_community"
@@ -802,10 +735,9 @@ export async function resolveCommunityAccessBundle(args: {
     can_post_chat: canPostChat,
     can_view: canView,
     can_post_message: canPostMessage,
-    can_create_resource: canCreateResource,
     can_manage_resources: canManageResources,
-    can_invite: canInvite,
     can_manage_members: canManageMembers,
+    can_review_join_requests: canReviewJoinRequests,
   };
 }
 
@@ -832,6 +764,30 @@ export async function requireCommunityManager(args: {
   });
   const role = normalizeCommunityRoleForOutput(membership?.role);
   if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
+    throw new Error("community_forbidden");
+  }
+  return { community };
+}
+
+export async function requireCommunityModerator(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<{ community: CommunityLike }> {
+  const { community, membership } = await getCommunityAndMembership(args);
+  const entitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community,
+    membership,
+    userId: args.userId,
+  });
+  const role = normalizeCommunityRoleForOutput(membership?.role);
+  if (
+    !(
+      community.ownerId === args.userId ||
+      (entitlement.isEntitled && (role === "admin" || role === "moderator"))
+    )
+  ) {
     throw new Error("community_forbidden");
   }
   return { community };

@@ -260,7 +260,8 @@
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .web-empty-thread,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .ask-bar,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid {
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .public-funnel-shell {
     position: relative;
     left: var(--web-rail-balance-shift);
   }

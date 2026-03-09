@@ -2,6 +2,14 @@ export type ModelSectionId = "all" | "free" | "openai" | "anthropic" | "google" 
 export type ModelCatalogSurface = "web";
 export type ModelProviderId = "openai" | "anthropic" | "google" | "x-ai" | "openrouter";
 export type ModelFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
+export type ModelRegistryRow = {
+  id: string;
+  provider: ModelProviderId;
+  display_name: string;
+  supported_sources: readonly ModelFundingSource[];
+  sort_order: number;
+  enabled: boolean;
+};
 
 export type ModelToggle = {
   id: string;
@@ -97,6 +105,19 @@ export function getPremiumModelCatalog(surface: ModelCatalogSurface): PremiumMod
     description: model.description,
     supportedFundingSources: [...model.supportedFundingSources],
   }));
+}
+
+export function getModelRegistryRows(surface: ModelCatalogSurface): ModelRegistryRow[] {
+  return PREMIUM_MODELS.filter((model) => model.surfaces.includes(surface))
+    .map((model, index) => ({
+      id: model.id,
+      provider: model.section,
+      display_name: model.label,
+      supported_sources: [...model.supportedFundingSources],
+      sort_order: index * 10 + 10,
+      enabled: model.defaultEnabled,
+    }))
+    .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id));
 }
 
 export function getSupportedFundingSourcesForModel(modelId: string | null | undefined): ModelFundingSource[] {

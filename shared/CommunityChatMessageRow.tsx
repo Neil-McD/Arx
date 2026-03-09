@@ -38,6 +38,7 @@ type CommunityChatMessageRowProps = {
   isPending: boolean;
   showMeta: boolean;
   isOwn: boolean;
+  canModerateContent: boolean;
   senderLabel: string;
   avatarUrl: string | null;
   avatarColor: string;
@@ -75,6 +76,7 @@ export function CommunityChatMessageRow({
   isPending,
   showMeta,
   isOwn,
+  canModerateContent,
   senderLabel,
   avatarUrl,
   avatarColor,
@@ -139,7 +141,7 @@ export function CommunityChatMessageRow({
           title={senderLabel}
         >
           {avatarUrl ? (
-            <img src={avatarUrl} alt={senderLabel} />
+            <img src={avatarUrl} alt={senderLabel} draggable={false} />
           ) : (
             <span>{getInitials(senderLabel)}</span>
           )}
@@ -340,7 +342,7 @@ export function CommunityChatMessageRow({
           >
             <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
           </button>
-          {isOwn && !isPending && (
+          {(isOwn || canModerateContent) && !isPending && (
             <>
               <button
                 className="chat-action-btn"

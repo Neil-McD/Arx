@@ -11,7 +11,7 @@ import type { CloudSession } from "../cloudAuth";
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder";
+  builder_tier: "free" | "builder" | "architect";
   max_communities: number;
   platform_fee_bps: number;
   has_payouts: boolean;
@@ -22,6 +22,7 @@ type BuilderBillingStatus = {
 
 type UseWebCommerceAffiliateActionsArgs = {
   getSession: () => CloudSession | null;
+  ensureSession?: () => Promise<CloudSession | null>;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   openCommunityWorkspace: (communityId: string) => void;
   loadCommunities: (session: CloudSession) => Promise<void>;
@@ -45,7 +46,7 @@ type UseWebCommerceAffiliateActionsArgs = {
 export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActionsArgs) {
   const redeemPurchaseClaim = useCallback(
     async (token: string): Promise<void> => {
-      const session = args.getSession();
+      const session = (await args.ensureSession?.()) ?? args.getSession();
       if (!session) {
         args.storePendingPurchaseClaimToken(token);
         args.openAuthGate({ reason: "redeem_purchase_claim", payload: { token } });
@@ -85,8 +86,9 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setIsLoadingPendingPurchases(true);
       args.setPendingPurchasesError(null);
       try {
+        const usableSession = (await args.ensureSession?.()) ?? session;
         const rows = await listPendingPurchaseClaimsRpc({
-          session,
+          session: usableSession,
         });
         args.setPendingPurchaseClaims(rows);
       } catch (error) {
@@ -110,8 +112,9 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setIsLoadingBuilderBilling(true);
       args.setBuilderBillingError(null);
       try {
+        const usableSession = (await args.ensureSession?.()) ?? session;
         const row = await loadBuilderBillingStatusCanonical({
-          session,
+          session: usableSession,
         });
         args.setBuilderBillingStatus(row);
         return row;
@@ -134,7 +137,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
 
   const redeemPendingPurchases = useCallback(
     async (opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> => {
-      const session = args.getSession();
+      const session = (await args.ensureSession?.()) ?? args.getSession();
       if (!session) {
         args.openAuthGate({
           reason: "redeem_pending_purchases",

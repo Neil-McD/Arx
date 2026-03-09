@@ -18,7 +18,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     <div className="community-panel resources-panel">
       <div className="resources-header-row">
         <div className="resources-header">Resources</div>
-        {capabilities.hasActiveCommunity && capabilities.canCreateResources && (
+        {capabilities.hasActiveCommunity && capabilities.canOperateResources && (
           <button className="resources-add-btn" onClick={actions.openNewResourceModal} title="Add resource">
             +
           </button>
@@ -52,7 +52,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               Welcome to {capabilities.activeCommunityName ?? "your"} resources
             </div>
             <div className="chat-empty-text">
-              Share links, posts, and videos with your members. Add your first resource to get started.
+              {capabilities.canOperateResources
+                ? "Share links, posts, and videos with your members. Add your first resource to get started."
+                : "Resources shared by the moderators will show up here."}
             </div>
           </div>
         )}
@@ -127,7 +129,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               {resource.body_md && (
                 <div className="resource-body">{resource.body_md}</div>
               )}
-              {capabilities.canManageResources && (
+              {capabilities.canOperateResources && (
                 <div className="resource-actions">
                   <button
                     className="secondary"

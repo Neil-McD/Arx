@@ -165,39 +165,6 @@ export type PublicCommunityJoinErrorKind =
   | "forbidden"
   | null;
 
-export type InviteAcceptErrorKind = "invite_expired" | null;
-
-export type AcceptCommunityInviteResult = {
-  community_id: string;
-  community_slug: string;
-  community_name: string;
-};
-
-export function classifyInviteAcceptError(error: unknown): InviteAcceptErrorKind {
-  const values: string[] = [];
-  const collect = (value: unknown) => {
-    const normalized = normalizeErrorToken(value);
-    if (normalized) values.push(normalized);
-  };
-
-  collectStructuredErrorFields(error, collect);
-  if (error instanceof Error) {
-    collect(error.message);
-  } else if (!error || typeof error !== "object") {
-    collect(error);
-  }
-
-  const has = (token: string): boolean =>
-    values.some((value) => value === token || value.includes(token));
-
-  if (has("invite_expired")) return "invite_expired";
-  if (has("invite has expired")) return "invite_expired";
-  if (has("invite expired")) return "invite_expired";
-  if (has("expired invite")) return "invite_expired";
-
-  return null;
-}
-
 export function classifyPublicCommunityJoinError(error: unknown): PublicCommunityJoinErrorKind {
   const values: string[] = [];
   const collect = (value: unknown) => {
@@ -240,30 +207,6 @@ export async function redeemPurchaseClaimRpc<S extends CloudSessionLike>(opts: {
   const communityId = rows[0]?.community_id;
   if (!communityId) throw new Error("Redeem succeeded but community missing.");
   return communityId;
-}
-
-export async function acceptCommunityInviteRpc<S extends CloudSessionLike>(opts: {
-  session: S;
-  inviteCode: string;
-}): Promise<AcceptCommunityInviteResult> {
-  const inviteCode = opts.inviteCode.trim();
-  if (!inviteCode) throw new Error("Invite code is required.");
-
-  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
-  const payload = (await client.mutation("community:acceptCommunityInvite" as any, {
-    authSubject,
-    inviteCode,
-    nowMs: Date.now(),
-  })) as Partial<AcceptCommunityInviteResult> | null;
-  const first: AcceptCommunityInviteResult = {
-    community_id: String(payload?.community_id ?? "").trim(),
-    community_slug: String(payload?.community_slug ?? "").trim(),
-    community_name: String(payload?.community_name ?? "").trim(),
-  };
-  if (!first.community_id || !first.community_slug || !first.community_name) {
-    throw new Error("Failed to join community.");
-  }
-  return first;
 }
 
 export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {

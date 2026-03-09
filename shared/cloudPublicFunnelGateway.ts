@@ -73,6 +73,33 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   };
 }
 
+export async function heartbeatCloudCommunityPresence<SessionT>(
+  params: CloudPublicFunnelAuthParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:heartbeatCommunityPresence" as any, {
+    authSubject,
+    communityId: params.communityId,
+    nowMs: Date.now(),
+  });
+}
+
+export async function fetchCloudCommunityPresenceSummary<SessionT, TSummary = unknown>(
+  params: CloudPublicFunnelAuthParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<TSummary | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunityPresenceSummary" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  const rows = coerceObjectRows<TSummary>(payload);
+  return rows[0] ?? null;
+}
+
 export async function startCloudPublicFunnelCheckout<SessionT>(
   params: CloudPublicFunnelParams<SessionT> & {
     session: SessionT | null;

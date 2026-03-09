@@ -12,7 +12,7 @@ import {
   parseIsoMs,
   requireCommunityChatAccess,
   requireCommunityManager,
-  resolveCommunityMembershipEntitlementState,
+  requireCommunityModerator,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
@@ -112,7 +112,7 @@ export const saveCommunityResource = mutation({
       if (!resourceId) throw new Error("community_resource_id_required");
       const existing = (await ctx.db.get(resourceId as any)) as CommunityResourceLike | null;
       if (!existing) throw new Error("community_resource_not_found");
-      await requireCommunityManager({
+      await requireCommunityModerator({
         ctx,
         communityId: existing.communityId,
         userId: args.userId,
@@ -143,20 +143,16 @@ export const saveCommunityResource = mutation({
 
     const communityIdRaw = args.communityId ?? (payload.community_id as any);
     if (!communityIdRaw) throw new Error("community_id_required");
-    const { community, membership } = await getCommunityAndMembership({
+    const { community } = await getCommunityAndMembership({
       ctx,
       communityId: communityIdRaw,
       userId: args.userId,
     });
-    const entitlement = await resolveCommunityMembershipEntitlementState({
+    await requireCommunityModerator({
       ctx,
-      community,
-      membership,
+      communityId: community._id,
       userId: args.userId,
     });
-    if (!entitlement.isEntitled) {
-      throw new Error("community_entitlement_required");
-    }
     const type = normalizeResourceType(payload.type);
     const title = normalizeName(payload.title);
     const bodyMd = normalizeOptionalText(payload.body_md, 20_000);
@@ -197,7 +193,7 @@ export const deleteCommunityResource = mutation({
     (args as { userId?: any }).userId = userId;
     const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
     if (!resource) return { ok: true };
-    await requireCommunityManager({
+    await requireCommunityModerator({
       ctx,
       communityId: resource.communityId,
       userId: args.userId,

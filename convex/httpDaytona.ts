@@ -1546,13 +1546,10 @@ async function executeDaytonaTool(params: {
           errorMessage: "community_search requires query.",
         };
       }
-      const limitRaw = Number(params.args.limit ?? 8);
-      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(12, Math.floor(limitRaw))) : 8;
       const payload = await params.ctx.runQuery(api.community.readCompiledCommunityContext as any, {
         userId: params.userId,
         communityId,
         query,
-        limit,
       });
       return {
         status: "ok",

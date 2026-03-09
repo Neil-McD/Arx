@@ -51,7 +51,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
         renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
       <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
 
-      {communityTab === "feed" && renderCenteredPane(<CommunityAiFeedPanel {...feedPanelProps} />)}
+      {communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...feedPanelProps} />)}
 
       {communityTab === "ai_agent" &&
         renderCenteredPane(<WebCommunityAiAgentSection {...aiAgentSectionProps} />)}

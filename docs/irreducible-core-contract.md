@@ -10,13 +10,14 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
 1. Tier system:
    - anonymous free
    - authenticated free
-   - builder ($60)
+   - builder ($20)
+   - architect ($60)
 2. Canonical chat + canonical community UX.
 3. Community agentic harness + community AI feed + community research.
-4. Daytona cloud coding harness.
+4. Daytona builder workbench.
 5. User-funded ChatGPT-auth lane for OpenAI inference.
 6. Voice UX.
-7. Builder monetization rails (including Stripe Connect onboarding).
+7. Architect monetization rails (including Stripe Connect onboarding).
 
 ## Community Surface (Must Keep)
 
@@ -39,14 +40,14 @@ Core AI-agent paths:
 
 - User-funded ChatGPT lane path for eligible OpenAI aliases.
 - Platform and public fallback lanes.
-- Daytona agent harness remains available independent of cloud auth.
+- Daytona workbench remains a paid builder/architect capability.
 - Public and private edge routing contracts remain explicit.
 
 ## Monetization Rails (Must Keep)
 
 - Public funnel -> checkout start -> checkout finalize -> webhook chain.
-- Builder checkout start.
-- Builder billing portal.
+- Builder/Architect checkout start.
+- Builder/Architect billing portal.
 - Connect onboard start (Stripe Connect account onboarding).
 - Webhook idempotency + entitlement reconciliation path.
 

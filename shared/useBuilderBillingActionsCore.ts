@@ -1,5 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
-import type { BuilderUpgradeContextValue } from "./builderBilling";
+import type { BuilderCheckoutTier, BuilderUpgradeContextValue } from "./builderBilling";
 
 import {
   openCloudBuilderBillingPortal,
@@ -7,14 +7,14 @@ import {
   startCloudConnectOnboarding,
 } from "./cloudBuilderBillingGateway";
 
-export type BuilderCheckoutTier = "builder";
-export type BuilderCheckoutRequestTier = "builder";
+export type BuilderCheckoutRequestTier = BuilderCheckoutTier;
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
 
 type BillingActionKind = "checkout" | "portal" | "connect";
 
 type UseBuilderBillingActionsCoreArgs<SessionT> = {
   getSession: () => SessionT | null;
+  ensureSession?: () => Promise<SessionT | null>;
   onMissingAuth: (
     kind: BillingActionKind,
     details: { tier?: BuilderCheckoutTier; context?: BuilderUpgradeContext },
@@ -58,7 +58,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
     async (tier: BuilderCheckoutTier, opts?: { context?: BuilderUpgradeContext }): Promise<void> => {
       const context: BuilderUpgradeContext = opts?.context ?? "builder";
       const current = argsRef.current;
-      const session = current.getSession();
+      const session = (await current.ensureSession?.()) ?? current.getSession();
       if (!session) {
         await current.onMissingAuth("checkout", { tier, context });
         return;
@@ -89,7 +89,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
   const openBuilderBillingPortal = useCallback(
     async (context: BuilderUpgradeContext = "builder"): Promise<void> => {
       const current = argsRef.current;
-      const session = current.getSession();
+      const session = (await current.ensureSession?.()) ?? current.getSession();
       if (!session) {
         await current.onMissingAuth("portal", { context });
         return;
@@ -117,7 +117,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
 
   const startConnectOnboarding = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
-    const session = current.getSession();
+    const session = (await current.ensureSession?.()) ?? current.getSession();
     if (!session) {
       await current.onMissingAuth("connect", {});
       return;

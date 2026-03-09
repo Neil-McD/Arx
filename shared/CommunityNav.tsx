@@ -15,7 +15,6 @@ type CommunityNavProps = {
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
-  activeCommunityOwnerHasBuilderAccess: boolean | null;
   onSelectTab: (tab: CommunityTab) => void;
   buttonType?: "button" | "submit" | "reset";
   includeButtonTitles?: boolean;
@@ -27,7 +26,6 @@ export function CommunityNav({
   canViewActiveCommunitySettings,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
-  activeCommunityOwnerHasBuilderAccess,
   onSelectTab,
   buttonType,
   includeButtonTitles = false,
@@ -47,6 +45,7 @@ export function CommunityNav({
               className="community-nav-banner-img"
               src={activeCommunity.banner_url}
               alt=""
+              draggable={false}
               style={getCommunityBannerImageStyle({
                 focusX: activeCommunity.banner_focus_x,
                 focusY: activeCommunity.banner_focus_y,
@@ -72,9 +71,9 @@ export function CommunityNav({
         Chat
       </button>
       <button
-        className={communityTab === "feed" ? "nav-item active" : "nav-item"}
+        className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
         type={buttonType}
-        onClick={() => onSelectTab("feed")}
+        onClick={() => onSelectTab("ai_feed")}
         title={maybeTitle("AI Feed")}
       >
         <span className="nav-icon">
@@ -148,12 +147,10 @@ export function CommunityNav({
           </button>
           {canManageMembersActiveCommunity && (
             <button
-              className={`${communityTab === "ai_agent" ? "nav-item active" : "nav-item"}${
-                activeCommunityOwnerHasBuilderAccess === false ? " premium-locked" : ""
-              }`}
+              className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
               type={buttonType}
               onClick={() => onSelectTab("ai_agent")}
-              title={activeCommunityOwnerHasBuilderAccess === false ? "AI Agent (Builder)" : "AI Agent"}
+              title={maybeTitle("AI Agent")}
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -169,13 +166,6 @@ export function CommunityNav({
                 </svg>
               </span>
               AI Agent
-              {activeCommunityOwnerHasBuilderAccess === false && (
-                <span className="nav-premium-badge" aria-hidden="true">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M4 7l4 4 4-6 4 6 4-4-2 13H6L4 7z" />
-                  </svg>
-                </span>
-              )}
             </button>
           )}
           {canManageMembersActiveCommunity && (

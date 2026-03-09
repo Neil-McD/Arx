@@ -22,10 +22,7 @@ type RuntimePersonalMemoryInput = {
 
 type RuntimeCommunityResearchInput = {
   community_id?: unknown;
-  community_name?: unknown;
   query?: unknown;
-  source_types?: unknown;
-  limit?: unknown;
 };
 
 type RuntimeCommunityLiveFeedWriteInput = {
@@ -246,17 +243,11 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
           message: "community_id and query are required.",
         });
       }
-      const communityName = parseOptionalString(input.community_name, 200);
-      const limit = normalizePositiveInt(input.limit, 12, 24);
-      void input.source_types;
-
       try {
         const payload = await (ctx as any).runQuery(api.community.readCompiledCommunityContext as any, {
           authSubject: auth.authSubject,
           communityId,
-          communityName: communityName ?? null,
           query,
-          limit,
         });
         return jsonResponse(req, 200, (payload ?? { ok: false }) as Record<string, unknown>);
       } catch (error) {

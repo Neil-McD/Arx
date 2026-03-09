@@ -18,7 +18,7 @@ This file is the execution contract for agents working in this repository.
 - Community value first: optimize creator setup + member participation loop.
 
 ### MVP North Star
-- A founder can create a community, share a landing link, and onboard members through a gated flow.
+- A founder can create a community, share a funnel link, and onboard members through a gated flow.
 - Members can join, chat/post/use voice, access resources, and use personal AI threads.
 - AI in a thread can switch community context safely and deterministically.
 
@@ -31,7 +31,7 @@ This file is the execution contract for agents working in this repository.
 - Community visibility model simplified to `Published` and `Unlisted`.
 - Discover page retained using simplified visibility semantics.
 - Gated community access model (including for `Published` communities).
-- Public community landing pages for founder-shared links (YouTube/social/direct).
+- Public community funnels for founder-shared links (YouTube/social/direct).
 - Core member UX: join, navigate, post/chat, and voice.
 - Billing and provider/account connections.
 - Automated payouts for community builders (existing community payout flow).
@@ -76,7 +76,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 ### Community Access + Visibility
 - Visibility has only two states: `Published` and `Unlisted`.
 - `Published` does not mean ungated access; entitlement and membership checks still apply.
-- Community landing page is a single canonical entry surface for join/gate.
+- Community funnel is a single canonical entry surface for join/gate.
 
 ### Thread Community Lens
 - Thread-level community context is explicit and server-validated.
@@ -103,7 +103,7 @@ When deciding keep vs delete:
 
 1. Keep only what directly supports MVP scope above.
 2. If there is no first-party call path, mark as delete candidate.
-3. Prefer one canonical flow per job (one landing path, one gate path, one checkout completion path).
+3. Prefer one canonical flow per job (one funnel path, one gate path, one checkout completion path).
 4. Remove dead docs/contracts/migrations for deferred systems once replacement truth exists.
 5. Do not keep duplicate “just in case” surfaces.
 
@@ -131,8 +131,8 @@ Classification buckets for every candidate:
 All must be demonstrably true:
 
 - Auth/session works across the canonical web surface.
-- Founder can create/manage community and share landing link.
-- Member can discover/open landing, pass gate, and join community.
+- Founder can create/manage community and share funnel link.
+- Member can discover/open funnel, pass gate, and join community.
 - Community usage loop works: navigate, post/chat, voice, resources.
 - Thread lens switch between communities works and remains auditable.
 - Billing flow reaches entitlement correctly; builder payouts continue.

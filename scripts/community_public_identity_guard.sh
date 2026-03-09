@@ -83,10 +83,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityJoinRequests = query\([\s\S]*?user_id: \(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\? String\(row\.userId\)' \
   "join-request rows resolve public user IDs"
 
-echo "[6/9] Ensuring invite and member-settings payloads resolve public IDs..."
-require_multiline_match "$COMMUNITY_CORE_FILE" \
-  'export async function mapCommunityInviteRow\([\s\S]*?created_by: \(await resolvePublicUserId\(ctx, row\.createdByUserId, userIdCache\)\) \?\? String\(row\.createdByUserId\)' \
-  "invite rows resolve public creator IDs"
+echo "[6/9] Ensuring member-settings payloads resolve public IDs..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityMemberSettingsRow\([\s\S]*?user_id: \(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\? String\(row\.userId\)' \
   "member settings rows resolve public user IDs"

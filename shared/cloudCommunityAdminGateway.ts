@@ -194,24 +194,6 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
   return coerceObjectRows<CloudCommunityRevenueSeriesRow>(payload);
 }
 
-export async function fetchCloudCommunityOwnerHasBuilderAccess<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<boolean | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:communityOwnerHasBuilderAccess" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  if (typeof payload === "boolean") return payload;
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    const maybe = (payload as Record<string, unknown>).community_owner_has_builder_access;
-    if (typeof maybe === "boolean") return maybe;
-  }
-  return null;
-}
-
 export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -234,7 +216,7 @@ export async function setCloudCommunityMemberRole<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     userId: string;
-    role: "admin" | "member";
+    role: "admin" | "moderator" | "member";
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);

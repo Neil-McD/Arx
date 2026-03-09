@@ -2,7 +2,8 @@ export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
-export type BuilderTierUi = "free" | "builder";
+export type BuilderTierUi = "free" | "builder" | "architect";
+export type BuilderCheckoutTier = "builder" | "architect";
 
 export type BuilderBillingReturn = {
   status: BuilderBillingStatus;
@@ -59,7 +60,8 @@ function normalizeBuilderTierRaw(value: string | null | undefined): string {
 
 export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
   const raw = normalizeBuilderTierRaw(value);
-  if (raw === "builder" || raw === "pro" || raw === "architect") return "builder";
+  if (raw === "builder") return "builder";
+  if (raw === "architect" || raw === "pro") return "architect";
   return "free";
 }
 
@@ -69,14 +71,28 @@ export function isBuilderTierFree(value: string | null | undefined): boolean {
 
 export function isBuilderTierBuilder(value: string | null | undefined): boolean {
   const raw = normalizeBuilderTierRaw(value);
-  return raw === "builder" || raw === "pro" || raw === "architect";
+  return raw === "builder";
+}
+
+export function isBuilderTierArchitect(value: string | null | undefined): boolean {
+  const raw = normalizeBuilderTierRaw(value);
+  return raw === "architect" || raw === "pro";
 }
 
 export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
-  return isBuilderTierBuilder(value);
+  return isBuilderTierBuilder(value) || isBuilderTierArchitect(value);
 }
 
-export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" {
+export function hasBuilderWorkbenchAccess(value: string | null | undefined): boolean {
+  return hasBuilderTierPaidAccess(value);
+}
+
+export function hasArchitectAccess(value: string | null | undefined): boolean {
+  return isBuilderTierArchitect(value);
+}
+
+export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" | "Architect" {
+  if (isBuilderTierArchitect(value)) return "Architect";
   if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
 }
@@ -99,8 +115,8 @@ export function buildBuilderCheckoutRequestPayload(args: {
   origin: string;
   source: "web";
   context: BuilderUpgradeContextValue;
-  tier: "builder";
-}): { tier: "builder"; successUrl: string; cancelUrl: string } {
+  tier: BuilderCheckoutTier;
+}): { tier: BuilderCheckoutTier; successUrl: string; cancelUrl: string } {
   const urls = buildBuilderBillingRedirectUrls({
     origin: args.origin,
     source: args.source,

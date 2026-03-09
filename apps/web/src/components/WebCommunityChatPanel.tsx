@@ -29,6 +29,7 @@ export type WebCommunityChatPanelProps = {
   hasSession: boolean;
   sessionUserId: string | null;
   canPostMessages: boolean;
+  canModerateMessages: boolean;
   isLoadingChat: boolean;
   hasResolvedCommunityChat: boolean;
   isLoadingMoreChat: boolean;
@@ -91,6 +92,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     hasSession,
     sessionUserId,
     canPostMessages,
+    canModerateMessages,
     isLoadingChat,
     hasResolvedCommunityChat,
     isLoadingMoreChat,
@@ -231,6 +233,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     isPending={isPending}
                     showMeta={showMeta}
                     isOwn={isOwn}
+                    canModerateContent={canModerateMessages}
                     senderLabel={senderLabel}
                     avatarUrl={avatarUrl}
                     avatarColor={avatarColor}

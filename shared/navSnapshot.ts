@@ -5,6 +5,7 @@ export type NavSnapshotBase = {
   view: AppView;
   settingsPage: SettingsPage;
   communityId: string | null;
+  communitySlug?: string | null;
   communityTab: CommunityTab;
   threadId: string | null;
   workspaceWantsNewChat?: boolean;
@@ -20,6 +21,7 @@ export function navSnapshotsEqual(
     a.view !== b.view ||
     a.settingsPage !== b.settingsPage ||
     a.communityId !== b.communityId ||
+    (a.communitySlug ?? null) !== (b.communitySlug ?? null) ||
     a.communityTab !== b.communityTab ||
     a.threadId !== b.threadId
   ) {

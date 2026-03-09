@@ -82,7 +82,7 @@ const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: Re
     label: "OpenAI",
     icon: (
       <span className="model-picker-nav-logo">
-        <img className="model-picker-nav-logo-img monochrome" src={openAiLogo} alt="" />
+        <img className="model-picker-nav-logo-img monochrome" src={openAiLogo} alt="" draggable={false} />
       </span>
     ),
   },
@@ -91,7 +91,7 @@ const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: Re
     label: "Anthropic",
     icon: (
       <span className="model-picker-nav-logo">
-        <img className="model-picker-nav-logo-img monochrome" src={anthropicLogo} alt="" />
+        <img className="model-picker-nav-logo-img monochrome" src={anthropicLogo} alt="" draggable={false} />
       </span>
     ),
   },
@@ -100,7 +100,7 @@ const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: Re
     label: "Google",
     icon: (
       <span className="model-picker-nav-logo">
-        <img className="model-picker-nav-logo-img monochrome" src={googleLogo} alt="" />
+        <img className="model-picker-nav-logo-img monochrome" src={googleLogo} alt="" draggable={false} />
       </span>
     ),
   },
@@ -109,7 +109,7 @@ const MODEL_PICKER_SECTIONS: Array<{ id: ModelSectionId; label: string; icon: Re
     label: "xAI",
     icon: (
       <span className="model-picker-nav-logo">
-        <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" />
+        <img className="model-picker-nav-logo-img monochrome" src={xAiLogo} alt="" draggable={false} />
       </span>
     ),
   },
@@ -235,7 +235,7 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
                               ? supportsUserChatgpt && !supportsUserKey
                                 ? "Connect ChatGPT"
                                 : supportsUserKey && !supportsUserChatgpt
-                                  ? "Connect key"
+                                  ? "Connect OpenRouter"
                                   : supportsUserKey || supportsUserChatgpt
                                     ? "Connect provider"
                                     : null

@@ -24,6 +24,7 @@ type PersonalMemoryItem = {
 
 type UseWebMemorySettingsDataControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
+  ensureSession?: () => Promise<SessionT | null>;
   setIsLoadingUserMemorySettings: Dispatch<SetStateAction<boolean>>;
   setUserMemorySettings: Dispatch<SetStateAction<UserMemorySettings>>;
 
@@ -72,8 +73,9 @@ export function useWebMemorySettingsDataController<SessionT>(
     const current = argsRef.current;
     current.setIsLoadingUserMemorySettings(true);
     try {
+      const usableSession = (await current.ensureSession?.()) ?? session;
       const row = (await loadCloudUserMemorySettings({
-        session,
+        session: usableSession,
       })) as Partial<UserMemorySettings> | null;
       current.setUserMemorySettings({
         memory_mode: "auto",
@@ -91,8 +93,9 @@ export function useWebMemorySettingsDataController<SessionT>(
     current.setIsLoadingUserModelSettings(true);
     current.setUserModelSettingsError(null);
     try {
+      const usableSession = (await current.ensureSession?.()) ?? session;
       const row = (await loadCloudUserModelSettings({
-        session,
+        session: usableSession,
       })) as Partial<UserModelSettings> | null;
       const prompt = typeof row?.system_prompt === "string" ? row.system_prompt : "";
       current.setUserModelSettings({ system_prompt: prompt });
@@ -113,7 +116,7 @@ export function useWebMemorySettingsDataController<SessionT>(
     current.setIsLoadingPersonalMemory(true);
     current.setPersonalMemoryError(null);
     try {
-      const session = current.getSession();
+      const session = (await current.ensureSession?.()) ?? current.getSession();
       if (!session) {
         current.setPersonalMemoryItems([]);
         return;
@@ -140,7 +143,7 @@ export function useWebMemorySettingsDataController<SessionT>(
       current.setIsLoadingPersonalMemory(true);
       current.setPersonalMemoryError(null);
       try {
-        const session = current.getSession();
+        const session = (await current.ensureSession?.()) ?? current.getSession();
         if (!session) {
           current.setPersonalMemoryItems([]);
           return;

@@ -261,11 +261,9 @@ Suggested shape:
 6. `can_enter_community`
 7. `can_read_chat`
 8. `can_post_chat`
-9. `can_create_resource`
-10. `can_manage_resources`
-11. `can_invite`
-12. `can_manage_members`
-13. `primary_cta`
+9. `can_manage_resources`
+10. `can_manage_members`
+11. `primary_cta`
    - `sign_in`
    - `join`
    - `request_access`
@@ -395,8 +393,8 @@ make chat/resources/settings consume the same access bundle.
 Changes:
 
 1. chat uses `can_read_chat` and `can_post_chat`
-2. resources use `can_create_resource` and `can_manage_resources`
-3. settings/members/invites use `can_manage_members` and `can_invite`
+2. resources use `can_manage_resources`
+3. settings/members use `can_manage_members`
 
 Acceptance:
 

@@ -255,7 +255,7 @@ export function useWebPublicFunnelActions<
               return;
             }
           } catch {
-            // ignore; fall back to public landing
+            // ignore; fall back to the public funnel
           }
         }
 

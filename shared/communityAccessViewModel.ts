@@ -3,10 +3,8 @@ import type { CommunityAccess } from "./communityTypes";
 export type CommunityAccessCapabilities = {
   canViewCommunity: boolean;
   isOwner: boolean;
-  canInvite: boolean;
   canViewSettings: boolean;
   canPostMessages: boolean;
-  canCreateResources: boolean;
   canManageResources: boolean;
   canManageMembers: boolean;
   canReviewJoinRequests: boolean;
@@ -20,9 +18,7 @@ export type CommunityNavVisibility = {
 };
 
 export type CommunityActionGuards = {
-  canInvite: boolean;
   canPostMessages: boolean;
-  canCreateResources: boolean;
   canManageResources: boolean;
   canManageMembers: boolean;
   canReviewJoinRequests: boolean;
@@ -35,17 +31,16 @@ export function deriveCommunityAccessCapabilities(
   const isOwner = Boolean(access?.is_owner);
   const canManageMembers = Boolean(access?.can_manage_members);
   const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : true;
+  const effectiveRole = String(access?.effective_role ?? "").trim().toLowerCase();
   return {
     canViewCommunity: canEnterCommunity,
     isOwner,
-    canInvite: Boolean(access?.can_invite),
     canViewSettings: canEnterCommunity,
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
-    canCreateResources: Boolean(access?.can_create_resource),
     canManageResources: Boolean(access?.can_manage_resources),
     canManageMembers,
     canReviewJoinRequests:
-      isOwner || String(access?.effective_role ?? "").trim().toLowerCase() === "admin",
+      Boolean(access?.can_review_join_requests) || isOwner || effectiveRole === "admin" || effectiveRole === "moderator",
     canViewAnalytics: canManageMembers,
   };
 }
@@ -63,9 +58,7 @@ export function deriveCommunityNavVisibility(
 export function deriveCommunityActionGuards(
   capabilities: Pick<
     CommunityAccessCapabilities,
-    | "canInvite"
     | "canPostMessages"
-    | "canCreateResources"
     | "canManageResources"
     | "canManageMembers"
     | "canReviewJoinRequests"
@@ -73,9 +66,7 @@ export function deriveCommunityActionGuards(
   >,
 ): CommunityActionGuards {
   return {
-    canInvite: capabilities.canInvite,
     canPostMessages: capabilities.canPostMessages,
-    canCreateResources: capabilities.canCreateResources,
     canManageResources: capabilities.canManageResources,
     canManageMembers: capabilities.canManageMembers,
     canReviewJoinRequests: capabilities.canReviewJoinRequests,

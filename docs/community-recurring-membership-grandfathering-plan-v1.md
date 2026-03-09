@@ -135,7 +135,6 @@ Add:
 - `accessSource`
   - `free_grant`
   - `manual_grant`
-  - `invite_bypass`
   - `paid_unlock`
   - `paid_subscription`
 - `pricePointId?`

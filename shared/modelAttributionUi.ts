@@ -88,8 +88,8 @@ function formatInferenceLaneFallbackSuffix(
     const to = normalizeInferenceLane(item?.to);
     if (!from || !to) continue;
     if (from !== "chatgpt") continue;
-    if (to === "platform") return " (ChatGPT fallback -> Polynet.ai)";
-    if (to === "public") return " (ChatGPT fallback -> Free)";
+    if (to === "platform") return " (ChatGPT fallback -> Polynet-hosted)";
+    if (to === "public") return " (ChatGPT fallback -> OpenRouter free)";
   }
   return " (fallback)";
 }

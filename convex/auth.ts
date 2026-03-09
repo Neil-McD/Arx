@@ -2,8 +2,8 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
-type CanonicalTier = "free" | "builder";
-type EffectiveTier = "anon_free" | "auth_free" | "builder";
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 type BuilderTierMeta = {
@@ -14,6 +14,13 @@ type BuilderTierMeta = {
 
 function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
   if (tier === "builder") {
+    return {
+      maxCommunities: 0,
+      platformFeeBps: 0,
+      hasPayouts: false,
+    };
+  }
+  if (tier === "architect") {
     return {
       maxCommunities: 3,
       platformFeeBps: 300,
@@ -32,7 +39,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "builder";
+  if (normalized === "architect" || normalized === "pro") return "architect";
   return "free";
 }
 
@@ -215,7 +222,7 @@ export const getActor = query({
 export const setDevTierOverride = mutation({
   args: {
     authSubject: v.optional(v.string()),
-    tier: v.union(v.literal("free"), v.literal("builder")),
+    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {

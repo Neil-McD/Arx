@@ -4,6 +4,8 @@ export {
 } from "./communityAccessQueries";
 
 export {
+  heartbeatCommunityPresence,
+  getCommunityPresenceSummary,
   resolvePublicFunnelBySlug,
   listPublicDiscoverCommunities,
   getMyJoinRequestBySlug,

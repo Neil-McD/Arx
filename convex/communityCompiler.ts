@@ -26,7 +26,9 @@ const CHAT_SIGNAL_LIMIT = 6;
 const RESOURCE_LIMIT = 5;
 const RANKED_LIMIT = 5;
 const REPEATED_QUESTION_LIMIT = 5;
-const IMPORTANT_THRESHOLD = 4;
+const DEFAULT_COMPILED_LIMIT = 12;
+const MAX_COMPILED_LIMIT = 24;
+const RANKED_INSIGHT_THRESHOLD = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function normalizeResearchText(raw: unknown, maxLen: number): string {
@@ -96,6 +98,38 @@ function effectiveScoreForPost(post: CommunityAiFeedPostLike, nowMs: number): nu
   return Math.max(0, Number(post.score ?? 0) - decayForPost(post, nowMs));
 }
 
+function normalizeCompiledLimit(raw: unknown): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return DEFAULT_COMPILED_LIMIT;
+  return Math.max(1, Math.min(MAX_COMPILED_LIMIT, Math.floor(value)));
+}
+
+function applyCompiledItemLimit<T>(args: {
+  limit: number;
+  sections: Array<{ key: string; items: T[] }>;
+}): Record<string, T[]> {
+  const normalizedLimit = normalizeCompiledLimit(args.limit);
+  const buckets = new Map<string, T[]>(args.sections.map((section) => [section.key, []]));
+  const cursors = new Map<string, number>(args.sections.map((section) => [section.key, 0]));
+  let remaining = normalizedLimit;
+
+  while (remaining > 0) {
+    let advanced = false;
+    for (const section of args.sections) {
+      if (remaining <= 0) break;
+      const cursor = cursors.get(section.key) ?? 0;
+      if (cursor >= section.items.length) continue;
+      buckets.get(section.key)!.push(section.items[cursor]!);
+      cursors.set(section.key, cursor + 1);
+      remaining -= 1;
+      advanced = true;
+    }
+    if (!advanced) break;
+  }
+
+  return Object.fromEntries(args.sections.map((section) => [section.key, buckets.get(section.key) ?? []]));
+}
+
 async function listCommunityChatThreadsForCommunity(
   ctx: any,
   communityId: any,
@@ -144,7 +178,6 @@ export const readCompiledCommunityContext = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    communityName: v.optional(v.union(v.string(), v.null())),
     query: v.string(),
     limit: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -152,14 +185,13 @@ export const readCompiledCommunityContext = query({
   handler: async (ctx, args) => {
     const startedAt = Date.now();
     const nowMs = args.nowMs ?? startedAt;
+    const compiledLimit = normalizeCompiledLimit(args.limit);
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    void args.communityName;
-    void args.limit;
 
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) {
@@ -220,7 +252,7 @@ export const readCompiledCommunityContext = query({
         : Promise.resolve([] as CommunityChatMessageLike[]),
     ]);
 
-    const recentChatSignals = (
+    const recentChatSignalsAll = (
       await Promise.all(
         chatMessages
           .map(async (message) => {
@@ -267,7 +299,7 @@ export const readCompiledCommunityContext = query({
         });
       }
     }
-    const repeatedQuestions = Array.from(questionBuckets.values())
+    const repeatedQuestionsAll = Array.from(questionBuckets.values())
       .filter((bucket) => bucket.count >= 2)
       .sort((a, b) => b.count - a.count || b.latestMs - a.latestMs)
       .slice(0, REPEATED_QUESTION_LIMIT)
@@ -277,7 +309,7 @@ export const readCompiledCommunityContext = query({
         supporting_chat_message_ids: bucket.supportingIds,
       }));
 
-    const relevantResources = resources
+    const relevantResourcesAll = resources
       .map((resource) => {
         const title = normalizeResearchText(resource.title, 100) || "Community resource";
         const snippet = normalizeResearchText(resource.bodyMd ?? resource.title ?? "", 220) || title;
@@ -304,13 +336,13 @@ export const readCompiledCommunityContext = query({
       .slice(0, RESOURCE_LIMIT)
       .map(({ _createdAtMs, ...row }) => row);
 
-    const rankedInsights = feedPosts
+    const rankedInsightsAll = feedPosts
       .map((post) => {
         const title = normalizeResearchText(post.title ?? "AI feed item", 100) || "AI feed item";
         const body = normalizeResearchText(post.body ?? "", 220);
         if (!body) return null;
         const effectiveScore = effectiveScoreForPost(post, nowMs);
-        if (effectiveScore < IMPORTANT_THRESHOLD) return null;
+        if (effectiveScore < RANKED_INSIGHT_THRESHOLD) return null;
         if (queryTokens.length > 0 && scoreResearchSnippet(`${title}\n${body}`, queryTokens) <= 0) return null;
         return {
           post_id: String(post._id),
@@ -325,6 +357,26 @@ export const readCompiledCommunityContext = query({
       .sort((a, b) => b.effective_score - a.effective_score || b._createdAtMs - a._createdAtMs)
       .slice(0, RANKED_LIMIT)
       .map(({ _createdAtMs, ...row }) => row);
+
+    const limited = applyCompiledItemLimit({
+      limit: compiledLimit,
+      sections: [
+        { key: "rankedInsights", items: rankedInsightsAll },
+        { key: "relevantResources", items: relevantResourcesAll },
+        { key: "repeatedQuestions", items: repeatedQuestionsAll },
+        { key: "recentChatSignals", items: recentChatSignalsAll },
+      ],
+    }) as {
+      rankedInsights: typeof rankedInsightsAll;
+      relevantResources: typeof relevantResourcesAll;
+      repeatedQuestions: typeof repeatedQuestionsAll;
+      recentChatSignals: typeof recentChatSignalsAll;
+    };
+
+    const rankedInsights = limited.rankedInsights;
+    const relevantResources = limited.relevantResources;
+    const repeatedQuestions = limited.repeatedQuestions;
+    const recentChatSignals = limited.recentChatSignals;
 
     const summary = buildSummary({
       repeatedQuestions,
@@ -346,7 +398,7 @@ export const readCompiledCommunityContext = query({
           chat_messages_considered: chatMessages.length,
           resources_considered: resources.length,
           ranked_feed_items_considered: feedPosts.filter(
-            (post) => effectiveScoreForPost(post, nowMs) >= IMPORTANT_THRESHOLD,
+            (post) => effectiveScoreForPost(post, nowMs) >= RANKED_INSIGHT_THRESHOLD,
           ).length,
         },
         summary,

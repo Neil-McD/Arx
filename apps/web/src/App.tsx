@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type SetStateAction } from "react";
 import "highlight.js/styles/github-dark.css";
 import {
-  clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, loadPersistedCloudSession, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, persistCloudSession, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, CLOUD_SESSION_STORAGE_KEY_PREFIX, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
+  clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, loadPersistedCloudSession, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, persistCloudSession, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, CLOUD_SESSION_STORAGE_KEY_PREFIX, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
 } from "./cloudAuth";
 import {
   captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
@@ -43,10 +43,14 @@ import {
 } from "../../../shared/cloudCommunityAiFeedGateway";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
-  saveCloudCommunityPublicPage,
+  saveCloudCommunityFunnel,
   uploadCloudCommunityFunnelMediaFile,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
+import {
+  fetchCloudCommunityPresenceSummary,
+  heartbeatCloudCommunityPresence,
+} from "../../../shared/cloudPublicFunnelGateway";
 import {
   beginCloudChatgptConnect,
   beginCloudChatgptManualConnect,
@@ -85,7 +89,7 @@ import type {
   AnalyticsRange as SharedAnalyticsRange,
   ChatLightboxImage as SharedChatLightboxImage,
   CommunityAccess as SharedCommunityAccess,
-  CommunityAgentDraft as SharedCommunityAgentDraft,
+  CommunityAgentConfig as SharedCommunityAgentConfig,
   CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
   CommunityChatMessage as SharedCommunityChatMessage,
   CommunityFunnelConfig as SharedCommunityFunnelConfig,
@@ -104,7 +108,6 @@ import {
 import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
-  deriveOpenCommunityTabTransition,
   deriveOpenDiscoverTransition,
   deriveToggleWorkspaceSettingsTransition,
 } from "../../../shared/appNavTransitions";
@@ -112,7 +115,7 @@ import {
   type AppRouteState,
   type PublicRoute,
   DEFAULT_POST_SIGN_IN_PATH,
-  buildAppRouteHash,
+  buildAppRoutePath,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
 } from "../../../shared/webAppRouteState";
@@ -216,7 +219,7 @@ import { useWebSettingsImageUploadController } from "../../../shared/useWebSetti
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
 import { useAuthGateLifecycleEffects } from "../../../shared/useAuthGateLifecycleEffects";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
-import { useCommunityAgentDraftController } from "../../../shared/useCommunityAgentDraftController";
+import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
 import { useCommunitySettingsDataController } from "../../../shared/useCommunitySettingsDataController";
@@ -276,7 +279,9 @@ import { useWebAuthSessionLifecycle } from "./controllers/useWebAuthSessionLifec
 import { buildWebCommunitySecondaryPanelsProps } from "./controllers/buildWebCommunitySecondaryPanelsProps";
 import { useWebGuestThreadLifecycle } from "./controllers/useWebGuestThreadLifecycle";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
-import { useWebRouteHashLifecycle } from "./controllers/useWebRouteHashLifecycle";
+import { useWebPathRouteLifecycle } from "./controllers/useWebPathRouteLifecycle";
+import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
+import { useWebWorkspaceRouteController } from "./controllers/useWebWorkspaceRouteController";
 import { useWebThreadDiscoverChatLifecycle } from "./controllers/useWebThreadDiscoverChatLifecycle";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
@@ -297,6 +302,10 @@ import {
   type ExternalMemoryImportItem,
 } from "../../../shared/externalMemoryImport";
 import { WebCreateCommunityModal } from "./components/WebCreateCommunityModal";
+import { WebProfileSettingsSection } from "./components/WebProfileSettingsSection";
+import { WebAccountSettingsSection } from "./components/WebAccountSettingsSection";
+import { WebAgentSettingsSection } from "./components/WebAgentSettingsSection";
+import { WebAppearanceSettingsSection } from "./components/WebAppearanceSettingsSection";
 import { WebCommunityChatPanel } from "./components/WebCommunityChatPanel";
 import { WebDeleteCommunityModal } from "./components/WebDeleteCommunityModal";
 import { WebMessageContextModal } from "./components/WebMessageContextModal";
@@ -307,7 +316,12 @@ import { WebChatgptConnectModal } from "./components/WebChatgptConnectModal";
 import { WebChatgptEmptyStateCard } from "./components/WebChatgptEmptyStateCard";
 import { WebCommunitySecondaryPanels } from "./components/WebCommunitySecondaryPanels";
 import { WebModelPickerPopover } from "./components/WebModelPickerPopover";
+import { WebPublicCommunityFunnel } from "./components/WebPublicCommunityFunnel";
 import { WebPublicRouteView } from "./components/WebPublicRouteView";
+
+const GUEST_FREE_MODEL_LIMIT_MESSAGE =
+  "Guest chat is hitting the free model limit right now. Sign in for ChatGPT Plus/Pro rate limits or connect your own key.";
+const GUEST_FREE_MODEL_LIMIT_SHORT_MESSAGE = "Guest chat is hitting the free model limit right now.";
 
 type CommunityRecord = {
   id: string;
@@ -344,7 +358,19 @@ type PublicCommunityRecord = {
   funnel?: SharedCommunityFunnelConfig | null;
   member_count?: number | null;
   admin_count?: number | null;
-  featured_faces?: Array<{
+  online_count?: number | null;
+  online_faces?: Array<{
+    user_id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }> | null;
+};
+
+type CommunityPresenceSummaryRecord = {
+  member_count?: number | null;
+  admin_count?: number | null;
+  online_count?: number | null;
+  online_faces?: Array<{
     user_id: string;
     display_name: string | null;
     avatar_url: string | null;
@@ -402,7 +428,7 @@ type MessageAttachment = CommunityMessageAttachment & {
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type ChatLightboxImage = SharedChatLightboxImage;
-type CommunityAgentDraft = SharedCommunityAgentDraft<CommunityAgentLanding>;
+type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
@@ -540,7 +566,7 @@ type CommunityMember = {
   community_id: string;
   user_id: string;
   role: string;
-  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
   created_at: string;
   is_entitled?: boolean;
   entitlement_ends_at?: string | null;
@@ -598,7 +624,7 @@ type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder";
+  builder_tier: "free" | "builder" | "architect";
   max_communities: number;
   platform_fee_bps: number;
   has_payouts: boolean;
@@ -612,9 +638,11 @@ type NavSnapshot = {
   view: AppView;
   settingsPage: SettingsPage;
   communityId: string | null;
+  communitySlug: string | null;
   communityTab: CommunityTab;
   threadId: string | null;
   workspaceWantsNewChat: boolean;
+  routePath: string;
 };
 
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
@@ -664,11 +692,44 @@ export default function App() {
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
 
+  async function expireCloudSessionLocally(): Promise<void> {
+    authSessionEpochRef.current += 1;
+    await expireCloudSessionFailClosed({
+      clearPersistedCloudSession: clearPersistedCloudSession,
+      setCloudSession,
+      sessionRef,
+    });
+  }
+
+  async function ensureUsableCloudSession(
+    session: CloudAuthSession | null | undefined = sessionRef.current ?? cloudSession,
+  ): Promise<CloudAuthSession | null> {
+    const candidate = session ?? null;
+    if (!candidate) return null;
+
+    let requestSession = candidate;
+    const persistedBeforeRequest = loadPersistedCloudSession();
+    if (persistedBeforeRequest && !sessionsEqual(persistedBeforeRequest, requestSession)) {
+      adoptCloudSession(persistedBeforeRequest);
+      requestSession = persistedBeforeRequest;
+    }
+
+    const ensured = await ensureCloudSessionForRequest(requestSession, refreshCloudSessionLocked);
+    if (!ensured) {
+      await expireCloudSessionLocally();
+      return null;
+    }
+    if (!sessionsEqual(ensured, requestSession)) {
+      adoptCloudSession(ensured);
+    }
+    return sessionRef.current ?? ensured;
+  }
+
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
 
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "models");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
@@ -807,10 +868,13 @@ export default function App() {
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
   const [activeCommunityId, setActiveCommunityId] = useState<string | null>(() => initialAppRoute?.communityId ?? null);
+  const [activeCommunitySlug, setActiveCommunitySlug] = useState<string | null>(() => initialAppRoute?.communitySlug ?? null);
   const activeCommunity = useMemo(() => {
     if (!activeCommunityId) return null;
     return communities.find((community) => community.id === activeCommunityId) ?? null;
   }, [activeCommunityId, communities]);
+  const [activeCommunityPresenceSummary, setActiveCommunityPresenceSummary] =
+    useState<CommunityPresenceSummaryRecord | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`,
     [cloudSession?.user?.id],
@@ -855,11 +919,9 @@ export default function App() {
     () => deriveCommunityActionGuards(communityAccessCapabilities),
     [communityAccessCapabilities],
   );
-  const canInviteActiveCommunity = communityActionGuards.canInvite;
   const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
-  const canCreateResourcesActiveCommunity = communityActionGuards.canCreateResources;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
   const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
@@ -1193,32 +1255,30 @@ export default function App() {
   const markCommunitySettingsDirty = () => {
     communitySettingsDirtyRef.current = true;
   };
-  const [communityAgentDrafts, setCommunityAgentDrafts] = useState<CommunityAgentDraft[]>([]);
-  const [isLoadingCommunityAgentDrafts, setIsLoadingCommunityAgentDrafts] = useState(false);
-  const [communityAgentDraftsError, setCommunityAgentDraftsError] = useState<string | null>(null);
-  const communityAgentDraftsLoadedCommunityIdRef = useRef<string | null>(null);
+  const [isLoadingCommunityAgentConfig, setIsLoadingCommunityAgentConfig] = useState(false);
+  const [communityAgentConfigError, setCommunityAgentConfigError] = useState<string | null>(null);
+  const communityAgentConfigLoadedCommunityIdRef = useRef<string | null>(null);
 
-  const [communityAgentDraftLanding, setCommunityAgentDraftLanding] = useState<CommunityAgentLanding>(
+  const [communityAgentConfigLanding, setCommunityAgentConfigLanding] = useState<CommunityAgentLanding>(
     DEFAULT_EMPTY_THREAD_LANDING,
   );
-  const [communityAgentDraftSystemPrompt, setCommunityAgentDraftSystemPrompt] = useState("");
-  const [isSavingCommunityAgentDraft, setIsSavingCommunityAgentDraft] = useState(false);
-  const [communityAgentDraftSaveError, setCommunityAgentDraftSaveError] = useState<string | null>(null);
-  const communityAgentDraftDirtyRef = useRef(false);
-  const markCommunityAgentDraftDirty = useCallback(() => {
-    communityAgentDraftDirtyRef.current = true;
+  const [communityAgentConfigSystemPrompt, setCommunityAgentConfigSystemPrompt] = useState("");
+  const [isSavingCommunityAgentConfig, setIsSavingCommunityAgentConfig] = useState(false);
+  const [communityAgentConfigSaveError, setCommunityAgentConfigSaveError] = useState<string | null>(null);
+  const communityAgentConfigDirtyRef = useRef(false);
+  const markCommunityAgentConfigDirty = useCallback(() => {
+    communityAgentConfigDirtyRef.current = true;
   }, []);
-  const hydrateCommunityAgentEditor = useCallback((_slot: number, drafts: CommunityAgentDraft[]) => {
-    const row = drafts.find((draft) => draft.slot === 1) ?? null;
+  const hydrateCommunityAgentEditor = useCallback((row: CommunityAgentConfig | null) => {
     const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
-    setCommunityAgentDraftLanding(landing);
-    setCommunityAgentDraftSystemPrompt(row?.system_prompt ?? "");
-    setCommunityAgentDraftSaveError(null);
-    communityAgentDraftDirtyRef.current = false;
+    setCommunityAgentConfigLanding(landing);
+    setCommunityAgentConfigSystemPrompt(row?.system_prompt ?? "");
+    setCommunityAgentConfigSaveError(null);
+    communityAgentConfigDirtyRef.current = false;
   }, []);
-  const handleResetCommunityAgentDraft = useCallback(() => {
-    hydrateCommunityAgentEditor(1, communityAgentDrafts);
-  }, [communityAgentDrafts, hydrateCommunityAgentEditor]);
+  const handleResetCommunityAgentConfig = useCallback(() => {
+    hydrateCommunityAgentEditor(null);
+  }, [hydrateCommunityAgentEditor]);
 
   const [communityFunnelConfig, setCommunityFunnelConfig] = useState<CommunityFunnelConfig>(
     DEFAULT_COMMUNITY_FUNNEL_CONFIG,
@@ -1285,7 +1345,10 @@ export default function App() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const initialWorkspaceWantsNewChat = Boolean(
-    initialAppRoute && initialAppRoute.threadIsExplicit && initialAppRoute.threadId === null,
+    initialAppRoute &&
+      initialAppRoute.page === "workspace" &&
+      initialAppRoute.view === "home" &&
+      initialAppRoute.threadId === null,
   );
   const [workspaceWantsNewChat, setWorkspaceWantsNewChat] = useState<boolean>(initialWorkspaceWantsNewChat);
   const workspaceWantsNewChatRef = useRef<boolean>(initialWorkspaceWantsNewChat);
@@ -1296,20 +1359,67 @@ export default function App() {
       return resolved;
     });
   };
+
+  function navigateTo(path: string, opts: { replace?: boolean } = {}) {
+    if (opts.replace) {
+      window.history.replaceState({}, document.title, path);
+    } else {
+      window.history.pushState({}, document.title, path);
+    }
+    const nextPublicRoute = readPublicRouteFromLocation();
+    setPublicRoute(nextPublicRoute);
+    if (nextPublicRoute.kind !== "app") {
+      setActivePage("workspace");
+      setActiveView("home");
+      setSettingsPage("agent");
+      setCommunityTab("chat");
+      setActiveCommunityId(null);
+      setActiveCommunitySlug(null);
+      setActiveThreadId(null);
+      setWorkspaceWantsNewChatMode(true);
+      setActiveCloudProjectId(null);
+      setCloudProjectMenuProjectId(null);
+    }
+  }
+
+  const {
+    syncWorkspaceSelection,
+    applyWorkspaceRouteState,
+    applyGuestWorkspaceState,
+    openWorkspaceDraft,
+    openWorkspaceThread,
+    handleNewWorkspaceThread,
+  } = useWebWorkspaceRouteController({
+    activePage,
+    activeView,
+    activeThreadId,
+    navigateTo,
+    setActivePage,
+    setActiveView,
+    setActiveThreadId,
+    setWorkspaceWantsNewChatMode,
+    setActiveCloudProjectId,
+    setCloudProjectMenuProjectId,
+  });
+
   const resolvedActiveCloudProjectId = useMemo(
     () => resolvePreferredCloudProjectId(cloudProjects, activeCloudProjectId),
     [activeCloudProjectId, cloudProjects],
   );
 
   const navStackRef = useRef<NavSnapshot[]>([]);
+  const readCurrentRoutePath = () =>
+    `${window.location.pathname}${window.location.search}` || "/";
   const takeNavSnapshot = (): NavSnapshot => ({
     page: activePage,
     view: activeView,
     settingsPage,
     communityId: activeCommunityId,
+    communitySlug: activeCommunitySlug,
     communityTab,
     threadId: activeThreadId,
     workspaceWantsNewChat,
+    routePath: readCurrentRoutePath(),
   });
   const pushNavSnapshot = () => {
     const snapshot = takeNavSnapshot();
@@ -1317,14 +1427,65 @@ export default function App() {
       includeWorkspaceWantsNewChat: true,
     });
   };
+  const {
+    resolveCommunitySlugById,
+    syncCommunitySelection,
+    clearCommunitySelection,
+    openPublicCommunityFunnel,
+    openCommunityTab,
+    openCommunityChat,
+    openJoinedCommunityBySlug,
+  } = useWebCommunityRouteController<CommunityRecord>({
+    activePage,
+    activeView,
+    activeCommunityId,
+    activeCommunitySlug,
+    communityTab,
+    communities,
+    isLoadingCommunities,
+    publicRouteKind: publicRoute.kind,
+    navigateTo,
+    pushNavSnapshot,
+    setActivePage,
+    setActiveView,
+    setActiveCommunityId,
+    setActiveCommunitySlug,
+    setCommunityTab,
+    setUnreadCount,
+  });
+  const applyPublicRouteState = useCallback((route: PublicRoute) => {
+    setPublicRoute(route);
+    setActivePage("workspace");
+    setActiveView("home");
+    setSettingsPage("agent");
+    setCommunityTab("chat");
+    clearCommunitySelection();
+    applyWorkspaceRouteState({
+      page: "workspace",
+      view: "home",
+      threadId: null,
+    });
+  }, [applyWorkspaceRouteState, clearCommunitySelection]);
   const restoreNavSnapshot = (snapshot: NavSnapshot) => {
+    const nextRoutePath = snapshot.routePath?.trim() || "/";
+    const currentRoutePath = readCurrentRoutePath();
+    if (currentRoutePath !== nextRoutePath) {
+      window.history.replaceState({}, document.title, nextRoutePath);
+      setPublicRoute(readPublicRouteFromLocation());
+    }
     setActivePage(snapshot.page);
     setActiveView(snapshot.page === "workspace" ? snapshot.view : "home");
     setSettingsPage(snapshot.settingsPage);
-    setActiveCommunityId(snapshot.communityId);
+    syncCommunitySelection({
+      communityId: snapshot.communityId,
+      communitySlug: snapshot.communitySlug ?? null,
+    });
     setCommunityTab(snapshot.communityTab);
-    setActiveThreadId(snapshot.threadId);
-    setWorkspaceWantsNewChatMode(snapshot.workspaceWantsNewChat);
+    applyWorkspaceRouteState({
+      page: snapshot.page,
+      view: snapshot.page === "workspace" ? snapshot.view : "home",
+      threadId: snapshot.threadId,
+    });
   };
   const goBack = (): boolean => {
     const snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
@@ -1456,7 +1617,7 @@ export default function App() {
     setAuthError(null);
     const intent = parsePendingAuthIntentInput(intentInput);
     if (intent && !cloudSession) {
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const returnTo = `${window.location.pathname}${window.location.search}`;
       storePendingAuthIntent(buildPendingAuthIntent(intent, returnTo));
     }
     setIsAuthGateOpen(true);
@@ -1537,29 +1698,27 @@ export default function App() {
   });
 
   const {
-    loadCommunityAgentDrafts,
-    handleSaveCommunityAgentDraft,
-  } = useCommunityAgentDraftController<CloudAuthSession, CommunityAgentLanding, CommunityAgentDraft>({
+    loadCommunityAgentConfig,
+    handleSaveCommunityAgentConfig,
+  } = useCommunityAgentConfigController<CloudAuthSession, CommunityAgentLanding, CommunityAgentConfig>({
     activeCommunityId,
     ...cloudSessionArg,
-    communityAgentDraftLanding,
-    communityAgentDraftSystemPrompt,
-    communityAgentDrafts,
-    normalizeDraftForSave: normalizeCommunityAgentDraftForSave,
-    hydrateDraftEditor: hydrateCommunityAgentEditor,
+    communityAgentConfigLanding,
+    communityAgentConfigSystemPrompt,
+    normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
+    hydrateConfigEditor: hydrateCommunityAgentEditor,
     setLoadedCommunityId: (communityId) => {
-      communityAgentDraftsLoadedCommunityIdRef.current = communityId;
+      communityAgentConfigLoadedCommunityIdRef.current = communityId;
     },
-    markDraftClean: () => {
-      communityAgentDraftDirtyRef.current = false;
+    markConfigClean: () => {
+      communityAgentConfigDirtyRef.current = false;
     },
-    setIsLoadingCommunityAgentDrafts,
-    setCommunityAgentDraftsError,
-    setCommunityAgentDrafts,
-    setIsSavingCommunityAgentDraft,
-    setCommunityAgentDraftSaveError,
+    setIsLoadingCommunityAgentConfig,
+    setCommunityAgentConfigError,
+    setIsSavingCommunityAgentConfig,
+    setCommunityAgentConfigSaveError,
     saveValidationErrorMessage: "Add at least one onboarding prompt.",
-    loadFailureMessage: "Failed to load AI agent drafts.",
+    loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
 
@@ -1572,7 +1731,7 @@ export default function App() {
     communityFunnelConfig,
     normalizeConfigForSave: normalizeCommunityFunnelConfig,
     saveConfig: async ({ session, communityId, normalizedConfig }) => {
-      const saved = await saveCloudCommunityPublicPage<CloudAuthSession, CommunityFunnelConfig>({
+      const saved = await saveCloudCommunityFunnel<CloudAuthSession, CommunityFunnelConfig>({
         session,
         communityId,
         description: communityFunnelOneLiner.trim() || null,
@@ -1666,7 +1825,7 @@ export default function App() {
     confirmAction: (message) => confirm(message),
     loadCommunities,
     onLeaveCommunityLocalState: (leavingId) => {
-      setActiveCommunityId(null);
+      clearCommunitySelection();
       setActivePage("workspace");
       setActiveView("home");
       setCommunityTab("chat");
@@ -1815,6 +1974,7 @@ export default function App() {
     searchPersonalMemoryItems,
   } = useWebMemorySettingsDataController<CloudAuthSession>({
     getSession: () => sessionRef.current,
+    ensureSession: ensureUsableCloudSession,
     setIsLoadingUserMemorySettings,
     setUserMemorySettings,
     setIsLoadingUserModelSettings,
@@ -1834,6 +1994,7 @@ export default function App() {
     handleDeletePersonalMemoryItem,
   } = useWebMemoryMutationController<CloudAuthSession>({
     getSession: () => sessionRef.current,
+    ensureSession: ensureUsableCloudSession,
     openAuthGate,
     loadPersonalMemoryItems,
     newPersonalMemoryContent,
@@ -2051,16 +2212,24 @@ export default function App() {
           window.history.replaceState({}, document.title, nextPath);
 
           const nextPublicRoute = readPublicRouteFromLocation();
-          setPublicRoute(nextPublicRoute);
           if (nextPublicRoute.kind === "app") {
+            setPublicRoute(nextPublicRoute);
             const nextAppRoute = readAppRouteFromLocation();
             setActivePage(nextAppRoute.page);
             setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
             setSettingsPage(nextAppRoute.settingsPage);
-            setActiveCommunityId(nextAppRoute.communityId);
+            syncCommunitySelection({
+              communityId: nextAppRoute.communityId,
+              communitySlug: nextAppRoute.communitySlug,
+            });
             setCommunityTab(nextAppRoute.communityTab);
-            setActiveThreadId(nextAppRoute.threadId);
-            setWorkspaceWantsNewChatMode(Boolean(nextAppRoute.threadIsExplicit && nextAppRoute.threadId === null));
+            applyWorkspaceRouteState({
+              page: nextAppRoute.page,
+              view: nextAppRoute.page === "workspace" ? nextAppRoute.view : "home",
+              threadId: nextAppRoute.threadId,
+            });
+          } else {
+            applyPublicRouteState(nextPublicRoute);
           }
         },
         profileLoadErrorMessage: "Failed to load user profile from Cloud.",
@@ -2074,22 +2243,27 @@ export default function App() {
       resumePendingAuthIntent();
     },
     onSessionAvailable: (session) => {
-      void loadCommunities(session);
-      void loadCloudProjects(session);
-      void loadThreads(session);
-      void loadModelRegistry(session);
-      void loadSelfProfile(session);
+      void (async () => {
+        const usableSession = await ensureUsableCloudSession(session);
+        if (!usableSession) return;
+        await Promise.all([
+          loadCommunities(usableSession),
+          loadCloudProjects(usableSession),
+          loadThreads(usableSession),
+          loadModelRegistry(usableSession),
+          loadSelfProfile(usableSession),
+        ]);
+      })();
     },
     onSessionMissing: () => {
       setCommunities([]);
       setIsLoadingCommunities(false);
-      setActiveCommunityId(null);
+      clearCommunitySelection();
       setCloudProjects([]);
       setActiveCloudProjectId(null);
       setThreads([]);
       setThreadError(null);
-      setWorkspaceWantsNewChatMode(false);
-      setActiveThreadId(null);
+      syncWorkspaceSelection({ threadId: null, wantsNewChat: false });
       threadsHydratedRef.current = false;
       setLoadingThreadMessagesThreadId(null);
       setThreadMessages([]);
@@ -2102,10 +2276,16 @@ export default function App() {
       setProfileSaveSuccess(false);
     },
     onFocusWithSession: (current) => {
-      void loadModelRegistry(current);
-      void loadBuilderBillingStatus(current);
-      void loadCommunities(current);
-      void loadCloudProjects(current);
+      void (async () => {
+        const usableSession = await ensureUsableCloudSession(current);
+        if (!usableSession) return;
+        await Promise.all([
+          loadModelRegistry(usableSession),
+          loadBuilderBillingStatus(usableSession),
+          loadCommunities(usableSession),
+          loadCloudProjects(usableSession),
+        ]);
+      })();
     },
   });
 
@@ -2156,6 +2336,67 @@ export default function App() {
     activeCommunityIdRef.current = activeCommunityId;
   }, [activeCommunityId]);
 
+  useEffect(() => {
+    if (!cloudSession || activePage !== "community" || !activeCommunityId) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      try {
+        await heartbeatCloudCommunityPresence<CloudAuthSession>({
+          session: cloudSession,
+          communityId: activeCommunityId,
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("Failed to heartbeat community presence:", error);
+        }
+      }
+    };
+    void tick();
+    const intervalId = window.setInterval(() => {
+      void tick();
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeCommunityId, activePage, cloudSession]);
+
+  useEffect(() => {
+    if (!cloudSession || activePage !== "community" || communityTab !== "funnel" || !activeCommunityId) {
+      setActiveCommunityPresenceSummary(null);
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      try {
+        const summary = await fetchCloudCommunityPresenceSummary<
+          CloudAuthSession,
+          CommunityPresenceSummaryRecord
+        >({
+          session: cloudSession,
+          communityId: activeCommunityId,
+        });
+        if (!cancelled) {
+          setActiveCommunityPresenceSummary(summary ?? null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("Failed to load community presence summary:", error);
+        }
+      }
+    };
+    void refresh();
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeCommunityId, activePage, cloudSession, communityTab]);
+
   useCommunityAgentLandingLifecycle<CloudAuthSession>({
     ...cloudSessionArg,
     activeCommunityId,
@@ -2192,21 +2433,31 @@ export default function App() {
     captureBrandosAidFromLocation();
   }, []);
 
-  useWebRouteHashLifecycle({
+  useWebPathRouteLifecycle({
     publicRouteKind: publicRoute.kind,
     activePage,
     activeView,
     settingsPage,
     activeCommunityId,
+    activeCommunitySlug,
     communityTab,
     activeThreadId,
     workspaceWantsNewChat,
     threadsHydratedRef,
     setPublicRoute,
+    setActivePage,
+    setActiveView,
+    setSettingsPage,
+    setActiveCommunityId,
+    setActiveCommunitySlug,
+    setCommunityTab,
+    applyPublicRouteState,
+    applyWorkspaceRouteState,
     setBuilderBillingReturn,
     setFinalizeCreateCommunityError,
     readPublicRouteFromLocation,
-    buildAppRouteHash,
+    readAppRouteFromLocation,
+    buildAppRoutePath,
   });
 
   useEffect(() => {
@@ -2303,24 +2554,6 @@ export default function App() {
   }, [cloudProfile, profileAvatarUrl, profileBio, profileName, cloudSession]);
   const profileNeedsSave = Boolean(cloudSession && (isProfileDirty || cloudProfile === null));
 
-  useWebThreadDiscoverChatLifecycle<CloudAuthSession, ThreadMessage>({
-    ...cloudSessionArg,
-    activeThreadId,
-    guestThreadId: GUEST_THREAD_ID,
-    activePage,
-    activeCommunityId,
-    communityTab,
-    isLoadingThreadRef,
-    autoScrollEnabledRef,
-    lastWorkspaceScrollTopRef,
-    setIsWorkspaceAtBottom,
-    setLoadingThreadMessagesThreadId,
-    setThreadMessages,
-    loadThreadMessages,
-    loadDiscoverCommunities,
-    loadCommunityChat,
-  });
-
   useWebGuestThreadLifecycle<CloudAuthSession, GuestThreadStorageV1, ThreadMessage>({
     ...cloudSessionArg,
     publicRouteKind: publicRoute.kind,
@@ -2328,9 +2561,9 @@ export default function App() {
     guestThreadId: GUEST_THREAD_ID,
     loadGuestThreadStorage,
     guestStoredToThreadMessages,
+    applyGuestWorkspaceState,
+    syncWorkspaceSelection,
     setGuestModelId,
-    setActiveThreadId,
-    setWorkspaceWantsNewChatMode,
     setThreadMessages,
   });
 
@@ -2351,13 +2584,13 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (activeView !== "settings" || settingsPage !== "memory") return;
+    if (activeView !== "settings" || settingsGroup !== "agent") return;
     const q = personalMemoryQuery.trim();
     const handle = window.setTimeout(() => {
       void searchPersonalMemoryItems(q);
     }, 150);
     return () => window.clearTimeout(handle);
-  }, [activeView, settingsPage, personalMemoryQuery, cloudSession]);
+  }, [activeView, settingsGroup, personalMemoryQuery, cloudSession]);
 
   useEffect(() => {
     setCommunityChatError(null);
@@ -2391,6 +2624,24 @@ export default function App() {
     saveCachedCommunityChatMessages(activeCommunityId, communityMessages);
   }, [activeCommunityId, communityMessages]);
 
+  useWebThreadDiscoverChatLifecycle<CloudAuthSession, ThreadMessage>({
+    ...cloudSessionArg,
+    activeThreadId,
+    guestThreadId: GUEST_THREAD_ID,
+    activePage,
+    activeCommunityId,
+    communityTab,
+    isLoadingThreadRef,
+    autoScrollEnabledRef,
+    lastWorkspaceScrollTopRef,
+    setIsWorkspaceAtBottom,
+    setLoadingThreadMessagesThreadId,
+    setThreadMessages,
+    loadThreadMessages,
+    loadDiscoverCommunities,
+    loadCommunityChat,
+  });
+
   useCommunitySettingsAccessLifecycle<CloudAuthSession, CommunityRecord>({
     activePage,
     communityTab,
@@ -2409,9 +2660,6 @@ export default function App() {
     setActiveCommunityAccess,
     setIsLoadingCommunityAccess,
   });
-
-  const [activeCommunityOwnerHasBuilderAccess, setActiveCommunityOwnerHasBuilderAccess] = useState<boolean | null>(null);
-  const activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef = useRef<string | null>(null);
 
   const loadCommunityAiFeed = useCallback(async (communityId: string) => {
     if (!cloudSession) {
@@ -2498,19 +2746,15 @@ export default function App() {
     [activeCommunityId, cloudSession, loadCommunityAiFeed],
   );
 
-  useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentDraft>({
+  useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentConfig>({
     activePage,
     communityTab,
     ...cloudSessionArg,
     activeCommunityId,
     canManageMembersActiveCommunity,
-    activeCommunityOwnerHasBuilderAccess,
-    setActiveCommunityOwnerHasBuilderAccess,
-    activeCommunityOwnerHasBuilderAccessLoadedCommunityIdRef,
-    loadCommunityAgentDrafts,
-    communityAgentDraftsLoadedCommunityIdRef,
-    setCommunityAgentDrafts,
-    setCommunityAgentDraftsError,
+    loadCommunityAgentConfig,
+    communityAgentConfigLoadedCommunityIdRef,
+    setCommunityAgentConfigError,
     loadCommunityMembers,
   });
 
@@ -2559,7 +2803,6 @@ export default function App() {
   });
 
   async function refreshCloudSessionLocked(refreshToken: string): Promise<CloudAuthSession | null> {
-    if (!sessionRef.current) return null;
     const epochAtRefreshStart = authSessionEpochRef.current;
     return await refreshCloudSessionWithLock({
       refreshToken,
@@ -2579,7 +2822,7 @@ export default function App() {
     setAuthError(null);
     clearCloudSignedOutIntentMarker();
     markCloudAuthFlowPending();
-    storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    storeAuthReturnTo(`${window.location.pathname}${window.location.search}`);
     const result = await beginGoogleCloudSignIn();
     if (!result.ok) {
       setAuthError(result.error);
@@ -2656,7 +2899,7 @@ export default function App() {
 
     clearCloudSignedOutIntentMarker();
     markCloudAuthFlowPending();
-    storeAuthReturnTo(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+    storeAuthReturnTo(`${window.location.pathname}${window.location.search}`);
     setMagicLinkStatus("sending");
     setMagicLinkError(null);
     try {
@@ -2700,7 +2943,7 @@ export default function App() {
   }, []);
 
   const handleConnectOpenRouter = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "openrouter" } });
       return;
@@ -2728,10 +2971,10 @@ export default function App() {
     } finally {
       setIsSavingOpenRouterConnection(false);
     }
-  }, [cloudSession, openAuthGate, openRouterApiKeyDraft]);
+  }, [ensureUsableCloudSession, openAuthGate, openRouterApiKeyDraft]);
 
   const handleDisconnectOpenRouter = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) return;
     setIsSavingOpenRouterConnection(true);
     setOpenRouterConnectionError(null);
@@ -2749,7 +2992,7 @@ export default function App() {
     } finally {
       setIsSavingOpenRouterConnection(false);
     }
-  }, [cloudSession]);
+  }, [ensureUsableCloudSession]);
 
   const resetChatgptConnectFlowState = useCallback((): void => {
     if (chatgptConnectPollTimeoutRef.current) {
@@ -2779,7 +3022,7 @@ export default function App() {
   }, [chatgptDeviceLoginId, chatgptManualAuthorizeUrl, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleStartChatgptDeviceConnect = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
@@ -2791,7 +3034,7 @@ export default function App() {
     try {
       const result = await beginCloudChatgptConnect({
         session,
-        returnToPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        returnToPath: `${window.location.pathname}${window.location.search}`,
       });
       setChatgptDeviceLoginId(result.login_id);
       setChatgptDeviceVerificationUrl(result.verification_url);
@@ -2803,7 +3046,7 @@ export default function App() {
     } finally {
       setIsConnectingChatgpt(false);
     }
-  }, [cloudSession, openAuthGate, resetChatgptConnectFlowState]);
+  }, [ensureUsableCloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleOpenChatgptAuthorizePage = useCallback(() => {
     if (!chatgptDeviceVerificationUrl) return;
@@ -2811,7 +3054,7 @@ export default function App() {
   }, [chatgptDeviceVerificationUrl]);
 
   const handleStartChatgptManualConnect = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
@@ -2822,7 +3065,7 @@ export default function App() {
     try {
       const result = await beginCloudChatgptManualConnect({
         session,
-        returnToPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        returnToPath: `${window.location.pathname}${window.location.search}`,
       });
       setChatgptManualAuthorizeUrl(result.authorize_url);
       setChatgptManualCallbackInput("");
@@ -2832,7 +3075,7 @@ export default function App() {
     } finally {
       setIsConnectingChatgpt(false);
     }
-  }, [cloudSession, openAuthGate]);
+  }, [ensureUsableCloudSession, openAuthGate]);
 
   const handleOpenChatgptManualAuthPage = useCallback(() => {
     if (!chatgptManualAuthorizeUrl) return;
@@ -2840,7 +3083,7 @@ export default function App() {
   }, [chatgptManualAuthorizeUrl]);
 
   const handlePollChatgptConnect = useCallback(async (): Promise<boolean> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return false;
@@ -2876,10 +3119,10 @@ export default function App() {
     } finally {
       setIsPollingChatgptConnection(false);
     }
-  }, [chatgptDeviceLoginId, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
+  }, [chatgptDeviceLoginId, ensureUsableCloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleCompleteChatgptManualConnect = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) {
       openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
@@ -2907,10 +3150,10 @@ export default function App() {
     } finally {
       setIsCompletingChatgptConnection(false);
     }
-  }, [chatgptManualCallbackInput, cloudSession, openAuthGate, resetChatgptConnectFlowState]);
+  }, [chatgptManualCallbackInput, ensureUsableCloudSession, openAuthGate, resetChatgptConnectFlowState]);
 
   const handleDisconnectChatgpt = useCallback(async (): Promise<void> => {
-    const session = sessionRef.current ?? cloudSession;
+    const session = await ensureUsableCloudSession();
     if (!session) return;
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
@@ -2927,7 +3170,7 @@ export default function App() {
     } finally {
       setIsConnectingChatgpt(false);
     }
-  }, [cloudSession]);
+  }, [ensureUsableCloudSession]);
 
   const handleCloseChatgptConnectModal = useCallback((): void => {
     if (isConnectingChatgpt || isCompletingChatgptConnection) return;
@@ -2988,9 +3231,15 @@ export default function App() {
       setChatgptConnectionSuccess(null);
       return;
     }
-    void loadUserMemorySettings(session);
-    void loadUserModelSettings(session);
-    void loadOpenRouterConnection(session);
+    void (async () => {
+      const usableSession = await ensureUsableCloudSession(session);
+      if (!usableSession) return;
+      await Promise.all([
+        loadUserMemorySettings(usableSession),
+        loadUserModelSettings(usableSession),
+        loadOpenRouterConnection(usableSession),
+      ]);
+    })();
   }, [cloudSession, loadOpenRouterConnection]);
 
   useEffect(() => {
@@ -3018,15 +3267,6 @@ export default function App() {
     handlePollChatgptConnect,
     isPollingChatgptConnection,
   ]);
-
-  function navigateTo(path: string, opts: { replace?: boolean } = {}) {
-    if (opts.replace) {
-      window.history.replaceState({}, document.title, path);
-    } else {
-      window.history.pushState({}, document.title, path);
-    }
-    setPublicRoute(readPublicRouteFromLocation());
-  }
 
   async function handleSignOut() {
     // Fail closed immediately so a fast refresh cannot rehydrate auth.
@@ -3160,10 +3400,7 @@ export default function App() {
     ...cloudSessionArg,
     openAuthGate,
     loadCommunities,
-    openCommunityWorkspace: (communityId) => {
-      navigateTo("/", { replace: true });
-      openCommunityTab(communityId, "chat", { pushSnapshot: false });
-    },
+    openCommunityWorkspace: (communityId) => openCommunityChat(communityId, { pushSnapshot: false }),
     isUuid,
     setIsJoiningPublicCommunity,
     setPublicJoinError,
@@ -3184,6 +3421,7 @@ export default function App() {
   const { startBuilderPlanCheckout, openBuilderBillingPortal, startConnectOnboarding } =
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
+      ensureSession: ensureUsableCloudSession,
       openAuthGate: (intent) => openAuthGate(intent),
       setBuilderBillingError,
       setIsStartingBuilderCheckout,
@@ -3199,11 +3437,9 @@ export default function App() {
     redeemPendingPurchases,
   } = useWebCommerceAffiliateActions({
     getSession: () => sessionRef.current,
+    ensureSession: ensureUsableCloudSession,
     openAuthGate,
-    openCommunityWorkspace: (communityId) => {
-      navigateTo("/", { replace: true });
-      openCommunityTab(communityId, "chat", { pushSnapshot: false });
-    },
+    openCommunityWorkspace: (communityId) => openCommunityChat(communityId, { pushSnapshot: false }),
     loadCommunities,
     clearPendingPurchaseClaimToken,
     storePendingPurchaseClaimToken,
@@ -3222,8 +3458,8 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "builder"): Promise<void> {
-    const session = sessionRef.current ?? cloudSession;
+  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+    const session = await ensureUsableCloudSession();
     if (!session || !canUseDevTierOverride) return;
     setIsSettingDevBuilderTier(true);
     setDevBuilderTierError(null);
@@ -3318,7 +3554,7 @@ export default function App() {
     bannerLoadFailureMessage: "Failed to load banner.",
   });
 
-  const publicLandingSlug = publicRoute.kind === "community_landing" ? publicRoute.slug : null;
+  const publicFunnelSlug = publicRoute.kind === "community_funnel" ? publicRoute.slug : null;
   const checkoutSuccessSessionId = publicRoute.kind === "checkout_success" ? publicRoute.sessionId : null;
   const claimTokenParam = publicRoute.kind === "claim" ? publicRoute.token : null;
   const pendingPurchaseBannerKey = pendingPurchaseClaims
@@ -3331,9 +3567,9 @@ export default function App() {
   }, [pendingPurchaseBannerKey]);
 
   useEffect(() => {
-    if (!publicLandingSlug) return;
-    void loadPublicCommunity(publicLandingSlug);
-  }, [publicLandingSlug]);
+    if (!publicFunnelSlug) return;
+    void loadPublicCommunity(publicFunnelSlug);
+  }, [publicFunnelSlug]);
 
   useWebPostAuthBillingLifecycle({
     session: cloudSession,
@@ -3480,11 +3716,14 @@ export default function App() {
       return syncWorkspaceThreadCommunityLens(thread.id, desiredCommunityId, session);
     },
     onSelectThread: (thread: ThreadRecord) => {
-      setWorkspaceWantsNewChatMode(false);
-      setActiveCommunityId(thread.community_id ?? null);
       const projectId = (thread.project_id ?? "").trim();
-      if (projectId) setActiveCloudProjectId(projectId);
-      setActiveThreadId(thread.id);
+      openWorkspaceThread({
+        threadId: thread.id,
+        projectId: projectId || null,
+        beforeSelect: () => {
+          syncCommunitySelection({ communityId: thread.community_id ?? null });
+        },
+      });
     },
     trace: traceThreadContext,
     buildThreadSelectedTrace: (thread: ThreadRecord) => ({
@@ -3768,11 +4007,11 @@ export default function App() {
   }
 
   function handleStartDraftInCloudProject(projectId: string): void {
-    setActiveCloudProjectId(projectId);
-    setCloudProjectMenuProjectId(null);
-    setWorkspaceWantsNewChatMode(true);
-    setActiveThreadId(null);
-    workspaceAskInputRef.current?.focus();
+    openWorkspaceDraft({
+      projectId,
+      clearProjectMenu: true,
+      focusComposer: () => workspaceAskInputRef.current?.focus(),
+    });
   }
 
   const selectWorkspaceThread = (thread: ThreadRecord): void => {
@@ -4105,19 +4344,19 @@ export default function App() {
       communityFeedByCommunityId[activeCommunityId] ?? {
         live: [] as CommunityAiFeedPost[],
         ranked: [] as CommunityAiFeedPost[],
-        isLoading: communityTab === "feed",
+        isLoading: communityTab === "ai_feed",
         error: null as string | null,
       }
     );
   }, [activeCommunityId, communityFeedByCommunityId, communityTab]);
 
   useEffect(() => {
-    if (communityTab !== "feed") return;
+    if (communityTab !== "ai_feed") return;
     if (!activeCommunityId) return;
     void loadCommunityAiFeed(activeCommunityId);
   }, [activeCommunityId, communityTab, loadCommunityAiFeed]);
 
-  const normalizedBuilderTier = useMemo<"free" | "builder">(
+  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
   );
@@ -4548,13 +4787,16 @@ export default function App() {
 	    return "Open your guest chat.";
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
+	  const isPublicCommunityFunnel = publicRoute.kind === "community_funnel";
 	  const showCommunityRail = true;
-	  const showCommunityNav = activePage === "community";
+	  const showCommunityNav = publicRoute.kind === "app" && activePage === "community";
 	  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
 	  const sessionsDrawerEnabled = publicRoute.kind === "app" && activePage === "workspace" && !isWorkspaceSettings;
 	  const isSessionsDrawerOpen = sessionsDrawerEnabled && userWantsSessions;
 	  const hasLeftPanel = isWorkspaceSettings || showCommunityNav;
   const canReorderCommunities = railCommunities.length > 1;
+  const hasCommunityRailMiddleContent =
+    railCommunities.length > 0 || (communities.length === 0 && isLoadingCommunities);
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
   const { setContainerElement: setCommunityRailListElement, getItemBindings: getCommunityRailItemBindings, draggingId: draggingCommunityId } =
     useRailPointerReorder({
@@ -4562,6 +4804,58 @@ export default function App() {
       enabled: canReorderCommunities,
       onMoveToIndex: handleReorderCommunityRail,
     });
+  const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
+  const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
+  const funnelPreviewJoinMode = deriveCommunityJoinMode({
+    entry_policy: activeCommunity?.entry_policy,
+  });
+  const funnelPreviewAdminCount = useMemo(() => {
+    if (typeof activeCommunityPresenceSummary?.admin_count === "number") {
+      return activeCommunityPresenceSummary.admin_count;
+    }
+    if (!activeCommunity) return null;
+    const adminLikeCount = communityMembers.filter((member) => {
+      const normalizedRole = String(member.role ?? "").trim().toLowerCase();
+      return normalizedRole === "owner" || normalizedRole === "admin";
+    }).length;
+    return adminLikeCount > 0 ? adminLikeCount : null;
+  }, [activeCommunity, activeCommunityPresenceSummary?.admin_count, communityMembers]);
+  const funnelPreviewOnlineCount = useMemo(() => {
+    if (typeof activeCommunityPresenceSummary?.online_count === "number") {
+      return activeCommunityPresenceSummary.online_count;
+    }
+    return null;
+  }, [activeCommunityPresenceSummary?.online_count]);
+  const funnelPreviewOnlineFaces = useMemo(() => {
+    if (activeCommunityPresenceSummary?.online_faces?.length) {
+      return activeCommunityPresenceSummary.online_faces.slice(0, 8);
+    }
+    if (!activeCommunity) return [];
+    const orderedUserIds: string[] = [];
+    const seen = new Set<string>();
+    const appendUserId = (value: string | null | undefined) => {
+      const normalized = String(value ?? "").trim();
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      orderedUserIds.push(normalized);
+    };
+    appendUserId(activeCommunity.owner_id);
+    for (const member of communityMembers) {
+      const normalizedRole = String(member.role ?? "").trim().toLowerCase();
+      if (normalizedRole === "owner" || normalizedRole === "admin") {
+        appendUserId(member.user_id);
+      }
+    }
+    for (const member of communityMembers) appendUserId(member.user_id);
+    return orderedUserIds.slice(0, 8).map((userId) => {
+      const profile = profilesByUserId[userId];
+      return {
+        user_id: userId,
+        display_name: profile?.display_name ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      };
+    });
+  }, [activeCommunity, activeCommunityPresenceSummary?.online_faces, communityMembers, profilesByUserId]);
 
   useEffect(() => {
     if (!isSessionsDrawerOpen) return;
@@ -4591,113 +4885,102 @@ export default function App() {
       lastThreadMessageRole === "user" &&
       lastThreadUserMessageId,
   );
+  const showGuestRateLimitSignInAction = !cloudSession && threadError === GUEST_FREE_MODEL_LIMIT_MESSAGE;
+  const displayedThreadError = showGuestRateLimitSignInAction
+    ? GUEST_FREE_MODEL_LIMIT_SHORT_MESSAGE
+    : threadError;
 		  const workspaceThreadKey = cloudSession ? activeThreadId : GUEST_THREAD_ID;
-		  const isStreamingWorkspaceTurn = Boolean(
-		    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
-		  );
+  const isStreamingWorkspaceTurn = Boolean(
+    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
+  );
 
-		  if (publicRoute.kind !== "app") {
-		    const showSignIn = !cloudSession;
-		    const selectedPublicCommunityPlan =
-		      publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
-		      publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
-	      publicCommunityPlans.find((plan) => plan.billing_period === "yearly") ??
-	      publicCommunityPlans[0] ??
-	      null;
-	    const publicVisibility = toCanonicalCommunityVisibility(publicCommunity?.visibility, "unlisted");
-	    const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
-	    const publicJoinMode: CommunityJoinMode | null = publicCommunity
-          ? deriveCommunityJoinMode({
-              entry_policy: publicCommunity.entry_policy,
-            })
-          : null;
-	    const publicVisibilityHint =
-	      publicVisibility === "published"
-	        ? publicJoinMode === "request_access"
-	          ? "Preview is available. Request access to participate."
-	          : "Preview is available. Join to participate."
-	        : publicJoinMode === "request_access"
-	          ? "Not listed in discovery. Request access to participate."
-	          : "Not listed in discovery. Share the link when you're ready.";
-		    const canJoinForFree = publicJoinMode === "join_free";
-		    const canRequestAccessForFree = publicJoinMode === "request_access";
-		    const canJoinWithCheckout = publicJoinMode === "checkout";
-	    const pendingToken =
-	      (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
-	      readPendingPurchaseClaimToken();
-	    const myJoinRequestStatus = String(myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
-	    const deniedUntilIso = myPublicCommunityJoinRequest?.denied_until ?? null;
-	    const deniedUntilMs = deniedUntilIso ? new Date(deniedUntilIso).getTime() : NaN;
-	    const requestCooldownActive =
-	      myJoinRequestStatus === "denied" && Number.isFinite(deniedUntilMs) && deniedUntilMs > Date.now();
-	    const requestPending = myJoinRequestStatus === "pending";
-	    const requestDeniedDateLabel =
-	      requestCooldownActive && deniedUntilIso
-	        ? new Date(deniedUntilIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
-	        : "";
-      const handlePublicLandingPrimaryAction = () => {
-        if (!publicCommunity) return;
-        if (canJoinWithCheckout && selectedPublicCommunityPlan) {
-          void startCheckoutForPlan(
-            publicCommunity.slug,
-            selectedPublicCommunityPlan.billing_period,
-            `/c/${encodeURIComponent(publicCommunity.slug)}`,
-          );
-          return;
-        }
-        if (canRequestAccessForFree) {
-          void requestCommunityAccess({ communitySlug: publicCommunity.slug });
-          return;
-        }
-        if (!canJoinForFree) return;
-        void joinPublicCommunity({ communitySlug: publicCommunity.slug });
-      };
+  const showPublicSignIn = !cloudSession;
+  const selectedPublicCommunityPlan =
+    publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
+    publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
+    publicCommunityPlans.find((plan) => plan.billing_period === "yearly") ??
+    publicCommunityPlans[0] ??
+    null;
+  const publicVisibility = toCanonicalCommunityVisibility(publicCommunity?.visibility, "unlisted");
+  const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
+  const publicJoinMode: CommunityJoinMode | null = publicCommunity
+    ? deriveCommunityJoinMode({
+        entry_policy: publicCommunity.entry_policy,
+      })
+    : null;
+  const canJoinForFree = publicJoinMode === "join_free";
+  const canRequestAccessForFree = publicJoinMode === "request_access";
+  const canJoinWithCheckout = publicJoinMode === "checkout";
+  const pendingToken =
+    (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
+    readPendingPurchaseClaimToken();
+  const myJoinRequestStatus = String(myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
+  const deniedUntilIso = myPublicCommunityJoinRequest?.denied_until ?? null;
+  const deniedUntilMs = deniedUntilIso ? new Date(deniedUntilIso).getTime() : NaN;
+  const requestCooldownActive =
+    myJoinRequestStatus === "denied" && Number.isFinite(deniedUntilMs) && deniedUntilMs > Date.now();
+  const requestPending = myJoinRequestStatus === "pending";
+  const requestDeniedDateLabel =
+    requestCooldownActive && deniedUntilIso
+      ? new Date(deniedUntilIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+      : "";
+  const handlePublicLandingPrimaryAction = () => {
+    if (!publicCommunity) return;
+    if (canJoinWithCheckout && selectedPublicCommunityPlan) {
+      void startCheckoutForPlan(
+        publicCommunity.slug,
+        selectedPublicCommunityPlan.billing_period,
+        `/c/${encodeURIComponent(publicCommunity.slug)}`,
+      );
+      return;
+    }
+    if (canRequestAccessForFree) {
+      void requestCommunityAccess({ communitySlug: publicCommunity.slug });
+      return;
+    }
+    if (!canJoinForFree) return;
+    void joinPublicCommunity({ communitySlug: publicCommunity.slug });
+  };
 
-      const handlePublicLandingMagicLink = () => {
-        if (!publicCommunity) return;
-        const aid = getBrandosAidForCommunitySlug(publicCommunity.slug);
-        if (canRequestAccessForFree) {
-          const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          storePendingAuthIntent(buildPendingAuthIntent(
-            { reason: "request_community_access", payload: { community_slug: publicCommunity.slug, message: null } },
-            returnTo
-          ));
-        } else {
-          storePendingPublicJoin(publicCommunity.slug, aid);
-        }
-        void handleSendMagicLink(magicLinkEmail);
-      };
+  const handlePublicCheckoutContinue = () => {
+    if (!pendingToken) return;
+    if (showPublicSignIn) {
+      openAuthGate({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
+      return;
+    }
+    void redeemPurchaseClaim(pendingToken);
+  };
 
-      const handlePublicCheckoutContinue = () => {
-        if (!pendingToken) return;
-        if (showSignIn) {
-          openAuthGate({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
-          return;
-        }
-        void redeemPurchaseClaim(pendingToken);
-      };
+  const handlePublicClaimContinue = () => {
+    const token = (pendingToken || manualClaimToken).trim();
+    if (!token) return;
+    void redeemPurchaseClaim(token);
+  };
 
-      const handlePublicClaimContinue = () => {
-        const token = (pendingToken || manualClaimToken).trim();
-        if (!token) return;
-        void redeemPurchaseClaim(token);
-      };
-
+  if (publicRoute.kind === "checkout_success" || publicRoute.kind === "claim") {
       return (
         <WebPublicRouteView
           publicRouteKind={publicRoute.kind}
-          publicRouteSlug={publicRoute.kind === "community_landing" ? publicRoute.slug : ""}
-          showSignIn={showSignIn}
-          onBackToApp={() => navigateTo("/")}
+          publicRouteSlug={publicRoute.kind === "community_funnel" ? publicRoute.slug : ""}
+          showSignIn={showPublicSignIn}
+          showBackToApp={Boolean(backTargetSnapshot)}
+          backToAppLabel={backTargetLabel}
+          onBackToApp={() => {
+            const restored = goBack();
+            if (!restored) {
+              navigateTo("/workspace", { replace: true });
+              setActivePage("workspace");
+              setActiveView("home");
+            }
+          }}
           onOpenAuthGate={() => openAuthGate()}
           onSignOut={() => {
             void handleSignOut();
           }}
-          publicCommunity={publicCommunity}
-          selectedPublicCommunityPlanLabel={selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null}
-          publicVisibilityLabel={publicVisibilityLabel}
-          publicVisibilityHint={publicVisibilityHint}
-          publicCommunityPlans={publicCommunityPlans}
+	          publicCommunity={publicCommunity}
+	          selectedPublicCommunityPlanLabel={selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null}
+	          publicVisibilityLabel={publicVisibilityLabel}
+	          publicCommunityPlans={publicCommunityPlans}
           selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
           selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlan?.billing_period ?? null}
           onSelectPublicCommunityBillingPeriod={setSelectedPublicCommunityBillingPeriod}
@@ -4714,11 +4997,9 @@ export default function App() {
           requestCooldownActive={requestCooldownActive}
           requestDeniedDateLabel={requestDeniedDateLabel}
           onPrimaryJoinAction={handlePublicLandingPrimaryAction}
-          onSendLandingMagicLink={handlePublicLandingMagicLink}
           onRetryCheckoutFinalize={retryCheckoutFinalize}
           onContinueCheckout={handlePublicCheckoutContinue}
           onContinueClaim={handlePublicClaimContinue}
-          onNavigateToClaim={() => navigateTo("/claim")}
           onSendMagicLink={() => {
             void handleSendMagicLink(magicLinkEmail);
           }}
@@ -4741,12 +5022,15 @@ export default function App() {
           onSignIn={handleSignIn}
         />
       );
-    }
+	    }
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
 	    if (goBack()) return;
 	    const transition = deriveBackFromWorkspaceSettingsFallbackTransition();
 	    setActiveView(transition.nextView);
+	  };
+	  const handleTopbarBackFromPublicFunnel = () => {
+	    void goBack();
 	  };
 	  const handleTopbarBackToWorkspace = () => {
 	    if (goBack()) return;
@@ -4757,31 +5041,6 @@ export default function App() {
 	    setActiveView(transition.nextView);
 	    setActivePage(transition.nextPage);
 	  };
-	  function openCommunityTab(
-	    nextCommunityId: string,
-	    nextCommunityTab: CommunityTab,
-	    opts?: { clearUnread?: boolean; pushSnapshot?: boolean },
-	  ): void {
-	    const transition = deriveOpenCommunityTabTransition(
-	      {
-	        activePage,
-	        activeView,
-	        communityTab,
-	        activeCommunityId: activeCommunityId ?? null,
-	      },
-	      nextCommunityId,
-	      nextCommunityTab,
-	    );
-	    if ((opts?.pushSnapshot ?? true) && transition.shouldPushSnapshot) pushNavSnapshot();
-	    setActiveView(transition.nextView);
-	    setActivePage(transition.nextPage);
-	    setCommunityTab(transition.nextCommunityTab);
-	    if (opts?.clearUnread) setUnreadCount(0);
-	    setActiveCommunityId(transition.nextCommunityId);
-	  }
-	  function openCommunityChat(nextCommunityId: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }): void {
-	    openCommunityTab(nextCommunityId, "chat", opts);
-	  }
 	  const handleOpenLandingCommunity = () => {
 	    if (!activeCommunityId) return;
 	    openCommunityChat(activeCommunityId, { clearUnread: true });
@@ -4802,23 +5061,6 @@ export default function App() {
 	    setActivePage(transition.nextPage);
 	    setActiveView(transition.nextView);
 	  };
-  const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
-  const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
-  const funnelPreviewJoinMode = deriveCommunityJoinMode({
-    entry_policy: activeCommunity?.entry_policy,
-  });
-  const funnelPreviewVisibilityHint =
-    funnelPreviewVisibility === "published"
-      ? funnelPreviewJoinMode === "request_access"
-        ? "Preview is available. Request access to participate."
-        : funnelPreviewJoinMode === "join_free"
-          ? "Preview is available. Join to participate."
-          : "Preview is available. Select a plan to continue."
-      : funnelPreviewJoinMode === "request_access"
-        ? "Not listed in discovery. Request access to participate."
-        : funnelPreviewJoinMode === "join_free"
-          ? "Not listed in discovery. Share the link when you're ready."
-          : "Not listed in discovery. Select a plan to continue.";
   const communitySecondaryPanelsProps = buildWebCommunitySecondaryPanelsProps({
     communityTab,
     settings: {
@@ -4926,27 +5168,27 @@ export default function App() {
       activeCommunity,
       hasSession: Boolean(cloudSession),
       canManageMembersActiveCommunity,
-      isLoadingCommunityAgentDrafts,
-      communityAgentDraftsError,
+      isLoadingCommunityAgentConfig,
+      communityAgentConfigError,
       isActiveCommunityOwner,
       onOpenAuthGate: openAuthGate,
       setBuilderUpgradeContext,
       setIsBuilderUpgradeOpen,
       landingEditorProps: {
-        communityAgentDraftDirtyRef,
-        handleSaveCommunityAgentDraft,
-	        handleResetCommunityAgentDraft,
-	        isSavingCommunityAgentDraft,
-	        communityAgentDraftSaveError,
-	        communityAgentDraftLanding,
-	        setCommunityAgentDraftLanding,
-	        markCommunityAgentDraftDirty,
-	        communityAgentDraftSystemPrompt,
-	        setCommunityAgentDraftSystemPrompt,
-	        previewCommunityName: activeCommunity?.name ?? "Community",
-	        previewProjectName: resolvedActiveCloudProjectName,
-	      },
-	    },
+        communityAgentConfigDirtyRef,
+        handleSaveCommunityAgentConfig,
+        handleResetCommunityAgentConfig,
+        isSavingCommunityAgentConfig,
+        communityAgentConfigSaveError,
+        communityAgentConfigLanding,
+        setCommunityAgentConfigLanding,
+        markCommunityAgentConfigDirty,
+        communityAgentConfigSystemPrompt,
+        setCommunityAgentConfigSystemPrompt,
+        previewCommunityName: activeCommunity?.name ?? "Community",
+        previewProjectName: resolvedActiveCloudProjectName,
+      },
+    },
     funnel: {
       activeCommunity,
       hasSession: Boolean(cloudSession),
@@ -4976,9 +5218,11 @@ export default function App() {
           banner_focus_y: activeCommunity?.banner_focus_y ?? null,
           banner_zoom: activeCommunity?.banner_zoom ?? null,
           visibility: activeCommunity?.visibility ?? "unlisted",
+          admin_count: funnelPreviewAdminCount,
+          online_count: funnelPreviewOnlineCount,
+          online_faces: funnelPreviewOnlineFaces,
         },
         previewVisibilityLabel: funnelPreviewVisibilityLabel,
-        previewVisibilityHint: funnelPreviewVisibilityHint,
         previewMemberCount: activeCommunity ? communityMembers.length : null,
         previewJoinMode: funnelPreviewJoinMode,
       },
@@ -5008,8 +5252,7 @@ export default function App() {
       capabilities: {
         hasActiveCommunity: Boolean(activeCommunity),
         activeCommunityName: activeCommunity?.name ?? null,
-        canCreateResources: Boolean(cloudSession && canCreateResourcesActiveCommunity),
-        canManageResources: canManageResourcesActiveCommunity,
+        canOperateResources: Boolean(cloudSession && canManageResourcesActiveCommunity),
       },
       state: {
         isLoadingResources,
@@ -5028,7 +5271,6 @@ export default function App() {
       activeCommunity,
       hasSession: Boolean(cloudSession),
       capabilities: {
-        canInviteActiveCommunity,
         canManageMembersActiveCommunity,
         canReviewJoinRequestsActiveCommunity,
         isActiveCommunityOwner,
@@ -5093,6 +5335,7 @@ export default function App() {
     hasSession: Boolean(cloudSession),
     sessionUserId: cloudSession?.user.id ?? null,
     canPostMessages: canPostMessagesActiveCommunity,
+    canModerateMessages: canManageResourcesActiveCommunity,
     isLoadingChat,
     hasResolvedCommunityChat,
     isLoadingMoreChat,
@@ -5180,7 +5423,7 @@ export default function App() {
 	      if (
 	        !confirmDiscardUnsavedCommunitySettingsWeb({
 	          isCommunitySettingsDirty: communitySettingsDirtyRef.current,
-	          isCommunityAgentDraftDirty: communityAgentDraftDirtyRef.current,
+	          isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
 	          activeCommunityId,
 	          nextCommunityId: opts.memberCommunity.id,
 	          confirmDiscard: (message) => window.confirm(message),
@@ -5188,13 +5431,13 @@ export default function App() {
 	      ) {
 	        return;
 	      }
-	      openCommunityChat(opts.memberCommunity.id);
+	      openJoinedCommunityBySlug(opts.memberCommunity.slug, { pushSnapshot: true });
 	      return;
 	    }
 	    if (!opts.slug) return;
-	    navigateTo(`/c/${encodeURIComponent(opts.slug)}`);
+      openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
 	  };
-	  const showHeaderIslands = activePage === "workspace" && activeView === "home";
+	  const showHeaderIslands = publicRoute.kind === "app" && activePage === "workspace" && activeView === "home";
 	  const communityHomeButton = activeCommunity ? (
 	    <button
 	      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
@@ -5212,6 +5455,7 @@ export default function App() {
 	          src={activeCommunity.avatar_url}
 	          alt={activeCommunity.name}
 	          loading="lazy"
+	          draggable={false}
 	        />
 	      ) : (
 	        <span className="community-btn-initials">{communityInitials(activeCommunity.name)}</span>
@@ -5228,7 +5472,21 @@ export default function App() {
     >
       <header className="app-topbar">
         <div className="topbar-left">
-	          {activePage === "workspace" ? (
+	          {isPublicCommunityFunnel ? (
+              backTargetSnapshot ? (
+              <button
+                className="back-to-workspace"
+                onClick={handleTopbarBackFromPublicFunnel}
+                title="Back"
+                type="button"
+              >
+                <svg viewBox="0 0 24 24" className="back-icon">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                <span className="back-path">{backTargetLabel ?? "back"}</span>
+              </button>
+              ) : null
+            ) : activePage === "workspace" ? (
 	            activeView === "settings" ? (
 	              <button
 	                className="back-to-workspace"
@@ -5255,24 +5513,18 @@ export default function App() {
                     <path d="M9 4v16" />
                   </svg>
                 </button>
-	                <button
+                <button
 		                  className="new-session-header-btn"
-		                  onClick={() => {
-				                    if (!userAccessPolicy.allowMultipleThreads) {
-				                      setThreadError(null);
-				                      openAuthGate();
-				                      return;
-				                    }
-	                    // ChatGPT-style: "New chat" is a draft state until the first message is sent.
-	                    if (!activeThreadId) {
-	                      setWorkspaceWantsNewChatMode(true);
-                      workspaceAskInputRef.current?.focus();
-                      return;
-                    }
-                    setWorkspaceWantsNewChatMode(true);
-                    setActiveThreadId(null);
-                    workspaceAskInputRef.current?.focus();
-                  }}
+		                  onClick={() =>
+                        handleNewWorkspaceThread({
+                          allowMultipleThreads: userAccessPolicy.allowMultipleThreads,
+                          onBlocked: () => {
+                            setThreadError(null);
+                            openAuthGate();
+                          },
+                          focusComposer: () => workspaceAskInputRef.current?.focus(),
+                        })
+                      }
                   title="New thread"
                   aria-label="New thread"
                   type="button"
@@ -5300,8 +5552,8 @@ export default function App() {
         </div>
 
         <div className="topbar-right">
-          {communityHomeButton}
-        </div>
+	          {isPublicCommunityFunnel ? null : communityHomeButton}
+	        </div>
 	      </header>
 
         {sessionsDrawerEnabled && (
@@ -5310,7 +5562,20 @@ export default function App() {
               className={`sessions web-sessions-drawer${isSessionsDrawerOpen ? " open" : ""}`}
               aria-hidden={!isSessionsDrawerOpen}
             >
-              {threadError && <div className="auth-error">{threadError}</div>}
+              {threadError && (
+                <div className="auth-error">
+                  {displayedThreadError}
+                  {showGuestRateLimitSignInAction ? (
+                    <button
+                      type="button"
+                      className="auth-error-link"
+                      onClick={() => openAuthGate()}
+                    >
+                      Sign in
+                    </button>
+                  ) : null}
+                </div>
+              )}
               {cloudSession ? (
                 <ThreadSidebarPanel<ThreadRecord, CloudProjectRecord>
                   showThreadLaneSwitch={false}
@@ -5369,13 +5634,10 @@ export default function App() {
 	                  <div
 	                    className={`session-item${(activeThreadId === GUEST_THREAD_ID || (!activeThreadId && !guestThreadHasMessages)) ? " active" : ""}`}
 	                    onClick={() => {
-	                      if (guestThreadHasMessages) {
-	                        setWorkspaceWantsNewChatMode(false);
-	                        if (activeThreadId !== GUEST_THREAD_ID) setActiveThreadId(GUEST_THREAD_ID);
-	                        return;
-	                      }
-	                      if (activeThreadId !== null) setActiveThreadId(null);
-	                      setWorkspaceWantsNewChatMode(true);
+	                      applyGuestWorkspaceState({
+                          guestThreadId: GUEST_THREAD_ID,
+                          hasMessages: guestThreadHasMessages,
+                        });
 	                    }}
 	                  >
 	                    <div className="session-content">
@@ -5454,7 +5716,7 @@ export default function App() {
                   <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
                 </svg>
               </button>
-	              <div className="community-rail-divider" />
+              {hasCommunityRailMiddleContent ? <div className="community-rail-divider" /> : null}
 	              <div className="community-rail-list" ref={setCommunityRailListElement}>
 	                {railCommunities.map((community) => {
 	                  const bindings = getCommunityRailItemBindings(community.id);
@@ -5468,7 +5730,7 @@ export default function App() {
 	                        if (
 	                          !confirmDiscardUnsavedCommunitySettingsWeb({
 	                            isCommunitySettingsDirty: communitySettingsDirtyRef.current,
-	                            isCommunityAgentDraftDirty: communityAgentDraftDirtyRef.current,
+	                            isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
 	                            activeCommunityId,
 	                            nextCommunityId: community.id,
 	                            confirmDiscard: (message) => window.confirm(message),
@@ -5476,7 +5738,10 @@ export default function App() {
 	                        ) {
 	                          return;
 	                        }
-	                        setActiveCommunityId(community.id);
+	                        syncCommunitySelection({
+                            communityId: community.id,
+                            communitySlug: (community.slug ?? "").trim() || null,
+                          });
 	                          // Keep the user on their current page; only the selected community context changes.
 	                          if (activePage === "workspace") {
 	                            const currentLens = activeThreadId
@@ -5555,7 +5820,7 @@ export default function App() {
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
-              </button>
+		              </button>
             </div>
           </aside>
         )}
@@ -5569,13 +5834,12 @@ export default function App() {
 	        )}
 
         {showCommunityNav && (
-          <CommunityNav
+        <CommunityNav
             activeCommunity={activeCommunity}
             communityTab={communityTab}
             canViewActiveCommunitySettings={canViewActiveCommunitySettings}
             canManageMembersActiveCommunity={canManageMembersActiveCommunity}
             canViewActiveCommunityAnalytics={canViewActiveCommunityAnalytics}
-            activeCommunityOwnerHasBuilderAccess={activeCommunityOwnerHasBuilderAccess}
             buttonType="button"
             includeButtonTitles={true}
             onSelectTab={(tab) => {
@@ -5595,736 +5859,183 @@ export default function App() {
 	          {activeView === "settings" ? (
 	            <div className="settings-panel">
 	              <div className="web-settings-centered-pane">
+                {settingsGroup === "profile" && (
+                  <WebProfileSettingsSection
+                    cloudSession={cloudSession}
+                    cloudProfile={cloudProfile}
+                    profileAvatarUrl={profileAvatarUrl}
+                    profileName={profileName}
+                    profileUsername={profileUsername}
+                    profileBio={profileBio}
+                    isProfileAvatarDragOver={isProfileAvatarDragOver}
+                    profileNeedsSave={profileNeedsSave}
+                    isSavingProfile={isSavingProfile}
+                    isProfileDirty={isProfileDirty}
+                    profileSaveError={profileSaveError}
+                    profileSaveSuccess={profileSaveSuccess}
+                    setIsProfileAvatarDragOver={setIsProfileAvatarDragOver}
+                    handleProfileAvatarDrop={handleProfileAvatarDrop}
+                    handleProfileAvatarUpload={handleProfileAvatarUpload}
+                    setProfileAvatarUrl={setProfileAvatarUrl}
+                    getInitials={getInitials}
+                    setProfileName={setProfileName}
+                    setProfileUsername={setProfileUsername}
+                    setProfileBio={setProfileBio}
+                    saveProfileToCloud={saveProfileToCloud}
+                  />
+                )}
+
 	              {settingsGroup === "account" && (
-	                <>
-	                  <div className="settings-section">
-	                    <div className="settings-section-title">
-	                      <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-	                      Profile
-	                    </div>
-	                    <div className="settings-section-desc">
-	                      {cloudSession
-	                        ? "Profile details shown in communities. Save to sync across devices."
-	                        : "Local profile details shown in communities on this device."}
-	                    </div>
-	                    <div className="profile-block">
-                      <div
-                        className={`profile-avatar-drop${isProfileAvatarDragOver ? " drag-over" : ""}`}
-                        onDragOver={(event) => {
-                          event.preventDefault();
-                          setIsProfileAvatarDragOver(true);
-                        }}
-                        onDragLeave={() => setIsProfileAvatarDragOver(false)}
-                        onDrop={handleProfileAvatarDrop}
-                      >
-                        {cloudSession && profileAvatarUrl ? (
-                          <img src={profileAvatarUrl} alt="Profile avatar" />
-                        ) : (
-                          cloudSession ? (
-                            <span>
-                              {getInitials(
-                                (profileName || profileUsername || cloudSession.user.email || "AR").replace(/^@/, "")
-                              )}
-                            </span>
-                          ) : (
-                            <span className="profile-avatar-placeholder" aria-hidden="true">
-                              <svg viewBox="0 0 24 24">
-                                <circle cx="12" cy="8" r="4.2" />
-                                <path d="M4.5 20c1.8-4 5-6 7.5-6s5.7 2 7.5 6" />
-                              </svg>
-                            </span>
-                          )
-                        )}
-                      </div>
-                      <div className="profile-avatar-actions">
-                        <label className="create-avatar-btn">
-                          Upload photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
-                          />
-                        </label>
-                        {cloudSession && profileAvatarUrl && (
-                          <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="profile-row">
-                      <input
-                        type="text"
-                        placeholder="Name"
-                        value={profileName}
-                        onChange={(event) => setProfileName(event.target.value)}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Username"
-                        value={profileUsername}
-                        onChange={(event) => setProfileUsername(event.target.value)}
-                      />
-                    </div>
-	                    <textarea
-	                      className="profile-bio"
-	                      placeholder="Bio"
-	                      value={profileBio}
-	                      onChange={(event) => setProfileBio(event.target.value)}
-	                      rows={3}
-	                    />
-	                    <div className="account-row">
-	                      <div className="account-identity">
-	                        <span>Sync</span>
-	                        <strong>
-	                          {cloudSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
-	                        </strong>
-	                      </div>
-	                      <div className="auth-actions">
-	                        <button
-                            className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
-	                          type="button"
-	                          onClick={() => void saveProfileToCloud()}
-	                          disabled={!cloudSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
-	                        >
-	                          {isSavingProfile ? "Saving…" : "Save"}
-	                        </button>
-	                      </div>
-	                    </div>
-	                    {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
-	                    {profileSaveSuccess && <div className="auth-success">Saved.</div>}
-	                  </div>
-
-                  <div className="settings-section">
-                    <div className="settings-section-title">
-                      <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                      Account
-                    </div>
-                    <div className="settings-section-desc">
-                      Sign in to join communities and sync your profile.
-                    </div>
-                    {cloudSession ? (
-                      <div className="account-row">
-                        <div className="account-identity">
-                          <span>Signed in as</span>
-                          <strong>{cloudSession.user.email ?? cloudSession.user.id}</strong>
-                        </div>
-                        <button className="secondary" type="button" onClick={() => void handleSignOut()}>
-                          Sign out
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="account-row">
-                        <button className="google-sign-in" type="button" onClick={openAuthGate}>
-                          <svg className="google-logo" viewBox="0 0 24 24">
-                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                          </svg>
-                          Sign in with Google
-                        </button>
-                      </div>
-                    )}
-                    {authError && <div className="key-error">{authError}</div>}
-                  </div>
-
-                  <div className="settings-section">
-                    <div className="settings-section-title">
-                      <svg viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>
-                      Inference connections
-                    </div>
-                    <div className="settings-section-desc">
-                      Free authenticated accounts can use a personal provider connection. Paid plans still use platform-funded inference.
-                    </div>
-                    {!cloudSession ? (
-                      <div className="model-note">Sign in to connect a personal provider.</div>
-                    ) : (
-                      <>
-                        <div className="account-row">
-                          <div className="account-identity">
-                            <span>ChatGPT / Codex</span>
-                            <strong>
-                              {isLoadingChatgptConnection
-                                ? "Checking…"
-                                : chatgptConnection.connected
-                                  ? `Connected${chatgptConnection.email ? ` · ${chatgptConnection.email}` : ""}`
-                                  : "Not connected"}
-                            </strong>
-                          </div>
-                          {chatgptConnection.connected ? (
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => void handleDisconnectChatgpt()}
-                              disabled={isConnectingChatgpt || isPollingChatgptConnection}
-                            >
-                              {isConnectingChatgpt ? "Disconnecting…" : isPollingChatgptConnection ? "Waiting…" : "Disconnect"}
-                            </button>
-                          ) : (
-                            <button
-                              className="secondary"
-                              type="button"
-                              onClick={() => void handleConnectChatgpt()}
-                              disabled={isConnectingChatgpt}
-                            >
-                              {isConnectingChatgpt
-                                ? "Starting…"
-                                : hasPendingChatgptAuth || isPollingChatgptConnection
-                                  ? "Continue auth"
-                                  : "Connect ChatGPT"}
-                            </button>
-                          )}
-                        </div>
-                        {!chatgptConnection.connected && chatgptDeviceUserCode && (
-                          <div className="auth-status">Waiting for OpenAI verification code {chatgptDeviceUserCode}.</div>
-                        )}
-                        {chatgptConnection.connected && (
-                          <div className="auth-status">
-                            {chatgptConnection.updated_at
-                              ? `Last validated ${formatRelativeTime(chatgptConnection.updated_at)}.`
-                              : "Ready for GPT-family models on the ChatGPT lane."}
-                          </div>
-                        )}
-                        {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
-                        {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
-                        <div className="account-row">
-                          <div className="account-identity">
-                            <span>OpenRouter</span>
-                            <strong>
-                              {isLoadingOpenRouterConnection
-                                ? "Checking…"
-                                : openRouterConnection.connected
-                                  ? `Connected${openRouterConnection.key_last_four ? ` ·••••${openRouterConnection.key_last_four}` : ""}`
-                                : "Not connected"}
-                            </strong>
-                          </div>
-                        </div>
-                        <div className="provider-connection-stack">
-                          <input
-                            className="provider-connection-input"
-                            type="password"
-                            placeholder="Paste OpenRouter API key"
-                            value={openRouterApiKeyDraft}
-                            onChange={(event) => setOpenRouterApiKeyDraft(event.target.value)}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                          <div className="provider-connection-actions">
-                            <button
-                              className="platform-save-button"
-                              type="button"
-                              onClick={() => void handleConnectOpenRouter()}
-                              disabled={isSavingOpenRouterConnection || openRouterApiKeyDraft.trim().length === 0}
-                            >
-                              {isSavingOpenRouterConnection
-                                ? (openRouterConnection.connected ? "Updating…" : "Connecting…")
-                                : (openRouterConnection.connected ? "Update key" : "Connect key")}
-                            </button>
-                            {openRouterConnection.connected && (
-                              <button
-                                className="secondary provider-disconnect-btn"
-                                type="button"
-                                onClick={() => void handleDisconnectOpenRouter()}
-                                disabled={isSavingOpenRouterConnection}
-                              >
-                                {isSavingOpenRouterConnection ? "Disconnecting…" : "Disconnect"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {openRouterConnection.connected && openRouterConnection.updated_at && (
-                          <div className="auth-status">
-                            Last validated {formatRelativeTime(openRouterConnection.updated_at)}.
-                          </div>
-                        )}
-                        {openRouterConnectionError && <div className="auth-error">{openRouterConnectionError}</div>}
-                        {openRouterConnectionSuccess && <div className="auth-success">{openRouterConnectionSuccess}</div>}
-                      </>
-                    )}
-                  </div>
-
-                  {cloudSession && (
-                    <div className="settings-section">
-                      {(() => {
-                        const status = builderBillingStatus;
-                        const tier = status?.builder_tier ?? "free";
-                        const ownedCount = communities.reduce(
-                          (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
-                          0,
-                        );
-                        const max = status?.max_communities ?? 0;
-                        const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
-                        const communitiesLabel =
-                          max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
-                        const tierLabel = formatBuilderTierLabel(tier);
-                        return (
-                          <>
-                            <div className="account-row">
-                              <div className="account-identity">
-                                <span>Plan</span>
-                                <strong>
-                                  {tierLabel} · {communitiesLabel}
-                                </strong>
-                              </div>
-                              <div className="auth-actions">
-	                                {isBuilderTierFree(tier) ? (
-	                                  <button
-	                                    type="button"
-	                                    className="secondary"
-	                                    onClick={() => {
-	                                      setBuilderUpgradeContext("builder");
-	                                      setIsBuilderUpgradeOpen(true);
-	                                    }}
-	                                  >
-	                                    Upgrade plan
-	                                  </button>
-	                                ) : (
-                                  <button
-                                    type="button"
-                                    className="secondary"
-                                    onClick={() => void openBuilderBillingPortal()}
-                                    disabled={isStartingBuilderPortal}
-                                  >
-                                    {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {canUseDevTierOverride && (
-                              <div className="account-row">
-                                <div className="account-identity">
-                                  <span>Internal tier override (dev)</span>
-                                  <strong>Creator-only testing control</strong>
-                                </div>
-                                <div className="auth-actions">
-                                  <button
-                                    type="button"
-                                    className={isBuilderTierFree(tier) ? "" : "secondary"}
-                                    onClick={() => void setDevBuilderTier("free")}
-                                    disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
-                                  >
-                                    Free
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={tier === "builder" ? "" : "secondary"}
-                                    onClick={() => void setDevBuilderTier("builder")}
-                                    disabled={isSettingDevBuilderTier || tier === "builder"}
-                                  >
-                                    Builder
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        );
-                      })()}
-                      {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-                      {devBuilderTierError && <div className="auth-error">{devBuilderTierError}</div>}
-                    </div>
-                  )}
-
-                  {cloudSession && (
-                    <div className="settings-section">
-                      <div className="settings-section-title">
-                        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                        Your communities
-                      </div>
-                      <div className="settings-section-desc">Open a community to manage pricing and payouts.</div>
-                      {(() => {
-                        const owned = communities
-                          .filter((community) => communityRoleById[community.id] === "owner")
-                          .sort((a, b) => a.name.localeCompare(b.name));
-                        if (owned.length === 0) {
-                          return <div className="model-note">No owned communities yet.</div>;
-                        }
-	                        return (
-	                          <div className="invite-list">
-	                            {owned.map((community) => (
-	                              <div key={community.id} className="invite-row">
-	                                <div className="invite-main with-avatar">
-	                                  <div className="invite-avatar" aria-hidden="true">
-	                                    {community.avatar_url ? (
-	                                      <img
-	                                        className="invite-avatar-img"
-	                                        src={community.avatar_url}
-	                                        alt=""
-	                                        loading="lazy"
-	                                      />
-	                                    ) : (
-	                                      <span className="invite-avatar-fallback">{communityInitials(community.name)}</span>
-	                                    )}
-	                                  </div>
-	                                  <div className="invite-text">
-	                                    <div className="invite-code">{community.name}</div>
-                                    <div className="invite-status">{`/c/${community.slug}`}</div>
-	                                  </div>
-	                                </div>
-	                                <div className="invite-actions">
-	                                  <button
-	                                    type="button"
-                                    onClick={() => {
-                                      if (
-                                        !confirmDiscardUnsavedCommunitySettingsWeb({
-                                          isCommunitySettingsDirty: communitySettingsDirtyRef.current,
-                                          isCommunityAgentDraftDirty: communityAgentDraftDirtyRef.current,
-                                          activeCommunityId,
-                                          nextCommunityId: community.id,
-                                          confirmDiscard: (message) => window.confirm(message),
-                                        })
-                                      ) {
-                                        return;
-                                      }
-                                      openCommunityTab(community.id, "settings", { pushSnapshot: false });
-                                    }}
-                                  >
-                                    Open settings
-                                  </button>
-                                </div>
-                              </div>
-	                            ))}
-	                          </div>
-	                        );
-	                      })()}
-	                    </div>
-	                  )}
-
-                  {cloudSession &&
-                    (isLoadingPendingPurchases ||
-                      pendingPurchaseClaims.length > 0 ||
-                      pendingPurchasesError ||
-                      pendingPurchasesSuccess) && (
-                      <div className="settings-section">
-                        <div className="settings-section-title">
-                          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                          Pending purchases
-                        </div>
-                        <div className="settings-section-desc">
-                          Recover access if you paid but didn&apos;t finish the join flow.
-                        </div>
-                        {isLoadingPendingPurchases && (
-                          <div className="chat-loading">
-                            <div className="loading-spinner" />
-                            <span>Checking…</span>
-                          </div>
-                        )}
-                        {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
-                          <div className="model-list">
-                            {pendingPurchaseClaims.map((claim) => (
-                              <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
-                                <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {!isLoadingPendingPurchases && pendingPurchaseClaims.length === 0 && pendingPurchasesSuccess && (
-                          <div className="auth-status">{pendingPurchasesSuccess}</div>
-                        )}
-                        <div className="auth-actions">
-                          <button
-                            type="button"
-                            onClick={() => void redeemPendingPurchases()}
-                            disabled={
-                              isRedeemingPendingPurchases ||
-                              isLoadingPendingPurchases ||
-                              pendingPurchaseClaims.length === 0
-                            }
-                          >
-                            {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-                          </button>
-                          <button
-                            className="secondary"
-                            type="button"
-                            onClick={() => cloudSession && void loadPendingPurchaseClaims(cloudSession)}
-                            disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
-                          >
-                            Refresh
-                          </button>
-                        </div>
-                        {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
-                      </div>
-                    )}
-
-                </>
+	                <WebAccountSettingsSection
+                    cloudSession={cloudSession}
+                    authError={authError}
+                    openAuthGate={openAuthGate}
+                    handleSignOut={handleSignOut}
+                    isLoadingChatgptConnection={isLoadingChatgptConnection}
+                    chatgptConnection={chatgptConnection}
+                    isConnectingChatgpt={isConnectingChatgpt}
+                    isPollingChatgptConnection={isPollingChatgptConnection}
+                    hasPendingChatgptAuth={hasPendingChatgptAuth}
+                    handleConnectChatgpt={handleConnectChatgpt}
+                    handleDisconnectChatgpt={handleDisconnectChatgpt}
+                    chatgptDeviceUserCode={chatgptDeviceUserCode}
+                    chatgptConnectionError={chatgptConnectionError}
+                    chatgptConnectionSuccess={chatgptConnectionSuccess}
+                    isLoadingOpenRouterConnection={isLoadingOpenRouterConnection}
+                    openRouterConnection={openRouterConnection}
+                    openRouterApiKeyDraft={openRouterApiKeyDraft}
+                    setOpenRouterApiKeyDraft={setOpenRouterApiKeyDraft}
+                    isSavingOpenRouterConnection={isSavingOpenRouterConnection}
+                    handleConnectOpenRouter={handleConnectOpenRouter}
+                    handleDisconnectOpenRouter={handleDisconnectOpenRouter}
+                    openRouterConnectionError={openRouterConnectionError}
+                    openRouterConnectionSuccess={openRouterConnectionSuccess}
+                    formatRelativeTime={formatRelativeTime}
+                    builderBillingStatus={builderBillingStatus}
+                    communities={communities}
+                    communityRoleById={communityRoleById}
+                    openOwnedCommunitySettings={(communityId) => {
+                      if (
+                        !confirmDiscardUnsavedCommunitySettingsWeb({
+                          isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+                          isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
+                          activeCommunityId,
+                          nextCommunityId: communityId,
+                          confirmDiscard: (message) => window.confirm(message),
+                        })
+                      ) {
+                        return;
+                      }
+                      openCommunityTab(communityId, "settings", { pushSnapshot: false });
+                    }}
+                    communityInitials={communityInitials}
+                    openBuilderUpgrade={(context) => {
+                      setBuilderUpgradeContext(context);
+                      setIsBuilderUpgradeOpen(true);
+                    }}
+                    openBuilderBillingPortal={openBuilderBillingPortal}
+                    isStartingBuilderPortal={isStartingBuilderPortal}
+                    builderBillingError={builderBillingError}
+                    canUseDevTierOverride={canUseDevTierOverride}
+                    isSettingDevBuilderTier={isSettingDevBuilderTier}
+                    setDevBuilderTier={setDevBuilderTier}
+                    devBuilderTierError={devBuilderTierError}
+                    pendingPurchaseClaims={pendingPurchaseClaims}
+                    isLoadingPendingPurchases={isLoadingPendingPurchases}
+                    isRedeemingPendingPurchases={isRedeemingPendingPurchases}
+                    redeemPendingPurchases={redeemPendingPurchases}
+                    refreshPendingPurchases={async () => {
+                      const session = await ensureUsableCloudSession();
+                      if (!session) return;
+                      await loadPendingPurchaseClaims(session);
+                    }}
+                    pendingPurchasesError={pendingPurchasesError}
+                    pendingPurchasesSuccess={pendingPurchasesSuccess}
+                  />
               )}
 
 		              {settingsGroup === "agent" && (
-		                <>
-		                  <div className="settings-section">
-		                    <div className="settings-section-title">
-		                      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-		                      Agent Soul
-		                    </div>
-		                    <div className="settings-section-desc">
-	                      Shape the agent&apos;s personality, voice, and default way of thinking across every conversation.
-	                    </div>
-	                    <textarea
-	                      className="exec-policy-input"
-	                      value={systemPromptDraft}
-	                      onChange={(event) => setSystemPromptDraft(event.target.value)}
-	                      placeholder="e.g. You are Soul: incisive, imaginative, and calmly opinionated. See patterns early, turn ambiguity into crisp direction, and speak like a trusted strategist who can also build."
-	                      disabled={!cloudSession || isLoadingUserModelSettings}
-	                    />
-	                    <div className="exec-policy-actions">
-	                      <button
-	                        className="platform-save-button"
-	                        type="button"
-	                        onClick={() => void saveUserModelSettings({ system_prompt: systemPromptDraft })}
-	                        disabled={!cloudSession || isLoadingUserModelSettings || isSavingUserModelSettings}
-	                      >
-	                        {isSavingUserModelSettings ? "Saving…" : "Save"}
-	                      </button>
-	                      <button
-	                        type="button"
-	                        className="secondary"
-	                        onClick={() => {
-	                          setSystemPromptDraft("");
-	                          void saveUserModelSettings({ system_prompt: "" });
-	                        }}
-	                        disabled={!cloudSession || isLoadingUserModelSettings || isSavingUserModelSettings}
-	                      >
-	                        Clear
-	                      </button>
-	                      {userModelSettingsError && <div className="exec-policy-error">{userModelSettingsError}</div>}
-	                    </div>
-	                  </div>
-
-	                </>
-	              )}
-
-              {settingsGroup === "agent" && (
-                <>
-                  <div className="panel-title">Memory</div>
-                  <div className="memory-panel">
-                    {personalMemoryError &&
-                      !isBuilderTierFree(builderBillingStatus?.builder_tier ?? "free") && (
-                        <div className="memory-error">{personalMemoryError}</div>
-                      )}
-                    {exportError && <div className="auth-error">{exportError}</div>}
-
-		                    <div className="settings-section">
-		                      <div className="settings-section-title">
-		                        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-		                        Export
-		                      </div>
-		                      <div className="settings-section-desc">
-		                        Download your threads, messages, and personal memory as CSV.
-		                      </div>
-		                      <div className="export-actions">
-		                        <button
-		                          className="secondary"
-		                          type="button"
-		                          onClick={() => void exportThreadsCsv()}
-		                          disabled={!cloudSession || isExporting}
-		                        >
-		                          Threads CSV
-		                        </button>
-		                        <button
-		                          className="secondary"
-		                          type="button"
-		                          onClick={() => void exportMessagesCsv()}
-		                          disabled={!cloudSession || isExporting}
-		                        >
-		                          Messages CSV
-		                        </button>
-		                        <button
-		                          className="secondary"
-		                          type="button"
-		                          onClick={() => void exportMemoryCsv()}
-		                          disabled={!cloudSession || isExporting}
-		                        >
-		                          Memory CSV
-		                        </button>
-		                      </div>
-		                    </div>
-
-                    {(() => {
-                      const tier = builderBillingStatus?.builder_tier ?? "free";
-                      const hasPersonalMemoryAccess = hasBuilderTierPaidAccess(tier);
-                      if (!cloudSession) return null;
-                      if (!hasPersonalMemoryAccess) {
-                        return (
-                          <div className="settings-section">
-                            <div className="settings-section-title">
-                              <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z" /><path d="M20 2a10 10 0 0 1 0 10" /></svg>
-                              Personal memory
-                            </div>
-                            <div className="settings-section-desc">
-                              Personal memory is included with Builder.
-                            </div>
-                            <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBuilderUpgradeContext("builder");
-                                  setIsBuilderUpgradeOpen(true);
-                                }}
-                              >
-                                Upgrade plan
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <>
-                          <div className="memory-editor">
-                            <div className="memory-editor-header">
-                              <div className="memory-editor-title">Personal memory</div>
-                              <div className="memory-editor-meta">
-                                {isLoadingPersonalMemory
-                                  ? "loading…"
-                                  : `${personalMemoryItems.length} item${personalMemoryItems.length === 1 ? "" : "s"}`}
-                              </div>
-                            </div>
-                            <input
-                              value={personalMemoryQuery}
-                              onChange={(event) => setPersonalMemoryQuery(event.target.value)}
-                              placeholder="Search memory…"
-                            />
-                            <div className="memory-editor-actions">
-                              <button
-                                className="secondary"
-                                type="button"
-                                onClick={() => {
-                                  setPersonalMemoryQuery("");
-                                  void loadPersonalMemoryItems();
-                                }}
-                                disabled={isLoadingPersonalMemory}
-                              >
-                                Refresh
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="memory-block-group">
-                            {personalMemoryItems.length === 0 ? (
-                              <div className="memory-block-empty">No personal memory items yet.</div>
-                            ) : (
-                              personalMemoryItems.map((item) => (
-                                <div key={item.id} className="memory-block">
-                                  <div className="memory-block-header">
-                                    <div className="memory-block-label">{item.content}</div>
-                                    <div className="memory-block-actions">
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => void handleTogglePersonalMemoryPinned(item)}
-                                        disabled={isLoadingPersonalMemory}
-                                      >
-                                        {item.pinned ? "Unpin" : "Pin"}
-                                      </button>
-                                      <button
-                                        className="secondary"
-                                        type="button"
-                                        onClick={() => void handleDeletePersonalMemoryItem(item.id)}
-                                        disabled={isLoadingPersonalMemory}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="memory-block-meta">
-                                    {item.scope}
-                                    {item.scope === "workspace" && item.scope_id ? ` · ${item.scope_id}` : ""}
-                                    {" · "}
-                                    updated {formatRelativeTime(item.updated_at)}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-
-                          <div className="memory-import-launch">
-                            <button
-                              className="memory-import-trigger"
-                              type="button"
-                              onClick={() => {
-                                setMemoryImportError(null);
-                                setIsMemoryImportModalOpen(true);
-                              }}
-                            >
-                              Upload import memory from other AI providers
-                            </button>
-                          </div>
-
-                          <div className="memory-editor">
-                            <div className="memory-editor-header">
-                              <div className="memory-editor-title">Add memory</div>
-                            </div>
-                            <textarea
-                              value={newPersonalMemoryContent}
-                              onChange={(event) => setNewPersonalMemoryContent(event.target.value)}
-                              placeholder="Write a durable preference/fact…"
-                            />
-                            <div className="memory-editor-actions">
-                              <button
-                                className="platform-save-button"
-                                type="button"
-                                onClick={() => void handleCreatePersonalMemoryItem()}
-                                disabled={!newPersonalMemoryContent.trim()}
-                              >
-                                Save memory
-                              </button>
-                              <button
-                                className="secondary"
-                                type="button"
-                                onClick={() => {
-                                  setNewPersonalMemoryContent("");
-                                  setNewPersonalMemoryPinned(false);
-                                }}
-                              >
-                                Clear
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </>
+                <WebAgentSettingsSection
+                  cloudSession={cloudSession}
+                  systemPromptDraft={systemPromptDraft}
+                  setSystemPromptDraft={setSystemPromptDraft}
+                  saveUserModelSettings={saveUserModelSettings}
+                  isLoadingUserModelSettings={isLoadingUserModelSettings}
+                  isSavingUserModelSettings={isSavingUserModelSettings}
+                  userModelSettingsError={userModelSettingsError}
+                  exportError={exportError}
+                  exportThreadsCsv={exportThreadsCsv}
+                  exportMessagesCsv={exportMessagesCsv}
+                  exportMemoryCsv={exportMemoryCsv}
+                  isExporting={isExporting}
+                  personalMemoryError={personalMemoryError}
+                  builderBillingStatus={builderBillingStatus}
+                  openBuilderUpgrade={(context) => {
+                    setBuilderUpgradeContext(context);
+                    setIsBuilderUpgradeOpen(true);
+                  }}
+                  isLoadingPersonalMemory={isLoadingPersonalMemory}
+                  personalMemoryItems={personalMemoryItems}
+                  personalMemoryQuery={personalMemoryQuery}
+                  setPersonalMemoryQuery={setPersonalMemoryQuery}
+                  loadPersonalMemoryItems={loadPersonalMemoryItems}
+                  formatRelativeTime={formatRelativeTime}
+                  handleTogglePersonalMemoryPinned={handleTogglePersonalMemoryPinned}
+                  handleDeletePersonalMemoryItem={handleDeletePersonalMemoryItem}
+                  setMemoryImportError={setMemoryImportError}
+                  setIsMemoryImportModalOpen={setIsMemoryImportModalOpen}
+                  newPersonalMemoryContent={newPersonalMemoryContent}
+                  setNewPersonalMemoryContent={setNewPersonalMemoryContent}
+                  setNewPersonalMemoryPinned={setNewPersonalMemoryPinned}
+                  handleCreatePersonalMemoryItem={handleCreatePersonalMemoryItem}
+                />
               )}
 
 	              {settingsGroup === "appearance" && (
-	                <>
-	                  <div className="panel-title">Appearance</div>
-	                  <div className="appearance-panel">
-                    <div className="appearance-selector">
-                      <div className="appearance-title">Theme</div>
-                      <div className="appearance-options">
-                        {APP_THEME_OPTIONS.map((theme) => (
-                          <button
-                            key={theme.id}
-                            className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
-                            type="button"
-                            onClick={() => {
-                              if (!theme.disabled) {
-                                setAppTheme(theme.id);
-                              }
-                            }}
-                            disabled={theme.disabled}
-                          >
-                            <div className="appearance-option-preview" data-preview-theme={theme.id}>
-                              <div className="preview-header" />
-                              <div className="preview-sidebar" />
-                              <div className="preview-content">
-                                <div className="preview-line" />
-                                <div className="preview-line short" />
-                              </div>
-                            </div>
-                            <div className="appearance-option-label">{theme.label}</div>
-                            <div className="appearance-option-desc">{theme.description}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-	                </>
+	                <WebAppearanceSettingsSection
+                    appTheme={appTheme}
+                    setAppTheme={setAppTheme}
+                  />
 	              )}
 	              </div>
 	            </div>
+	          ) : isPublicCommunityFunnel ? (
+            <div className="community-body">
+              <div className="community-panel public-route-panel public-community-funnel-panel">
+                <div className="workspace-body public-route-body public-community-funnel-body">
+                  <WebPublicCommunityFunnel
+                    publicRouteSlug={publicRoute.slug}
+                    publicCommunity={publicCommunity}
+                    publicVisibilityLabel={publicVisibilityLabel}
+                    selectedPublicCommunityPlanLabel={
+                      selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null
+                    }
+                    publicCommunityPlans={publicCommunityPlans}
+                    selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
+                    selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlan?.billing_period ?? null}
+                    onSelectPublicCommunityBillingPeriod={setSelectedPublicCommunityBillingPeriod}
+                    hasSelectedPublicCommunityPlan={Boolean(selectedPublicCommunityPlan)}
+                    isLoadingPublicCommunity={isLoadingPublicCommunity}
+                    canJoinForFree={canJoinForFree}
+                    canRequestAccessForFree={canRequestAccessForFree}
+                    canJoinWithCheckout={canJoinWithCheckout}
+                    checkoutStatus={checkoutStatus}
+                    isJoiningPublicCommunity={isJoiningPublicCommunity}
+                    isRequestingPublicCommunityAccess={isRequestingPublicCommunityAccess}
+                    isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
+                    requestPending={requestPending}
+                    requestCooldownActive={requestCooldownActive}
+                    requestDeniedDateLabel={requestDeniedDateLabel}
+                    onPrimaryJoinAction={handlePublicLandingPrimaryAction}
+                    publicCommunityError={publicCommunityError}
+                    publicJoinError={publicJoinError}
+                    publicRequestAccessError={publicRequestAccessError}
+                    checkoutError={checkoutError}
+                    showSignIn={showPublicSignIn}
+                  />
+                </div>
+              </div>
+            </div>
 	          ) : activePage === "workspace" ? (
 	            <>
 		              <div className="workspace-body">
@@ -6349,7 +6060,11 @@ export default function App() {
 		                            </div>
 	                          </div>
 		                        ) : (
-		                          <div className="web-empty-thread" role="region" aria-label="Start a new thread">
+		                          <div
+                                className={`web-empty-thread${activeCommunity ? "" : " web-empty-thread-no-community"}`}
+                                role="region"
+                                aria-label="Start a new thread"
+                              >
 		                            {activeCommunity && (
 		                              <div className="web-empty-thread-avatar" aria-hidden="true">
 		                                {activeCommunity.avatar_url ? (
@@ -6562,7 +6277,16 @@ export default function App() {
 	                    )}
                       {threadError && (
                         <div className="auth-error">
-                          {threadError}
+                          {displayedThreadError}
+                          {showGuestRateLimitSignInAction ? (
+                            <button
+                              type="button"
+                              className="auth-error-link"
+                              onClick={() => openAuthGate()}
+                            >
+                              Sign in
+                            </button>
+                          ) : null}
                           {canRetryLastThreadTurn && (
                             <button
                               className="auth-error-action"
@@ -6840,7 +6564,7 @@ export default function App() {
             </>
           ) : (
             <div className="community-body">
-              {activePage === "discover" && (
+              {publicRoute.kind === "app" && activePage === "discover" && (
                 <div className="community-panel discover-panel">
                   <div className="discover-hero">
                     <div className="discover-hero-copy">
@@ -6958,7 +6682,7 @@ export default function App() {
 	                </div>
 	              )}
 
-              {activePage === "community" && (
+              {publicRoute.kind === "app" && activePage === "community" && (
                 <>
                   {communityTab === "chat" && <WebCommunityChatPanel {...communityChatPanelProps} />}
 
@@ -6982,7 +6706,7 @@ export default function App() {
             const tier = builderBillingStatus?.builder_tier ?? "free";
             if (isBuilderTierFree(tier)) {
               setBuilderUpgradeContext("builder");
-              setBuilderBillingError("Upgrade to Builder to use personal memory.");
+              setBuilderBillingError("Upgrade to Builder or Architect to use personal memory.");
               setIsBuilderUpgradeOpen(true);
               return;
             }
@@ -7036,18 +6760,26 @@ export default function App() {
           onClose={handleCloseChatgptConnectModal}
         />
 
-			      <WebPlatformQuotaModal
-          hasSession={Boolean(cloudSession)}
-          platformQuotaModal={platformQuotaModal}
-          isPlatformQuotaModalRunning={isPlatformQuotaModalRunning}
-          onClose={() => setPlatformQuotaModal(null)}
-          onChangeModel={(threadId) => {
-            setPlatformQuotaModal(null);
-            setActiveThreadId(threadId);
-            setIsModelPickerOpen(true);
-            window.setTimeout(() => {
-              const root = modelPickerRef.current;
-              const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
+	      <WebPlatformQuotaModal
+	          hasSession={Boolean(cloudSession)}
+	          platformQuotaModal={platformQuotaModal}
+	          isPlatformQuotaModalRunning={isPlatformQuotaModalRunning}
+	          onClose={() => setPlatformQuotaModal(null)}
+	          onChangeModel={(threadId) => {
+	            setPlatformQuotaModal(null);
+              const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+              const projectId = (thread?.project_id ?? "").trim();
+              openWorkspaceThread({
+                threadId,
+                projectId: projectId || null,
+                beforeSelect: () => {
+                  syncCommunitySelection({ communityId: thread?.community_id ?? null });
+                },
+              });
+	            setIsModelPickerOpen(true);
+	            window.setTimeout(() => {
+	              const root = modelPickerRef.current;
+	              const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
               btn?.focus();
             }, 60);
           }}

@@ -3,7 +3,7 @@ import { parseCommunityTab, type AppPage, type AppView, type CommunityTab, type 
 
 export type PublicRoute =
   | { kind: "app" }
-  | { kind: "community_landing"; slug: string }
+  | { kind: "community_funnel"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
 
@@ -12,28 +12,159 @@ export type AppRouteState = {
   view: AppView;
   settingsPage: SettingsPage;
   communityId: string | null;
+  communitySlug: string | null;
   communityTab: CommunityTab;
   threadId: string | null;
-  threadIsExplicit: boolean;
 };
 
-export type AppRouteHashState = {
+export type AppRoutePathState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
-  communityId: string | null;
+  communitySlug: string | null;
   communityTab: CommunityTab;
-  threadToken?: string | null;
+  threadId: string | null;
 };
 
-export const DEFAULT_POST_SIGN_IN_PATH = "/#page=workspace&view=home";
+export const DEFAULT_POST_SIGN_IN_PATH = "/workspace";
+
+export function buildWorkspaceDraftPath(): string {
+  return "/workspace";
+}
+
+export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
+  const normalized = String(threadId ?? "").trim();
+  if (!isUuid(normalized)) return buildWorkspaceDraftPath();
+  return `/workspace/thread/${encodeURIComponent(normalized)}`;
+}
+
+export function buildSettingsPath(settingsPage: SettingsPage): string {
+  return `/settings/${encodeURIComponent(settingsPage)}`;
+}
+
+export function buildCommunityTabPath(
+  communitySlug: string | null | undefined,
+  communityTab: CommunityTab,
+): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  const tabSegment =
+    communityTab === "ai_agent"
+      ? "agent"
+      : communityTab === "ai_feed"
+        ? "ai-feed"
+        : communityTab;
+  return `/c/${encodeURIComponent(slug)}/${tabSegment}`;
+}
+
+function splitPathSegments(pathname: string): string[] {
+  return String(pathname ?? "")
+    .split("/")
+    .map((segment) => decodeURIComponent(segment).trim())
+    .filter(Boolean);
+}
+
+function parseSettingsPage(value: string | null | undefined): SettingsPage {
+  switch ((value ?? "").trim()) {
+    case "profile":
+      return "profile";
+    case "account":
+      return "account";
+    case "appearance":
+      return "appearance";
+    default:
+      return "agent";
+  }
+}
+
+function parseCommunityTabSegment(value: string | null | undefined): CommunityTab {
+  switch ((value ?? "").trim()) {
+    case "agent":
+      return "ai_agent";
+    case "ai-feed":
+      return "ai_feed";
+    default:
+      return parseCommunityTab(value);
+  }
+}
+
+function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
+  const segments = splitPathSegments(pathname);
+  if (segments.length === 0) {
+    return {
+      page: "workspace",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
+  }
+
+  if (segments[0] === "discover" && segments.length === 1) {
+    return {
+      page: "discover",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
+  }
+
+  if (segments[0] === "workspace") {
+    if (segments.length === 1) {
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: null,
+        communityTab: "chat",
+        threadId: null,
+      };
+    }
+    if (segments[1] === "thread" && segments.length >= 3) {
+      const rawThreadId = String(segments[2] ?? "").trim();
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: null,
+        communityTab: "chat",
+        threadId: isUuid(rawThreadId) ? rawThreadId : null,
+      };
+    }
+  }
+
+  if (segments[0] === "settings") {
+    return {
+      page: "workspace",
+      view: "settings",
+      settingsPage: parseSettingsPage(segments[1] ?? null),
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
+  }
+
+  if (segments[0] === "c" && segments.length >= 3) {
+    const slug = String(segments[1] ?? "").trim() || null;
+    if (!slug) return null;
+    return {
+      page: "community",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: slug,
+      communityTab: parseCommunityTabSegment(segments[2] ?? null),
+      threadId: null,
+    };
+  }
+
+  return null;
+}
 
 export function readPublicRouteFromLocation(): PublicRoute {
   const path = window.location.pathname || "/";
-  if (path.startsWith("/c/")) {
-    const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
-    if (slug) return { kind: "community_landing", slug };
-  }
   if (path === "/checkout/success") {
     const params = new URLSearchParams(window.location.search);
     const sessionId = (params.get("session_id") ?? "").trim();
@@ -44,58 +175,53 @@ export function readPublicRouteFromLocation(): PublicRoute {
     const token = (params.get("token") ?? "").trim();
     return { kind: "claim", token };
   }
+
+  const segments = splitPathSegments(path);
+  if (segments[0] === "c" && segments.length === 2) {
+    const slug = String(segments[1] ?? "").trim();
+    if (slug) return { kind: "community_funnel", slug };
+  }
+
   return { kind: "app" };
 }
 
 export function readAppRouteFromLocation(): AppRouteState {
-  const rawHash = window.location.hash ? window.location.hash.slice(1) : "";
-  const normalized = rawHash.replace(/^\/+/, "").replace(/^\?/, "");
-  const params = new URLSearchParams(normalized);
+  const fromPath = parseAppRouteFromPathname(window.location.pathname || "/");
+  if (fromPath) {
+    return {
+      page: fromPath.page,
+      view: fromPath.view,
+      settingsPage: fromPath.settingsPage,
+      communityId: null,
+      communitySlug: fromPath.communitySlug,
+      communityTab: fromPath.communityTab,
+      threadId: fromPath.threadId,
+    };
+  }
 
-  const rawPage = (params.get("page") ?? "").trim();
-  const page: AppPage = rawPage === "community" ? "community" : rawPage === "discover" ? "discover" : "workspace";
-
-  const rawView = (params.get("view") ?? "").trim();
-  const view: AppView = rawView === "settings" ? "settings" : "home";
-
-  const rawSettings = (params.get("settings") ?? "").trim();
-  const settingsPage: SettingsPage =
-    rawSettings === "account"
-      ? "account"
-      : rawSettings === "execution"
-        ? "execution"
-        : rawSettings === "memory"
-          ? "memory"
-          : rawSettings === "appearance"
-            ? "appearance"
-            : "models";
-
-  const rawCommunity = (params.get("community") ?? "").trim();
-  const communityId = rawCommunity && isUuid(rawCommunity) ? rawCommunity : null;
-
-  const rawCommunityTab = (params.get("ctab") ?? "").trim();
-  const communityTab: CommunityTab = parseCommunityTab(rawCommunityTab);
-
-  const rawThread = (params.get("thread") ?? "").trim();
-  const threadIsExplicit = params.has("thread");
-  const threadId = rawThread === "new" || !rawThread ? null : isUuid(rawThread) ? rawThread : null;
-
-  return { page, view, settingsPage, communityId, communityTab, threadId, threadIsExplicit };
+  return {
+    page: "workspace",
+    view: "home",
+    settingsPage: "agent",
+    communityId: null,
+    communitySlug: null,
+    communityTab: "chat",
+    threadId: null,
+  };
 }
 
-export function buildAppRouteHash(state: AppRouteHashState): string {
-  const params = new URLSearchParams();
-  params.set("page", state.page);
-  params.set("view", state.view);
+export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.view === "settings") {
-    params.set("settings", state.settingsPage);
+    return buildSettingsPath(state.settingsPage);
   }
-  if (state.communityId) {
-    params.set("community", state.communityId);
-    params.set("ctab", state.communityTab);
+
+  if (state.page === "discover") {
+    return "/discover";
   }
-  if (typeof state.threadToken === "string" && state.threadToken.trim()) {
-    params.set("thread", state.threadToken);
+
+  if (state.page === "community") {
+    return buildCommunityTabPath(state.communitySlug, state.communityTab);
   }
-  return `#${params.toString()}`;
+
+  return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();
 }

@@ -63,14 +63,14 @@ export type MessageReaction = {
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
-  relation?: "visitor" | "pending" | "member" | "admin" | "owner";
+  relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: string | null;
   primary_cta?: "open_community" | "join" | "request_access" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;
-  access_source?: "free_grant" | "manual_grant" | "invite_bypass" | "paid_unlock" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
   entitlement_role: string | null;
   entitlement_ends_at: string | null;
@@ -81,20 +81,16 @@ export type CommunityAccess = {
   can_post_chat?: boolean;
   can_view: boolean;
   can_post_message: boolean;
-  can_create_resource: boolean;
   can_manage_resources: boolean;
-  can_invite: boolean;
   can_manage_members: boolean;
+  can_review_join_requests?: boolean;
 };
 
-export type CommunityAgentDraft<TLanding = unknown> = {
+export type CommunityAgentConfig<TLanding = unknown> = {
   id: string;
   community_id: string;
-  slot: number;
-  name: string | null;
   landing_json: TLanding | null;
   system_prompt: string;
-  is_active: boolean;
   updated_at: string;
 };
 

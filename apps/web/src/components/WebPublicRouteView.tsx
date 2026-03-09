@@ -1,8 +1,8 @@
 import { WebAuthGateModal } from "./WebAuthGateModal";
-import { WebPublicCommunityLanding, type PublicCommunityLandingCommunityLike } from "./WebPublicCommunityLanding";
+import type { PublicCommunityFunnelCommunityLike } from "./WebPublicCommunityFunnel";
 
-type PublicRouteKind = "community_landing" | "checkout_success" | "claim";
-type PublicCommunityLike = PublicCommunityLandingCommunityLike & {
+type PublicRouteKind = "community_funnel" | "checkout_success" | "claim";
+type PublicCommunityLike = PublicCommunityFunnelCommunityLike & {
   slug: string;
 };
 
@@ -17,6 +17,8 @@ type WebPublicRouteViewProps = {
   publicRouteKind: PublicRouteKind;
   publicRouteSlug: string;
   showSignIn: boolean;
+  showBackToApp: boolean;
+  backToAppLabel: string | null;
   onBackToApp: () => void;
   onOpenAuthGate: () => void;
   onSignOut: () => void;
@@ -24,7 +26,6 @@ type WebPublicRouteViewProps = {
   publicCommunity: PublicCommunityLike | null;
   selectedPublicCommunityPlanLabel: string | null;
   publicVisibilityLabel: string;
-  publicVisibilityHint: string;
   publicCommunityPlans: PublicCommunityPlanLike[];
   selectedPublicCommunityBillingPeriod: string | null;
   selectedPublicCommunityPlanBillingPeriod: string | null;
@@ -44,11 +45,9 @@ type WebPublicRouteViewProps = {
   requestDeniedDateLabel: string;
 
   onPrimaryJoinAction: () => void;
-  onSendLandingMagicLink: () => void;
   onRetryCheckoutFinalize: () => void;
   onContinueCheckout: () => void;
   onContinueClaim: () => void;
-  onNavigateToClaim: () => void;
   onSendMagicLink: () => void;
 
   checkoutError: string | null;
@@ -77,10 +76,12 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
     publicRouteKind,
     publicRouteSlug,
     showSignIn,
+    showBackToApp,
+    backToAppLabel,
+    onBackToApp,
     publicCommunity,
     selectedPublicCommunityPlanLabel,
     publicVisibilityLabel,
-    publicVisibilityHint,
     publicCommunityPlans,
     selectedPublicCommunityBillingPeriod,
     selectedPublicCommunityPlanBillingPeriod,
@@ -98,11 +99,9 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
     requestCooldownActive,
     requestDeniedDateLabel,
     onPrimaryJoinAction,
-    onSendLandingMagicLink,
     onRetryCheckoutFinalize,
     onContinueCheckout,
     onContinueClaim,
-    onNavigateToClaim,
     onSendMagicLink,
     checkoutError,
     publicCommunityError,
@@ -126,44 +125,6 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
   return (
     <div className="app-root public-root">
       <main className="workspace community-mode public-route-workspace">
-        {publicRouteKind === "community_landing" && (
-          <WebPublicCommunityLanding
-            publicRouteSlug={publicRouteSlug}
-            publicCommunity={publicCommunity}
-            publicVisibilityLabel={publicVisibilityLabel}
-            publicVisibilityHint={publicVisibilityHint}
-            selectedPublicCommunityPlanLabel={selectedPublicCommunityPlanLabel}
-            publicCommunityPlans={publicCommunityPlans}
-            selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
-            selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlanBillingPeriod}
-            onSelectPublicCommunityBillingPeriod={onSelectPublicCommunityBillingPeriod}
-            hasSelectedPublicCommunityPlan={hasSelectedPublicCommunityPlan}
-            isLoadingPublicCommunity={isLoadingPublicCommunity}
-            canJoinForFree={canJoinForFree}
-            canRequestAccessForFree={canRequestAccessForFree}
-            canJoinWithCheckout={canJoinWithCheckout}
-            checkoutStatus={checkoutStatus}
-            isJoiningPublicCommunity={isJoiningPublicCommunity}
-            isRequestingPublicCommunityAccess={isRequestingPublicCommunityAccess}
-            isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
-            requestPending={requestPending}
-            requestCooldownActive={requestCooldownActive}
-            requestDeniedDateLabel={requestDeniedDateLabel}
-            onPrimaryJoinAction={onPrimaryJoinAction}
-            onSendLandingMagicLink={onSendLandingMagicLink}
-            onNavigateToClaim={onNavigateToClaim}
-            publicCommunityError={publicCommunityError}
-            publicJoinError={publicJoinError}
-            publicRequestAccessError={publicRequestAccessError}
-            checkoutError={checkoutError}
-            showSignIn={showSignIn}
-            magicLinkEmail={magicLinkEmail}
-            onChangeMagicLinkEmail={onChangeMagicLinkEmail}
-            magicLinkStatus={magicLinkStatus}
-            magicLinkError={magicLinkError}
-          />
-        )}
-
         {publicRouteKind === "checkout_success" && (
           <div className="public-funnel-page">
             <div className="public-funnel-shell public-funnel-shell-narrow">
@@ -187,7 +148,7 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
                 </p>
                 <div className="public-funnel-state-actions">
                   <button
-                    className="public-funnel-primary"
+                    className="public-funnel-primary platform-save-button"
                     type="button"
                     disabled={!pendingToken || isRedeemingClaim || checkoutStatus === "loading"}
                     onClick={onContinueCheckout}
@@ -268,7 +229,7 @@ export function WebPublicRouteView(props: WebPublicRouteViewProps) {
 
                   <div className="public-funnel-state-actions">
                     <button
-                      className="public-funnel-primary"
+                      className="public-funnel-primary platform-save-button"
                       type="button"
                       disabled={!(pendingToken || manualClaimToken.trim()) || isRedeemingClaim}
                       onClick={onContinueClaim}

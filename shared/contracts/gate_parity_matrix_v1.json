@@ -57,6 +57,24 @@
       }
     },
     {
+      "id": "auth_architect_chat_platform_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "architect",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "requestedFundingSource": "platform"
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "platform",
+        "fundingSource": "platform",
+        "effectiveTier": "architect"
+      }
+    },
+    {
       "id": "auth_builder_tools_platform_cloud",
       "input": {
         "authState": "authenticated",
@@ -72,6 +90,24 @@
         "lane": "daytona_cloud",
         "fundingSource": "platform",
         "effectiveTier": "builder"
+      }
+    },
+    {
+      "id": "auth_architect_tools_platform_cloud",
+      "input": {
+        "authState": "authenticated",
+        "tier": "architect",
+        "executionMode": "cloud",
+        "turnClass": "requires_tools",
+        "requestedFundingSource": "platform"
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "daytona_cloud",
+        "fundingSource": "platform",
+        "effectiveTier": "architect"
       }
     },
     {
@@ -147,6 +183,26 @@
         "cta": "none",
         "lane": "chatgpt",
         "fundingSource": "user_chatgpt",
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_free_platform_user_key_fallback",
+      "input": {
+        "surface": "web",
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "turnClass": "chat_only",
+        "requestedFundingSource": "platform",
+        "hasUserKeyConnection": true
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "platform",
+        "fundingSource": "user_key",
         "effectiveTier": "auth_free"
       }
     }

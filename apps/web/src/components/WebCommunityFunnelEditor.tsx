@@ -22,7 +22,8 @@ type PreviewCommunityLike = {
   banner_zoom?: number | null;
   visibility: string;
   admin_count?: number | null;
-  featured_faces?: Array<{
+  online_count?: number | null;
+  online_faces?: Array<{
     user_id: string;
     display_name: string | null;
     avatar_url: string | null;
@@ -48,7 +49,6 @@ export type WebCommunityFunnelEditorProps = {
   markCommunityFunnelDirty: () => void;
   previewCommunity: PreviewCommunityLike;
   previewVisibilityLabel: string;
-  previewVisibilityHint: string;
   previewMemberCount: number | null;
   previewJoinMode: "join_free" | "request_access" | "checkout";
 };
@@ -107,7 +107,7 @@ function buildActionCardArtStyle(
   return buildHeroStyle(community);
 }
 
-function buildLandingCopy(mode: "join_free" | "request_access" | "checkout"): {
+function buildFunnelCopy(mode: "join_free" | "request_access" | "checkout"): {
   eyebrow: string;
   body: string;
 } {
@@ -159,7 +159,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   }, [localMediaPreviewUrl]);
 
   const isDirty = communityFunnelDirtyRef.current;
-  const landingCopy = buildLandingCopy(previewJoinMode);
+  const funnelCopy = buildFunnelCopy(previewJoinMode);
   const mediaPreviewUrl = localMediaPreviewUrl ?? communityFunnelConfig.hero_media_url ?? null;
   const aboutValue = communityFunnelConfig.about ?? "";
   const cardOneLiner = communityOneLiner;
@@ -167,7 +167,9 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const actionCardArtStyle = buildActionCardArtStyle(previewCommunity, communityFunnelConfig, mediaPreviewUrl);
   const previewAdminCount =
     typeof previewCommunity.admin_count === "number" ? previewCommunity.admin_count : null;
-  const previewFaces = previewCommunity.featured_faces?.filter(Boolean).slice(0, 8) ?? [];
+  const previewOnlineCount =
+    typeof previewCommunity.online_count === "number" ? previewCommunity.online_count : null;
+  const previewFaces = previewCommunity.online_faces?.filter(Boolean).slice(0, 8) ?? [];
 
   const avatarNode = useMemo(() => {
     if (previewCommunity.avatar_url) {
@@ -176,6 +178,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           className="public-funnel-avatar-image"
           src={previewCommunity.avatar_url}
           alt={`${previewCommunity.name} avatar`}
+          draggable={false}
         />
       );
     }
@@ -242,7 +245,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     <div className="settings-section">
       <div className="settings-section-title">Public funnel</div>
       <div className="model-note agent-editor-intro">
-        Edit the actual landing page. Use the media, long-form about copy, and CTA one-liner to shape the offer.
+        Edit the actual funnel. Use the media, long-form about copy, and CTA one-liner to shape the offer.
       </div>
 
       <div className="agent-preview-actions">
@@ -306,7 +309,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                     </div>
                   ) : (
                     <div className="public-funnel-media-shell">
-                      <img className="public-funnel-media-image" src={mediaPreviewUrl} alt="" />
+                      <img className="public-funnel-media-image" src={mediaPreviewUrl} alt="" draggable={false} />
                     </div>
                   )
                 ) : (
@@ -356,7 +359,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                     about: event.target.value,
                   }))
                 }
-                placeholder="Write the long-form sales copy for this landing page."
+                placeholder="Click here and type to edit."
               />
             </article>
 
@@ -378,7 +381,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                       setCommunityOneLiner(event.target.value);
                       markCommunityFunnelDirty();
                     }}
-                    placeholder={previewCommunity.description ?? landingCopy.body}
+                    placeholder={previewCommunity.description ?? funnelCopy.body}
                   />
 
                   <div className="public-funnel-action-stats">
@@ -388,16 +391,18 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                         <div className="public-funnel-action-stat-label">Members</div>
                       </div>
                     ) : null}
+                    {typeof previewOnlineCount === "number" ? (
+                      <div className="public-funnel-action-stat">
+                        <div className="public-funnel-action-stat-value">{formatCompactStat(previewOnlineCount)}</div>
+                        <div className="public-funnel-action-stat-label">Online</div>
+                      </div>
+                    ) : null}
                     {typeof previewAdminCount === "number" ? (
                       <div className="public-funnel-action-stat">
                         <div className="public-funnel-action-stat-value">{formatCompactStat(previewAdminCount)}</div>
                         <div className="public-funnel-action-stat-label">Admins</div>
                       </div>
                     ) : null}
-                    <div className="public-funnel-action-stat">
-                      <div className="public-funnel-action-stat-value">{previewJoinMode === "checkout" ? "Paid" : "Free"}</div>
-                      <div className="public-funnel-action-stat-label">Price</div>
-                    </div>
                   </div>
 
                   {previewFaces.length > 0 ? (
@@ -419,16 +424,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                     </div>
                   ) : null}
 
-                  <button className="public-funnel-primary" type="button" disabled>
-                    {previewJoinMode === "request_access"
-                      ? "Request access"
-                      : previewJoinMode === "checkout"
-                        ? "Join now"
-                        : "Join free"}
-                  </button>
-
-                  <button className="public-funnel-helper" type="button" disabled>
-                    Already paid? Recover access
+                  <button className="public-funnel-primary platform-save-button" type="button" disabled>
+                    Join now
                   </button>
                 </div>
               </div>

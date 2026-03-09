@@ -1,9 +1,6 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
-import {
-  fetchCloudCommunityFunnelConfig,
-  upsertCloudCommunityFunnelConfig,
-} from "./cloudCommunityFunnelGateway";
+import { fetchCloudCommunityFunnelConfig } from "./cloudCommunityFunnelGateway";
 
 type SessionLike = {
   user: {
@@ -16,7 +13,7 @@ type UseCommunityFunnelControllerArgs<SessionT extends SessionLike, ConfigT> = {
   session: SessionT | null;
   communityFunnelConfig: ConfigT;
   normalizeConfigForSave: (config: ConfigT) => ConfigT;
-  saveConfig?: (params: {
+  saveConfig: (params: {
     session: SessionT;
     communityId: string;
     normalizedConfig: ConfigT;
@@ -71,17 +68,11 @@ export function useCommunityFunnelController<SessionT extends SessionLike, Confi
     current.setCommunityFunnelSaveError(null);
     try {
       const normalized = current.normalizeConfigForSave(current.communityFunnelConfig);
-      const saved = current.saveConfig
-        ? await current.saveConfig({
-            session: current.session,
-            communityId: current.activeCommunityId,
-            normalizedConfig: normalized,
-          })
-        : await upsertCloudCommunityFunnelConfig<SessionT, ConfigT>({
-            session: current.session,
-            communityId: current.activeCommunityId,
-            config: normalized,
-          });
+      const saved = await current.saveConfig({
+        session: current.session,
+        communityId: current.activeCommunityId,
+        normalizedConfig: normalized,
+      });
       current.hydrateEditor(saved ?? normalized);
       current.markDraftClean();
       return true;

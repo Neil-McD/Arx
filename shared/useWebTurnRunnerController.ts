@@ -150,7 +150,8 @@ export function useWebTurnRunnerController<
               cancelled: false,
               error: formatCloudFunctionErrorMessage({
                 ...failure,
-                message: "Too many requests. Try again soon.",
+                message:
+                  "Guest chat is hitting the free model limit right now. Sign in for ChatGPT Plus/Pro rate limits or connect your own key.",
               }),
               content: "",
               runId: null,
