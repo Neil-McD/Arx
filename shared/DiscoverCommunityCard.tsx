@@ -5,7 +5,7 @@ import { communityInitials } from "./messageMetadataUi";
 type DiscoverCommunityCardProps = {
   name: string;
   slug?: string | null;
-  description: string;
+  oneLiner: string;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
   bannerFocusX?: number | null;
@@ -23,7 +23,7 @@ type DiscoverCommunityCardProps = {
 export function DiscoverCommunityCard({
   name,
   slug,
-  description,
+  oneLiner,
   avatarUrl,
   bannerUrl,
   bannerFocusX,
@@ -103,7 +103,7 @@ export function DiscoverCommunityCard({
             {slug ? <div className="discover-card-slug">/{slug}</div> : null}
           </div>
         </div>
-        <div className="discover-card-desc">{description}</div>
+        <div className="discover-card-desc">{oneLiner}</div>
       </div>
     </div>
   );

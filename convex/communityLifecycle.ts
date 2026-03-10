@@ -2,7 +2,7 @@ import { api } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  type CommunityAgentDraftLike,
+  type CommunityAgentConfigLike,
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityJoinRequestLike,
@@ -28,13 +28,17 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  normalizeCommunityFunnelConfigInput,
+  saveCommunityFunnelConfigInternal,
+} from "./communityFunnel";
 
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
   slug: string;
   name: string;
   owner_id: string;
-  description: string | null;
+  one_liner: string | null;
   avatar_url: string | null;
   avatar_storage_id: string | null;
   banner_url: string | null;
@@ -55,7 +59,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     slug: row.slug,
     name: row.name,
     owner_id: (await resolvePublicUserId(ctx, row.ownerId, userIdCache)) ?? String(row.ownerId),
-    description: row.description ?? null,
+    one_liner: row.oneLiner ?? null,
     avatar_url: branding.avatar_url,
     avatar_storage_id: branding.avatar_storage_id,
     banner_url: branding.banner_url,
@@ -70,6 +74,22 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   };
 }
 
+async function saveCommunityOneLinerInternal(
+  ctx: any,
+  community: CommunityLike,
+  oneLiner: string | null | undefined,
+  nowMs: number,
+): Promise<CommunityLike> {
+  const nextOneLiner = normalizeOptionalText(oneLiner);
+  await ctx.db.patch(community._id as any, {
+    oneLiner: nextOneLiner,
+    updatedAt: nowMs,
+  });
+  const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
+  if (!updated) throw new Error("community_not_found");
+  return updated;
+}
+
 export const createCommunity = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -79,7 +99,7 @@ export const createCommunity = mutation({
     visibility: v.optional(v.string()),
     avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
-    description: v.optional(v.union(v.string(), v.null())),
+    oneLiner: v.optional(v.union(v.string(), v.null())),
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     bannerUrl: v.optional(v.union(v.string(), v.null())),
     bannerFocusX: v.optional(v.number()),
@@ -125,7 +145,7 @@ export const createCommunity = mutation({
       ownerId,
       slug,
       name: normalizeName(args.name),
-      description: normalizeOptionalText(args.description),
+      oneLiner: normalizeOptionalText(args.oneLiner),
       avatarUrl: avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl),
       avatarStorageId,
       bannerUrl: bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl),
@@ -169,7 +189,7 @@ export const saveCommunitySettings = mutation({
     communityId: v.id("communities"),
     name: v.string(),
     slug: v.string(),
-    description: v.optional(v.union(v.string(), v.null())),
+    oneLiner: v.optional(v.union(v.string(), v.null())),
     avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
@@ -179,7 +199,7 @@ export const saveCommunitySettings = mutation({
     bannerZoom: v.optional(v.number()),
     visibility: v.optional(v.string()),
     monthlyAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
-    yearlyAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
+    annualAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
     currency: v.optional(v.string()),
     currencyDecimals: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -213,8 +233,11 @@ export const saveCommunitySettings = mutation({
       return Math.max(1, Math.floor(parsed));
     };
     const monthlyAmount = normalizePlanAmount(args.monthlyAmountBaseUnits);
-    const yearlyAmount = normalizePlanAmount(args.yearlyAmountBaseUnits);
-    const hasPaidPlan = monthlyAmount !== null || yearlyAmount !== null;
+    const annualAmount = normalizePlanAmount(args.annualAmountBaseUnits);
+    if (monthlyAmount !== null && annualAmount !== null) {
+      throw new Error("community_pricing_mode_invalid");
+    }
+    const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
     const currentEntryPolicy = resolveCommunityEntryPolicy(community);
     const nextEntryPolicy = hasPaidPlan
       ? currentEntryPolicy === "paid_subscription"
@@ -228,7 +251,7 @@ export const saveCommunitySettings = mutation({
       .toLowerCase() || "usd";
     const currencyDecimals = Math.max(0, Math.floor(args.currencyDecimals ?? 2));
     const nextName = normalizeName(args.name);
-    const nextDescription = normalizeOptionalText(args.description);
+    const nextOneLiner = normalizeOptionalText(args.oneLiner);
     const nextAvatarStorageId =
       args.avatarStorageId !== undefined
         ? (args.avatarStorageId ?? undefined)
@@ -267,7 +290,7 @@ export const saveCommunitySettings = mutation({
     await ctx.db.patch(community._id as any, {
       name: nextName,
       slug: normalizedSlug,
-      description: nextDescription,
+      oneLiner: nextOneLiner,
       avatarUrl: nextAvatarUrl,
       avatarStorageId: nextAvatarStorageId,
       bannerUrl: nextBannerUrl,
@@ -288,7 +311,7 @@ export const saveCommunitySettings = mutation({
     }
 
     const upsertPricePoint = async (
-      billingPeriod: "monthly" | "yearly",
+      billingPeriod: "monthly" | "annual",
       amountBaseUnits: number | null,
     ): Promise<string | null> => {
       const rows = (await ctx.db
@@ -322,7 +345,7 @@ export const saveCommunitySettings = mutation({
       if (hasMatchingCurrent && current) {
         await ctx.db.patch(current._id as any, {
           name: nextName,
-          description: nextDescription,
+          description: nextOneLiner,
           isCurrent: true,
           archivedAt: undefined,
           updatedAt: nowMs,
@@ -350,7 +373,7 @@ export const saveCommunitySettings = mutation({
         kind: nextEntryPolicy === "paid_subscription" ? "subscription" : "unlock",
         billingPeriod,
         name: nextName,
-        description: nextDescription,
+        description: nextOneLiner,
         amountBaseUnits,
         currency,
         currencyDecimals,
@@ -362,7 +385,7 @@ export const saveCommunitySettings = mutation({
     };
 
     await upsertPricePoint("monthly", monthlyAmount);
-    await upsertPricePoint("yearly", yearlyAmount);
+    await upsertPricePoint("annual", annualAmount);
 
     const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
     if (!updated) throw new Error("community_not_found");
@@ -371,7 +394,7 @@ export const saveCommunitySettings = mutation({
       community_id: String(updated._id),
       name: updated.name,
       slug: updated.slug,
-      description: updated.description ?? null,
+      one_liner: updated.oneLiner ?? null,
       avatar_url: branding.avatar_url,
       avatar_storage_id: branding.avatar_storage_id,
       banner_url: branding.banner_url,
@@ -390,7 +413,7 @@ export const saveCommunityOneLiner = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    description: v.optional(v.union(v.string(), v.null())),
+    oneLiner: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -406,17 +429,50 @@ export const saveCommunityOneLiner = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const nextDescription = normalizeOptionalText(args.description);
-    await ctx.db.patch(community._id as any, {
-      description: nextDescription,
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
-    if (!updated) throw new Error("community_not_found");
+    const updated = await saveCommunityOneLinerInternal(ctx, community, args.oneLiner, nowMs);
     return {
       community_id: String(updated._id),
-      description: updated.description ?? null,
+      one_liner: updated.oneLiner ?? null,
       updated_at: toIsoString(updated.updatedAt),
+    };
+  },
+});
+
+
+export const saveCommunityPublicPresentation = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    oneLiner: v.optional(v.union(v.string(), v.null())),
+    config: v.any(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const nowMs = args.nowMs ?? Date.now();
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const updatedCommunity = await saveCommunityOneLinerInternal(ctx, community, args.oneLiner, nowMs);
+    const funnel = await saveCommunityFunnelConfigInternal(
+      ctx,
+      args.communityId,
+      normalizeCommunityFunnelConfigInput(args.config),
+      nowMs,
+    );
+    return {
+      community_id: String(updatedCommunity._id),
+      one_liner: updatedCommunity.oneLiner ?? null,
+      updated_at: toIsoString(updatedCommunity.updatedAt),
+      funnel,
     };
   },
 });
@@ -507,11 +563,11 @@ export const deleteCommunity = mutation({
       await ctx.db.delete(row._id as any);
     }
 
-    const drafts = (await ctx.db
-      .query("communityAgentDrafts" as any)
+    const agentConfigs = (await ctx.db
+      .query("communityAgentConfigs" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityAgentDraftLike[];
-    for (const row of drafts) {
+      .collect()) as CommunityAgentConfigLike[];
+    for (const row of agentConfigs) {
       await ctx.db.delete(row._id as any);
     }
 

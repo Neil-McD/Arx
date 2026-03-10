@@ -126,7 +126,7 @@ export const resolvePublicFunnelBySlug = query({
       community: {
         slug: community.slug,
         name: community.name,
-        description: community.description ?? null,
+        one_liner: community.oneLiner ?? null,
         avatar_url: branding.avatar_url,
         banner_url: branding.banner_url,
         banner_focus_x: branding.banner_focus_x,
@@ -236,7 +236,7 @@ export const listPublicDiscoverCommunities = query({
         return {
           slug: community.slug,
           name: community.name,
-          description: community.description ?? null,
+          one_liner: community.oneLiner ?? null,
           avatar_url: branding.avatar_url,
           banner_url: branding.banner_url,
           banner_focus_x: branding.banner_focus_x,

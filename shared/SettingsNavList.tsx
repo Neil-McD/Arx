@@ -12,11 +12,10 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     id: "profile",
     page: "profile",
     icon: (
-      <span className="nav-icon nav-icon-profile">
+      <span className="nav-icon nav-icon-emphasis">
         <svg viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="8.7" r="3.4" />
-          <path d="M6.8 18.3a6.4 6.4 0 0 1 10.4 0" />
+          <circle cx="12" cy="8" r="4" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
         </svg>
       </span>
     ),
@@ -37,7 +36,7 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     id: "agent",
     page: "agent",
     icon: (
-      <span className="nav-icon nav-icon-emphasis">
+      <span className="nav-icon nav-icon-emphasis nav-icon-agent">
         <svg viewBox="0 0 24 24">
           <circle cx="6" cy="7" r="2" />
           <circle cx="6" cy="17" r="2" />

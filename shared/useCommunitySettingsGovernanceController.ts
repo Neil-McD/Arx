@@ -29,7 +29,7 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
 
   communitySettingsName: string;
   communitySettingsSlug: string;
-  communitySettingsDescription: string;
+  communitySettingsOneLiner: string;
   communitySettingsVisibility: string;
   communitySettingsAvatarUrl: string | null;
   communitySettingsBannerUrl: string | null;
@@ -42,7 +42,7 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   activeCommunityBannerUrl?: string | null;
   communitySettingsPricingMode: string;
   communitySettingsPriceUsdMonthly: string;
-  communitySettingsPriceUsdYearly: string;
+  communitySettingsPriceUsdAnnual: string;
   isValidCommunitySlug: (slug: string) => boolean;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setIsSavingCommunitySettings: Dispatch<SetStateAction<boolean>>;
@@ -156,14 +156,12 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
 
     try {
-      const monthlyEnabled =
-        current.communitySettingsPricingMode === "monthly" || current.communitySettingsPricingMode === "both";
-      const yearlyEnabled =
-        current.communitySettingsPricingMode === "yearly" || current.communitySettingsPricingMode === "both";
+      const monthlyEnabled = current.communitySettingsPricingMode === "monthly";
+      const annualEnabled = current.communitySettingsPricingMode === "annual";
       const monthlyAmount = monthlyEnabled ? parsePriceBaseUnits(current.communitySettingsPriceUsdMonthly) : null;
-      const yearlyAmount = yearlyEnabled ? parsePriceBaseUnits(current.communitySettingsPriceUsdYearly) : null;
+      const annualAmount = annualEnabled ? parsePriceBaseUnits(current.communitySettingsPriceUsdAnnual) : null;
       if (monthlyEnabled && monthlyAmount == null) throw new Error("Enter a monthly price.");
-      if (yearlyEnabled && yearlyAmount == null) throw new Error("Enter an annual price.");
+      if (annualEnabled && annualAmount == null) throw new Error("Enter an annual price.");
       const [avatarField, bannerField] = await Promise.all([
         prepareCloudCommunityBrandingField({
           session,
@@ -186,7 +184,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         communityId,
         name,
         slug,
-        description: current.communitySettingsDescription.trim() || null,
+        oneLiner: current.communitySettingsOneLiner.trim() || null,
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
         bannerStorageId: bannerField.storageId ?? null,
@@ -196,7 +194,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         bannerZoom: current.communitySettingsBannerZoom,
         visibility,
         monthlyAmountBaseUnits: monthlyAmount,
-        yearlyAmountBaseUnits: yearlyAmount,
+        annualAmountBaseUnits: annualAmount,
       });
       if (result?.community_id) {
         current.onSaveCommunitySettingsSuccess({

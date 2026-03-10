@@ -11,7 +11,7 @@ type SessionLike = {
   };
 };
 
-type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
+type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type CommunityMemberSettingsRow = {
   muted: boolean;
@@ -34,7 +34,7 @@ type UseCommunitySettingsDataControllerArgs = {
 
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
-  setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
 };
 
 function formatPlanAmount(row: CommunityPricingRow | null): string {
@@ -81,10 +81,10 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
         if (current.communityPricingDirtyRef.current) return;
 
         const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
-        const yearly = rows.find((row) => row.billing_period === "yearly") ?? null;
+        const annual = rows.find((row) => row.billing_period === "annual") ?? null;
         current.setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
-        current.setCommunitySettingsPriceUsdYearly(formatPlanAmount(yearly));
-        current.setCommunitySettingsPricingMode(monthly && yearly ? "both" : monthly ? "monthly" : yearly ? "yearly" : "free");
+        current.setCommunitySettingsPriceUsdAnnual(formatPlanAmount(annual));
+        current.setCommunitySettingsPricingMode(monthly ? "monthly" : annual ? "annual" : "free");
       } catch {
         // ignore
       }

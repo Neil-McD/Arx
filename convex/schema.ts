@@ -179,7 +179,7 @@ export default defineSchema({
     ownerId: v.id("users"),
     slug: v.string(),
     name: v.string(),
-    description: v.optional(v.string()),
+    oneLiner: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     bannerUrl: v.optional(v.string()),
@@ -250,7 +250,6 @@ export default defineSchema({
   communityFunnels: defineTable({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),
-    heroMediaStorageId: v.optional(v.id("_storage")),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
     about: v.optional(v.string()),
     createdAt: v.number(),
@@ -333,19 +332,13 @@ export default defineSchema({
     .index("by_message_user_emoji", ["messageId", "userId", "emoji"])
     .index("by_user", ["userId"]),
 
-  communityAgentDrafts: defineTable({
+  communityAgentConfigs: defineTable({
     communityId: v.id("communities"),
-    slot: v.number(),
-    name: v.optional(v.string()),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
-    isActive: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_slot", ["communityId", "slot"])
-    .index("by_community_active", ["communityId", "isActive"]),
+  }).index("by_community", ["communityId"]),
 
   communityAiFeedPosts: defineTable({
     communityId: v.id("communities"),

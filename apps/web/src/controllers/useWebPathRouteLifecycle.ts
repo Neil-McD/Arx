@@ -32,7 +32,6 @@ export function useWebPathRouteLifecycle(params: {
     threadId: string | null;
   }) => void;
   setBuilderBillingReturn: Dispatch<SetStateAction<BuilderBillingReturn | null>>;
-  setFinalizeCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   readPublicRouteFromLocation: () => PublicRoute;
   readAppRouteFromLocation: () => AppRouteState;
   buildAppRoutePath: (state: {
@@ -71,11 +70,9 @@ export function useWebPathRouteLifecycle(params: {
     const billingReturn = parseBuilderBillingReturn(url.searchParams);
     if (!billingReturn) return;
 
-    params.setFinalizeCreateCommunityError(null);
     params.setBuilderBillingReturn(billingReturn);
 
     clearBuilderBillingQueryParams(url.searchParams);
-    url.searchParams.delete("draft_id");
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     applyLocationToState();
   }, []);

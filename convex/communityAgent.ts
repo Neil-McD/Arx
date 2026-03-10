@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  type CommunityAgentDraftLike,
+  type CommunityAgentConfigLike,
   requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -13,7 +13,7 @@ function normalizeSystemPrompt(raw: unknown): string {
   return prompt.slice(0, 40_000);
 }
 
-function mapCommunityAgentConfigRow(row: CommunityAgentDraftLike) {
+function mapCommunityAgentConfigRow(row: CommunityAgentConfigLike) {
   return {
     id: String(row._id),
     community_id: String(row.communityId),
@@ -23,20 +23,31 @@ function mapCommunityAgentConfigRow(row: CommunityAgentDraftLike) {
   };
 }
 
-async function listCommunityAgentRows(ctx: any, communityId: any): Promise<CommunityAgentDraftLike[]> {
+async function listCommunityAgentConfigRows(ctx: any, communityId: any): Promise<CommunityAgentConfigLike[]> {
   return (await ctx.db
-    .query("communityAgentDrafts" as any)
+    .query("communityAgentConfigs" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityAgentDraftLike[];
+    .collect()) as CommunityAgentConfigLike[];
 }
 
-function selectCanonicalCommunityAgentRow(rows: CommunityAgentDraftLike[]): CommunityAgentDraftLike | null {
+function selectPrimaryCommunityAgentConfigRow(
+  rows: CommunityAgentConfigLike[],
+): CommunityAgentConfigLike | null {
   if (rows.length === 0) return null;
-  const active = rows.find((row) => Boolean(row.isActive));
-  if (active) return active;
   return rows
     .slice()
-    .sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)[0] ?? null;
+    .sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt)[0] ?? null;
+}
+
+async function pruneCommunityAgentConfigRows(
+  ctx: any,
+  rows: CommunityAgentConfigLike[],
+  keepId: any,
+): Promise<void> {
+  for (const row of rows) {
+    if (String(row._id) === String(keepId)) continue;
+    await ctx.db.delete(row._id as any);
+  }
 }
 
 export const getCommunityAgentConfig = query({
@@ -53,7 +64,7 @@ export const getCommunityAgentConfig = query({
     });
     (args as { userId?: any }).userId = userId;
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    const row = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
+    const row = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
     return row ? mapCommunityAgentConfigRow(row) : null;
   },
 });
@@ -77,37 +88,29 @@ export const saveCommunityAgentConfig = mutation({
     const nowMs = args.nowMs ?? Date.now();
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const nextSystemPrompt = normalizeSystemPrompt(args.systemPrompt);
-    const rows = await listCommunityAgentRows(ctx, args.communityId);
-    const existing = selectCanonicalCommunityAgentRow(rows);
+    const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
+    const existing = selectPrimaryCommunityAgentConfigRow(rows);
 
     if (existing) {
       await ctx.db.patch(existing._id as any, {
         landingJson: args.landingJson ?? null,
         systemPrompt: nextSystemPrompt,
-        slot: 1,
-        isActive: true,
         updatedAt: nowMs,
       });
-      for (const row of rows) {
-        if (row._id === existing._id) continue;
-        await ctx.db.delete(row._id as any);
-      }
-      const updated = (await ctx.db.get(existing._id as any)) as CommunityAgentDraftLike | null;
-      if (!updated) throw new Error("community_agent_draft_not_found");
+      await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
+      const updated = (await ctx.db.get(existing._id as any)) as CommunityAgentConfigLike | null;
+      if (!updated) throw new Error("community_agent_config_not_found");
       return mapCommunityAgentConfigRow(updated);
     }
 
-    const id = await ctx.db.insert("communityAgentDrafts" as any, {
+    const id = await ctx.db.insert("communityAgentConfigs" as any, {
       communityId: args.communityId,
-      slot: 1,
-      name: undefined,
       landingJson: args.landingJson ?? null,
       systemPrompt: nextSystemPrompt,
-      isActive: true,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    const created = (await ctx.db.get(id as any)) as CommunityAgentDraftLike | null;
+    const created = (await ctx.db.get(id as any)) as CommunityAgentConfigLike | null;
     if (!created) throw new Error("community_agent_config_create_failed");
     return mapCommunityAgentConfigRow(created);
   },
@@ -131,11 +134,10 @@ export const getActiveCommunityAgentSystemPrompt = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const active = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
-    if (!active) return null;
+    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
+    if (!config) return null;
     return {
-      system_prompt: active.systemPrompt,
-      draft_id: String(active._id),
+      system_prompt: config.systemPrompt,
     };
   },
 });
@@ -158,8 +160,8 @@ export const getActiveCommunityAgentLanding = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const active = selectCanonicalCommunityAgentRow(await listCommunityAgentRows(ctx, args.communityId));
-    if (!active) return null;
-    return mapCommunityAgentConfigRow(active);
+    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
+    if (!config) return null;
+    return mapCommunityAgentConfigRow(config);
   },
 });

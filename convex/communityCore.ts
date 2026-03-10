@@ -5,7 +5,7 @@ export type CommunityLike = {
   ownerId: any;
   slug: string;
   name: string;
-  description?: string;
+  oneLiner?: string;
   avatarUrl?: string;
   avatarStorageId?: any;
   bannerUrl?: string;
@@ -65,14 +65,11 @@ export type CommunityMessageReactionLike = {
   createdAt: number;
 };
 
-export type CommunityAgentDraftLike = {
+export type CommunityAgentConfigLike = {
   _id: any;
   communityId: any;
-  slot: number;
-  name?: string;
   landingJson?: unknown;
   systemPrompt: string;
-  isActive: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -91,7 +88,7 @@ export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
   kind: "unlock" | "subscription";
-  billingPeriod: string;
+  billingPeriod: "monthly" | "annual";
   name: string;
   description?: string;
   amountBaseUnits: number;
@@ -175,7 +172,7 @@ export type PublicPlanSummaryLike = {
   amount_base_units: string;
   currency: string;
   currency_decimals: number;
-  billing_period: string;
+  billing_period: "monthly" | "annual";
 };
 
 export function normalizeIdValue(raw: unknown): string {
@@ -489,10 +486,11 @@ export async function listCommunityMembershipRowsForManager(args: {
 }
 
 export function mapCommunityPricingRow(row: CommunityPricePointLike) {
+  const billingPeriodRaw = String(row.billingPeriod ?? "").trim().toLowerCase();
   return {
     price_point_id: String(row._id),
     community_id: String(row.communityId),
-    billing_period: String(row.billingPeriod ?? "").trim() || "monthly",
+    billing_period: billingPeriodRaw === "annual" ? "annual" : "monthly",
     name: row.name,
     description: row.description ?? null,
     amount_base_units: Math.max(0, Math.floor(row.amountBaseUnits)),
@@ -807,20 +805,23 @@ export function mapActivePlanSummaries<
   return plans
     .slice()
     .sort((a, b) => a.updatedAt - b.updatedAt)
-    .map((plan) => ({
-      name: plan.name,
-      description: plan.description ?? null,
-      amount_base_units: String(Math.max(0, Math.floor(plan.amountBaseUnits))),
-      currency: plan.currency,
-      currency_decimals: Math.max(0, Math.floor(plan.currencyDecimals)),
-      billing_period: String(plan.billingPeriod ?? "").trim() || "monthly",
-    }));
+    .map((plan) => {
+      const billingPeriodRaw = String(plan.billingPeriod ?? "").trim().toLowerCase();
+      return {
+        name: plan.name,
+        description: plan.description ?? null,
+        amount_base_units: String(Math.max(0, Math.floor(plan.amountBaseUnits))),
+        currency: plan.currency,
+        currency_decimals: Math.max(0, Math.floor(plan.currencyDecimals)),
+        billing_period: billingPeriodRaw === "annual" ? "annual" : "monthly",
+      };
+    });
 }
 
 export function pickPreferredActivePlan(plans: PublicPlanSummaryLike[]): PublicPlanSummaryLike | null {
   return (
     plans.find((plan) => plan.billing_period === "monthly") ??
-    plans.find((plan) => plan.billing_period === "yearly") ??
+    plans.find((plan) => plan.billing_period === "annual") ??
     plans[0] ??
     null
   );

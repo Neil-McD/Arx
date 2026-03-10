@@ -3,13 +3,13 @@ import type { DragEvent } from "react";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
-type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
+type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type ActiveCommunity = {
   name: string;
   slug: string;
   visibility: string;
-  description: string | null;
+  one_liner: string | null;
 };
 
 type ActiveCommunityAccess = {
@@ -42,11 +42,11 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsAvatarUrl: string | null;
     communitySettingsName: string;
     communitySettingsSlug: string;
-    communitySettingsDescription: string;
+    communitySettingsOneLiner: string;
     communitySettingsVisibility: string;
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
-    communitySettingsPriceUsdYearly: string;
+    communitySettingsPriceUsdAnnual: string;
     builderBillingStatus: BuilderBillingStatus;
     isStartingConnectOnboarding: boolean;
     communitySettingsError: string | null;
@@ -77,11 +77,11 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsName: (value: string) => void;
     setCommunitySettingsSlug: (value: string) => void;
     slugifyCommunityName: (value: string) => string;
-    setCommunitySettingsDescription: (value: string) => void;
+    setCommunitySettingsOneLiner: (value: string) => void;
     setCommunitySettingsVisibility: (value: string) => void;
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
-    setCommunitySettingsPriceUsdYearly: (value: string) => void;
+    setCommunitySettingsPriceUsdAnnual: (value: string) => void;
     setCommunityPricingDirty: () => void;
     startConnectOnboarding: () => Promise<void> | void;
     handleSaveCommunitySettings: () => Promise<void> | void;
@@ -107,8 +107,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const pricingOptions = [
     { key: "free", label: "Free" },
     { key: "monthly", label: "Monthly" },
-    { key: "yearly", label: "Annual" },
-    { key: "both", label: "Both" },
+    { key: "annual", label: "Annual" },
   ] as Array<{ key: CommunityPricingMode; label: string }>;
   const pricingSwitcherStyle = buildPlatformSwitcherStyle(
     pricingOptions.length,
@@ -304,9 +303,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 <textarea
                   placeholder="Short one-liner for the public funnel card"
                   rows={3}
-                  value={state.communitySettingsDescription}
+                  value={state.communitySettingsOneLiner}
                   onChange={(event) => {
-                    actions.setCommunitySettingsDescription(event.target.value);
+                    actions.setCommunitySettingsOneLiner(event.target.value);
                     actions.markCommunitySettingsDirty();
                   }}
                 />
@@ -330,7 +329,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 </select>
                 <span className="create-community-hint">
                   {state.communitySettingsVisibility === "published"
-                    ? "Discoverable. Anyone can preview chat and join to participate."
+                    ? "Discoverable. Anyone can join to participate."
                     : "Not listed in discovery. Share the link when you're ready."}
                 </span>
               </label>
@@ -363,8 +362,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   Choose what billing options members see at checkout.
                 </span>
               </div>
-              {(state.communitySettingsPricingMode === "monthly" ||
-                state.communitySettingsPricingMode === "both") && (
+              {state.communitySettingsPricingMode === "monthly" && (
                 <label className="create-community-field">
                   <span>Monthly price (USD)</span>
                   <input
@@ -381,22 +379,21 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   <span className="create-community-hint">Billed monthly.</span>
                 </label>
               )}
-              {(state.communitySettingsPricingMode === "yearly" ||
-                state.communitySettingsPricingMode === "both") && (
+              {state.communitySettingsPricingMode === "annual" && (
                 <label className="create-community-field">
                   <span>Annual price (USD)</span>
                   <input
                     type="text"
                     inputMode="decimal"
                     placeholder="290"
-                    value={state.communitySettingsPriceUsdYearly}
+                    value={state.communitySettingsPriceUsdAnnual}
                     onChange={(event) => {
-                      actions.setCommunitySettingsPriceUsdYearly(event.target.value);
+                      actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
                       actions.setCommunityPricingDirty();
                       actions.markCommunitySettingsDirty();
                     }}
                   />
-                  <span className="create-community-hint">Billed yearly.</span>
+                  <span className="create-community-hint">Billed annually.</span>
                 </label>
               )}
               <div className="create-community-field">
@@ -549,8 +546,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 </div>
               ))}
             </div>
-            {activeCommunity.description && (
-              <div className="model-note">{activeCommunity.description}</div>
+            {activeCommunity.one_liner && (
+              <div className="model-note">{activeCommunity.one_liner}</div>
             )}
           </div>
           <div className="settings-section">

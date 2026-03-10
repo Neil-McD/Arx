@@ -21,7 +21,7 @@ type WebCreateCommunityModalProps = {
   createCommunityBannerUrl: string | null;
   createCommunityAvatarUrl: string | null;
   createCommunityName: string;
-  createCommunityDescription: string;
+  createCommunityOneLiner: string;
   createCommunitySlug: string;
   createCommunityVisibility: "published" | "unlisted";
   createCommunityError: string | null;
@@ -40,7 +40,7 @@ type WebCreateCommunityModalProps = {
   onRemoveBanner: () => void;
   onRemoveAvatar: () => void;
   onChangeName: (value: string) => void;
-  onChangeDescription: (value: string) => void;
+  onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
   onChangeVisibility: (value: "published" | "unlisted") => void;
@@ -58,7 +58,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     createCommunityBannerUrl,
     createCommunityAvatarUrl,
     createCommunityName,
-    createCommunityDescription,
+    createCommunityOneLiner,
     createCommunitySlug,
     createCommunityVisibility,
     createCommunityError,
@@ -77,7 +77,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     onRemoveBanner,
     onRemoveAvatar,
     onChangeName,
-    onChangeDescription,
+    onChangeOneLiner,
     onChangeSlug,
     onChangeSlugEdited,
     onChangeVisibility,
@@ -182,12 +182,12 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               />
             </label>
             <label className="create-community-field">
-              <span>Short description</span>
+                <span>One-liner</span>
               <textarea
                 placeholder="One-liner about who this is for"
                 rows={2}
-                value={createCommunityDescription}
-                onChange={(event) => onChangeDescription(event.target.value)}
+                value={createCommunityOneLiner}
+                onChange={(event) => onChangeOneLiner(event.target.value)}
               />
             </label>
             <label className="create-community-field">

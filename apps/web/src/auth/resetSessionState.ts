@@ -37,7 +37,7 @@ type WebSessionResetDeps = {
   setCommunityMembers: (value: any[]) => void;
   setCommunitySettingsName: (value: string) => void;
   setCommunitySettingsSlug: (value: string) => void;
-  setCommunitySettingsDescription: (value: string) => void;
+  setCommunitySettingsOneLiner: (value: string) => void;
   setCommunitySettingsVisibility: (value: string) => void;
   setCommunitySettingsAvatarUrl: (value: string | null) => void;
   setCommunitySettingsBannerUrl: (value: string | null) => void;
@@ -97,7 +97,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setCommunityMembers([]);
   deps.setCommunitySettingsName("");
   deps.setCommunitySettingsSlug("");
-  deps.setCommunitySettingsDescription("");
+  deps.setCommunitySettingsOneLiner("");
   deps.setCommunitySettingsVisibility("unlisted");
   deps.setCommunitySettingsAvatarUrl(null);
   deps.setCommunitySettingsBannerUrl(null);

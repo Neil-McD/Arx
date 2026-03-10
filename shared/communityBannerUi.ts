@@ -31,3 +31,20 @@ export function getCommunityBannerImageStyle(args: {
     transformOrigin: "center center",
   };
 }
+
+export function getCommunityBannerBackgroundStyle(args: {
+  imageUrl?: string | null;
+  focusX?: number | null;
+  focusY?: number | null;
+  zoom?: number | null;
+}): CSSProperties | undefined {
+  if (!args.imageUrl) return undefined;
+  const focusX = clampCommunityBannerFocus(args.focusX);
+  const focusY = clampCommunityBannerFocus(args.focusY);
+  const zoom = clampCommunityBannerZoom(args.zoom);
+  return {
+    backgroundImage: `url(${args.imageUrl})`,
+    backgroundPosition: `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`,
+    backgroundSize: `${Math.max(100, zoom * 100)}%`,
+  };
+}

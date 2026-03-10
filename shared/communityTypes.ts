@@ -1,4 +1,5 @@
 export type CommunityEntryPolicy = "open" | "approval" | "paid_unlock" | "paid_subscription";
+export type CommunityBillingPeriod = "monthly" | "annual";
 
 export type PublicPlanSummary = {
   name: string;
@@ -6,14 +7,13 @@ export type PublicPlanSummary = {
   amount_base_units: string;
   currency: string;
   currency_decimals: number;
-  billing_period: string;
+  billing_period: CommunityBillingPeriod;
 };
 
 export type CommunityFunnelHeroMediaKind = "image" | "video";
 
 export type CommunityFunnelConfig = {
   hero_media_url: string | null;
-  hero_media_storage_id?: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
   about: string | null;
 };
@@ -21,7 +21,7 @@ export type CommunityFunnelConfig = {
 export type DiscoverCommunitySnapshot = {
   slug: string;
   name: string;
-  description: string | null;
+  one_liner: string | null;
   avatar_url: string | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
@@ -198,7 +198,7 @@ export type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
 
 export type AnalyticsChartMode = "members" | "revenue";
 
-export type CommunityPricingMode = "free" | "monthly" | "yearly" | "both";
+export type CommunityPricingMode = "free" | "monthly" | "annual";
 
 export type UserProfile = {
   user_id: string;

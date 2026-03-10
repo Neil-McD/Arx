@@ -1,4 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import type { CommunityBillingPeriod } from "./communityTypes";
 
 type CloudCommunityMembershipGatewayParams<SessionT> = {
   session: SessionT;
@@ -54,12 +55,8 @@ export type CloudCommunityMembershipAdminRow = {
   community_id: string;
   user_id: string;
   role: string;
-  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
-  is_entitled?: boolean;
-  entitlement_ends_at?: string | null;
-  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
-  subscription_cancel_at_period_end?: boolean | null;
-  billing_period?: string | null;
+  price_point_id?: string | null;
+  billing_period?: CommunityBillingPeriod | null;
   amount_base_units?: number | null;
   currency?: string | null;
   currency_decimals?: number | null;

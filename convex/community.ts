@@ -24,8 +24,6 @@ import {
 } from "./communityAgent";
 import {
   getCommunityFunnelConfig as getCommunityFunnelConfigImpl,
-  saveCommunityFunnel as saveCommunityFunnelImpl,
-  upsertCommunityFunnelConfig as upsertCommunityFunnelConfigImpl,
 } from "./communityFunnel";
 import {
   createMessageReaction as createMessageReactionImpl,
@@ -68,6 +66,7 @@ import {
   createCommunity as createCommunityImpl,
   deleteCommunity as deleteCommunityImpl,
   generateCommunityBrandingUploadUrl as generateCommunityBrandingUploadUrlImpl,
+  saveCommunityPublicPresentation as saveCommunityPublicPresentationImpl,
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
   saveCommunitySettings as saveCommunitySettingsImpl,
 } from "./communityLifecycle";
@@ -129,5 +128,4 @@ export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;
 export const getActiveCommunityAgentLanding = getActiveCommunityAgentLandingImpl;
 export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
-export const saveCommunityFunnel = saveCommunityFunnelImpl;
-export const upsertCommunityFunnelConfig = upsertCommunityFunnelConfigImpl;
+export const saveCommunityPublicPresentation = saveCommunityPublicPresentationImpl;

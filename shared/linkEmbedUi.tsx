@@ -4,6 +4,8 @@ const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
 
 export type ParsedEmbed =
   | { provider: "youtube"; id: string; src: string; thumbnailUrl: string }
+  | { provider: "vimeo"; id: string; src: string }
+  | { provider: "loom"; id: string; src: string }
   | { provider: "wistia"; id: string; src: string };
 
 function splitUrlAndTrailingPunctuation(candidate: string): { url: string; trailing: string } {
@@ -129,6 +131,29 @@ function parseWistiaId(url: URL): string | null {
   return null;
 }
 
+function parseVimeoId(url: URL): string | null {
+  const host = url.hostname.toLowerCase();
+  if (!host.includes("vimeo.com")) return null;
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const candidate = parts[index] ?? "";
+    if (/^\d{6,}$/.test(candidate)) return candidate;
+  }
+  return null;
+}
+
+function parseLoomId(url: URL): string | null {
+  const host = url.hostname.toLowerCase();
+  if (host !== "loom.com" && host !== "www.loom.com") return null;
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  if (parts[0] !== "share" && parts[0] !== "embed") return null;
+  const id = (parts[1] ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
+  return id.length >= 8 ? id : null;
+}
+
 export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   const url = normalizeExternalUrl(rawUrl);
   if (!url) return null;
@@ -148,6 +173,18 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   if (wistiaId) {
     const src = `https://fast.wistia.net/embed/iframe/${wistiaId}?seo=false&videoFoam=true`;
     return { provider: "wistia", id: wistiaId, src };
+  }
+
+  const vimeoId = parseVimeoId(url);
+  if (vimeoId) {
+    const src = `https://player.vimeo.com/video/${vimeoId}`;
+    return { provider: "vimeo", id: vimeoId, src };
+  }
+
+  const loomId = parseLoomId(url);
+  if (loomId) {
+    const src = `https://www.loom.com/embed/${loomId}`;
+    return { provider: "loom", id: loomId, src };
   }
 
   return null;

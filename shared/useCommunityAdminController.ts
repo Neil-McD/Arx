@@ -33,7 +33,6 @@ type UseCommunityAdminControllerArgs<
   dateKeyLocal: (date: Date) => string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   confirmAction?: (message: string) => boolean;
-  getMemberRefreshIncludeStatus: () => boolean;
   reloadCommunities: (session: SessionT) => Promise<void>;
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
   loadUserProfiles?: (userIds: string[], session: SessionT) => Promise<void> | void;
@@ -86,10 +85,8 @@ export function useCommunityAdminController<
   const loadCommunityMembers = useCallback(async (
     communityId: string,
     session: SessionT,
-    opts?: { includeStatus?: boolean },
   ) => {
     const current = argsRef.current;
-    void opts;
     let rows: CommunityMemberT[] | null = null;
     try {
       rows = (await listCloudCommunityMembershipAdminRows({
@@ -369,7 +366,7 @@ export function useCommunityAdminController<
 
   const refreshCommunityMembershipViews = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    await loadCommunityMembers(communityId, session, { includeStatus: current.getMemberRefreshIncludeStatus() });
+    await loadCommunityMembers(communityId, session);
     await current.reloadCommunities(session);
     await current.reloadCommunityAccess(communityId, session);
   }, [loadCommunityMembers]);

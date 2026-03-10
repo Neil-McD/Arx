@@ -26,7 +26,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
-  setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
   setActiveCommunityAccess: Dispatch<SetStateAction<CommunityAccess | null>>;
   setIsLoadingCommunityAccess: Dispatch<SetStateAction<boolean>>;
 }) {
@@ -68,7 +68,7 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     if (!session || !params.activeCommunityId) {
       params.setCommunitySettingsPricingMode("free");
       params.setCommunitySettingsPriceUsdMonthly("");
-      params.setCommunitySettingsPriceUsdYearly("");
+      params.setCommunitySettingsPriceUsdAnnual("");
       return;
     }
     if (!params.activeCommunityAccess?.can_manage_members) return;

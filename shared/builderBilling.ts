@@ -1,3 +1,5 @@
+import type { CommunityBillingPeriod } from "./communityTypes";
+
 export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
@@ -15,7 +17,7 @@ export type PublicPlanSummaryLike = {
   amount_base_units: number | string | null | undefined;
   currency: string | null | undefined;
   currency_decimals: number | null | undefined;
-  billing_period: string | null | undefined;
+  billing_period: CommunityBillingPeriod | null | undefined;
 };
 
 export function formatPlanPrice(plan: PublicPlanSummaryLike): string {
@@ -25,7 +27,7 @@ export function formatPlanPrice(plan: PublicPlanSummaryLike): string {
   const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
   const currency = String(plan.currency ?? "").toUpperCase();
   const period = String(plan.billing_period ?? "").trim().toLowerCase();
-  const suffix = period === "yearly" ? "/year" : period === "monthly" ? "/month" : "";
+  const suffix = period === "annual" ? "/year" : period === "monthly" ? "/month" : "";
   if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
   return `${value.toFixed(0)} ${currency}${suffix}`;
 }
@@ -34,7 +36,7 @@ export function formatSubscriptionPrice(args: {
   amountBaseUnits: number | string | null | undefined;
   currency: string | null | undefined;
   currencyDecimals: number | null | undefined;
-  billingPeriod: string | null | undefined;
+  billingPeriod: CommunityBillingPeriod | null | undefined;
 }): string {
   const raw = String(args.amountBaseUnits ?? "").trim();
   const amount = Number(raw);
@@ -42,10 +44,10 @@ export function formatSubscriptionPrice(args: {
   const value = Number.isFinite(amount) ? amount / Math.pow(10, decimals) : 0;
   const currency = String(args.currency ?? "").toUpperCase();
   const period = String(args.billingPeriod ?? "").trim().toLowerCase();
-  const suffix = period === "yearly" ? "/year" : period === "monthly" ? "/month" : "";
+  const suffix = period === "annual" ? "/year" : period === "monthly" ? "/month" : "";
   if (!raw || !Number.isFinite(amount)) {
     if (period === "monthly") return "monthly";
-    if (period === "yearly") return "annual";
+    if (period === "annual") return "annual";
     return "paid";
   }
   if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;

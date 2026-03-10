@@ -20,7 +20,6 @@ import {
   requireCommunityModerator,
   requireCommunityManager,
   resolveCommunityEntryPolicy,
-  resolveCommunityMembershipEntitlementState,
   resolveCommunityBrandingFields,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -88,7 +87,7 @@ export const listCommunityMemberships = query({
         ? base
         : {
             ...base,
-            description: community.description ?? null,
+            one_liner: community.oneLiner ?? null,
             avatar_url: branding.avatar_url,
             avatar_storage_id: branding.avatar_storage_id,
             banner_url: branding.banner_url,
@@ -162,11 +161,7 @@ export const listCommunityMembershipsAdmin = query({
       community_id: String(community._id),
       user_id: (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ?? String(community.ownerId),
       role: "owner",
-      access_source: "manual_grant",
-      is_entitled: true,
-      entitlement_ends_at: null,
-      subscription_status: null,
-      subscription_cancel_at_period_end: null,
+      price_point_id: null,
       billing_period: null,
       amount_base_units: null,
       currency: null,
@@ -175,12 +170,6 @@ export const listCommunityMembershipsAdmin = query({
     };
     const memberRows = await Promise.all(
       rows.slice(0, Math.max(0, limit - 1)).map(async (row) => {
-        const entitlement = await resolveCommunityMembershipEntitlementState({
-          ctx,
-          community,
-          membership: row,
-          userId: row.userId,
-        });
         const subscription = ((await ctx.db
           .query("communitySubscriptions" as any)
           .withIndex("by_membership", (q: any) => q.eq("membershipId", row._id))
@@ -195,15 +184,12 @@ export const listCommunityMembershipsAdmin = query({
           community_id: String(row.communityId),
           user_id: (await resolvePublicUserId(ctx, row.userId, userIdCache)) ?? String(row.userId),
           role: normalizeCommunityRoleForOutput(row.role) || "member",
-          access_source: row.accessSource ?? null,
-          is_entitled: entitlement.isEntitled,
-          entitlement_ends_at:
-            typeof entitlement.subscriptionCurrentPeriodEndAt === "number"
-              ? toIsoString(entitlement.subscriptionCurrentPeriodEndAt)
-              : null,
-          subscription_status: subscription ? String(subscription.status) : null,
-          subscription_cancel_at_period_end: subscription ? Boolean(subscription.cancelAtPeriodEnd) : null,
-          billing_period: pricePoint ? String(pricePoint.billingPeriod ?? "").trim().toLowerCase() || null : null,
+          price_point_id: pricePoint ? String(pricePoint._id) : null,
+          billing_period: pricePoint
+            ? String(pricePoint.billingPeriod ?? "").trim().toLowerCase() === "annual"
+              ? "annual"
+              : "monthly"
+            : null,
           amount_base_units: pricePoint ? Math.max(0, Math.floor(pricePoint.amountBaseUnits)) : null,
           currency: pricePoint?.currency ?? null,
           currency_decimals: pricePoint ? Math.max(0, Math.floor(pricePoint.currencyDecimals)) : null,

@@ -1,11 +1,13 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
+import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "../apps/web/src/communityJoinPolicy";
 
 type CommunityLike = {
   id: string;
   entry_policy?: string | null;
   visibility?: string | null;
 };
+type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type LifecycleParams<
   SessionT,
@@ -17,12 +19,10 @@ type LifecycleParams<
   session: SessionT | null;
   activeCommunityId: string | null;
   communities: CommunityT[];
-  canReviewJoinRequestsActiveCommunity: boolean;
-  membersCommunityHasPaidPlans: boolean | null;
+  membersSurfaceMode: MembersSurfaceMode;
+  activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
   isJoinRequestsModalOpen: boolean;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
-  setMembersCommunityHasPaidPlans: Dispatch<SetStateAction<boolean | null>>;
-  setIsLoadingMembersCommunityPricing: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
   setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
@@ -44,8 +44,6 @@ export function useCommunityMembersReviewLifecycle<
   }, [params.loadCommunityJoinRequests]);
 
   useEffect(() => {
-    params.setMembersCommunityHasPaidPlans(null);
-    params.setIsLoadingMembersCommunityPricing(false);
     params.setCommunityJoinRequests([]);
     params.setIsLoadingCommunityJoinRequests(false);
     params.setCommunityJoinRequestsError(null);
@@ -64,8 +62,6 @@ export function useCommunityMembersReviewLifecycle<
     const session = params.session;
     const communityId = params.activeCommunityId;
     if (!session || !communityId) {
-      params.setMembersCommunityHasPaidPlans(null);
-      params.setIsLoadingMembersCommunityPricing(false);
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
@@ -73,8 +69,7 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsJoinRequestsModalOpen(false);
       return;
     }
-    if (!params.canReviewJoinRequestsActiveCommunity) {
-      params.setMembersCommunityHasPaidPlans(null);
+    if (params.membersSurfaceMode === "viewer") {
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
@@ -88,7 +83,6 @@ export function useCommunityMembersReviewLifecycle<
       .trim()
       .toLowerCase();
     if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) {
-      params.setMembersCommunityHasPaidPlans(null);
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
@@ -99,7 +93,6 @@ export function useCommunityMembersReviewLifecycle<
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
 
     if (visibility !== "published" && visibility !== "unlisted") {
-      params.setMembersCommunityHasPaidPlans(null);
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
@@ -108,18 +101,17 @@ export function useCommunityMembersReviewLifecycle<
       return;
     }
 
-    params.setIsLoadingMembersCommunityPricing(true);
     params.setCommunityJoinRequestsError(null);
-    const entryPolicy = String(activeCommunityRecord?.entry_policy ?? "").trim().toLowerCase();
-    const hasPaidPlans = entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription";
-    params.setMembersCommunityHasPaidPlans(hasPaidPlans);
-    if (hasPaidPlans) {
+    const joinReviewMode =
+      params.activeCommunityMembersJoinReviewMode ??
+      deriveCommunityMembersJoinReviewMode({ entry_policy: activeCommunityRecord?.entry_policy });
+
+    if (joinReviewMode !== "free_approval") {
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
       params.setDecidingCommunityJoinRequestId(null);
       params.setIsJoinRequestsModalOpen(false);
-      params.setIsLoadingMembersCommunityPricing(false);
       return;
     }
 
@@ -131,22 +123,19 @@ export function useCommunityMembersReviewLifecycle<
             : error instanceof Error
               ? error.message
               : "Failed to load join requests.";
-        params.setMembersCommunityHasPaidPlans(null);
         params.setCommunityJoinRequests([]);
         params.setIsLoadingCommunityJoinRequests(false);
         params.setCommunityJoinRequestsError(message);
         params.setDecidingCommunityJoinRequestId(null);
         params.setIsJoinRequestsModalOpen(false);
-      })
-      .finally(() => {
-        params.setIsLoadingMembersCommunityPricing(false);
       });
   }, [
     params.activePage,
     params.communityTab,
     params.session,
     params.activeCommunityId,
-    params.canReviewJoinRequestsActiveCommunity,
+    params.membersSurfaceMode,
+    params.activeCommunityMembersJoinReviewMode,
     params.communities,
   ]);
 
@@ -156,8 +145,8 @@ export function useCommunityMembersReviewLifecycle<
       params.activePage !== "community" ||
       params.communityTab !== "members" ||
       !params.activeCommunityId ||
-      !params.canReviewJoinRequestsActiveCommunity ||
-      params.membersCommunityHasPaidPlans === true
+      params.membersSurfaceMode === "viewer" ||
+      params.activeCommunityMembersJoinReviewMode !== "free_approval"
     ) {
       params.setIsJoinRequestsModalOpen(false);
     }
@@ -166,7 +155,7 @@ export function useCommunityMembersReviewLifecycle<
     params.activePage,
     params.communityTab,
     params.activeCommunityId,
-    params.canReviewJoinRequestsActiveCommunity,
-    params.membersCommunityHasPaidPlans,
+    params.membersSurfaceMode,
+    params.activeCommunityMembersJoinReviewMode,
   ]);
 }

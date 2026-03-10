@@ -13,6 +13,7 @@ import {
 } from "../../../../shared/cloudPublicFunnelGateway";
 import type { CloudSession } from "../cloudAuth";
 import { deriveCommunityJoinMode } from "../communityJoinPolicy";
+import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 
 type UseWebPublicFunnelActionsArgs<
   PublicCommunityT extends {
@@ -20,7 +21,7 @@ type UseWebPublicFunnelActionsArgs<
     visibility: string;
     entry_policy?: unknown;
   },
-  PublicPlanT extends { billing_period: string },
+  PublicPlanT extends { billing_period: CommunityBillingPeriod },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 > = {
   getSession: () => CloudSession | null;
@@ -42,7 +43,6 @@ type UseWebPublicFunnelActionsArgs<
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunityPlans: Dispatch<SetStateAction<PublicPlanT[]>>;
-  setSelectedPublicCommunityBillingPeriod: Dispatch<SetStateAction<string | null>>;
 
   setCheckoutError: Dispatch<SetStateAction<string | null>>;
   setCheckoutStatus: Dispatch<SetStateAction<"idle" | "loading" | "pending" | "succeeded" | "error">>;
@@ -57,7 +57,7 @@ export function useWebPublicFunnelActions<
     visibility: string;
     entry_policy?: unknown;
   },
-  PublicPlanT extends { billing_period: string },
+  PublicPlanT extends { billing_period: CommunityBillingPeriod },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 >(args: UseWebPublicFunnelActionsArgs<PublicCommunityT, PublicPlanT, MyCommunityJoinRequestT>) {
   const loadMyJoinRequestBySlug = useCallback(
@@ -234,7 +234,6 @@ export function useWebPublicFunnelActions<
       args.setPublicRequestAccessError(null);
       args.setPublicCommunity(null);
       args.setPublicCommunityPlans([]);
-      args.setSelectedPublicCommunityBillingPeriod(null);
       args.setMyPublicCommunityJoinRequest(null);
       try {
         const payload = await resolveCloudPublicFunnel<CloudSession, PublicCommunityT, PublicPlanT>({
@@ -268,13 +267,12 @@ export function useWebPublicFunnelActions<
           ...payload.community,
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
         } as PublicCommunityT);
-        args.setPublicCommunityPlans(plans);
         const preferred =
           plans.find((plan) => plan.billing_period === "monthly") ??
-          plans.find((plan) => plan.billing_period === "yearly") ??
+          plans.find((plan) => plan.billing_period === "annual") ??
           plans[0] ??
           null;
-        args.setSelectedPublicCommunityBillingPeriod(preferred?.billing_period ?? null);
+        args.setPublicCommunityPlans(preferred ? [preferred] : []);
 
         if (
           session &&
@@ -299,7 +297,7 @@ export function useWebPublicFunnelActions<
   );
 
   const startCheckoutForPlan = useCallback(
-    async (communitySlug: string, billingPeriod: string, cancelPath: string): Promise<void> => {
+    async (communitySlug: string, billingPeriod: CommunityBillingPeriod, cancelPath: string): Promise<void> => {
       args.setCheckoutStatus("loading");
       args.setCheckoutError(null);
       try {

@@ -22,14 +22,9 @@ type CommunityLike = {
   id: string;
 };
 
-type CreateCommunityDraftLike = {
-  user_id?: string | null;
-};
-
 export function useWebPostAuthBillingLifecycle<
   TSession extends SessionLike,
   TBillingStatus extends BuilderBillingStatusLike,
-  TDraft extends CreateCommunityDraftLike,
 >(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
@@ -38,7 +33,6 @@ export function useWebPostAuthBillingLifecycle<
   isJoiningPublicCommunity: boolean;
   builderBillingReturn: BuilderBillingReturn | null;
   builderBillingStatus: TBillingStatus | null;
-  isFinalizingCreateCommunityFromBilling: boolean;
   communities: CommunityLike[];
   communityRoleById: Record<string, string>;
   lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
@@ -47,16 +41,15 @@ export function useWebPostAuthBillingLifecycle<
   setBuilderBillingStatus: Dispatch<SetStateAction<TBillingStatus | null>>;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
-  setFinalizeCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   setIsFinalizingBuilderReturn: Dispatch<SetStateAction<boolean>>;
+  clearBuilderBillingReturn: () => void;
   getCloudAuthUid: (session: TSession) => string | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
   loadBuilderBillingStatus: (session: TSession) => Promise<TBillingStatus | null>;
   joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
-  loadCreateCommunityDraft: () => TDraft | null;
-  createCommunityFromDraft: (draft: TDraft, session: TSession) => Promise<unknown>;
+  resumeCreateCommunityIntent: () => void;
 }) {
   useEffect(() => {
     const token = (params.claimTokenParam ?? "").trim();
@@ -165,29 +158,24 @@ export function useWebPostAuthBillingLifecycle<
         }
 
         if (cancelled) return;
-        if (!wantsCreate) return;
-        if (params.isFinalizingCreateCommunityFromBilling) return;
-
-        const draft = params.loadCreateCommunityDraft();
-        if (!draft) {
-          params.setFinalizeCreateCommunityError("Draft not found. Re-open Create community to continue.");
-          return;
-        }
-        if (draft.user_id && draft.user_id !== session.user.id) {
-          params.setFinalizeCreateCommunityError("Draft belongs to a different account. Re-open Create community to continue.");
+        if (!wantsCreate) {
+          params.clearBuilderBillingReturn();
           return;
         }
         const tier = (lastStatus?.builder_tier ?? params.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
         const max = lastStatus?.max_communities ?? params.builderBillingStatus?.max_communities ?? 0;
         if (tier !== "architect") {
-          params.setFinalizeCreateCommunityError("Architect is required to create a community.");
+          params.setBuilderBillingError("Architect is required to create a community.");
+          params.clearBuilderBillingReturn();
           return;
         }
         if (max > 0 && ownedCount >= max) {
-          params.setFinalizeCreateCommunityError("You've reached your plan limit. Upgrade your plan to create more communities.");
+          params.setBuilderBillingError("You've reached your plan limit. Upgrade your plan to create more communities.");
+          params.clearBuilderBillingReturn();
           return;
         }
-        await params.createCommunityFromDraft(draft, session);
+        params.resumeCreateCommunityIntent();
+        params.clearBuilderBillingReturn();
       } finally {
         if (!cancelled) params.setIsFinalizingBuilderReturn(false);
       }

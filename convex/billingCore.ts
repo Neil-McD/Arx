@@ -12,7 +12,7 @@ export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
   kind: "unlock" | "subscription";
-  billingPeriod: string;
+  billingPeriod: "monthly" | "annual";
   name: string;
   description?: string;
   amountBaseUnits: number;
@@ -43,7 +43,7 @@ export type PurchaseClaimLike = {
   _id: any;
   claimToken: string;
   communityId: any;
-  billingPeriod?: string;
+  billingPeriod?: "monthly" | "annual";
   pricePointId?: any;
   amountBaseUnits?: number;
   currency?: string;
@@ -84,11 +84,11 @@ export async function resolveUserIdForAuthenticatedRequest(args: {
   return user._id;
 }
 
-export function normalizeBillingPeriod(raw: unknown): "monthly" | "yearly" {
+export function normalizeBillingPeriod(raw: unknown): "monthly" | "annual" {
   const period = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (period === "yearly" || period === "annual") return "yearly";
+  if (period === "annual") return "annual";
   return "monthly";
 }
 
@@ -226,7 +226,7 @@ export async function createCommunitySubscriptionForMembership(args: {
 export async function resolveCheckoutPricePoint(args: {
   ctx: any;
   community: CommunityLike;
-  billingPeriod: "monthly" | "yearly";
+  billingPeriod: "monthly" | "annual";
   nowMs: number;
 }): Promise<CommunityPricePointLike | null> {
   const currentRows = (await args.ctx.db

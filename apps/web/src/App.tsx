@@ -21,7 +21,8 @@ import {
 import {
   isLikelyImageFile, isLikelyTextFile, isSupportedChatRasterImage, readChatImageAsDataUrl, readTextAttachmentPreview, } from "../../../shared/attachmentHelpers";
 import {
-  clearCreateCommunityDraft, createCommunityDraftId, loadCreateCommunityDraft, saveCreateCommunityDraft, } from "../../../shared/communityDraftStorage";
+  type CreateCommunityIntentDraft,
+} from "../../../shared/createCommunityIntent";
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import {
@@ -43,8 +44,7 @@ import {
 } from "../../../shared/cloudCommunityAiFeedGateway";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
-  saveCloudCommunityFunnel,
-  uploadCloudCommunityFunnelMediaFile,
+  saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
@@ -116,7 +116,11 @@ import {
   type PublicRoute,
   DEFAULT_POST_SIGN_IN_PATH,
   buildAppRoutePath,
+  buildCommunityTabPath,
+  buildCommunityFunnelPreviewPath,
+  buildCommunityFunnelPreviewHistoryState,
   readAppRouteFromLocation,
+  readCommunityFunnelPreviewHistoryState,
   readPublicRouteFromLocation,
 } from "../../../shared/webAppRouteState";
 import {
@@ -219,6 +223,7 @@ import { useWebSettingsImageUploadController } from "../../../shared/useWebSetti
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
 import { useAuthGateLifecycleEffects } from "../../../shared/useAuthGateLifecycleEffects";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
+import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
@@ -272,6 +277,7 @@ import {
 import { setDevBuilderTierCanonical } from "../../../shared/builderBillingStatusGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import { deriveCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
+import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "./communityJoinPolicy";
 import { useWebBuilderBillingActions } from "./controllers/useWebBuilderBillingActions";
 import { useWebCommerceAffiliateActions } from "./controllers/useWebCommerceAffiliateActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
@@ -327,7 +333,7 @@ type CommunityRecord = {
   id: string;
   slug: string;
   name: string;
-  description: string | null;
+  one_liner: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
   banner_url: string | null;
@@ -345,7 +351,7 @@ type CommunityRecord = {
 type PublicCommunityRecord = {
   slug: string;
   name: string;
-  description: string | null;
+  one_liner: string | null;
   avatar_url: string | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
@@ -446,7 +452,6 @@ const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
-const LEGACY_COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "arx-community-rail-order:web";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -561,22 +566,7 @@ type CommunityResource = {
   created_at: string;
 };
 
-type CommunityMember = {
-  id: string;
-  community_id: string;
-  user_id: string;
-  role: string;
-  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
-  created_at: string;
-  is_entitled?: boolean;
-  entitlement_ends_at?: string | null;
-  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
-  subscription_cancel_at_period_end?: boolean | null;
-  billing_period?: string | null;
-  amount_base_units?: number | null;
-  currency?: string | null;
-  currency_decimals?: number | null;
-};
+type CommunityMember = CloudCommunityMembershipAdminRow;
 
 type CommunityAccess = SharedCommunityAccess;
 type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
@@ -586,6 +576,7 @@ type AnalyticsChartMode = SharedAnalyticsChartMode;
 type CommunityPricingMode = SharedCommunityPricingMode;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
+type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type CommunityJoinRequest = {
   id: string;
@@ -756,7 +747,6 @@ export default function App() {
 
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityRecord | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
-  const [selectedPublicCommunityBillingPeriod, setSelectedPublicCommunityBillingPeriod] = useState<string | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
@@ -785,8 +775,6 @@ export default function App() {
   const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
   const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
   const [, setIsFinalizingBuilderReturn] = useState(false);
-  const [isFinalizingCreateCommunityFromBilling, setIsFinalizingCreateCommunityFromBilling] = useState(false);
-  const [, setFinalizeCreateCommunityError] = useState<string | null>(null);
   const builderUpgradeScrollRefreshToken = `${builderBillingStatus?.builder_tier ?? ""}:${builderUpgradeContext}`;
   const {
     builderUpgradeModalBodyRef,
@@ -879,15 +867,10 @@ export default function App() {
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`,
     [cloudSession?.user?.id],
   );
-  const legacyCommunityRailOrderStorageKeys = useMemo(
-    () => [`${LEGACY_COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`],
-    [cloudSession?.user?.id],
-  );
   const { orderedCommunities: railCommunities, moveCommunityToIndex: handleReorderCommunityRail } =
     useCommunityRailOrder<CommunityRecord>({
       communities,
       storageKey: communityRailOrderStorageKey,
-      legacyStorageKeys: legacyCommunityRailOrderStorageKeys,
     });
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
@@ -900,7 +883,7 @@ export default function App() {
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
   const [createCommunityVisibility, setCreateCommunityVisibility] = useState<"published" | "unlisted">("unlisted");
   const [createCommunityAvatarUrl, setCreateCommunityAvatarUrl] = useState<string | null>(null);
-  const [createCommunityDescription, setCreateCommunityDescription] = useState("");
+  const [createCommunityOneLiner, setCreateCommunityOneLiner] = useState("");
   const [createCommunityBannerUrl, setCreateCommunityBannerUrl] = useState<string | null>(null);
   const [createCommunityError, setCreateCommunityError] = useState<string | null>(null);
   const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
@@ -920,11 +903,19 @@ export default function App() {
     [communityAccessCapabilities],
   );
   const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
+  const isActiveCommunityAdmin =
+    String(activeCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
+  const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
   const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
+  const membersSurfaceMode: MembersSurfaceMode = canViewMemberPlanDetailsActiveCommunity
+    ? "admin"
+    : canReviewJoinRequestsActiveCommunity
+      ? "moderator"
+      : "viewer";
   const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
   const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
@@ -1145,8 +1136,7 @@ export default function App() {
 
   const [communityMembers, setCommunityMembers] = useState<CommunityMember[]>([]);
   const [communityMembersRoleFilter, setCommunityMembersRoleFilter] = useState<string>("all");
-  const [membersCommunityHasPaidPlans, setMembersCommunityHasPaidPlans] = useState<boolean | null>(null);
-  const [isLoadingMembersCommunityPricing, setIsLoadingMembersCommunityPricing] = useState(false);
+  const [communityMembersPlanFilter, setCommunityMembersPlanFilter] = useState<string>("all");
   const [communityJoinRequests, setCommunityJoinRequests] = useState<CommunityJoinRequest[]>([]);
   const [isLoadingCommunityJoinRequests, setIsLoadingCommunityJoinRequests] = useState(false);
   const [communityJoinRequestsError, setCommunityJoinRequestsError] = useState<string | null>(null);
@@ -1232,7 +1222,7 @@ export default function App() {
 
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
-  const [communitySettingsDescription, setCommunitySettingsDescription] = useState("");
+  const [communitySettingsOneLiner, setCommunitySettingsOneLiner] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("unlisted");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
@@ -1241,7 +1231,7 @@ export default function App() {
   const [communitySettingsBannerZoom, setCommunitySettingsBannerZoom] = useState(1);
   const [communitySettingsPricingMode, setCommunitySettingsPricingMode] = useState<CommunityPricingMode>("free");
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
-  const [communitySettingsPriceUsdYearly, setCommunitySettingsPriceUsdYearly] = useState("");
+  const [communitySettingsPriceUsdAnnual, setCommunitySettingsPriceUsdAnnual] = useState("");
   const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
   const [communitySettingsBannerUploadError, setCommunitySettingsBannerUploadError] = useState<string | null>(null);
   const [isProcessingCommunitySettingsBanner, setIsProcessingCommunitySettingsBanner] = useState(false);
@@ -1308,19 +1298,6 @@ export default function App() {
     setCommunityFunnelSaveError(null);
     communityFunnelDirtyRef.current = false;
   }, []);
-  const handleUploadCommunityFunnelMedia = useCallback(
-    async (file: File) => {
-      if (!cloudSession) {
-        throw new Error("Sign in to upload funnel media.");
-      }
-      return uploadCloudCommunityFunnelMediaFile({
-        session: cloudSession,
-        file,
-      });
-    },
-    [cloudSession],
-  );
-
   const [communityMemberMuted, setCommunityMemberMuted] = useState(false);
   const [isLoadingCommunityMemberSettings, setIsLoadingCommunityMemberSettings] = useState(false);
   const [communityMemberSettingsError, setCommunityMemberSettingsError] = useState<string | null>(null);
@@ -1360,11 +1337,12 @@ export default function App() {
     });
   };
 
-  function navigateTo(path: string, opts: { replace?: boolean } = {}) {
+  function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {
+    const historyState = opts.state ?? {};
     if (opts.replace) {
-      window.history.replaceState({}, document.title, path);
+      window.history.replaceState(historyState, document.title, path);
     } else {
-      window.history.pushState({}, document.title, path);
+      window.history.pushState(historyState, document.title, path);
     }
     const nextPublicRoute = readPublicRouteFromLocation();
     setPublicRoute(nextPublicRoute);
@@ -1623,6 +1601,11 @@ export default function App() {
     setIsAuthGateOpen(true);
   };
 
+  const persistCreateCommunityIntent = useCallback((draft: CreateCommunityIntentDraft): void => {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    storePendingAuthIntent(buildPendingAuthIntent({ reason: "create_community", payload: { draft } }, returnTo));
+  }, []);
+
   const { loadCommunities, loadCommunityAccess, loadUserProfiles } = useWebCommunityAccessController<
     CloudAuthSession,
     CommunityRecord,
@@ -1660,7 +1643,6 @@ export default function App() {
     dateKeyLocal,
     ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
-    getMemberRefreshIncludeStatus: () => communityNavVisibility.canManageMembers,
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: loadCommunityAccess,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
@@ -1731,22 +1713,22 @@ export default function App() {
     communityFunnelConfig,
     normalizeConfigForSave: normalizeCommunityFunnelConfig,
     saveConfig: async ({ session, communityId, normalizedConfig }) => {
-      const saved = await saveCloudCommunityFunnel<CloudAuthSession, CommunityFunnelConfig>({
+      const saved = await saveCloudCommunityPublicPresentation<CloudAuthSession, CommunityFunnelConfig>({
         session,
         communityId,
-        description: communityFunnelOneLiner.trim() || null,
+        oneLiner: communityFunnelOneLiner.trim() || null,
         config: normalizedConfig,
       });
-      const resolvedDescription = saved?.description ?? null;
-      communityFunnelSavedOneLinerRef.current = resolvedDescription ?? "";
-      setCommunityFunnelOneLiner(resolvedDescription ?? "");
-      setCommunitySettingsDescription(resolvedDescription ?? "");
+      const resolvedOneLiner = saved?.one_liner ?? null;
+      communityFunnelSavedOneLinerRef.current = resolvedOneLiner ?? "";
+      setCommunityFunnelOneLiner(resolvedOneLiner ?? "");
+      setCommunitySettingsOneLiner(resolvedOneLiner ?? "");
       setCommunities((prev) =>
         prev.map((community) =>
           community.id === communityId
             ? {
                 ...community,
-                description: resolvedDescription,
+                one_liner: resolvedOneLiner,
                 updated_at: saved?.updated_at || community.updated_at,
               }
             : community,
@@ -1780,7 +1762,7 @@ export default function App() {
     setCommunityMemberSettingsError,
     setCommunitySettingsName,
     setCommunitySettingsSlug,
-    setCommunitySettingsDescription,
+    setCommunitySettingsOneLiner,
     setCommunitySettingsVisibility,
     setCommunitySettingsAvatarUrl,
     setCommunitySettingsBannerUrl,
@@ -1789,7 +1771,7 @@ export default function App() {
     setCommunitySettingsBannerZoom,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdYearly,
+    setCommunitySettingsPriceUsdAnnual,
     setCommunityMemberMuted,
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
@@ -1806,7 +1788,7 @@ export default function App() {
     setCommunityMemberSettingsError,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdYearly,
+    setCommunitySettingsPriceUsdAnnual,
   });
 
   const activeCommunitySettingsSource = activeCommunity;
@@ -1837,7 +1819,7 @@ export default function App() {
     setIsLeavingCommunity,
     communitySettingsName,
     communitySettingsSlug,
-    communitySettingsDescription,
+    communitySettingsOneLiner,
     communitySettingsVisibility,
     communitySettingsAvatarUrl,
     communitySettingsBannerUrl,
@@ -1846,7 +1828,7 @@ export default function App() {
     communitySettingsBannerZoom,
     communitySettingsPricingMode,
     communitySettingsPriceUsdMonthly,
-    communitySettingsPriceUsdYearly,
+    communitySettingsPriceUsdAnnual,
     isValidCommunitySlug,
     setCommunitySettingsError,
     setIsSavingCommunitySettings,
@@ -1858,7 +1840,7 @@ export default function App() {
                 ...community,
                 name: result.name,
                 slug: result.slug,
-                description: result.description,
+                one_liner: result.one_liner,
                 avatar_url: result.avatar_url,
                 avatar_storage_id: result.avatar_storage_id ?? null,
                 banner_url: result.banner_url,
@@ -1916,7 +1898,7 @@ export default function App() {
   >({
     activeCommunityId,
     ...cloudSessionArg,
-    canManageMembersActiveCommunity: communityNavVisibility.canManageMembers,
+    membersSurfaceMode,
     isSavingFreeAccessMode,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
     loadCommunityMembers,
@@ -2454,7 +2436,6 @@ export default function App() {
     applyPublicRouteState,
     applyWorkspaceRouteState,
     setBuilderBillingReturn,
-    setFinalizeCreateCommunityError,
     readPublicRouteFromLocation,
     readAppRouteFromLocation,
     buildAppRoutePath,
@@ -2617,6 +2598,7 @@ export default function App() {
 
   useEffect(() => {
     setCommunityMembersRoleFilter("all");
+    setCommunityMembersPlanFilter("all");
   }, [activeCommunityId]);
 
   useEffect(() => {
@@ -2656,7 +2638,7 @@ export default function App() {
     setCommunityMemberMuted,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdYearly,
+    setCommunitySettingsPriceUsdAnnual,
     setActiveCommunityAccess,
     setIsLoadingCommunityAccess,
   });
@@ -2758,6 +2740,13 @@ export default function App() {
     loadCommunityMembers,
   });
 
+  const activeCommunityMembersJoinReviewMode = useMemo<CommunityMembersJoinReviewMode | null>(() => {
+    if (!activeCommunity) return null;
+    return deriveCommunityMembersJoinReviewMode({
+      entry_policy: activeCommunity.entry_policy,
+    });
+  }, [activeCommunity]);
+
   useCommunityMembersReviewLifecycle<
     CloudAuthSession,
     CommunityJoinRequest,
@@ -2768,12 +2757,10 @@ export default function App() {
     ...cloudSessionArg,
     activeCommunityId,
     communities,
-    canReviewJoinRequestsActiveCommunity,
-    membersCommunityHasPaidPlans,
+    membersSurfaceMode,
+    activeCommunityMembersJoinReviewMode,
     isJoinRequestsModalOpen,
     loadCommunityJoinRequests,
-    setMembersCommunityHasPaidPlans,
-    setIsLoadingMembersCommunityPricing,
     setCommunityJoinRequests,
     setIsLoadingCommunityJoinRequests,
     setCommunityJoinRequestsError,
@@ -2851,8 +2838,8 @@ export default function App() {
         setSettingsPage("account");
         showAppToastMessage("Add your OpenRouter key in Settings to finish connecting.");
       },
-      create_community: () => {
-        openCreateCommunityModal();
+      create_community: (payload) => {
+        openCreateCommunityModal(payload.draft ?? null);
       },
       redeem_purchase_claim: (payload) => {
         void redeemPurchaseClaim(payload.token);
@@ -3316,7 +3303,7 @@ export default function App() {
       setCommunityMembers,
       setCommunitySettingsName,
       setCommunitySettingsSlug,
-      setCommunitySettingsDescription,
+      setCommunitySettingsOneLiner,
       setCommunitySettingsVisibility,
       setCommunitySettingsAvatarUrl,
       setCommunitySettingsBannerUrl,
@@ -3412,7 +3399,6 @@ export default function App() {
     setIsLoadingPublicCommunity,
     setPublicCommunityError,
     setPublicCommunityPlans,
-    setSelectedPublicCommunityBillingPeriod,
     setCheckoutError,
     setCheckoutStatus,
     navigateToUrl: (url) => window.location.assign(url),
@@ -3485,7 +3471,7 @@ export default function App() {
   const {
     openCreateCommunityModal,
     closeCreateCommunityModal,
-    createCommunityFromDraft,
+    resumeCreateCommunityIntent,
     handleCreateCommunityPrimaryAction,
     handleCreateCommunityAvatarUpload,
     handleCreateCommunityBannerUpload,
@@ -3498,18 +3484,17 @@ export default function App() {
     communityRoleById,
     loadBuilderBillingStatus,
     openBuilderBillingPortal,
+    persistCreateCommunityIntent,
     onStartUpgradeFlow: () => {
       setBuilderUpgradeContext("create_community");
       setIsBuilderUpgradeOpen(true);
     },
     onPrimaryUnauthenticated: (draft) => {
-      openAuthGate({ reason: "create_community", payload: { draft_id: draft?.id ?? null } });
+      openAuthGate({ reason: "create_community", payload: { draft } });
     },
-    buildDraftOnPrimaryUnauthenticated: true,
     onCreateUnauthenticated: (draft) => {
-      openAuthGate({ reason: "create_community", payload: { draft_id: draft?.id ?? null } });
+      openAuthGate({ reason: "create_community", payload: { draft } });
     },
-    buildDraftOnCreateUnauthenticated: true,
     onOwnedCommunityLimitReached: () => {
       showAppToastMessage("You've built the maximum number of communities");
     },
@@ -3518,43 +3503,45 @@ export default function App() {
       setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
       openCommunityTab(community.id, "chat", { pushSnapshot: false });
     },
-    onDraftCreatedCommunitySuccess: () => {
-      setBuilderBillingReturn(null);
-    },
     createCommunityName,
     createCommunitySlug,
     createCommunitySlugEdited,
     createCommunityVisibility,
     createCommunityAvatarUrl,
-    createCommunityDescription,
+    createCommunityOneLiner,
     createCommunityBannerUrl,
     setCreateCommunityName,
     setCreateCommunitySlug,
     setCreateCommunitySlugEdited,
     setCreateCommunityVisibility,
     setCreateCommunityAvatarUrl,
-    setCreateCommunityDescription,
+    setCreateCommunityOneLiner,
     setCreateCommunityBannerUrl,
     setCreateCommunityError,
     setShowCreateCommunityModal,
     setIsCreatingCommunity,
-    setIsFinalizingCreateCommunityFromBilling,
-    setFinalizeCreateCommunityError,
     setIsCreateAvatarDragOver,
     setIsCreateBannerDragOver,
     readAvatarFileAsSquareDataUrl,
     readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile,
     maxCreateImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
-    createDraftId: createCommunityDraftId,
-    loadCreateDraft: loadCreateCommunityDraft,
-    saveCreateDraft: saveCreateCommunityDraft,
-    clearCreateDraft: clearCreateCommunityDraft,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
     bannerLoadFailureMessage: "Failed to load banner.",
   });
 
-  const publicFunnelSlug = publicRoute.kind === "community_funnel" ? publicRoute.slug : null;
+  const resumePendingCreateCommunityIntent = useCallback((): void => {
+    const intent = readPendingAuthIntent();
+    if (!intent || intent.reason !== "create_community") return;
+    clearPendingAuthIntent();
+    resumeCreateCommunityIntent(intent.payload.draft ?? null);
+  }, [resumeCreateCommunityIntent]);
+
+  const publicFunnelSlug =
+    publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview"
+      ? publicRoute.slug
+      : null;
+  const isPublicFunnelPreviewRoute = publicRoute.kind === "community_funnel_preview";
   const checkoutSuccessSessionId = publicRoute.kind === "checkout_success" ? publicRoute.sessionId : null;
   const claimTokenParam = publicRoute.kind === "claim" ? publicRoute.token : null;
   const pendingPurchaseBannerKey = pendingPurchaseClaims
@@ -3571,6 +3558,10 @@ export default function App() {
     void loadPublicCommunity(publicFunnelSlug);
   }, [publicFunnelSlug]);
 
+  const publicFunnelPreviewDraft = isPublicFunnelPreviewRoute
+    ? readCommunityFunnelPreviewHistoryState(publicFunnelSlug)
+    : null;
+
   useWebPostAuthBillingLifecycle({
     session: cloudSession,
     sessionRef,
@@ -3579,7 +3570,6 @@ export default function App() {
     isJoiningPublicCommunity,
     builderBillingReturn,
     builderBillingStatus,
-    isFinalizingCreateCommunityFromBilling,
     communities,
     communityRoleById,
     lastAutoRedeemPendingPurchasesUserIdRef,
@@ -3588,16 +3578,15 @@ export default function App() {
     setBuilderBillingStatus,
     setBuilderBillingError,
     setIsLoadingBuilderBilling,
-    setFinalizeCreateCommunityError,
     setIsFinalizingBuilderReturn,
+    clearBuilderBillingReturn: () => setBuilderBillingReturn(null),
     getCloudAuthUid,
     redeemPurchaseClaim,
     redeemPendingPurchases,
     loadPendingPurchaseClaims,
     loadBuilderBillingStatus,
     joinPublicCommunity,
-    loadCreateCommunityDraft,
-    createCommunityFromDraft,
+    resumeCreateCommunityIntent: resumePendingCreateCommunityIntent,
   });
 
   const { retryCheckoutFinalize } = useCheckoutFinalizeController({
@@ -4327,10 +4316,10 @@ export default function App() {
   });
 
   useEffect(() => {
-    const nextOneLiner = activeCommunity?.description ?? "";
+    const nextOneLiner = activeCommunity?.one_liner ?? "";
     communityFunnelSavedOneLinerRef.current = nextOneLiner;
     setCommunityFunnelOneLiner(nextOneLiner);
-  }, [activeCommunity?.description, activeCommunityId]);
+  }, [activeCommunity?.one_liner, activeCommunityId]);
   const activeCommunityFeedState = useMemo(() => {
     if (!activeCommunityId) {
       return {
@@ -4409,14 +4398,24 @@ export default function App() {
 
   const filteredCommunityMembers = useMemo(() => {
     const roleFilter = (communityMembersRoleFilter ?? "all").trim().toLowerCase();
+    const planFilter = canViewMemberPlanDetailsActiveCommunity
+      ? (communityMembersPlanFilter ?? "all").trim().toLowerCase()
+      : "all";
     const ownerId = activeCommunity?.owner_id ?? null;
     return communityMembers.filter((member) => {
       const memberIsOwner = Boolean(ownerId && member.user_id === ownerId);
       const effectiveRole = memberIsOwner ? "owner" : String(member.role ?? "").trim().toLowerCase();
       if (roleFilter !== "all" && effectiveRole !== roleFilter) return false;
-      return true;
+      if (planFilter === "all") return true;
+      return String(member.price_point_id ?? "").trim() === planFilter;
     });
-  }, [activeCommunity?.owner_id, communityMembers, communityMembersRoleFilter]);
+  }, [
+    activeCommunity?.owner_id,
+    canViewMemberPlanDetailsActiveCommunity,
+    communityMembers,
+    communityMembersPlanFilter,
+    communityMembersRoleFilter,
+  ]);
 
   const communityMessageById = useMemo(() => {
     const map = new Map<string, CommunityChatMessage>();
@@ -4765,7 +4764,7 @@ export default function App() {
 	    return discoverCommunities.filter((community) => {
       const name = (community.name ?? "").toLowerCase();
       const slug = (community.slug ?? "").toLowerCase();
-      const desc = (community.description ?? "").toLowerCase();
+      const desc = (community.one_liner ?? "").toLowerCase();
       return name.includes(q) || slug.includes(q) || desc.includes(q);
     });
   }, [discoverCommunities, discoverQuery]);
@@ -4787,7 +4786,8 @@ export default function App() {
 	    return "Open your guest chat.";
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
-	  const isPublicCommunityFunnel = publicRoute.kind === "community_funnel";
+	  const isPublicCommunityFunnel =
+      publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
 	  const showCommunityRail = true;
 	  const showCommunityNav = publicRoute.kind === "app" && activePage === "community";
 	  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
@@ -4828,34 +4828,53 @@ export default function App() {
   }, [activeCommunityPresenceSummary?.online_count]);
   const funnelPreviewOnlineFaces = useMemo(() => {
     if (activeCommunityPresenceSummary?.online_faces?.length) {
-      return activeCommunityPresenceSummary.online_faces.slice(0, 8);
+      return activeCommunityPresenceSummary.online_faces
+        .filter((face) => Boolean(face?.avatar_url))
+        .slice(0, 4);
     }
-    if (!activeCommunity) return [];
-    const orderedUserIds: string[] = [];
-    const seen = new Set<string>();
-    const appendUserId = (value: string | null | undefined) => {
-      const normalized = String(value ?? "").trim();
-      if (!normalized || seen.has(normalized)) return;
-      seen.add(normalized);
-      orderedUserIds.push(normalized);
-    };
-    appendUserId(activeCommunity.owner_id);
-    for (const member of communityMembers) {
-      const normalizedRole = String(member.role ?? "").trim().toLowerCase();
-      if (normalizedRole === "owner" || normalizedRole === "admin") {
-        appendUserId(member.user_id);
-      }
-    }
-    for (const member of communityMembers) appendUserId(member.user_id);
-    return orderedUserIds.slice(0, 8).map((userId) => {
-      const profile = profilesByUserId[userId];
-      return {
-        user_id: userId,
-        display_name: profile?.display_name ?? null,
-        avatar_url: profile?.avatar_url ?? null,
-      };
+    return [];
+  }, [activeCommunityPresenceSummary?.online_faces]);
+  const handlePreviewCommunityFunnel = useCallback(() => {
+    const slug = String(activeCommunity?.slug ?? "").trim();
+    if (!slug) return;
+    const previewPath = buildCommunityFunnelPreviewPath(slug);
+    if (!previewPath) return;
+    const previewState = buildCommunityFunnelPreviewHistoryState({
+      slug,
+      community: {
+        slug,
+        name: activeCommunity?.name ?? "Community",
+        one_liner: activeCommunity?.one_liner ?? null,
+        avatar_url: activeCommunity?.avatar_url ?? null,
+        banner_url: activeCommunity?.banner_url ?? null,
+        banner_focus_x: activeCommunity?.banner_focus_x ?? null,
+        banner_focus_y: activeCommunity?.banner_focus_y ?? null,
+        banner_zoom: activeCommunity?.banner_zoom ?? null,
+        visibility: activeCommunity?.visibility ?? "unlisted",
+        admin_count: funnelPreviewAdminCount,
+        online_count: funnelPreviewOnlineCount,
+        online_faces: funnelPreviewOnlineFaces,
+      },
+      visibilityLabel: funnelPreviewVisibilityLabel,
+      memberCount: activeCommunity ? communityMembers.length : null,
+      joinMode: funnelPreviewJoinMode,
+      one_liner: communityFunnelOneLiner.trim() || null,
+      funnel: communityFunnelConfig,
+      savedAt: Date.now(),
     });
-  }, [activeCommunity, activeCommunityPresenceSummary?.online_faces, communityMembers, profilesByUserId]);
+    pushNavSnapshot();
+    navigateTo(previewPath, { state: previewState });
+  }, [
+    activeCommunity,
+    communityMembers.length,
+    communityFunnelOneLiner,
+    communityFunnelConfig,
+    funnelPreviewAdminCount,
+    funnelPreviewJoinMode,
+    funnelPreviewOnlineCount,
+    funnelPreviewOnlineFaces,
+    funnelPreviewVisibilityLabel,
+  ]);
 
   useEffect(() => {
     if (!isSessionsDrawerOpen) return;
@@ -4895,26 +4914,45 @@ export default function App() {
   );
 
   const showPublicSignIn = !cloudSession;
+  const previewCommunityFallback = isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.community ?? null : null;
+  const publicCommunityForSurface = publicCommunity ?? previewCommunityFallback;
   const selectedPublicCommunityPlan =
-    publicCommunityPlans.find((plan) => plan.billing_period === selectedPublicCommunityBillingPeriod) ??
     publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
-    publicCommunityPlans.find((plan) => plan.billing_period === "yearly") ??
+    publicCommunityPlans.find((plan) => plan.billing_period === "annual") ??
     publicCommunityPlans[0] ??
     null;
-  const publicVisibility = toCanonicalCommunityVisibility(publicCommunity?.visibility, "unlisted");
-  const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
-  const publicJoinMode: CommunityJoinMode | null = publicCommunity
-    ? deriveCommunityJoinMode({
-        entry_policy: publicCommunity.entry_policy,
-      })
-    : null;
+  const publicVisibility = toCanonicalCommunityVisibility(publicCommunityForSurface?.visibility, "unlisted");
+  const publicVisibilityLabel = isPublicFunnelPreviewRoute
+    ? publicFunnelPreviewDraft?.visibilityLabel ?? formatCommunityVisibilityLabel(publicVisibility)
+    : formatCommunityVisibilityLabel(publicVisibility);
+  const resolvedPublicCommunity = useMemo(() => {
+    if (!publicCommunityForSurface) return null;
+    if (!publicFunnelPreviewDraft) return publicCommunityForSurface;
+    return {
+      ...publicCommunityForSurface,
+      one_liner:
+        publicFunnelPreviewDraft.one_liner ??
+        publicCommunityForSurface.one_liner ??
+        null,
+      funnel: publicFunnelPreviewDraft.funnel,
+    };
+  }, [publicCommunityForSurface, publicFunnelPreviewDraft]);
+  const publicJoinMode: CommunityJoinMode | null = isPublicFunnelPreviewRoute
+    ? publicFunnelPreviewDraft?.joinMode ?? null
+    : publicCommunity
+      ? deriveCommunityJoinMode({
+          entry_policy: publicCommunity.entry_policy,
+        })
+      : null;
   const canJoinForFree = publicJoinMode === "join_free";
   const canRequestAccessForFree = publicJoinMode === "request_access";
   const canJoinWithCheckout = publicJoinMode === "checkout";
   const pendingToken =
     (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
     readPendingPurchaseClaimToken();
-  const myJoinRequestStatus = String(myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
+  const myJoinRequestStatus = isPublicFunnelPreviewRoute
+    ? ""
+    : String(myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
   const deniedUntilIso = myPublicCommunityJoinRequest?.denied_until ?? null;
   const deniedUntilMs = deniedUntilIso ? new Date(deniedUntilIso).getTime() : NaN;
   const requestCooldownActive =
@@ -4925,6 +4963,7 @@ export default function App() {
       ? new Date(deniedUntilIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
       : "";
   const handlePublicLandingPrimaryAction = () => {
+    if (isPublicFunnelPreviewRoute) return;
     if (!publicCommunity) return;
     if (canJoinWithCheckout && selectedPublicCommunityPlan) {
       void startCheckoutForPlan(
@@ -4961,42 +5000,12 @@ export default function App() {
       return (
         <WebPublicRouteView
           publicRouteKind={publicRoute.kind}
-          publicRouteSlug={publicRoute.kind === "community_funnel" ? publicRoute.slug : ""}
           showSignIn={showPublicSignIn}
-          showBackToApp={Boolean(backTargetSnapshot)}
-          backToAppLabel={backTargetLabel}
-          onBackToApp={() => {
-            const restored = goBack();
-            if (!restored) {
-              navigateTo("/workspace", { replace: true });
-              setActivePage("workspace");
-              setActiveView("home");
-            }
-          }}
           onOpenAuthGate={() => openAuthGate()}
           onSignOut={() => {
             void handleSignOut();
           }}
-	          publicCommunity={publicCommunity}
-	          selectedPublicCommunityPlanLabel={selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null}
-	          publicVisibilityLabel={publicVisibilityLabel}
-	          publicCommunityPlans={publicCommunityPlans}
-          selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
-          selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlan?.billing_period ?? null}
-          onSelectPublicCommunityBillingPeriod={setSelectedPublicCommunityBillingPeriod}
-          hasSelectedPublicCommunityPlan={Boolean(selectedPublicCommunityPlan)}
-          isLoadingPublicCommunity={isLoadingPublicCommunity}
-          canJoinForFree={canJoinForFree}
-          canRequestAccessForFree={canRequestAccessForFree}
-          canJoinWithCheckout={canJoinWithCheckout}
           checkoutStatus={checkoutStatus}
-          isJoiningPublicCommunity={isJoiningPublicCommunity}
-          isRequestingPublicCommunityAccess={isRequestingPublicCommunityAccess}
-          isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
-          requestPending={requestPending}
-          requestCooldownActive={requestCooldownActive}
-          requestDeniedDateLabel={requestDeniedDateLabel}
-          onPrimaryJoinAction={handlePublicLandingPrimaryAction}
           onRetryCheckoutFinalize={retryCheckoutFinalize}
           onContinueCheckout={handlePublicCheckoutContinue}
           onContinueClaim={handlePublicClaimContinue}
@@ -5004,9 +5013,6 @@ export default function App() {
             void handleSendMagicLink(magicLinkEmail);
           }}
           checkoutError={checkoutError}
-          publicCommunityError={publicCommunityError}
-          publicJoinError={publicJoinError}
-          publicRequestAccessError={publicRequestAccessError}
           magicLinkEmail={magicLinkEmail}
           onChangeMagicLinkEmail={setMagicLinkEmail}
           magicLinkStatus={magicLinkStatus}
@@ -5032,6 +5038,12 @@ export default function App() {
 	  const handleTopbarBackFromPublicFunnel = () => {
 	    void goBack();
 	  };
+    const handleExitPublicFunnelPreview = () => {
+      if (goBack()) return;
+      const fallbackPath = buildCommunityTabPath(publicRoute.kind === "community_funnel_preview" ? publicRoute.slug : null, "funnel");
+      if (!fallbackPath) return;
+      navigateTo(fallbackPath, { replace: true });
+    };
 	  const handleTopbarBackToWorkspace = () => {
 	    if (goBack()) return;
 	    const transition = deriveBackToWorkspaceFallbackTransition(
@@ -5083,11 +5095,11 @@ export default function App() {
         communitySettingsAvatarUrl,
         communitySettingsName,
         communitySettingsSlug,
-        communitySettingsDescription,
+        communitySettingsOneLiner,
         communitySettingsVisibility,
         communitySettingsPricingMode,
         communitySettingsPriceUsdMonthly,
-        communitySettingsPriceUsdYearly,
+        communitySettingsPriceUsdAnnual,
         builderBillingStatus,
         isStartingConnectOnboarding,
         communitySettingsError,
@@ -5114,11 +5126,11 @@ export default function App() {
         setCommunitySettingsAvatarUrl,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
-        setCommunitySettingsDescription,
+        setCommunitySettingsOneLiner,
         setCommunitySettingsVisibility,
         setCommunitySettingsPricingMode,
         setCommunitySettingsPriceUsdMonthly,
-        setCommunitySettingsPriceUsdYearly,
+        setCommunitySettingsPriceUsdAnnual,
         communityPricingDirtyRef,
         startConnectOnboarding,
         handleSaveCommunitySettings,
@@ -5200,7 +5212,7 @@ export default function App() {
         communityFunnelDirtyRef,
         handleSaveCommunityFunnel,
         handleResetCommunityFunnel,
-        handleUploadCommunityFunnelMedia,
+        handlePreviewCommunityFunnel,
         communityOneLiner: communityFunnelOneLiner,
         setCommunityOneLiner: setCommunityFunnelOneLiner,
         isSavingCommunityFunnel,
@@ -5211,7 +5223,7 @@ export default function App() {
         previewCommunity: {
           slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
-          description: activeCommunity?.description ?? null,
+          one_liner: activeCommunity?.one_liner ?? null,
           avatar_url: activeCommunity?.avatar_url ?? null,
           banner_url: activeCommunity?.banner_url ?? null,
           banner_focus_x: activeCommunity?.banner_focus_x ?? null,
@@ -5269,22 +5281,19 @@ export default function App() {
     },
     members: {
       activeCommunity,
-      hasSession: Boolean(cloudSession),
       capabilities: {
-        canManageMembersActiveCommunity,
-        canReviewJoinRequestsActiveCommunity,
+        membersSurfaceMode,
         isActiveCommunityOwner,
       },
       state: {
         communityMembers,
         filteredCommunityMembers,
         communityMembersRoleFilter,
-        membersCommunityHasPaidPlans,
-        activeCommunityJoinMode,
+        communityMembersPlanFilter,
+        activeCommunityMembersJoinReviewMode,
         communityJoinRequests,
         communityJoinRequestsError,
         decidingCommunityJoinRequestId,
-        isLoadingMembersCommunityPricing,
         isLoadingCommunityJoinRequests,
         isSavingFreeAccessMode,
         isJoinRequestsModalOpen,
@@ -5292,6 +5301,7 @@ export default function App() {
       },
       actions: {
         setCommunityMembersRoleFilter,
+        setCommunityMembersPlanFilter,
         setIsJoinRequestsModalOpen,
         displayName,
         handleSetCommunityFreeAccessMode,
@@ -5473,7 +5483,19 @@ export default function App() {
       <header className="app-topbar">
         <div className="topbar-left">
 	          {isPublicCommunityFunnel ? (
-              backTargetSnapshot ? (
+              publicRoute.kind === "community_funnel_preview" ? (
+              <button
+                className="back-to-workspace"
+                onClick={handleExitPublicFunnelPreview}
+                title="Exit preview"
+                type="button"
+              >
+                <svg viewBox="0 0 24 24" className="back-icon">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                <span className="back-path">exit preview</span>
+              </button>
+              ) : backTargetSnapshot ? (
               <button
                 className="back-to-workspace"
                 onClick={handleTopbarBackFromPublicFunnel}
@@ -6005,15 +6027,12 @@ export default function App() {
                 <div className="workspace-body public-route-body public-community-funnel-body">
                   <WebPublicCommunityFunnel
                     publicRouteSlug={publicRoute.slug}
-                    publicCommunity={publicCommunity}
+                    publicCommunity={resolvedPublicCommunity}
+                    isPreviewMode={isPublicFunnelPreviewRoute}
                     publicVisibilityLabel={publicVisibilityLabel}
                     selectedPublicCommunityPlanLabel={
                       selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null
                     }
-                    publicCommunityPlans={publicCommunityPlans}
-                    selectedPublicCommunityBillingPeriod={selectedPublicCommunityBillingPeriod}
-                    selectedPublicCommunityPlanBillingPeriod={selectedPublicCommunityPlan?.billing_period ?? null}
-                    onSelectPublicCommunityBillingPeriod={setSelectedPublicCommunityBillingPeriod}
                     hasSelectedPublicCommunityPlan={Boolean(selectedPublicCommunityPlan)}
                     isLoadingPublicCommunity={isLoadingPublicCommunity}
                     canJoinForFree={canJoinForFree}
@@ -6031,7 +6050,8 @@ export default function App() {
                     publicJoinError={publicJoinError}
                     publicRequestAccessError={publicRequestAccessError}
                     checkoutError={checkoutError}
-                    showSignIn={showPublicSignIn}
+                    showSignIn={isPublicFunnelPreviewRoute ? true : showPublicSignIn}
+                    memberCountOverride={isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.memberCount ?? null : null}
                   />
                 </div>
               </div>
@@ -6637,10 +6657,10 @@ export default function App() {
                             const visibilityClass = isPublishedCommunityVisibility(community.visibility)
                               ? "published"
                               : "unlisted";
-		                            const description =
-		                              community.description && community.description.trim().length > 0
-		                                ? community.description
-		                                : "No description yet.";
+	                            const oneLiner =
+	                              community.one_liner && community.one_liner.trim().length > 0
+	                                ? community.one_liner
+	                                : "No one-liner yet.";
                               const canActivate = alreadyMember || Boolean(community.slug);
                               const activateDiscoverCard = () => {
                                 activateDiscoverCommunityCard({
@@ -6654,7 +6674,7 @@ export default function App() {
 		                                key={community.slug}
 		                                name={community.name}
 		                                slug={community.slug}
-		                                description={description}
+		                                oneLiner={oneLiner}
 		                                avatarUrl={community.avatar_url}
 		                                bannerUrl={community.banner_url}
                                         bannerFocusX={community.banner_focus_x}
@@ -6909,7 +6929,7 @@ export default function App() {
           createCommunityBannerUrl={createCommunityBannerUrl}
           createCommunityAvatarUrl={createCommunityAvatarUrl}
           createCommunityName={createCommunityName}
-          createCommunityDescription={createCommunityDescription}
+          createCommunityOneLiner={createCommunityOneLiner}
           createCommunitySlug={createCommunitySlug}
           createCommunityVisibility={createCommunityVisibility}
           createCommunityError={createCommunityError}
@@ -6928,7 +6948,7 @@ export default function App() {
           onRemoveBanner={() => setCreateCommunityBannerUrl(null)}
           onRemoveAvatar={() => setCreateCommunityAvatarUrl(null)}
           onChangeName={setCreateCommunityName}
-          onChangeDescription={setCreateCommunityDescription}
+          onChangeOneLiner={setCreateCommunityOneLiner}
           onChangeSlug={setCreateCommunitySlug}
           onChangeSlugEdited={setCreateCommunitySlugEdited}
           onChangeVisibility={setCreateCommunityVisibility}

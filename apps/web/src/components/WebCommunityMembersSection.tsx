@@ -1,21 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-import { deriveCommunityJoinMode, type CommunityEntryPolicy } from "../communityJoinPolicy";
+import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
+import { type CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 
-type CommunityMember = {
-  id: string;
-  user_id: string;
-  role: string;
-  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
-  is_entitled?: boolean;
-  entitlement_ends_at?: string | null;
-  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
-  subscription_cancel_at_period_end?: boolean | null;
-  billing_period?: string | null;
-  amount_base_units?: number | null;
-  currency?: string | null;
-  currency_decimals?: number | null;
-};
+type CommunityMember = CloudCommunityMembershipAdminRow;
 
 type CommunityJoinRequest = {
   id: string;
@@ -28,32 +16,29 @@ type ActiveCommunity = {
   id: string;
   slug: string;
   owner_id: string;
-  entry_policy?: CommunityEntryPolicy | null;
 };
 
 type UserProfile = {
   display_name?: string | null;
   avatar_url?: string | null;
 };
+type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type WebCommunityMembersSectionProps = {
   activeCommunity: ActiveCommunity | null;
-  hasSession: boolean;
   capabilities: {
-    canManageMembersActiveCommunity: boolean;
-    canReviewJoinRequestsActiveCommunity: boolean;
+    membersSurfaceMode: MembersSurfaceMode;
     isActiveCommunityOwner: boolean;
   };
   state: {
     communityMembers: CommunityMember[];
     filteredCommunityMembers: CommunityMember[];
     communityMembersRoleFilter: string;
-    membersCommunityHasPaidPlans: boolean | null;
-    activeCommunityJoinMode: string | null;
+    communityMembersPlanFilter: string;
+    activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
     communityJoinRequests: CommunityJoinRequest[];
     communityJoinRequestsError: string | null;
     decidingCommunityJoinRequestId: string | null;
-    isLoadingMembersCommunityPricing: boolean;
     isLoadingCommunityJoinRequests: boolean;
     isSavingFreeAccessMode: boolean;
     isJoinRequestsModalOpen: boolean;
@@ -61,6 +46,7 @@ type WebCommunityMembersSectionProps = {
   };
   actions: {
     setCommunityMembersRoleFilter: (value: string) => void;
+    setCommunityMembersPlanFilter: (value: string) => void;
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
     displayName: (userId: string) => string;
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
@@ -77,7 +63,10 @@ type WebCommunityMembersSectionProps = {
 };
 
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
-  const { activeCommunity, hasSession, capabilities, state, actions } = props;
+  const { activeCommunity, capabilities, state, actions } = props;
+  const isAdminMode = capabilities.membersSurfaceMode === "admin";
+  const isModeratorMode = capabilities.membersSurfaceMode === "moderator";
+  const canReviewJoinRequests = isAdminMode || isModeratorMode;
   const [didCopyJoinPath, setDidCopyJoinPath] = useState(false);
   const copyResetTimeoutRef = useRef<number | null>(null);
   const joinPath = activeCommunity ? `/c/${encodeURIComponent(activeCommunity.slug)}` : "";
@@ -123,62 +112,57 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
     }
   };
   const formatMemberAccess = (member: CommunityMember): string | null => {
-    const source = String(member.access_source ?? "").trim().toLowerCase();
+    if (!isAdminMode) return null;
     const amount = formatAmount(member);
     const period =
-      member.billing_period === "monthly" ? "/mo" : member.billing_period === "yearly" ? "/yr" : "";
-    const base =
-      source === "free_grant"
-        ? "free"
-        : source === "manual_grant"
-          ? "complimentary"
-          : source === "paid_unlock"
-              ? amount ? `unlock ${amount}${period}` : "paid unlock"
-              : source === "paid_subscription"
-                ? amount ? `${amount}${period}` : "subscription"
-                : "";
-    const status = String(member.subscription_status ?? "").trim().toLowerCase();
-    const statusLabel =
-      status === "cancel_at_period_end"
-        ? "cancels at period end"
-        : status === "past_due"
-          ? "past due"
-          : status === "active"
-            ? "active"
-            : "";
-    if (base && statusLabel && source === "paid_subscription") return `${base} · ${statusLabel}`;
-    if (base) return base;
-    if (statusLabel) return statusLabel;
+      member.billing_period === "monthly" ? "/mo" : member.billing_period === "annual" ? "/yr" : "";
+    if (!String(member.price_point_id ?? "").trim()) return null;
+    if (amount) return `${amount}${period}`;
     return null;
   };
-  const formatEntitlementEnds = (member: CommunityMember): string | null => {
-    const raw = String(member.entitlement_ends_at ?? "").trim();
-    if (!raw) return null;
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return `through ${parsed.toLocaleDateString()}`;
-  };
-  const activeCommunityJoinMode = activeCommunity
-    ? deriveCommunityJoinMode({
-      entry_policy: activeCommunity.entry_policy,
-      })
-    : null;
-  const effectiveActiveCommunityJoinMode = activeCommunityJoinMode ?? state.activeCommunityJoinMode;
-  const autoApproveNewMembers = effectiveActiveCommunityJoinMode === "join_free";
+  const planOptions = (() => {
+    const seenPricePoints = new Set<string>();
+    const dynamicPlanOptions: Array<{ value: string; label: string; amount: number }> = [];
+    if (!isAdminMode) {
+      return [{ value: "all", label: "All plans" }];
+    }
+    for (const member of state.communityMembers) {
+      const pricePointId = String(member.price_point_id ?? "").trim();
+      if (!pricePointId || seenPricePoints.has(pricePointId)) continue;
+      seenPricePoints.add(pricePointId);
+      const amountRaw = Number(member.amount_base_units ?? 0);
+      const amount = Number.isFinite(amountRaw) ? amountRaw : 0;
+      const formattedAmount = formatAmount(member);
+      const period =
+        member.billing_period === "monthly" ? "/mo" : member.billing_period === "annual" ? "/yr" : "";
+      dynamicPlanOptions.push({
+        value: pricePointId,
+        label: formattedAmount ? `${formattedAmount}${period}` : "Paid plan",
+        amount,
+      });
+    }
+    dynamicPlanOptions.sort((a, b) => a.amount - b.amount || a.label.localeCompare(b.label));
+    const options: Array<{ value: string; label: string }> = [{ value: "all", label: "All plans" }];
+    for (const option of dynamicPlanOptions) {
+      options.push({ value: option.value, label: option.label });
+    }
+    return options;
+  })();
+  const autoApproveNewMembers = state.activeCommunityMembersJoinReviewMode === "free_auto";
   const canReviewFreeMembers = Boolean(
     activeCommunity &&
-      capabilities.canReviewJoinRequestsActiveCommunity &&
-      state.membersCommunityHasPaidPlans === false,
+      canReviewJoinRequests &&
+      state.activeCommunityMembersJoinReviewMode !== "paid",
   );
   const showPendingApprovals =
     canReviewFreeMembers &&
-    (effectiveActiveCommunityJoinMode === "request_access" || state.communityJoinRequests.length > 0);
+    state.activeCommunityMembersJoinReviewMode === "free_approval";
   const pendingApprovalsCount = state.isLoadingCommunityJoinRequests ? "…" : String(state.communityJoinRequests.length);
 
   return (
     <>
       <div className="community-panel members-panel">
-        <div className={`members-layout${capabilities.canManageMembersActiveCommunity ? " with-invites" : ""}`}>
+        <div className={`members-layout${isAdminMode ? " with-invites" : ""}`}>
           <section className="members-section">
             <div className="members-header-row">
               <div className="members-header">Members</div>
@@ -188,7 +172,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   : state.communityMembers.length}
               </div>
             </div>
-            {capabilities.canManageMembersActiveCommunity && (
+            {capabilities.membersSurfaceMode !== "viewer" && (
               <div className="members-filter-row">
                 <label className="members-filter-field">
                   <span>Role</span>
@@ -204,6 +188,22 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <option value="member">Member</option>
                   </select>
                 </label>
+                {isAdminMode ? (
+                  <label className="members-filter-field">
+                    <span>Plan</span>
+                    <select
+                      className="select-styled members-surface-select"
+                      value={state.communityMembersPlanFilter}
+                      onChange={(event) => actions.setCommunityMembersPlanFilter(event.target.value)}
+                    >
+                      {planOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             )}
             {canReviewFreeMembers && activeCommunity && (
@@ -216,13 +216,13 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 </div>
                 <label
                   className={`members-switch${
-                    state.isLoadingMembersCommunityPricing || state.isSavingFreeAccessMode ? " is-disabled" : ""
+                    state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode ? " is-disabled" : ""
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={autoApproveNewMembers}
-                    disabled={state.isLoadingMembersCommunityPricing || state.isSavingFreeAccessMode}
+                    disabled={state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode}
                     onChange={(event) => {
                       const nextAutoApprove = event.target.checked;
                       void actions.handleSetCommunityFreeAccessMode(nextAutoApprove ? "open" : "approval");
@@ -240,7 +240,6 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   className="members-queue-button"
                   type="button"
                   disabled={
-                    state.isLoadingMembersCommunityPricing ||
                     state.isLoadingCommunityJoinRequests ||
                     state.isSavingFreeAccessMode
                   }
@@ -277,9 +276,10 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     activeCommunity && activeCommunity.owner_id === member.user_id,
                   );
                   const viewerIsOwner = capabilities.isActiveCommunityOwner;
-                  const viewerIsAdmin = capabilities.canManageMembersActiveCommunity && !viewerIsOwner;
-                  const memberIsModerator = member.role === "moderator";
+                  const viewerIsAdmin = isAdminMode && !viewerIsOwner;
                   const memberIsAdmin = member.role === "admin";
+                  const memberIsModerator = member.role === "moderator";
+                  const memberPriceLabel = formatMemberAccess(member);
                   const canEditThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
                   const canRemoveThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
                   const roleOptions =
@@ -299,17 +299,16 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         {avatarUrl ? <img src={avatarUrl} alt={actions.displayName(member.user_id)} draggable={false} /> : initials}
                       </div>
                       <div className="member-info">
-                        <span className="member-name">{actions.displayName(member.user_id)}</span>
-                        <div className="member-meta">
-                          <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
-                          {formatMemberAccess(member) ? (
-                            <span className="member-role">{formatMemberAccess(member)}</span>
-                          ) : null}
-                          {formatEntitlementEnds(member) ? (
-                            <span className="member-role">{formatEntitlementEnds(member)}</span>
+                        <div className="member-name-row">
+                          <span className="member-name">{actions.displayName(member.user_id)}</span>
+                          {memberPriceLabel ? (
+                            <span className="member-price-label">{memberPriceLabel}</span>
                           ) : null}
                         </div>
-                        {!capabilities.canManageMembersActiveCommunity || memberIsOwner ? null : (
+                        <div className="member-meta">
+                          <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
+                        </div>
+                        {!isAdminMode || memberIsOwner ? null : (
                           <div className="member-controls">
                             <select
                               className="select-styled"
@@ -346,7 +345,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             </div>
           </section>
 
-          {activeCommunity && hasSession && capabilities.canManageMembersActiveCommunity && (
+          {activeCommunity && isAdminMode && (
             <section className="invites-section">
               <div className="members-header-row">
                 <div className="members-header">Join path</div>

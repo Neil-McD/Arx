@@ -2,6 +2,7 @@ import {
   bootstrapConvexAuthenticatedClient,
   createConvexClient,
 } from "./convexAuthenticatedClient";
+import type { CommunityBillingPeriod } from "./communityTypes";
 
 type CloudPublicFunnelAuthParams<SessionT> = {
   session: SessionT;
@@ -104,7 +105,7 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
   params: CloudPublicFunnelParams<SessionT> & {
     session: SessionT | null;
     communitySlug: string;
-    billingPeriod: string;
+    billingPeriod: CommunityBillingPeriod;
     successUrl: string;
     cancelUrl: string;
     brandosAid?: string | null;

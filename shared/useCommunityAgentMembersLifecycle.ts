@@ -10,11 +10,7 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentConfig
   loadCommunityAgentConfig: (communityId: string, session: SessionT) => Promise<void>;
   communityAgentConfigLoadedCommunityIdRef: MutableRefObject<string | null>;
   setCommunityAgentConfigError: Dispatch<SetStateAction<string | null>>;
-  loadCommunityMembers: (
-    communityId: string,
-    session: SessionT,
-    options?: { includeStatus?: boolean },
-  ) => Promise<void>;
+  loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void>;
 }) {
   const session = params.session;
 
@@ -40,9 +36,7 @@ export function useCommunityAgentMembersLifecycle<SessionT, CommunityAgentConfig
   useEffect(() => {
     if (!session || !params.activeCommunityId || params.activePage !== "community") return;
     const communityId = params.activeCommunityId;
-    void params.loadCommunityMembers(communityId, session, {
-      includeStatus: params.canManageMembersActiveCommunity,
-    });
+    void params.loadCommunityMembers(communityId, session);
   }, [
     session,
     params.activeCommunityId,

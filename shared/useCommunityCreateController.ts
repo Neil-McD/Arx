@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import { type CreateCommunityDraft } from "./communityDraftStorage";
+import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 
 import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
@@ -33,14 +33,12 @@ type UseCommunityCreateControllerArgs<
   communityRoleById: Record<string, string>;
   loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   openBuilderBillingPortal: (context: "create_community") => Promise<void>;
+  persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onStartUpgradeFlow: () => void;
-  onPrimaryUnauthenticated: (draft: CreateCommunityDraft | null) => Promise<void> | void;
-  buildDraftOnPrimaryUnauthenticated: boolean;
-  onCreateUnauthenticated?: (draft: CreateCommunityDraft | null) => Promise<void> | void;
-  buildDraftOnCreateUnauthenticated: boolean;
+  onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
+  onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
-  onDraftCreatedCommunitySuccess?: () => void;
   getOwnedCountForOpenModal?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
   getOwnedCountForPrimary?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
   createCommunityName: string;
@@ -48,30 +46,24 @@ type UseCommunityCreateControllerArgs<
   createCommunitySlugEdited: boolean;
   createCommunityVisibility: Visibility;
   createCommunityAvatarUrl: string | null;
-  createCommunityDescription: string;
+  createCommunityOneLiner: string;
   createCommunityBannerUrl: string | null;
   setCreateCommunityName: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlug: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlugEdited: Dispatch<SetStateAction<boolean>>;
   setCreateCommunityVisibility: Dispatch<SetStateAction<Visibility>>;
   setCreateCommunityAvatarUrl: Dispatch<SetStateAction<string | null>>;
-  setCreateCommunityDescription: Dispatch<SetStateAction<string>>;
+  setCreateCommunityOneLiner: Dispatch<SetStateAction<string>>;
   setCreateCommunityBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   setShowCreateCommunityModal: Dispatch<SetStateAction<boolean>>;
   setIsCreatingCommunity: Dispatch<SetStateAction<boolean>>;
-  setIsFinalizingCreateCommunityFromBilling: Dispatch<SetStateAction<boolean>>;
-  setFinalizeCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   setIsCreateAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setIsCreateBannerDragOver: Dispatch<SetStateAction<boolean>>;
   readAvatarFileAsSquareDataUrl: (file: File, size?: number) => Promise<string>;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
   isLikelyImageFile: (file: File) => boolean;
   maxCreateImageDataUrlChars: number;
-  createDraftId: () => string;
-  loadCreateDraft: () => CreateCommunityDraft | null;
-  saveCreateDraft: (draft: CreateCommunityDraft) => void;
-  clearCreateDraft: () => void;
   createUnauthenticatedErrorMessage: string;
   bannerLoadFailureMessage: string;
 };
@@ -130,13 +122,26 @@ export function useCommunityCreateController<
     return defaultOwnedCount(current.communities, current.communityRoleById);
   }, []);
 
+  const resetCreateCommunityForm = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
+    const current = argsRef.current;
+    current.setCreateCommunityName(draft?.name ?? "");
+    current.setCreateCommunitySlug(draft?.slug ?? "");
+    current.setCreateCommunitySlugEdited(Boolean(draft?.slug_edited));
+    current.setCreateCommunityVisibility(toCanonicalCommunityVisibility(draft?.visibility, "unlisted"));
+    current.setCreateCommunityAvatarUrl(null);
+    current.setCreateCommunityOneLiner(draft?.one_liner ?? "");
+    current.setCreateCommunityBannerUrl(null);
+    current.setIsCreateAvatarDragOver(false);
+    current.setIsCreateBannerDragOver(false);
+  }, []);
+
   const closeCreateCommunityModal = useCallback(() => {
     const current = argsRef.current;
     current.setShowCreateCommunityModal(false);
     current.setCreateCommunityError(null);
   }, []);
 
-  const openCreateCommunityModal = useCallback(() => {
+  const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
     const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
@@ -147,28 +152,12 @@ export function useCommunityCreateController<
     }
 
     current.setCreateCommunityError(null);
-    const draft = current.loadCreateDraft();
-    const session = current.session;
-    const currentUserId = session?.user.id ?? null;
-    if (draft && draft.user_id && currentUserId && draft.user_id !== currentUserId) {
-      current.clearCreateDraft();
-    }
-    const safeDraft = draft && (!draft.user_id || !currentUserId || draft.user_id === currentUserId) ? draft : null;
-    current.setCreateCommunityName(safeDraft?.name ?? "");
-    current.setCreateCommunitySlug(safeDraft?.slug ?? "");
-    current.setCreateCommunitySlugEdited(Boolean(safeDraft?.slug_edited));
-    current.setCreateCommunityVisibility(toCanonicalCommunityVisibility(safeDraft?.visibility, "unlisted"));
-    current.setCreateCommunityAvatarUrl(safeDraft?.avatar_url ?? null);
-    current.setCreateCommunityDescription(safeDraft?.description ?? "");
-    current.setCreateCommunityBannerUrl(safeDraft?.banner_url ?? null);
-    current.setIsCreateAvatarDragOver(false);
-    current.setIsCreateBannerDragOver(false);
+    resetCreateCommunityForm(draft);
     current.setShowCreateCommunityModal(true);
-  }, [getOwnedCountForOpenModal]);
+  }, [getOwnedCountForOpenModal, resetCreateCommunityForm]);
 
-  const buildCreateCommunityDraftFromState = useCallback((): CreateCommunityDraft | null => {
+  const buildCreateCommunityIntentFromState = useCallback((): CreateCommunityIntentDraft | null => {
     const current = argsRef.current;
-    const session = current.session;
     current.setCreateCommunityError(null);
 
     const name = current.createCommunityName.trim();
@@ -187,68 +176,14 @@ export function useCommunityCreateController<
       return null;
     }
 
-    const draft: CreateCommunityDraft = {
-      v: 1,
-      id: current.createDraftId(),
-      created_at: Date.now(),
-      user_id: session?.user.id ?? null,
+    return {
       name,
       slug,
       slug_edited: current.createCommunitySlugEdited,
       visibility: current.createCommunityVisibility,
-      avatar_url: current.createCommunityAvatarUrl?.trim() || null,
-      banner_url: current.createCommunityBannerUrl?.trim() || null,
-      description: current.createCommunityDescription.trim() || null,
+      one_liner: current.createCommunityOneLiner.trim() || null,
     };
-    current.saveCreateDraft(draft);
-    return draft;
   }, []);
-
-  const createCommunityFromDraft = useCallback(async (
-    draft: CreateCommunityDraft,
-    session: SessionT,
-  ): Promise<CommunityT | null> => {
-    const current = argsRef.current;
-    current.setFinalizeCreateCommunityError(null);
-    current.setIsFinalizingCreateCommunityFromBilling(true);
-    try {
-      const [avatarField, bannerField] = await Promise.all([
-        prepareCloudCommunityBrandingField({
-          session,
-          kind: "avatar",
-          nextValue: draft.avatar_url,
-        }),
-        prepareCloudCommunityBrandingField({
-          session,
-          kind: "banner",
-          nextValue: draft.banner_url,
-        }),
-      ]);
-      const community = await createCloudCommunity<SessionT, CommunityT>({
-        session,
-        name: draft.name,
-        slug: draft.slug,
-        visibility: draft.visibility,
-        avatarStorageId: avatarField.storageId ?? null,
-        avatarUrl: avatarField.url ?? null,
-        description: draft.description,
-        bannerStorageId: bannerField.storageId ?? null,
-        bannerUrl: bannerField.url ?? null,
-      });
-      if (!community?.id) throw new Error("Failed to create community.");
-
-      current.onCommunityCreated(community);
-      current.clearCreateDraft();
-      closeCreateCommunityModal();
-      current.onDraftCreatedCommunitySuccess?.();
-      return community;
-    } catch (error) {
-      current.setFinalizeCreateCommunityError(mapCreateCommunityErrorMessage(error));
-      return null;
-    } finally {
-      current.setIsFinalizingCreateCommunityFromBilling(false);
-    }
-  }, [closeCreateCommunityModal]);
 
   const handleCreateCommunity = useCallback(async () => {
     const current = argsRef.current;
@@ -256,7 +191,8 @@ export function useCommunityCreateController<
     current.setCreateCommunityError(null);
 
     if (!session) {
-      const draft = current.buildDraftOnCreateUnauthenticated ? buildCreateCommunityDraftFromState() : null;
+      const draft = buildCreateCommunityIntentFromState();
+      if (!draft) return;
       if (current.onCreateUnauthenticated) {
         await current.onCreateUnauthenticated(draft);
       } else {
@@ -303,7 +239,7 @@ export function useCommunityCreateController<
         visibility: current.createCommunityVisibility,
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
-        description: current.createCommunityDescription.trim() || null,
+        oneLiner: current.createCommunityOneLiner.trim() || null,
         bannerStorageId: bannerField.storageId ?? null,
         bannerUrl: bannerField.url ?? null,
       });
@@ -312,21 +248,21 @@ export function useCommunityCreateController<
         return;
       }
       current.onCommunityCreated(community);
-      current.clearCreateDraft();
+      resetCreateCommunityForm();
       closeCreateCommunityModal();
     } catch (error) {
       current.setCreateCommunityError(mapCreateCommunityErrorMessage(error));
     } finally {
       current.setIsCreatingCommunity(false);
     }
-  }, [buildCreateCommunityDraftFromState, closeCreateCommunityModal]);
+  }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, resetCreateCommunityForm]);
 
   const handleCreateCommunityPrimaryAction = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
     const session = current.session;
-    current.setFinalizeCreateCommunityError(null);
     if (!session) {
-      const draft = current.buildDraftOnPrimaryUnauthenticated ? buildCreateCommunityDraftFromState() : null;
+      const draft = buildCreateCommunityIntentFromState();
+      if (!draft) return;
       closeCreateCommunityModal();
       await current.onPrimaryUnauthenticated(draft);
       return;
@@ -348,16 +284,17 @@ export function useCommunityCreateController<
       return;
     }
 
-    const draft = buildCreateCommunityDraftFromState();
+    const draft = buildCreateCommunityIntentFromState();
     if (!draft) return;
 
+    current.persistCreateCommunityIntent(draft);
     closeCreateCommunityModal();
     if (limitReached) {
       await current.openBuilderBillingPortal("create_community");
       return;
     }
     current.onStartUpgradeFlow();
-  }, [buildCreateCommunityDraftFromState, closeCreateCommunityModal, getOwnedCountForPrimary, handleCreateCommunity]);
+  }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, getOwnedCountForPrimary, handleCreateCommunity]);
 
   const handleCreateCommunityAvatarUpload = useCallback(async (file: File | null) => {
     const current = argsRef.current;
@@ -416,8 +353,7 @@ export function useCommunityCreateController<
   return {
     openCreateCommunityModal,
     closeCreateCommunityModal,
-    buildCreateCommunityDraftFromState,
-    createCommunityFromDraft,
+    resumeCreateCommunityIntent: openCreateCommunityModal,
     handleCreateCommunityPrimaryAction,
     handleCreateCommunity,
     handleCreateCommunityAvatarUpload,

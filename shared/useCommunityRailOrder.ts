@@ -7,7 +7,6 @@ type CommunityLike = {
 type UseCommunityRailOrderArgs<TCommunity extends CommunityLike> = {
   communities: TCommunity[];
   storageKey: string;
-  legacyStorageKeys?: string[];
 };
 
 function arraysEqual(left: string[], right: string[]): boolean {
@@ -30,13 +29,10 @@ function dedupeIds(ids: string[]): string[] {
   return deduped;
 }
 
-function readStoredOrder(storageKey: string, legacyStorageKeys: readonly string[] = []): string[] {
+function readStoredOrder(storageKey: string): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw =
-      window.localStorage.getItem(storageKey) ??
-      legacyStorageKeys.map((key) => window.localStorage.getItem(key)).find((value) => value !== null) ??
-      null;
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -104,15 +100,15 @@ function moveIdToIndex(orderIds: string[], draggedId: string, targetIndexInput: 
 export function useCommunityRailOrder<TCommunity extends CommunityLike>(
   args: UseCommunityRailOrderArgs<TCommunity>,
 ) {
-  const { communities, storageKey, legacyStorageKeys = [] } = args;
+  const { communities, storageKey } = args;
   const availableIds = useMemo(() => communities.map((community) => community.id), [communities]);
-  const [orderIds, setOrderIds] = useState<string[]>(() => readStoredOrder(storageKey, legacyStorageKeys));
+  const [orderIds, setOrderIds] = useState<string[]>(() => readStoredOrder(storageKey));
   const skipPersistRef = useRef(false);
 
   useEffect(() => {
     skipPersistRef.current = true;
-    setOrderIds(readStoredOrder(storageKey, legacyStorageKeys));
-  }, [storageKey, legacyStorageKeys]);
+    setOrderIds(readStoredOrder(storageKey));
+  }, [storageKey]);
 
   useEffect(() => {
     setOrderIds((previous) => {

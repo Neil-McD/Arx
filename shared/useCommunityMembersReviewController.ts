@@ -23,6 +23,7 @@ type CommunityLike = {
   entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
   updated_at: string;
 };
+type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type UseCommunityMembersReviewControllerArgs<
   SessionT extends SessionLike,
@@ -31,14 +32,10 @@ type UseCommunityMembersReviewControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
-  canManageMembersActiveCommunity: boolean;
+  membersSurfaceMode: MembersSurfaceMode;
   isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
-  loadCommunityMembers: (
-    communityId: string,
-    session: SessionT,
-    opts?: { includeStatus?: boolean },
-  ) => Promise<void> | void;
+  loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void> | void;
   setCommunities: Dispatch<SetStateAction<CommunityT[]>>;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
@@ -97,7 +94,7 @@ export function useCommunityMembersReviewController<
         requestId,
       });
       await Promise.all([
-        current.loadCommunityMembers(communityId, session, { includeStatus: current.canManageMembersActiveCommunity }),
+        current.loadCommunityMembers(communityId, session),
         loadCommunityJoinRequests(communityId, session),
       ]);
     } catch (error) {

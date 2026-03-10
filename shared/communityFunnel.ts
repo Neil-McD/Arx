@@ -5,7 +5,6 @@ import type {
 
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
-  hero_media_storage_id: null,
   hero_media_kind: "image",
   about: null,
 };
@@ -28,7 +27,6 @@ export function normalizeCommunityFunnelConfig(raw: unknown): CommunityFunnelCon
   const value = raw as Record<string, unknown>;
   return {
     hero_media_url: normalizeTrimmedString(value.hero_media_url, 2_000),
-    hero_media_storage_id: normalizeTrimmedString(value.hero_media_storage_id, 256),
     hero_media_kind: normalizeHeroMediaKind(value.hero_media_kind),
     about: normalizeTrimmedString(value.about, 8_000),
   };

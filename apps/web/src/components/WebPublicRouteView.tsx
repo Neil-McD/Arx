@@ -1,59 +1,22 @@
 import { WebAuthGateModal } from "./WebAuthGateModal";
-import type { PublicCommunityFunnelCommunityLike } from "./WebPublicCommunityFunnel";
 
 type PublicRouteKind = "community_funnel" | "checkout_success" | "claim";
-type PublicCommunityLike = PublicCommunityFunnelCommunityLike & {
-  slug: string;
-};
-
-type PublicCommunityPlanLike = {
-  billing_period: string;
-};
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
 type WebPublicRouteViewProps = {
   publicRouteKind: PublicRouteKind;
-  publicRouteSlug: string;
   showSignIn: boolean;
-  showBackToApp: boolean;
-  backToAppLabel: string | null;
-  onBackToApp: () => void;
   onOpenAuthGate: () => void;
   onSignOut: () => void;
-
-  publicCommunity: PublicCommunityLike | null;
-  selectedPublicCommunityPlanLabel: string | null;
-  publicVisibilityLabel: string;
-  publicCommunityPlans: PublicCommunityPlanLike[];
-  selectedPublicCommunityBillingPeriod: string | null;
-  selectedPublicCommunityPlanBillingPeriod: string | null;
-  onSelectPublicCommunityBillingPeriod: (period: string) => void;
-  hasSelectedPublicCommunityPlan: boolean;
-
-  isLoadingPublicCommunity: boolean;
-  canJoinForFree: boolean;
-  canRequestAccessForFree: boolean;
-  canJoinWithCheckout: boolean;
   checkoutStatus: CheckoutStatus;
-  isJoiningPublicCommunity: boolean;
-  isRequestingPublicCommunityAccess: boolean;
-  isLoadingMyPublicCommunityJoinRequest: boolean;
-  requestPending: boolean;
-  requestCooldownActive: boolean;
-  requestDeniedDateLabel: string;
-
-  onPrimaryJoinAction: () => void;
   onRetryCheckoutFinalize: () => void;
   onContinueCheckout: () => void;
   onContinueClaim: () => void;
   onSendMagicLink: () => void;
 
   checkoutError: string | null;
-  publicCommunityError: string | null;
-  publicJoinError: string | null;
-  publicRequestAccessError: string | null;
   magicLinkEmail: string;
   onChangeMagicLinkEmail: (value: string) => void;
   magicLinkStatus: MagicLinkStatus;
@@ -74,39 +37,13 @@ type WebPublicRouteViewProps = {
 export function WebPublicRouteView(props: WebPublicRouteViewProps) {
   const {
     publicRouteKind,
-    publicRouteSlug,
     showSignIn,
-    showBackToApp,
-    backToAppLabel,
-    onBackToApp,
-    publicCommunity,
-    selectedPublicCommunityPlanLabel,
-    publicVisibilityLabel,
-    publicCommunityPlans,
-    selectedPublicCommunityBillingPeriod,
-    selectedPublicCommunityPlanBillingPeriod,
-    onSelectPublicCommunityBillingPeriod,
-    hasSelectedPublicCommunityPlan,
-    isLoadingPublicCommunity,
-    canJoinForFree,
-    canRequestAccessForFree,
-    canJoinWithCheckout,
     checkoutStatus,
-    isJoiningPublicCommunity,
-    isRequestingPublicCommunityAccess,
-    isLoadingMyPublicCommunityJoinRequest,
-    requestPending,
-    requestCooldownActive,
-    requestDeniedDateLabel,
-    onPrimaryJoinAction,
     onRetryCheckoutFinalize,
     onContinueCheckout,
     onContinueClaim,
     onSendMagicLink,
     checkoutError,
-    publicCommunityError,
-    publicJoinError,
-    publicRequestAccessError,
     magicLinkEmail,
     onChangeMagicLinkEmail,
     magicLinkStatus,

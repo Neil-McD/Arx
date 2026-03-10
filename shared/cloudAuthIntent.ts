@@ -1,3 +1,8 @@
+import {
+  normalizeCreateCommunityIntentDraft,
+  type CreateCommunityIntentDraft,
+} from "./createCommunityIntent";
+
 const PENDING_AUTH_INTENT_STORAGE_KEY = "arx_pending_auth_intent_v1";
 const PENDING_AUTH_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 const AUTH_RETURN_TO_STORAGE_KEY = "arx_auth_return_to_v1";
@@ -25,7 +30,7 @@ export type PendingAuthIntent =
       reason: "create_community";
       return_to: string;
       created_at_ms: number;
-      payload: { draft_id: string | null };
+      payload: { draft: CreateCommunityIntentDraft | null };
     }
   | {
       v: 1;
@@ -112,14 +117,11 @@ function normalizePendingAuthIntent(
   }
 
   if (reason === "create_community") {
-    const draftIdRaw = payload.draft_id;
-    const draft_id =
-      typeof draftIdRaw === "string"
-        ? draftIdRaw.trim() || null
-        : draftIdRaw === null || draftIdRaw === undefined
-          ? null
-          : null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { draft_id } };
+    const draft = payload.draft === null || payload.draft === undefined
+      ? null
+      : normalizeCreateCommunityIntentDraft(payload.draft);
+    if (payload.draft !== null && payload.draft !== undefined && !draft) return null;
+    return { v: 1, reason, return_to, created_at_ms, payload: { draft } };
   }
 
   if (reason === "redeem_purchase_claim") {

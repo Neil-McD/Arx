@@ -5,7 +5,7 @@ type CommunityLike = {
   id: string;
   name: string | null;
   slug: string | null;
-  description: string | null;
+  one_liner: string | null;
   visibility: string | null;
   avatar_url: string | null;
   banner_url: string | null;
@@ -24,16 +24,16 @@ type UseCommunitySettingsFormControllerArgs = {
   setCommunityMemberSettingsError: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsName: Dispatch<SetStateAction<string>>;
   setCommunitySettingsSlug: Dispatch<SetStateAction<string>>;
-  setCommunitySettingsDescription: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsOneLiner: Dispatch<SetStateAction<string>>;
   setCommunitySettingsVisibility: Dispatch<SetStateAction<string>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerZoom: Dispatch<SetStateAction<number>>;
-  setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "yearly" | "both">>;
+  setCommunitySettingsPricingMode: Dispatch<SetStateAction<"free" | "monthly" | "annual">>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
-  setCommunitySettingsPriceUsdYearly: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
 
   setCommunitySettingsBannerUploadError?: Dispatch<SetStateAction<string | null>>;
@@ -66,7 +66,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.communityPricingDirtyRef.current = false;
       current.setCommunitySettingsPricingMode("free");
       current.setCommunitySettingsPriceUsdMonthly("");
-      current.setCommunitySettingsPriceUsdYearly("");
+      current.setCommunitySettingsPriceUsdAnnual("");
       current.onCommunitySwitched?.(nextLoadedId);
     }
 
@@ -77,7 +77,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       clearBannerState(true);
       current.setCommunitySettingsName("");
       current.setCommunitySettingsSlug("");
-      current.setCommunitySettingsDescription("");
+      current.setCommunitySettingsOneLiner("");
       current.setCommunitySettingsVisibility("unlisted");
       current.setCommunitySettingsAvatarUrl(null);
       current.setCommunitySettingsBannerUrl(null);
@@ -85,7 +85,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsBannerFocusY(0.5);
       current.setCommunitySettingsBannerZoom(1);
       current.setCommunitySettingsPriceUsdMonthly("");
-      current.setCommunitySettingsPriceUsdYearly("");
+      current.setCommunitySettingsPriceUsdAnnual("");
       current.setCommunityMemberMuted(false);
       current.onNoCommunitySelected?.();
       return;
@@ -98,7 +98,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     clearBannerState(false);
     current.setCommunitySettingsName(selectedCommunity.name ?? "");
     current.setCommunitySettingsSlug(current.slugifyCommunityName(selectedCommunity.slug ?? ""));
-    current.setCommunitySettingsDescription(selectedCommunity.description ?? "");
+    current.setCommunitySettingsOneLiner(selectedCommunity.one_liner ?? "");
     current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
     current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
     current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);

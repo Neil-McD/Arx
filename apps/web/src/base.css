@@ -994,6 +994,7 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
+  flex-shrink: 0;
 }
 
 .nav-icon svg {
@@ -1017,6 +1018,16 @@ body {
   width: 19px;
   height: 19px;
   stroke-width: 1.75;
+}
+
+.nav-icon-agent {
+  width: 19px;
+  height: 19px;
+}
+
+.nav-icon-agent svg {
+  width: 18.5px;
+  height: 18.5px;
 }
 
 .nav-item.active .nav-icon {
@@ -1494,7 +1505,7 @@ body {
 .public-funnel-shell {
   width: min(100%, 1080px);
   margin: 0 auto;
-  padding: 18px clamp(20px, 4vw, 48px) 32px;
+  padding: 18px clamp(20px, 4vw, 48px) 96px;
   display: grid;
   gap: 20px;
 }
@@ -1510,6 +1521,10 @@ body {
   align-items: start;
 }
 
+.public-funnel-inline-cta {
+  display: none;
+}
+
 .public-funnel-main-column {
   display: grid;
   gap: 20px;
@@ -1522,10 +1537,22 @@ body {
 
 .public-funnel-about {
   margin: 0;
-  white-space: pre-wrap;
   font-size: 15px;
   line-height: 1.65;
   color: var(--text-secondary);
+}
+
+.public-funnel-about a {
+  color: var(--accent-gold, var(--text-primary));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-gold) 42%, transparent);
+  text-underline-offset: 3px;
+}
+
+.public-funnel-about a:hover,
+.public-funnel-about a:focus-visible {
+  color: color-mix(in srgb, var(--accent-gold) 88%, white 12%);
+  text-decoration-color: color-mix(in srgb, var(--accent-gold) 72%, transparent);
 }
 
 .public-funnel-media-placeholder {
@@ -1562,6 +1589,14 @@ body {
   -webkit-user-drag: none;
 }
 
+.public-funnel-media-embed {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: color-mix(in srgb, var(--bg-card) 84%, black);
+}
+
 .public-funnel-media-placeholder-text {
   font-size: 14px;
   font-weight: 540;
@@ -1582,12 +1617,31 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 13px;
+  line-height: 1;
   font-weight: 560;
   color: var(--text-secondary);
 }
 
 .public-funnel-metadata-item svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  flex-shrink: 0;
   color: var(--text-muted);
+}
+
+.public-funnel-metadata-price {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 560;
+  letter-spacing: 0.03em;
+  color: #8fe3b1;
+}
+
+.public-funnel-metadata-price.is-free {
+  text-transform: uppercase;
 }
 
 .public-funnel-metadata-creator {
@@ -1787,6 +1841,16 @@ body {
   color: var(--text-secondary);
 }
 
+.public-community-funnel-body .public-funnel-about {
+  font-size: 17px;
+  line-height: 1.72;
+}
+
+.public-community-funnel-body .public-funnel-action-copy {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
 .public-funnel-action-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1822,25 +1886,24 @@ body {
 
 .public-funnel-face-strip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  padding-left: 2px;
 }
 
 .public-funnel-face {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  overflow: hidden;
   object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid color-mix(in srgb, var(--bg-card) 92%, transparent);
+  background: color-mix(in srgb, var(--bg-card-alt) 90%, transparent);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
-.public-funnel-face-fallback {
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 640;
-  color: var(--text-primary);
+.public-funnel-face + .public-funnel-face {
+  margin-left: -10px;
 }
 
 .public-funnel-switcher {
@@ -2144,7 +2207,7 @@ body {
   gap: 8px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
   .public-funnel-hero-grid {
     grid-template-columns: 1fr;
   }
@@ -2157,8 +2220,50 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .public-funnel-sidebar {
-    position: static;
+  .public-funnel-sidebar-desktop {
+    display: none;
+  }
+
+  .public-funnel-inline-cta {
+    display: grid;
+    gap: 10px;
+    padding: 4px 0 0;
+  }
+
+  .public-funnel-inline-cta .public-funnel-action-content {
+    padding: 0;
+    gap: 10px;
+  }
+
+  .public-funnel-inline-cta .public-funnel-avatar,
+  .public-funnel-inline-cta .public-funnel-action-header,
+  .public-funnel-inline-cta .public-funnel-action-copy,
+  .public-funnel-inline-cta .public-funnel-action-stats,
+  .public-funnel-inline-cta .public-funnel-face-strip {
+    display: none;
+  }
+
+  .public-funnel-inline-cta .public-funnel-primary,
+  .public-funnel-inline-cta .public-funnel-primary.platform-save-button {
+    width: auto;
+    min-width: 220px;
+    max-width: min(100%, 320px);
+    justify-self: center;
+    padding: 0 28px;
+  }
+
+  .public-funnel-inline-cta .public-funnel-status {
+    margin-top: 0;
+  }
+
+  .funnel-editor-preview .public-funnel-inline-cta .public-funnel-action-copy {
+    display: block;
+    min-height: 76px;
+    margin: 0;
+  }
+
+  .funnel-editor-preview .public-funnel-inline-cta .public-funnel-status {
+    text-align: center;
   }
 
   .public-funnel-action-stats {
@@ -2274,17 +2379,72 @@ body {
   background: color-mix(in srgb, var(--accent-gold) 8%, transparent);
 }
 
-.funnel-editor-media-dropzone.is-uploading {
-  cursor: progress;
-}
-
-.funnel-editor-file-input {
-  display: none;
-}
-
 .funnel-editor-media-dropzone > .public-funnel-media-shell {
   border: 0;
   border-radius: inherit;
+}
+
+.modal.funnel-video-url-modal {
+  width: min(420px, calc(100vw - 32px));
+  border-radius: 18px;
+}
+
+.funnel-video-url-modal-body {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.funnel-video-url-modal-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.funnel-video-url-modal-copy {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.funnel-video-url-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 24%, var(--border-default));
+  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-card));
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.funnel-video-url-input:focus {
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, var(--border-default));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 18%, transparent);
+}
+
+.funnel-video-url-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.funnel-video-url-cancel {
+  min-width: 84px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.funnel-video-url-cancel:hover {
+  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
+  color: var(--text-primary);
 }
 
 .funnel-editor-media-hint {
@@ -2319,6 +2479,7 @@ body {
 .funnel-editor-about-input {
   min-height: 120px;
   padding: 14px 16px;
+  overflow-y: hidden;
 }
 
 .funnel-editor-card-input {
@@ -3286,6 +3447,25 @@ button.chat-reply-quote:hover {
   color: var(--text-primary);
 }
 
+.member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.member-price-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 560;
+  letter-spacing: 0.03em;
+  color: #8fe3b1;
+  flex-shrink: 0;
+}
+
 .member-role {
   display: inline-flex;
   align-items: center;
@@ -3466,7 +3646,6 @@ button.chat-reply-quote:hover {
 }
 
 .community-nav-banner-img,
-.public-funnel-face,
 .model-picker-nav-logo-img,
 .create-community-banner-media img,
 .create-community-avatar img {
@@ -6847,6 +7026,15 @@ button.chat-reply-quote:hover {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.workspace-body.public-route-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.workspace-body.public-route-body::after {
+  display: none;
 }
 
 .discover-panel .workspace-body {

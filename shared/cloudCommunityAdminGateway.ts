@@ -15,7 +15,7 @@ export type CloudCommunitySettingsSaveResult = {
   community_id: string;
   name: string;
   slug: string;
-  description: string | null;
+  one_liner: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
   banner_url: string | null;
@@ -29,7 +29,7 @@ export type CloudCommunitySettingsSaveResult = {
 
 export type CloudCommunityOneLinerSaveResult = {
   community_id: string;
-  description: string | null;
+  one_liner: string | null;
   updated_at: string;
 };
 
@@ -385,7 +385,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     visibility: string;
     avatarStorageId?: string | null;
     avatarUrl?: string | null;
-    description: string | null;
+    oneLiner: string | null;
     bannerStorageId?: string | null;
     bannerUrl?: string | null;
     bannerFocusX?: number | null;
@@ -401,7 +401,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     visibility: params.visibility,
     avatarStorageId: params.avatarStorageId ?? null,
     avatarUrl: params.avatarUrl ?? null,
-    description: params.description,
+    oneLiner: params.oneLiner,
     bannerStorageId: params.bannerStorageId ?? null,
     bannerUrl: params.bannerUrl ?? null,
     bannerFocusX: params.bannerFocusX ?? 0.5,
@@ -445,7 +445,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     communityId: string;
     name: string;
     slug: string;
-    description: string | null;
+    oneLiner: string | null;
     avatarStorageId?: string | null;
     avatarUrl?: string | null;
     bannerStorageId?: string | null;
@@ -455,7 +455,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     bannerZoom?: number | null;
     visibility: string;
     monthlyAmountBaseUnits: number | null;
-    yearlyAmountBaseUnits: number | null;
+    annualAmountBaseUnits: number | null;
   },
 ): Promise<CloudCommunitySettingsSaveResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -464,7 +464,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     communityId: params.communityId,
     name: params.name,
     slug: params.slug,
-    description: params.description,
+    oneLiner: params.oneLiner,
     avatarStorageId: params.avatarStorageId ?? null,
     avatarUrl: params.avatarUrl ?? null,
     bannerStorageId: params.bannerStorageId ?? null,
@@ -474,7 +474,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     bannerZoom: params.bannerZoom ?? 1,
     visibility: params.visibility,
     monthlyAmountBaseUnits: params.monthlyAmountBaseUnits,
-    yearlyAmountBaseUnits: params.yearlyAmountBaseUnits,
+    annualAmountBaseUnits: params.annualAmountBaseUnits,
     currency: "usd",
     currencyDecimals: 2,
   });
@@ -485,14 +485,14 @@ export async function saveCloudCommunitySettings<SessionT>(
 export async function saveCloudCommunityOneLiner<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    description: string | null;
+    oneLiner: string | null;
   },
 ): Promise<CloudCommunityOneLinerSaveResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.mutation("community:saveCommunityOneLiner" as any, {
     authSubject,
     communityId: params.communityId,
-    description: params.description,
+    oneLiner: params.oneLiner,
   });
   const rows = coerceObjectRows<CloudCommunityOneLinerSaveResult>(payload);
   return rows[0] ?? null;

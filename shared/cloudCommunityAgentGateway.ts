@@ -6,7 +6,6 @@ type CloudCommunityAgentGatewayParams<SessionT> = {
 
 type RawCloudCommunityAgentPromptRow = {
   system_prompt?: unknown;
-  draft_id?: unknown;
 };
 
 type CloudCommunityAgentConfigMutationRow = {
@@ -48,7 +47,6 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
 
 export type CloudCommunityAgentSystemPromptResult = {
   systemPrompt: string;
-  draftId: string | null;
 };
 
 export type CloudCommunityAgentConfigMutationResult = {
@@ -71,7 +69,6 @@ export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
   if (!systemPrompt) return null;
   return {
     systemPrompt,
-    draftId: toOptionalString(row?.draft_id),
   };
 }
 
