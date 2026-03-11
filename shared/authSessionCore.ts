@@ -1,9 +1,10 @@
 import {
-  beginCloudOAuthSignInUrl,
+  beginCloudBridgeOAuthSignIn,
+  bootstrapCloudBridgeSession,
+  completeCloudBridgeOAuthCallback,
   decodeJwtPayload,
   ensureCloudSessionForAuthenticatedSend,
   ensureCloudSessionForRequest,
-  exchangeCloudPkceCodeForSession,
   fetchCloudUser,
   fetchWithCloudAuthShared,
   fetchWithCloudPublicShared,
@@ -31,11 +32,12 @@ export type AuthSessionRef = CloudSessionRef;
 export type AuthSessionRefreshInFlightRef = CloudSessionRefreshInFlightRef;
 
 export {
-  beginCloudOAuthSignInUrl as beginOAuthSignInUrl,
+  beginCloudBridgeOAuthSignIn as beginBridgeOAuthSignIn,
+  bootstrapCloudBridgeSession as bootstrapBridgeSession,
+  completeCloudBridgeOAuthCallback as completeBridgeOAuthCallback,
   decodeJwtPayload as decodeAuthJwtPayload,
   ensureCloudSessionForAuthenticatedSend as ensureAuthSessionForAuthenticatedSend,
   ensureCloudSessionForRequest as ensureAuthSessionForRequest,
-  exchangeCloudPkceCodeForSession as exchangeOAuthPkceCodeForSession,
   fetchCloudUser as fetchAuthUser,
   fetchWithCloudAuthShared as fetchWithAuthShared,
   fetchWithCloudPublicShared as fetchWithPublicShared,

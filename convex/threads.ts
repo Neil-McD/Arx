@@ -274,6 +274,17 @@ async function getRuntimeRunByOwnerRunId(args: {
     .first()) as RuntimeRunLike | null;
 }
 
+async function getRunningRuntimeRunByThread(args: {
+  ctx: any;
+  threadId: any;
+}): Promise<RuntimeRunLike | null> {
+  return (await args.ctx.db
+    .query("runtimeRuns")
+    .withIndex("by_thread_status_startedAt", (q: any) => q.eq("threadId", args.threadId).eq("status", "running"))
+    .order("desc")
+    .first()) as RuntimeRunLike | null;
+}
+
 function extractPathCandidatesFromArgs(args: Record<string, unknown>): string[] {
   const candidates: string[] = [];
   const pushCandidate = (raw: unknown) => {
@@ -1068,6 +1079,15 @@ export const ensureCloudRuntimeRunStarted = mutation({
       return existing;
     }
 
+    const runningRun = await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+    if (runningRun) {
+      if (runningRun.runId === runId) return runningRun;
+      throw new Error("thread_run_in_progress");
+    }
+
     const startedAt =
       typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
     const lane = normalizeRunLane(args.lane);
@@ -1327,13 +1347,19 @@ export const listCloudRuntimeRunEvents = query({
 
 export const getCloudCodingContinuationContextInternal = internalQuery({
   args: {
-    ownerId: v.id("users"),
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
     threadId: v.id("threads"),
   },
   handler: async (ctx, args) => {
-    const thread = await requireOwnedCloudThread({
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
       ctx,
       ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
       threadId: args.threadId,
     });
     const handoff =
@@ -1349,7 +1375,8 @@ export const getCloudCodingContinuationContextInternal = internalQuery({
 
 export const updateCloudThreadCodingHandoffInternal = internalMutation({
   args: {
-    ownerId: v.id("users"),
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
     threadId: v.id("threads"),
     runId: v.string(),
     userText: v.string(),
@@ -1357,16 +1384,21 @@ export const updateCloudThreadCodingHandoffInternal = internalMutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
     const nowMs = args.nowMs ?? Date.now();
     const thread = await requireOwnedCloudThread({
       ctx,
-      ownerId: args.ownerId,
+      ownerId,
       threadId: args.threadId,
     });
     const runId = normalizeRunId(args.runId);
     const run = await getRuntimeRunByOwnerRunId({
       ctx,
-      ownerId: args.ownerId,
+      ownerId,
       runId,
     });
     if (!run) throw new Error("runtime_run_not_found");
@@ -1374,7 +1406,7 @@ export const updateCloudThreadCodingHandoffInternal = internalMutation({
 
     const events = ((await ctx.db
       .query("runtimeRunEvents")
-      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
+      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", ownerId).eq("runId", runId))
       .collect()) as RuntimeRunEventLike[]).sort((a, b) => a.seq - b.seq);
 
     const previous =

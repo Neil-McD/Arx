@@ -465,6 +465,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner_runId", ["ownerId", "runId"])
+    .index("by_thread_status_startedAt", ["threadId", "status", "startedAt"])
     .index("by_thread_startedAt", ["threadId", "startedAt"])
     .index("by_owner_startedAt", ["ownerId", "startedAt"]),
 

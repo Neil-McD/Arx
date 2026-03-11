@@ -542,6 +542,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
             internal.communityAgent.resolveRuntimeCommunityPromptContextInternal as any,
             {
               userId: userDbId,
+              authSubject,
               communityId: threadCommunityId,
             },
           )) as {
@@ -601,7 +602,21 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
         startedAt: runStartedAt,
         nowMs: runStartedAt,
       };
-      await ctx.runMutation((api as any).threads.ensureCloudRuntimeRunStarted as any, runStartArgs);
+      try {
+        await ctx.runMutation((api as any).threads.ensureCloudRuntimeRunStarted as any, runStartArgs);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message === "thread_run_in_progress") {
+          return runtimeJsonResponse(409, {
+            ok: false,
+            code: "thread_run_in_progress",
+            error: "thread_run_in_progress",
+            message: "This thread already has a turn in progress. Wait for it to finish before sending another.",
+            run_id: runId,
+          });
+        }
+        throw error;
+      }
 
       const { appendRunEvent, finishRunBestEffort } = buildRuntimeRunPersistenceHelpers({
         ctx,
@@ -964,6 +979,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
         try {
           const continuation = (await ctx.runQuery(internal.threads.getCloudCodingContinuationContextInternal as any, {
             ownerId: userDbId,
+            authSubject,
             threadId: ownedThread._id,
           })) as { prompt?: unknown; handoff?: { relevantFiles?: unknown } | null } | null;
           const nextPrompt = String(continuation?.prompt ?? "").trim();
@@ -1109,6 +1125,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
           try {
             await ctx.runMutation(internal.threads.updateCloudThreadCodingHandoffInternal as any, {
               ownerId: userDbId,
+              authSubject,
               threadId: ownedThread._id,
               runId,
               userText: latestUserText,
@@ -1225,6 +1242,7 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
         try {
           await ctx.runMutation(internal.threads.updateCloudThreadCodingHandoffInternal as any, {
             ownerId: userDbId,
+            authSubject,
             threadId: ownedThread._id,
             runId,
             userText: latestUserText,

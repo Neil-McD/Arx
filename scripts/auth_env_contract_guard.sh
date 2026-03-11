@@ -42,8 +42,12 @@ require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_UR
   "auth URL lookup is Convex-only"
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_PUBLIC_KEY"\]\)' \
   "optional runtime API key lookup uses VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_RUNTIME_AUTH_BEGIN_GOOGLE_PATH' \
-  "auth transport uses runtime auth endpoint constants"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_AUTH_START_PATH' \
+  "auth transport uses bridge auth endpoint constants"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH' \
+  "auth transport uses bridge session bootstrap endpoint"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_SESSION_REFRESH_PATH' \
+  "auth transport uses bridge session refresh endpoint"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_URL' \
   "shared auth core must not use VITE_AUTH_URL"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_PUBLIC_KEY' \
@@ -53,13 +57,13 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_FUNCTIONS_V1_SEGMENT' \
 forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
   "shared auth core must not depend on PostgREST auth error codes"
 
-echo "[2/6] Validating OAuth flow is Convex-runtime-first..."
-forbid_match_in_file "$AUTH_FLOW_FILE" 'if \(!url \|\| !apiKey\)' \
-  "OAuth sign-in must not require runtime API key"
-forbid_match_in_file "$AUTH_FLOW_FILE" 'Missing Cloud URL or anon key\.' \
-  "OAuth sign-in error message must not claim anon key is required"
-require_match_in_file "$AUTH_FLOW_FILE" 'readConvexUrl\(\)' \
-  "OAuth sign-in checks Convex runtime URL availability"
+echo "[2/6] Validating OAuth flow is bridge-first..."
+require_match_in_file "$AUTH_FLOW_FILE" 'beginCloudBridgeOAuthSignIn' \
+  "OAuth sign-in uses bridge start path"
+forbid_match_in_file "$AUTH_FLOW_FILE" 'readConvexUrl\(\)' \
+  "OAuth sign-in must not depend on direct Convex runtime bootstrap"
+forbid_match_in_file "$AUTH_FLOW_FILE" 'exchangeCloudPkceCodeForSession|consumeCloudOAuthCallback' \
+  "OAuth flow must not own browser-side code exchange"
 
 echo "[3/6] Validating web model readiness is not coupled to auth keys..."
 forbid_match_in_file "$WEB_APP_FILE" 'getCloudUrl\(\) && getCloudAnonKey\(\)' \

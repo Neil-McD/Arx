@@ -1,7 +1,6 @@
 type TimeoutRef = { current: number | null };
 type CloudRefreshableSession = {
   expires_at: number;
-  refresh_token: string;
 };
 type SessionRef<TSession> = {
   current: TSession | null;
@@ -57,7 +56,7 @@ export function scheduleCloudRefreshTimer(params: {
 
 async function refreshCloudSessionIfNearExpiry(params: {
   session: CloudRefreshableSession | null | undefined;
-  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  refreshLocked: () => Promise<unknown>;
   nowSec?: number;
   thresholdSec?: number;
 }): Promise<boolean> {
@@ -66,13 +65,13 @@ async function refreshCloudSessionIfNearExpiry(params: {
   const nowSec = params.nowSec ?? Math.floor(Date.now() / 1000);
   const thresholdSec = params.thresholdSec ?? 60;
   if (session.expires_at > nowSec + thresholdSec) return false;
-  await params.refreshLocked(session.refresh_token);
+  await params.refreshLocked();
   return true;
 }
 
 export function bindCloudFocusRefresh<TSession extends CloudRefreshableSession>(params: {
   sessionRef: SessionRef<TSession>;
-  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  refreshLocked: () => Promise<unknown>;
   onFocusWithSession: (session: TSession) => void;
   thresholdSec?: number;
 }): () => void {

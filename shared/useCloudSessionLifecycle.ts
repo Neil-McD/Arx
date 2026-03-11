@@ -8,7 +8,6 @@ import {
 
 export type CloudSessionLike = {
   expires_at: number;
-  refresh_token: string;
 };
 
 type SessionRef<TSession> = MutableRefObject<TSession | null>;
@@ -41,7 +40,7 @@ function useCloudSessionAutoRefresh<TSession extends CloudSessionLike>(params: {
   session: TSession | null;
   sessionRef: SessionRef<TSession>;
   timeoutRef: TimeoutRef;
-  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  refreshLocked: () => Promise<unknown>;
   retryDelayMs?: number;
   retryIfNotExpired?: boolean;
 }) {
@@ -54,7 +53,7 @@ function useCloudSessionAutoRefresh<TSession extends CloudSessionLike>(params: {
     const attemptRefresh = async () => {
       const current = params.sessionRef.current;
       if (!current) return;
-      const refreshed = await refreshLockedRef.current(current.refresh_token);
+      const refreshed = await refreshLockedRef.current();
       if (refreshed) return;
 
       if (!params.retryIfNotExpired || !params.retryDelayMs) return;
@@ -92,7 +91,7 @@ function useCloudSessionAutoRefresh<TSession extends CloudSessionLike>(params: {
 
 function useCloudSessionFocusRefresh<TSession extends CloudSessionLike>(params: {
   sessionRef: SessionRef<TSession>;
-  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  refreshLocked: () => Promise<unknown>;
   onFocusWithSession: (session: TSession) => void;
   thresholdSec?: number;
 }) {
@@ -102,7 +101,7 @@ function useCloudSessionFocusRefresh<TSession extends CloudSessionLike>(params: 
   useEffect(() => {
     return bindCloudFocusRefresh({
       sessionRef: params.sessionRef,
-      refreshLocked: (refreshToken) => refreshLockedRef.current(refreshToken),
+      refreshLocked: () => refreshLockedRef.current(),
       thresholdSec: params.thresholdSec ?? 60,
       onFocusWithSession: (session) => {
         onFocusWithSessionRef.current(session);
@@ -115,7 +114,7 @@ export function useCloudAuthSessionLifecycle<TSession extends CloudSessionLike>(
   session: TSession | null;
   sessionRef: SessionRef<TSession>;
   refreshTimeoutRef: TimeoutRef;
-  refreshLocked: (refreshToken: string) => Promise<unknown>;
+  refreshLocked: () => Promise<unknown>;
   onMount: () => void | Promise<void>;
   onSessionAvailable: (session: TSession) => void;
   onFocusWithSession: (session: TSession) => void;

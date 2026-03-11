@@ -1,15 +1,7 @@
 import {
-  createPkceChallenge,
-  createPkceState,
-  createPkceVerifier,
-  storeCloudPkceState,
-} from "./cloudPkce";
-import {
-  beginCloudOAuthSignInUrl,
+  beginCloudBridgeOAuthSignIn,
   logoutCloudSessionRemote,
-  getOAuthRedirectUrl,
 } from "./cloudAuthCore";
-import { readConvexUrl } from "./convexRuntime";
 
 export type BeginGoogleCloudSignInResult =
   | { ok: true; authUrl: string }
@@ -18,38 +10,15 @@ export type BeginGoogleCloudSignInResult =
 export const CLOUD_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
 
 export async function beginGoogleCloudSignIn(): Promise<BeginGoogleCloudSignInResult> {
-  const convexUrl = readConvexUrl();
-  if (!convexUrl) {
-    return { ok: false, error: "Missing Convex URL." };
-  }
-
-  const redirectTo = getOAuthRedirectUrl();
-  const verifier = createPkceVerifier();
-  if (!verifier) {
-    return { ok: false, error: "Google sign-in failed: crypto is unavailable on this device." };
-  }
-
-  const challenge = await createPkceChallenge(verifier);
-  if (!challenge) {
-    return { ok: false, error: "Google sign-in failed: could not create PKCE challenge." };
-  }
-  const state = createPkceState();
-  if (!state) {
-    return { ok: false, error: "Google sign-in failed: could not create OAuth state." };
-  }
-
-  storeCloudPkceState({ codeVerifier: verifier, state });
-  const authUrl = await beginCloudOAuthSignInUrl({
+  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const authStart = await beginCloudBridgeOAuthSignIn({
     provider: "GoogleOAuth",
-    redirectTo,
-    codeChallenge: challenge,
-    codeChallengeMethod: "S256",
-    state,
+    returnTo,
   });
-  if (!authUrl) {
-    return { ok: false, error: "Google sign-in failed: could not create authorize URL." };
+  if (!authStart.ok) {
+    return { ok: false, error: authStart.error };
   }
-  return { ok: true, authUrl };
+  return { ok: true, authUrl: authStart.authUrl };
 }
 
 export async function revokeCloudSessionRemote(accessToken: string | null | undefined): Promise<void> {

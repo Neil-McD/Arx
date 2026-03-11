@@ -47,6 +47,10 @@ export function useWebSendFlowController<
 
   const sendUserMessage = useCallback(async (opts?: { text?: string }) => {
     const current = argsRef.current;
+    const setErrorForThread = (
+      threadId: string | null,
+      value: string | null | ((prev: string | null) => string | null),
+    ) => current.setThreadErrorForThread(threadId, value);
     const text = (opts?.text ?? current.messageInput).trim();
     const hasAttachments = current.workspaceAttachments.length > 0;
     if (!text && !hasAttachments) return;
@@ -73,7 +77,7 @@ export function useWebSendFlowController<
       } as ThreadMessageT;
       const baseMessages = [...existing, userMsg];
 
-      current.setThreadError(null);
+      setErrorForThread(current.guestThreadId, null);
       current.setIsSendingMessage(true);
       current.autoScrollEnabledRef.current = true;
       current.setIsWorkspaceAtBottom(true);
@@ -111,7 +115,7 @@ export function useWebSendFlowController<
         current.setThreadMessages(nextMessages);
         persistGuestFromMessages(nextMessages);
       } catch (error) {
-        current.setThreadError(toErrorMessage(error, "Failed to send message."));
+        setErrorForThread(current.guestThreadId, toErrorMessage(error, "Failed to send message."));
       } finally {
         current.setIsSendingMessage(false);
       }
@@ -127,14 +131,19 @@ export function useWebSendFlowController<
     const hasActiveThreadInState = Boolean(
       current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
     );
+    if (hasActiveThreadInState && current.isThreadRunActive(current.activeThreadId)) {
+      setErrorForThread(current.activeThreadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
+      return;
+    }
     const startedInDraft = !hasActiveThreadInState;
     let createdThreadId: string | null = null;
+    let runThreadId: string | null = null;
     let postedUserMessage = false;
     const hasPersonalMemoryAccess =
       current.builderTier === "builder" || current.builderTier === "architect";
 
-    current.setThreadError(null);
-    current.setIsSendingMessage(true);
+    setErrorForThread(current.activeThreadId ?? null, null);
+    if (startedInDraft) current.setIsSendingMessage(true);
     current.autoScrollEnabledRef.current = true;
     current.setIsWorkspaceAtBottom(true);
     try {
@@ -152,6 +161,8 @@ export function useWebSendFlowController<
       if (!threadId) {
         throw new Error("No thread available. Failed to create a cloud thread; please retry.");
       }
+      runThreadId = threadId;
+      current.setThreadRunSending(threadId, true);
 
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
       const preferredModelSelection = resolvePreferredModelSelection();
@@ -251,7 +262,7 @@ export function useWebSendFlowController<
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to send message.");
-      current.setThreadError(message);
+      setErrorForThread(runThreadId ?? current.activeThreadId ?? null, message);
       if (startedInDraft && createdThreadId && !postedUserMessage) {
         current.setThreads((prev) => prev.filter((thread) => thread.id !== createdThreadId));
         current.setWorkspaceWantsNewChatMode(true);
@@ -259,7 +270,8 @@ export function useWebSendFlowController<
       }
       maybeShowBuilderLimitUpgrade(message);
     } finally {
-      current.setIsSendingMessage(false);
+      if (startedInDraft) current.setIsSendingMessage(false);
+      if (runThreadId) current.setThreadRunSending(runThreadId, false);
     }
   }, [
     maybeShowBuilderLimitUpgrade,
@@ -271,7 +283,10 @@ export function useWebSendFlowController<
 
   const retryLastTurn = useCallback(async () => {
     const current = argsRef.current;
-    if (current.isSendingMessage) return;
+    const setErrorForThread = (
+      threadId: string | null,
+      value: string | null | ((prev: string | null) => string | null),
+    ) => current.setThreadErrorForThread(threadId, value);
     if (current.getSession() == null) {
       current.openAuthGate();
       return;
@@ -286,13 +301,17 @@ export function useWebSendFlowController<
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
+    if (current.isThreadRunActive(threadId)) {
+      setErrorForThread(threadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
+      return;
+    }
     const lastMessage = current.threadMessages[current.threadMessages.length - 1];
     if (!lastMessage || lastMessage.role !== "user") return;
     const lastUserMessageId = getLastThreadMessageId(current.threadMessages, "user");
     if (!lastUserMessageId) return;
 
-    current.setThreadError(null);
-    current.setIsSendingMessage(true);
+    setErrorForThread(threadId, null);
+    current.setThreadRunSending(threadId, true);
     current.autoScrollEnabledRef.current = true;
     current.setIsWorkspaceAtBottom(true);
     try {
@@ -330,10 +349,10 @@ export function useWebSendFlowController<
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to run model.");
-      current.setThreadError(message);
+      setErrorForThread(threadId, message);
       maybeShowBuilderLimitUpgrade(message);
     } finally {
-      current.setIsSendingMessage(false);
+      current.setThreadRunSending(threadId, false);
     }
   }, [
     maybeShowBuilderLimitUpgrade,
@@ -344,7 +363,10 @@ export function useWebSendFlowController<
 
   const regenerateLastTurn = useCallback(async () => {
     const current = argsRef.current;
-    if (current.isSendingMessage) return;
+    const setErrorForThread = (
+      threadId: string | null,
+      value: string | null | ((prev: string | null) => string | null),
+    ) => current.setThreadErrorForThread(threadId, value);
     if (current.getSession() == null) {
       current.openAuthGate();
       return;
@@ -359,11 +381,15 @@ export function useWebSendFlowController<
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
+    if (current.isThreadRunActive(threadId)) {
+      setErrorForThread(threadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
+      return;
+    }
     const lastUserMessageId = getLastThreadMessageId(current.threadMessages, "user");
     if (!lastUserMessageId) return;
 
-    current.setThreadError(null);
-    current.setIsSendingMessage(true);
+    setErrorForThread(threadId, null);
+    current.setThreadRunSending(threadId, true);
     current.autoScrollEnabledRef.current = true;
     current.setIsWorkspaceAtBottom(true);
     try {
@@ -421,10 +447,10 @@ export function useWebSendFlowController<
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to run model.");
-      current.setThreadError(message);
+      setErrorForThread(threadId, message);
       maybeShowBuilderLimitUpgrade(message);
     } finally {
-      current.setIsSendingMessage(false);
+      current.setThreadRunSending(threadId, false);
     }
   }, [
     maybeShowBuilderLimitUpgrade,

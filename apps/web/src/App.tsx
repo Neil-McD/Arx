@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type SetStateAction } from "react";
 import "highlight.js/styles/github-dark.css";
 import {
-  clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, loadPersistedCloudSession, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, persistCloudSession, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, CLOUD_SESSION_STORAGE_KEY_PREFIX, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
+  bootstrapCloudBridgeSession, clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, completeCloudBridgeOAuthCallback, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
 } from "./cloudAuth";
 import {
   captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
@@ -163,11 +163,9 @@ import {
 import { routePendingAuthIntent } from "../../../shared/cloudAuthIntentRouter";
 import {
   beginGoogleSignIn as beginGoogleCloudSignIn,
-  expireAuthSessionFailClosed as expireCloudSessionFailClosed,
   revokeAuthSessionRemote as revokeCloudSessionRemote,
   AUTH_SESSION_EXPIRED_MESSAGE as CLOUD_SESSION_EXPIRED_MESSAGE,
 } from "../../../shared/authSessionFlow";
-import { consumeOAuthCallback as consumeCloudOAuthCallback } from "../../../shared/authOAuthCallback";
 import { clearOAuthCallbackParamsFromLocation } from "../../../shared/cloudPkce";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
@@ -216,6 +214,7 @@ import { useWebMemoryMutationController } from "../../../shared/useWebMemoryMuta
 import { useWebSendFlowController } from "../../../shared/useWebSendFlowController";
 import { useWebThreadMutationController } from "../../../shared/useWebThreadMutationController";
 import { useWebTurnRunnerController } from "../../../shared/useWebTurnRunnerController";
+import type { ThreadStreamingState } from "../../../shared/webTurnRunnerCore";
 import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspaceActionsController";
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
@@ -431,6 +430,7 @@ type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
+const WORKSPACE_DRAFT_THREAD_ERROR_KEY = "__workspace_draft__";
 const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
 const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
 const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
@@ -658,7 +658,7 @@ export default function App() {
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
 
-  const [cloudSession, setCloudSession] = useState<CloudAuthSession | null>(() => loadPersistedCloudSession());
+  const [cloudSession, setCloudSession] = useState<CloudAuthSession | null>(null);
   const cloudSessionArg = { session: cloudSession } as const;
   const profileStorageUserId = (cloudSession?.user?.id ?? "").trim() || null;
   const initialProfileDraft = useMemo(
@@ -676,27 +676,87 @@ export default function App() {
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
 
-  const expireCloudSessionLocally = useCallback(async (): Promise<void> => {
-    authSessionEpochRef.current += 1;
-    await expireCloudSessionFailClosed({
+  async function resetSessionStateAfterSessionLoss(): Promise<void> {
+    sessionRef.current = null;
+    await resetWebSessionStateAfterSignOut({
       clearPersistedCloudSession: clearPersistedCloudSession,
       setCloudSession,
-      sessionRef,
+      setCommunities,
+      setIsLoadingCommunities,
+      setCommunityRoleById,
+      setActiveCommunityId,
+      setCommunityTab,
+      setCommunityMessages,
+      setCommunityMessageInput,
+      setCommunityChatError,
+      resetCommunityChatDataState,
+      setUnreadCount,
+      setIsUserAtBottom,
+      isUserAtBottomRef,
+      setIsSendingCommunityMessage,
+      setReplyingToMessage,
+      setMessageReactions,
+      setReactionPickerMessageId,
+      setEditingMessageId,
+      setEditingMessageText,
+      setEditingMessagePrefix,
+      setCommunityResources,
+      setIsLoadingResources,
+      setShowResourceModal,
+      setEditingResourceId,
+      setResourceTitleInput,
+      setResourceUrlInput,
+      setResourceBodyInput,
+      setResourcePinnedInput,
+      setResourceError,
+      setIsSavingResource,
+      setResourceSuccess,
+      setOpenResourceEmbedId,
+      setCommunityMembers,
+      setCommunitySettingsName,
+      setCommunitySettingsSlug,
+      setCommunitySettingsOneLiner,
+      setCommunitySettingsVisibility,
+      setCommunitySettingsAvatarUrl,
+      setCommunitySettingsBannerUrl,
+      setCommunitySettingsError,
+      setIsSavingCommunitySettings,
+      setIsSettingsBannerDragOver,
+      setIsSettingsAvatarDragOver,
+      setThreads,
+      setThreadError,
+      setThreadErrorById,
+      setWorkspaceWantsNewChatMode,
+      setActiveThreadId,
+      setThreadMessages,
+      setThreadSendingStateById,
+      setThreadStreamingStateById,
+      streamingAbortRef,
+      streamingRafRef,
+      streamingContentRef,
+      setStreamingContent,
+      setStreamingThreadId,
+      setStreamingRunId,
+      setStreamingMeta,
+      setDiscoverCommunities,
     });
+  }
+
+  const expireCloudSessionLocally = useCallback(async (): Promise<void> => {
+    authSessionEpochRef.current += 1;
+    await resetSessionStateAfterSessionLoss();
   }, []);
 
-  const refreshCloudSessionLocked = useCallback(async (refreshToken: string): Promise<CloudAuthSession | null> => {
+  const refreshCloudSessionLocked = useCallback(async (): Promise<CloudAuthSession | null> => {
     const epochAtRefreshStart = authSessionEpochRef.current;
     return await refreshCloudSessionWithLock({
-      refreshToken,
       inFlightRef: refreshInFlightRef,
-      refreshSession: refreshCloudSession,
+      refreshSession: () => refreshCloudSession(),
       onRefreshed: (refreshed) => {
         if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
         setCloudSession(refreshed);
         sessionRef.current = refreshed;
-        persistCloudSession(refreshed);
       },
     });
   }, []);
@@ -704,15 +764,8 @@ export default function App() {
   const ensureUsableCloudSession = useCallback(async (
     session: CloudAuthSession | null | undefined = sessionRef.current ?? cloudSession,
   ): Promise<CloudAuthSession | null> => {
-    const candidate = session ?? null;
-    if (!candidate) return null;
-
-    let requestSession = candidate;
-    const persistedBeforeRequest = loadPersistedCloudSession();
-    if (persistedBeforeRequest && !sessionsEqual(persistedBeforeRequest, requestSession)) {
-      adoptCloudSession(persistedBeforeRequest);
-      requestSession = persistedBeforeRequest;
-    }
+    const requestSession = session ?? null;
+    if (!requestSession) return null;
 
     const ensured = await ensureCloudSessionForRequest(requestSession, refreshCloudSessionLocked);
     if (!ensured) {
@@ -951,7 +1004,43 @@ export default function App() {
   const [communityFeedReactingPostId, setCommunityFeedReactingPostId] = useState<string | null>(null);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
-  const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadErrorById, setThreadErrorById] = useState<Record<string, string | null>>({});
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
+  const resolveThreadErrorKey = useCallback(
+    (threadId: string | null): string => {
+      const trimmedThreadId = String(threadId ?? "").trim();
+      if (trimmedThreadId) return trimmedThreadId;
+      return cloudSession ? WORKSPACE_DRAFT_THREAD_ERROR_KEY : GUEST_THREAD_ID;
+    },
+    [cloudSession],
+  );
+  const setThreadErrorForThread = useCallback(
+    (threadId: string | null, value: string | null | ((prev: string | null) => string | null)): void => {
+      const key = resolveThreadErrorKey(threadId);
+      setThreadErrorById((prev) => {
+        const previousValue = prev[key] ?? null;
+        const nextValue = typeof value === "function" ? value(previousValue) : value;
+        if (nextValue === null) {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        if (previousValue === nextValue) return prev;
+        return {
+          ...prev,
+          [key]: nextValue,
+        };
+      });
+    },
+    [resolveThreadErrorKey],
+  );
+  const setThreadError = useCallback(
+    (value: string | null | ((prev: string | null) => string | null)): void => {
+      setThreadErrorForThread(activeThreadId, value);
+    },
+    [activeThreadId, setThreadErrorForThread],
+  );
   const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
@@ -1336,7 +1425,6 @@ export default function App() {
   const [renameCloudProjectError, setRenameCloudProjectError] = useState<string | null>(null);
   const [isRenamingCloudProject, setIsRenamingCloudProject] = useState(false);
   const cloudProjectMenuRef = useRef<HTMLDivElement | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const initialWorkspaceWantsNewChat = Boolean(
     initialAppRoute &&
@@ -1516,6 +1604,10 @@ export default function App() {
   const activeCommunityIdRef = useRef<string | null>(null);
   const communityAgentLandingFetchSeqRef = useRef(0);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [threadSendingStateById, setThreadSendingStateById] = useState<Record<string, boolean>>({});
+  const [threadStreamingStateById, setThreadStreamingStateById] = useState<
+    Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
+  >({});
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
   const [streamingMeta, setStreamingMeta] = useState<{
@@ -2111,8 +2203,39 @@ export default function App() {
     void loadCloudProjects(cloudSession);
   }, [activePage, loadCloudProjects, cloudSession]);
 
+  const isThreadRunActive = useCallback(
+    (threadId: string | null): boolean => {
+      const trimmedThreadId = String(threadId ?? "").trim();
+      if (!trimmedThreadId) return false;
+      return Boolean(
+        threadSendingStateById[trimmedThreadId] ||
+          threadStreamingStateById[trimmedThreadId],
+      );
+    },
+    [threadSendingStateById, threadStreamingStateById],
+  );
+
+  const setThreadRunSending = useCallback((threadId: string, sending: boolean): void => {
+    const trimmedThreadId = threadId.trim();
+    if (!trimmedThreadId) return;
+    setThreadSendingStateById((prev) => {
+      if (sending) {
+        if (prev[trimmedThreadId]) return prev;
+        return {
+          ...prev,
+          [trimmedThreadId]: true,
+        };
+      }
+      if (!(trimmedThreadId in prev)) return prev;
+      const next = { ...prev };
+      delete next[trimmedThreadId];
+      return next;
+    });
+  }, []);
+
   const {
     stopStreamingTurn,
+    stopAllStreamingTurns,
     runPublicTurn,
     runAgentTurn,
     createThreadMessage,
@@ -2141,6 +2264,8 @@ export default function App() {
     setStreamingThreadId,
     setStreamingRunId,
     setStreamingMeta,
+    setThreadSendingStateById,
+    setThreadStreamingStateById,
     streamingContentRef,
     streamingRafRef,
     streamingAbortRef,
@@ -2160,6 +2285,47 @@ export default function App() {
     didJustSignInRef,
     onMountOAuthBootstrap: async () => {
       const parsedOAuthCallback = parseCloudOAuthCallbackFromLocation();
+      const finalizeSignedInSession = (session: CloudAuthSession, markJustSignedIn: boolean): void => {
+        if (markJustSignedIn) {
+          didJustSignInRef.current = true;
+        }
+        adoptCloudSession(session);
+
+        if (!markJustSignedIn) {
+          return;
+        }
+
+        const pendingIntent = readPendingAuthIntent();
+        const pendingReturnTo = (pendingIntent?.return_to ?? "").trim();
+        clearAuthReturnTo();
+        if (pendingReturnTo) {
+          const nextPath = pendingReturnTo.startsWith("/") || pendingReturnTo.startsWith("#")
+            ? pendingReturnTo
+            : DEFAULT_POST_SIGN_IN_PATH;
+          window.history.replaceState({}, document.title, nextPath);
+        }
+
+        const nextPublicRoute = readPublicRouteFromLocation();
+        if (nextPublicRoute.kind === "app") {
+          setPublicRoute(nextPublicRoute);
+          const nextAppRoute = readAppRouteFromLocation();
+          setActivePage(nextAppRoute.page);
+          setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
+          setSettingsPage(nextAppRoute.settingsPage);
+          syncCommunitySelection({
+            communityId: nextAppRoute.communityId,
+            communitySlug: nextAppRoute.communitySlug,
+          });
+          setCommunityTab(nextAppRoute.communityTab);
+          applyWorkspaceRouteState({
+            page: nextAppRoute.page,
+            view: nextAppRoute.page === "workspace" ? nextAppRoute.view : "home",
+            threadId: nextAppRoute.threadId,
+          });
+        } else {
+          applyPublicRouteState(nextPublicRoute);
+        }
+      };
       try {
         if (
           sessionStorage.getItem(CLOUD_SIGNED_OUT_TAB_INTENT_KEY) === "1" ||
@@ -2172,59 +2338,62 @@ export default function App() {
       } catch {
         // ignore
       }
-      if (parsedOAuthCallback && !hasRecentCloudAuthFlowPending()) {
+
+      if (parsedOAuthCallback?.kind === "error") {
+        setAuthError(`Google sign-in failed: ${parsedOAuthCallback.error}`);
         clearOAuthCallbackParamsFromLocation();
         clearCloudAuthFlowPending();
         return;
       }
-      const outcome = await consumeCloudOAuthCallback({
-        onBeforeStart: () => {
-          setAuthError(null);
-          setMagicLinkStatus("idle");
-          setMagicLinkError(null);
-        },
-        onAuthError: (message) => {
+
+      const hadPendingAuthFlow = hasRecentCloudAuthFlowPending();
+      let markJustSignedIn = false;
+      if (parsedOAuthCallback?.kind === "code") {
+        setAuthError(null);
+        setMagicLinkStatus("idle");
+        setMagicLinkError(null);
+        const completion = await completeCloudBridgeOAuthCallback({
+          authCode: parsedOAuthCallback.authCode,
+          state: parsedOAuthCallback.state,
+        });
+        if (!completion.ok) {
+          setAuthError(completion.error);
+          clearOAuthCallbackParamsFromLocation();
+          clearCloudAuthFlowPending();
+          return;
+        }
+        markJustSignedIn = true;
+      }
+
+      let bootstrappedSession: CloudAuthSession | null = null;
+      try {
+        bootstrappedSession = await bootstrapCloudBridgeSession();
+      } catch (error) {
+        if (markJustSignedIn || hadPendingAuthFlow) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to bootstrap bridge session.";
           setAuthError(message);
-        },
-        persistSession: persistCloudSession,
-        onSessionSet: (session) => {
-          didJustSignInRef.current = true;
-          setCloudSession(session);
+        }
+      }
+      if (bootstrappedSession) {
+        finalizeSignedInSession(bootstrappedSession, markJustSignedIn);
+        clearOAuthCallbackParamsFromLocation();
+        if (markJustSignedIn || hadPendingAuthFlow) {
+          clearCloudAuthFlowPending();
+        }
+        return;
+      }
 
-          const pendingIntent = readPendingAuthIntent();
-          const pendingReturnTo = (pendingIntent?.return_to ?? "").trim();
-          const rawNextPath = (pendingReturnTo || DEFAULT_POST_SIGN_IN_PATH).trim() || DEFAULT_POST_SIGN_IN_PATH;
-          clearAuthReturnTo();
-
-          const nextPath = rawNextPath.startsWith("/") || rawNextPath.startsWith("#") ? rawNextPath : "/";
-          window.history.replaceState({}, document.title, nextPath);
-
-          const nextPublicRoute = readPublicRouteFromLocation();
-          if (nextPublicRoute.kind === "app") {
-            setPublicRoute(nextPublicRoute);
-            const nextAppRoute = readAppRouteFromLocation();
-            setActivePage(nextAppRoute.page);
-            setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
-            setSettingsPage(nextAppRoute.settingsPage);
-            syncCommunitySelection({
-              communityId: nextAppRoute.communityId,
-              communitySlug: nextAppRoute.communitySlug,
-            });
-            setCommunityTab(nextAppRoute.communityTab);
-            applyWorkspaceRouteState({
-              page: nextAppRoute.page,
-              view: nextAppRoute.page === "workspace" ? nextAppRoute.view : "home",
-              threadId: nextAppRoute.threadId,
-            });
-          } else {
-            applyPublicRouteState(nextPublicRoute);
-          }
-        },
-        profileLoadErrorMessage: "Failed to load user profile from Cloud.",
-        parseResult: parsedOAuthCallback,
-      });
-      if (outcome !== "none") clearCloudAuthFlowPending();
-      if (outcome === "none") return;
+      if (parsedOAuthCallback?.kind === "code") {
+        setAuthError("Failed to bootstrap bridge session.");
+        clearOAuthCallbackParamsFromLocation();
+        clearCloudAuthFlowPending();
+        return;
+      }
     },
     onDidJustSignIn: () => {
       // If the user arrived via an auth gate (e.g. locked model selection), apply it immediately.
@@ -2244,24 +2413,21 @@ export default function App() {
       })();
     },
     onSessionMissing: () => {
-      setCommunities([]);
-      setIsLoadingCommunities(false);
-      clearCommunitySelection();
-      setCloudProjects([]);
-      setActiveCloudProjectId(null);
-      setThreads([]);
-      setThreadError(null);
-      syncWorkspaceSelection({ threadId: null, wantsNewChat: false });
-      threadsHydratedRef.current = false;
-      setLoadingThreadMessagesThreadId(null);
-      setThreadMessages([]);
-      setPersonalMemoryItems([]);
-      setPendingPurchaseClaims([]);
-      setPendingPurchasesError(null);
-      setPendingPurchasesSuccess(null);
-      setCloudProfile(null);
-      setProfileSaveError(null);
-      setProfileSaveSuccess(false);
+      void (async () => {
+        await resetSessionStateAfterSessionLoss();
+        clearCommunitySelection();
+        setCloudProjects([]);
+        setActiveCloudProjectId(null);
+        threadsHydratedRef.current = false;
+        setLoadingThreadMessagesThreadId(null);
+        setPersonalMemoryItems([]);
+        setPendingPurchaseClaims([]);
+        setPendingPurchasesError(null);
+        setPendingPurchasesSuccess(null);
+        setCloudProfile(null);
+        setProfileSaveError(null);
+        setProfileSaveSuccess(false);
+      })();
     },
     onFocusWithSession: (current) => {
       void (async () => {
@@ -2280,24 +2446,9 @@ export default function App() {
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       const key = String(event.key ?? "").trim();
-      if (
-        key &&
-        !key.startsWith(CLOUD_SESSION_STORAGE_KEY_PREFIX) &&
-        key !== CLOUD_SIGNED_OUT_INTENT_KEY
-      ) {
-        return;
-      }
-      const latest = loadPersistedCloudSession();
-      if (!latest) {
-        if (sessionRef.current) {
-          sessionRef.current = null;
-          setCloudSession(null);
-        }
-        return;
-      }
-      if (sessionsEqual(latest, sessionRef.current)) return;
-      sessionRef.current = latest;
-      setCloudSession(latest);
+      if (key !== CLOUD_SIGNED_OUT_INTENT_KEY || event.newValue !== "1") return;
+      authSessionEpochRef.current += 1;
+      void resetSessionStateAfterSessionLoss();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -2558,6 +2709,9 @@ export default function App() {
     setThreadMessages,
   });
 
+  const activeThreadStreamingContentForAutoScroll =
+    cloudSession && activeThreadId ? threadStreamingStateById[activeThreadId]?.content ?? null : streamingContent;
+
   useEffect(() => {
     if (!activeThreadId) return;
     const threadModelId = threads.find((t) => t.id === activeThreadId)?.model_id ?? null;
@@ -2570,7 +2724,7 @@ export default function App() {
     autoScrollEnabledRef,
     lastWorkspaceScrollTopRef,
     setIsWorkspaceAtBottom,
-    autoScrollDependencies: [threadMessages, streamingContent],
+    autoScrollDependencies: [threadMessages, activeThreadStreamingContentForAutoScroll],
     scrollBehavior: "auto",
   });
 
@@ -3259,67 +3413,8 @@ export default function App() {
     const accessToken = (sessionRef.current?.access_token ?? cloudSession?.access_token ?? "").trim();
     authSessionEpochRef.current += 1;
     setAuthError(null);
-    sessionRef.current = null;
-    setCloudSession(null);
-    await resetWebSessionStateAfterSignOut({
-      clearPersistedCloudSession: clearPersistedCloudSession,
-      setCloudSession,
-      setCommunities,
-      setIsLoadingCommunities,
-      setCommunityRoleById,
-      setActiveCommunityId,
-      setCommunityTab,
-      setCommunityMessages,
-      setCommunityMessageInput,
-      setCommunityChatError,
-      resetCommunityChatDataState,
-      setUnreadCount,
-      setIsUserAtBottom,
-      isUserAtBottomRef,
-      setIsSendingCommunityMessage,
-      setReplyingToMessage,
-      setMessageReactions,
-      setReactionPickerMessageId,
-      setEditingMessageId,
-      setEditingMessageText,
-      setEditingMessagePrefix,
-      setCommunityResources,
-      setIsLoadingResources,
-      setShowResourceModal,
-      setEditingResourceId,
-      setResourceTitleInput,
-      setResourceUrlInput,
-      setResourceBodyInput,
-      setResourcePinnedInput,
-      setResourceError,
-      setIsSavingResource,
-      setResourceSuccess,
-      setOpenResourceEmbedId,
-      setCommunityMembers,
-      setCommunitySettingsName,
-      setCommunitySettingsSlug,
-      setCommunitySettingsOneLiner,
-      setCommunitySettingsVisibility,
-      setCommunitySettingsAvatarUrl,
-      setCommunitySettingsBannerUrl,
-      setCommunitySettingsError,
-      setIsSavingCommunitySettings,
-      setIsSettingsBannerDragOver,
-      setIsSettingsAvatarDragOver,
-      setThreads,
-      setThreadError,
-      setWorkspaceWantsNewChatMode,
-      setActiveThreadId,
-      setThreadMessages,
-      streamingAbortRef,
-      streamingRafRef,
-      streamingContentRef,
-      setStreamingContent,
-      setStreamingThreadId,
-      setStreamingRunId,
-      setStreamingMeta,
-      setDiscoverCommunities,
-    });
+    stopAllStreamingTurns();
+    await resetSessionStateAfterSessionLoss();
     if (accessToken) {
       void revokeCloudSessionRemote(accessToken);
     }
@@ -3334,35 +3429,24 @@ export default function App() {
     b: CloudAuthSession | null | undefined,
   ): boolean {
     if (!a || !b) return false;
-    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+    return a.access_token === b.access_token;
   }
 
   function adoptCloudSession(session: CloudAuthSession): void {
     sessionRef.current = session;
     setCloudSession(session);
-    persistCloudSession(session);
   }
 
   async function fetchWithCloudAuth(url: string, init: RequestInit, session: CloudAuthSession): Promise<Response> {
-    let requestSession = sessionRef.current ?? session;
-    const persistedBeforeRequest = loadPersistedCloudSession();
-    if (persistedBeforeRequest && !sessionsEqual(persistedBeforeRequest, requestSession)) {
-      adoptCloudSession(persistedBeforeRequest);
-      requestSession = persistedBeforeRequest;
-    }
-
     return await fetchWithCloudAuthShared({
       url,
       init,
-      session: requestSession,
+      session: sessionRef.current ?? session,
       sessionRef,
       refreshLocked: refreshCloudSessionLocked,
       onSessionExpired: () => {
-        return expireCloudSessionFailClosed({
-          clearPersistedCloudSession: clearPersistedCloudSession,
-          setCloudSession,
-          sessionRef,
-        });
+        authSessionEpochRef.current += 1;
+        return resetSessionStateAfterSessionLoss();
       },
       sessionExpiredMessage: CLOUD_SESSION_EXPIRED_MESSAGE,
     });
@@ -4177,6 +4261,7 @@ export default function App() {
     messageInput,
     workspaceAttachments,
     isSendingMessage,
+    isThreadRunActive,
     activeThreadId,
     threadMessages,
     threads,
@@ -4197,7 +4282,9 @@ export default function App() {
     workspaceAttachmentsRef,
     autoScrollEnabledRef,
     setThreadError,
+    setThreadErrorForThread,
     setIsSendingMessage,
+    setThreadRunSending,
     setIsWorkspaceAtBottom,
     setWorkspaceWantsNewChatMode,
     setActiveThreadId,
@@ -4841,11 +4928,21 @@ export default function App() {
 	  }
 	  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
 	  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
+  const activeThreadStreamingState =
+    cloudSession && activeThreadId ? threadStreamingStateById[activeThreadId] ?? null : null;
+  const activeThreadStreamingContent = cloudSession ? activeThreadStreamingState?.content ?? null : streamingContent;
+  const activeThreadStreamingRunId = cloudSession ? activeThreadStreamingState?.runId ?? null : streamingRunId;
+  const threadError = threadErrorById[resolveThreadErrorKey(activeThreadId)] ?? null;
+  const isActiveWorkspaceThreadBusy = cloudSession
+    ? activeThreadId
+      ? isThreadRunActive(activeThreadId)
+      : isSendingMessage
+    : isSendingMessage;
   const canRetryLastThreadTurn = Boolean(
     threadError &&
       cloudSession &&
       activeThreadId &&
-      !isSendingMessage &&
+      !isActiveWorkspaceThreadBusy &&
       lastThreadMessageRole === "user" &&
       lastThreadUserMessageId,
   );
@@ -4855,7 +4952,9 @@ export default function App() {
     : threadError;
 		  const workspaceThreadKey = cloudSession ? activeThreadId : GUEST_THREAD_ID;
   const isStreamingWorkspaceTurn = Boolean(
-    isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
+    cloudSession
+      ? activeThreadStreamingContent !== null
+      : isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
   );
 
   const showPublicSignIn = !cloudSession;
@@ -5714,9 +5813,7 @@ export default function App() {
 	                            const currentLens = activeThreadId
 	                              ? (threads.find((t) => t.id === activeThreadId)?.community_id ?? null)
 	                              : null;
-	                            const isWorkspaceRunActive =
-	                              isSendingMessage ||
-	                              (streamingThreadId === activeThreadId && streamingContent !== null);
+	                            const isWorkspaceRunActive = isActiveWorkspaceThreadBusy;
 	                            if (isWorkspaceRunActive && currentLens !== community.id) {
 	                              showAppToastMessage(
 	                                `Switched to ${community.name}. Active run keeps prior context; new context applies next turn.`,
@@ -6082,7 +6179,7 @@ export default function App() {
 		                                      void sendUserMessage();
 		                                    }
 		                                  }}
-		                                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+		                                  disabled={isActiveWorkspaceThreadBusy || isStreamingWorkspaceTurn}
 		                                  rows={1}
 		                                />
 		                                {workspaceAttachments.length > 0 && (
@@ -6126,7 +6223,7 @@ export default function App() {
 		                                      className="ask-icon-btn ask-plus"
 		                                      type="button"
 		                                      onClick={() => workspaceFileInputRef.current?.click()}
-		                                      disabled={!cloudSession || isSendingMessage || isStreamingWorkspaceTurn}
+		                                      disabled={!cloudSession || isActiveWorkspaceThreadBusy || isStreamingWorkspaceTurn}
 		                                      aria-label="Attach files"
 		                                      title="Attach files"
 		                                    >
@@ -6174,11 +6271,11 @@ export default function App() {
 		                                    <button
 		                                      className="chat-send ask-send-btn ask-send-btn-v2"
 		                                      type="button"
-		                                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+		                                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn(activeThreadId ?? undefined) : void sendUserMessage())}
 		                                      disabled={
 		                                        isStreamingWorkspaceTurn
 		                                          ? false
-		                                          : isSendingMessage ||
+		                                          : isActiveWorkspaceThreadBusy ||
 		                                            (messageInput.trim().length === 0 && workspaceAttachments.length === 0)
 		                                      }
 		                                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
@@ -6202,7 +6299,7 @@ export default function App() {
 		                                  key={button.id}
 		                                  className="web-empty-thread-action"
 		                                  type="button"
-		                                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+		                                  disabled={isActiveWorkspaceThreadBusy || isStreamingWorkspaceTurn}
 		                                  onClick={() => {
 		                                    void sendUserMessage({ text: button.prompt });
 		                                    workspaceAskInputRef.current?.focus();
@@ -6346,14 +6443,13 @@ export default function App() {
 	                        </div>
 	                      );
 	                    })}
-                      {streamingThreadId === workspaceThreadKey &&
-                        streamingContent !== null &&
-                        !(streamingRunId && threadMessages.some((m) => m.run_id === streamingRunId && m.role === "assistant")) && (
+                      {activeThreadStreamingContent !== null &&
+                        !(activeThreadStreamingRunId && threadMessages.some((m) => m.run_id === activeThreadStreamingRunId && m.role === "assistant")) && (
                           <div className="message-item assistant streaming">
                             <div className="message-text streaming-text">
-                              {streamingContent.trim() ? (
+                              {activeThreadStreamingContent.trim() ? (
                                 <>
-                                  {renderMarkdown(streamingContent, { onCopyCode: copyTextToClipboard })}
+                                  {renderMarkdown(activeThreadStreamingContent, { onCopyCode: copyTextToClipboard })}
                                   <span className="streaming-caret" aria-hidden="true" />
                                 </>
                               ) : (
@@ -6407,7 +6503,7 @@ export default function App() {
                       void sendUserMessage();
                     }
                   }}
-	                  disabled={isSendingMessage || isStreamingWorkspaceTurn}
+	                  disabled={isActiveWorkspaceThreadBusy || isStreamingWorkspaceTurn}
 	                  rows={1}
 	                />
                 {workspaceAttachments.length > 0 && (
@@ -6451,7 +6547,7 @@ export default function App() {
 	                      className="ask-icon-btn ask-plus"
 	                      type="button"
 	                      onClick={() => workspaceFileInputRef.current?.click()}
-	                      disabled={!cloudSession || isSendingMessage || isStreamingWorkspaceTurn}
+	                      disabled={!cloudSession || isActiveWorkspaceThreadBusy || isStreamingWorkspaceTurn}
 	                      aria-label="Attach files"
 	                      title="Attach files"
 	                    >
@@ -6499,11 +6595,11 @@ export default function App() {
 	                    <button
 	                      className="chat-send ask-send-btn ask-send-btn-v2"
 	                      type="button"
-	                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn() : void sendUserMessage())}
+	                      onClick={() => (isStreamingWorkspaceTurn ? stopStreamingTurn(activeThreadId ?? undefined) : void sendUserMessage())}
 	                      disabled={
 	                        (isStreamingWorkspaceTurn
 	                          ? false
-	                          : isSendingMessage || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
+	                          : isActiveWorkspaceThreadBusy || (messageInput.trim().length === 0 && workspaceAttachments.length === 0))
 	                      }
 	                      aria-label={isStreamingWorkspaceTurn ? "Stop" : "Send"}
                       title={isStreamingWorkspaceTurn ? "Stop" : "Send"}

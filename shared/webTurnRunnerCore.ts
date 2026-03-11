@@ -8,13 +8,19 @@ export type PlatformQuotaModalState = {
   message: string | null;
 };
 
-type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
+export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
   engine_id: string;
   model_id: string | null;
   inference_source?: string | null;
   memory_used?: MemoryUsedItemT[];
   history_used?: HistoryUsedItemT[];
   community_evidence_used?: CommunityEvidenceUsedT | null;
+};
+
+export type ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
+  runId: string | null;
+  meta: WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null;
+  content: string | null;
 };
 
 export type UseWebTurnRunnerControllerArgs<
@@ -51,6 +57,10 @@ export type UseWebTurnRunnerControllerArgs<
   setStreamingRunId: Dispatch<SetStateAction<string | null>>;
   setStreamingMeta: Dispatch<
     SetStateAction<WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null>
+  >;
+  setThreadSendingStateById: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setThreadStreamingStateById: Dispatch<
+    SetStateAction<Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>>
   >;
   onCloudRunLifecycleEvent?: (payload: {
     threadId: string;

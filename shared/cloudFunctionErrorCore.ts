@@ -6,6 +6,7 @@ export type CloudFunctionErrorCategory =
   | "misconfigured"
   | "disabled"
   | "model_not_allowed"
+  | "conflict"
   | "unknown";
 
 export type CloudFunctionError = {
@@ -65,6 +66,7 @@ function classifyErrorCategory(input: { status: number; code: string | null; mes
   if (code === "community_contract_mismatch") return "misconfigured";
   if (code === "platform_inference_disabled") return "disabled";
   if (code === "model_not_allowed") return "model_not_allowed";
+  if (code === "thread_run_in_progress") return "conflict";
 
   if (input.status === 401 || input.status === 403) {
     if (includesAuthFailureText(message)) return "auth";
@@ -125,6 +127,9 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
 export function formatCloudFunctionErrorMessageCore(error: CloudFunctionError): string {
   const base = (() => {
     if (error.category === "auth") return "Session expired. Please sign in again.";
+    if (error.code === "thread_run_in_progress") {
+      return "This thread already has a turn in progress. Wait for it to finish before sending another.";
+    }
     if (error.code === "community_contract_mismatch") {
       return "Community tools are temporarily unavailable while the backend contract is syncing. Please retry shortly.";
     }

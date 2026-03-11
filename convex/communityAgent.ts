@@ -144,14 +144,20 @@ export const getActiveCommunityAgentSystemPrompt = query({
 
 export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
   args: {
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
     const { community } = await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
-      userId: args.userId,
+      userId,
     });
     const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
     const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;

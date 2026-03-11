@@ -34,13 +34,13 @@ Recommended:
 
 ## 3) Redirect URI
 
-This app defaults OAuth redirect to `window.location.origin` when `VITE_AUTH_REDIRECT_URL` is unset.
+This app defaults OAuth redirect to the app origin. The bridge then completes continuity creation server-side.
 
 Local examples:
 
 1. Web: `http://localhost:5174`
 
-If you set `VITE_AUTH_REDIRECT_URL`, add that exact value to your AuthKit allowed callback URLs.
+If you set `ARX_AUTH_REDIRECT_URI`, add that exact value to your AuthKit allowed callback URLs.
 
 ## 4) Local Validation
 

@@ -10,7 +10,6 @@ export type CloudUser = {
 
 export type CloudSession = {
   access_token: string;
-  refresh_token: string;
   expires_at: number; // epoch seconds
   user: CloudUser;
 };
@@ -83,11 +82,12 @@ export function getCloudAuthUid(session: CloudSession): string {
   return sub ?? session.user.id;
 }
 
-const CLOUD_RUNTIME_AUTH_BEGIN_GOOGLE_PATH = "/runtime/auth_begin_google_sign_in";
-const CLOUD_RUNTIME_AUTH_EXCHANGE_PKCE_PATH = "/runtime/auth_exchange_pkce_code";
-const CLOUD_RUNTIME_AUTH_REFRESH_PATH = "/runtime/auth_refresh_session";
 const CLOUD_RUNTIME_AUTH_OTP_PATH = "/runtime/auth_send_magic_link_otp";
-const CLOUD_RUNTIME_AUTH_LOGOUT_PATH = "/runtime/auth_logout_session";
+const CLOUD_BRIDGE_AUTH_START_PATH = "/api/auth/start";
+const CLOUD_BRIDGE_AUTH_CALLBACK_PATH = "/api/auth/callback";
+const CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH = "/api/session/bootstrap";
+const CLOUD_BRIDGE_SESSION_REFRESH_PATH = "/api/session/refresh";
+const CLOUD_BRIDGE_SESSION_LOGOUT_PATH = "/api/session/logout";
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
@@ -116,6 +116,30 @@ async function callConvexRuntimeAuthEndpoint(params: {
         accessToken: params.accessToken ?? null,
         includeJsonContentType: hasBody,
       }),
+      ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function callSameOriginBridgeEndpoint(params: {
+  path: string;
+  method?: "GET" | "POST";
+  payload?: Record<string, unknown>;
+  accessToken?: string | null;
+}): Promise<Response | null> {
+  const route = params.path.startsWith("/") ? params.path : `/${params.path}`;
+  const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
+  const headers = new Headers();
+  if (hasBody) headers.set("Content-Type", "application/json");
+  const accessToken = readString(params.accessToken ?? null);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  try {
+    return await fetch(route, {
+      method: params.method ?? "POST",
+      headers,
+      credentials: "include",
       ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
     });
   } catch {
@@ -211,7 +235,7 @@ function findNestedObjectCandidate(
   return null;
 }
 
-function findSessionPayload(payload: unknown): Record<string, unknown> | null {
+function findSessionPayload(payload: unknown, requireRefreshToken = true): Record<string, unknown> | null {
   const initial = asObject(payload);
   if (!initial) return null;
   const queue: Record<string, unknown>[] = [initial];
@@ -224,7 +248,7 @@ function findSessionPayload(payload: unknown): Record<string, unknown> | null {
 
     const accessToken = readObjectString(current, ["access_token", "accessToken"]);
     const refreshToken = readObjectString(current, ["refresh_token", "refreshToken"]);
-    if (accessToken && refreshToken) return current;
+    if (accessToken && (!requireRefreshToken || refreshToken)) return current;
 
     const nested = findNestedObjectCandidate(current, ["session", "data", "result", "payload"]);
     if (nested) queue.push(nested);
@@ -284,12 +308,19 @@ function coerceCloudUser(value: unknown): CloudUser | null {
   return user;
 }
 
-function coerceCloudSession(payload: unknown): CloudSession | null {
-  const sessionPayload = findSessionPayload(payload);
+function coerceCloudSession(
+  payload: unknown,
+  options: {
+    requireRefreshToken?: boolean;
+  } = {},
+): CloudSession | null {
+  const requireRefreshToken = options.requireRefreshToken !== false;
+  const sessionPayload = findSessionPayload(payload, requireRefreshToken);
   if (!sessionPayload) return null;
   const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
   const refreshToken = readObjectString(sessionPayload, ["refresh_token", "refreshToken"]);
-  if (!accessToken || !refreshToken) return null;
+  if (!accessToken) return null;
+  if (requireRefreshToken && !refreshToken) return null;
   const expiresAt = coerceSessionExpiresAt(sessionPayload, accessToken);
   if (!expiresAt) return null;
   const user =
@@ -297,7 +328,6 @@ function coerceCloudSession(payload: unknown): CloudSession | null {
     decodeCloudUserFromAccessToken(accessToken) ?? { id: "" };
   return {
     access_token: accessToken,
-    refresh_token: refreshToken,
     expires_at: expiresAt,
     user,
   };
@@ -319,34 +349,91 @@ function buildCloudAuthHeaders(params: {
   return headers;
 }
 
-export async function beginCloudOAuthSignInUrl(params: {
+export type BeginCloudOAuthSignInUrlResult =
+  | { ok: true; authUrl: string }
+  | { ok: false; error: string };
+
+export async function beginCloudBridgeOAuthSignIn(params: {
   provider: string;
-  redirectTo: string;
-  codeChallenge: string;
-  codeChallengeMethod?: string;
-  state?: string;
-}): Promise<string | null> {
-  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
-    path: CLOUD_RUNTIME_AUTH_BEGIN_GOOGLE_PATH,
+  returnTo?: string;
+}): Promise<BeginCloudOAuthSignInUrlResult> {
+  const bridgeResponse = await callSameOriginBridgeEndpoint({
+    path: CLOUD_BRIDGE_AUTH_START_PATH,
     method: "POST",
     payload: {
       provider: params.provider,
-      redirect_to: params.redirectTo,
-      code_challenge: params.codeChallenge,
-      code_challenge_method: params.codeChallengeMethod ?? "S256",
-      state: params.state,
+      return_to: params.returnTo ?? undefined,
     },
   });
-  if (runtimeResponse && runtimeResponse.ok) {
-    try {
-      const payload = (await runtimeResponse.json()) as Record<string, unknown>;
-      const authUrl = readString(payload.auth_url ?? payload.authUrl ?? payload.url);
-      if (authUrl) return authUrl;
-    } catch {
-      return null;
-    }
+  if (!bridgeResponse) {
+    return { ok: false, error: "Google sign-in failed: auth bridge is unavailable." };
   }
-  return null;
+  if (!bridgeResponse.ok) {
+    return {
+      ok: false,
+      error: (await readCloudError(bridgeResponse)) || "Google sign-in failed: auth bridge could not create authorize URL.",
+    };
+  }
+  try {
+    const payload = (await bridgeResponse.json()) as Record<string, unknown>;
+    const authUrl = readString(payload.auth_url ?? payload.authUrl ?? payload.url);
+    if (authUrl) return { ok: true, authUrl };
+    return { ok: false, error: "Google sign-in failed: authorize URL missing from bridge response." };
+  } catch {
+    return { ok: false, error: "Google sign-in failed: invalid bridge response." };
+  }
+}
+
+export async function bootstrapCloudBridgeSession(): Promise<CloudSession | null> {
+  const bridgeResponse = await callSameOriginBridgeEndpoint({
+    path: CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH,
+    method: "POST",
+    payload: {},
+  });
+  if (!bridgeResponse) return null;
+  if (!bridgeResponse.ok) {
+    if (bridgeResponse.status === 401) return null;
+    throw new Error(await readCloudError(bridgeResponse));
+  }
+  try {
+    return coerceCloudSession((await bridgeResponse.json()) as unknown, {
+      requireRefreshToken: false,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function completeCloudBridgeOAuthCallback(params: {
+  authCode: string;
+  state?: string | null;
+}): Promise<{ ok: true; returnTo?: string | null } | { ok: false; error: string }> {
+  const bridgeResponse = await callSameOriginBridgeEndpoint({
+    path: CLOUD_BRIDGE_AUTH_CALLBACK_PATH,
+    method: "POST",
+    payload: {
+      auth_code: params.authCode,
+      state: params.state ?? undefined,
+    },
+  });
+  if (!bridgeResponse) {
+    return { ok: false, error: "Google sign-in failed: auth bridge is unavailable." };
+  }
+  if (!bridgeResponse.ok) {
+    return {
+      ok: false,
+      error: (await readCloudError(bridgeResponse)) || "Google sign-in failed during bridge callback.",
+    };
+  }
+  try {
+    const payload = (await bridgeResponse.json()) as Record<string, unknown>;
+    return {
+      ok: true,
+      returnTo: readString(payload.return_to ?? payload.returnTo),
+    };
+  } catch {
+    return { ok: true, returnTo: null };
+  }
 }
 
 export async function logoutCloudSessionRemote(params: {
@@ -356,60 +443,29 @@ export async function logoutCloudSessionRemote(params: {
   const accessToken = readString(params.accessToken);
   if (!accessToken) return;
   const scope = readString(params.scope) ?? "local";
-
-  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
-    path: CLOUD_RUNTIME_AUTH_LOGOUT_PATH,
+  const bridgeResponse = await callSameOriginBridgeEndpoint({
+    path: CLOUD_BRIDGE_SESSION_LOGOUT_PATH,
     method: "POST",
     accessToken,
-    payload: {
-      scope,
-      access_token: accessToken,
-    },
+    payload: { scope },
   });
-  if (!runtimeResponse || runtimeResponse.ok) return;
+  if (!bridgeResponse || bridgeResponse.ok) return;
 }
 
-export async function refreshCloudSession(refreshToken: string): Promise<CloudSession | null> {
-  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
-    path: CLOUD_RUNTIME_AUTH_REFRESH_PATH,
+export async function refreshCloudSession(): Promise<CloudSession | null> {
+  const bridgeResponse = await callSameOriginBridgeEndpoint({
+    path: CLOUD_BRIDGE_SESSION_REFRESH_PATH,
     method: "POST",
-    payload: { refresh_token: refreshToken },
+    payload: {},
   });
-  if (runtimeResponse && runtimeResponse.ok) {
-    try {
-      return coerceCloudSession((await runtimeResponse.json()) as unknown);
-    } catch {
-      return null;
-    }
+  if (!bridgeResponse || !bridgeResponse.ok) return null;
+  try {
+    return coerceCloudSession((await bridgeResponse.json()) as unknown, {
+      requireRefreshToken: false,
+    });
+  } catch {
+    return null;
   }
-  return null;
-}
-
-export async function exchangeCloudPkceCodeForSession(
-  authCode: string,
-  codeVerifier: string,
-): Promise<CloudSession | null> {
-  const redirectTo = getOAuthRedirectUrl();
-  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
-    path: CLOUD_RUNTIME_AUTH_EXCHANGE_PKCE_PATH,
-    method: "POST",
-    payload: {
-      auth_code: authCode,
-      code_verifier: codeVerifier,
-      redirect_to: redirectTo,
-    },
-  });
-  if (!runtimeResponse) {
-    throw new Error("Missing Convex URL.");
-  }
-  if (runtimeResponse && runtimeResponse.ok) {
-    try {
-      return coerceCloudSession((await runtimeResponse.json()) as unknown);
-    } catch {
-      return null;
-    }
-  }
-  throw new Error(await readCloudError(runtimeResponse));
 }
 
 export async function sendCloudMagicLinkOtp(params: {
@@ -525,22 +581,22 @@ export function isLikelyJwt(value: string): boolean {
 
 export async function ensureCloudSessionForRequest(
   session: CloudSession,
-  refreshLocked: (refreshToken: string) => Promise<CloudSession | null>,
+  refreshLocked: () => Promise<CloudSession | null>,
 ): Promise<CloudSession | null> {
   const now = Math.floor(Date.now() / 1000);
   if (session.expires_at > now + 60) return session;
-  return await refreshLocked(session.refresh_token);
+  return await refreshLocked();
 }
 
 export async function ensureCloudSessionForAuthenticatedSend(params: {
   session: CloudSession;
   sessionRef?: CloudSessionRef;
-  refreshLocked: (refreshToken: string) => Promise<CloudSession | null>;
+  refreshLocked: () => Promise<CloudSession | null>;
 }): Promise<CloudSession | null> {
   const { session, sessionRef, refreshLocked } = params;
   const sameSession = (a: CloudSession | null | undefined, b: CloudSession | null | undefined): boolean => {
     if (!a || !b) return false;
-    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+    return a.access_token === b.access_token;
   };
 
   // Step 1: ensure not expiring imminently.
@@ -561,9 +617,7 @@ export async function ensureCloudSessionForAuthenticatedSend(params: {
   }
 
   // Step 4: one locked refresh + one verification retry.
-  const refreshToken = (sessionRef?.current?.refresh_token ?? current.refresh_token ?? "").trim();
-  if (!refreshToken) return null;
-  const refreshed = await refreshLocked(refreshToken);
+  const refreshed = await refreshLocked();
   if (!refreshed) return null;
   const refreshedAccepted = await isCloudSessionAcceptedForRuntime(refreshed);
   if (!refreshedAccepted) return null;
@@ -585,18 +639,16 @@ async function isCloudSessionAcceptedForRuntime(session: CloudSession): Promise<
 }
 
 export async function refreshCloudSessionWithLock(params: {
-  refreshToken: string;
   inFlightRef: CloudSessionRefreshInFlightRef;
-  refreshSession: (refreshToken: string) => Promise<CloudSession | null>;
+  refreshSession: () => Promise<CloudSession | null>;
   onRefreshed: (session: CloudSession) => void | Promise<void>;
 }): Promise<CloudSession | null> {
-  const { refreshToken, inFlightRef, refreshSession, onRefreshed } = params;
-  if (!refreshToken) return null;
+  const { inFlightRef, refreshSession, onRefreshed } = params;
   if (inFlightRef.current) {
     return await inFlightRef.current;
   }
   const promise = (async () => {
-    const refreshed = await refreshSession(refreshToken);
+    const refreshed = await refreshSession();
     if (!refreshed) return null;
     await onRefreshed(refreshed);
     return refreshed;
@@ -614,7 +666,7 @@ export async function fetchWithCloudAuthShared(params: {
   init: RequestInit;
   session: CloudSession;
   sessionRef: CloudSessionRef;
-  refreshLocked: (refreshToken: string) => Promise<CloudSession | null>;
+  refreshLocked: () => Promise<CloudSession | null>;
   onSessionExpired: () => void | Promise<void>;
   sessionExpiredMessage?: string;
 }): Promise<Response> {
@@ -644,7 +696,7 @@ export async function fetchWithCloudAuthShared(params: {
 
   const isSameSession = (a: CloudSession | null | undefined, b: CloudSession | null | undefined): boolean => {
     if (!a || !b) return false;
-    return a.access_token === b.access_token && a.refresh_token === b.refresh_token;
+    return a.access_token === b.access_token;
   };
 
   const tryFetchWithLatestSession = async (): Promise<Response | null> => {
@@ -655,9 +707,7 @@ export async function fetchWithCloudAuthShared(params: {
   };
 
   const tryRefreshAndFetch = async (): Promise<Response | null> => {
-    const refreshToken = (sessionRef.current?.refresh_token ?? requestSession.refresh_token ?? "").trim();
-    if (!refreshToken) return null;
-    const refreshed = await refreshLocked(refreshToken);
+    const refreshed = await refreshLocked();
     if (!refreshed) return null;
     requestSession = refreshed;
     return await doFetch(refreshed);
@@ -670,10 +720,7 @@ export async function fetchWithCloudAuthShared(params: {
     baseline: CloudSession,
   ): candidate is CloudSession => {
     if (!candidate) return false;
-    return (
-      candidate.access_token !== baseline.access_token ||
-      candidate.refresh_token !== baseline.refresh_token
-    );
+    return candidate.access_token !== baseline.access_token;
   };
 
   const baseSession = sessionRef.current ?? session;

@@ -97,6 +97,7 @@ export type UseWebSendFlowControllerArgs<
   messageInput: string;
   workspaceAttachments: AttachmentT[];
   isSendingMessage: boolean;
+  isThreadRunActive: (threadId: string | null) => boolean;
   activeThreadId: string | null;
   threadMessages: ThreadMessageT[];
   threads: ThreadRecordT[];
@@ -117,7 +118,12 @@ export type UseWebSendFlowControllerArgs<
   autoScrollEnabledRef: { current: boolean };
 
   setThreadError: (value: string | null | ((prev: string | null) => string | null)) => void;
+  setThreadErrorForThread: (
+    threadId: string | null,
+    value: string | null | ((prev: string | null) => string | null),
+  ) => void;
   setIsSendingMessage: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setThreadRunSending: (threadId: string, sending: boolean) => void;
   setIsWorkspaceAtBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;

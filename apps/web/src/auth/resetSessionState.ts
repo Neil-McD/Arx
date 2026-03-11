@@ -47,9 +47,12 @@ type WebSessionResetDeps = {
   setIsSettingsAvatarDragOver: (value: boolean) => void;
   setThreads: (value: any[]) => void;
   setThreadError: (value: string | null) => void;
+  setThreadErrorById: (value: Record<string, string | null>) => void;
   setWorkspaceWantsNewChatMode: (value: boolean) => void;
   setActiveThreadId: (value: string | null) => void;
   setThreadMessages: (value: any[]) => void;
+  setThreadSendingStateById: (value: Record<string, boolean>) => void;
+  setThreadStreamingStateById: (value: Record<string, any>) => void;
   streamingAbortRef: MutableRef<{ abort?: () => void } | null>;
   streamingRafRef: MutableRef<number | null>;
   streamingContentRef: MutableRef<string | null>;
@@ -106,10 +109,13 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setIsSettingsBannerDragOver(false);
   deps.setIsSettingsAvatarDragOver(false);
   deps.setThreads([]);
+  deps.setThreadErrorById({});
   deps.setThreadError(null);
   deps.setWorkspaceWantsNewChatMode(false);
   deps.setActiveThreadId(null);
   deps.setThreadMessages([]);
+  deps.setThreadSendingStateById({});
+  deps.setThreadStreamingStateById({});
   deps.streamingAbortRef.current?.abort?.();
   deps.streamingAbortRef.current = null;
   if (deps.streamingRafRef.current) {

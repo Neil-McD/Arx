@@ -8,7 +8,7 @@ export function useWebAuthSessionLifecycle<TSession extends CloudSessionLike>(pa
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   refreshTimeoutRef: MutableRefObject<number | null>;
-  refreshLocked: (refreshToken: string) => Promise<TSession | null>;
+  refreshLocked: () => Promise<TSession | null>;
   didJustSignInRef: MutableRefObject<boolean>;
   onMountOAuthBootstrap: () => void | Promise<void>;
   onDidJustSignIn: () => void;
