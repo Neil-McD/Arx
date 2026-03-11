@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityAgentConfigLike,
@@ -138,6 +138,27 @@ export const getActiveCommunityAgentSystemPrompt = query({
     if (!config) return null;
     return {
       system_prompt: config.systemPrompt,
+    };
+  },
+});
+
+export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
+    const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
+    return {
+      community_id: String(args.communityId),
+      community_name: communityName,
+      system_prompt: config?.systemPrompt ?? null,
     };
   },
 });

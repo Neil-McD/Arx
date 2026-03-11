@@ -1,5 +1,6 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CommunityBillingPeriod } from "./communityTypes";
+import { coerceGatewayRows, parseGatewayNumberLike } from "./cloudGateway";
 
 type CloudCommunityMembershipGatewayParams<SessionT> = {
   session: SessionT;
@@ -12,27 +13,6 @@ export type CloudCommunityMembershipRow<TCommunity = unknown> = {
   role: string;
   communities: TCommunity;
 };
-
-function coerceObjectRows<TRow>(payload: unknown): TRow[] {
-  if (Array.isArray(payload)) return payload as TRow[];
-  if (!payload || typeof payload !== "object") return [];
-  const payloadObj = payload as Record<string, unknown>;
-  const keys = ["rows", "items", "data"] as const;
-  for (const key of keys) {
-    const value = payloadObj[key];
-    if (Array.isArray(value)) return value as TRow[];
-  }
-  return [payload as TRow];
-}
-
-function parseNumberLike(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
 
 export async function listCloudCommunityMembershipRows<SessionT, TCommunity = unknown>(
   params: CloudCommunityMembershipGatewayParams<SessionT> & {
@@ -47,7 +27,7 @@ export async function listCloudCommunityMembershipRows<SessionT, TCommunity = un
     authSubject,
     selectMode,
   });
-  return coerceObjectRows<CloudCommunityMembershipRow<TCommunity>>(payload);
+  return coerceGatewayRows<CloudCommunityMembershipRow<TCommunity>>(payload);
 }
 
 export type CloudCommunityMembershipAdminRow = {
@@ -76,7 +56,7 @@ export async function listCloudCommunityMembershipAdminRows<SessionT>(
     communityId: params.communityId,
     limit: params.limit ?? 200,
   });
-  return coerceObjectRows<CloudCommunityMembershipAdminRow>(payload);
+  return coerceGatewayRows<CloudCommunityMembershipAdminRow>(payload);
 }
 
 export async function countCloudCommunityMembershipRows<SessionT>(
@@ -92,7 +72,7 @@ export async function countCloudCommunityMembershipRows<SessionT>(
     communityId: params.communityId,
     sinceIso: params.sinceIso ?? null,
   });
-  return parseNumberLike(payload);
+  return parseGatewayNumberLike(payload);
 }
 
 export async function listCloudCommunityMembershipCreatedAtRows<SessionT>(
@@ -110,5 +90,5 @@ export async function listCloudCommunityMembershipCreatedAtRows<SessionT>(
     sinceIso: params.sinceIso ?? null,
     limit: params.limit ?? 5000,
   });
-  return coerceObjectRows<{ created_at: string }>(payload);
+  return coerceGatewayRows<{ created_at: string }>(payload);
 }

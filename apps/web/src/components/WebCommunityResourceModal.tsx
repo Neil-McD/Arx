@@ -28,6 +28,16 @@ function LinkIcon() {
   );
 }
 
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 17v4" />
+      <path d="M8 3h8" />
+      <path d="M9 3v6l-3 4h12l-3-4V3" />
+    </svg>
+  );
+}
+
 function normalizeExternalUrl(rawUrl: string): URL | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
@@ -91,7 +101,19 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
         <div className="modal-body">
           <div className="resource-form">
             <div className="resource-form-section">
-              <div className="resource-field-label">Title</div>
+              <div className="resource-title-row">
+                <div className="resource-field-label">Title</div>
+                <button
+                  className={`resource-modal-pin${resourcePinnedInput ? " is-active" : ""}`}
+                  type="button"
+                  onClick={() => onChangePinned(!resourcePinnedInput)}
+                  title={resourcePinnedInput ? "Unpin resource" : "Pin resource"}
+                  aria-pressed={resourcePinnedInput}
+                  disabled={!hasActiveCommunity}
+                >
+                  <PinIcon />
+                </button>
+              </div>
               <input
                 className="resource-title-input"
                 type="text"
@@ -134,33 +156,32 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                   Supports YouTube, Wistia, and normal links. Leave blank if this is just a note.
                 </div>
                 {embed ? (
-                  <div className="resource-source-preview">
-                    <div className={embed.provider === "youtube" ? "resource-source-preview-visual" : "resource-source-preview-visual placeholder"}>
+                  <div className="resource-source-status">
+                    <div className="resource-source-status-media">
                       {embed.provider === "youtube" ? (
                         <img src={embed.thumbnailUrl} alt="" loading="lazy" />
                       ) : (
-                        <div className="resource-source-preview-provider">Wistia</div>
+                        <div className="resource-source-status-provider">Wistia</div>
                       )}
-                      <div className="resource-source-preview-play">▶</div>
                     </div>
-                    <div className="resource-source-preview-meta">
-                      <div className="resource-source-preview-label">
+                    <div className="resource-source-status-copy">
+                      <div className="resource-source-status-label">
                         {embed.provider === "youtube" ? "YouTube video" : "Wistia video"}
                       </div>
-                      <div className="resource-source-preview-subtitle">
-                        This will render as a richer preview in the resource library and open in the full viewer.
+                      <div className="resource-source-status-text">
+                        Will render in the resource library and open in the full viewer.
                       </div>
                     </div>
                   </div>
                 ) : normalizedUrl ? (
-                  <div className="resource-source-preview">
-                    <div className="resource-source-preview-visual placeholder">
-                      <div className="resource-source-preview-provider">{hostLabel ?? "Link"}</div>
+                  <div className="resource-source-status">
+                    <div className="resource-source-status-media is-placeholder">
+                      <div className="resource-source-status-provider">{hostLabel ?? "Link"}</div>
                     </div>
-                    <div className="resource-source-preview-meta">
-                      <div className="resource-source-preview-label">External link</div>
-                      <div className="resource-source-preview-subtitle">
-                        Members will see a clean source surface and can open the original link when they need it.
+                    <div className="resource-source-status-copy">
+                      <div className="resource-source-status-label">External link</div>
+                      <div className="resource-source-status-text">
+                        Members can open the original source when they need it.
                       </div>
                     </div>
                   </div>
@@ -178,23 +199,6 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                 disabled={!hasActiveCommunity}
               />
             </div>
-
-            <label className="resource-pin-row">
-              <div className="resource-pin-copy">
-                <div className="resource-pin-title">Pin to top</div>
-                <div className="resource-pin-text">
-                  Keep this resource surfaced first in the library.
-                </div>
-              </div>
-              <div className="resource-pin-control">
-                <input
-                  type="checkbox"
-                  checked={resourcePinnedInput}
-                  onChange={(event) => onChangePinned(event.target.checked)}
-                  disabled={!hasActiveCommunity}
-                />
-              </div>
-            </label>
 
             {resourceError && <div className="auth-error">{resourceError}</div>}
           </div>

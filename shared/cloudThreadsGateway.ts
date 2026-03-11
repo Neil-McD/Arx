@@ -1,10 +1,13 @@
 import { type CloudAuthSession } from "./cloudAuthSession";
-import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+import { type ConvexClient } from "./convexAuthenticatedClient";
+import {
+  bootstrapGatewayAuthContextIfAvailable,
+  readGatewayConvexIdMaybe,
+} from "./cloudGateway";
 
 export type CloudThreadRecordInput = {
   threadId: string;
   title?: string | null;
-  engineId?: string | null;
   modelId?: string | null;
   projectId?: string | null;
   communityId?: string | null;
@@ -22,33 +25,7 @@ export type CloudThreadMessageInput = {
   runId?: string | null;
 };
 
-async function bootstrapConvexOwnerContext(session: CloudAuthSession): Promise<{
-  client: ConvexClient;
-  authSubject: string;
-}> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
-  return { client, authSubject };
-}
-
-async function bootstrapConvexOwnerContextIfAvailable(session: CloudAuthSession): Promise<{
-  client: ConvexClient;
-  authSubject: string;
-} | null> {
-  try {
-    return await bootstrapConvexOwnerContext(session);
-  } catch (error) {
-    const message = String(error ?? "");
-    if (message.includes("convex_url_required")) return null;
-    throw error;
-  }
-}
-
-function readConvexIdMaybe(raw: unknown): string | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) return value;
-  return null;
-}
+// Gateway class: authenticated mutation bridge with optional fail-soft behavior when Convex is unavailable locally.
 
 async function resolveInternalThreadId(params: {
   client: ConvexClient;
@@ -67,18 +44,17 @@ export async function ensureCloudThreadRecord(params: {
   thread: CloudThreadRecordInput;
   nowMs?: number;
 }): Promise<void> {
-  const bootstrapped = await bootstrapConvexOwnerContextIfAvailable(params.session);
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) return;
   const { client, authSubject } = bootstrapped;
   const threadId = String(params.thread.threadId ?? "").trim();
   if (!threadId) return;
-  const maybeProjectId = readConvexIdMaybe(params.thread.projectId);
+  const maybeProjectId = readGatewayConvexIdMaybe(params.thread.projectId);
   await client.mutation("threads:ensureCloudThread" as any, {
     authSubject,
     threadKey: threadId,
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
-    engineId: String(params.thread.engineId ?? "").trim() || undefined,
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
     projectId: maybeProjectId ?? undefined,
     communityId: String(params.thread.communityId ?? "").trim() || undefined,
@@ -95,7 +71,7 @@ export async function updateCloudThreadRecord(params: {
   thread: CloudThreadRecordInput;
   nowMs?: number;
 }): Promise<void> {
-  const bootstrapped = await bootstrapConvexOwnerContextIfAvailable(params.session);
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) return;
   const { client, authSubject } = bootstrapped;
   const threadKey = String(params.thread.threadId ?? "").trim();
@@ -113,14 +89,13 @@ export async function updateCloudThreadRecord(params: {
     });
     return;
   }
-  const maybeProjectId = readConvexIdMaybe(params.thread.projectId);
+  const maybeProjectId = readGatewayConvexIdMaybe(params.thread.projectId);
   await client.mutation("threads:updateCloudThread" as any, {
     authSubject,
     threadId: internalThreadId,
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
-    engineId: String(params.thread.engineId ?? "").trim() || undefined,
     projectId: maybeProjectId ?? undefined,
     communityId: String(params.thread.communityId ?? "").trim() || undefined,
     contextVersion:
@@ -136,7 +111,7 @@ export async function addCloudThreadMessage(params: {
   message: CloudThreadMessageInput;
   nowMs?: number;
 }): Promise<void> {
-  const bootstrapped = await bootstrapConvexOwnerContextIfAvailable(params.session);
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) return;
   const { client, authSubject } = bootstrapped;
   const threadKey = String(params.message.threadId ?? "").trim();
@@ -145,8 +120,6 @@ export async function addCloudThreadMessage(params: {
     session: params.session,
     thread: {
       threadId: threadKey,
-      engineId: params.message.engineId ?? null,
-      modelId: params.message.modelId ?? null,
     },
     nowMs: params.nowMs,
   });
@@ -179,7 +152,7 @@ export async function deleteCloudThreadMessage(params: {
   messageId: string;
   nowMs?: number;
 }): Promise<void> {
-  const bootstrapped = await bootstrapConvexOwnerContextIfAvailable(params.session);
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) return;
   const { client, authSubject } = bootstrapped;
   const threadKey = String(params.threadId ?? "").trim();
@@ -205,7 +178,7 @@ export async function archiveCloudThreadRecord(params: {
   threadId: string;
   nowMs?: number;
 }): Promise<void> {
-  const bootstrapped = await bootstrapConvexOwnerContextIfAvailable(params.session);
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
   if (!bootstrapped) return;
   const { client, authSubject } = bootstrapped;
   const threadKey = String(params.threadId ?? "").trim();

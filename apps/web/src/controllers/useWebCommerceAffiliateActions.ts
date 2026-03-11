@@ -1,4 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { resolveCurrentSession } from "../../../../shared/ensureUsableSession";
 import {
   listPendingPurchaseClaimsRpc,
   redeemPendingPurchaseClaimsRpc,
@@ -46,7 +47,7 @@ type UseWebCommerceAffiliateActionsArgs = {
 export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActionsArgs) {
   const redeemPurchaseClaim = useCallback(
     async (token: string): Promise<void> => {
-      const session = (await args.ensureSession?.()) ?? args.getSession();
+      const session = await resolveCurrentSession(args.getSession, args.ensureSession);
       if (!session) {
         args.storePendingPurchaseClaimToken(token);
         args.openAuthGate({ reason: "redeem_purchase_claim", payload: { token } });
@@ -86,7 +87,11 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setIsLoadingPendingPurchases(true);
       args.setPendingPurchasesError(null);
       try {
-        const usableSession = (await args.ensureSession?.()) ?? session;
+        const usableSession = await resolveCurrentSession(() => session, args.ensureSession);
+        if (!usableSession) {
+          args.setPendingPurchaseClaims([]);
+          return;
+        }
         const rows = await listPendingPurchaseClaimsRpc({
           session: usableSession,
         });
@@ -112,7 +117,11 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setIsLoadingBuilderBilling(true);
       args.setBuilderBillingError(null);
       try {
-        const usableSession = (await args.ensureSession?.()) ?? session;
+        const usableSession = await resolveCurrentSession(() => session, args.ensureSession);
+        if (!usableSession) {
+          args.setBuilderBillingStatus(null);
+          return null;
+        }
         const row = await loadBuilderBillingStatusCanonical({
           session: usableSession,
         });
@@ -137,7 +146,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
 
   const redeemPendingPurchases = useCallback(
     async (opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> => {
-      const session = (await args.ensureSession?.()) ?? args.getSession();
+      const session = await resolveCurrentSession(args.getSession, args.ensureSession);
       if (!session) {
         args.openAuthGate({
           reason: "redeem_pending_purchases",

@@ -1,4 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
 
 type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
@@ -35,30 +36,9 @@ export type CloudCommunityOneLinerSaveResult = {
 
 type CloudCommunityFreeAccessModeResult = {
   community_id?: string;
-  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription";
+  entry_policy?: "open" | "approval" | "paid_subscription";
   updated_at?: string;
 };
-
-function coerceObjectRows<TRow>(payload: unknown): TRow[] {
-  if (Array.isArray(payload)) return payload as TRow[];
-  if (!payload || typeof payload !== "object") return [];
-  const payloadObj = payload as Record<string, unknown>;
-  const keys = ["rows", "items", "data"] as const;
-  for (const key of keys) {
-    const value = payloadObj[key];
-    if (Array.isArray(value)) return value as TRow[];
-  }
-  return [payload as TRow];
-}
-
-function parseNumberLike(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
 
 export type CloudCommunityBrandingKind = "avatar" | "banner";
 
@@ -191,7 +171,7 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
     communityId: params.communityId,
     range: params.range,
   });
-  return coerceObjectRows<CloudCommunityRevenueSeriesRow>(payload);
+  return coerceGatewayRows<CloudCommunityRevenueSeriesRow>(payload);
 }
 
 export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
@@ -206,7 +186,7 @@ export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
       communityId: params.communityId,
       sinceIso: null,
     });
-    return parseNumberLike(payload);
+    return parseGatewayNumberLike(payload);
   } catch {
     return null;
   }
@@ -255,7 +235,7 @@ export async function countCloudCommunityResourceRows<SessionT>(
       communityId: params.communityId,
       sinceIso: params.sinceIso ?? null,
     });
-    return parseNumberLike(payload);
+    return parseGatewayNumberLike(payload);
   } catch {
     return null;
   }
@@ -273,7 +253,7 @@ export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest =
     limit: 200,
     includeStatuses: ["pending"],
   });
-  return coerceObjectRows<TJoinRequest>(payload);
+  return coerceGatewayRows<TJoinRequest>(payload);
 }
 
 export async function fetchCloudCommunityMemberSettingsRow<SessionT, TRow = unknown>(
@@ -288,8 +268,7 @@ export async function fetchCloudCommunityMemberSettingsRow<SessionT, TRow = unkn
     communityId: params.communityId,
     targetUserId: params.userId,
   });
-  const rows = coerceObjectRows<TRow>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<TRow>(payload);
 }
 
 export async function approveCloudCommunityJoinRequest<SessionT>(
@@ -327,7 +306,7 @@ export async function listCloudCommunityPricePointRows<SessionT, TPricingRow = u
     communityId: params.communityId,
     activeOnly: true,
   });
-  return coerceObjectRows<TPricingRow>(payload);
+  return coerceGatewayRows<TPricingRow>(payload);
 }
 
 export async function listCloudCommunityResourceRows<SessionT, TResource = unknown>(
@@ -347,7 +326,7 @@ export async function listCloudCommunityResourceRows<SessionT, TResource = unkno
         ? Math.max(1, Math.floor(params.limit))
         : 200,
   });
-  return coerceObjectRows<TResource>(payload);
+  return coerceGatewayRows<TResource>(payload);
 }
 
 export async function saveCloudCommunityResource<SessionT>(
@@ -408,8 +387,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     bannerFocusY: params.bannerFocusY ?? 0.5,
     bannerZoom: params.bannerZoom ?? 1,
   });
-  const rows = coerceObjectRows<TCommunity>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<TCommunity>(payload);
 }
 
 export async function setCloudCommunityFreeAccessMode<SessionT>(
@@ -424,8 +402,7 @@ export async function setCloudCommunityFreeAccessMode<SessionT>(
     communityId: params.communityId,
     mode: params.mode,
   });
-  const rows = coerceObjectRows<CloudCommunityFreeAccessModeResult>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<CloudCommunityFreeAccessModeResult>(payload);
 }
 
 export async function leaveCloudCommunity<SessionT>(
@@ -478,8 +455,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     currency: "usd",
     currencyDecimals: 2,
   });
-  const rows = coerceObjectRows<CloudCommunitySettingsSaveResult>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<CloudCommunitySettingsSaveResult>(payload);
 }
 
 export async function saveCloudCommunityOneLiner<SessionT>(
@@ -494,8 +470,7 @@ export async function saveCloudCommunityOneLiner<SessionT>(
     communityId: params.communityId,
     oneLiner: params.oneLiner,
   });
-  const rows = coerceObjectRows<CloudCommunityOneLinerSaveResult>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<CloudCommunityOneLinerSaveResult>(payload);
 }
 
 export async function saveCloudCommunityMemberSettings<SessionT>(

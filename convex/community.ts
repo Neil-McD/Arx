@@ -36,7 +36,6 @@ import {
   listThreadMessages as listThreadMessagesImpl,
   listThreadUserMessageSenderIds as listThreadUserMessageSenderIdsImpl,
   patchOwnMessageContent as patchOwnMessageContentImpl,
-  researchCommunityContext as researchCommunityContextImpl,
 } from "./communityChat";
 import { readCompiledCommunityContext as readCompiledCommunityContextImpl } from "./communityCompiler";
 import {
@@ -78,7 +77,6 @@ export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
-export const researchCommunityContext = researchCommunityContextImpl;
 export const readCompiledCommunityContext = readCompiledCommunityContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
 export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;

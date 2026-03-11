@@ -1,19 +1,16 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveCurrentSession } from "./ensureUsableSession";
 
 import {
   createCloudPersonalMemoryItem,
   deleteCloudPersonalMemoryItem,
   updateCloudPersonalMemoryPinned,
 } from "./cloudPersonalMemoryGateway";
-import { saveCloudUserMemorySettings, saveCloudUserModelSettings } from "./cloudUserSettingsGateway";
+import { saveCloudUserMemorySettings } from "./cloudUserSettingsGateway";
 
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
-};
-
-type UserModelSettings = {
-  system_prompt: string;
 };
 
 type PersonalMemoryItem = {
@@ -39,10 +36,6 @@ type UseWebMemoryMutationControllerArgs<SessionT> = {
   setIsLoadingUserMemorySettings: Dispatch<SetStateAction<boolean>>;
   setUserMemorySettings: Dispatch<SetStateAction<UserMemorySettings>>;
 
-  setIsSavingUserModelSettings: Dispatch<SetStateAction<boolean>>;
-  setUserModelSettings: Dispatch<SetStateAction<UserModelSettings>>;
-  setUserModelSettingsError: Dispatch<SetStateAction<string | null>>;
-
   setPersonalMemoryError: Dispatch<SetStateAction<string | null>>;
   setNewPersonalMemoryContent: Dispatch<SetStateAction<string>>;
   setNewPersonalMemoryPinned: Dispatch<SetStateAction<boolean>>;
@@ -56,7 +49,7 @@ export function useWebMemoryMutationController<SessionT>(
 
   const saveUserMemorySettings = useCallback(async (next: UserMemorySettings): Promise<void> => {
     const current = argsRef.current;
-    const session = (await current.ensureSession?.()) ?? current.getSession();
+    const session = await resolveCurrentSession(current.getSession, current.ensureSession);
     if (!session) return;
     current.setIsLoadingUserMemorySettings(true);
     try {
@@ -73,33 +66,12 @@ export function useWebMemoryMutationController<SessionT>(
     }
   }, []);
 
-  const saveUserModelSettings = useCallback(async (next: UserModelSettings): Promise<void> => {
-    const current = argsRef.current;
-    const session = (await current.ensureSession?.()) ?? current.getSession();
-    if (!session) return;
-    current.setIsSavingUserModelSettings(true);
-    current.setUserModelSettingsError(null);
-    try {
-      await saveCloudUserModelSettings({
-        session,
-        systemPrompt: String(next.system_prompt ?? ""),
-      });
-      current.setUserModelSettings({ system_prompt: String(next.system_prompt ?? "") });
-    } catch (error) {
-      current.setUserModelSettingsError(
-        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to save system prompt",
-      );
-    } finally {
-      current.setIsSavingUserModelSettings(false);
-    }
-  }, []);
-
   const createPersonalMemoryItemDirect = useCallback(
     async (params: { content: string; pinned: boolean }): Promise<PersonalMemoryItem | null> => {
       const current = argsRef.current;
       const content = params.content.trim();
       if (!content) return null;
-      const session = (await current.ensureSession?.()) ?? current.getSession();
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) return null;
       const rows = (await createCloudPersonalMemoryItem({
         session,
@@ -120,7 +92,7 @@ export function useWebMemoryMutationController<SessionT>(
     if (!content) return;
     current.setPersonalMemoryError(null);
     try {
-      const session = (await current.ensureSession?.()) ?? current.getSession();
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
         current.openAuthGate();
         return;
@@ -146,7 +118,7 @@ export function useWebMemoryMutationController<SessionT>(
     const current = argsRef.current;
     current.setPersonalMemoryError(null);
     try {
-      const session = (await current.ensureSession?.()) ?? current.getSession();
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
         current.openAuthGate();
         return;
@@ -168,7 +140,7 @@ export function useWebMemoryMutationController<SessionT>(
     const current = argsRef.current;
     current.setPersonalMemoryError(null);
     try {
-      const session = (await current.ensureSession?.()) ?? current.getSession();
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
         current.openAuthGate();
         return;
@@ -187,7 +159,6 @@ export function useWebMemoryMutationController<SessionT>(
 
   return {
     saveUserMemorySettings,
-    saveUserModelSettings,
     createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
     handleTogglePersonalMemoryPinned,

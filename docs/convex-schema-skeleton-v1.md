@@ -131,7 +131,6 @@ export default defineSchema({
   // ---------- Threads / Messages ----------
   threads: defineTable({
     ownerId: v.id("users"),
-    context: v.union(v.literal("cloud"), v.literal("local"), v.literal("community")),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
     communityId: v.optional(v.id("communities")),
@@ -143,7 +142,6 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_updated", ["ownerId", "updatedAt"])
-    .index("by_owner_context", ["ownerId", "context"])
     .index("by_project", ["projectId"])
     .index("by_community", ["communityId"]),
 
@@ -194,7 +192,6 @@ export default defineSchema({
       v.literal("platform"),
       v.literal("chatgpt"),
       v.literal("daytona"),
-      v.literal("local"),
     ),
     status: v.union(v.literal("running"), v.literal("ok"), v.literal("error"), v.literal("cancelled")),
     modelId: v.string(),

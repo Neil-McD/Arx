@@ -94,7 +94,6 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
       const rows = threadRows.map((row) => ({
         id: row.id,
         title: row.title ?? null,
-        engine_id: row.engine_id,
         model_id: row.model_id ?? null,
         project_id: row.project_id ?? null,
         community_id: row.community_id ?? null,
@@ -102,7 +101,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         updated_at: row.updated_at,
       }));
       const csv = current.buildCsv(
-        ["id", "title", "engine_id", "model_id", "project_id", "community_id", "created_at", "updated_at"],
+        ["id", "title", "model_id", "project_id", "community_id", "created_at", "updated_at"],
         rows,
       );
       current.downloadTextFile("polynet_threads.csv", csv);

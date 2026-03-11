@@ -1,5 +1,6 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { ensureDefaultCloudProjectId } from "./daytonaCloudProjects";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import {
   getConvexCloudThreadRowByThreadKey,
   isConvexCloudThreadsEnabled,
@@ -12,7 +13,6 @@ import {
 type ThreadRecord = {
   id: string;
   title: string | null;
-  engine_id: string;
   model_id: string | null;
   project_id: string | null;
   community_id: string | null;
@@ -43,6 +43,7 @@ type UseWebThreadMutationControllerArgs<SessionT> = {
   setThreads: Dispatch<SetStateAction<ThreadRecord[]>>;
   setWorkspaceWantsNewChatMode: (next: boolean) => void;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
+  ensureSession?: EnsureSessionFn<SessionT>;
 };
 
 export function useWebThreadMutationController<SessionT>(
@@ -53,6 +54,8 @@ export function useWebThreadMutationController<SessionT>(
 
   const createThread = useCallback(async (session: SessionT): Promise<ThreadRecord | null> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return null;
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       console.warn("Convex is required for cloud thread creation in this build.");
@@ -70,15 +73,14 @@ export function useWebThreadMutationController<SessionT>(
     const preferredProjectId = (current.activeProjectId ?? "").trim() || null;
     const projectId = preferredProjectId
       ?? (await ensureDefaultCloudProjectId({
-        session,
+        session: usableSession,
       }));
     try {
       await ensureCloudThreadRecord({
-        session: session as any,
+        session: usableSession as any,
         thread: {
           threadId: id,
           title: null,
-          engineId: "arx_harness",
           modelId: preferredModelId,
           projectId: projectId || null,
           communityId,
@@ -86,13 +88,12 @@ export function useWebThreadMutationController<SessionT>(
         },
       });
       const convexRow = await getConvexCloudThreadRowByThreadKey({
-        session: session as any,
+        session: usableSession as any,
         threadKey: id,
       });
       const record: ThreadRecord = {
         id: convexRow?.id ?? id,
         title: convexRow?.title ?? null,
-        engine_id: convexRow?.engine_id ?? "arx_harness",
         model_id: convexRow?.model_id ?? preferredModelId,
         project_id: convexRow?.project_id ?? projectId,
         community_id: convexRow?.community_id ?? communityId,
@@ -113,6 +114,8 @@ export function useWebThreadMutationController<SessionT>(
 
   const updateThreadModel = useCallback(async (threadId: string, modelId: string, session: SessionT): Promise<void> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       console.warn("Convex is required for cloud thread model updates in this build.");
@@ -120,7 +123,7 @@ export function useWebThreadMutationController<SessionT>(
     }
     try {
       await updateCloudThreadRecord({
-        session: session as any,
+        session: usableSession as any,
         thread: {
           threadId,
           modelId,
@@ -135,6 +138,8 @@ export function useWebThreadMutationController<SessionT>(
   const maybeSetThreadTitleFromText = useCallback(
     async (threadId: string, userText: string, session: SessionT): Promise<void> => {
       const current = argsRef.current;
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!usableSession) return;
       const nextTitle = current.deriveThreadTitleFromUserText(userText);
       if (!nextTitle) return;
       let shouldPersist = false;
@@ -155,7 +160,7 @@ export function useWebThreadMutationController<SessionT>(
       }
       try {
         await updateCloudThreadRecord({
-          session: session as any,
+          session: usableSession as any,
           thread: {
             threadId,
             title: nextTitle,
@@ -175,6 +180,8 @@ export function useWebThreadMutationController<SessionT>(
       session: SessionT,
     ): Promise<{ thread_id: string; community_id: string | null; context_version: number; updated_at: string } | null> => {
       const current = argsRef.current;
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!usableSession) return null;
       const hasConvex = isConvexCloudThreadsEnabled();
       if (!hasConvex) {
         console.warn("Convex is required for cloud thread context updates in this build.");
@@ -200,7 +207,7 @@ export function useWebThreadMutationController<SessionT>(
       );
       try {
         await updateCloudThreadRecord({
-          session: session as any,
+          session: usableSession as any,
           thread: {
             threadId,
             communityId,

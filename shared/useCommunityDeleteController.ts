@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 
 import { deleteCloudCommunity } from "./cloudCommunityAdminGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type UseCommunityDeleteControllerArgs<
   SessionT,
@@ -10,6 +11,7 @@ type UseCommunityDeleteControllerArgs<
   TabT extends string,
 > = {
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   activeCommunityId: string | null;
   loadCommunities: (session: SessionT) => Promise<void>;
   setDeleteCommunityError: Dispatch<SetStateAction<string | null>>;
@@ -48,6 +50,7 @@ export function useCommunityDeleteController<
 } {
   const {
     session: session,
+    ensureSession,
     activeCommunityId,
     loadCommunities,
     setDeleteCommunityError,
@@ -81,13 +84,14 @@ export function useCommunityDeleteController<
   }, [setDeleteCommunityConfirmInput, setDeleteCommunityError, setDeleteCommunityNameInput, setIsDeletingCommunity, setShowDeleteCommunityModal]);
 
   const handleConfirmDeleteCommunity = useCallback(async () => {
-    if (!session || !activeCommunityId) return;
+    const usableSession = await resolveUsableSession(session, ensureSession);
+    if (!usableSession || !activeCommunityId) return;
     setDeleteCommunityError(null);
     setIsDeletingCommunity(true);
     try {
       const deletedId = activeCommunityId;
       await deleteCloudCommunity({
-        session,
+        session: usableSession,
         communityId: deletedId,
       });
       setShowDeleteCommunityModal(false);
@@ -101,7 +105,7 @@ export function useCommunityDeleteController<
         delete next[deletedId];
         return next;
       });
-      await loadCommunities(session);
+      await loadCommunities(usableSession);
     } catch (error) {
       setDeleteCommunityError(
         getErrorMessage(error, deleteFailureMessage ?? "Failed to delete community."),

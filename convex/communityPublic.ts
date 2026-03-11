@@ -143,7 +143,6 @@ export const resolvePublicFunnelBySlug = query({
         online_faces: stats.onlineFaces,
       },
       active_plan: activePlan,
-      active_plans: mappedPlans,
     };
   },
 });
@@ -312,7 +311,7 @@ export const requestCommunityAccessBySlug = mutation({
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     const entryPolicy = resolveCommunityEntryPolicy(community);
-    if (entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription") {
+    if (entryPolicy === "paid_subscription") {
       throw new Error("paid_communities_do_not_use_request_access");
     }
     if (entryPolicy === "open") {
@@ -381,7 +380,7 @@ async function joinPublicCommunityInternal(args: {
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
-  if (entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription") {
+  if (entryPolicy === "paid_subscription") {
     throw new Error("paid_plan_required");
   }
   if (entryPolicy === "approval") {

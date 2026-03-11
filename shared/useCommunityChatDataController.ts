@@ -7,6 +7,7 @@ import {
   listCloudMessageReactions,
   listCloudThreadMessages,
 } from "./cloudCommunityChatGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type CommunityChatRow = {
   id: string;
@@ -53,6 +54,7 @@ type UseCommunityChatDataControllerArgs<
   onLoadChatStart?: () => void;
   onLoadChatError?: (message: string) => void;
   onHydrateProfiles?: (userIds: string[], session: SessionT) => void | Promise<void>;
+  ensureSession?: EnsureSessionFn<SessionT>;
 };
 
 type LoadOlderStatus = "appended" | "noop" | "error";
@@ -177,12 +179,14 @@ export function useCommunityChatDataController<
 
   const ensureCommunityChatThread = useCallback(
     async (communityId: string, session: SessionT): Promise<string> => {
+      const usableSession = await resolveUsableSession(session, argsRef.current.ensureSession);
+      if (!usableSession) throw new Error("not_authenticated");
       const normalizedCommunityId = String(communityId ?? "").trim();
       if (!normalizedCommunityId) throw new Error("Missing community id.");
       activeCommunityIdRef.current = normalizedCommunityId;
 
       const sessionUserId = (
-        session as { user?: { id?: unknown } } | null
+        usableSession as { user?: { id?: unknown } } | null
       )?.user?.id;
       const normalizedUserId = typeof sessionUserId === "string" ? sessionUserId.trim() : "";
       const cacheKey = `${normalizedUserId}::${normalizedCommunityId}`;
@@ -203,7 +207,7 @@ export function useCommunityChatDataController<
 
       const request = (async (): Promise<string> => {
         const threadId = await ensureCloudCommunityChatThread({
-          session,
+          session: usableSession,
           communityId: normalizedCommunityId,
         });
         ensureThreadCacheByKeyRef.current.set(cacheKey, {
@@ -232,6 +236,8 @@ export function useCommunityChatDataController<
       session: SessionT,
       guard: { communityId: string; generation: number },
     ): Promise<void> => {
+      const usableSession = await resolveUsableSession(session, argsRef.current.ensureSession);
+      if (!usableSession) return;
       if (messageIds.length === 0) return;
       const reactionsFetchController = beginScopedAbortRequest({
         inFlightByKind: fetchAbortControllersRef.current,
@@ -239,7 +245,7 @@ export function useCommunityChatDataController<
       });
       try {
         const rows = await listCloudMessageReactions<SessionT, ReactionT>({
-          session,
+          session: usableSession,
           messageIds,
           init: { signal: reactionsFetchController.signal },
         });
@@ -271,6 +277,11 @@ export function useCommunityChatDataController<
 
   const loadCommunityChat = useCallback(
     async (communityId: string, session: SessionT): Promise<void> => {
+      const usableSession = await resolveUsableSession(session, argsRef.current.ensureSession);
+      if (!usableSession) {
+        argsRef.current.onLoadChatError?.("Sign in to access community chat.");
+        return;
+      }
       const generation = beginCommunityLoadGeneration(communityId);
       argsRef.current.onLoadChatStart?.();
       setIsLoadingChatTracked(true);
@@ -280,7 +291,7 @@ export function useCommunityChatDataController<
       argsRef.current.clearPendingPrependAnchor();
 
       try {
-        const threadId = await ensureCommunityChatThread(communityId, session);
+        const threadId = await ensureCommunityChatThread(communityId, usableSession);
         if (isStale(communityId, generation)) return;
 
         const messagesFetchController = beginScopedAbortRequest({
@@ -289,7 +300,7 @@ export function useCommunityChatDataController<
         });
         try {
           const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
-            session,
+            session: usableSession,
             threadId,
             limit: argsRef.current.pageSize,
             init: { signal: messagesFetchController.signal },
@@ -306,7 +317,7 @@ export function useCommunityChatDataController<
 
           if (rows.length > 0) {
             const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-            void argsRef.current.onHydrateProfiles?.(userIds, session);
+            void argsRef.current.onHydrateProfiles?.(userIds, usableSession);
           }
 
           argsRef.current.setUnreadCount(0);
@@ -315,7 +326,7 @@ export function useCommunityChatDataController<
 
           if (rows.length > 0) {
             const messageIds = rows.map((row) => row.id);
-            void loadMessageReactions(messageIds, session, { communityId, generation });
+            void loadMessageReactions(messageIds, usableSession, { communityId, generation });
           }
         } catch (error) {
           if (isAbortError(error)) return;
@@ -351,6 +362,8 @@ export function useCommunityChatDataController<
 
   const loadOlderCommunityChat = useCallback(
     async (communityId: string, session: SessionT): Promise<LoadOlderStatus> => {
+      const usableSession = await resolveUsableSession(session, argsRef.current.ensureSession);
+      if (!usableSession) return "error";
       if (isLoadingChatRef.current || isLoadingMoreChatRef.current) return "noop";
       if (!communityChatHasMoreRef.current) return "noop";
 
@@ -367,7 +380,7 @@ export function useCommunityChatDataController<
       setIsLoadingMoreChatTracked(true);
 
       try {
-        const threadId = await ensureCommunityChatThread(communityId, session);
+        const threadId = await ensureCommunityChatThread(communityId, usableSession);
         if (isStale(communityId, generation)) return "noop";
 
         const olderFetchController = beginScopedAbortRequest({
@@ -376,7 +389,7 @@ export function useCommunityChatDataController<
         });
         try {
           const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
-            session,
+            session: usableSession,
             threadId,
             beforeSeq: cursor,
             limit: argsRef.current.pageSize,
@@ -401,7 +414,7 @@ export function useCommunityChatDataController<
           communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
 
           const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-          void argsRef.current.onHydrateProfiles?.(userIds, session);
+          void argsRef.current.onHydrateProfiles?.(userIds, usableSession);
 
           let appended = false;
           argsRef.current.setCommunityMessages((prev) => {
@@ -417,7 +430,7 @@ export function useCommunityChatDataController<
 
           if (!appended) return "noop";
 
-          void loadMessageReactions(rows.map((row) => row.id), session, { communityId, generation });
+          void loadMessageReactions(rows.map((row) => row.id), usableSession, { communityId, generation });
           return "appended";
         } catch (error) {
           argsRef.current.clearPendingPrependAnchor();

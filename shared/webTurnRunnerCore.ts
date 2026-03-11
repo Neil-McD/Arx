@@ -1,5 +1,4 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { prependCommunityPreludeMessages } from "./communityLaneMessageBuilder";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 
 export type PlatformQuotaModalState = {
@@ -29,12 +28,10 @@ export type UseWebTurnRunnerControllerArgs<
   getThreadById?: (threadId: string) => {
     id: string;
     title?: string | null;
-    engine_id?: string | null;
     model_id?: string | null;
     project_id?: string | null;
     community_id?: string | null;
     context_version?: number | null;
-    thread_lane?: string | null;
   } | null;
   fetchCloudPublic: (url: string, init?: RequestInit) => Promise<Response>;
   fetchCloudAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
@@ -79,7 +76,6 @@ export type RunPublicTurnParams<ThreadMessageT extends PublicTurnThreadMessage> 
   runIdHint: string;
   messages: ThreadMessageT[];
   systemPrompt?: string | null;
-  communityEvidenceUserMessage?: string | null;
 };
 
 export type RunAgentTurnParams = {
@@ -88,9 +84,9 @@ export type RunAgentTurnParams = {
   runIdHint: string;
   userMessageKey?: string;
   systemPrompt?: string | null;
-  inferenceSource?: "platform" | "user_key" | "chatgpt";
-  requestedFundingSource?: "platform" | "user_key" | "user_chatgpt";
-  requiresTools?: boolean;
+  inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
+  requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
+  requestedExecutionTarget?: "chat" | "daytona_workspace";
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
 };
@@ -139,10 +135,16 @@ export function normalizeGuestInferenceError(message: string): string {
 export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadMessage>(params: {
   messages: ThreadMessageT[];
   systemPrompt?: string | null;
-  communityEvidenceUserMessage?: string | null;
   extractTextFromContentJson: (value: unknown) => string;
 }): Array<{ role: "user" | "assistant" | "system"; content: string }> {
   const threadMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [];
+  const systemPrompt = String(params.systemPrompt ?? "").trim();
+  if (systemPrompt) {
+    threadMessages.push({
+      role: "system",
+      content: systemPrompt,
+    });
+  }
   for (const msg of params.messages) {
     if (!msg) continue;
     const role = msg.role;
@@ -151,11 +153,7 @@ export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadM
     if (!content) continue;
     threadMessages.push({ role, content });
   }
-  return prependCommunityPreludeMessages({
-    messages: threadMessages,
-    systemPrompt: params.systemPrompt,
-    communityEvidenceUserMessage: params.communityEvidenceUserMessage,
-  });
+  return threadMessages;
 }
 
 export function mapPlatformFailureReason(

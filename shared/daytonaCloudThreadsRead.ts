@@ -10,7 +10,6 @@ type ConvexThreadRow = {
   context?: string | null;
   threadKey?: string | null;
   title?: string | null;
-  engineId?: string | null;
   modelId?: string | null;
   projectId?: string | null;
   communityId?: string | null;
@@ -37,9 +36,7 @@ type ConvexMessageRow = {
 export type DaytonaCloudThreadTransportRow = {
   id: string;
   title: string | null;
-  engine_id: string;
   model_id: string | null;
-  thread_lane: string | null;
   project_id: string | null;
   community_id: string | null;
   context_version: number;
@@ -91,17 +88,14 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
 }
 
 function mapConvexThreadRow(row: ConvexThreadRow): DaytonaCloudThreadTransportRow | null {
-  if (!row || String(row.context ?? "").trim() !== "cloud") return null;
+  if (!row) return null;
   if (typeof row.archivedAt === "number" && Number.isFinite(row.archivedAt)) return null;
   const id = String(row.threadKey ?? "").trim() || String(row._id ?? "").trim();
   if (!id) return null;
-  const engineId = String(row.engineId ?? "").trim() || "messages_agent";
   return {
     id,
     title: typeof row.title === "string" ? row.title : null,
-    engine_id: engineId,
     model_id: typeof row.modelId === "string" ? row.modelId : null,
-    thread_lane: "chat",
     project_id: typeof row.projectId === "string" ? row.projectId : null,
     community_id: typeof row.communityId === "string" ? row.communityId : null,
     context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),

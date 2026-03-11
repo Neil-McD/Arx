@@ -68,7 +68,7 @@ Minimum events for cloud-agent turns:
 
 1. Freeze contract (this document + runtime metadata).
 2. Replace Daytona probe/delegate behavior with full tool loop execution.
-3. Route cloud-agent turns from the web surface to `requires_tools=true`.
+3. Route Daytona workspace turns from the web surface to `requested_execution_target=daytona_workspace`.
 4. Add parity tests across web entrypoints and gate contracts.
 5. Remove silent fallback paths for cloud-agent turns.
 
@@ -89,7 +89,7 @@ Minimum events for cloud-agent turns:
 
 Current implemented scope in `convex/http.ts`:
 
-1. For `requires_tools=true`, runtime executes a real Daytona-backed probe tool call (`bash pwd` in `workspace`) and persists full lifecycle evidence.
+1. For `requested_execution_target=daytona_workspace`, runtime executes a real Daytona-backed probe tool call (`bash pwd` in `workspace`) and persists full lifecycle evidence.
 2. Runner failures are fail-closed (no silent fallback when Daytona execution fails).
 3. Probe output is injected into the iterative inference loop as explicit tool-result context.
 4. Model-directed tool loop is active for cloud tool turns, with policy-evented `tool_call_requested` / `tool_call_approved|denied` / `tool_call_started` / `tool_call_finished`.

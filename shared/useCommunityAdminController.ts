@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import {
   type AnalyticsPointLike, type AnalyticsRange, type AnalyticsSummaryLike, type CommunityMemberLike, type SessionLike, type UserProfileDetailLike, type UserProfileLike, analyticsBucketLabel, buildAnalyticsSeries, emptyAnalyticsSummary, resolveAnalyticsBucket, resolveAnalyticsWindowStart, trimProfileFields, } from "./communityAdminCore";
 
@@ -29,6 +30,7 @@ type UseCommunityAdminControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   parseContentRangeTotal: (value: string | null) => number | null;
   dateKeyLocal: (date: Date) => string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
@@ -87,10 +89,12 @@ export function useCommunityAdminController<
     session: SessionT,
   ) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     let rows: CommunityMemberT[] | null = null;
     try {
       rows = (await listCloudCommunityMembershipAdminRows({
-        session,
+        session: usableSession,
         communityId,
         limit: 200,
       })) as unknown as CommunityMemberT[];
@@ -104,13 +108,13 @@ export function useCommunityAdminController<
     if (userIds.length === 0) return;
 
     if (current.loadUserProfiles) {
-      await current.loadUserProfiles(userIds, session);
+      await current.loadUserProfiles(userIds, usableSession);
       return;
     }
 
     try {
       const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
-        session,
+        session: usableSession,
         userIds,
       });
       current.setProfilesByUserId((prev) => {
@@ -127,10 +131,12 @@ export function useCommunityAdminController<
 
   const loadSelfProfile = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     try {
       const row = await fetchCloudProfileDetailByUserId<SessionT, UserProfileDetailT>({
-        session,
-        userId: session.user.id,
+        session: usableSession,
+        userId: usableSession.user.id,
       });
       if (!row) return;
 
@@ -147,7 +153,7 @@ export function useCommunityAdminController<
 
   const saveProfileToCloud = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.getProfileSaveSession();
+    const session = await resolveUsableSession(current.getProfileSaveSession(), current.ensureSession);
     if (!session) {
       current.setProfileSaveError(current.profileSaveUnauthenticatedErrorMessage);
       current.onProfileSaveUnauthenticated?.();
@@ -209,6 +215,8 @@ export function useCommunityAdminController<
     communityCreatedAt: string | null,
   ) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     current.setIsLoadingCommunityAnalytics(true);
     current.setCommunityAnalyticsError(null);
     current.setCommunityRevenueError(null);
@@ -225,27 +233,27 @@ export function useCommunityAdminController<
     try {
       const [entitledMembers, rosterMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
         fetchCloudCommunityEntitledMemberCount({
-          session,
+          session: usableSession,
           communityId,
         }),
         countCloudCommunityMembershipRows({
-          session,
+          session: usableSession,
           communityId,
         }),
         countCloudCommunityResourceRows({
-          session,
+          session: usableSession,
           communityId,
         }),
         sinceWindowIso
           ? countCloudCommunityMembershipRows({
-              session,
+              session: usableSession,
               communityId,
               sinceIso: sinceWindowIso,
             })
           : null,
         sinceWindowIso
           ? countCloudCommunityResourceRows({
-              session,
+              session: usableSession,
               communityId,
               sinceIso: sinceWindowIso,
             })
@@ -257,7 +265,7 @@ export function useCommunityAdminController<
       let memberJoinsWindow: Array<{ created_at: string }> = [];
       try {
         memberJoinsWindow = await listCloudCommunityMembershipCreatedAtRows({
-          session,
+          session: usableSession,
           communityId,
           sinceIso: sinceWindowIso,
           limit: 5000,
@@ -268,9 +276,9 @@ export function useCommunityAdminController<
 
       let activeMembersWindow: number | null = null;
       try {
-        const threadId = await current.ensureCommunityChatThread(communityId, session);
+        const threadId = await current.ensureCommunityChatThread(communityId, usableSession);
         const senders = await listCloudThreadUserMessageSenderIds({
-          session,
+          session: usableSession,
           threadId,
           sinceIso: sinceWindowIso,
           limit: 5000,
@@ -302,7 +310,7 @@ export function useCommunityAdminController<
 
       try {
         const rows = await listCloudCommunityRevenueSeriesRows({
-          session,
+          session: usableSession,
           communityId,
           range,
         });
@@ -366,9 +374,11 @@ export function useCommunityAdminController<
 
   const refreshCommunityMembershipViews = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
-    await loadCommunityMembers(communityId, session);
-    await current.reloadCommunities(session);
-    await current.reloadCommunityAccess(communityId, session);
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
+    await loadCommunityMembers(communityId, usableSession);
+    await current.reloadCommunities(usableSession);
+    await current.reloadCommunityAccess(communityId, usableSession);
   }, [loadCommunityMembers]);
 
   const handleSetCommunityMemberRole = useCallback(async (
@@ -377,7 +387,7 @@ export function useCommunityAdminController<
   ) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     try {
       await setCloudCommunityMemberRole({
@@ -396,7 +406,7 @@ export function useCommunityAdminController<
   const handleRemoveCommunityMember = useCallback(async (userId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     const confirmed = current.confirmAction
       ? current.confirmAction("Remove this member?")

@@ -1,6 +1,6 @@
 import { normalizeDaytonaSandboxStatus, type DaytonaSandboxStatus } from "./daytonaSandboxStatus";
 import { type CloudAuthSession } from "./cloudAuthSession";
-import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
 type DaytonaCloudProjectsWarn = (message: string, error?: unknown) => void;
 
@@ -55,13 +55,7 @@ type ConvexCloudProjectProbePayload = {
   } | null;
 };
 
-async function bootstrapConvexOwnerId(session: CloudAuthSession): Promise<{
-  client: ConvexClient;
-  authSubject: string;
-}> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
-  return { client, authSubject };
-}
+// Gateway class: authenticated read/mutation/action bridge, caller-hardened session, fail-closed.
 
 function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudProjectRecord {
   const id = String(row._id ?? "").trim();
@@ -86,7 +80,7 @@ function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudPr
 async function fetchMappedDaytonaCloudProjectsViaConvex<TSession>(params: {
   session: TSession;
 }): Promise<DaytonaCloudProjectRecord[]> {
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const rows = (await client.query("projects:listCloudProjectsByOwner" as any, {
     authSubject,
     includeArchived: false,
@@ -152,7 +146,7 @@ export async function fetchMappedDaytonaCloudProjects<TSession>(params: {
 export async function ensureDefaultCloudProjectId<TSession>(params: {
   session: TSession;
 }): Promise<string> {
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const row = (await client.action("projects:ensureDefaultCloudProjectWithVolumeForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow | null;
@@ -175,7 +169,7 @@ export async function createDaytonaCloudProject<TSession>(params: {
   const cleanedName = String(params.name ?? "").trim();
   if (!cleanedName) throw new Error("project_name_required");
   const cleanedDescription = String(params.description ?? "").trim() || null;
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const row = (await client.action("projects:createCloudProjectWithVolume" as any, {
     authSubject,
     name: cleanedName,
@@ -193,7 +187,7 @@ export async function renameDaytonaCloudProject<TSession>(params: {
   const cleanedName = String(params.name ?? "").trim();
   if (!projectId) throw new Error("project_id_required");
   if (!cleanedName) throw new Error("project_name_required");
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const row = (await client.mutation("projects:renameCloudProject" as any, {
     authSubject,
     projectId,
@@ -212,7 +206,7 @@ export async function attachDaytonaCloudProjectVolume<TSession>(params: {
   const providerVolumeId = String(params.providerVolumeId ?? "").trim();
   if (!projectId) throw new Error("project_id_required");
   if (!providerVolumeId) throw new Error("provider_volume_id_required");
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const row = (await client.mutation("projects:attachCloudProjectVolume" as any, {
     authSubject,
     projectId,
@@ -229,7 +223,7 @@ export async function deleteDaytonaCloudProject<TSession>(params: {
 }): Promise<{ ok: boolean }> {
   const projectId = String(params.projectId ?? "").trim();
   if (!projectId) throw new Error("project_id_required");
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   await client.mutation("projects:deleteCloudProject" as any, {
     authSubject,
     projectId,
@@ -246,7 +240,7 @@ export async function probeDaytonaCloudProject<TSession>(params: {
 }> {
   const projectId = String(params.projectId ?? "").trim();
   if (!projectId) throw new Error("project_id_required");
-  const { client, authSubject } = await bootstrapConvexOwnerId(params.session as CloudAuthSession);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
   const payload = (await client.action("projects:probeCloudProject" as any, {
     authSubject,
     projectId,

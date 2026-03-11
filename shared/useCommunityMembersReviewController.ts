@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
   approveCloudCommunityJoinRequest,
@@ -20,7 +21,7 @@ type JoinRequestLike = {
 
 type CommunityLike = {
   id: string;
-  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
+  entry_policy?: "open" | "approval" | "paid_subscription" | null;
   updated_at: string;
 };
 type MembersSurfaceMode = "viewer" | "moderator" | "admin";
@@ -32,6 +33,7 @@ type UseCommunityMembersReviewControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   membersSurfaceMode: MembersSurfaceMode;
   isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
@@ -56,17 +58,19 @@ export function useCommunityMembersReviewController<
 
   const loadCommunityJoinRequests = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     current.setIsLoadingCommunityJoinRequests(true);
     current.setCommunityJoinRequestsError(null);
     try {
       const rows = await listCloudCommunityJoinRequestRows<SessionT, JoinRequestT>({
-        session,
+        session: usableSession,
         communityId,
       });
       const normalizedRows = Array.isArray(rows) ? rows : [];
       current.setCommunityJoinRequests(normalizedRows);
       const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
-      await current.loadUserProfiles(userIds, session);
+      await current.loadUserProfiles(userIds, usableSession);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -84,7 +88,7 @@ export function useCommunityMembersReviewController<
   const handleApproveCommunityJoinRequest = useCallback(async (requestId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(requestId);
@@ -113,7 +117,7 @@ export function useCommunityMembersReviewController<
   const handleDenyCommunityJoinRequest = useCallback(async (requestId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     current.setCommunityJoinRequestsError(null);
     current.setDecidingCommunityJoinRequestId(requestId);
@@ -139,7 +143,7 @@ export function useCommunityMembersReviewController<
   const handleSetCommunityFreeAccessMode = useCallback(async (nextMode: "open" | "approval") => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !communityId) return;
     if (current.isSavingFreeAccessMode) return;
     current.setCommunityJoinRequestsError(null);
@@ -154,7 +158,6 @@ export function useCommunityMembersReviewController<
       const updatedEntryPolicy =
         row?.entry_policy === "approval" ||
         row?.entry_policy === "open" ||
-        row?.entry_policy === "paid_unlock" ||
         row?.entry_policy === "paid_subscription"
           ? row.entry_policy
           : nextMode;

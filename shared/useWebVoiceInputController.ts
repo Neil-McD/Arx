@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { blobToBase64 } from "./imageTransforms";
 import { transcribeVoice as transcribeCloudVoice } from "./authSessionCore";
+import { resolveUsableSession } from "./ensureUsableSession";
 import {
   createWavBlobFromInt16Chunks,
   floatToInt16Pcm,
@@ -29,6 +30,7 @@ type VoiceInputIntent = {
 type UseWebVoiceInputControllerArgs<CloudSessionT> = {
   session: CloudSessionT | null;
   sessionRef: MutableRefObject<CloudSessionT | null>;
+  ensureSession?: (session: CloudSessionT | null) => Promise<CloudSessionT | null>;
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "request_access" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
@@ -158,7 +160,7 @@ export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInput
   }
 
   async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
-    const session = args.sessionRef.current ?? args.session;
+    const session = await resolveUsableSession(args.sessionRef.current ?? args.session, args.ensureSession);
     if (!session) throw new Error("Sign in to use voice input.");
     return await transcribeCloudVoice({
       session: session as unknown as { access_token: string },

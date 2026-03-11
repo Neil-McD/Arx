@@ -9,13 +9,13 @@ Non-goal: visual redesign
 The workspace product should reduce to one clear rule:
 
 - `anonymous free`: try the platform
-- `free`: use chat in the cloud
-- `builder`: use chat plus Daytona tools
+- `free`: use chat in the cloud with the community harness
+- `builder`: use chat with the community harness plus Daytona tools
 
 That means the runtime must preserve a hard boundary between:
 
-1. `chat-only turns`
-2. `tool-capable turns`
+1. `chat` turns
+2. `daytona_workspace` turns
 
 If that boundary is blurry, the product drifts in all downstream surfaces:
 
@@ -39,24 +39,24 @@ If that boundary is blurry, the product drifts in all downstream surfaces:
 - `user_chatgpt`
 - `platform`
 
-### Turn classes
+### Requested execution targets
 
-- `chat_only`
-- `requires_tools`
+- `chat`
+- `daytona_workspace`
 
 ### Canonical runtime rule
 
-1. Free and anonymous users may only run `chat_only` turns.
-2. Builder users may run both `chat_only` and `requires_tools` turns.
-3. `requires_tools=true` is the only way to enter the Daytona lane.
-4. `user_chatgpt` and `user_key` are funding lanes, not entitlements to tools.
-5. The client may request a turn; the server is the source of truth for turn class gating.
+1. Free and anonymous users may only run `chat` turns.
+2. Builder users may run both `chat` and `daytona_workspace` turns.
+3. `requested_execution_target=daytona_workspace` is the only way to enter the Daytona lane.
+4. `user_chatgpt` and `user_key` are funding lanes, not entitlements to the coding harness.
+5. The client may request an execution target; the server is the source of truth for gating.
 
 ## 3) Current Drift
 
 ### Drift A: authenticated cloud turns are defaulting to tool turns
 
-The main workspace send path currently routes all non-public turns through `runAgentTurn(... requiresTools: true)`:
+The main workspace send path previously routed all non-public turns through `runAgentTurn(... requestedExecutionTarget: "daytona_workspace")`:
 
 - [`shared/useWebSendFlowController.ts:261`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts#L261)
 - [`shared/useWebSendFlowController.ts:360`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts#L360)
@@ -65,13 +65,13 @@ The main workspace send path currently routes all non-public turns through `runA
 This collapses:
 
 - `free authenticated cloud chat`
-- `builder Daytona tool turns`
+- `builder Daytona workspace turns`
 
 into one runtime request shape.
 
 ### Drift B: the gate engine is correct, but the UI path is not
 
-The canonical gate engine still distinguishes `chat_only` from `requires_tools` correctly:
+The canonical gate engine still distinguishes `chat` from `daytona_workspace` correctly:
 
 - [`shared/canonicalGateEngine.mjs:95`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/canonicalGateEngine.mjs#L95)
 - [`convex/gates.ts:103`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/gates.ts#L103)
@@ -89,7 +89,7 @@ See [`shared/BuilderUpgradeModal.tsx:66`](/Users/neilmcdevitt/code/arx/.worktree
 
 But runtime behavior still partially behaves like:
 
-- authenticated cloud turn = agentic tool turn
+- authenticated cloud turn = Daytona workspace turn
 
 That makes the UI more honest than the runtime.
 
@@ -105,16 +105,18 @@ That makes the UI more honest than the runtime.
 ### Free
 
 - authenticated cloud chat
-- may use `user_chatgpt` or `user_key` for chat-only turns
+- may use `user_chatgpt` or `user_key` for `chat` turns
+- community harness and community tools when a community lens is active
 - no Daytona
-- no tool turns
+- no coding tools
 
 ### Builder
 
 - authenticated cloud chat
 - platform-funded premium chat
-- Daytona tool turns
-- project-bound tool runtime
+- community harness and community tools
+- Daytona workspace turns
+- project-bound coding runtime
 
 ## 5) Design Principles
 
@@ -136,14 +138,14 @@ These are the main deletions needed to restore coherence:
 
 ### Phase 1: Restore a truthful send contract
 
-Goal: free authenticated usage must send `chat_only` turns by default.
+Goal: free authenticated usage must send `chat` turns by default.
 
 Changes:
 
-1. In [`shared/useWebSendFlowController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts), stop hardcoding `requiresTools: true` for all non-public turns.
-2. Introduce a single local decision point for turn class:
-   - default to `chat_only`
-   - only request `requires_tools` when the action explicitly needs Builder-only tools
+1. In [`shared/useWebSendFlowController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts), stop hardcoding Daytona workspace escalation for all non-public turns.
+2. Introduce a single local decision point for execution target:
+   - default to `chat`
+   - only request `daytona_workspace` when the action explicitly needs Builder-only tools
 3. Use the same decision path for:
    - send
    - retry
@@ -161,13 +163,13 @@ Goal: keep the send controller aligned with the canonical gate engine.
 
 Changes:
 
-1. Route the chosen `turnClass` through the same gate semantics already defined in:
+1. Route the chosen `requestedExecutionTarget` through the same gate semantics already defined in:
    - [`shared/canonicalGateEngine.mjs`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/canonicalGateEngine.mjs)
    - [`convex/gates.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/gates.ts)
 2. Ensure a free authenticated user on:
    - `user_chatgpt`
    - `user_key`
-   gets `chat_only`, not a paid tool denial
+   gets `chat`, not a paid tool denial
 3. Ensure Builder retains tool-capable execution without adding a mode toggle
 
 Acceptance:
@@ -182,8 +184,8 @@ Goal: runtime errors should reflect the real requested action.
 
 Changes:
 
-1. Confirm `/runtime/runtime_turn` continues to derive `turnClass` from `requires_tools` only:
-   - [`convex/httpRuntimeRoutes.ts:566`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/httpRuntimeRoutes.ts#L566)
+1. Confirm `/runtime/runtime_turn` uses `requested_execution_target` as the canonical runtime control:
+   - [`convex/httpRuntimeRoutes.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/httpRuntimeRoutes.ts)
 2. Audit error handling so:
    - `tier_required` only appears for real tool-capable requests
    - free chat-only requests do not surface Builder upgrade CTAs unless they actually requested a Builder-only path
@@ -202,12 +204,12 @@ Goal: prevent this drift from reappearing.
 Changes:
 
 1. Extend gate/runtime parity coverage for:
-   - authenticated free + `user_chatgpt` + `chat_only`
-   - authenticated free + `user_key` + `chat_only`
-   - authenticated free + `platform` + `chat_only` denied
-   - authenticated free + any funding + `requires_tools` denied
-   - Builder + `requires_tools` allowed
-2. Add a UI/controller-level check if one is missing around send-path turn class selection
+   - authenticated free + `user_chatgpt` + `chat`
+   - authenticated free + `user_key` + `chat`
+   - authenticated free + `platform` + `chat` denied
+   - authenticated free + any funding + `daytona_workspace` denied
+   - Builder + `daytona_workspace` allowed
+2. Add a UI/controller-level check if one is missing around send-path execution target selection
 
 Acceptance:
 
@@ -225,7 +227,7 @@ Acceptance:
 
 The first slice should be intentionally small:
 
-1. add one helper in the send controller that resolves `requiresTools`
+1. add one helper in the send controller that resolves `requestedExecutionTarget`
 2. make it return `false` for the normal authenticated chat path
 3. thread that through send, retry, and regenerate
 4. run:
@@ -236,7 +238,7 @@ The first slice should be intentionally small:
 
 ## 10) Blind Spots
 
-1. If there is any hidden UI affordance that already assumes Builder means "agent mode", removing implicit `requiresTools` may expose dead copy or dormant buttons.
+1. If there is any hidden UI affordance that already assumes Builder means "workspace mode", removing implicit default escalation may expose dead copy or dormant buttons.
 2. Builder users may currently be relying on the accidental default-to-tools behavior. That is product drift, but changing it may alter perceived behavior unless tool entry remains obvious somewhere else.
 3. Funding-lane preference is still a separate drift bucket. Even after this fix, Builder users with ChatGPT connected may still prefer `user_chatgpt` for chat-only GPT-family turns unless lane selection is later revisited.
 

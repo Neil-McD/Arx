@@ -1,16 +1,10 @@
-import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
 type CloudBuilderBillingGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
-  client: ConvexClient;
-  authSubject: string;
-}> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(sessionRaw);
-  return { client, authSubject };
-}
+// Gateway class: authenticated query/mutation bridge, caller-hardened session, fail-closed.
 
 export async function startCloudBuilderCheckout<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
@@ -19,7 +13,7 @@ export async function startCloudBuilderCheckout<SessionT>(
     cancelUrl: string;
   },
 ): Promise<{ checkout_url?: unknown }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.mutation("billing:startBuilderCheckout" as any, {
     authSubject,
     tier: params.tier,
@@ -36,7 +30,7 @@ export async function openCloudBuilderBillingPortal<SessionT>(
     returnUrl: string;
   },
 ): Promise<{ url?: unknown }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.query("billing:openBuilderBillingPortal" as any, {
     authSubject,
     returnUrl: params.returnUrl,
@@ -51,7 +45,7 @@ export async function startCloudConnectOnboarding<SessionT>(
     refreshUrl: string;
   },
 ): Promise<{ url?: unknown }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.query("billing:startConnectOnboarding" as any, {
     authSubject,
     returnUrl: params.returnUrl,

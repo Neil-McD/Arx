@@ -3,6 +3,7 @@ import {
   createConvexClient,
 } from "./convexAuthenticatedClient";
 import type { CommunityBillingPeriod } from "./communityTypes";
+import { firstGatewayRow } from "./cloudGateway";
 
 type CloudPublicFunnelAuthParams<SessionT> = {
   session: SessionT;
@@ -10,18 +11,6 @@ type CloudPublicFunnelAuthParams<SessionT> = {
 
 type CloudPublicFunnelParams<SessionT> = {
 };
-
-function coerceObjectRows<TRow>(payload: unknown): TRow[] {
-  if (Array.isArray(payload)) return payload as TRow[];
-  if (!payload || typeof payload !== "object") return [];
-  const payloadObj = payload as Record<string, unknown>;
-  const keys = ["rows", "items", "data"] as const;
-  for (const key of keys) {
-    const value = payloadObj[key];
-    if (Array.isArray(value)) return value as TRow[];
-  }
-  return [payload as TRow];
-}
 
 export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
@@ -33,8 +22,7 @@ export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
     authSubject,
     communitySlug: params.communitySlug,
   });
-  const rows = coerceObjectRows<TRow>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<TRow>(payload);
 }
 
 export async function requestCloudCommunityAccessBySlug<SessionT, TRow = unknown>(
@@ -49,8 +37,7 @@ export async function requestCloudCommunityAccessBySlug<SessionT, TRow = unknown
     communitySlug: params.communitySlug,
     message: params.message ?? null,
   });
-  const rows = coerceObjectRows<TRow>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<TRow>(payload);
 }
 
 export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPublicPlan>(
@@ -61,7 +48,6 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   ok?: boolean;
   community?: TPublicCommunity;
   active_plan?: TPublicPlan | null;
-  active_plans?: TPublicPlan[] | null;
 }> {
   const client = createConvexClient();
   return (await client.query("community:resolvePublicFunnelBySlug" as any, {
@@ -70,7 +56,6 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
     ok?: boolean;
     community?: TPublicCommunity;
     active_plan?: TPublicPlan | null;
-    active_plans?: TPublicPlan[] | null;
   };
 }
 
@@ -97,8 +82,7 @@ export async function fetchCloudCommunityPresenceSummary<SessionT, TSummary = un
     authSubject,
     communityId: params.communityId,
   });
-  const rows = coerceObjectRows<TSummary>(payload);
-  return rows[0] ?? null;
+  return firstGatewayRow<TSummary>(payload);
 }
 
 export async function startCloudPublicFunnelCheckout<SessionT>(

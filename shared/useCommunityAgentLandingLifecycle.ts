@@ -1,11 +1,13 @@
 import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 import { fetchActiveCloudCommunityAgentLanding } from "./cloudCommunityAgentGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 const COMMUNITY_AGENT_LANDING_RPC_TIMEOUT_MS = 5000;
 
 export function useCommunityAgentLandingLifecycle<SessionT>(params: {
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   activeCommunityId: string | null;
   canViewCommunity: boolean;
   activeCommunityIdRef: MutableRefObject<string | null>;
@@ -37,8 +39,10 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
 
     void (async () => {
       try {
+        const usableSession = await resolveUsableSession(session, params.ensureSession);
+        if (!usableSession) return;
         const data = await fetchActiveCloudCommunityAgentLanding({
-          session,
+          session: usableSession,
           communityId,
           init: {
             signal: abortController.signal,
@@ -69,6 +73,7 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
     };
   }, [
     params.session,
+    params.ensureSession,
     params.activeCommunityId,
     params.canViewCommunity,
     params.activeCommunityIdRef,

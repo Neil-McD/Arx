@@ -240,9 +240,7 @@ export const saveCommunitySettings = mutation({
     const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
     const currentEntryPolicy = resolveCommunityEntryPolicy(community);
     const nextEntryPolicy = hasPaidPlan
-      ? currentEntryPolicy === "paid_subscription"
-        ? "paid_subscription"
-        : "paid_unlock"
+      ? "paid_subscription"
       : currentEntryPolicy === "approval"
         ? "approval"
         : "open";
@@ -370,7 +368,6 @@ export const saveCommunitySettings = mutation({
 
       const pricePointId = await ctx.db.insert("communityPricePoints" as any, {
         communityId: args.communityId,
-        kind: nextEntryPolicy === "paid_subscription" ? "subscription" : "unlock",
         billingPeriod,
         name: nextName,
         description: nextOneLiner,
@@ -407,6 +404,7 @@ export const saveCommunitySettings = mutation({
     };
   },
 });
+
 
 export const saveCommunityOneLiner = mutation({
   args: {

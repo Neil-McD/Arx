@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import type { ModelToggle } from "./modelCatalog";
 import { parseModelRegistryRows } from "./modelRegistry";
 import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "./threadTitleUi";
@@ -46,7 +47,6 @@ function deriveThreadTitleFromCloudMessage(content: unknown): string {
 type ThreadRecord = {
   id: string;
   title: string | null;
-  engine_id: string;
   model_id: string | null;
   project_id: string | null;
   community_id: string | null;
@@ -72,6 +72,7 @@ type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   setModelToggles: Dispatch<SetStateAction<ModelToggle[]>>;
   setModelProviderById?: Dispatch<SetStateAction<Record<string, string>>>;
   isModelAllowed?: (modelId: string) => boolean;
+  ensureSession?: EnsureSessionFn<SessionT>;
 };
 
 export function useWebThreadDataController<SessionT, ThreadMessageT>(
@@ -82,6 +83,12 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
   const loadThreads = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) {
+      current.setThreads([]);
+      current.threadsHydratedRef.current = true;
+      return;
+    }
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       current.setThreadError("Convex is required for cloud threads in this build.");
@@ -111,13 +118,11 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
         current.threadsHydratedRef.current = true;
       };
 
-      const convexRows = await listConvexCloudThreadRows(session as any);
+      const convexRows = await listConvexCloudThreadRows(usableSession as any);
       const convexList: ThreadRecord[] = (convexRows ?? [])
-        .filter((row) => (row.engine_id ?? "").trim() !== "community_chat")
         .map((row) => ({
           id: row.id,
           title: row.title ?? null,
-          engine_id: row.engine_id,
           model_id: row.model_id ?? null,
           project_id: row.project_id ?? null,
           community_id: row.community_id ?? null,
@@ -141,6 +146,11 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
   const loadThreadMessages = useCallback(async (threadId: string, session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) {
+      current.setThreadMessages([]);
+      return;
+    }
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       current.setThreadError("Convex is required for cloud threads in this build.");
@@ -150,7 +160,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
     try {
       const convexRows = await listConvexCloudThreadMessagesPageByThreadKey({
-        session: session as any,
+        session: usableSession as any,
         threadKey: threadId,
         pageSize: 1000,
         maxScan: 4000,
@@ -164,10 +174,12 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
 
   const loadModelRegistry = useCallback(async (session: SessionT): Promise<void> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const fetchRows = current.fetchModelRegistryRows;
     if (!fetchRows) return;
     try {
-      const rows = await fetchRows(session);
+      const rows = await fetchRows(usableSession);
       if (!rows || !Array.isArray(rows)) return;
       const isModelAllowed = current.isModelAllowed ?? (() => true);
       const parsed = parseModelRegistryRows(rows, {

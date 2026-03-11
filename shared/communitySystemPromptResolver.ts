@@ -3,6 +3,14 @@ import {
   joinPromptBlocks,
 } from "./doctrinePrompt";
 
+// Scoped prompt precedence:
+// 1. platform doctrine
+// 2. soul doctrine
+// 3. workspace/runtime doctrine
+// 4. community doctrine
+//
+// Repo instruction docs and user messages are layered later by the active runtime lane.
+
 function normalizeTrimmed(value: string | null | undefined): string {
   return String(value ?? "").trim();
 }
@@ -27,7 +35,7 @@ function buildDefaultCommunitySystemPrompt(params: {
   ].join("\n");
 }
 
-function resolveEffectiveCommunitySystemPrompt(params: {
+export function resolveEffectiveCommunitySystemPrompt(params: {
   communityId: string | null | undefined;
   communityName?: string | null;
   customSystemPrompt?: string | null;
@@ -42,7 +50,7 @@ function resolveEffectiveCommunitySystemPrompt(params: {
   });
 }
 
-function buildDefaultNonCommunityScopePrompt(): string {
+export function buildDefaultNonCommunityScopePrompt(): string {
   return [
     "Active community context: none.",
     "No specific community context is currently active.",
@@ -53,10 +61,8 @@ export function composeCloudScopedSystemPrompt(params: {
   communityId?: string | null;
   communityName?: string | null;
   customCommunitySystemPrompt?: string | null;
-  personalSystemPrompt?: string | null;
 }): string {
   const communityId = normalizeTrimmed(params.communityId);
-  const personalSystemPrompt = normalizeTrimmed(params.personalSystemPrompt);
   const scopePrompt = communityId
     ? resolveEffectiveCommunitySystemPrompt({
         communityId,
@@ -71,6 +77,5 @@ export function composeCloudScopedSystemPrompt(params: {
       workspaceMode: "platform",
     }),
     scopePrompt,
-    personalSystemPrompt ? `Personal preferences:\n${personalSystemPrompt}` : null,
   ]);
 }

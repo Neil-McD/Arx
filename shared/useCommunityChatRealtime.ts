@@ -6,6 +6,7 @@ import {
   subscribeCloudThreadMessages,
   type CloudCommunityChatLiveClient,
 } from "./cloudCommunityChatGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type SessionLike = {
   access_token: string;
@@ -36,6 +37,7 @@ type UseCommunityChatRealtimeArgs<
 > = {
   isEnabled: boolean;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   activeCommunityId: string | null;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   toCommunityChatMessage: (row: MessageRowT) => ChatMessageT | null;
@@ -112,10 +114,12 @@ export function useCommunityChatRealtime<
     const subscribe = async () => {
       try {
         const latestArgs = argsRef.current;
-        const threadId = await latestArgs.ensureCommunityChatThread(args.activeCommunityId!, session);
+        const usableSession = await resolveUsableSession(session, latestArgs.ensureSession);
+        if (!usableSession) return;
+        const threadId = await latestArgs.ensureCommunityChatThread(args.activeCommunityId!, usableSession);
         if (cancelled) return;
 
-        const liveClient = createCloudCommunityChatLiveClient({ session });
+        const liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
         liveClientRef.current?.close();
         liveClientRef.current = liveClient;
 
@@ -159,14 +163,14 @@ export function useCommunityChatRealtime<
             if (newMessages.length > 0) {
               const uniqueSenders = Array.from(new Set(newMessages.map((message) => message.sender_id)));
               if (uniqueSenders.length > 0) {
-                void onLoadProfilesRef.current?.(uniqueSenders, session);
+                void onLoadProfilesRef.current?.(uniqueSenders, usableSession);
               }
             }
 
             let unreadDelta = 0;
             if (!latestArgs.isUserAtBottomRef.current) {
               for (const message of newMessages) {
-                if (message.sender_id === session.user.id) continue;
+                if (message.sender_id === usableSession.user.id) continue;
                 unreadDelta += 1;
               }
             }

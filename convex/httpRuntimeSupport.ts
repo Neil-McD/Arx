@@ -3,7 +3,7 @@ import { api, internal } from "./_generated/api";
 type InferenceRole = "user" | "assistant" | "system";
 type RuntimeSurface = "web" | "mobile";
 type GateModelClass = "free_model" | "paid_model";
-type GateTurnClass = "chat_only" | "requires_tools";
+type RequestedExecutionTarget = "chat" | "daytona_workspace";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -174,7 +174,7 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
   authSubject: string;
   surface: RuntimeSurface;
   modelClass: GateModelClass;
-  turnClass: GateTurnClass;
+  requestedExecutionTarget: RequestedExecutionTarget;
   requestedFundingSource: RequestedFundingSource;
   hasUserKeyConnection?: boolean;
   hasUserChatgptConnection?: boolean;
@@ -185,8 +185,8 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     surface: params.surface,
     executionMode: "cloud",
     modelClass: params.modelClass,
+    requestedExecutionTarget: params.requestedExecutionTarget,
     requestedFundingSource: params.requestedFundingSource,
-    turnClass: params.turnClass,
     hasUserKeyConnection: Boolean(params.hasUserKeyConnection),
     hasUserChatGptConnection: Boolean(params.hasUserChatgptConnection),
   })) as Record<string, unknown> | null;
@@ -204,20 +204,20 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
 }
 
 export function mapGateLaneToRuntimeLane(params: {
-  turnClass: GateTurnClass;
+  requestedExecutionTarget: RequestedExecutionTarget;
   lane: GateLane | null;
 }): "public" | "platform" | "daytona" | "chatgpt" {
   if (params.lane === "public") return "public";
   if (params.lane === "platform") return "platform";
   if (params.lane === "chatgpt") return "chatgpt";
   if (params.lane === "daytona_cloud") return "daytona";
-  return params.turnClass === "requires_tools" ? "daytona" : "platform";
+  return params.requestedExecutionTarget === "daytona_workspace" ? "daytona" : "platform";
 }
 
 export function gateDeniedResponse(
   jsonResponse: (req: Request, status: number, payload: unknown) => Response,
   req: Request,
-  params: { decision: ResolvedGateDecision; turnClass: GateTurnClass; requestedModelId: string | null },
+  params: { decision: ResolvedGateDecision; requestedExecutionTarget: RequestedExecutionTarget; requestedModelId: string | null },
 ): Response {
   if (params.decision.code === "auth_required") {
     return jsonResponse(req, 401, {
@@ -234,8 +234,8 @@ export function gateDeniedResponse(
 
   if (params.decision.code === "tier_required" || params.decision.code === "plan_required") {
     const message =
-      params.turnClass === "requires_tools"
-        ? "Paid tier required for cloud tool execution."
+      params.requestedExecutionTarget === "daytona_workspace"
+        ? "Paid tier required for Daytona workspace execution."
         : "Paid tier required for platform inference.";
     return jsonResponse(req, 403, {
       ok: false,

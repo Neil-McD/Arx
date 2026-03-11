@@ -1,3 +1,7 @@
+// Canonical doctrine source lives in PLATFORM.md and SOUL.md at the worktree root.
+// This file is the runtime projection of that doctrine, not an independent source of truth.
+// Keep the prompt builders aligned with those markdown files and the precedence contract below.
+
 function normalizePromptBlock(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
   return normalized ? normalized : null;
@@ -31,7 +35,16 @@ export function buildSoulDoctrinePrompt(): string {
   ].join("\n");
 }
 
-function buildCommunityFoundationPrompt(params: {
+export const WORKSPACE_CONTEXT_PRECEDENCE_V1 = [
+  "platform",
+  "soul",
+  "workspace",
+  "community",
+  "repo_instruction_docs",
+  "user_message",
+] as const;
+
+export function buildCommunityFoundationPrompt(params: {
   communityId?: string | null;
   communityName?: string | null;
 }): string {
@@ -53,7 +66,7 @@ function buildCommunityFoundationPrompt(params: {
   ].join("\n");
 }
 
-function buildWorkspaceFoundationPrompt(params: {
+export function buildWorkspaceFoundationPrompt(params: {
   workspaceMode: "coding" | "platform";
 }): string {
   return [
@@ -73,12 +86,12 @@ export function buildFoundationContextPrompt(params: {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
     buildSoulDoctrinePrompt(),
+    buildWorkspaceFoundationPrompt({
+      workspaceMode: params.workspaceMode,
+    }),
     buildCommunityFoundationPrompt({
       communityId: params.communityId,
       communityName: params.communityName,
-    }),
-    buildWorkspaceFoundationPrompt({
-      workspaceMode: params.workspaceMode,
     }),
   ]);
 }

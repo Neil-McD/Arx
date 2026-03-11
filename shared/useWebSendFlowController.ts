@@ -1,19 +1,13 @@
 import { useCallback, useRef } from "react";
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
-import {
-  getCommunityHarnessUnavailableErrorMessage,
-  isCommunityHarnessUnavailablePreflight,
-} from "./cloudCommunityContextPreflight";
+import { resolveUsableSession } from "./ensureUsableSession";
 import {
   type ThreadRecord,
   type ThreadMessage,
   type UseWebSendFlowControllerArgs,
   getLastThreadMessageId,
   persistGuestThreadStorageFromMessages,
-  resolveCommunityPreflightForThread,
   resolvePreferredModelSelectionFromArgs,
-  resolveScopedSystemPromptForThread,
-  runPublicTurnAndPersistAssistant,
   showBuilderLimitUpgradeIfNeeded,
   syncThreadModelSelectionInState,
   toErrorMessage,
@@ -48,22 +42,6 @@ export function useWebSendFlowController<
     (threadId: string, modelId: string, session: SessionT | null): void => {
       syncThreadModelSelectionInState(argsRef.current, threadId, modelId, session);
     },
-    [],
-  );
-
-  const resolveScopedSystemPrompt = useCallback(
-    async (threadId: string, session: SessionT): Promise<string | null> =>
-      resolveScopedSystemPromptForThread(argsRef.current, threadId, session),
-    [],
-  );
-
-  const resolveCommunityPreflight = useCallback(
-    async (params: {
-      threadId: string;
-      session: SessionT;
-      messages: ThreadMessageT[];
-      fallbackQuery?: string | null;
-    }) => resolveCommunityPreflightForThread(argsRef.current, params),
     [],
   );
 
@@ -112,9 +90,7 @@ export function useWebSendFlowController<
           threadId: current.guestThreadId,
           runIdHint: `public_web:${userMsg.id}`,
           messages: baseMessages,
-          systemPrompt: buildCloudCommunityContextEnvelope({
-            personalSystemPrompt: current.getPersonalSystemPrompt(),
-          }).scopedSystemPrompt,
+          systemPrompt: buildCloudCommunityContextEnvelope({}).scopedSystemPrompt,
         });
         if (turnResult.error) throw new Error(turnResult.error);
         if (turnResult.cancelled) return;
@@ -142,6 +118,12 @@ export function useWebSendFlowController<
       return;
     }
 
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) {
+      current.openAuthGate();
+      return;
+    }
+
     const hasActiveThreadInState = Boolean(
       current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
     );
@@ -158,11 +140,11 @@ export function useWebSendFlowController<
     try {
       let threadId = hasActiveThreadInState ? current.activeThreadId : null;
       if (!threadId) {
-        const created = await current.createThread(session);
+        const created = await current.createThread(usableSession);
         threadId = created?.id ?? null;
         createdThreadId = threadId;
         if (!threadId) {
-          const retryCreated = await current.createThread(session);
+          const retryCreated = await current.createThread(usableSession);
           threadId = retryCreated?.id ?? null;
           if (!createdThreadId) createdThreadId = threadId;
         }
@@ -178,11 +160,11 @@ export function useWebSendFlowController<
         current.setActiveModelId(preferredModelId);
       }
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        syncThreadModelSelection(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
 
-      await current.ensureWorkspaceThreadLensBeforeSend(threadId, session);
-      await current.maybeSetThreadTitleFromText(threadId, text, session);
+      await current.ensureWorkspaceThreadLensBeforeSend(threadId, usableSession);
+      await current.maybeSetThreadTitleFromText(threadId, text, usableSession);
 
       const remembered = current.userMemoryRememberEnabled ? current.extractRememberIntent(text) : null;
       if (remembered && hasPersonalMemoryAccess) {
@@ -201,7 +183,7 @@ export function useWebSendFlowController<
         throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
       }
 
-      await current.createThreadMessage(session, {
+      await current.createThreadMessage(usableSession, {
         id: messageId,
         threadId,
         role: "user",
@@ -243,55 +225,30 @@ export function useWebSendFlowController<
       const optimisticThreadMessages = [...priorThreadMessages, syntheticUserMessage];
       current.setThreadMessages(optimisticThreadMessages);
 
-      if (usePublicModel) {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const communityPreflight = await resolveCommunityPreflight({
-          threadId,
-          session,
-          messages: optimisticThreadMessages,
-          fallbackQuery: text,
-        });
-        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
-          throw new Error(getCommunityHarnessUnavailableErrorMessage());
-        }
-        await runPublicTurnAndPersistAssistant(current, {
-          session,
-          threadId,
-          modelId: preferredModelId,
-          runIdHint: `public_web:${messageId}`,
-          messages: optimisticThreadMessages,
-          systemPrompt,
-          communityPreflight,
-        });
-      } else {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
-        const turnResult = await current.runAgentTurn(session, threadId, {
-          preferredModelId,
-          mode: "respond",
-          runIdHint: `agent_web:${messageId}`,
-          userMessageKey: messageId,
-          systemPrompt,
-          inferenceSource:
-            preferredModelSelection.fundingSource === "user_key"
+      const requestedExecutionTarget =
+        !usePublicModel && shouldRequestToolsForAuthenticatedTurn() ? "daytona_workspace" : "chat";
+      const turnResult = await current.runAgentTurn(usableSession, threadId, {
+        preferredModelId,
+        mode: "respond",
+        runIdHint: `agent_web:${messageId}`,
+        userMessageKey: messageId,
+        systemPrompt: null,
+        inferenceSource:
+          preferredModelSelection.fundingSource === "demo_public"
+            ? "free"
+            : preferredModelSelection.fundingSource === "user_key"
               ? "user_key"
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "chatgpt"
                 : "platform",
-          requestedFundingSource:
-            preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "user_chatgpt"
-                : "platform",
-          requiresTools,
-          replyToId: messageId,
-          messages: optimisticThreadMessages,
-        });
-        if (turnResult.error) throw new Error(turnResult.error);
-      }
+        requestedFundingSource: preferredModelSelection.fundingSource,
+        requestedExecutionTarget,
+        replyToId: messageId,
+        messages: optimisticThreadMessages,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
 
-      await current.loadThreadMessages(threadId, session);
+      await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to send message.");
       current.setThreadError(message);
@@ -307,8 +264,6 @@ export function useWebSendFlowController<
   }, [
     maybeShowBuilderLimitUpgrade,
     persistGuestFromMessages,
-    resolveScopedSystemPrompt,
-    resolveCommunityPreflight,
     resolvePreferredModelSelection,
     shouldRequestToolsForAuthenticatedTurn,
     syncThreadModelSelection,
@@ -323,6 +278,11 @@ export function useWebSendFlowController<
     }
     const session = current.getSession();
     if (!session) return;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) {
+      current.openAuthGate();
+      return;
+    }
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
@@ -342,56 +302,32 @@ export function useWebSendFlowController<
       const usePublicModel = preferredModelSelection.lane === "public";
       const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        syncThreadModelSelection(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
 
-      if (usePublicModel) {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const communityPreflight = await resolveCommunityPreflight({
-          threadId,
-          session,
-          messages: currentThreadMessages,
-        });
-        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
-          throw new Error(getCommunityHarnessUnavailableErrorMessage());
-        }
-        await runPublicTurnAndPersistAssistant(current, {
-          session,
-          threadId,
-          modelId: preferredModelId,
-          runIdHint: `public_web_retry:${lastUserMessageId}:${Date.now()}`,
-          messages: currentThreadMessages,
-          systemPrompt,
-          communityPreflight,
-        });
-      } else {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
-        const turnResult = await current.runAgentTurn(session, threadId, {
-          preferredModelId,
-          mode: "respond",
-          runIdHint: `agent_web:${lastUserMessageId}`,
-          userMessageKey: lastUserMessageId,
-          systemPrompt,
-          inferenceSource:
-            preferredModelSelection.fundingSource === "user_key"
+      const requestedExecutionTarget =
+        !usePublicModel && shouldRequestToolsForAuthenticatedTurn() ? "daytona_workspace" : "chat";
+      const turnResult = await current.runAgentTurn(usableSession, threadId, {
+        preferredModelId,
+        mode: "respond",
+        runIdHint: `agent_web:${lastUserMessageId}`,
+        userMessageKey: lastUserMessageId,
+        systemPrompt: null,
+        inferenceSource:
+          preferredModelSelection.fundingSource === "demo_public"
+            ? "free"
+            : preferredModelSelection.fundingSource === "user_key"
               ? "user_key"
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "chatgpt"
                 : "platform",
-          requestedFundingSource:
-            preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "user_chatgpt"
-                : "platform",
-          requiresTools,
-          replyToId: lastUserMessageId,
-          messages: currentThreadMessages,
-        });
-        if (turnResult.error) throw new Error(turnResult.error);
-      }
-      await current.loadThreadMessages(threadId, session);
+        requestedFundingSource: preferredModelSelection.fundingSource,
+        requestedExecutionTarget,
+        replyToId: lastUserMessageId,
+        messages: currentThreadMessages,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
+      await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to run model.");
       current.setThreadError(message);
@@ -401,8 +337,6 @@ export function useWebSendFlowController<
     }
   }, [
     maybeShowBuilderLimitUpgrade,
-    resolveScopedSystemPrompt,
-    resolveCommunityPreflight,
     resolvePreferredModelSelection,
     shouldRequestToolsForAuthenticatedTurn,
     syncThreadModelSelection,
@@ -417,6 +351,11 @@ export function useWebSendFlowController<
     }
     const session = current.getSession();
     if (!session) return;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) {
+      current.openAuthGate();
+      return;
+    }
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
@@ -434,13 +373,12 @@ export function useWebSendFlowController<
       const usePublicModel = preferredModelSelection.lane === "public";
       const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        syncThreadModelSelection(threadId, preferredModelId, session);
+        syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
 
       let messagesForTurn = currentThreadMessages;
 
       if (usePublicModel) {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
         let lastUserIndex = -1;
         for (let i = currentThreadMessages.length - 1; i >= 0; i--) {
           if (currentThreadMessages[i]?.role === "user") {
@@ -455,54 +393,32 @@ export function useWebSendFlowController<
           .slice(lastUserIndex + 1)
           .map((message) => message.id)
           .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-        await current.deleteThreadMessagesByIds(session, trailingMessageIds);
+        await current.deleteThreadMessagesByIds(usableSession, trailingMessageIds);
 
-        const communityPreflight = await resolveCommunityPreflight({
-          threadId,
-          session,
-          messages: messagesForTurn,
-        });
-        if (isCommunityHarnessUnavailablePreflight(communityPreflight)) {
-          throw new Error(getCommunityHarnessUnavailableErrorMessage());
-        }
-
-        await runPublicTurnAndPersistAssistant(current, {
-          session,
-          threadId,
-          modelId: preferredModelId,
-          runIdHint: `public_web_regen:${lastUserMessageId}:${Date.now()}`,
-          messages: messagesForTurn,
-          systemPrompt,
-          communityPreflight,
-        });
-      } else {
-        const systemPrompt = await resolveScopedSystemPrompt(threadId, session);
-        const requiresTools = shouldRequestToolsForAuthenticatedTurn();
-        const turnResult = await current.runAgentTurn(session, threadId, {
-          preferredModelId,
-          mode: "regenerate",
-          runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
-          userMessageKey: lastUserMessageId,
-          systemPrompt,
-          inferenceSource:
-            preferredModelSelection.fundingSource === "user_key"
+      }
+      const requestedExecutionTarget =
+        !usePublicModel && shouldRequestToolsForAuthenticatedTurn() ? "daytona_workspace" : "chat";
+      const turnResult = await current.runAgentTurn(usableSession, threadId, {
+        preferredModelId,
+        mode: "regenerate",
+        runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
+        userMessageKey: lastUserMessageId,
+        systemPrompt: null,
+        inferenceSource:
+          preferredModelSelection.fundingSource === "demo_public"
+            ? "free"
+            : preferredModelSelection.fundingSource === "user_key"
               ? "user_key"
               : preferredModelSelection.fundingSource === "user_chatgpt"
                 ? "chatgpt"
                 : "platform",
-          requestedFundingSource:
-            preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "user_chatgpt"
-                : "platform",
-          requiresTools,
-          replyToId: lastUserMessageId,
-          messages: messagesForTurn,
-        });
-        if (turnResult.error) throw new Error(turnResult.error);
-      }
-      await current.loadThreadMessages(threadId, session);
+        requestedFundingSource: preferredModelSelection.fundingSource,
+        requestedExecutionTarget,
+        replyToId: lastUserMessageId,
+        messages: messagesForTurn,
+      });
+      if (turnResult.error) throw new Error(turnResult.error);
+      await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
       const message = toErrorMessage(error, "Failed to run model.");
       current.setThreadError(message);
@@ -512,8 +428,6 @@ export function useWebSendFlowController<
     }
   }, [
     maybeShowBuilderLimitUpgrade,
-    resolveScopedSystemPrompt,
-    resolveCommunityPreflight,
     resolvePreferredModelSelection,
     shouldRequestToolsForAuthenticatedTurn,
     syncThreadModelSelection,

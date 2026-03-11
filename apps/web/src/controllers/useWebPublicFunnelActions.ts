@@ -26,6 +26,7 @@ type UseWebPublicFunnelActionsArgs<
 > = {
   getSession: () => CloudSession | null;
   session: CloudSession | null;
+  ensureSession?: (session: CloudSession | null) => Promise<CloudSession | null>;
   openAuthGate: (intentInput: PendingAuthIntentInput) => void;
   loadCommunities: (session: CloudSession) => Promise<void>;
   openCommunityWorkspace: (communityId: string) => void;
@@ -89,7 +90,8 @@ export function useWebPublicFunnelActions<
 
       const brandosAid = trimmedSlug ? getBrandosAidForCommunitySlug(trimmedSlug) : null;
 
-      const session = args.getSession();
+      const rawSession = args.getSession();
+      const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
       if (!session) {
         storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
         args.openAuthGate({
@@ -149,7 +151,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  entry_policy: "paid_unlock",
+                  entry_policy: "paid_subscription",
                 } as PublicCommunityT)
               : prev,
           );
@@ -169,7 +171,8 @@ export function useWebPublicFunnelActions<
       if (!trimmedSlug) return;
       const message = typeof opts.message === "string" ? opts.message.trim() || null : null;
 
-      const session = args.getSession() ?? args.session;
+      const rawSession = args.getSession() ?? args.session;
+      const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
       if (!session) {
         args.openAuthGate({
           reason: "request_community_access",
@@ -200,7 +203,7 @@ export function useWebPublicFunnelActions<
             prev
               ? ({
                   ...prev,
-                  entry_policy: "paid_unlock",
+                  entry_policy: "paid_subscription",
                 } as PublicCommunityT)
               : prev,
           );
@@ -241,7 +244,8 @@ export function useWebPublicFunnelActions<
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
-        const session = args.getSession();
+        const rawSession = args.getSession();
+        const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
         if (session) {
           try {
             const access = await fetchCloudMyCommunityAccessBySlug<CloudSession, CommunityAccessRow>({
@@ -258,21 +262,11 @@ export function useWebPublicFunnelActions<
           }
         }
 
-        const plans = Array.isArray(payload.active_plans)
-          ? payload.active_plans
-          : payload.active_plan
-            ? [payload.active_plan]
-            : [];
         args.setPublicCommunity({
           ...payload.community,
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
         } as PublicCommunityT);
-        const preferred =
-          plans.find((plan) => plan.billing_period === "monthly") ??
-          plans.find((plan) => plan.billing_period === "annual") ??
-          plans[0] ??
-          null;
-        args.setPublicCommunityPlans(preferred ? [preferred] : []);
+        args.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
 
         if (
           session &&
@@ -305,7 +299,8 @@ export function useWebPublicFunnelActions<
         const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${origin}${cancelPath}`;
         const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
-        const session = args.getSession();
+        const rawSession = args.getSession();
+        const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
         const data = await startCloudPublicFunnelCheckout<CloudSession>({
           session,
           communitySlug,

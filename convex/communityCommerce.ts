@@ -160,7 +160,7 @@ export const startPublicCommunityCheckout = mutation({
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     const entryPolicy = resolveCommunityEntryPolicy(community as any);
-    if (entryPolicy !== "paid_unlock" && entryPolicy !== "paid_subscription") {
+    if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");
     }
     const pricePoint = await resolveCheckoutPricePoint({

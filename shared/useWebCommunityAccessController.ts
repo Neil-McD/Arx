@@ -5,6 +5,7 @@ import {
 import { fetchCloudMyCommunityAccessById } from "./cloudCommunityAccessGateway";
 import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, CommunityAccessT, UserProfileT> = {
   toCanonicalCommunityVisibility: (
@@ -23,6 +24,7 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, CommunityAc
   setActiveCommunityAccess: Dispatch<SetStateAction<CommunityAccessT | null>>;
 
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
+  ensureSession?: EnsureSessionFn<SessionT>;
 };
 
 export function useWebCommunityAccessController<
@@ -39,6 +41,8 @@ export function useWebCommunityAccessController<
 
   const loadCommunities = useCallback(async (session: SessionT): Promise<void> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const seq = (loadCommunitiesSeqRef.current += 1);
     const fetchController = beginScopedAbortRequest({
       inFlightByKind: fetchAbortControllersRef.current,
@@ -47,7 +51,7 @@ export function useWebCommunityAccessController<
     try {
       current.setIsLoadingCommunities(true);
       const rows = await listCloudCommunityMembershipRows<SessionT, CommunityRecordT>({
-        session,
+        session: usableSession,
         selectMode: "full",
         init: { signal: fetchController.signal },
       });
@@ -94,6 +98,8 @@ export function useWebCommunityAccessController<
 
   const loadCommunityAccess = useCallback(async (communityId: string, session: SessionT): Promise<void> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const seq = (loadCommunityAccessSeqRef.current += 1);
     const fetchController = beginScopedAbortRequest({
       inFlightByKind: fetchAbortControllersRef.current,
@@ -102,7 +108,7 @@ export function useWebCommunityAccessController<
     current.setIsLoadingCommunityAccess(true);
     try {
       const row = await fetchCloudMyCommunityAccessById<SessionT, CommunityAccessT>({
-        session,
+        session: usableSession,
         communityId,
         init: { signal: fetchController.signal },
       });
@@ -124,11 +130,13 @@ export function useWebCommunityAccessController<
 
   const loadUserProfiles = useCallback(async (userIds: string[], session: SessionT): Promise<void> => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const unique = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
     if (unique.length === 0) return;
     try {
       const profiles = (await listCloudProfileRowsByUserIds<SessionT>({
-        session,
+        session: usableSession,
         userIds: unique,
       })) as unknown as UserProfileT[];
       if (profiles.length === 0) return;

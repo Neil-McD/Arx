@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
   deleteCloudCommunityResource,
@@ -25,6 +26,7 @@ type UseCommunityResourceControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   parseEmbedUrl: (url: string) => unknown;
   includeCommunityIdOnPatch: boolean;
   includeFileKeyOnSave: boolean;
@@ -73,6 +75,8 @@ export function useCommunityResourceController<
 
   const loadCommunityResources = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     const generation = (resourceLoadGenerationRef.current += 1);
     const fetchController = beginScopedAbortRequest({
       inFlightByKind: fetchAbortControllersRef.current,
@@ -82,7 +86,7 @@ export function useCommunityResourceController<
     try {
       try {
         const rows = await listCloudCommunityResourceRows<SessionT, ResourceT>({
-          session,
+          session: usableSession,
           communityId,
           limit: 200,
           init: { signal: fetchController.signal },
@@ -112,7 +116,7 @@ export function useCommunityResourceController<
 
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
 
     const title = current.resourceTitleInput.trim();
@@ -191,7 +195,7 @@ export function useCommunityResourceController<
 
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return false;
     try {
       await deleteCloudCommunityResource({

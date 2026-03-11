@@ -52,7 +52,6 @@ export function useWebTurnRunnerController<
         thread: {
           threadId,
           title: thread?.title ?? null,
-          engineId: thread?.engine_id ?? "runtime_turn",
           modelId: thread?.model_id ?? null,
           projectId: thread?.project_id ?? null,
           communityId: thread?.community_id ?? null,
@@ -137,7 +136,6 @@ export function useWebTurnRunnerController<
             messages: buildPublicTurnMessages({
               messages: params.messages,
               systemPrompt: params.systemPrompt,
-              communityEvidenceUserMessage: params.communityEvidenceUserMessage,
               extractTextFromContentJson: current.extractTextFromContentJson,
             }),
           },
@@ -346,30 +344,32 @@ export function useWebTurnRunnerController<
       };
 
       try {
+        const requestedExecutionTarget = params.requestedExecutionTarget ?? "chat";
         const laneMessages = Array.isArray(params.messages)
           ? buildPublicTurnMessages({
               messages: params.messages,
-              systemPrompt: params.systemPrompt,
+              systemPrompt: requestedExecutionTarget === "daytona_workspace" ? null : params.systemPrompt,
               extractTextFromContentJson: current.extractTextFromContentJson,
             })
           : [];
-        const createRuntimeTurnRequest = (): Promise<Response> =>
-          invokeCloudRuntimeTurn({
+        const createRuntimeTurnRequest = (): Promise<Response> => {
+          return invokeCloudRuntimeTurn({
             transport,
             session,
             payload: {
-                thread_id: threadId,
-                stream: true,
-                surface: "web",
-                requires_tools: params.requiresTools === true,
-                model_id: params.preferredModelId,
-                requested_funding_source: params.requestedFundingSource ?? "platform",
-                idempotency_key: params.runIdHint,
-                user_message_key: params.userMessageKey ?? undefined,
-                ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
+              thread_id: threadId,
+              stream: true,
+              surface: "web",
+              requested_execution_target: requestedExecutionTarget,
+              model_id: params.preferredModelId,
+              requested_funding_source: params.requestedFundingSource ?? "platform",
+              idempotency_key: params.runIdHint,
+              user_message_key: params.userMessageKey ?? undefined,
+              ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,
           });
+        };
 
         let runtimeTurn = await createRuntimeTurnRequest();
         responseStarted = true;

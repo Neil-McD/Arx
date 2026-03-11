@@ -19,12 +19,10 @@ export function buildCloudCommunityContextEnvelope(params: {
   communityName?: string | null;
   customCommunitySystemPrompt?: string | null;
   communityPromptDraftId?: string | null;
-  personalSystemPrompt?: string | null;
 }): CloudCommunityContextEnvelope {
   const communityIdRaw = normalizeTrimmed(params.communityId);
   const communityNameRaw = normalizeTrimmed(params.communityName);
   const customCommunitySystemPrompt = normalizeTrimmed(params.customCommunitySystemPrompt);
-  const personalSystemPrompt = normalizeTrimmed(params.personalSystemPrompt);
   const communityPromptDraftIdRaw = normalizeTrimmed(params.communityPromptDraftId);
 
   const hasCommunityScope = communityIdRaw.length > 0;
@@ -43,7 +41,6 @@ export function buildCloudCommunityContextEnvelope(params: {
       communityId: hasCommunityScope ? communityIdRaw : null,
       communityName: hasCommunityScope ? communityNameRaw || null : null,
       customCommunitySystemPrompt,
-      personalSystemPrompt,
     }),
   };
 }

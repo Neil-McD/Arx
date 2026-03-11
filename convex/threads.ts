@@ -7,10 +7,8 @@ const MAX_ACTIVE_CLOUD_PROJECTS_PER_USER = 5;
 type ThreadLike = {
   _id: any;
   ownerId: any;
-  context: "cloud" | "local" | "community";
   title?: string;
   titleSource: "auto" | "manual";
-  engineId?: string;
   projectId?: any;
   communityId?: string;
   modelId?: string;
@@ -43,12 +41,18 @@ type RuntimeRunLike = {
   threadId: any;
   runId: string;
   lane: string;
-  requiresTools: boolean;
+  requestedExecutionTarget?: "chat" | "daytona_workspace";
+  projectId?: any;
   modelId?: string;
   engineId?: string;
   executionMode?: string;
+  approvalMode?: string;
+  sandboxMode?: string;
   contractName?: string;
   contractVersion?: string;
+  harnessProfile?: string;
+  harnessProfileSource?: string;
+  capabilityFamilies?: string[];
   status: "running" | "ok" | "error" | "cancelled";
   reason?: string;
   errorCode?: string;
@@ -244,7 +248,6 @@ async function getCloudThreadByThreadKeyInternal(args: {
     .withIndex("by_owner_threadKey", (q: any) => q.eq("ownerId", args.ownerId).eq("threadKey", args.threadKey))
     .first();
   if (!row) return null;
-  if (row.context !== "cloud") return null;
   if (typeof row.archivedAt === "number") return null;
   return row as ThreadLike;
 }
@@ -257,7 +260,6 @@ async function requireOwnedCloudThread(args: {
   const row = (await args.ctx.db.get(args.threadId)) as ThreadLike | null;
   if (!row) throw new Error("thread_not_found");
   if (row.ownerId !== args.ownerId) throw new Error("thread_access_denied");
-  if (row.context !== "cloud") throw new Error("thread_wrong_context");
   return row;
 }
 
@@ -501,7 +503,7 @@ export const listCloudThreadsByOwner = query({
     const includeArchived = Boolean(args.includeArchived);
     const rows = await ctx.db
       .query("threads")
-      .withIndex("by_owner_context", (q) => q.eq("ownerId", ownerId).eq("context", "cloud"))
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
     const filtered = rows.filter((row) => {
       if (!includeArchived && typeof row.archivedAt === "number") return false;
@@ -528,7 +530,6 @@ export const getCloudThreadById = query({
     const row = (await ctx.db.get(args.threadId)) as ThreadLike | null;
     if (!row) return null;
     if (row.ownerId !== ownerId) return null;
-    if (row.context !== "cloud") return null;
     if (!args.includeArchived && typeof row.archivedAt === "number") return null;
     return row;
   },
@@ -569,7 +570,6 @@ export const getCloudThreadContext = query({
     const row = (await ctx.db.get(args.threadId)) as ThreadLike | null;
     if (!row) return null;
     if (row.ownerId !== ownerId) return null;
-    if (row.context !== "cloud") return null;
     if (typeof row.archivedAt === "number") return null;
     return {
       thread_id: String(row._id),
@@ -642,7 +642,6 @@ export const ensureCloudThread = mutation({
     threadKey: v.string(),
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
-    engineId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
@@ -666,9 +665,6 @@ export const ensureCloudThread = mutation({
       const patch: Record<string, unknown> = { updatedAt: nowMs };
       if (args.projectId && existing.projectId !== args.projectId) {
         patch.projectId = args.projectId;
-      }
-      if (typeof args.engineId === "string" && args.engineId.trim() && existing.engineId !== args.engineId.trim()) {
-        patch.engineId = args.engineId.trim();
       }
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
@@ -696,11 +692,9 @@ export const ensureCloudThread = mutation({
     const projectId = args.projectId ?? (await ensureDefaultProjectId({ ctx, ownerId, nowMs }));
     const id = await ctx.db.insert("threads", {
       ownerId,
-      context: "cloud",
       threadKey,
       title: normalizeThreadTitle(args.title) ?? "New thread",
       titleSource: args.titleSource ?? "auto",
-      engineId: String(args.engineId ?? "").trim() || "cloud_chat",
       projectId,
       communityId: String(args.communityId ?? "").trim() || undefined,
       modelId: String(args.modelId ?? "").trim() || undefined,
@@ -726,7 +720,6 @@ export const updateCloudThread = mutation({
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
-    engineId: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
@@ -754,7 +747,6 @@ export const updateCloudThread = mutation({
     }
     if (args.titleSource) patch.titleSource = args.titleSource;
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
-    if (typeof args.engineId === "string") patch.engineId = args.engineId.trim() || undefined;
     if (args.projectId) patch.projectId = args.projectId;
     if (typeof args.communityId === "string") {
       patch.communityId = args.communityId.trim() || undefined;
@@ -1038,12 +1030,18 @@ export const ensureCloudRuntimeRunStarted = mutation({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.optional(v.string()),
-    requiresTools: v.optional(v.boolean()),
+    requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
+    projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),
+    approvalMode: v.optional(v.string()),
+    sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
+    harnessProfileSource: v.optional(v.string()),
+    capabilityFamilies: v.optional(v.array(v.string())),
     startedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -1073,24 +1071,41 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const startedAt =
       typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
     const lane = normalizeRunLane(args.lane);
-    const executionMode = String(args.executionMode ?? "").trim() || (args.requiresTools ? "agentic" : "chat");
+    const requestedExecutionTarget = args.requestedExecutionTarget === "daytona_workspace" ? "daytona_workspace" : "chat";
+    const executionMode =
+      String(args.executionMode ?? "").trim() || (requestedExecutionTarget === "daytona_workspace" ? "agentic" : "chat");
     const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
     const modelId = String(args.modelId ?? "").trim() || undefined;
     const engineId = String(args.engineId ?? "").trim() || undefined;
-    const requiresTools = Boolean(args.requiresTools);
+    const projectId = args.projectId;
+    const approvalMode = String(args.approvalMode ?? "").trim() || undefined;
+    const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
+    const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
+    const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
+    const capabilityFamilies = Array.isArray(args.capabilityFamilies)
+      ? args.capabilityFamilies
+          .map((value) => String(value ?? "").trim())
+          .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index)
+      : undefined;
 
     const id = await ctx.db.insert("runtimeRuns", {
       ownerId,
       threadId: thread._id,
       runId,
       lane,
-      requiresTools,
+      requestedExecutionTarget,
+      projectId,
       modelId,
       engineId,
       executionMode,
+      approvalMode,
+      sandboxMode,
       contractName,
       contractVersion,
+      harnessProfile,
+      harnessProfileSource,
+      capabilityFamilies,
       status: "running",
       lastEventSeq: 1,
       startedAt,
@@ -1108,12 +1123,18 @@ export const ensureCloudRuntimeRunStarted = mutation({
       payload: {
         run_id: runId,
         lane,
-        requires_tools: requiresTools,
+        requested_execution_target: requestedExecutionTarget,
+        project_id: projectId ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
         execution_mode: executionMode,
+        approval_mode: approvalMode ?? null,
+        sandbox_mode: sandboxMode ?? null,
         contract_name: contractName,
         contract_version: contractVersion,
+        harness_profile: harnessProfile ?? null,
+        harness_profile_source: harnessProfileSource ?? null,
+        capability_families: capabilityFamilies ?? [],
       },
       createdAt: startedAt,
     });

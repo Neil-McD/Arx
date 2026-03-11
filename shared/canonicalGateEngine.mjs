@@ -11,7 +11,8 @@ const VALID_REQUESTED_FUNDING_SOURCE = new Set([
   "platform",
   "auto",
 ]);
-const VALID_TURN_CLASS = new Set(["chat_only", "requires_tools"]);
+const VALID_REQUESTED_EXECUTION_TARGET = new Set(["chat", "daytona_workspace"]);
+const VALID_CAPABILITY_FAMILY = new Set(["community_tools", "coding_tools"]);
 
 function toLowerTrimmed(value) {
   return String(value ?? "")
@@ -48,9 +49,10 @@ function normalizeRequestedFundingSource(rawRequestedFundingSource, rawModelClas
   return legacyModelClass === "free_model" ? "demo_public" : "platform";
 }
 
-function normalizeTurnClass(rawTurnClass) {
-  const normalized = toLowerTrimmed(rawTurnClass);
-  return VALID_TURN_CLASS.has(normalized) ? normalized : "chat_only";
+function normalizeRequestedExecutionTarget(rawRequestedExecutionTarget) {
+  const normalized = toLowerTrimmed(rawRequestedExecutionTarget);
+  if (VALID_REQUESTED_EXECUTION_TARGET.has(normalized)) return normalized;
+  return "chat";
 }
 
 function normalizeCanonicalTier(rawTier) {
@@ -70,6 +72,49 @@ function resolveEffectiveTier(input) {
 
 function isPaidEffectiveTier(effectiveTier) {
   return WORKBENCH_TIER_SET.has(effectiveTier);
+}
+
+function normalizeHasCommunityContext(rawValue) {
+  return rawValue === true;
+}
+
+export function resolveEntitledCapabilityFamiliesForGate(input) {
+  const effectiveTier = resolveEffectiveTier({
+    authState: input?.authState,
+    tier: input?.tier,
+  });
+  if (effectiveTier === "anon_free") return [];
+  if (effectiveTier === "auth_free") return ["community_tools"];
+  return ["community_tools", "coding_tools"];
+}
+
+export function resolveActiveCapabilityFamiliesForGate(input) {
+  const requestedExecutionTarget = normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
+  const hasCommunityContext = normalizeHasCommunityContext(input?.hasCommunityContext);
+  const entitled = resolveEntitledCapabilityFamiliesForGate(input);
+  const active = [];
+  if (hasCommunityContext && entitled.includes("community_tools")) {
+    active.push("community_tools");
+  }
+  if (requestedExecutionTarget === "daytona_workspace" && entitled.includes("coding_tools")) {
+    active.push("coding_tools");
+  }
+  return active.filter((value, index, list) => VALID_CAPABILITY_FAMILY.has(value) && list.indexOf(value) === index);
+}
+
+export function resolveHarnessProfileForGate(input) {
+  const authState = normalizeAuthState(input?.authState);
+  if (authState === "anonymous") return "anonymous_demo";
+  const requestedExecutionTarget = normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
+  const active = resolveActiveCapabilityFamiliesForGate(input);
+  if (requestedExecutionTarget === "daytona_workspace") {
+    return active.includes("community_tools")
+      ? "authenticated_daytona_workspace_with_community"
+      : "authenticated_daytona_workspace";
+  }
+  return active.includes("community_tools")
+    ? "authenticated_cloud_chat_with_community"
+    : "authenticated_cloud_chat";
 }
 
 function deny(code, cta) {
@@ -99,7 +144,7 @@ export function evaluateCanonicalGate(rawInput) {
     rawInput?.requestedFundingSource,
     rawInput?.modelClass,
   );
-  const turnClass = normalizeTurnClass(rawInput?.turnClass);
+  const requestedExecutionTarget = normalizeRequestedExecutionTarget(rawInput?.requestedExecutionTarget);
   const authState = normalizeAuthState(rawInput?.authState);
   const effectiveTier = resolveEffectiveTier({
     authState,
@@ -110,7 +155,7 @@ export function evaluateCanonicalGate(rawInput) {
   const hasWorkbenchAccess = isPaidEffectiveTier(effectiveTier);
   const isAnonymous = effectiveTier === "anon_free";
 
-  if (turnClass === "requires_tools") {
+  if (requestedExecutionTarget === "daytona_workspace") {
     if (requestedFundingSource === "user_chatgpt") {
       if (isAnonymous) {
         return {
@@ -248,6 +293,10 @@ export function evaluateCanonicalGate(rawInput) {
 
 export function normalizeTierForGate(rawTier) {
   return normalizeCanonicalTier(rawTier);
+}
+
+export function resolveRequestedExecutionTargetForGate(input) {
+  return normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
 }
 
 export function resolveEffectiveTierForGate(input) {

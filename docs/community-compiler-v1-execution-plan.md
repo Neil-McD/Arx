@@ -319,7 +319,7 @@ Do not rebuild those systems.
 
 ### 1. Extract the compiler from ad hoc chat research
 
-Current `researchCommunityContext` in `communityChat.ts` is the embryo of the compiler.
+The old ad hoc community research query was the embryo of the compiler.
 
 V1 should:
 

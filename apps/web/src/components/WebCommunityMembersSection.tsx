@@ -243,7 +243,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     state.isLoadingCommunityJoinRequests ||
                     state.isSavingFreeAccessMode
                   }
-                  onClick={() => actions.setIsJoinRequestsModalOpen(true)}
+                  onClick={() => actions.setIsJoinRequestsModalOpen(!state.isJoinRequestsModalOpen)}
                 >
                   <div className="members-queue-copy">
                     <div className="members-queue-title">Pending approvals</div>
@@ -253,6 +253,60 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   </div>
                   <div className="members-queue-count">{pendingApprovalsCount}</div>
                 </button>
+                {state.isJoinRequestsModalOpen && (
+                  <div className="members-queue-expanded">
+                    {state.isLoadingCommunityJoinRequests ? (
+                      <div className="members-queue-empty">Loading…</div>
+                    ) : state.communityJoinRequests.length === 0 ? (
+                      <div className="members-queue-empty">No pending approvals.</div>
+                    ) : (
+                      <div className="members-queue-list">
+                        {state.communityJoinRequests.map((request) => {
+                          const message = (request.message ?? "").trim();
+                          const details = [actions.formatRelativeTime(request.created_at), message]
+                            .filter(Boolean)
+                            .join(" • ");
+                          const isDeciding = state.decidingCommunityJoinRequestId === request.id;
+                          return (
+                            <div key={request.id} className="members-queue-item">
+                              <div className="members-queue-item-main">
+                                <div className="members-queue-item-name">
+                                  {actions.displayName(request.user_id)}
+                                </div>
+                                <div className="members-queue-item-meta">
+                                  {details || "Requested access"}
+                                </div>
+                              </div>
+                              <div className="members-queue-item-actions">
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  disabled={isDeciding}
+                                  onClick={() => void actions.handleApproveCommunityJoinRequest(request.id)}
+                                  title="Approve"
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  className="danger"
+                                  type="button"
+                                  disabled={isDeciding}
+                                  onClick={() => void actions.handleDenyCommunityJoinRequest(request.id)}
+                                  title="Deny"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {state.communityJoinRequestsError && (
+                      <div className="auth-error">{state.communityJoinRequestsError}</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {state.communityJoinRequestsError && (
@@ -390,67 +444,6 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
         </div>
       </div>
 
-      {state.isJoinRequestsModalOpen && (
-        <div className="modal-overlay" onClick={() => actions.setIsJoinRequestsModalOpen(false)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">Pending approvals</div>
-              <button
-                className="modal-close"
-                onClick={() => actions.setIsJoinRequestsModalOpen(false)}
-                title="Close"
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              {state.isLoadingCommunityJoinRequests ? (
-                <div className="chat-empty">Loading…</div>
-              ) : state.communityJoinRequests.length === 0 ? (
-                <div className="model-note">No pending approvals.</div>
-              ) : (
-                <div className="invite-list">
-                  {state.communityJoinRequests.map((request) => {
-                    const message = (request.message ?? "").trim();
-                    const details = [actions.formatRelativeTime(request.created_at), message].filter(Boolean).join(" • ");
-                    const isDeciding = state.decidingCommunityJoinRequestId === request.id;
-                    return (
-                      <div key={request.id} className="invite-row">
-                        <div className="invite-main">
-                          <div className="invite-code">{actions.displayName(request.user_id)}</div>
-                          <div className="invite-status active">{details || "Requested access"}</div>
-                        </div>
-                        <div className="invite-actions">
-                          <button
-                            className="secondary"
-                            type="button"
-                            disabled={isDeciding}
-                            onClick={() => void actions.handleApproveCommunityJoinRequest(request.id)}
-                            title="Approve"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            className="danger"
-                            type="button"
-                            disabled={isDeciding}
-                            onClick={() => void actions.handleDenyCommunityJoinRequest(request.id)}
-                            title="Deny"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {state.communityJoinRequestsError && <div className="auth-error">{state.communityJoinRequestsError}</div>}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

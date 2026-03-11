@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import { fetchCloudCommunityFunnelConfig } from "./cloudCommunityFunnelGateway";
 
@@ -11,6 +12,7 @@ type SessionLike = {
 type UseCommunityFunnelControllerArgs<SessionT extends SessionLike, ConfigT> = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   communityFunnelConfig: ConfigT;
   normalizeConfigForSave: (config: ConfigT) => ConfigT;
   saveConfig: (params: {
@@ -37,11 +39,13 @@ export function useCommunityFunnelController<SessionT extends SessionLike, Confi
 
   const loadCommunityFunnelConfig = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     current.setIsLoadingCommunityFunnel(true);
     current.setCommunityFunnelError(null);
     try {
       const config = await fetchCloudCommunityFunnelConfig<SessionT, ConfigT>({
-        session,
+        session: usableSession,
         communityId,
       });
       current.hydrateEditor(config);
@@ -63,13 +67,14 @@ export function useCommunityFunnelController<SessionT extends SessionLike, Confi
 
   const handleSaveCommunityFunnel = useCallback(async (): Promise<boolean> => {
     const current = argsRef.current;
-    if (!current.session || !current.activeCommunityId) return false;
+    const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+    if (!usableSession || !current.activeCommunityId) return false;
     current.setIsSavingCommunityFunnel(true);
     current.setCommunityFunnelSaveError(null);
     try {
       const normalized = current.normalizeConfigForSave(current.communityFunnelConfig);
       const saved = await current.saveConfig({
-        session: current.session,
+        session: usableSession,
         communityId: current.activeCommunityId,
         normalizedConfig: normalized,
       });

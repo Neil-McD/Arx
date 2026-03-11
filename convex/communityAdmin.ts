@@ -669,10 +669,7 @@ export const setCommunityFreeAccessMode = mutation({
       throw new Error("community_free_access_mode_invalid");
     }
     const currentEntryPolicy = resolveCommunityEntryPolicy(community);
-    const nextEntryPolicy =
-      currentEntryPolicy === "paid_unlock" || currentEntryPolicy === "paid_subscription"
-        ? currentEntryPolicy
-        : nextMode;
+    const nextEntryPolicy = currentEntryPolicy === "paid_subscription" ? currentEntryPolicy : nextMode;
     await ctx.db.patch(community._id as any, {
       entryPolicy: nextEntryPolicy,
       updatedAt: nowMs,

@@ -747,7 +747,6 @@ export const deleteCloudProject = mutation({
     let movedThreadCount = 0;
     for (const thread of projectThreads) {
       if (thread.ownerId !== ownerId) continue;
-      if (thread.context !== "cloud") continue;
       await ctx.db.patch(thread._id, {
         projectId: generalProject._id,
         updatedAt: nowMs,

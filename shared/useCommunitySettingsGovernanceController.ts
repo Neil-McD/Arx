@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 
 import {
@@ -18,6 +19,7 @@ type SessionLike = {
 type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   confirmAction: (message: string) => boolean;
   loadCommunities: (session: SessionT) => Promise<void>;
   onLeaveCommunityLocalState: (leavingCommunityId: string) => void;
@@ -67,7 +69,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleToggleCommunityMute = useCallback(async (nextMuted: boolean) => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
     current.setCommunityMemberSettingsError(null);
@@ -96,7 +98,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleLeaveCommunity = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
@@ -126,7 +128,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 
   const handleSaveCommunitySettings = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 

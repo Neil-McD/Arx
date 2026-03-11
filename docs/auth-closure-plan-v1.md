@@ -99,7 +99,7 @@ The repo is partly cleaned already, but the client contract still carries dead o
 
 ### Drift F: auth and runtime still meet at one major behavioral blur
 
-Authenticated non-public sends still default to `requiresTools: true` in [`shared/useWebSendFlowController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts).
+Authenticated non-public sends should now default to `requestedExecutionTarget: "chat"` unless the action explicitly needs the Daytona workspace in [`shared/useWebSendFlowController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useWebSendFlowController.ts).
 
 This is not core auth verification drift.
 But it is auth-adjacent product drift because it makes:
@@ -229,8 +229,8 @@ make authenticated free access truthful.
 
 Changes:
 
-1. change authenticated cloud sends to default to `chat_only`
-2. keep `requires_tools` as the only path into Daytona
+1. change authenticated cloud sends to default to `chat`
+2. keep `requested_execution_target=daytona_workspace` as the only path into Daytona
 3. preserve Builder-only tool access
 
 Acceptance:

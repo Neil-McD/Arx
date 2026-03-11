@@ -19,7 +19,7 @@ export type CommunityLike = {
   updatedAt: number;
 };
 
-export type CommunityEntryPolicy = "open" | "approval" | "paid_unlock" | "paid_subscription";
+export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
 export type CommunityPrimaryCta = "open_community" | "join" | "request_access" | "checkout";
 
@@ -87,7 +87,6 @@ export type CommunityJoinRequestLike = {
 export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
-  kind: "unlock" | "subscription";
   billingPeriod: "monthly" | "annual";
   name: string;
   description?: string;
@@ -274,14 +273,13 @@ export function normalizeRole(raw: unknown): string {
 
 export function normalizeMembershipAccessSource(
   raw: unknown,
-): "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | "" {
+): "free_grant" | "manual_grant" | "paid_subscription" | "" {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
   if (
     value === "free_grant" ||
     value === "manual_grant" ||
-    value === "paid_unlock" ||
     value === "paid_subscription"
   ) {
     return value;
@@ -343,7 +341,6 @@ export function normalizeEntryPolicy(raw: unknown, fallback: CommunityEntryPolic
   if (
     entryPolicy === "open" ||
     entryPolicy === "approval" ||
-    entryPolicy === "paid_unlock" ||
     entryPolicy === "paid_subscription"
   ) {
     return entryPolicy;
@@ -416,8 +413,7 @@ function communityAccessSourceIsDurable(
   return (
     source === "" ||
     source === "free_grant" ||
-    source === "manual_grant" ||
-    source === "paid_unlock"
+    source === "manual_grant"
   );
 }
 
@@ -703,7 +699,7 @@ export async function resolveCommunityAccessBundle(args: {
   const canPostMessage = isEntitled;
   const primaryCta: CommunityPrimaryCta = isEntitled
     ? "open_community"
-    : entryPolicy === "paid_unlock" || entryPolicy === "paid_subscription"
+    : entryPolicy === "paid_subscription"
       ? "checkout"
       : entryPolicy === "approval"
         ? "request_access"

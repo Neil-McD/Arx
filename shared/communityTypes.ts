@@ -1,4 +1,4 @@
-export type CommunityEntryPolicy = "open" | "approval" | "paid_unlock" | "paid_subscription";
+export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
 
 export type PublicPlanSummary = {
@@ -70,7 +70,7 @@ export type CommunityAccess = {
   primary_cta?: "open_community" | "join" | "request_access" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;
-  access_source?: "free_grant" | "manual_grant" | "paid_unlock" | "paid_subscription" | null;
+  access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
   entitlement_role: string | null;
   entitlement_ends_at: string | null;

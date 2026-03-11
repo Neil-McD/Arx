@@ -52,7 +52,7 @@ Execution board:
 Scope:
 1. Align `/runtime/runtime_turn` behavior with `canonical-cloud-run-v1` target semantics.
 2. Harden deterministic event/run/tool lifecycle behavior for cloud tool-capable turns.
-3. Remove or strictly bound implicit fallback behavior for `requires_tools=true` turns.
+3. Remove or strictly bound implicit fallback behavior for `requested_execution_target=daytona_workspace` turns.
 
 Acceptance:
 1. Cloud tool turns emit canonical lifecycle semantics per active contract docs.

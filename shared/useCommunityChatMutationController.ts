@@ -7,6 +7,7 @@ import {
   deleteCloudOwnMessage,
   patchCloudOwnMessageContent,
 } from "./cloudCommunityChatGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type SessionLike = {
   user: { id: string };
@@ -42,6 +43,7 @@ type UseCommunityChatMutationControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   missingPayloadMessage: string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   toCommunityChatMessage: (row: RowT) => MessageT | null;
@@ -105,7 +107,7 @@ export function useCommunityChatMutationController<
 
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session) return;
     const existingReaction = current.messageReactions.find(
       (reaction) => (
@@ -183,7 +185,7 @@ export function useCommunityChatMutationController<
 
   const handleSaveEdit = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.editingMessageId) return;
     const text = current.editingMessageText.trim();
     if (!text) return;
@@ -219,7 +221,7 @@ export function useCommunityChatMutationController<
 
   const handleDeleteMessage = useCallback(async (messageId: string) => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session) return;
     current.setCommunityMessages((prev) => prev.filter((message) => message.id !== messageId));
     current.setMessageReactions((prev) => prev.filter((reaction) => reaction.message_id !== messageId));
@@ -239,7 +241,7 @@ export function useCommunityChatMutationController<
 
   const handleSendCommunityMessage = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
 
     const rawText = current.communityMessageInput.trim();

@@ -4,9 +4,16 @@ import {
 } from "./httpRuntimeSupport";
 import { runChatgptCompletion } from "./httpChatgpt";
 import {
-  buildFoundationContextPrompt,
+  buildPlatformDoctrinePrompt,
+  buildSoulDoctrinePrompt,
+  buildWorkspaceFoundationPrompt,
+  buildCommunityFoundationPrompt,
   joinPromptBlocks,
 } from "../shared/doctrinePrompt";
+import {
+  buildDefaultNonCommunityScopePrompt,
+  resolveEffectiveCommunitySystemPrompt,
+} from "../shared/communitySystemPromptResolver";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -74,6 +81,8 @@ type DaytonaToolName =
   | "edit"
   | "bash";
 
+type CommunityToolName = "community_search" | "community_write";
+
 type DaytonaToolCallDecision = {
   type: "tool_call";
   tool_name: DaytonaToolName;
@@ -119,6 +128,38 @@ type DaytonaAgentLoopFailure = {
   pendingToolCallId?: string;
   pendingToolName?: DaytonaToolName;
 };
+
+type CommunityToolCallDecision = {
+  type: "tool_call";
+  tool_name: CommunityToolName;
+  args?: Record<string, unknown> | null;
+  reason?: string | null;
+};
+
+type CommunityAssistantDecision = {
+  type: "assistant";
+  text: string;
+};
+
+type CommunityAgentDecision = CommunityToolCallDecision | CommunityAssistantDecision;
+
+type RuntimeAgentLoopSuccess = {
+  ok: true;
+  assistantText: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+};
+
+type RuntimeAgentLoopFailure = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+  pendingToolCallId?: string;
+  pendingToolName?: string;
+};
+
+type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 
 function readEnv(name: string): string {
   try {
@@ -773,6 +814,14 @@ function normalizeDaytonaToolName(value: unknown): DaytonaToolName | null {
   return null;
 }
 
+function normalizeCommunityToolName(value: unknown): CommunityToolName | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "community_search" || normalized === "community_write") {
+    return normalized;
+  }
+  return null;
+}
+
 function stripCodeFence(text: string): string {
   const trimmed = text.trim();
   if (!trimmed.startsWith("```")) return trimmed;
@@ -816,11 +865,46 @@ function parseDaytonaAgentDecision(rawText: string): DaytonaAgentDecision | null
   return null;
 }
 
+function parseCommunityAgentDecision(rawText: string): CommunityAgentDecision | null {
+  const stripped = stripCodeFence(rawText);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  const type = String(record.type ?? "").trim().toLowerCase();
+  if (type === "assistant") {
+    const text = String(record.text ?? "").trim();
+    if (!text) return null;
+    return { type: "assistant", text };
+  }
+  if (type === "tool_call") {
+    const toolName = normalizeCommunityToolName(record.tool_name);
+    if (!toolName) return null;
+    const args = record.args && typeof record.args === "object" && !Array.isArray(record.args)
+      ? (record.args as Record<string, unknown>)
+      : {};
+    const reason = String(record.reason ?? "").trim() || null;
+    return {
+      type: "tool_call",
+      tool_name: toolName,
+      args,
+      reason,
+    };
+  }
+  return null;
+}
+
 function buildDaytonaAgentSystemPrompt(params: {
   projectId: string;
   sandboxId: string;
   maxIterations: number;
   communityId?: string | null;
+  communityName?: string | null;
+  communitySystemPrompt?: string | null;
 }): string {
   const communityToolList = params.communityId ? "|community_search|community_write" : "";
   const workspacePrompt = [
@@ -850,12 +934,69 @@ function buildDaytonaAgentSystemPrompt(params: {
     `- Max ${params.maxIterations} tool iterations.`,
     `Context: project_id=${params.projectId}, sandbox_id=${params.sandboxId}`,
   ].join("\n");
-  return joinPromptBlocks([
-    buildFoundationContextPrompt({
+  const communityPrompt =
+    resolveEffectiveCommunitySystemPrompt({
       communityId: params.communityId,
+      communityName: params.communityName,
+      customSystemPrompt: params.communitySystemPrompt,
+    }) ?? buildDefaultNonCommunityScopePrompt();
+  return joinPromptBlocks([
+    buildPlatformDoctrinePrompt(),
+    buildSoulDoctrinePrompt(),
+    buildWorkspaceFoundationPrompt({
       workspaceMode: "coding",
     }),
     workspacePrompt,
+    buildCommunityFoundationPrompt({
+      communityId: params.communityId,
+      communityName: params.communityName,
+    }),
+    communityPrompt,
+  ]);
+}
+
+function buildCommunityAgentSystemPrompt(params: {
+  maxIterations: number;
+  communityId: string;
+  communityName?: string | null;
+  communitySystemPrompt?: string | null;
+}): string {
+  const communityPrompt =
+    resolveEffectiveCommunitySystemPrompt({
+      communityId: params.communityId,
+      communityName: params.communityName,
+      customSystemPrompt: params.communitySystemPrompt,
+    }) ?? buildDefaultNonCommunityScopePrompt();
+  const harnessPrompt = [
+    "COMMUNITY_HARNESS_MODE",
+    "You are the Arx authenticated cloud chat agent with community tools.",
+    "Return only strict JSON (no prose, no markdown).",
+    "Allowed JSON outputs:",
+    '1) {"type":"assistant","text":"..."}',
+    '2) {"type":"tool_call","tool_name":"community_search|community_write","args":{...},"reason":"..."}',
+    "Rules:",
+    "- At most one tool_call per response.",
+    "- Use community_search to ground questions about community chat, AI feed, resources, trends, and requests.",
+    "- Infer a useful search query from the user request before asking for clarification.",
+    "- Only ask for clarification after at least one community_search pass returns no relevant evidence.",
+    "- Use community_write only when the user asks to share, publish, or broadcast a grounded community insight.",
+    '- community_write args should use: {"post_type":"observation|recommendation|action","title":"optional","body":"required","why_now":"optional","evidence":["1-4 grounding bullets"],"publish_confidence":0-6,"novelty_key":"optional"}.',
+    "- Do not claim community tools are unavailable in this harness.",
+    "- Do not reference filesystem, shell, workspace, or sandbox tools in this harness.",
+    `- Max ${params.maxIterations} tool iterations.`,
+  ].join("\n");
+  return joinPromptBlocks([
+    buildPlatformDoctrinePrompt(),
+    buildSoulDoctrinePrompt(),
+    buildWorkspaceFoundationPrompt({
+      workspaceMode: "platform",
+    }),
+    harnessPrompt,
+    buildCommunityFoundationPrompt({
+      communityId: params.communityId,
+      communityName: params.communityName,
+    }),
+    communityPrompt,
   ]);
 }
 
@@ -893,13 +1034,113 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 async function makeToolCallKey(params: {
-  toolName: DaytonaToolName;
+  toolName: string;
   args: Record<string, unknown>;
-  projectId: string;
+  scopeId: string;
 }): Promise<string> {
   const canonicalEntries = Object.entries(params.args).sort(([left], [right]) => left.localeCompare(right));
   const canonicalArgs = JSON.stringify(Object.fromEntries(canonicalEntries));
-  return await sha256Hex(`${params.projectId}:${params.toolName}:${canonicalArgs}`);
+  return await sha256Hex(`${params.scopeId}:${params.toolName}:${canonicalArgs}`);
+}
+
+async function executeCommunityHarnessTool(params: {
+  ctx: any;
+  userId: string;
+  communityId: string | null;
+  toolName: CommunityToolName;
+  args: Record<string, unknown>;
+}): Promise<DaytonaToolExecutionResult> {
+  const communityId = String(params.communityId ?? "").trim();
+  if (!communityId) {
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: "",
+      errorCode: "community_context_required",
+      errorMessage: `${params.toolName} requires an active community context.`,
+    };
+  }
+  if (params.toolName === "community_search") {
+    const query = String(params.args.query ?? "").trim();
+    if (!query) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "invalid_tool_args",
+        errorMessage: "community_search requires query.",
+      };
+    }
+    const payload = await params.ctx.runQuery(api.community.readCompiledCommunityContext as any, {
+      userId: params.userId,
+      communityId,
+      query,
+    });
+    return {
+      status: "ok",
+      exitCode: 0,
+      outputText: JSON.stringify(payload ?? { ok: false }),
+      errorCode: null,
+      errorMessage: null,
+    };
+  }
+
+  const body = String(params.args.body ?? "").trim();
+  if (!body) {
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: "",
+      errorCode: "invalid_tool_args",
+      errorMessage: "community_write requires body.",
+    };
+  }
+  const postTypeRaw = String(params.args.post_type ?? "").trim().toLowerCase();
+  const postType =
+    postTypeRaw === "recommendation" || postTypeRaw === "action" ? postTypeRaw : "observation";
+  const title = String(params.args.title ?? "").trim() || null;
+  const whyNow = String(params.args.why_now ?? "").trim() || null;
+  const evidence = Array.isArray(params.args.evidence)
+    ? params.args.evidence
+        .map((entry) => String(entry ?? "").trim())
+        .filter((entry): entry is string => entry.length > 0)
+        .slice(0, 4)
+    : [];
+  const authorLabel = String(params.args.author_label ?? "").trim() || null;
+  const noveltyKey = String(params.args.novelty_key ?? "").trim() || null;
+  const publishConfidenceRaw = Number(params.args.publish_confidence);
+  const publishConfidence = Number.isFinite(publishConfidenceRaw)
+    ? Math.max(0, Math.min(6, Math.round(publishConfidenceRaw)))
+    : undefined;
+  if (evidence.length === 0) {
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: "",
+      errorCode: "invalid_tool_args",
+      errorMessage: "community_write requires evidence.",
+    };
+  }
+  const payload = await params.ctx.runMutation(api.community.publishCommunityAiFeedAgentPost as any, {
+    userId: params.userId,
+    communityId,
+    agentKey: "community_write",
+    authorLabel,
+    postType,
+    title,
+    body,
+    whyNow,
+    evidence,
+    publishConfidence,
+    noveltyKey,
+  });
+  return {
+    status: "ok",
+    exitCode: 0,
+    outputText: JSON.stringify(payload ?? { ok: false }),
+    errorCode: null,
+    errorMessage: null,
+  };
 }
 
 function normalizeRelativeWorkspacePath(raw: unknown): string {
@@ -1525,107 +1766,14 @@ async function executeDaytonaTool(params: {
         errorMessage: null,
       };
     }
-    if (params.toolName === "community_search") {
-      const communityId = String(params.communityId ?? "").trim();
-      if (!communityId) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "community_context_required",
-          errorMessage: "community_search requires an active community context.",
-        };
-      }
-      const query = String(params.args.query ?? "").trim();
-      if (!query) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "invalid_tool_args",
-          errorMessage: "community_search requires query.",
-        };
-      }
-      const payload = await params.ctx.runQuery(api.community.readCompiledCommunityContext as any, {
+    if (params.toolName === "community_search" || params.toolName === "community_write") {
+      return await executeCommunityHarnessTool({
+        ctx: params.ctx,
         userId: params.userId,
-        communityId,
-        query,
+        communityId: params.communityId,
+        toolName: params.toolName,
+        args: params.args,
       });
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: JSON.stringify(payload ?? { ok: false }),
-        errorCode: null,
-        errorMessage: null,
-      };
-    }
-    if (params.toolName === "community_write") {
-      const communityId = String(params.communityId ?? "").trim();
-      if (!communityId) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "community_context_required",
-          errorMessage: "community_write requires an active community context.",
-        };
-      }
-      const body = String(params.args.body ?? "").trim();
-      if (!body) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "invalid_tool_args",
-          errorMessage: "community_write requires body.",
-        };
-      }
-      const postTypeRaw = String(params.args.post_type ?? "").trim().toLowerCase();
-      const postType =
-        postTypeRaw === "recommendation" || postTypeRaw === "action" ? postTypeRaw : "observation";
-      const title = String(params.args.title ?? "").trim() || null;
-      const whyNow = String(params.args.why_now ?? "").trim() || null;
-      const evidence = Array.isArray(params.args.evidence)
-        ? params.args.evidence
-            .map((entry) => String(entry ?? "").trim())
-            .filter((entry): entry is string => entry.length > 0)
-            .slice(0, 4)
-        : [];
-      const authorLabel = String(params.args.author_label ?? "").trim() || null;
-      const noveltyKey = String(params.args.novelty_key ?? "").trim() || null;
-      const publishConfidenceRaw = Number(params.args.publish_confidence);
-      const publishConfidence = Number.isFinite(publishConfidenceRaw)
-        ? Math.max(0, Math.min(6, Math.round(publishConfidenceRaw)))
-        : undefined;
-      if (evidence.length === 0) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: "",
-          errorCode: "invalid_tool_args",
-          errorMessage: "community_write requires evidence.",
-        };
-      }
-      const payload = await params.ctx.runMutation(api.community.publishCommunityAiFeedAgentPost as any, {
-        userId: params.userId,
-        communityId,
-        agentKey: "community_write",
-        authorLabel,
-        postType,
-        title,
-        body,
-        whyNow,
-        evidence,
-        publishConfidence,
-        noveltyKey,
-      });
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: JSON.stringify(payload ?? { ok: false }),
-        errorCode: null,
-        errorMessage: null,
-      };
     }
     if (params.toolName === "bash") {
       const command = String(params.args.cmd ?? params.args.command ?? "").trim();
@@ -1687,6 +1835,44 @@ async function executeDaytonaTool(params: {
   }
 }
 
+async function runRuntimeAgentCompletion(params: {
+  ctx: any;
+  req: Request;
+  userId: string;
+  requestedModelId: string;
+  inferenceSource: RuntimeInferenceSource;
+  modelRef: string;
+  messages: InferenceMessage[];
+  maxTokens: number;
+  apiKeyOverride?: string | null;
+}): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
+  const completion =
+    params.inferenceSource === "chatgpt"
+      ? await runChatgptCompletion({
+          ctx: params.ctx,
+          userId: params.userId,
+          modelId: params.requestedModelId,
+          messages: params.messages,
+          maxTokens: params.maxTokens,
+        })
+      : await runOpenRouterCompletion({
+          req: params.req,
+          modelRef: params.modelRef,
+          messages: params.messages,
+          maxTokens: params.maxTokens,
+          apiKeyOverride: params.apiKeyOverride,
+        });
+  if ("ok" in completion && completion.ok === false) {
+    return completion;
+  }
+  return {
+    ok: true,
+    assistantText: completion.content.trim(),
+    promptTokens: completion.promptTokens,
+    completionTokens: completion.completionTokens,
+  };
+}
+
 async function executeDaytonaAgentLoop(params: {
   ctx: any;
   req: Request;
@@ -1696,6 +1882,7 @@ async function executeDaytonaAgentLoop(params: {
   modelRef: string;
   messages: InferenceMessage[];
   maxTokens: number;
+  apiKeyOverride?: string | null;
   runId: string;
   projectId: string;
   daytonaConfig: DaytonaConfig;
@@ -1705,6 +1892,8 @@ async function executeDaytonaAgentLoop(params: {
   codingContinuationPrompt?: string | null;
   codingRelevantFiles?: string[] | null;
   communityId?: string | null;
+  communityName?: string | null;
+  communitySystemPrompt?: string | null;
   appendRunEvent: (params: {
     eventType: string;
     eventKey?: string;
@@ -1728,6 +1917,8 @@ async function executeDaytonaAgentLoop(params: {
         sandboxId: params.providerSandboxId,
         maxIterations,
         communityId: params.communityId,
+        communityName: params.communityName,
+        communitySystemPrompt: params.communitySystemPrompt,
       }),
     },
     ...(params.codingContinuationPrompt
@@ -1768,27 +1959,23 @@ async function executeDaytonaAgentLoop(params: {
   let lastCompletionTokens: number | null = null;
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const completion =
-      params.inferenceSource === "chatgpt"
-        ? await runChatgptCompletion({
-            ctx: params.ctx,
-            userId: params.userId,
-            modelId: params.requestedModelId,
-            messages: transcript,
-            maxTokens: params.maxTokens,
-          })
-        : await runOpenRouterCompletion({
-            req: params.req,
-            modelRef: params.modelRef,
-            messages: transcript,
-            maxTokens: params.maxTokens,
-          });
-    if ("ok" in completion && completion.ok === false) {
+    const completion = await runRuntimeAgentCompletion({
+      ctx: params.ctx,
+      req: params.req,
+      userId: params.userId,
+      requestedModelId: params.requestedModelId,
+      inferenceSource: params.inferenceSource,
+      modelRef: params.modelRef,
+      messages: transcript,
+      maxTokens: params.maxTokens,
+      apiKeyOverride: params.apiKeyOverride,
+    });
+    if (!completion.ok) {
       return completion;
     }
     lastPromptTokens = completion.promptTokens;
     lastCompletionTokens = completion.completionTokens;
-    const rawAssistantText = completion.content.trim();
+    const rawAssistantText = completion.assistantText.trim();
     if (!rawAssistantText) {
       return {
         ok: false,
@@ -1850,7 +2037,7 @@ async function executeDaytonaAgentLoop(params: {
     const toolCallKey = await makeToolCallKey({
       toolName: decision.tool_name,
       args: normalizedArgs,
-      projectId: params.projectId,
+      scopeId: params.projectId,
     });
     const policy = resolveDaytonaToolPolicy(decision.tool_name);
 
@@ -1985,8 +2172,225 @@ async function executeDaytonaAgentLoop(params: {
   };
 }
 
+async function executeCommunityAgentLoop(params: {
+  ctx: any;
+  req: Request;
+  userId: string;
+  requestedModelId: string;
+  inferenceSource: RuntimeInferenceSource;
+  modelRef: string;
+  messages: InferenceMessage[];
+  maxTokens: number;
+  runId: string;
+  communityId: string;
+  communityName?: string | null;
+  communitySystemPrompt?: string | null;
+  apiKeyOverride?: string | null;
+  appendRunEvent: (params: {
+    eventType: string;
+    eventKey?: string;
+    payload: Record<string, unknown>;
+  }) => Promise<void>;
+}): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
+  const maxIterations = 6;
+  const transcript: InferenceMessage[] = [
+    {
+      role: "system",
+      content: buildCommunityAgentSystemPrompt({
+        maxIterations,
+        communityId: params.communityId,
+        communityName: params.communityName,
+        communitySystemPrompt: params.communitySystemPrompt,
+      }),
+    },
+    ...params.messages,
+  ];
+
+  let invalidJsonRetries = 0;
+  const maxInvalidJsonRetries = 1;
+  let lastPromptTokens: number | null = null;
+  let lastCompletionTokens: number | null = null;
+
+  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    const completion = await runRuntimeAgentCompletion({
+      ctx: params.ctx,
+      req: params.req,
+      userId: params.userId,
+      requestedModelId: params.requestedModelId,
+      inferenceSource: params.inferenceSource,
+      modelRef: params.modelRef,
+      messages: transcript,
+      maxTokens: params.maxTokens,
+      apiKeyOverride: params.apiKeyOverride,
+    });
+    if (!completion.ok) {
+      return completion;
+    }
+    lastPromptTokens = completion.promptTokens;
+    lastCompletionTokens = completion.completionTokens;
+    const rawAssistantText = completion.assistantText.trim();
+    if (!rawAssistantText) {
+      return {
+        ok: false,
+        status: 502,
+        code: "empty_response",
+        message: "Community harness model returned an empty response.",
+      };
+    }
+
+    const decision = parseCommunityAgentDecision(rawAssistantText);
+    if (!decision) {
+      if (invalidJsonRetries < maxInvalidJsonRetries) {
+        invalidJsonRetries += 1;
+        await params.appendRunEvent({
+          eventType: "model_output_invalid_json",
+          eventKey: `${params.runId}:community_model_output_invalid_json:${iteration}:${invalidJsonRetries}`,
+          payload: {
+            run_id: params.runId,
+            iteration,
+            attempt: invalidJsonRetries,
+            output_preview: rawAssistantText.slice(0, 2000),
+          },
+        });
+        transcript.push({
+          role: "assistant",
+          content: rawAssistantText,
+        });
+        transcript.push({
+          role: "system",
+          content: [
+            "INVALID_FORMAT",
+            "Your previous response was not strict JSON.",
+            "Reply again using exactly one JSON object and no prose/markdown.",
+            'Allowed schemas: {"type":"assistant","text":"..."} or {"type":"tool_call","tool_name":"community_search|community_write","args":{...}}',
+          ].join("\n"),
+        });
+        continue;
+      }
+      return {
+        ok: true,
+        assistantText: rawAssistantText,
+        promptTokens: lastPromptTokens,
+        completionTokens: lastCompletionTokens,
+      };
+    }
+    invalidJsonRetries = 0;
+
+    if (decision.type === "assistant") {
+      return {
+        ok: true,
+        assistantText: decision.text,
+        promptTokens: lastPromptTokens,
+        completionTokens: lastCompletionTokens,
+      };
+    }
+
+    const toolCallId = `runtime_tools:${params.runId}:community:${iteration}`;
+    const normalizedArgs = decision.args ?? {};
+    const toolCallKey = await makeToolCallKey({
+      toolName: decision.tool_name,
+      args: normalizedArgs,
+      scopeId: params.communityId,
+    });
+
+    await params.appendRunEvent({
+      eventType: "tool_call_requested",
+      eventKey: `${params.runId}:community_tool_call_requested:${iteration}`,
+      payload: {
+        run_id: params.runId,
+        tool_call_id: toolCallId,
+        tool_call_key: toolCallKey,
+        tool_name: decision.tool_name,
+        args: normalizedArgs,
+        requires_approval: false,
+        policy_basis: "runtime_community_harness_policy_v1:auto_allow",
+        reason: decision.reason ?? null,
+        iteration,
+      },
+    });
+
+    await params.appendRunEvent({
+      eventType: "tool_call_approved",
+      eventKey: `${params.runId}:community_tool_call_approved:${iteration}`,
+      payload: {
+        run_id: params.runId,
+        tool_call_id: toolCallId,
+        approved: true,
+        approved_by: "policy",
+        note: "Auto-approved by community harness policy.",
+        iteration,
+      },
+    });
+
+    await params.appendRunEvent({
+      eventType: "tool_call_started",
+      eventKey: `${params.runId}:community_tool_call_started:${iteration}`,
+      payload: {
+        run_id: params.runId,
+        tool_call_id: toolCallId,
+        attempt: 1,
+        community_scope_id: params.communityId,
+        harness: {
+          kind: "community",
+        },
+      },
+    });
+
+    const toolResult = await executeCommunityHarnessTool({
+      ctx: params.ctx,
+      userId: params.userId,
+      communityId: params.communityId,
+      toolName: decision.tool_name,
+      args: normalizedArgs,
+    });
+
+    await params.appendRunEvent({
+      eventType: "tool_call_finished",
+      eventKey: `${params.runId}:community_tool_call_finished:${iteration}`,
+      payload: {
+        run_id: params.runId,
+        tool_call_id: toolCallId,
+        attempt: 1,
+        status: toolResult.status,
+        exit_code: toolResult.exitCode,
+        error_code: toolResult.errorCode,
+        error_message: toolResult.errorMessage,
+        output_preview: toolResult.outputText.slice(0, 2000),
+      },
+    });
+
+    transcript.push({
+      role: "assistant",
+      content: rawAssistantText,
+    });
+    transcript.push({
+      role: "system",
+      content: [
+        "TOOL_RESULT",
+        `tool_name=${decision.tool_name}`,
+        `status=${toolResult.status}`,
+        `exit_code=${toolResult.exitCode ?? ""}`,
+        toolResult.errorCode ? `error_code=${toolResult.errorCode}` : "",
+        toolResult.errorMessage ? `error_message=${toolResult.errorMessage}` : "",
+        "output:",
+        toolResult.outputText || "(empty)",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n"),
+    });
+  }
+
+  return {
+    ok: false,
+    status: 502,
+    code: "run_loop_limit_exceeded",
+    message: `Community harness run exceeded max tool iterations (${maxIterations}).`,
+  };
+}
+
 export type { DaytonaConfig };
 export {
+  executeCommunityAgentLoop,
   executeDaytonaAgentLoop,
   executeDaytonaProbeToolCall,
   loadDaytonaConfig,

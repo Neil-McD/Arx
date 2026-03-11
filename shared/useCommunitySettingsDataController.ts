@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
   fetchCloudCommunityMemberSettingsRow,
@@ -24,7 +25,8 @@ type CommunityPricingRow = {
   currency_decimals: number;
 };
 
-type UseCommunitySettingsDataControllerArgs = {
+type UseCommunitySettingsDataControllerArgs<SessionT extends SessionLike> = {
+  ensureSession?: EnsureSessionFn<SessionT>;
   communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
   communityPricingDirtyRef: MutableRefObject<boolean>;
 
@@ -45,20 +47,22 @@ function formatPlanAmount(row: CommunityPricingRow | null): string {
 }
 
 export function useCommunitySettingsDataController<SessionT extends SessionLike>(
-  args: UseCommunitySettingsDataControllerArgs,
+  args: UseCommunitySettingsDataControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
   const loadCommunityMemberSettings = useCallback(async (params: { communityId: string; session: SessionT }) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(params.session, current.ensureSession);
+    if (!usableSession) return;
     current.setIsLoadingCommunityMemberSettings(true);
     current.setCommunityMemberSettingsError(null);
     try {
       const row = await fetchCloudCommunityMemberSettingsRow<SessionT, CommunityMemberSettingsRow>({
-        session: params.session,
+        session: usableSession,
         communityId: params.communityId,
-        userId: params.session.user.id,
+        userId: usableSession.user.id,
       });
       current.setCommunityMemberMuted(Boolean(row?.muted));
     } catch {
@@ -71,9 +75,11 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
   const loadCommunityPricing = useCallback(
     async (params: { communityId: string; session: SessionT; shouldIgnore?: () => boolean }) => {
       const current = argsRef.current;
+      const usableSession = await resolveUsableSession(params.session, current.ensureSession);
+      if (!usableSession) return;
       try {
         const rows = await listCloudCommunityPricePointRows<SessionT, CommunityPricingRow>({
-          session: params.session,
+          session: usableSession,
           communityId: params.communityId,
         });
         if (params.shouldIgnore?.()) return;

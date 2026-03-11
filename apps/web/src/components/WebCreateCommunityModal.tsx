@@ -99,121 +99,138 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Create community</div>
+          <div className="create-community-heading">
+            <div className="modal-title">Create community</div>
+            <div className="create-community-subtitle">
+              Start with the identity and access basics. You can refine the funnel and AI agent after.
+            </div>
+          </div>
           <button className="modal-close" onClick={onClose} title="Close">
             ×
           </button>
         </div>
         <div className="modal-body">
           <div className="create-community-form">
-            <div
-              className={`create-community-banner${isCreateBannerDragOver ? " drag-over" : ""}`}
-              onDragOver={(event) => {
-                event.preventDefault();
-                onSetBannerDragOver(true);
-              }}
-              onDragLeave={() => onSetBannerDragOver(false)}
-              onDrop={onBannerDrop}
-            >
-              <div className="create-community-banner-media">
-                {createCommunityBannerUrl ? (
-                  <img src={createCommunityBannerUrl} alt="Community banner preview" draggable={false} />
-                ) : (
-                  <div className="create-community-banner-placeholder">Banner preview</div>
-                )}
-              </div>
-              <label className="create-banner-btn">
-                Upload banner
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    event.target.value = "";
-                    void onUploadBanner(file);
+            <div className="create-community-layout">
+              <div className="create-community-branding">
+                <div
+                  className={`create-community-banner${isCreateBannerDragOver ? " drag-over" : ""}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    onSetBannerDragOver(true);
                   }}
-                />
-              </label>
-              {createCommunityBannerUrl && (
-                <button className="create-banner-remove" type="button" onClick={onRemoveBanner}>
-                  Remove
-                </button>
-              )}
-            </div>
-            <div className="create-community-avatar-row">
-              <div
-                className={`create-community-avatar${isCreateAvatarDragOver ? " drag-over" : ""}`}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  onSetAvatarDragOver(true);
-                }}
-                onDragLeave={() => onSetAvatarDragOver(false)}
-                onDrop={onAvatarDrop}
-              >
-                {createCommunityAvatarUrl ? (
-                  <img src={createCommunityAvatarUrl} alt="Community avatar preview" draggable={false} />
-                ) : (
-                  <span>{communityInitials(createCommunityName || "Community")}</span>
-                )}
+                  onDragLeave={() => onSetBannerDragOver(false)}
+                  onDrop={onBannerDrop}
+                >
+                  <div className="create-community-banner-media">
+                    {createCommunityBannerUrl ? (
+                      <img src={createCommunityBannerUrl} alt="Community banner preview" draggable={false} />
+                    ) : (
+                      <div className="create-community-banner-placeholder">Banner preview</div>
+                    )}
+                  </div>
+                </div>
+                <div className="create-community-branding-actions">
+                  <label className="create-banner-btn">
+                    Upload banner
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        event.target.value = "";
+                        void onUploadBanner(file);
+                      }}
+                    />
+                  </label>
+                  {createCommunityBannerUrl ? (
+                    <button className="create-banner-remove" type="button" onClick={onRemoveBanner}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="create-community-avatar-shell">
+                  <div
+                    className={`create-community-avatar${isCreateAvatarDragOver ? " drag-over" : ""}`}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      onSetAvatarDragOver(true);
+                    }}
+                    onDragLeave={() => onSetAvatarDragOver(false)}
+                    onDrop={onAvatarDrop}
+                  >
+                    {createCommunityAvatarUrl ? (
+                      <img src={createCommunityAvatarUrl} alt="Community avatar preview" draggable={false} />
+                    ) : (
+                      <span>{communityInitials(createCommunityName || "Community")}</span>
+                    )}
+                  </div>
+                  <div className="create-community-avatar-actions">
+                    <label className="create-avatar-btn">
+                      Upload avatar
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(event) => void onUploadAvatar(event.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    {createCommunityAvatarUrl ? (
+                      <button className="create-avatar-remove" type="button" onClick={onRemoveAvatar}>
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <div className="create-community-avatar-actions">
-                <label className="create-avatar-btn">
-                  Upload avatar
+
+              <div className="create-community-details">
+                <label className="create-community-field">
+                  <span>Name</span>
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => void onUploadAvatar(event.target.files?.[0] ?? null)}
+                    type="text"
+                    placeholder="Community name"
+                    value={createCommunityName}
+                    onChange={(event) => onChangeName(event.target.value)}
                   />
                 </label>
-                {createCommunityAvatarUrl && (
-                  <button className="create-avatar-remove" type="button" onClick={onRemoveAvatar}>
-                    Remove
-                  </button>
-                )}
+                <label className="create-community-field">
+                  <span>One-liner</span>
+                  <textarea
+                    placeholder="One-liner about who this is for"
+                    rows={3}
+                    value={createCommunityOneLiner}
+                    onChange={(event) => onChangeOneLiner(event.target.value)}
+                  />
+                </label>
+                <div className="create-community-detail-grid">
+                  <label className="create-community-field">
+                    <span>Slug</span>
+                    <input
+                      type="text"
+                      placeholder="your-community"
+                      value={createCommunitySlug}
+                      onChange={(event) => {
+                        onChangeSlug(event.target.value);
+                        onChangeSlugEdited(true);
+                      }}
+                    />
+                    <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
+                  </label>
+                  <label className="create-community-field">
+                    <span>Visibility</span>
+                    <select
+                      className="select-styled"
+                      value={createCommunityVisibility}
+                      onChange={(event) => onChangeVisibility(event.target.value as "published" | "unlisted")}
+                    >
+                      <option value="published">Published</option>
+                      <option value="unlisted">Unlisted</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
-            <label className="create-community-field">
-              <span>Name</span>
-              <input
-                type="text"
-                placeholder="Community name"
-                value={createCommunityName}
-                onChange={(event) => onChangeName(event.target.value)}
-              />
-            </label>
-            <label className="create-community-field">
-                <span>One-liner</span>
-              <textarea
-                placeholder="One-liner about who this is for"
-                rows={2}
-                value={createCommunityOneLiner}
-                onChange={(event) => onChangeOneLiner(event.target.value)}
-              />
-            </label>
-            <label className="create-community-field">
-              <span>Slug</span>
-              <input
-                type="text"
-                placeholder="your-community"
-                value={createCommunitySlug}
-                onChange={(event) => {
-                  onChangeSlug(event.target.value);
-                  onChangeSlugEdited(true);
-                }}
-              />
-              <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
-            </label>
-            <label className="create-community-field">
-              <span>Visibility</span>
-              <select
-                className="select-styled"
-                value={createCommunityVisibility}
-                onChange={(event) => onChangeVisibility(event.target.value as "published" | "unlisted")}
-              >
-                <option value="published">Published</option>
-                <option value="unlisted">Unlisted</option>
-              </select>
-            </label>
             {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
             {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
           </div>

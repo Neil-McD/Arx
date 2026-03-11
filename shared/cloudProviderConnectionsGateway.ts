@@ -1,8 +1,13 @@
-import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+import {
+  bootstrapGatewayAuthContext,
+  normalizeGatewayNullableString,
+} from "./cloudGateway";
 
 type CloudProviderConnectionsGatewayParams<SessionT> = {
   session: SessionT;
 };
+
+// Gateway class: authenticated read/action bridge, caller-hardened session, fail-closed.
 
 export type CloudOpenRouterConnectionStatus = {
   provider: "openrouter";
@@ -84,27 +89,15 @@ export type CloudChatgptProbeResult = {
   cf_ray: string | null;
 };
 
-async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
-  client: ConvexClient;
-  authSubject: string;
-}> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(sessionRaw);
-  return { client, authSubject };
-}
-
-function normalizeNullableString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 function normalizeOpenRouterConnection(payload: unknown): CloudOpenRouterConnectionStatus {
   const row = (payload ?? null) as CloudProviderConnectionsPayload["openrouter"];
   return {
     provider: "openrouter",
     auth_kind: "api_key",
     connected: row?.connected === true,
-    key_last_four: normalizeNullableString(row?.key_last_four),
-    validated_at: normalizeNullableString(row?.validated_at),
-    updated_at: normalizeNullableString(row?.updated_at),
+    key_last_four: normalizeGatewayNullableString(row?.key_last_four),
+    validated_at: normalizeGatewayNullableString(row?.validated_at),
+    updated_at: normalizeGatewayNullableString(row?.updated_at),
   };
 }
 
@@ -114,18 +107,18 @@ function normalizeChatgptConnection(payload: unknown): CloudChatgptConnectionSta
     provider: "chatgpt",
     auth_kind: "oauth_tokens",
     connected: row?.connected === true,
-    email: normalizeNullableString(row?.email),
-    account_id: normalizeNullableString(row?.account_id),
-    access_token_expires_at: normalizeNullableString(row?.access_token_expires_at),
-    validated_at: normalizeNullableString(row?.validated_at),
-    updated_at: normalizeNullableString(row?.updated_at),
+    email: normalizeGatewayNullableString(row?.email),
+    account_id: normalizeGatewayNullableString(row?.account_id),
+    access_token_expires_at: normalizeGatewayNullableString(row?.access_token_expires_at),
+    validated_at: normalizeGatewayNullableString(row?.validated_at),
+    updated_at: normalizeGatewayNullableString(row?.updated_at),
   };
 }
 
 export async function loadCloudProviderConnections<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.query("providerConnections:getCurrentUserProviderConnections" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
@@ -140,7 +133,7 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
     apiKey: string;
   },
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:connectOpenRouterApiKey" as any, {
     authSubject,
     apiKey: String(params.apiKey ?? ""),
@@ -154,7 +147,7 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
 export async function disconnectCloudOpenRouterApiKey<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:disconnectOpenRouterApiKey" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
@@ -169,7 +162,7 @@ export async function beginCloudChatgptConnect<SessionT>(
     returnToPath?: string | null;
   },
 ): Promise<CloudChatgptConnectStart> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:beginChatgptConnect" as any, {
     authSubject,
     returnToPath: String(params.returnToPath ?? "").trim() || "/",
@@ -180,9 +173,9 @@ export async function beginCloudChatgptConnect<SessionT>(
     user_code?: unknown;
     poll_interval_seconds?: unknown;
   } | null;
-  const loginId = normalizeNullableString(payload?.login_id);
-  const verificationUrl = normalizeNullableString(payload?.verification_url);
-  const userCode = normalizeNullableString(payload?.user_code);
+  const loginId = normalizeGatewayNullableString(payload?.login_id);
+  const verificationUrl = normalizeGatewayNullableString(payload?.verification_url);
+  const userCode = normalizeGatewayNullableString(payload?.user_code);
   const pollIntervalRaw = Number(payload?.poll_interval_seconds ?? 5);
   const pollIntervalSeconds = Number.isFinite(pollIntervalRaw) && pollIntervalRaw > 0 ? Math.floor(pollIntervalRaw) : 5;
   if (!loginId || !verificationUrl || !userCode) {
@@ -202,7 +195,7 @@ export async function beginCloudChatgptManualConnect<SessionT>(
     returnToPath?: string | null;
   },
 ): Promise<CloudChatgptManualConnectStart> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:beginChatgptManualConnect" as any, {
     authSubject,
     returnToPath: String(params.returnToPath ?? "").trim() || "/",
@@ -210,7 +203,7 @@ export async function beginCloudChatgptManualConnect<SessionT>(
     mode?: unknown;
     authorize_url?: unknown;
   } | null;
-  const authorizeUrl = normalizeNullableString(payload?.authorize_url);
+  const authorizeUrl = normalizeGatewayNullableString(payload?.authorize_url);
   if (!authorizeUrl) {
     throw new Error("ChatGPT browser login did not return an authorization URL.");
   }
@@ -225,12 +218,12 @@ export async function pollCloudChatgptConnect<SessionT>(
     loginId: string;
   },
 ): Promise<CloudChatgptConnectPollResult> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:pollChatgptConnect" as any, {
     authSubject,
     loginId: params.loginId,
   })) as ({ status?: unknown } & CloudProviderConnectionsPayload) | null;
-  const status = normalizeNullableString(payload?.status);
+  const status = normalizeGatewayNullableString(payload?.status);
   if (status !== "connected") return { status: "pending" };
   return {
     status: "connected",
@@ -244,7 +237,7 @@ export async function completeCloudChatgptConnect<SessionT>(
     callbackInput: string;
   },
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:completeChatgptConnect" as any, {
     authSubject,
     callbackInput: String(params.callbackInput ?? ""),
@@ -258,7 +251,7 @@ export async function completeCloudChatgptConnect<SessionT>(
 export async function disconnectCloudChatgpt<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
 ): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:disconnectChatgpt" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
@@ -274,11 +267,11 @@ export async function probeCloudChatgptConnection<SessionT>(
     prompt?: string | null;
   },
 ): Promise<CloudChatgptProbeResult> {
-  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnectionProbes:probeChatgptConnection" as any, {
     authSubject,
-    modelId: normalizeNullableString(params.modelId),
-    prompt: normalizeNullableString(params.prompt),
+    modelId: normalizeGatewayNullableString(params.modelId),
+    prompt: normalizeGatewayNullableString(params.prompt),
   })) as {
     ok?: unknown;
     status?: unknown;
@@ -298,18 +291,18 @@ export async function probeCloudChatgptConnection<SessionT>(
   return {
     ok: payload?.ok === true,
     status: Number.isFinite(statusRaw) ? Math.floor(statusRaw) : null,
-    code: normalizeNullableString(payload?.code),
-    message: normalizeNullableString(payload?.message) || "ChatGPT probe failed.",
-    model_id: normalizeNullableString(payload?.model_id) || "gpt-5.4",
-    resolved_model_id: normalizeNullableString(payload?.resolved_model_id),
+    code: normalizeGatewayNullableString(payload?.code),
+    message: normalizeGatewayNullableString(payload?.message) || "ChatGPT probe failed.",
+    model_id: normalizeGatewayNullableString(payload?.model_id) || "gpt-5.4",
+    resolved_model_id: normalizeGatewayNullableString(payload?.resolved_model_id),
     elapsed_ms: Number.isFinite(elapsedRaw) ? Math.floor(elapsedRaw) : null,
-    content_preview: normalizeNullableString(payload?.content_preview),
-    email: normalizeNullableString(payload?.email),
-    account_id: normalizeNullableString(payload?.account_id),
-    token_expires_at: normalizeNullableString(payload?.token_expires_at),
-    content_type: normalizeNullableString((payload as any)?.content_type),
-    body_preview: normalizeNullableString((payload as any)?.body_preview),
-    upstream_request_id: normalizeNullableString((payload as any)?.upstream_request_id),
-    cf_ray: normalizeNullableString((payload as any)?.cf_ray),
+    content_preview: normalizeGatewayNullableString(payload?.content_preview),
+    email: normalizeGatewayNullableString(payload?.email),
+    account_id: normalizeGatewayNullableString(payload?.account_id),
+    token_expires_at: normalizeGatewayNullableString(payload?.token_expires_at),
+    content_type: normalizeGatewayNullableString((payload as any)?.content_type),
+    body_preview: normalizeGatewayNullableString((payload as any)?.body_preview),
+    upstream_request_id: normalizeGatewayNullableString((payload as any)?.upstream_request_id),
+    cf_ray: normalizeGatewayNullableString((payload as any)?.cf_ray),
   };
 }

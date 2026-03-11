@@ -91,11 +91,11 @@ forbid_match_in_file "$HTTP_FILE" 'tailRole === "user"' "no tail-role text dedup
 echo "[7/10] Ensuring runtime turn short-circuits duplicate idempotency keys before inference..."
 require_match_in_file "$HTTP_FILE" 'getCloudThreadMessageByOwnerMessageKey as any' \
   "runtime turn checks existing persisted messages by owner+messageKey"
-require_match_in_file "$HTTP_FILE" 'const existingAssistant = \(await ctx\.runQuery\(api\.threads\.getCloudThreadMessageByOwnerMessageKey as any' \
+require_match_in_file "$HTTP_FILE" 'existingAssistant = \(await ctx\.runQuery\(api\.threads\.getCloudThreadMessageByOwnerMessageKey as any' \
   "runtime turn assistant short-circuit lookup exists"
 require_match_in_file "$HTTP_FILE" 'if \(existingAssistant\) \{' \
   "runtime turn returns persisted assistant for duplicate idempotency key"
-ASSIST_LOOKUP_LINE="$(rg -n -S 'const existingAssistant = \(await ctx\.runQuery\(api\.threads\.getCloudThreadMessageByOwnerMessageKey as any' "$HTTP_FILE" | head -n 1 | cut -d: -f1)"
+ASSIST_LOOKUP_LINE="$(rg -n -S 'existingAssistant = \(await ctx\.runQuery\(api\.threads\.getCloudThreadMessageByOwnerMessageKey as any' "$HTTP_FILE" | head -n 1 | cut -d: -f1)"
 CHATGPT_COMPLETION_LINE="$(rg -n -S 'runChatgptCompletion\(' "$HTTP_FILE" | tail -n 1 | cut -d: -f1)"
 OPENROUTER_COMPLETION_LINE="$(rg -n -S 'runOpenRouterCompletion\(' "$HTTP_FILE" | tail -n 1 | cut -d: -f1)"
 DAYTONA_LOOP_LINE="$(rg -n -S 'executeDaytonaAgentLoop\(' "$HTTP_FILE" | tail -n 1 | cut -d: -f1)"

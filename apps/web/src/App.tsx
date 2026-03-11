@@ -36,7 +36,6 @@ import {
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 
-import { fetchActiveCloudCommunityAgentSystemPrompt } from "../../../shared/cloudCommunityAgentGateway";
 import {
   listCloudCommunityAiFeedLive,
   listCloudCommunityAiFeedRanked,
@@ -238,7 +237,6 @@ import {
   extractCommunityEvidenceUsedV1,
   type CommunityEvidenceUsedV1,
 } from "../../../shared/communityEvidence";
-import { loadCloudCommunityContextPreflight } from "../../../shared/cloudCommunityContextPreflight";
 import { AttachmentChipButton } from "../../../shared/AttachmentChipButton";
 import {
   buildReplyPrefix,
@@ -342,7 +340,7 @@ type CommunityRecord = {
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
   visibility: string;
-  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
+  entry_policy?: "open" | "approval" | "paid_subscription" | null;
   owner_id: string;
   created_at: string;
   updated_at: string;
@@ -358,7 +356,7 @@ type PublicCommunityRecord = {
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
   visibility: string;
-  entry_policy?: "open" | "approval" | "paid_unlock" | "paid_subscription" | null;
+  entry_policy?: "open" | "approval" | "paid_subscription" | null;
   created_at: string;
   updated_at: string;
   funnel?: SharedCommunityFunnelConfig | null;
@@ -386,7 +384,6 @@ type CommunityPresenceSummaryRecord = {
 type ThreadRecord = {
   id: string;
   title: string | null;
-  engine_id: string;
   model_id: string | null;
   project_id: string | null;
   community_id: string | null;
@@ -422,10 +419,6 @@ type ThreadMessage = {
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
-};
-
-type UserModelSettings = {
-  system_prompt: string;
 };
 
 type MessageAttachment = CommunityMessageAttachment & {
@@ -683,18 +676,34 @@ export default function App() {
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
 
-  async function expireCloudSessionLocally(): Promise<void> {
+  const expireCloudSessionLocally = useCallback(async (): Promise<void> => {
     authSessionEpochRef.current += 1;
     await expireCloudSessionFailClosed({
       clearPersistedCloudSession: clearPersistedCloudSession,
       setCloudSession,
       sessionRef,
     });
-  }
+  }, []);
 
-  async function ensureUsableCloudSession(
+  const refreshCloudSessionLocked = useCallback(async (refreshToken: string): Promise<CloudAuthSession | null> => {
+    const epochAtRefreshStart = authSessionEpochRef.current;
+    return await refreshCloudSessionWithLock({
+      refreshToken,
+      inFlightRef: refreshInFlightRef,
+      refreshSession: refreshCloudSession,
+      onRefreshed: (refreshed) => {
+        if (authSessionEpochRef.current !== epochAtRefreshStart) return;
+        setAuthError(null);
+        setCloudSession(refreshed);
+        sessionRef.current = refreshed;
+        persistCloudSession(refreshed);
+      },
+    });
+  }, []);
+
+  const ensureUsableCloudSession = useCallback(async (
     session: CloudAuthSession | null | undefined = sessionRef.current ?? cloudSession,
-  ): Promise<CloudAuthSession | null> {
+  ): Promise<CloudAuthSession | null> => {
     const candidate = session ?? null;
     if (!candidate) return null;
 
@@ -714,7 +723,12 @@ export default function App() {
       adoptCloudSession(ensured);
     }
     return sessionRef.current ?? ensured;
-  }
+  }, [cloudSession, expireCloudSessionLocally]);
+
+  const authenticatedCloudSessionArg = {
+    session: cloudSession,
+    ensureSession: ensureUsableCloudSession,
+  } as const;
 
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
 
@@ -1003,6 +1017,7 @@ export default function App() {
   >({
     extractTextFromContentJson,
     parseMessageAttachments,
+    ensureSession: ensureUsableCloudSession,
     pageSize: COMMUNITY_CHAT_PAGE_SIZE,
     setCommunityMessages,
     setMessageReactions,
@@ -1063,6 +1078,7 @@ export default function App() {
   useCommunityChatRealtime({
     isEnabled: activePage === "community" && communityTab === "chat",
     session: cloudSession,
+    ensureSession: ensureUsableCloudSession,
     activeCommunityId,
     ensureCommunityChatThread,
     toCommunityChatMessage,
@@ -1087,6 +1103,7 @@ export default function App() {
   } = useCommunityChatMutationController({
     activeCommunityId,
     session: cloudSession,
+    ensureSession: ensureUsableCloudSession,
     missingPayloadMessage: "Message sent, but no payload returned.",
     ensureCommunityChatThread,
     toCommunityChatMessage,
@@ -1150,7 +1167,7 @@ export default function App() {
     handleDeleteResource,
   } = useCommunityResourceController<CloudAuthSession, CommunityResource>({
     activeCommunityId,
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     parseEmbedUrl,
     includeCommunityIdOnPatch: false,
     includeFileKeyOnSave: false,
@@ -1532,11 +1549,6 @@ export default function App() {
     remember_intent_enabled: true,
   });
   const [, setIsLoadingUserMemorySettings] = useState(false);
-  const [userModelSettings, setUserModelSettings] = useState<UserModelSettings>({ system_prompt: "" });
-  const [systemPromptDraft, setSystemPromptDraft] = useState("");
-  const [isLoadingUserModelSettings, setIsLoadingUserModelSettings] = useState(false);
-  const [isSavingUserModelSettings, setIsSavingUserModelSettings] = useState(false);
-  const [userModelSettingsError, setUserModelSettingsError] = useState<string | null>(null);
   const [openRouterConnection, setOpenRouterConnection] = useState<CloudOpenRouterConnectionStatus>({
     provider: "openrouter",
     auth_kind: "api_key",
@@ -1614,6 +1626,7 @@ export default function App() {
   >({
     toCanonicalCommunityVisibility,
     activeCommunityId,
+    ensureSession: ensureUsableCloudSession,
     setIsLoadingCommunities,
     setCommunityRoleById,
     setCommunities,
@@ -1638,7 +1651,7 @@ export default function App() {
     UserProfileDetail
   >({
     activeCommunityId,
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     parseContentRangeTotal,
     dateKeyLocal,
     ensureCommunityChatThread,
@@ -1684,7 +1697,7 @@ export default function App() {
     handleSaveCommunityAgentConfig,
   } = useCommunityAgentConfigController<CloudAuthSession, CommunityAgentLanding, CommunityAgentConfig>({
     activeCommunityId,
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     communityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
     normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
@@ -1709,7 +1722,7 @@ export default function App() {
     handleSaveCommunityFunnel,
   } = useCommunityFunnelController<CloudAuthSession, CommunityFunnelConfig>({
     activeCommunityId,
-    session: cloudSession,
+    ...authenticatedCloudSessionArg,
     communityFunnelConfig,
     normalizeConfigForSave: normalizeCommunityFunnelConfig,
     saveConfig: async ({ session, communityId, normalizedConfig }) => {
@@ -1781,6 +1794,7 @@ export default function App() {
     loadCommunityMemberSettings,
     loadCommunityPricing,
   } = useCommunitySettingsDataController<CloudAuthSession>({
+    ensureSession: ensureUsableCloudSession,
     communitySettingsLoadedCommunityIdRef,
     communityPricingDirtyRef,
     setCommunityMemberMuted,
@@ -1803,7 +1817,7 @@ export default function App() {
     activeCommunityAvatarUrl: activeCommunitySettingsSource?.avatar_url ?? null,
     activeCommunityBannerUrl: activeCommunitySettingsSource?.banner_url ?? null,
     activeCommunityId,
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     confirmAction: (message) => confirm(message),
     loadCommunities,
     onLeaveCommunityLocalState: (leavingId) => {
@@ -1869,7 +1883,7 @@ export default function App() {
     AppView,
     CommunityTab
   >({
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     activeCommunityId,
     loadCommunities,
     setDeleteCommunityError,
@@ -1897,7 +1911,7 @@ export default function App() {
     CommunityRecord
   >({
     activeCommunityId,
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     membersSurfaceMode,
     isSavingFreeAccessMode,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
@@ -1937,6 +1951,7 @@ export default function App() {
     },
     toEpochSeconds,
     formatModelLabel,
+    ensureSession: ensureUsableCloudSession,
     activeThreadId,
     threadsHydratedRef,
     workspaceWantsNewChatRef,
@@ -1951,7 +1966,6 @@ export default function App() {
 
   const {
     loadUserMemorySettings,
-    loadUserModelSettings,
     loadPersonalMemoryItems,
     searchPersonalMemoryItems,
   } = useWebMemorySettingsDataController<CloudAuthSession>({
@@ -1959,17 +1973,12 @@ export default function App() {
     ensureSession: ensureUsableCloudSession,
     setIsLoadingUserMemorySettings,
     setUserMemorySettings,
-    setIsLoadingUserModelSettings,
-    setUserModelSettings,
-    setSystemPromptDraft,
-    setUserModelSettingsError,
     setIsLoadingPersonalMemory,
     setPersonalMemoryError,
     setPersonalMemoryItems,
   });
 
   const {
-    saveUserModelSettings,
     createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
     handleTogglePersonalMemoryPinned,
@@ -1984,9 +1993,6 @@ export default function App() {
     newPersonalMemoryPinned,
     setIsLoadingUserMemorySettings,
     setUserMemorySettings,
-    setIsSavingUserModelSettings,
-    setUserModelSettings,
-    setUserModelSettingsError,
     setPersonalMemoryError,
     setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned,
@@ -2003,6 +2009,7 @@ export default function App() {
       modelToggles,
       threads,
       defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
+      ensureSession: ensureUsableCloudSession,
       setThreads,
       setWorkspaceWantsNewChatMode,
       setActiveThreadId,
@@ -2109,7 +2116,6 @@ export default function App() {
     runPublicTurn,
     runAgentTurn,
     createThreadMessage,
-    createAssistantTextMessage,
     deleteThreadMessagesByIds,
   } = useWebTurnRunnerController<
     CloudAuthSession,
@@ -2324,8 +2330,10 @@ export default function App() {
     const tick = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
       try {
+        const usableSession = await ensureUsableCloudSession(cloudSession);
+        if (!usableSession) return;
         await heartbeatCloudCommunityPresence<CloudAuthSession>({
-          session: cloudSession,
+          session: usableSession,
           communityId: activeCommunityId,
         });
       } catch (error) {
@@ -2342,7 +2350,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeCommunityId, activePage, cloudSession]);
+  }, [activeCommunityId, activePage, cloudSession, ensureUsableCloudSession]);
 
   useEffect(() => {
     if (!cloudSession || activePage !== "community" || communityTab !== "funnel" || !activeCommunityId) {
@@ -2353,11 +2361,13 @@ export default function App() {
     const refresh = async () => {
       if (cancelled || document.visibilityState !== "visible") return;
       try {
+        const usableSession = await ensureUsableCloudSession(cloudSession);
+        if (!usableSession) return;
         const summary = await fetchCloudCommunityPresenceSummary<
           CloudAuthSession,
           CommunityPresenceSummaryRecord
         >({
-          session: cloudSession,
+          session: usableSession,
           communityId: activeCommunityId,
         });
         if (!cancelled) {
@@ -2377,10 +2387,10 @@ export default function App() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeCommunityId, activePage, cloudSession, communityTab]);
+  }, [activeCommunityId, activePage, cloudSession, communityTab, ensureUsableCloudSession]);
 
   useCommunityAgentLandingLifecycle<CloudAuthSession>({
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     activeCommunityId,
     canViewCommunity: communityActionGuards.canViewCommunity,
     activeCommunityIdRef,
@@ -2644,7 +2654,8 @@ export default function App() {
   });
 
   const loadCommunityAiFeed = useCallback(async (communityId: string) => {
-    if (!cloudSession) {
+    const session = await ensureUsableCloudSession(cloudSession);
+    if (!session) {
       setCommunityFeedByCommunityId((prev) => ({
         ...prev,
         [communityId]: {
@@ -2668,12 +2679,12 @@ export default function App() {
     try {
       const [live, ranked] = await Promise.all([
         listCloudCommunityAiFeedLive<CloudAuthSession, CommunityAiFeedPost>({
-          session: cloudSession,
+          session,
           communityId,
           limit: 100,
         }),
         listCloudCommunityAiFeedRanked<CloudAuthSession, CommunityAiFeedPost>({
-          session: cloudSession,
+          session,
           communityId,
           limit: 100,
         }),
@@ -2698,15 +2709,16 @@ export default function App() {
         },
       }));
     }
-  }, [cloudSession]);
+  }, [cloudSession, ensureUsableCloudSession]);
 
   const handleReactToCommunityFeedPost = useCallback(
     async (postId: string, reactionType: CommunityAiFeedReactionType) => {
-      if (!cloudSession || !activeCommunityId) return;
+      const session = await ensureUsableCloudSession(cloudSession);
+      if (!session || !activeCommunityId) return;
       setCommunityFeedReactingPostId(postId);
       try {
         await reactToCloudCommunityAiFeedPost({
-          session: cloudSession,
+          session,
           postId,
           reactionType,
         });
@@ -2725,7 +2737,7 @@ export default function App() {
         setCommunityFeedReactingPostId(null);
       }
     },
-    [activeCommunityId, cloudSession, loadCommunityAiFeed],
+    [activeCommunityId, cloudSession, ensureUsableCloudSession, loadCommunityAiFeed],
   );
 
   useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentConfig>({
@@ -2788,22 +2800,6 @@ export default function App() {
     loadCommunityAnalytics,
     resetCommunityAnalytics,
   });
-
-  async function refreshCloudSessionLocked(refreshToken: string): Promise<CloudAuthSession | null> {
-    const epochAtRefreshStart = authSessionEpochRef.current;
-    return await refreshCloudSessionWithLock({
-      refreshToken,
-      inFlightRef: refreshInFlightRef,
-      refreshSession: refreshCloudSession,
-      onRefreshed: (refreshed) => {
-        if (authSessionEpochRef.current !== epochAtRefreshStart) return;
-        setAuthError(null);
-        setCloudSession(refreshed);
-        sessionRef.current = refreshed;
-        persistCloudSession(refreshed);
-      },
-    });
-  }
 
   async function handleSignIn() {
     setAuthError(null);
@@ -2909,11 +2905,13 @@ export default function App() {
   }
 
   const loadOpenRouterConnection = useCallback(async (session: CloudAuthSession): Promise<void> => {
+    const usableSession = await ensureUsableCloudSession(session);
+    if (!usableSession) return;
     setIsLoadingOpenRouterConnection(true);
     setIsLoadingChatgptConnection(true);
     try {
       const result = await loadCloudProviderConnections({
-        session,
+        session: usableSession,
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
@@ -2927,7 +2925,7 @@ export default function App() {
       setIsLoadingOpenRouterConnection(false);
       setIsLoadingChatgptConnection(false);
     }
-  }, []);
+  }, [ensureUsableCloudSession]);
 
   const handleConnectOpenRouter = useCallback(async (): Promise<void> => {
     const session = await ensureUsableCloudSession();
@@ -3179,8 +3177,6 @@ export default function App() {
     if (!session) {
       navStackRef.current = [];
       setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
-      setUserModelSettings({ system_prompt: "" });
-      setSystemPromptDraft("");
       setOpenRouterConnection({
         provider: "openrouter",
         auth_kind: "api_key",
@@ -3223,7 +3219,6 @@ export default function App() {
       if (!usableSession) return;
       await Promise.all([
         loadUserMemorySettings(usableSession),
-        loadUserModelSettings(usableSession),
         loadOpenRouterConnection(usableSession),
       ]);
     })();
@@ -3384,6 +3379,7 @@ export default function App() {
     MyCommunityJoinRequest
   >({
     getSession: () => sessionRef.current,
+    ensureSession: ensureUsableCloudSession,
     ...cloudSessionArg,
     openAuthGate,
     loadCommunities,
@@ -3478,7 +3474,7 @@ export default function App() {
     handleCreateBannerDrop,
     handleCreateAvatarDrop,
   } = useCommunityCreateController<CloudAuthSession, CommunityRecord, BuilderBillingStatus>({
-    session: cloudSession,
+    ...authenticatedCloudSessionArg,
     builderBillingStatus,
     communities,
     communityRoleById,
@@ -3729,63 +3725,12 @@ export default function App() {
     return webThreadContextController.ensureLensBeforeSend(threadId);
   };
 
-  const loadEffectiveCommunitySystemPrompt = useCallback(
-    async (params: {
-      threadId: string;
-      communityId: string;
-      session: CloudAuthSession;
-    }): Promise<string | null> => {
-      void params.threadId;
-      const communityId = String(params.communityId ?? "").trim();
-      if (!communityId) return null;
-      const url = getCloudUrl();
-      if (!url) return null;
-      try {
-        const prompt = await fetchActiveCloudCommunityAgentSystemPrompt({
-          session: params.session,
-          communityId,
-        });
-        return prompt?.systemPrompt ?? null;
-      } catch {
-        return null;
-      }
-    },
-    [fetchWithCloudAuth],
-  );
-  const resolveCommunityNameById = useCallback((communityId: string): string | null => {
-    const id = String(communityId ?? "").trim();
-    if (!id) return null;
-    const community = communities.find((candidate) => candidate.id === id) ?? null;
-    if (!community) return null;
-    const name = (community.name ?? "").trim();
-    if (name) return name;
-    const slug = (community.slug ?? "").trim();
-    return slug || null;
-  }, [communities]);
-
-  const loadCommunityContextPreflight = useCallback(
-    async (params: {
-      threadId: string;
-      communityId: string;
-      query: string;
-      session: CloudAuthSession;
-    }) => {
-      if (!params || typeof params !== "object") return null;
-      void params.threadId;
-      return await loadCloudCommunityContextPreflight({
-        session: params.session,
-        communityId: params.communityId,
-        communityName: resolveCommunityNameById(params.communityId),
-        query: params.query,
-      });
-    },
-    [resolveCommunityNameById],
-  );
-
   async function loadCloudProjects(session: CloudAuthSession): Promise<void> {
+    const usableSession = await ensureUsableCloudSession(session);
+    if (!usableSession) return;
     try {
       const next = (await fetchMappedDaytonaCloudProjects({
-        session,
+        session: usableSession,
       })).map(({ description: _description, ...project }) => project satisfies CloudProjectRecord);
       setCloudProjects(next);
       setCloudProjectExpandedById((prev) => {
@@ -3823,7 +3768,8 @@ export default function App() {
   }
 
   async function handleConfirmCreateCloudProject(): Promise<void> {
-    if (!cloudSession) {
+    const session = await ensureUsableCloudSession(cloudSession);
+    if (!session) {
       openAuthGate();
       setCreateCloudProjectError("Sign in to manage cloud projects.");
       return;
@@ -3838,10 +3784,10 @@ export default function App() {
     setCreateCloudProjectError(null);
     try {
       await createDaytonaCloudProject({
-        session: cloudSession,
+        session,
         name: cleaned,
       });
-      await loadCloudProjects(cloudSession);
+      await loadCloudProjects(session);
       setThreadError(null);
       closeCreateCloudProjectModal();
     } catch (error) {
@@ -3879,7 +3825,8 @@ export default function App() {
   }
 
   async function handleConfirmRenameCloudProject(): Promise<void> {
-    if (!cloudSession) {
+    const session = await ensureUsableCloudSession(cloudSession);
+    if (!session) {
       openAuthGate();
       setRenameCloudProjectError("Sign in to manage cloud projects.");
       return;
@@ -3897,11 +3844,11 @@ export default function App() {
     setRenameCloudProjectError(null);
     try {
       await renameDaytonaCloudProject({
-        session: cloudSession,
+        session,
         projectId: renameCloudProjectId,
         name: cleaned,
       });
-      await loadCloudProjects(cloudSession);
+      await loadCloudProjects(session);
       setThreadError(null);
       closeRenameCloudProjectModal();
     } catch (error) {
@@ -3918,7 +3865,8 @@ export default function App() {
   }
 
   async function handleRemoveCloudProject(project: CloudProjectRecord): Promise<void> {
-    if (!cloudSession) {
+    const session = await ensureUsableCloudSession(cloudSession);
+    if (!session) {
       openAuthGate();
       return;
     }
@@ -3932,11 +3880,11 @@ export default function App() {
     if (!shouldRemove) return;
     try {
       await deleteDaytonaCloudProject({
-        session: cloudSession,
+        session,
         projectId: project.id,
         force: true,
       });
-      await Promise.all([loadCloudProjects(cloudSession), loadThreads(cloudSession)]);
+      await Promise.all([loadCloudProjects(session), loadThreads(session)]);
       setThreadError(null);
     } catch (error) {
       const message =
@@ -3950,7 +3898,8 @@ export default function App() {
   }
 
   async function handleProbeCloudProject(project: CloudProjectRecord): Promise<void> {
-    if (!cloudSession) {
+    const session = await ensureUsableCloudSession(cloudSession);
+    if (!session) {
       openAuthGate();
       return;
     }
@@ -3959,13 +3908,13 @@ export default function App() {
     setProbingCloudProjectId(project.id);
     try {
       const payload = (await probeDaytonaCloudProject({
-        session: cloudSession,
+        session,
         projectId: project.id,
       })) as {
         sandbox?: { status?: string | null };
         probe?: { stdout_preview?: string | null };
       };
-      await loadCloudProjects(cloudSession);
+      await loadCloudProjects(session);
       setThreadError(null);
       const status = String(payload?.sandbox?.status ?? "").trim().toLowerCase();
       const firstOutputLine = String(payload?.probe?.stdout_preview ?? "")
@@ -4209,22 +4158,18 @@ export default function App() {
     ThreadMessage
   >({
     getSession: () => sessionRef.current,
+    ensureSession: ensureUsableCloudSession,
     openAuthGate,
     ensureWorkspaceThreadLensBeforeSend,
     createThread,
     updateThreadModel,
     maybeSetThreadTitleFromText,
-    loadEffectiveCommunitySystemPrompt,
-    loadCommunityContextPreflight,
-    getPersonalSystemPrompt: () => userModelSettings.system_prompt,
-    getCommunityNameById: resolveCommunityNameById,
     createPersonalMemoryItemDirect,
     showMemoryToastMessage,
     loadThreadMessages,
     runPublicTurn,
     runAgentTurn,
     createThreadMessage,
-    createAssistantTextMessage,
     deleteThreadMessagesByIds,
     extractRememberIntent,
     extractTextFromContentJson,
@@ -4382,7 +4327,7 @@ export default function App() {
     communityVoiceUiState,
     handleVoiceInputClick,
   } = useWebVoiceInputController<CloudAuthSession>({
-    ...cloudSessionArg,
+    ...authenticatedCloudSessionArg,
     sessionRef: sessionRef,
     activeCommunity,
     activeCommunityJoinMode,
@@ -5979,12 +5924,6 @@ export default function App() {
 		              {settingsGroup === "agent" && (
                 <WebAgentSettingsSection
                   cloudSession={cloudSession}
-                  systemPromptDraft={systemPromptDraft}
-                  setSystemPromptDraft={setSystemPromptDraft}
-                  saveUserModelSettings={saveUserModelSettings}
-                  isLoadingUserModelSettings={isLoadingUserModelSettings}
-                  isSavingUserModelSettings={isSavingUserModelSettings}
-                  userModelSettingsError={userModelSettingsError}
                   exportError={exportError}
                   exportThreadsCsv={exportThreadsCsv}
                   exportMessagesCsv={exportMessagesCsv}

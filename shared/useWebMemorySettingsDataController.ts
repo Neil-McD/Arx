@@ -1,15 +1,12 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveCurrentSession } from "./ensureUsableSession";
 
 import { listCloudPersonalMemoryRowsByScopes } from "./cloudPersonalMemoryGateway";
-import { loadCloudUserMemorySettings, loadCloudUserModelSettings } from "./cloudUserSettingsGateway";
+import { loadCloudUserMemorySettings } from "./cloudUserSettingsGateway";
 
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
-};
-
-type UserModelSettings = {
-  system_prompt: string;
 };
 
 type PersonalMemoryItem = {
@@ -27,11 +24,6 @@ type UseWebMemorySettingsDataControllerArgs<SessionT> = {
   ensureSession?: () => Promise<SessionT | null>;
   setIsLoadingUserMemorySettings: Dispatch<SetStateAction<boolean>>;
   setUserMemorySettings: Dispatch<SetStateAction<UserMemorySettings>>;
-
-  setIsLoadingUserModelSettings: Dispatch<SetStateAction<boolean>>;
-  setUserModelSettings: Dispatch<SetStateAction<UserModelSettings>>;
-  setSystemPromptDraft: Dispatch<SetStateAction<string>>;
-  setUserModelSettingsError: Dispatch<SetStateAction<string | null>>;
 
   setIsLoadingPersonalMemory: Dispatch<SetStateAction<boolean>>;
   setPersonalMemoryError: Dispatch<SetStateAction<string | null>>;
@@ -73,7 +65,11 @@ export function useWebMemorySettingsDataController<SessionT>(
     const current = argsRef.current;
     current.setIsLoadingUserMemorySettings(true);
     try {
-      const usableSession = (await current.ensureSession?.()) ?? session;
+      const usableSession = await resolveCurrentSession(() => session, current.ensureSession);
+      if (!usableSession) {
+        current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
+        return;
+      }
       const row = (await loadCloudUserMemorySettings({
         session: usableSession,
       })) as Partial<UserMemorySettings> | null;
@@ -88,35 +84,12 @@ export function useWebMemorySettingsDataController<SessionT>(
     }
   }, []);
 
-  const loadUserModelSettings = useCallback(async (session: SessionT): Promise<void> => {
-    const current = argsRef.current;
-    current.setIsLoadingUserModelSettings(true);
-    current.setUserModelSettingsError(null);
-    try {
-      const usableSession = (await current.ensureSession?.()) ?? session;
-      const row = (await loadCloudUserModelSettings({
-        session: usableSession,
-      })) as Partial<UserModelSettings> | null;
-      const prompt = typeof row?.system_prompt === "string" ? row.system_prompt : "";
-      current.setUserModelSettings({ system_prompt: prompt });
-      current.setSystemPromptDraft(prompt);
-    } catch (error) {
-      current.setUserModelSettings({ system_prompt: "" });
-      current.setSystemPromptDraft("");
-      current.setUserModelSettingsError(
-        typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to load system prompt",
-      );
-    } finally {
-      current.setIsLoadingUserModelSettings(false);
-    }
-  }, []);
-
   const loadPersonalMemoryItems = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
     current.setIsLoadingPersonalMemory(true);
     current.setPersonalMemoryError(null);
     try {
-      const session = (await current.ensureSession?.()) ?? current.getSession();
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
         current.setPersonalMemoryItems([]);
         return;
@@ -143,7 +116,7 @@ export function useWebMemorySettingsDataController<SessionT>(
       current.setIsLoadingPersonalMemory(true);
       current.setPersonalMemoryError(null);
       try {
-        const session = (await current.ensureSession?.()) ?? current.getSession();
+        const session = await resolveCurrentSession(current.getSession, current.ensureSession);
         if (!session) {
           current.setPersonalMemoryItems([]);
           return;
@@ -165,7 +138,6 @@ export function useWebMemorySettingsDataController<SessionT>(
 
   return {
     loadUserMemorySettings,
-    loadUserModelSettings,
     loadPersonalMemoryItems,
     searchPersonalMemoryItems,
   };

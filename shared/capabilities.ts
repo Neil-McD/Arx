@@ -1,6 +1,7 @@
 import {
   evaluateCanonicalGate,
   resolveEffectiveTierForGate,
+  resolveEntitledCapabilityFamiliesForGate,
 } from "./canonicalGateEngine";
 
 export type AccessSurface = "web";
@@ -17,6 +18,8 @@ export type UserAccessPolicy = {
   allowMultipleThreads: boolean;
   allowPlatformInference: boolean;
   allowGuestInference: boolean;
+  allowCommunityTools: boolean;
+  allowCodingTools: boolean;
   allowCommunityJoin: boolean;
   allowCommunityCreate: boolean;
   allowPersonalMemory: boolean;
@@ -40,7 +43,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
   const paidModelDecision = evaluateCanonicalGate({
     surface: input.surface,
     executionMode: "cloud",
-    turnClass: "chat_only",
+    requestedExecutionTarget: "chat",
     requestedFundingSource: "platform",
     authState: input.authState,
     tier: input.builderTier ?? null,
@@ -63,6 +66,10 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
       : "free";
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
+  const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+    authState: input.authState,
+    tier: input.builderTier ?? null,
+  });
 
   return {
     surface: input.surface,
@@ -76,6 +83,8 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
       paidModelDecision.lane === "platform" &&
       paidModelDecision.fundingSource === "platform",
     allowGuestInference: true,
+    allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
+    allowCodingTools: entitledCapabilityFamilies.includes("coding_tools"),
     allowCommunityJoin: isAuthenticated,
     allowCommunityCreate: effectiveTier === "architect",
     allowPersonalMemory: hasWorkbenchAccess,

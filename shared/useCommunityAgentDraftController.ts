@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
   fetchCloudCommunityAgentConfig,
@@ -26,6 +27,7 @@ type UseCommunityAgentConfigControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   communityAgentConfigLanding: LandingT;
   communityAgentConfigSystemPrompt: string;
   normalizeConfigForSave: (config: LandingT) => LandingT | null;
@@ -58,11 +60,13 @@ export function useCommunityAgentConfigController<
 
   const loadCommunityAgentConfig = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
     current.setIsLoadingCommunityAgentConfig(true);
     current.setCommunityAgentConfigError(null);
     try {
       const row = await fetchCloudCommunityAgentConfig<SessionT, ConfigT>({
-        session,
+        session: usableSession,
         communityId,
       });
       current.setLoadedCommunityId(communityId);
@@ -83,7 +87,7 @@ export function useCommunityAgentConfigController<
 
   const handleSaveCommunityAgentConfig = useCallback(async (): Promise<boolean> => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return false;
 

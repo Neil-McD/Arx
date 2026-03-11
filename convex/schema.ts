@@ -81,13 +81,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  userModelSettings: defineTable({
-    userId: v.id("users"),
-    systemPrompt: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
   userProviderConnections: defineTable({
     userId: v.id("users"),
     provider: v.union(v.literal("openrouter"), v.literal("chatgpt")),
@@ -191,7 +184,6 @@ export default defineSchema({
     entryPolicy: v.union(
       v.literal("open"),
       v.literal("approval"),
-      v.literal("paid_unlock"),
       v.literal("paid_subscription"),
     ),
     createdAt: v.number(),
@@ -209,7 +201,6 @@ export default defineSchema({
       v.union(
         v.literal("free_grant"),
         v.literal("manual_grant"),
-        v.literal("paid_unlock"),
         v.literal("paid_subscription"),
       ),
     ),
@@ -258,7 +249,6 @@ export default defineSchema({
 
   communityPricePoints: defineTable({
     communityId: v.id("communities"),
-    kind: v.union(v.literal("unlock"), v.literal("subscription")),
     billingPeriod: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
@@ -413,14 +403,11 @@ export default defineSchema({
 
   threads: defineTable({
     ownerId: v.id("users"),
-    context: v.union(v.literal("cloud"), v.literal("local"), v.literal("community")),
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
-    engineId: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
-    harnessProfile: v.optional(v.string()),
     modelId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
     codingHandoff: v.optional(v.any()),
@@ -431,7 +418,6 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_updatedAt", ["ownerId", "updatedAt"])
-    .index("by_owner_context", ["ownerId", "context"])
     .index("by_owner_threadKey", ["ownerId", "threadKey"])
     .index("by_project", ["projectId"]),
 
@@ -456,7 +442,7 @@ export default defineSchema({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.string(),
-    requiresTools: v.boolean(),
+    requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),

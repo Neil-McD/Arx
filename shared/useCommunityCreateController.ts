@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
@@ -28,6 +29,7 @@ type UseCommunityCreateControllerArgs<
   BillingStatusT extends BillingStatusLike,
 > = {
   session: SessionT | null;
+  ensureSession?: EnsureSessionFn<SessionT>;
   builderBillingStatus: BillingStatusT | null;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
@@ -187,7 +189,7 @@ export function useCommunityCreateController<
 
   const handleCreateCommunity = useCallback(async () => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     current.setCreateCommunityError(null);
 
     if (!session) {
@@ -259,7 +261,7 @@ export function useCommunityCreateController<
 
   const handleCreateCommunityPrimaryAction = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
-    const session = current.session;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session) {
       const draft = buildCreateCommunityIntentFromState();
       if (!draft) return;

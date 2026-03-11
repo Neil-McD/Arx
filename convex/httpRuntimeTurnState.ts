@@ -1,7 +1,7 @@
 import { api } from "./_generated/api";
 
-type RuntimeLane = "public" | "platform" | "daytona";
-type RuntimeInferenceSource = "free" | "platform" | "user_key";
+type RuntimeLane = "public" | "platform" | "daytona" | "chatgpt";
+type RuntimeInferenceSource = "free" | "platform" | "user_key" | "chatgpt";
 
 type JsonResponseFn = (req: Request, status: number, payload: unknown) => Response;
 type SseResponseFn = (

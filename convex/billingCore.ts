@@ -5,13 +5,12 @@ export type CommunityLike = {
   _id: any;
   slug: string;
   name: string;
-  entryPolicy?: "open" | "approval" | "paid_unlock" | "paid_subscription";
+  entryPolicy?: "open" | "approval" | "paid_subscription";
 };
 
 export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
-  kind: "unlock" | "subscription";
   billingPeriod: "monthly" | "annual";
   name: string;
   description?: string;
@@ -152,14 +151,15 @@ export async function ensureCommunityMembership(args: {
   communityId: any;
   userId: any;
   pricePointId?: any;
+  accessSourceOverride?: "free_grant" | "manual_grant" | "paid_subscription";
   nowMs: number;
 }): Promise<CommunityMembershipLike> {
   const existing = await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
     .first() as CommunityMembershipLike | null;
-  const accessSource =
-    resolveCommunityEntryPolicy(args.community as any) === "paid_subscription" ? "paid_subscription" : "paid_unlock";
+  const defaultAccessSource = "paid_subscription";
+  const accessSource = args.accessSourceOverride ?? defaultAccessSource;
   if (existing) {
     const patch: Record<string, unknown> = {
       accessSource,
