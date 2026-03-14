@@ -183,7 +183,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           <>
             <div className="account-row">
               <div className="account-identity">
-                <span>ChatGPT / Codex</span>
+                <span>ChatGPT</span>
                 <strong>
                   {isLoadingChatgptConnection
                     ? "Checking…"

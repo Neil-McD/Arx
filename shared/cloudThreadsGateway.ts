@@ -68,7 +68,7 @@ export async function ensureCloudThreadRecord(params: {
 
 export async function updateCloudThreadRecord(params: {
   session: CloudAuthSession;
-  thread: CloudThreadRecordInput;
+  thread: Omit<CloudThreadRecordInput, "communityId" | "contextVersion">;
   nowMs?: number;
 }): Promise<void> {
   const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
@@ -97,11 +97,6 @@ export async function updateCloudThreadRecord(params: {
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
     projectId: maybeProjectId ?? undefined,
-    communityId: String(params.thread.communityId ?? "").trim() || undefined,
-    contextVersion:
-      typeof params.thread.contextVersion === "number" && Number.isFinite(params.thread.contextVersion)
-        ? Math.max(0, Math.floor(params.thread.contextVersion))
-        : undefined,
     nowMs: params.nowMs ?? Date.now(),
   });
 }

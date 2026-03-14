@@ -56,7 +56,7 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-chatgpt-connect" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Connect ChatGPT / Codex</div>
+          <div className="modal-title">Connect ChatGPT</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
             ×
           </button>
@@ -67,10 +67,10 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
               <>
                 <div className="chatgpt-connect-stage">
                   <div className="chatgpt-connect-stage-eyebrow">Before you connect</div>
-                  <div className="chatgpt-connect-stage-title">Enable device code authorization for Codex</div>
+                  <div className="chatgpt-connect-stage-title">Enable device code authorization</div>
                   <ul className="chatgpt-connect-bullets">
                     <li>Open your ChatGPT Security settings.</li>
-                    <li>Turn on <strong>Enable device code authorization for Codex</strong>.</li>
+                    <li>Turn on <strong>Enable device code authorization</strong>.</li>
                     <li>Come back here and click <strong>Authenticate</strong>.</li>
                   </ul>
                 </div>

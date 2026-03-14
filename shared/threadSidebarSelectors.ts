@@ -41,15 +41,12 @@ export function buildProjectByIdMap<TProject extends { id: string }>(
   return map;
 }
 
-type CloudProjectLike = { id: string; slug?: string | null };
+type CloudProjectLike = { id: string };
 
-export function resolveGeneralCloudProjectId<TProject extends CloudProjectLike>(
+export function resolveDefaultWorkspaceProjectId<TProject extends CloudProjectLike>(
   projects: readonly TProject[],
 ): string | null {
-  const general =
-    projects.find((project) => String(project.slug ?? "").trim().toLowerCase() === "general") ?? null;
-  if (general) return general.id;
-  return null;
+  return projects[0]?.id ?? null;
 }
 
 export function resolvePreferredCloudProjectId<TProject extends CloudProjectLike>(
@@ -60,8 +57,8 @@ export function resolvePreferredCloudProjectId<TProject extends CloudProjectLike
   if (preferred && projects.some((project) => project.id === preferred)) {
     return preferred;
   }
-  const generalId = resolveGeneralCloudProjectId(projects);
-  if (generalId) return generalId;
+  const workspaceId = resolveDefaultWorkspaceProjectId(projects);
+  if (workspaceId) return workspaceId;
   return projects[0]?.id ?? null;
 }
 
@@ -71,11 +68,11 @@ export function resolveCloudThreadProjectId<
 >(
   thread: TThread,
   projectById: Map<string, TProject>,
-  generalProjectId: string | null,
+  defaultWorkspaceProjectId: string | null,
 ): string | null {
   const direct = String(thread.project_id ?? "").trim();
   if (direct && projectById.has(direct)) return direct;
-  return generalProjectId;
+  return defaultWorkspaceProjectId;
 }
 
 export function searchThreads<TThread>(
@@ -99,11 +96,4 @@ export function buildProjectThreadGroups<
     project,
     threads: threads.filter((thread) => resolveProjectId(thread) === project.id),
   }));
-}
-
-export function filterThreadsWithoutProject<TThread>(
-  threads: TThread[],
-  resolveProjectId: (thread: TThread) => string | null,
-): TThread[] {
-  return threads.filter((thread) => !resolveProjectId(thread));
 }

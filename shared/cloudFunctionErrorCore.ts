@@ -49,6 +49,26 @@ function normalizeCode(value: unknown): string | null {
   return null;
 }
 
+function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]+>/g, " ");
+}
+
+function isLikelyHtmlDocument(value: string): boolean {
+  const lower = value.trim().toLowerCase();
+  return lower.startsWith("<!doctype html") || lower.startsWith("<html") || lower.includes("<body");
+}
+
+function normalizePlainTextError(value: string, status: number): string {
+  const trimmed = value.trim();
+  if (!trimmed) return `Request failed (${status})`;
+  if (!isLikelyHtmlDocument(trimmed)) return trimmed;
+
+  const text = stripHtmlTags(trimmed).replace(/\s+/g, " ").trim();
+  if (status === 502) return "Bad gateway. The backend returned an invalid upstream response.";
+  if (status === 503) return "Service unavailable. The backend is temporarily unavailable.";
+  return text || `Request failed (${status})`;
+}
+
 function classifyErrorCategory(input: { status: number; code: string | null; message: string }): CloudFunctionErrorCategory {
   const code = (input.code ?? "").toLowerCase();
   const message = (input.message ?? "").toLowerCase();
@@ -95,7 +115,7 @@ async function readFunctionErrorBody(response: Response): Promise<{ code: string
 
   try {
     const text = (await response.clone().text()).trim();
-    if (text) return { code: null, message: text, stage: null };
+    if (text) return { code: null, message: normalizePlainTextError(text, response.status), stage: null };
   } catch {
     // ignore
   }

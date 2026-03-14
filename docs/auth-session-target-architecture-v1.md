@@ -1,8 +1,11 @@
 # Auth Session Target Architecture (Daytona Worktree)
 
-Status: active design target  
+Status: active reference architecture  
 Scope: web-native authenticated session posture for Convex + runtime HTTP endpoints  
 Goal: simple, scalable, reliable, robust, secure, efficient, and premium
+
+Implementation posture note:
+The currently chosen implementation is the browser-owned SPA continuity model described in [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md).
 
 ## 0) Irreducible Problem
 

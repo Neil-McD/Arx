@@ -56,6 +56,43 @@ type ThreadRecord = {
   updated_at: number;
 };
 
+type ThreadMessageRecord = {
+  id: string;
+  thread_id: string;
+  seq: number;
+  created_at: string;
+};
+
+function compareThreadMessages(a: ThreadMessageRecord, b: ThreadMessageRecord): number {
+  if (a.seq !== b.seq) return a.seq - b.seq;
+  const createdAtDelta = Date.parse(a.created_at) - Date.parse(b.created_at);
+  if (Number.isFinite(createdAtDelta) && createdAtDelta !== 0) return createdAtDelta;
+  return a.id.localeCompare(b.id);
+}
+
+function mergeThreadMessagesForThread<ThreadMessageT extends ThreadMessageRecord>(params: {
+  previous: ThreadMessageT[];
+  fetched: ThreadMessageT[];
+  threadId: string;
+}): ThreadMessageT[] {
+  const { previous, fetched, threadId } = params;
+  const otherThreads = previous.filter((message) => message.thread_id !== threadId);
+  const previousForThread = previous.filter((message) => message.thread_id === threadId);
+  const mergedById = new Map<string, ThreadMessageT>();
+
+  for (const message of fetched) {
+    mergedById.set(message.id, message);
+  }
+  for (const message of previousForThread) {
+    if (!mergedById.has(message.id)) {
+      mergedById.set(message.id, message);
+    }
+  }
+
+  const mergedForThread = Array.from(mergedById.values()).sort(compareThreadMessages);
+  return [...otherThreads, ...mergedForThread];
+}
+
 type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   fetchModelRegistryRows?: (session: SessionT) => Promise<unknown[] | null>;
   toEpochSeconds: (value: string) => number;
@@ -75,7 +112,7 @@ type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   ensureSession?: EnsureSessionFn<SessionT>;
 };
 
-export function useWebThreadDataController<SessionT, ThreadMessageT>(
+export function useWebThreadDataController<SessionT, ThreadMessageT extends ThreadMessageRecord>(
   args: UseWebThreadDataControllerArgs<SessionT, ThreadMessageT>,
 ) {
   const argsRef = useRef(args);
@@ -165,7 +202,14 @@ export function useWebThreadDataController<SessionT, ThreadMessageT>(
         pageSize: 1000,
         maxScan: 4000,
       });
-      current.setThreadMessages(((convexRows ?? []) as ThreadMessageT[]));
+      const fetchedRows = (convexRows ?? []) as ThreadMessageT[];
+      current.setThreadMessages((prev) =>
+        mergeThreadMessagesForThread({
+          previous: prev,
+          fetched: fetchedRows,
+          threadId,
+        }),
+      );
     } catch (error) {
       console.warn("Failed to load Convex thread messages:", error);
       current.setThreadMessages([]);

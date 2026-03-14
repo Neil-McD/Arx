@@ -45,7 +45,7 @@ export const probeChatgptConnection = action({
         ok: false,
         status: 403,
         code: "provider_connection_required",
-        message: "Reconnect ChatGPT / Codex and retry.",
+        message: "Reconnect ChatGPT and retry.",
         model_id: modelId,
         resolved_model_id: null,
         elapsed_ms: 0,

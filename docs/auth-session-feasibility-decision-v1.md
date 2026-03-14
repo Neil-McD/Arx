@@ -1,7 +1,10 @@
 # Auth Session Feasibility Decision (Gate 1)
 
-Status: active decision memo  
+Status: superseded historical decision memo  
 Scope: decide whether the Daytona worktree can adopt server-owned session continuity without creating a second auth plane
+
+This memo is preserved for historical context.  
+The active implementation posture is browser-owned SPA continuity in [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md).
 
 ## Decision
 

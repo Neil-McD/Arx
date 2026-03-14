@@ -12,7 +12,7 @@ const VALID_REQUESTED_FUNDING_SOURCE = new Set([
   "auto",
 ]);
 const VALID_REQUESTED_EXECUTION_TARGET = new Set(["chat", "daytona_workspace"]);
-const VALID_CAPABILITY_FAMILY = new Set(["community_tools", "coding_tools"]);
+const VALID_CAPABILITY_FAMILY = new Set(["community_tools", "web_research", "workspace_tools"]);
 
 function toLowerTrimmed(value) {
   return String(value ?? "")
@@ -55,6 +55,10 @@ function normalizeRequestedExecutionTarget(rawRequestedExecutionTarget) {
   return "chat";
 }
 
+export function resolveRequiresWorkspaceToolsForGate(input) {
+  return normalizeRequestedExecutionTarget(input?.requestedExecutionTarget) === "daytona_workspace";
+}
+
 function normalizeCanonicalTier(rawTier) {
   const normalized = toLowerTrimmed(rawTier);
   if (normalized === "pro" || normalized === "architect") return "architect";
@@ -84,20 +88,23 @@ export function resolveEntitledCapabilityFamiliesForGate(input) {
     tier: input?.tier,
   });
   if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") return ["community_tools"];
-  return ["community_tools", "coding_tools"];
+  if (effectiveTier === "auth_free") return ["community_tools", "web_research"];
+  return ["community_tools", "web_research", "workspace_tools"];
 }
 
 export function resolveActiveCapabilityFamiliesForGate(input) {
-  const requestedExecutionTarget = normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
+  const requiresWorkspaceTools = resolveRequiresWorkspaceToolsForGate(input);
   const hasCommunityContext = normalizeHasCommunityContext(input?.hasCommunityContext);
   const entitled = resolveEntitledCapabilityFamiliesForGate(input);
   const active = [];
   if (hasCommunityContext && entitled.includes("community_tools")) {
     active.push("community_tools");
   }
-  if (requestedExecutionTarget === "daytona_workspace" && entitled.includes("coding_tools")) {
-    active.push("coding_tools");
+  if (entitled.includes("web_research")) {
+    active.push("web_research");
+  }
+  if (requiresWorkspaceTools && entitled.includes("workspace_tools")) {
+    active.push("workspace_tools");
   }
   return active.filter((value, index, list) => VALID_CAPABILITY_FAMILY.has(value) && list.indexOf(value) === index);
 }
@@ -105,16 +112,12 @@ export function resolveActiveCapabilityFamiliesForGate(input) {
 export function resolveHarnessProfileForGate(input) {
   const authState = normalizeAuthState(input?.authState);
   if (authState === "anonymous") return "anonymous_demo";
-  const requestedExecutionTarget = normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
+  const requiresWorkspaceTools = resolveRequiresWorkspaceToolsForGate(input);
   const active = resolveActiveCapabilityFamiliesForGate(input);
-  if (requestedExecutionTarget === "daytona_workspace") {
-    return active.includes("community_tools")
-      ? "authenticated_daytona_workspace_with_community"
-      : "authenticated_daytona_workspace";
+  if (requiresWorkspaceTools) {
+    return "authenticated_cloud_workspace";
   }
-  return active.includes("community_tools")
-    ? "authenticated_cloud_chat_with_community"
-    : "authenticated_cloud_chat";
+  return active.length > 0 ? "authenticated_cloud_tools" : "authenticated_cloud_chat";
 }
 
 function deny(code, cta) {

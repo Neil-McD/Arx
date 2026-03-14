@@ -120,7 +120,6 @@ export type CommunityAiFeedPost = {
   status: CommunityAiFeedPostStatus;
   score: number;
   effective_score: number;
-  publish_confidence: number;
   reaction_counts: CommunityAiFeedReactionCounts;
   viewer_reaction: CommunityAiFeedReactionType | null;
   created_at: string;

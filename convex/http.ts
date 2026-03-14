@@ -67,56 +67,6 @@ function sseResponse(req: Request, events: Array<{ event: string; data: Record<s
   return new Response(body, { status: 200, headers });
 }
 
-type SseEventWriter = (event: string, data: Record<string, unknown>) => void;
-
-function sseLiveResponse(
-  req: Request,
-  producer: (emit: SseEventWriter) => Promise<void>,
-): Response {
-  const headers = buildCorsHeaders(req);
-  headers.set("Content-Type", "text/event-stream; charset=utf-8");
-  headers.set("Connection", "keep-alive");
-  headers.set("X-Accel-Buffering", "no");
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let closed = false;
-      const emit: SseEventWriter = (event, data) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(encodeSse(event, data)));
-        } catch {
-          closed = true;
-        }
-      };
-      void Promise.resolve()
-        .then(async () => {
-          await producer(emit);
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          emit("error", {
-            error: message || "stream_failed",
-            message: message || "stream_failed",
-          });
-        })
-        .finally(() => {
-          if (closed) return;
-          closed = true;
-          try {
-            controller.close();
-          } catch {
-            // ignore
-          }
-        });
-    },
-    cancel() {
-      // best-effort: no background task cancellation in this path yet.
-    },
-  });
-  return new Response(stream, { status: 200, headers });
-}
-
 function hasBearerTokenHeader(req: Request): boolean {
   const raw = String(req.headers.get("authorization") ?? "").trim();
   if (!raw) return false;
@@ -344,7 +294,6 @@ registerRuntimeTurnRoutes({
   jsonResponse,
   optionsResponse,
   sseResponse,
-  sseLiveResponse,
   requireAuthenticatedActor,
 });
 

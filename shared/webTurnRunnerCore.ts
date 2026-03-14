@@ -17,10 +17,21 @@ export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenc
   community_evidence_used?: CommunityEvidenceUsedT | null;
 };
 
+export type ThreadStreamingRuntimeEvent = {
+  id: string;
+  run_id: string;
+  seq: number;
+  event_type: string;
+  payload: unknown;
+  created_at: string;
+};
+
 export type ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
   runId: string | null;
   meta: WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null;
   content: string | null;
+  runtimeEvents?: ThreadStreamingRuntimeEvent[];
+  lastRuntimeEventSeq?: number;
 };
 
 export type UseWebTurnRunnerControllerArgs<
@@ -50,6 +61,10 @@ export type UseWebTurnRunnerControllerArgs<
   loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
   loadThreads: (session: SessionT) => Promise<void>;
   showMemoryToastMessage: (message: string) => void;
+  setThreadErrorForThread: (
+    threadId: string | null,
+    value: string | null | ((prev: string | null) => string | null),
+  ) => void;
 
   setPlatformQuotaModal: Dispatch<SetStateAction<PlatformQuotaModalState | null>>;
   setStreamingContent: Dispatch<SetStateAction<string | null>>;
@@ -96,7 +111,7 @@ export type RunAgentTurnParams = {
   systemPrompt?: string | null;
   inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
   requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
-  requestedExecutionTarget?: "chat" | "daytona_workspace";
+  requiresWorkspaceTools?: boolean;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
 };

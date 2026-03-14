@@ -83,11 +83,12 @@ export function getCloudAuthUid(session: CloudSession): string {
 }
 
 const CLOUD_RUNTIME_AUTH_OTP_PATH = "/runtime/auth_send_magic_link_otp";
-const CLOUD_BRIDGE_AUTH_START_PATH = "/api/auth/start";
-const CLOUD_BRIDGE_AUTH_CALLBACK_PATH = "/api/auth/callback";
-const CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH = "/api/session/bootstrap";
-const CLOUD_BRIDGE_SESSION_REFRESH_PATH = "/api/session/refresh";
-const CLOUD_BRIDGE_SESSION_LOGOUT_PATH = "/api/session/logout";
+const CLOUD_RUNTIME_AUTH_BEGIN_PATH = "/runtime/auth_begin_google_sign_in";
+const CLOUD_RUNTIME_AUTH_EXCHANGE_PATH = "/runtime/auth_exchange_pkce_code";
+const CLOUD_RUNTIME_AUTH_REFRESH_PATH = "/runtime/auth_refresh_session";
+const CLOUD_RUNTIME_AUTH_LOGOUT_PATH = "/runtime/auth_logout_session";
+const CLOUD_SESSION_STORAGE_KEY = "arx_cloud_session:active";
+const CLOUD_PKCE_STORAGE_KEY = "arx_cloud_session:pkce";
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
@@ -123,30 +124,6 @@ async function callConvexRuntimeAuthEndpoint(params: {
   }
 }
 
-async function callSameOriginBridgeEndpoint(params: {
-  path: string;
-  method?: "GET" | "POST";
-  payload?: Record<string, unknown>;
-  accessToken?: string | null;
-}): Promise<Response | null> {
-  const route = params.path.startsWith("/") ? params.path : `/${params.path}`;
-  const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
-  const headers = new Headers();
-  if (hasBody) headers.set("Content-Type", "application/json");
-  const accessToken = readString(params.accessToken ?? null);
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  try {
-    return await fetch(route, {
-      method: params.method ?? "POST",
-      headers,
-      credentials: "include",
-      ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
-    });
-  } catch {
-    return null;
-  }
-}
-
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -164,6 +141,71 @@ function readObjectString(record: Record<string, unknown>, keys: readonly string
     if (value) return value;
   }
   return null;
+}
+
+function getSessionStorageOrNull(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readSessionStorageRecord(key: string): Record<string, unknown> | null {
+  const storage = getSessionStorageOrNull();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    return asObject(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionStorageRecord(key: string, value: Record<string, unknown>): void {
+  const storage = getSessionStorageOrNull();
+  if (!storage) return;
+  try {
+    storage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function removeSessionStorageRecord(key: string): void {
+  const storage = getSessionStorageOrNull();
+  if (!storage) return;
+  try {
+    storage.removeItem(key);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function randomBase64Url(bytes: number): string {
+  const view = new Uint8Array(bytes);
+  crypto.getRandomValues(view);
+  let binary = "";
+  for (const byte of view) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function createCodeVerifier(): string {
+  return randomBase64Url(64);
+}
+
+async function createCodeChallenge(verifier: string): Promise<string> {
+  const bytes = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const view = new Uint8Array(digest);
+  let binary = "";
+  for (const byte of view) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function createState(): string {
+  return randomBase64Url(24);
 }
 
 function coerceDisplayNameFromRecord(record: Record<string, unknown>): string | null {
@@ -308,12 +350,16 @@ function coerceCloudUser(value: unknown): CloudUser | null {
   return user;
 }
 
-function coerceCloudSession(
+type PersistedCloudSessionRecord = CloudSession & {
+  refresh_token: string;
+};
+
+function toPersistedCloudSessionRecord(
   payload: unknown,
   options: {
     requireRefreshToken?: boolean;
   } = {},
-): CloudSession | null {
+): PersistedCloudSessionRecord | null {
   const requireRefreshToken = options.requireRefreshToken !== false;
   const sessionPayload = findSessionPayload(payload, requireRefreshToken);
   if (!sessionPayload) return null;
@@ -328,9 +374,85 @@ function coerceCloudSession(
     decodeCloudUserFromAccessToken(accessToken) ?? { id: "" };
   return {
     access_token: accessToken,
+    refresh_token: refreshToken ?? "",
     expires_at: expiresAt,
     user,
   };
+}
+
+function coerceCloudSession(
+  payload: unknown,
+  options: {
+    requireRefreshToken?: boolean;
+  } = {},
+): CloudSession | null {
+  const record = toPersistedCloudSessionRecord(payload, options);
+  if (!record) return null;
+  return {
+    access_token: record.access_token,
+    expires_at: record.expires_at,
+    user: record.user,
+  };
+}
+
+function readPersistedCloudSessionRecord(): PersistedCloudSessionRecord | null {
+  const payload = readSessionStorageRecord(CLOUD_SESSION_STORAGE_KEY);
+  if (!payload) return null;
+  const record = toPersistedCloudSessionRecord(payload, {
+    requireRefreshToken: true,
+  });
+  if (!record || !record.refresh_token) {
+    removeSessionStorageRecord(CLOUD_SESSION_STORAGE_KEY);
+    return null;
+  }
+  return record;
+}
+
+function persistCloudSessionRecord(record: PersistedCloudSessionRecord): void {
+  writeSessionStorageRecord(CLOUD_SESSION_STORAGE_KEY, record);
+}
+
+function clearPersistedCloudSessionRecord(): void {
+  removeSessionStorageRecord(CLOUD_SESSION_STORAGE_KEY);
+}
+
+type PendingPkceState = {
+  state: string;
+  codeVerifier: string;
+  redirectTo: string;
+  returnTo: string | null;
+};
+
+function readPendingPkceState(): PendingPkceState | null {
+  const payload = readSessionStorageRecord(CLOUD_PKCE_STORAGE_KEY);
+  if (!payload) return null;
+  const state = readString(payload.state);
+  const codeVerifier = readString(payload.codeVerifier);
+  const redirectTo = readString(payload.redirectTo);
+  const returnTo = readString(payload.returnTo);
+  if (!state || !codeVerifier || !redirectTo) {
+    removeSessionStorageRecord(CLOUD_PKCE_STORAGE_KEY);
+    return null;
+  }
+  return {
+    state,
+    codeVerifier,
+    redirectTo,
+    returnTo,
+  };
+}
+
+function persistPendingPkceState(state: PendingPkceState): void {
+  writeSessionStorageRecord(CLOUD_PKCE_STORAGE_KEY, {
+    state: state.state,
+    codeVerifier: state.codeVerifier,
+    redirectTo: state.redirectTo,
+    returnTo: state.returnTo,
+  });
+}
+
+function clearPendingPkceState(): void {
+  removeSessionStorageRecord(CLOUD_PKCE_STORAGE_KEY);
 }
 
 function buildCloudAuthHeaders(params: {
@@ -353,86 +475,108 @@ export type BeginCloudOAuthSignInUrlResult =
   | { ok: true; authUrl: string }
   | { ok: false; error: string };
 
-export async function beginCloudBridgeOAuthSignIn(params: {
+export async function beginCloudOAuthSignIn(params: {
   provider: string;
   returnTo?: string;
 }): Promise<BeginCloudOAuthSignInUrlResult> {
-  const bridgeResponse = await callSameOriginBridgeEndpoint({
-    path: CLOUD_BRIDGE_AUTH_START_PATH,
+  const redirectTo = getOAuthRedirectUrl();
+  const codeVerifier = createCodeVerifier();
+  const codeChallenge = await createCodeChallenge(codeVerifier);
+  const state = createState();
+  persistPendingPkceState({
+    state,
+    codeVerifier,
+    redirectTo,
+    returnTo: readString(params.returnTo) ?? null,
+  });
+  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
+    path: CLOUD_RUNTIME_AUTH_BEGIN_PATH,
     method: "POST",
     payload: {
       provider: params.provider,
-      return_to: params.returnTo ?? undefined,
+      redirect_to: redirectTo,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+      state,
     },
   });
-  if (!bridgeResponse) {
-    return { ok: false, error: "Google sign-in failed: auth bridge is unavailable." };
+  if (!runtimeResponse) {
+    clearPendingPkceState();
+    return { ok: false, error: "Google sign-in failed: auth runtime is unavailable." };
   }
-  if (!bridgeResponse.ok) {
-    return {
-      ok: false,
-      error: (await readCloudError(bridgeResponse)) || "Google sign-in failed: auth bridge could not create authorize URL.",
-    };
+  if (!runtimeResponse.ok) {
+    const error = (await readCloudError(runtimeResponse)) || "Google sign-in failed: auth runtime could not create authorize URL.";
+    clearPendingPkceState();
+    return { ok: false, error };
   }
   try {
-    const payload = (await bridgeResponse.json()) as Record<string, unknown>;
+    const payload = (await runtimeResponse.json()) as Record<string, unknown>;
     const authUrl = readString(payload.auth_url ?? payload.authUrl ?? payload.url);
     if (authUrl) return { ok: true, authUrl };
-    return { ok: false, error: "Google sign-in failed: authorize URL missing from bridge response." };
+    clearPendingPkceState();
+    return { ok: false, error: "Google sign-in failed: authorize URL missing from auth runtime response." };
   } catch {
-    return { ok: false, error: "Google sign-in failed: invalid bridge response." };
+    clearPendingPkceState();
+    return { ok: false, error: "Google sign-in failed: invalid auth runtime response." };
   }
 }
 
-export async function bootstrapCloudBridgeSession(): Promise<CloudSession | null> {
-  const bridgeResponse = await callSameOriginBridgeEndpoint({
-    path: CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH,
-    method: "POST",
-    payload: {},
-  });
-  if (!bridgeResponse) return null;
-  if (!bridgeResponse.ok) {
-    if (bridgeResponse.status === 401) return null;
-    throw new Error(await readCloudError(bridgeResponse));
+export async function bootstrapCloudSession(): Promise<CloudSession | null> {
+  const record = readPersistedCloudSessionRecord();
+  if (!record) return null;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (record.expires_at > nowSec + 60) {
+    return {
+      access_token: record.access_token,
+      expires_at: record.expires_at,
+      user: record.user,
+    };
   }
-  try {
-    return coerceCloudSession((await bridgeResponse.json()) as unknown, {
-      requireRefreshToken: false,
-    });
-  } catch {
-    return null;
-  }
+  return await refreshCloudSession();
 }
 
-export async function completeCloudBridgeOAuthCallback(params: {
+export async function completeCloudOAuthCallback(params: {
   authCode: string;
   state?: string | null;
 }): Promise<{ ok: true; returnTo?: string | null } | { ok: false; error: string }> {
-  const bridgeResponse = await callSameOriginBridgeEndpoint({
-    path: CLOUD_BRIDGE_AUTH_CALLBACK_PATH,
+  const pending = readPendingPkceState();
+  const callbackState = readString(params.state ?? null);
+  if (!pending || !pending.codeVerifier || !pending.state || pending.state !== callbackState) {
+    clearPendingPkceState();
+    return { ok: false, error: "Google sign-in failed: invalid OAuth callback state." };
+  }
+  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
+    path: CLOUD_RUNTIME_AUTH_EXCHANGE_PATH,
     method: "POST",
     payload: {
       auth_code: params.authCode,
-      state: params.state ?? undefined,
+      code_verifier: pending.codeVerifier,
+      redirect_to: pending.redirectTo,
     },
   });
-  if (!bridgeResponse) {
-    return { ok: false, error: "Google sign-in failed: auth bridge is unavailable." };
+  if (!runtimeResponse) {
+    return { ok: false, error: "Google sign-in failed: auth runtime is unavailable." };
   }
-  if (!bridgeResponse.ok) {
+  if (!runtimeResponse.ok) {
     return {
       ok: false,
-      error: (await readCloudError(bridgeResponse)) || "Google sign-in failed during bridge callback.",
+      error: (await readCloudError(runtimeResponse)) || "Google sign-in failed during session exchange.",
     };
   }
   try {
-    const payload = (await bridgeResponse.json()) as Record<string, unknown>;
+    const payload = (await runtimeResponse.json()) as unknown;
+    const record = toPersistedCloudSessionRecord(payload, { requireRefreshToken: true });
+    if (!record || !record.refresh_token) {
+      return { ok: false, error: "Google sign-in failed: session payload was incomplete." };
+    }
+    persistCloudSessionRecord(record);
+    clearPendingPkceState();
     return {
       ok: true,
-      returnTo: readString(payload.return_to ?? payload.returnTo),
+      returnTo: pending.returnTo,
     };
   } catch {
-    return { ok: true, returnTo: null };
+    return { ok: false, error: "Google sign-in failed: invalid session response." };
   }
 }
 
@@ -443,27 +587,57 @@ export async function logoutCloudSessionRemote(params: {
   const accessToken = readString(params.accessToken);
   if (!accessToken) return;
   const scope = readString(params.scope) ?? "local";
-  const bridgeResponse = await callSameOriginBridgeEndpoint({
-    path: CLOUD_BRIDGE_SESSION_LOGOUT_PATH,
+  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
+    path: CLOUD_RUNTIME_AUTH_LOGOUT_PATH,
     method: "POST",
     accessToken,
     payload: { scope },
   });
-  if (!bridgeResponse || bridgeResponse.ok) return;
+  if (!runtimeResponse || runtimeResponse.ok) return;
 }
 
 export async function refreshCloudSession(): Promise<CloudSession | null> {
-  const bridgeResponse = await callSameOriginBridgeEndpoint({
-    path: CLOUD_BRIDGE_SESSION_REFRESH_PATH,
+  const existing = readPersistedCloudSessionRecord();
+  if (!existing?.refresh_token) {
+    clearPersistedCloudSessionRecord();
+    return null;
+  }
+  const runtimeResponse = await callConvexRuntimeAuthEndpoint({
+    path: CLOUD_RUNTIME_AUTH_REFRESH_PATH,
     method: "POST",
-    payload: {},
+    payload: {
+      refresh_token: existing.refresh_token,
+    },
   });
-  if (!bridgeResponse || !bridgeResponse.ok) return null;
+  if (!runtimeResponse || !runtimeResponse.ok) {
+    clearPersistedCloudSessionRecord();
+    return null;
+  }
   try {
-    return coerceCloudSession((await bridgeResponse.json()) as unknown, {
+    const payload = (await runtimeResponse.json()) as unknown;
+    const refreshed = toPersistedCloudSessionRecord(payload, {
       requireRefreshToken: false,
     });
+    if (!refreshed) {
+      clearPersistedCloudSessionRecord();
+      return null;
+    }
+    const merged: PersistedCloudSessionRecord = {
+      ...refreshed,
+      refresh_token: refreshed.refresh_token || existing.refresh_token,
+    };
+    if (!merged.refresh_token) {
+      clearPersistedCloudSessionRecord();
+      return null;
+    }
+    persistCloudSessionRecord(merged);
+    return {
+      access_token: merged.access_token,
+      expires_at: merged.expires_at,
+      user: merged.user,
+    };
   } catch {
+    clearPersistedCloudSessionRecord();
     return null;
   }
 }

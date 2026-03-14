@@ -42,12 +42,12 @@ require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_UR
   "auth URL lookup is Convex-only"
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_PUBLIC_KEY"\]\)' \
   "optional runtime API key lookup uses VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_AUTH_START_PATH' \
-  "auth transport uses bridge auth endpoint constants"
-require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_SESSION_BOOTSTRAP_PATH' \
-  "auth transport uses bridge session bootstrap endpoint"
-require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_SESSION_REFRESH_PATH' \
-  "auth transport uses bridge session refresh endpoint"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_RUNTIME_AUTH_BEGIN_PATH' \
+  "auth transport uses runtime OAuth begin endpoint"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_RUNTIME_AUTH_EXCHANGE_PATH' \
+  "auth transport uses runtime OAuth exchange endpoint"
+require_match_in_file "$AUTH_CORE_FILE" 'CLOUD_RUNTIME_AUTH_REFRESH_PATH' \
+  "auth transport uses runtime session refresh endpoint"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_URL' \
   "shared auth core must not use VITE_AUTH_URL"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_PUBLIC_KEY' \
@@ -56,10 +56,12 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_FUNCTIONS_V1_SEGMENT' \
   "shared auth core must not classify legacy /functions/v1 surface"
 forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
   "shared auth core must not depend on PostgREST auth error codes"
+forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_' \
+  "shared auth core must not carry bridge endpoint constants"
 
-echo "[2/6] Validating OAuth flow is bridge-first..."
-require_match_in_file "$AUTH_FLOW_FILE" 'beginCloudBridgeOAuthSignIn' \
-  "OAuth sign-in uses bridge start path"
+echo "[2/6] Validating OAuth flow is SPA-first..."
+require_match_in_file "$AUTH_FLOW_FILE" 'beginCloudOAuthSignIn' \
+  "OAuth sign-in uses direct runtime OAuth start"
 forbid_match_in_file "$AUTH_FLOW_FILE" 'readConvexUrl\(\)' \
   "OAuth sign-in must not depend on direct Convex runtime bootstrap"
 forbid_match_in_file "$AUTH_FLOW_FILE" 'exchangeCloudPkceCodeForSession|consumeCloudOAuthCallback' \

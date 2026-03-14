@@ -20,24 +20,6 @@ type RuntimePersonalMemoryInput = {
   limit?: unknown;
 };
 
-type RuntimeCommunityResearchInput = {
-  community_id?: unknown;
-  query?: unknown;
-};
-
-type RuntimeCommunityLiveFeedWriteInput = {
-  community_id?: unknown;
-  agent_key?: unknown;
-  author_label?: unknown;
-  post_type?: unknown;
-  title?: unknown;
-  body?: unknown;
-  why_now?: unknown;
-  evidence?: unknown;
-  publish_confidence?: unknown;
-  novelty_key?: unknown;
-};
-
 type HttpRouterLike = {
   route: (config: {
     path: string;
@@ -86,18 +68,6 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
 
   http.route({
     path: "/runtime/list_personal_memory_items",
-    method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
-  });
-
-  http.route({
-    path: "/runtime/community_research",
-    method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
-  });
-
-  http.route({
-    path: "/runtime/community_live_feed_write",
     method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
@@ -214,138 +184,4 @@ export function registerRuntimeContextRoutes(args: RegisterRuntimeContextRoutesA
       return jsonResponse(req, 200, normalized);
     }),
   });
-
-  http.route({
-    path: "/runtime/community_research",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
-      let input: RuntimeCommunityResearchInput;
-      try {
-        input = (await req.json()) as RuntimeCommunityResearchInput;
-      } catch {
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "invalid_request",
-          code: "invalid_request",
-        });
-      }
-
-      const auth = await requireAuthenticatedSubject(ctx, req);
-      if (!auth.ok) return auth.response;
-
-      const communityId = parseOptionalString(input.community_id, 200);
-      const query = parseOptionalString(input.query, 240);
-      if (!communityId || !query) {
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "invalid_request",
-          code: "invalid_request",
-          message: "community_id and query are required.",
-        });
-      }
-      try {
-        const payload = await (ctx as any).runQuery(api.community.readCompiledCommunityContext as any, {
-          authSubject: auth.authSubject,
-          communityId,
-          query,
-        });
-        return jsonResponse(req, 200, (payload ?? { ok: false }) as Record<string, unknown>);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "community_research_failed",
-          code: "community_research_failed",
-          message,
-        });
-      }
-    }),
-  });
-
-  http.route({
-    path: "/runtime/community_live_feed_write",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
-      let input: RuntimeCommunityLiveFeedWriteInput;
-      try {
-        input = (await req.json()) as RuntimeCommunityLiveFeedWriteInput;
-      } catch {
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "invalid_request",
-          code: "invalid_request",
-        });
-      }
-
-      const auth = await requireAuthenticatedSubject(ctx, req);
-      if (!auth.ok) return auth.response;
-
-      const communityId = parseOptionalString(input.community_id, 200);
-      const body = parseOptionalString(input.body, 12_000);
-      if (!communityId || !body) {
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "invalid_request",
-          code: "invalid_request",
-          message: "community_id and body are required.",
-        });
-      }
-
-      const postTypeRaw = parseOptionalString(input.post_type, 32)?.toLowerCase();
-      const postType =
-        postTypeRaw === "recommendation" || postTypeRaw === "action" ? postTypeRaw : "observation";
-      const title = parseOptionalString(input.title, 180);
-      const whyNow = parseOptionalString(input.why_now, 280);
-      const evidence = Array.isArray(input.evidence)
-        ? input.evidence
-            .map((entry) => parseOptionalString(entry, 180))
-            .filter((entry): entry is string => Boolean(entry))
-            .slice(0, 4)
-        : [];
-      const authorLabel = parseOptionalString(input.author_label, 80);
-      const agentKey = parseOptionalString(input.agent_key, 120);
-      const noveltyKey = parseOptionalString(input.novelty_key, 256);
-      const publishConfidenceRaw = Number(input.publish_confidence);
-      const publishConfidence = Number.isFinite(publishConfidenceRaw)
-        ? Math.max(0, Math.min(6, Math.round(publishConfidenceRaw)))
-        : undefined;
-      if (evidence.length === 0) {
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "invalid_request",
-          code: "invalid_request",
-          message: "evidence is required for community live feed writes.",
-        });
-      }
-
-      try {
-        const payload = await (ctx as any).runMutation(api.community.publishCommunityAiFeedAgentPost as any, {
-          authSubject: auth.authSubject,
-          communityId,
-          agentKey: agentKey ?? null,
-          authorLabel: authorLabel ?? null,
-          postType,
-          title: title ?? null,
-          body,
-          whyNow: whyNow ?? null,
-          evidence,
-          publishConfidence,
-          noveltyKey: noveltyKey ?? null,
-        });
-        return jsonResponse(req, 200, {
-          ok: true,
-          post: payload ?? null,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return jsonResponse(req, 400, {
-          ok: false,
-          error: "community_live_feed_write_failed",
-          code: "community_live_feed_write_failed",
-          message,
-        });
-      }
-    }),
-  });
-
 }

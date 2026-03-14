@@ -42,6 +42,13 @@ const HIGHLIGHT_LANGUAGE_ALIAS: Record<string, string> = {
   zsh: "bash",
 };
 
+const PLAIN_TEXT_LANGUAGES = new Set([
+  "txt",
+  "text",
+  "plain",
+  "plaintext",
+]);
+
 export type MarkdownRenderOptions = {
   onCopyCode?: (text: string) => Promise<void> | void;
 };
@@ -51,6 +58,8 @@ type CodeBlockProps = {
   language?: string;
   onCopyCode?: (text: string) => Promise<void> | void;
 };
+
+type CodeBlockVariant = "code" | "artifact" | "terminal" | "diff";
 
 async function copyCodeToClipboard(text: string, onCopyCode?: (text: string) => Promise<void> | void): Promise<void> {
   if (onCopyCode) {
@@ -66,10 +75,20 @@ async function copyCodeToClipboard(text: string, onCopyCode?: (text: string) => 
 
 function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const normalizedLanguage = useMemo(() => {
+    if (!language) return null;
+    const trimmed = language.trim().toLowerCase();
+    return HIGHLIGHT_LANGUAGE_ALIAS[trimmed] ?? trimmed;
+  }, [language]);
+  const isPlainText = normalizedLanguage ? PLAIN_TEXT_LANGUAGES.has(normalizedLanguage) : false;
+  const variant: CodeBlockVariant = useMemo(() => {
+    if (normalizedLanguage === "diff" || normalizedLanguage === "patch") return "diff";
+    if (normalizedLanguage === "bash") return "terminal";
+    if (isPlainText || normalizedLanguage === "markdown") return "artifact";
+    return "code";
+  }, [isPlainText, normalizedLanguage]);
   const highlighted = useMemo(() => {
-    const normalizedLanguage = language
-      ? HIGHLIGHT_LANGUAGE_ALIAS[language.trim().toLowerCase()] ?? language.trim().toLowerCase()
-      : null;
+    if (isPlainText) return null;
     if (normalizedLanguage && hljs.getLanguage(normalizedLanguage)) {
       try {
         return hljs.highlight(code, { language: normalizedLanguage }).value;
@@ -78,7 +97,7 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
       }
     }
     return hljs.highlightAuto(code).value;
-  }, [code, language]);
+  }, [code, isPlainText, normalizedLanguage]);
 
   const handleCopy = async () => {
     await copyCodeToClipboard(code, onCopyCode);
@@ -87,7 +106,7 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   };
 
   return (
-    <div className="code-block-wrapper">
+    <div className={`code-block-wrapper code-block-variant-${variant}`}>
       <div className="code-block-header">
         {language && <span className="code-block-lang">{language}</span>}
         <button className="code-block-copy" type="button" onClick={() => void handleCopy()}>
@@ -95,10 +114,14 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
         </button>
       </div>
       <pre className="md-code-block">
-        <code
-          className={language ? `language-${language} hljs` : "hljs"}
-          dangerouslySetInnerHTML={{ __html: highlighted }}
-        />
+        {isPlainText ? (
+          <code>{code}</code>
+        ) : (
+          <code
+            className={language ? `language-${language} hljs` : "hljs"}
+            dangerouslySetInnerHTML={{ __html: highlighted ?? "" }}
+          />
+        )}
       </pre>
     </div>
   );

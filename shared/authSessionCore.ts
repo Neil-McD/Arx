@@ -1,7 +1,7 @@
 import {
-  beginCloudBridgeOAuthSignIn,
-  bootstrapCloudBridgeSession,
-  completeCloudBridgeOAuthCallback,
+  beginCloudOAuthSignIn,
+  bootstrapCloudSession,
+  completeCloudOAuthCallback,
   decodeJwtPayload,
   ensureCloudSessionForAuthenticatedSend,
   ensureCloudSessionForRequest,
@@ -32,9 +32,9 @@ export type AuthSessionRef = CloudSessionRef;
 export type AuthSessionRefreshInFlightRef = CloudSessionRefreshInFlightRef;
 
 export {
-  beginCloudBridgeOAuthSignIn as beginBridgeOAuthSignIn,
-  bootstrapCloudBridgeSession as bootstrapBridgeSession,
-  completeCloudBridgeOAuthCallback as completeBridgeOAuthCallback,
+  beginCloudOAuthSignIn as beginOAuthSignIn,
+  bootstrapCloudSession as bootstrapSession,
+  completeCloudOAuthCallback as completeOAuthCallback,
   decodeJwtPayload as decodeAuthJwtPayload,
   ensureCloudSessionForAuthenticatedSend as ensureAuthSessionForAuthenticatedSend,
   ensureCloudSessionForRequest as ensureAuthSessionForRequest,

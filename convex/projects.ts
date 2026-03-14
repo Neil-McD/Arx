@@ -2,9 +2,7 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
-import { loadDaytonaConfig, type DaytonaConfig } from "./httpDaytona";
-
-const MAX_ACTIVE_CLOUD_PROJECTS_PER_USER = 5;
+import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -32,63 +30,20 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
   return user._id;
 }
 
-function normalizeProjectName(raw: string): string {
-  const cleaned = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!cleaned) throw new Error("project_name_required");
-  return cleaned.slice(0, 80);
-}
-
-function slugifyProjectName(raw: string): string {
-  const base = normalizeProjectName(raw)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || "project";
-}
-
-async function listActiveProjectsByOwner(ctx: any, ownerId: any) {
-  const rows = await ctx.db
-    .query("cloudProjects")
-    .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerId))
-    .collect();
-  return rows.filter((row: any) => row.status === "active");
-}
-
 async function ensureDefaultProjectInternal(args: {
   ctx: any;
   ownerId: any;
   nowMs: number;
 }) {
-  const existingGeneral = await args.ctx.db
+  const existing = await args.ctx.db
     .query("cloudProjects")
-    .withIndex("by_owner_slug", (q: any) => q.eq("ownerId", args.ownerId).eq("slug", "general"))
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
     .first();
-  if (existingGeneral) {
-    if (existingGeneral.status !== "active") {
-      await args.ctx.db.patch(existingGeneral._id, { status: "active", updatedAt: args.nowMs });
-    }
-    const refreshed = await args.ctx.db.get(existingGeneral._id);
-    return refreshed ?? existingGeneral;
-  }
-
-  const activeRows = await listActiveProjectsByOwner(args.ctx, args.ownerId);
-  if (activeRows.length >= MAX_ACTIVE_CLOUD_PROJECTS_PER_USER) {
-    throw new Error("project_limit_reached");
-  }
+  if (existing) return existing;
 
   const id = await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: "General",
-    slug: "general",
-    description: "Default cloud project",
-    providerSandboxId: undefined,
-    providerSandboxState: undefined,
-    providerSandboxLastSeenAt: undefined,
     providerVolumeId: undefined,
-    providerVolumeName: undefined,
-    providerVolumeState: undefined,
-    providerVolumeLastSeenAt: undefined,
-    status: "active",
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -97,36 +52,15 @@ async function ensureDefaultProjectInternal(args: {
   return created;
 }
 
-async function reserveUniqueSlug(args: {
-  ctx: any;
-  ownerId: any;
-  baseSlug: string;
-  excludeProjectId?: any;
-}): Promise<string> {
-  const normalizedBase = String(args.baseSlug ?? "").trim() || "project";
-  for (let suffix = 0; suffix < 300; suffix += 1) {
-    const candidate = suffix === 0 ? normalizedBase : `${normalizedBase}-${suffix + 1}`;
-    const existing = await args.ctx.db
-      .query("cloudProjects")
-      .withIndex("by_owner_slug", (q: any) => q.eq("ownerId", args.ownerId).eq("slug", candidate))
-      .first();
-    if (!existing) return candidate;
-    if (args.excludeProjectId && existing._id === args.excludeProjectId) return candidate;
-  }
-  throw new Error("project_slug_unavailable");
-}
-
 function normalizeOptionalVolumeValue(raw: unknown): string | undefined {
   const normalized = String(raw ?? "").trim();
   return normalized || undefined;
 }
 
-function buildProjectVolumeName(project: { slug?: unknown; _id?: unknown }): string {
-  const slug = String(project.slug ?? "").trim().toLowerCase() || "project";
-  const safeSlug = slug.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "project";
+function buildProjectVolumeName(project: { _id?: unknown }): string {
   const projectId = normalizeIdValue(project._id);
   if (!projectId) throw new Error("project_id_required");
-  return `arx-${safeSlug}-${projectId}`;
+  return `arx-workspace-${projectId}`;
 }
 
 type DaytonaVolumeApiDto = {
@@ -337,9 +271,6 @@ export const attachCloudProjectVolumeInternal = internalMutation({
   args: {
     projectId: v.id("cloudProjects"),
     providerVolumeId: v.string(),
-    providerVolumeName: v.optional(v.string()),
-    providerVolumeState: v.optional(v.string()),
-    providerVolumeLastSeenAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -348,17 +279,8 @@ export const attachCloudProjectVolumeInternal = internalMutation({
     const nowMs = args.nowMs ?? Date.now();
     const providerVolumeId = normalizeOptionalVolumeValue(args.providerVolumeId);
     if (!providerVolumeId) throw new Error("provider_volume_id_required");
-    const providerVolumeName =
-      normalizeOptionalVolumeValue(args.providerVolumeName) ??
-      existing.providerVolumeName ??
-      providerVolumeId;
-    const providerVolumeState =
-      normalizeOptionalVolumeValue(args.providerVolumeState) ?? existing.providerVolumeState ?? "ready";
     await ctx.db.patch(existing._id, {
       providerVolumeId,
-      providerVolumeName,
-      providerVolumeState,
-      providerVolumeLastSeenAt: args.providerVolumeLastSeenAt ?? nowMs,
       updatedAt: nowMs,
     });
     return await ctx.db.get(existing._id);
@@ -380,8 +302,7 @@ export const ensureCloudProjectVolumeInternal = internalAction({
       throw new Error(loadedDaytonaConfig.message);
     }
     const config = loadedDaytonaConfig.config;
-    const expectedVolumeName =
-      normalizeOptionalVolumeValue(project.providerVolumeName) ?? buildProjectVolumeName(project);
+    const expectedVolumeName = buildProjectVolumeName(project);
 
     let volume: DaytonaVolumeApiDto | null = null;
     const existingVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
@@ -434,34 +355,10 @@ export const ensureCloudProjectVolumeInternal = internalAction({
     const updated = await ctx.runMutation(internal.projects.attachCloudProjectVolumeInternal as any, {
       projectId: args.projectId,
       providerVolumeId: volumeId,
-      providerVolumeName: volumeName,
-      providerVolumeState: volumeState,
-      providerVolumeLastSeenAt: Date.now(),
       nowMs: Date.now(),
     });
     if (!updated) throw new Error("project_not_found");
     return updated;
-  },
-});
-
-export const listCloudProjectsByOwner = query({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    includeArchived: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const rows = await ctx.db
-      .query("cloudProjects")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-    const filtered = args.includeArchived ? rows : rows.filter((row) => row.status === "active");
-    return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
   },
 });
 
@@ -509,156 +406,6 @@ export const ensureDefaultCloudProjectWithVolumeForOwner = action({
   },
 });
 
-export const createCloudProject = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    name: v.string(),
-    description: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const name = normalizeProjectName(args.name);
-    const activeRows = await listActiveProjectsByOwner(ctx, ownerId);
-    if (activeRows.length >= MAX_ACTIVE_CLOUD_PROJECTS_PER_USER) {
-      throw new Error("project_limit_reached");
-    }
-    const slug = await reserveUniqueSlug({
-      ctx,
-      ownerId,
-      baseSlug: slugifyProjectName(name),
-    });
-    const description = String(args.description ?? "").trim() || undefined;
-    const id = await ctx.db.insert("cloudProjects", {
-      ownerId,
-      name,
-      slug,
-      description,
-      providerSandboxId: undefined,
-      providerSandboxState: undefined,
-      providerSandboxLastSeenAt: undefined,
-      providerVolumeId: undefined,
-      providerVolumeName: undefined,
-      providerVolumeState: undefined,
-      providerVolumeLastSeenAt: undefined,
-      status: "active",
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const created = await ctx.db.get(id);
-    if (!created) throw new Error("project_create_failed");
-    return created;
-  },
-});
-
-export const createCloudProjectWithVolume = action({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    name: v.string(),
-    description: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { authSubject, userId } = await resolveActionUser({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const row = await ctx.runMutation(api.projects.createCloudProject as any, {
-      ownerId: args.ownerId ?? userId,
-      authSubject,
-      name: args.name,
-      description: args.description,
-      nowMs: args.nowMs,
-    });
-    if (!row?._id) throw new Error("project_create_failed");
-    return await ctx.runAction(internal.projects.ensureCloudProjectVolumeInternal as any, {
-      projectId: row._id,
-    });
-  },
-});
-
-export const renameCloudProject = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    projectId: v.id("cloudProjects"),
-    name: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await ctx.db.get(args.projectId);
-    if (!existing) throw new Error("project_not_found");
-    if (existing.ownerId !== ownerId) throw new Error("project_access_denied");
-
-    const name = normalizeProjectName(args.name);
-    const slug = await reserveUniqueSlug({
-      ctx,
-      ownerId,
-      baseSlug: slugifyProjectName(name),
-      excludeProjectId: existing._id,
-    });
-
-    await ctx.db.patch(existing._id, {
-      name,
-      slug,
-      updatedAt: nowMs,
-    });
-    const updated = await ctx.db.get(existing._id);
-    if (!updated) throw new Error("project_not_found");
-    return updated;
-  },
-});
-
-export const attachCloudProjectVolume = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    projectId: v.id("cloudProjects"),
-    providerVolumeId: v.string(),
-    providerVolumeName: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await ctx.db.get(args.projectId);
-    if (!existing) throw new Error("project_not_found");
-    if (existing.ownerId !== ownerId) throw new Error("project_access_denied");
-
-    const providerVolumeId = normalizeOptionalVolumeValue(args.providerVolumeId);
-    if (!providerVolumeId) throw new Error("provider_volume_id_required");
-    const providerVolumeName = normalizeOptionalVolumeValue(args.providerVolumeName) ?? providerVolumeId;
-
-    await ctx.db.patch(existing._id, {
-      providerVolumeId,
-      providerVolumeName,
-      providerVolumeState: "ready",
-      providerVolumeLastSeenAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const updated = await ctx.db.get(existing._id);
-    if (!updated) throw new Error("project_not_found");
-    return updated;
-  },
-});
-
 export const ensureCloudProjectVolume = action({
   args: {
     projectId: v.id("cloudProjects"),
@@ -678,92 +425,6 @@ export const ensureCloudProjectVolume = action({
     return await ctx.runAction(internal.projects.ensureCloudProjectVolumeInternal as any, {
       projectId: args.projectId,
     });
-  },
-});
-
-export const recordCloudProjectRuntimeState = internalMutation({
-  args: {
-    projectId: v.id("cloudProjects"),
-    providerSandboxId: v.optional(v.string()),
-    providerSandboxState: v.optional(v.string()),
-    providerSandboxLastSeenAt: v.optional(v.number()),
-    providerVolumeId: v.optional(v.string()),
-    providerVolumeName: v.optional(v.string()),
-    providerVolumeState: v.optional(v.string()),
-    providerVolumeLastSeenAt: v.optional(v.number()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db.get(args.projectId);
-    if (!existing) throw new Error("project_not_found");
-    const nowMs = args.nowMs ?? Date.now();
-    await ctx.db.patch(existing._id, {
-      providerSandboxId: normalizeOptionalVolumeValue(args.providerSandboxId),
-      providerSandboxState: normalizeOptionalVolumeValue(args.providerSandboxState),
-      providerSandboxLastSeenAt: args.providerSandboxLastSeenAt ?? nowMs,
-      providerVolumeId: normalizeOptionalVolumeValue(args.providerVolumeId) ?? existing.providerVolumeId,
-      providerVolumeName: normalizeOptionalVolumeValue(args.providerVolumeName) ?? existing.providerVolumeName,
-      providerVolumeState: normalizeOptionalVolumeValue(args.providerVolumeState) ?? existing.providerVolumeState,
-      providerVolumeLastSeenAt:
-        args.providerVolumeLastSeenAt ??
-        (args.providerVolumeId || args.providerVolumeState ? nowMs : existing.providerVolumeLastSeenAt),
-      updatedAt: nowMs,
-    });
-    return await ctx.db.get(existing._id);
-  },
-});
-
-export const deleteCloudProject = mutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    projectId: v.id("cloudProjects"),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await ctx.db.get(args.projectId);
-    if (!existing) throw new Error("project_not_found");
-    if (existing.ownerId !== ownerId) throw new Error("project_access_denied");
-    if (String(existing.slug ?? "").trim().toLowerCase() === "general") {
-      throw new Error("general_project_protected");
-    }
-
-    const generalProject = await ensureDefaultProjectInternal({
-      ctx,
-      ownerId,
-      nowMs,
-    });
-
-    const projectThreads = await ctx.db
-      .query("threads")
-      .withIndex("by_project", (q) => q.eq("projectId", existing._id))
-      .collect();
-    let movedThreadCount = 0;
-    for (const thread of projectThreads) {
-      if (thread.ownerId !== ownerId) continue;
-      await ctx.db.patch(thread._id, {
-        projectId: generalProject._id,
-        updatedAt: nowMs,
-      });
-      movedThreadCount += 1;
-    }
-
-    await ctx.db.patch(existing._id, {
-      status: "archived",
-      updatedAt: nowMs,
-    });
-
-    return {
-      ok: true,
-      movedThreadCount,
-      generalProjectId: generalProject._id,
-    };
   },
 });
 
@@ -788,147 +449,21 @@ export const getCloudProjectById = query({
   },
 });
 
-export const getCloudProjectBySlug = query({
+export const getCloudProjectDisplayLabel = query({
   args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    slug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const row = await ctx.db
-      .query("cloudProjects")
-      .withIndex("by_owner_slug", (q) => q.eq("ownerId", ownerId).eq("slug", args.slug))
-      .first();
-    return row ?? null;
-  },
-});
-
-export const probeCloudProject = action({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
     projectId: v.id("cloudProjects"),
+    authSubject: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { authSubject, userId } = await resolveActionUser({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const project = await ctx.runQuery(api.projects.getCloudProjectById as any, {
-      ownerId: args.ownerId ?? userId,
-      authSubject,
-      projectId: args.projectId,
-    });
-    if (!project) throw new Error("project_access_denied");
-
-    const loadedDaytonaConfig = loadDaytonaConfig();
-    if (!loadedDaytonaConfig.ok) {
-      return {
-        ok: false,
-        sandbox: {
-          status: String(project.providerSandboxState ?? project.status ?? "active").trim().toLowerCase() || "active",
-        },
-        probe: {
-          stdout_preview: loadedDaytonaConfig.message,
-        },
-      };
-    }
-
-    const config = loadedDaytonaConfig.config;
-    const nowMs = Date.now();
-    const providerVolumeId = normalizeOptionalVolumeValue(project.providerVolumeId);
-    const providerSandboxId = normalizeOptionalVolumeValue(project.providerSandboxId);
-
-    let liveVolumeState = normalizeOptionalVolumeValue(project.providerVolumeState) ?? undefined;
-    let liveVolumeName = normalizeOptionalVolumeValue(project.providerVolumeName) ?? undefined;
-    if (providerVolumeId) {
-      const volumeLookup = await fetchDaytonaVolumeById({
-        config,
-        volumeId: providerVolumeId,
+    const row = await ctx.db.get(args.projectId);
+    if (!row) return null;
+    if (args.authSubject) {
+      const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+        ctx,
+        authSubject: args.authSubject ?? null,
       });
-      if (volumeLookup.ok) {
-        liveVolumeState = normalizeDaytonaVolumeState(volumeLookup.payload) ?? liveVolumeState;
-        liveVolumeName = normalizeOptionalVolumeValue(volumeLookup.payload.name) ?? liveVolumeName;
-      } else if (volumeLookup.status === 404) {
-        liveVolumeState = "missing";
-      } else {
-        return {
-          ok: false,
-          sandbox: {
-            status:
-              String(project.providerSandboxState ?? project.status ?? "active").trim().toLowerCase() || "active",
-          },
-          probe: {
-            stdout_preview: volumeLookup.message,
-          },
-        };
-      }
+      if (row.ownerId !== ownerId) return null;
     }
-
-    let liveSandboxState = normalizeOptionalVolumeValue(project.providerSandboxState) ?? undefined;
-    if (providerSandboxId) {
-      const sandboxLookup = await fetchDaytonaSandboxById({
-        config,
-        sandboxId: providerSandboxId,
-      });
-      if (sandboxLookup.ok) {
-        liveSandboxState = normalizeDaytonaSandboxState(sandboxLookup.payload) ?? liveSandboxState;
-      } else if (sandboxLookup.status === 404) {
-        liveSandboxState = "deleted";
-      } else {
-        return {
-          ok: false,
-          sandbox: {
-            status:
-              String(project.providerSandboxState ?? project.status ?? "active").trim().toLowerCase() || "active",
-          },
-          probe: {
-            stdout_preview: sandboxLookup.message,
-          },
-        };
-      }
-    }
-
-    await ctx.runMutation(internal.projects.recordCloudProjectRuntimeState as any, {
-      projectId: args.projectId,
-      providerSandboxId: providerSandboxId ?? undefined,
-      providerSandboxState: liveSandboxState ?? undefined,
-      providerSandboxLastSeenAt: providerSandboxId ? nowMs : undefined,
-      providerVolumeId: providerVolumeId ?? undefined,
-      providerVolumeName: liveVolumeName ?? undefined,
-      providerVolumeState: liveVolumeState ?? undefined,
-      providerVolumeLastSeenAt: providerVolumeId ? nowMs : undefined,
-      nowMs,
-    });
-
-    const status =
-      String(liveSandboxState ?? "").trim().toLowerCase() ||
-      String(project.status ?? "active").trim().toLowerCase() ||
-      "active";
-    const label =
-      String(project.name ?? "").trim() ||
-      String(project.slug ?? "").trim() ||
-      String(project._id ?? "").trim() ||
-      "project";
-    const stdoutPreview = providerVolumeId
-      ? providerSandboxId
-        ? `daytona sandbox ${liveSandboxState ?? "unknown"} on volume ${liveVolumeName ?? providerVolumeId}`
-        : `daytona volume ${liveVolumeState ?? "unknown"} attached (${liveVolumeName ?? providerVolumeId})`
-      : `no daytona volume attached (${label})`;
-
-    return {
-      ok: true,
-      sandbox: {
-        status,
-      },
-      probe: {
-        stdout_preview: stdoutPreview,
-      },
-    };
+    return "Workspace";
   },
 });

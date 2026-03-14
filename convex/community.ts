@@ -39,7 +39,6 @@ import {
 } from "./communityChat";
 import { readCompiledCommunityContext as readCompiledCommunityContextImpl } from "./communityCompiler";
 import {
-  listCommunityAiFeedImportant as listCommunityAiFeedImportantImpl,
   listCommunityAiFeedRanked as listCommunityAiFeedRankedImpl,
   listCommunityAiFeedLive as listCommunityAiFeedLiveImpl,
   publishCommunityAiFeedAgentPost as publishCommunityAiFeedAgentPostImpl,
@@ -115,7 +114,6 @@ export const listMessageReactions = listMessageReactionsImpl;
 export const listThreadUserMessageSenderIds = listThreadUserMessageSenderIdsImpl;
 export const listCommunityAiFeedLive = listCommunityAiFeedLiveImpl;
 export const listCommunityAiFeedRanked = listCommunityAiFeedRankedImpl;
-export const listCommunityAiFeedImportant = listCommunityAiFeedImportantImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
 export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;

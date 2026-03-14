@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "== Runtime router/loop contract guard =="
+
+HTTP_FILE="$ROOT/convex/httpRuntimeRoutes.ts"
+HANDLERS_FILE="$ROOT/convex/runtimeTurnHandlers.ts"
+RESOLUTION_FILE="$ROOT/convex/runtimeTurnResolution.ts"
+DAYTONA_FILE="$ROOT/convex/httpDaytona.ts"
+TOOL_TYPES_FILE="$ROOT/shared/retrievalTools.ts"
+NATIVE_LOOP_FILE="$ROOT/shared/nativeToolLoop.ts"
+PROMPT_FILE="$ROOT/shared/runtimePrompt.ts"
+ROUTER_FILE="$ROOT/shared/routerLevels.ts"
+
+require_match_in_file() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if ! rg -n -S "$pattern" "$file" >/dev/null; then
+    echo "FAIL: missing contract marker: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
+forbid_match_in_file() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if rg -n -S "$pattern" "$file" >/dev/null; then
+    echo "FAIL: forbidden pattern detected: $description"
+    rg -n -S "$pattern" "$file" || true
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
+if [[ -e "$ROUTER_FILE" ]]; then
+  echo "FAIL: legacy router file still exists: $ROUTER_FILE"
+  exit 1
+fi
+echo "OK: legacy router file deleted"
+
+require_match_in_file "$RESOLUTION_FILE" 'function resolveAllowedToolNames\(' \
+  "runtime derives allowed tools directly"
+require_match_in_file "$HANDLERS_FILE" 'tool_policy_resolved' \
+  "runtime emits tool_policy_resolved event"
+require_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
+  "runtime still supports workspace agent loop"
+require_match_in_file "$HANDLERS_FILE" 'executeChatToolsAgentLoop\(' \
+  "runtime supports non-workspace tool loop"
+require_match_in_file "$HANDLERS_FILE" 'runtimeExecutionMode === "agentic"' \
+  "runtime branches on execution mode for tool-capable turns"
+
+forbid_match_in_file "$HANDLERS_FILE" 'resolveRouterLevelDecision' \
+  "runtime no longer references router level decisions"
+forbid_match_in_file "$HANDLERS_FILE" 'ROUTER_LEVEL_TOOL_NAMES' \
+  "runtime no longer references router tool bundles"
+forbid_match_in_file "$HANDLERS_FILE" 'router_level_selected' \
+  "runtime no longer emits router_level_selected"
+forbid_match_in_file "$HANDLERS_FILE" 'debug_force_router_level' \
+  "runtime no longer accepts debug_force_router_level"
+
+require_match_in_file "$DAYTONA_FILE" 'function executeRetrievalAgentLoop\(' \
+  "shared loop core still exists"
+require_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
+  "workspace loop uses unified harness name"
+require_match_in_file "$PROMPT_FILE" 'Use native tool calling when a tool is needed' \
+  "workspace prompt instructs native tool calling"
+require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
+  "workspace loop uses provider-native tool completion"
+require_match_in_file "$DAYTONA_FILE" 'runSerialNativeToolLoop<' \
+  "workspace loop uses explicit serial native tool loop state machine"
+forbid_match_in_file "$DAYTONA_FILE" 'executeCommunityAgentLoop' \
+  "community-specific loop wrapper removed"
+forbid_match_in_file "$DAYTONA_FILE" 'executeExternalAgentLoop' \
+  "external-specific loop wrapper removed"
+forbid_match_in_file "$DAYTONA_FILE" 'parseRetrievalAgentDecision\(' \
+  "workspace loop no longer parses JSON tool decisions"
+forbid_match_in_file "$DAYTONA_FILE" 'Your previous response was not strict JSON' \
+  "workspace loop no longer retries malformed JSON tool decisions"
+forbid_match_in_file "$DAYTONA_FILE" 'Allowed JSON outputs:' \
+  "workspace prompt no longer teaches JSON tool wrapper format"
+
+if [[ -e "$ROOT/shared/retrievalAgentDecision.ts" ]]; then
+  echo "FAIL: deleted parser file still exists: $ROOT/shared/retrievalAgentDecision.ts"
+  exit 1
+fi
+echo "OK: deleted parser file absent"
+
+require_match_in_file "$TOOL_TYPES_FILE" 'export type RetrievalToolName' \
+  "tool name type lives in neutral shared module"
+require_match_in_file "$TOOL_TYPES_FILE" '"community_search"' \
+  "tool name type includes community_search"
+require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
+  "tool name type includes community_write"
+require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
+  "tool name type includes list_dir"
+require_match_in_file "$TOOL_TYPES_FILE" '"web_research"' \
+  "tool name type includes web_research"
+require_match_in_file "$TOOL_TYPES_FILE" '"read"' \
+  "tool name type includes read"
+require_match_in_file "$TOOL_TYPES_FILE" '"glob"' \
+  "tool name type includes glob"
+require_match_in_file "$TOOL_TYPES_FILE" '"grep"' \
+  "tool name type includes grep"
+require_match_in_file "$TOOL_TYPES_FILE" '"sha256"' \
+  "tool name type includes sha256"
+require_match_in_file "$TOOL_TYPES_FILE" '"write"' \
+  "tool name type includes write"
+require_match_in_file "$TOOL_TYPES_FILE" '"edit"' \
+  "tool name type includes edit"
+require_match_in_file "$TOOL_TYPES_FILE" '"bash"' \
+  "tool name type includes bash"
+require_match_in_file "$NATIVE_LOOP_FILE" 'kind: "tool_follow_up"' \
+  "native tool loop has explicit follow-up state"
+require_match_in_file "$NATIVE_LOOP_FILE" 'providerCallId' \
+  "native tool loop treats provider call id as first-class"
+require_match_in_file "$NATIVE_LOOP_FILE" 'buildToolResultEnvelope' \
+  "native tool loop uses a canonical tool result envelope"
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("community_search", "community_write"\)' \
+  "runtime capability resolution includes community tools"
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
+  "runtime capability resolution includes web research tools"
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("list_dir", "read", "glob", "grep", "sha256", "write", "edit", "bash"\)' \
+  "runtime capability resolution includes workspace tools"
+
+echo "== Runtime tool loop proof =="
+node --experimental-strip-types --experimental-specifier-resolution=node "$ROOT/scripts/runtime_tool_loop_proof.ts"

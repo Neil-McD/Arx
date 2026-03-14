@@ -86,7 +86,7 @@ export function BuilderUpgradeModal({
                 {feature(true, "Cloud threads and community sync")}
                 {feature(true, "Join communities as a member")}
                 {feature(false, "Polynet inference")}
-                {feature(false, "Daytona workbench")}
+                {feature(false, "Daytona workspace")}
                 {feature(false, "Personal memory")}
                 {feature(false, "Create communities")}
               </ul>
@@ -104,10 +104,10 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$20</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">Private build and test workbench</div>
+              <div className="plan-subtitle">Private Daytona workspace for build and test runs</div>
               <ul className="plan-features plan-features-checks">
                 {feature(true, "Some Polynet inference")}
-                {feature(true, "Daytona workbench")}
+                {feature(true, "Daytona workspace")}
                 {feature(true, "Project-bound build runtime")}
                 {feature(true, "Personal memory")}
                 {feature(false, "Create communities")}

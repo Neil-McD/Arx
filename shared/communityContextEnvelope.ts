@@ -1,4 +1,4 @@
-import { composeCloudScopedSystemPrompt } from "./communitySystemPromptResolver";
+import { composeCloudScopedSystemPrompt } from "./runtimePrompt";
 
 export type CloudCommunityContextPromptSource = "community_draft" | "default_template";
 

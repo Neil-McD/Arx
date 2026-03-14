@@ -19,7 +19,8 @@ export type UserAccessPolicy = {
   allowPlatformInference: boolean;
   allowGuestInference: boolean;
   allowCommunityTools: boolean;
-  allowCodingTools: boolean;
+  allowWebResearch: boolean;
+  allowWorkspaceTools: boolean;
   allowCommunityJoin: boolean;
   allowCommunityCreate: boolean;
   allowPersonalMemory: boolean;
@@ -84,7 +85,8 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
       paidModelDecision.fundingSource === "platform",
     allowGuestInference: true,
     allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
-    allowCodingTools: entitledCapabilityFamilies.includes("coding_tools"),
+    allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
+    allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
     allowCommunityJoin: isAuthenticated,
     allowCommunityCreate: effectiveTier === "architect",
     allowPersonalMemory: hasWorkbenchAccess,

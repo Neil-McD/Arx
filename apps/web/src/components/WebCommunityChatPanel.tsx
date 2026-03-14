@@ -412,7 +412,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           />
           <VoiceInputButton {...voiceButtonProps} />
           <button
-            className="chat-send ask-send-btn"
+            className="chat-send ask-send-btn ask-send-btn-v2"
             onClick={() => void onSendCommunityMessage()}
             disabled={
               !hasSession ||
@@ -426,7 +426,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             title="Send"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+              <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
             </svg>
           </button>
         </div>

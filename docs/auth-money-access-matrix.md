@@ -15,6 +15,7 @@ Scope: web + mobile, chat + agent, inference + Daytona sandbox entitlement
    - can use ChatGPT auth
    - can use OpenRouter key
    - can join and use communities
+   - gets web research and community tools
 3. `builder`
    - authenticated free plus Daytona workbench
    - some Polynet inference
@@ -27,7 +28,7 @@ Scope: web + mobile, chat + agent, inference + Daytona sandbox entitlement
 The platform behavior is defined by 6 inputs:
 
 1. Surface: `web` | `mobile`
-2. Requested execution target: `chat` | `daytona_workspace`
+2. Workspace substrate request: `chat` | `daytona_workspace`
 3. Auth state: `anonymous` | `authenticated`
 4. Account tier: `free` | `builder` | `architect`
 5. Requested funding source: `demo_public` | `user_key` | `user_chatgpt` | `platform`
@@ -39,13 +40,13 @@ And 7 outputs:
 2. Resolved funding source: `demo_public` | `user_key` | `user_chatgpt` | `platform`
 3. Daytona sandbox entitlement: allowed/denied
 4. Platform inference entitlement: allowed/denied
-5. Entitled capability families: `[]` | `["community_tools"]` | `["community_tools","coding_tools"]`
+5. Entitled capability families: `[]` | `["community_tools","web_research"]` | `["community_tools","web_research","workspace_tools"]`
 6. Community action mode: `join_free` | `request_access` | `checkout`
 7. Community create entitlement: allowed/denied
 
 ## 2) Canonical Routing + Gating Rules
 
-1. Server decides lane. Clients request a turn; they do not authoritatively choose execution backend.
+1. Server decides lane. Clients may express whether a turn needs workspace substrate; they do not authoritatively choose execution backend.
 2. `runtime_turn` is the canonical authenticated cloud runtime entrypoint.
 2a. Non-community cloud threads must be project-bound (`project_id` required). The server auto-assigns `General` where needed.
 3. Funding source, not price class, decides who pays for inference.
@@ -54,18 +55,19 @@ And 7 outputs:
    - `free`: never create or use Daytona sandbox
    - `builder`: Daytona sandbox allowed
    - `architect`: Daytona sandbox allowed
-6. `requested_execution_target=daytona_workspace` routes to `daytona` only when paid platform compute is present.
-6a. `requested_execution_target=daytona_workspace` remains the only path into Daytona and the coding harness.
-6b. Authenticated chat-target turns may still use the community harness tools when an active community lens is present. That community tool loop does not imply Daytona entitlement.
-6c. Capability entitlements are tier-based:
+6. `requested_execution_target=daytona_workspace` is now a compatibility boundary signal meaning the turn requires workspace tools/substrate.
+6a. Daytona is only entered when that workspace-substrate signal is present and the user is entitled to `workspace_tools`.
+6b. Authenticated chat-target turns may use capability-composed tools without Daytona entitlement.
+6c. `web_research` does not imply Daytona entitlement.
+6d. `community_tools` do not imply Daytona entitlement.
+6e. Capability entitlements are tier-based:
    - anonymous: `[]`
-   - authenticated free: `["community_tools"]`
-   - builder / architect: `["community_tools","coding_tools"]`
-6d. Active run capability families are run-specific:
-   - authenticated cloud chat with no active community lens: `[]`
-   - authenticated cloud chat with an active community lens: `["community_tools"]`
-   - Daytona workspace with no active community lens: `["coding_tools"]`
-   - Daytona workspace with an active community lens: `["community_tools","coding_tools"]`
+   - authenticated free: `["community_tools","web_research"]`
+   - builder / architect: `["community_tools","web_research","workspace_tools"]`
+6f. Active run capability families are run-specific:
+   - authenticated cloud chat with no active community lens: `["web_research"]`
+   - authenticated cloud chat with an active community lens: `["community_tools","web_research"]`
+   - Daytona workspace: `["community_tools","web_research","workspace_tools"]` when a community lens is active, otherwise `["web_research","workspace_tools"]`
 7. Chat-only turns may route to:
    - `public` for `demo_public`
    - `platform_fallback` for `platform`
@@ -77,7 +79,7 @@ And 7 outputs:
 
 ## 3) Behavior Matrix (Phase 1)
 
-| Surface | Lane | Auth | Tier | Requested funding source | requested_execution_target | Runtime lane | Resolved funding source | Daytona sandbox | Platform inference | Community create |
+| Surface | Lane | Auth | Tier | Requested funding source | workspace substrate request | Runtime lane | Resolved funding source | Daytona sandbox | Platform inference | Community create |
 |---|---|---|---|---|---|---|---|---|---|
 | Web/Mobile | Chat | anonymous | n/a | `demo_public` | `chat` | `public` | `demo_public` | denied | denied | denied |
 | Web/Mobile | Chat | anonymous | n/a | `user_key` / `user_chatgpt` / `platform` | any | denied (`auth_required`) | denied | denied | denied |
@@ -95,9 +97,9 @@ And 7 outputs:
 | Web/Mobile | Chat | authenticated | architect | any | `daytona_workspace` | `daytona` | `platform` | allowed | allowed | allowed |
 
 Notes:
-- `daytona` is only for paid tiers and only when tool-capable execution is requested.
-- Authenticated cloud chat with an active community lens may enter the community harness loop while staying on its resolved inference lane (`public`, `platform_fallback`, or `chatgpt`).
-- `runtimeRuns` should persist `requestedExecutionTarget`, active capability families, and harness profile.
+- `daytona` is only for paid tiers and only when workspace substrate is requested.
+- Authenticated cloud chat may enter the same serial native loop with `web_research`, and with `community_tools` when a community lens is active.
+- `runtimeRuns` currently persist the compatibility field `requestedExecutionTarget`, plus active capability families and harness profile.
 - Phase 2 runtime detail: `daytona` now provisions/reuses a Daytona sandbox and executes a toolbox probe command (`pwd`) before response completion.
 - Assistant response generation uses the Convex runtime endpoints (`/runtime/public_turn`, `/runtime/runtime_turn`).
 - Client wiring gate: `VITE_ENABLE_RUNTIME_TURN_V2=true` keeps authenticated cloud turns on the canonical `runtime_turn` path.

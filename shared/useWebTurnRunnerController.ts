@@ -395,6 +395,8 @@ export function useWebTurnRunnerController<
           community_evidence_used: null,
         },
         content: "",
+        runtimeEvents: [],
+        lastRuntimeEventSeq: 0,
       }));
       let runIdFromServer: string | null = null;
       let runtimeRequestId: string | null = null;
@@ -423,12 +425,87 @@ export function useWebTurnRunnerController<
         });
       };
 
+      const kickoffBackgroundWorkspaceTurn = async (createRuntimeTurnRequest: () => Promise<Response>): Promise<void> => {
+        let runtimeTurn: Response;
+        try {
+          runtimeTurn = await createRuntimeTurnRequest();
+        } catch (error) {
+          const cancelled =
+            threadStreamingUserCancelledRefById.current[threadId] === true || abort.signal.aborted || isAbortError(error);
+          if (cancelled) {
+            resetThreadStreamingState(threadId);
+            return;
+          }
+          const rawMessage =
+            typeof error === "string" ? error : error instanceof Error ? error.message : "Runtime transport failed.";
+          setThreadStreamingState(threadId, (entry) =>
+            entry
+              ? {
+                  ...entry,
+                  content: null,
+                }
+              : null,
+          );
+          current.setThreadErrorForThread(threadId, rawMessage || "Runtime transport failed.");
+          resetThreadStreamingState(threadId);
+          return;
+        }
+        responseStarted = true;
+        runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
+        runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
+        if (runtimeTurn.ok) return;
+
+        let failure = await readCloudFunctionError(runtimeTurn);
+        runtimeRequestId = failure.requestId ?? runtimeRequestId;
+        runtimeStage = failure.stage ?? runtimeStage;
+        const failureMessage = String(failure.message ?? "").toLowerCase();
+        const canRetryThreadMirror =
+          failure.status === 404 &&
+          (failureMessage.includes("thread_not_found") || String(failure.code ?? "").toLowerCase() === "thread_not_found");
+        if (canRetryThreadMirror) {
+          try {
+            await ensureCloudThreadRecordForRuntime(session, threadId);
+            runtimeTurn = await createRuntimeTurnRequest();
+            responseStarted = true;
+            runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
+            runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
+            if (runtimeTurn.ok) return;
+            failure = await readCloudFunctionError(runtimeTurn);
+            runtimeRequestId = failure.requestId ?? runtimeRequestId;
+            runtimeStage = failure.stage ?? runtimeStage;
+          } catch (mirrorError) {
+            console.warn("Non-fatal: retry ensure cloud thread record failed:", mirrorError);
+          }
+        }
+
+        // Workspace turns now trust persisted run state over a late transport failure.
+        // If the edge times out after the backend has already started the run, the
+        // polling loop will reconcile completion from runtimeRuns/runtimeRunEvents.
+        if (failure.status >= 500) {
+          return;
+        }
+
+        if (failure.category === "quota" || failure.category === "misconfigured" || failure.category === "disabled" || failure.category === "plan") {
+          current.setPlatformQuotaModal({
+            reason: mapPlatformFailureReason(failure.category),
+            threadId,
+            mode: params.mode === "regenerate" ? "regenerate" : "respond",
+            message: failure.message.trim() || null,
+          });
+        } else {
+          current.setThreadErrorForThread(threadId, formatCloudFunctionErrorMessage(failure));
+        }
+        resetThreadStreamingState(threadId);
+      };
+
       try {
-        const requestedExecutionTarget = params.requestedExecutionTarget ?? "chat";
+        const requiresWorkspaceTools = Boolean(params.requiresWorkspaceTools);
+        const requestedExecutionTarget = requiresWorkspaceTools ? "daytona_workspace" : "chat";
+        const streamRuntimeTurn = !requiresWorkspaceTools;
         const laneMessages = Array.isArray(params.messages)
           ? buildPublicTurnMessages({
               messages: params.messages,
-              systemPrompt: requestedExecutionTarget === "daytona_workspace" ? null : params.systemPrompt,
+              systemPrompt: requiresWorkspaceTools ? null : params.systemPrompt,
               extractTextFromContentJson: current.extractTextFromContentJson,
             })
           : [];
@@ -438,7 +515,7 @@ export function useWebTurnRunnerController<
             session,
             payload: {
               thread_id: threadId,
-              stream: true,
+              stream: streamRuntimeTurn,
               surface: "web",
               requested_execution_target: requestedExecutionTarget,
               model_id: params.preferredModelId,
@@ -450,6 +527,16 @@ export function useWebTurnRunnerController<
             signal: abort.signal,
           });
         };
+
+        if (requiresWorkspaceTools) {
+          current.onCloudRunLifecycleEvent?.({
+            threadId,
+            runId: params.runIdHint,
+            phase: "start",
+          });
+          void kickoffBackgroundWorkspaceTurn(createRuntimeTurnRequest);
+          return { cancelled: false, error: null };
+        }
 
         let runtimeTurn = await createRuntimeTurnRequest();
         responseStarted = true;
@@ -508,6 +595,39 @@ export function useWebTurnRunnerController<
           }
           throw new Error(formatCloudFunctionErrorMessage(failure));
           }
+        }
+
+        if (!streamRuntimeTurn) {
+          const payload = (await runtimeTurn.json()) as {
+            run_id?: unknown;
+            content?: unknown;
+            assistant_message_id?: unknown;
+            stage?: unknown;
+            request_id?: unknown;
+          };
+          if (typeof payload?.request_id === "string" && payload.request_id.trim()) {
+            runtimeRequestId = payload.request_id.trim();
+          }
+          if (typeof payload?.stage === "string" && payload.stage.trim()) {
+            runtimeStage = payload.stage.trim();
+          }
+          if (typeof payload?.run_id === "string" && payload.run_id.trim()) {
+            runIdFromServer = payload.run_id.trim();
+          }
+          const finalContent = typeof payload?.content === "string" ? payload.content : "";
+          const persistedAssistantMessageId =
+            typeof payload?.assistant_message_id === "string" && payload.assistant_message_id.trim()
+              ? payload.assistant_message_id.trim()
+              : null;
+          if (!finalContent.trim()) {
+            throw new Error("Runtime turn returned empty content.");
+          }
+          if (!persistedAssistantMessageId) {
+            throw new Error("Runtime turn did not persist assistant message.");
+          }
+          await current.loadThreadMessages(threadId, session);
+          await current.loadThreads(session);
+          return { cancelled: false, error: null };
         }
 
         const reader = runtimeTurn.body?.getReader();
@@ -679,7 +799,9 @@ export function useWebTurnRunnerController<
           error: details.length > 0 ? `${inferredMessage} (${details.join(", ")})` : inferredMessage,
         };
       } finally {
-        resetThreadStreamingState(threadId);
+        if (!params.requiresWorkspaceTools) {
+          resetThreadStreamingState(threadId);
+        }
       }
     },
     [ensureCloudThreadRecordForRuntime, resetThreadStreamingState, setThreadStreamingState],

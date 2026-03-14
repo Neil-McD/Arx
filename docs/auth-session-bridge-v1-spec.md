@@ -1,8 +1,11 @@
 # Auth Session Bridge V1 Spec
 
-Status: proposed v1 spec  
+Status: superseded by `auth-session-spa-posture-v1.md`  
 Scope: same-origin bridge for server-owned session continuity in the Daytona web app  
 Preconditions:
+
+This document is preserved as historical design context only.  
+The active implementation posture is browser-owned SPA continuity in [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md).
 
 1. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-target-architecture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-target-architecture-v1.md)
 2. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-feasibility-spike-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-feasibility-spike-v1.md)

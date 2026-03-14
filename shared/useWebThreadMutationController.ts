@@ -9,6 +9,11 @@ import {
   ensureCloudThreadRecord,
   updateCloudThreadRecord,
 } from "./cloudThreadsGateway";
+import {
+  fetchCloudThreadContextById,
+  setCloudThreadContext,
+} from "./cloudThreadContextGateway";
+import { syncThreadCommunityLensCloud, type ThreadContextCloudState } from "./threadContextCloudSync";
 
 type ThreadRecord = {
   id: string;
@@ -187,42 +192,48 @@ export function useWebThreadMutationController<SessionT>(
         console.warn("Convex is required for cloud thread context updates in this build.");
         return null;
       }
-      const nowIso = new Date().toISOString();
-      let nextContextVersion = 1;
-      current.setThreads((prev) =>
-        prev.map((thread) => {
-          if (thread.id !== threadId) return thread;
-          const baseVersion =
-            typeof thread.context_version === "number" && Number.isFinite(thread.context_version)
-              ? thread.context_version
-              : 0;
-          nextContextVersion = baseVersion + 1;
-          return {
-            ...thread,
-            community_id: communityId,
-            context_version: nextContextVersion,
-            updated_at: Math.floor(Date.now() / 1000),
-          };
-        }),
-      );
+
+      const applyObservedContext = (context: ThreadContextCloudState): void => {
+        current.setThreads((prev) =>
+          prev.map((thread) =>
+            thread.id === threadId
+              ? {
+                ...thread,
+                community_id: context.community_id,
+                context_version: context.context_version,
+                updated_at: current.toEpochSeconds(context.updated_at),
+              }
+              : thread,
+          ),
+        );
+      };
+
+      const initialExpectedContextVersion =
+        current.threads.find((thread) => thread.id === threadId)?.context_version ?? null;
+
       try {
-        await updateCloudThreadRecord({
-          session: usableSession as any,
-          thread: {
-            threadId,
-            communityId,
-            contextVersion: nextContextVersion,
-          },
+        return await syncThreadCommunityLensCloud({
+          threadId,
+          desiredCommunityId: communityId,
+          initialExpectedContextVersion,
+          fetchLatestContext: () =>
+            fetchCloudThreadContextById({
+              session: usableSession as any,
+              threadId,
+            }),
+          setThreadContext: (expectedContextVersion) =>
+            setCloudThreadContext({
+              session: usableSession as any,
+              threadId,
+              expectedContextVersion,
+              communityId,
+            }),
+          onObservedContext: applyObservedContext,
         });
       } catch (error) {
         console.warn("Failed to update Convex thread community lens:", error);
+        return null;
       }
-      return {
-        thread_id: threadId,
-        community_id: communityId,
-        context_version: nextContextVersion,
-        updated_at: nowIso,
-      };
     },
     [],
   );

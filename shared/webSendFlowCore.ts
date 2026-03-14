@@ -79,7 +79,7 @@ export type UseWebSendFlowControllerArgs<
       systemPrompt?: string | null;
       inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
       requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
-      requestedExecutionTarget?: "chat" | "daytona_workspace";
+      requiresWorkspaceTools?: boolean;
       replyToId?: string;
       messages?: ThreadMessageT[];
     },
@@ -124,6 +124,7 @@ export type UseWebSendFlowControllerArgs<
   ) => void;
   setIsSendingMessage: (value: boolean | ((prev: boolean) => boolean)) => void;
   setThreadRunSending: (threadId: string, sending: boolean) => void;
+  setThreadRunRequiresWorkspaceTools: (threadId: string, requiresWorkspaceTools: boolean | null) => void;
   setIsWorkspaceAtBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;

@@ -17,12 +17,14 @@ type GateCode =
 type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
 type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
+type CapabilityFamily = "community_tools" | "web_research" | "workspace_tools";
 type ResolvedGateDecision = {
   allowed: boolean;
   code: GateCode;
   cta: GateCta;
   lane: GateLane | null;
   fundingSource: RequestedFundingSource | null;
+  entitledCapabilityFamilies: CapabilityFamily[];
 };
 type InferenceMessage = {
   role: InferenceRole;
@@ -200,24 +202,39 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     cta,
     lane: normalizeGateLane(raw?.lane),
     fundingSource: normalizeGateFundingSource(raw?.fundingSource),
+    entitledCapabilityFamilies: Array.isArray(raw?.entitledCapabilityFamilies)
+      ? raw.entitledCapabilityFamilies
+          .map((value) => String(value ?? "").trim())
+          .filter(
+            (value, index, list): value is CapabilityFamily =>
+              (value === "community_tools" ||
+                value === "web_research" ||
+                value === "workspace_tools") &&
+              list.indexOf(value) === index,
+          )
+      : [],
   };
 }
 
 export function mapGateLaneToRuntimeLane(params: {
-  requestedExecutionTarget: RequestedExecutionTarget;
+  requiresWorkspaceTools: boolean;
   lane: GateLane | null;
 }): "public" | "platform" | "daytona" | "chatgpt" {
   if (params.lane === "public") return "public";
   if (params.lane === "platform") return "platform";
   if (params.lane === "chatgpt") return "chatgpt";
   if (params.lane === "daytona_cloud") return "daytona";
-  return params.requestedExecutionTarget === "daytona_workspace" ? "daytona" : "platform";
+  return params.requiresWorkspaceTools ? "daytona" : "platform";
 }
 
 export function gateDeniedResponse(
   jsonResponse: (req: Request, status: number, payload: unknown) => Response,
   req: Request,
-  params: { decision: ResolvedGateDecision; requestedExecutionTarget: RequestedExecutionTarget; requestedModelId: string | null },
+  params: {
+    decision: ResolvedGateDecision;
+    requiresWorkspaceTools: boolean;
+    requestedModelId: string | null;
+  },
 ): Response {
   if (params.decision.code === "auth_required") {
     return jsonResponse(req, 401, {
@@ -234,7 +251,7 @@ export function gateDeniedResponse(
 
   if (params.decision.code === "tier_required" || params.decision.code === "plan_required") {
     const message =
-      params.requestedExecutionTarget === "daytona_workspace"
+      params.requiresWorkspaceTools
         ? "Paid tier required for Daytona workspace execution."
         : "Paid tier required for platform inference.";
     return jsonResponse(req, 403, {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type SetStateAction } from "react";
 import "highlight.js/styles/github-dark.css";
 import {
-  bootstrapCloudBridgeSession, clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, completeCloudBridgeOAuthCallback, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
+  bootstrapCloudSession, clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, completeCloudOAuthCallback, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
 } from "./cloudAuth";
 import {
   captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
@@ -11,11 +11,12 @@ import {
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
 import {
-  buildProjectByIdMap, buildProjectThreadGroups, filterVisibleThreads, resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared, resolveGeneralCloudProjectId, resolvePreferredCloudProjectId, searchThreads, } from "../../../shared/threadSidebarSelectors";
+  buildProjectByIdMap, buildProjectThreadGroups, filterVisibleThreads, resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared, resolveDefaultWorkspaceProjectId, resolvePreferredCloudProjectId, searchThreads, } from "../../../shared/threadSidebarSelectors";
 import {
-  type DaytonaSandboxStatus, } from "../../../shared/daytonaSandboxStatus";
+  fetchMappedDaytonaCloudProjects, } from "../../../shared/daytonaCloudProjects";
 import {
-  createDaytonaCloudProject, deleteDaytonaCloudProject, fetchMappedDaytonaCloudProjects, probeDaytonaCloudProject, renameDaytonaCloudProject, } from "../../../shared/daytonaCloudProjects";
+  listConvexCloudRuntimeRunEvents,
+} from "../../../shared/daytonaCloudThreadsRead";
 import {
   isUuid, } from "../../../shared/appIdentity";
 import {
@@ -214,7 +215,8 @@ import { useWebMemoryMutationController } from "../../../shared/useWebMemoryMuta
 import { useWebSendFlowController } from "../../../shared/useWebSendFlowController";
 import { useWebThreadMutationController } from "../../../shared/useWebThreadMutationController";
 import { useWebTurnRunnerController } from "../../../shared/useWebTurnRunnerController";
-import type { ThreadStreamingState } from "../../../shared/webTurnRunnerCore";
+import type { ThreadStreamingRuntimeEvent, ThreadStreamingState } from "../../../shared/webTurnRunnerCore";
+import { RuntimeToolTrace } from "./components/RuntimeToolTrace";
 import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspaceActionsController";
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
@@ -397,7 +399,6 @@ type CloudProjectRecord = {
   name: string | null;
   slug: string | null;
   status: string;
-  sandbox_status: DaytonaSandboxStatus | null;
   created_at: number;
   updated_at: number;
   root_path: string;
@@ -675,6 +676,7 @@ export default function App() {
   const refreshTimeoutRef = useRef<number | null>(null);
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
+  const authBootstrapCompleteRef = useRef(false);
 
   async function resetSessionStateAfterSessionLoss(): Promise<void> {
     sessionRef.current = null;
@@ -1413,18 +1415,6 @@ export default function App() {
   const [cloudProjects, setCloudProjects] = useState<CloudProjectRecord[]>([]);
   const [activeCloudProjectId, setActiveCloudProjectId] = useState<string | null>(null);
   const [cloudProjectExpandedById, setCloudProjectExpandedById] = useState<Record<string, boolean>>({});
-  const [cloudProjectMenuProjectId, setCloudProjectMenuProjectId] = useState<string | null>(null);
-  const [probingCloudProjectId, setProbingCloudProjectId] = useState<string | null>(null);
-  const [showCreateCloudProjectModal, setShowCreateCloudProjectModal] = useState(false);
-  const [createCloudProjectName, setCreateCloudProjectName] = useState("");
-  const [createCloudProjectError, setCreateCloudProjectError] = useState<string | null>(null);
-  const [isCreatingCloudProject, setIsCreatingCloudProject] = useState(false);
-  const [showRenameCloudProjectModal, setShowRenameCloudProjectModal] = useState(false);
-  const [renameCloudProjectId, setRenameCloudProjectId] = useState<string | null>(null);
-  const [renameCloudProjectName, setRenameCloudProjectName] = useState("");
-  const [renameCloudProjectError, setRenameCloudProjectError] = useState<string | null>(null);
-  const [isRenamingCloudProject, setIsRenamingCloudProject] = useState(false);
-  const cloudProjectMenuRef = useRef<HTMLDivElement | null>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const initialWorkspaceWantsNewChat = Boolean(
     initialAppRoute &&
@@ -1461,7 +1451,6 @@ export default function App() {
       setActiveThreadId(null);
       setWorkspaceWantsNewChatMode(true);
       setActiveCloudProjectId(null);
-      setCloudProjectMenuProjectId(null);
     }
   }
 
@@ -1482,7 +1471,6 @@ export default function App() {
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
     setActiveCloudProjectId,
-    setCloudProjectMenuProjectId,
   });
 
   const resolvedActiveCloudProjectId = useMemo(
@@ -1577,16 +1565,6 @@ export default function App() {
     return true;
   };
 
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!cloudProjectMenuRef.current) return;
-      if (cloudProjectMenuRef.current.contains(event.target as Node)) return;
-      setCloudProjectMenuProjectId(null);
-    };
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, []);
-
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
 
@@ -1605,9 +1583,17 @@ export default function App() {
   const communityAgentLandingFetchSeqRef = useRef(0);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [threadSendingStateById, setThreadSendingStateById] = useState<Record<string, boolean>>({});
+  const [threadRunRequiresWorkspaceToolsById, setThreadRunRequiresWorkspaceToolsById] = useState<
+    Record<string, boolean>
+  >({});
   const [threadStreamingStateById, setThreadStreamingStateById] = useState<
     Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
   >({});
+  const threadStreamingStateByIdRef = useRef(threadStreamingStateById);
+  const loadThreadsRef = useRef<((session: CloudAuthSession) => Promise<void>) | null>(null);
+  const loadThreadMessagesRef = useRef<((threadId: string, session: CloudAuthSession) => Promise<void>) | null>(null);
+  const [runtimeEventsByRunId, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
+  const runtimeEventsLoadingByRunIdRef = useRef<Record<string, boolean>>({});
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
   const [streamingMeta, setStreamingMeta] = useState<{
@@ -1636,6 +1622,139 @@ export default function App() {
     message: string | null;
   } | null>(null);
   const [isPlatformQuotaModalRunning] = useState(false);
+  const hasActiveStreamingRuns = useMemo(
+    () =>
+      Object.values(threadStreamingStateById).some(
+        (value) => typeof value?.runId === "string" && value.runId.trim().length > 0,
+      ),
+    [threadStreamingStateById],
+  );
+
+  useEffect(() => {
+    threadStreamingStateByIdRef.current = threadStreamingStateById;
+  }, [threadStreamingStateById]);
+
+  useEffect(() => {
+    if (cloudSession) return;
+    setRuntimeEventsByRunId({});
+    runtimeEventsLoadingByRunIdRef.current = {};
+  }, [cloudSession]);
+
+  useEffect(() => {
+    if (!cloudSession || !hasActiveStreamingRuns) return;
+    let cancelled = false;
+    let timeoutId: number | null = null;
+
+    const pollRuntimeEvents = async () => {
+      if (cancelled) return;
+      const activeEntries = Object.entries(threadStreamingStateByIdRef.current).filter(
+        ([, value]) => typeof value?.runId === "string" && value.runId.trim().length > 0,
+      );
+      for (const [threadId, state] of activeEntries) {
+        const runId = String(state?.runId ?? "").trim();
+        if (!runId) continue;
+        const afterSeq =
+          typeof state?.lastRuntimeEventSeq === "number" && Number.isFinite(state.lastRuntimeEventSeq)
+            ? Math.max(0, Math.floor(state.lastRuntimeEventSeq))
+            : 0;
+        const rows = await listConvexCloudRuntimeRunEvents({
+          session: cloudSession,
+          runId,
+          afterSeq,
+          limit: 200,
+        });
+        if (cancelled || !rows || rows.length === 0) continue;
+        const runFinished = rows.some((row) => row.event_type === "run_finished");
+        setRuntimeEventsByRunId((prev) => {
+          const existing = prev[runId] ?? [];
+          const seenIds = new Set(existing.map((row) => row.id));
+          const merged = [...existing];
+          for (const row of rows) {
+            if (seenIds.has(row.id)) continue;
+            merged.push(row);
+            seenIds.add(row.id);
+          }
+          merged.sort((a, b) => a.seq - b.seq);
+          return {
+            ...prev,
+            [runId]: merged,
+          };
+        });
+        setThreadStreamingStateById((prev) => {
+          const current = prev[threadId] ?? null;
+          if (!current || String(current.runId ?? "").trim() !== runId) return prev;
+          const nextRows = [...(current.runtimeEvents ?? [])];
+          const seenIds = new Set(nextRows.map((row) => row.id));
+          let nextLastSeq = Math.max(0, Math.floor(current.lastRuntimeEventSeq ?? 0));
+          for (const row of rows) {
+            if (seenIds.has(row.id)) continue;
+            nextRows.push(row);
+            seenIds.add(row.id);
+            nextLastSeq = Math.max(nextLastSeq, Math.floor(row.seq ?? 0));
+          }
+          nextRows.sort((a, b) => a.seq - b.seq);
+          return {
+            ...prev,
+            [threadId]: {
+              ...current,
+              runtimeEvents: nextRows,
+              lastRuntimeEventSeq: nextLastSeq,
+            },
+          };
+        });
+        if (runFinished) {
+          setThreadStreamingStateById((prev) => {
+            if (!(threadId in prev)) return prev;
+            const next = { ...prev };
+            delete next[threadId];
+            return next;
+          });
+          void loadThreadMessagesRef.current?.(threadId, cloudSession).catch(() => null);
+          void loadThreadsRef.current?.(cloudSession).catch(() => null);
+        }
+      }
+      if (!cancelled) {
+        timeoutId = window.setTimeout(pollRuntimeEvents, 900);
+      }
+    };
+
+    void pollRuntimeEvents();
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [cloudSession, hasActiveStreamingRuns, setThreadStreamingStateById]);
+
+  useEffect(() => {
+    if (!cloudSession) return;
+    const runIds = Array.from(
+      new Set(
+        threadMessages
+          .map((message) => (typeof message.run_id === "string" ? message.run_id.trim() : ""))
+          .filter(Boolean),
+      ),
+    );
+    for (const runId of runIds) {
+      if (runtimeEventsByRunId[runId]?.length) continue;
+      if (runtimeEventsLoadingByRunIdRef.current[runId]) continue;
+      runtimeEventsLoadingByRunIdRef.current[runId] = true;
+      void listConvexCloudRuntimeRunEvents({
+        session: cloudSession,
+        runId,
+        limit: 200,
+      })
+        .then((rows) => {
+          if (!rows) return;
+          setRuntimeEventsByRunId((prev) => ({
+            ...prev,
+            [runId]: rows,
+          }));
+        })
+        .finally(() => {
+          delete runtimeEventsLoadingByRunIdRef.current[runId];
+        });
+    }
+  }, [cloudSession, runtimeEventsByRunId, threadMessages]);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -2055,6 +2174,8 @@ export default function App() {
     setModelProviderById,
     isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "web"),
   });
+  loadThreadsRef.current = loadThreads;
+  loadThreadMessagesRef.current = loadThreadMessages;
 
   const {
     loadUserMemorySettings,
@@ -2233,6 +2354,27 @@ export default function App() {
     });
   }, []);
 
+  const setThreadRunRequiresWorkspaceTools = useCallback(
+    (threadId: string, requiresWorkspaceTools: boolean | null): void => {
+      const trimmedThreadId = threadId.trim();
+      if (!trimmedThreadId) return;
+      setThreadRunRequiresWorkspaceToolsById((prev) => {
+        if (requiresWorkspaceTools !== null) {
+          if (prev[trimmedThreadId] === requiresWorkspaceTools) return prev;
+          return {
+            ...prev,
+            [trimmedThreadId]: requiresWorkspaceTools,
+          };
+        }
+        if (!(trimmedThreadId in prev)) return prev;
+        const next = { ...prev };
+        delete next[trimmedThreadId];
+        return next;
+      });
+    },
+    [],
+  );
+
   const {
     stopStreamingTurn,
     stopAllStreamingTurns,
@@ -2259,6 +2401,7 @@ export default function App() {
     loadThreadMessages,
     loadThreads,
     showMemoryToastMessage,
+    setThreadErrorForThread,
     setPlatformQuotaModal,
     setStreamingContent,
     setStreamingThreadId,
@@ -2285,7 +2428,9 @@ export default function App() {
     didJustSignInRef,
     onMountOAuthBootstrap: async () => {
       const parsedOAuthCallback = parseCloudOAuthCallbackFromLocation();
+      let hasSignedOutIntent = false;
       const finalizeSignedInSession = (session: CloudAuthSession, markJustSignedIn: boolean): void => {
+        clearCloudSignedOutIntentMarker();
         if (markJustSignedIn) {
           didJustSignInRef.current = true;
         }
@@ -2327,14 +2472,9 @@ export default function App() {
         }
       };
       try {
-        if (
+        hasSignedOutIntent =
           sessionStorage.getItem(CLOUD_SIGNED_OUT_TAB_INTENT_KEY) === "1" ||
-          localStorage.getItem(CLOUD_SIGNED_OUT_INTENT_KEY) === "1"
-        ) {
-          clearOAuthCallbackParamsFromLocation();
-          clearCloudAuthFlowPending();
-          return;
-        }
+          localStorage.getItem(CLOUD_SIGNED_OUT_INTENT_KEY) === "1";
       } catch {
         // ignore
       }
@@ -2352,7 +2492,7 @@ export default function App() {
         setAuthError(null);
         setMagicLinkStatus("idle");
         setMagicLinkError(null);
-        const completion = await completeCloudBridgeOAuthCallback({
+        const completion = await completeCloudOAuthCallback({
           authCode: parsedOAuthCallback.authCode,
           state: parsedOAuthCallback.state,
         });
@@ -2367,7 +2507,7 @@ export default function App() {
 
       let bootstrappedSession: CloudAuthSession | null = null;
       try {
-        bootstrappedSession = await bootstrapCloudBridgeSession();
+        bootstrappedSession = await bootstrapCloudSession();
       } catch (error) {
         if (markJustSignedIn || hadPendingAuthFlow) {
           const message =
@@ -2375,7 +2515,7 @@ export default function App() {
               ? error
               : error instanceof Error
                 ? error.message
-                : "Failed to bootstrap bridge session.";
+                : "Failed to bootstrap auth session.";
           setAuthError(message);
         }
       }
@@ -2388,18 +2528,26 @@ export default function App() {
         return;
       }
 
-      if (parsedOAuthCallback?.kind === "code") {
-        setAuthError("Failed to bootstrap bridge session.");
+      if (hasSignedOutIntent) {
         clearOAuthCallbackParamsFromLocation();
         clearCloudAuthFlowPending();
         return;
       }
+
+      if (parsedOAuthCallback?.kind === "code") {
+        setAuthError("Failed to bootstrap auth session.");
+        clearOAuthCallbackParamsFromLocation();
+        clearCloudAuthFlowPending();
+        return;
+      }
+      authBootstrapCompleteRef.current = true;
     },
     onDidJustSignIn: () => {
       // If the user arrived via an auth gate (e.g. locked model selection), apply it immediately.
       resumePendingAuthIntent();
     },
     onSessionAvailable: (session) => {
+      authBootstrapCompleteRef.current = true;
       void (async () => {
         const usableSession = await ensureUsableCloudSession(session);
         if (!usableSession) return;
@@ -2413,6 +2561,7 @@ export default function App() {
       })();
     },
     onSessionMissing: () => {
+      if (!authBootstrapCompleteRef.current) return;
       void (async () => {
         await resetSessionStateAfterSessionLoss();
         clearCommunitySelection();
@@ -2632,7 +2781,7 @@ export default function App() {
     setProfileAvatarUrl,
   });
 
-  // Cloud session is bootstrapped from localStorage in useState(), so refresh keeps app state stable.
+  // Cloud session is hydrated from browser auth continuity during lifecycle bootstrap.
 
   useLayoutEffect(() => {
     const el = workspaceAskInputRef.current;
@@ -3832,206 +3981,9 @@ export default function App() {
     }
   }
 
-  async function handleAddCloudProject(): Promise<void> {
-    if (!cloudSession) {
-      openAuthGate();
-      return;
-    }
-    const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
-    setCloudProjectMenuProjectId(null);
-    setCreateCloudProjectName(suggestedName);
-    setCreateCloudProjectError(null);
-    setShowCreateCloudProjectModal(true);
-  }
-
-  function closeCreateCloudProjectModal(): void {
-    if (isCreatingCloudProject) return;
-    setShowCreateCloudProjectModal(false);
-    setCreateCloudProjectName("");
-    setCreateCloudProjectError(null);
-  }
-
-  async function handleConfirmCreateCloudProject(): Promise<void> {
-    const session = await ensureUsableCloudSession(cloudSession);
-    if (!session) {
-      openAuthGate();
-      setCreateCloudProjectError("Sign in to manage cloud projects.");
-      return;
-    }
-    const suggestedName = `Project ${Math.max(1, cloudProjects.length + 1)}`;
-    const cleaned = createCloudProjectName.trim() || suggestedName;
-    if (!cleaned) {
-      setCreateCloudProjectError("Project name cannot be empty.");
-      return;
-    }
-    setIsCreatingCloudProject(true);
-    setCreateCloudProjectError(null);
-    try {
-      await createDaytonaCloudProject({
-        session,
-        name: cleaned,
-      });
-      await loadCloudProjects(session);
-      setThreadError(null);
-      closeCreateCloudProjectModal();
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to create cloud project.";
-      setCreateCloudProjectError(message);
-    } finally {
-      setIsCreatingCloudProject(false);
-    }
-  }
-
-  async function handleRenameCloudProject(project: CloudProjectRecord): Promise<void> {
-    if (!cloudSession) {
-      openAuthGate();
-      return;
-    }
-    setCloudProjectMenuProjectId(null);
-    const defaultName = (project.name ?? "").trim() || (project.root_path.split("/").pop() ?? project.root_path);
-    setRenameCloudProjectId(project.id);
-    setRenameCloudProjectName(defaultName);
-    setRenameCloudProjectError(null);
-    setShowRenameCloudProjectModal(true);
-  }
-
-  function closeRenameCloudProjectModal(): void {
-    if (isRenamingCloudProject) return;
-    setShowRenameCloudProjectModal(false);
-    setRenameCloudProjectId(null);
-    setRenameCloudProjectName("");
-    setRenameCloudProjectError(null);
-  }
-
-  async function handleConfirmRenameCloudProject(): Promise<void> {
-    const session = await ensureUsableCloudSession(cloudSession);
-    if (!session) {
-      openAuthGate();
-      setRenameCloudProjectError("Sign in to manage cloud projects.");
-      return;
-    }
-    if (!renameCloudProjectId) {
-      closeRenameCloudProjectModal();
-      return;
-    }
-    const cleaned = renameCloudProjectName.trim();
-    if (!cleaned) {
-      setRenameCloudProjectError("Project name cannot be empty.");
-      return;
-    }
-    setIsRenamingCloudProject(true);
-    setRenameCloudProjectError(null);
-    try {
-      await renameDaytonaCloudProject({
-        session,
-        projectId: renameCloudProjectId,
-        name: cleaned,
-      });
-      await loadCloudProjects(session);
-      setThreadError(null);
-      closeRenameCloudProjectModal();
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to rename cloud project.";
-      setRenameCloudProjectError(message);
-    } finally {
-      setIsRenamingCloudProject(false);
-    }
-  }
-
-  async function handleRemoveCloudProject(project: CloudProjectRecord): Promise<void> {
-    const session = await ensureUsableCloudSession(cloudSession);
-    if (!session) {
-      openAuthGate();
-      return;
-    }
-    setCloudProjectMenuProjectId(null);
-    if (String(project.slug ?? "").trim().toLowerCase() === "general") {
-      setThreadError("General project cannot be removed.");
-      return;
-    }
-    const label = (project.name ?? "").trim() || project.root_path;
-    const shouldRemove = window.confirm(`Delete cloud project "${label}"?\n\nIts threads will move to General.`);
-    if (!shouldRemove) return;
-    try {
-      await deleteDaytonaCloudProject({
-        session,
-        projectId: project.id,
-        force: true,
-      });
-      await Promise.all([loadCloudProjects(session), loadThreads(session)]);
-      setThreadError(null);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to delete cloud project.";
-      setThreadError(message);
-    }
-  }
-
-  async function handleProbeCloudProject(project: CloudProjectRecord): Promise<void> {
-    const session = await ensureUsableCloudSession(cloudSession);
-    if (!session) {
-      openAuthGate();
-      return;
-    }
-    setCloudProjectMenuProjectId(null);
-    const label = (project.name ?? "").trim() || project.root_path;
-    setProbingCloudProjectId(project.id);
-    try {
-      const payload = (await probeDaytonaCloudProject({
-        session,
-        projectId: project.id,
-      })) as {
-        sandbox?: { status?: string | null };
-        probe?: { stdout_preview?: string | null };
-      };
-      await loadCloudProjects(session);
-      setThreadError(null);
-      const status = String(payload?.sandbox?.status ?? "").trim().toLowerCase();
-      const firstOutputLine = String(payload?.probe?.stdout_preview ?? "")
-        .trim()
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0);
-      const details = [
-        status ? status : null,
-        firstOutputLine ? firstOutputLine.slice(0, 80) : null,
-      ].filter(Boolean);
-      showMemoryToastMessage(
-        details.length > 0
-          ? `Sandbox probe ok: ${label} (${details.join(" · ")})`
-          : `Sandbox probe ok: ${label}`,
-      );
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to probe sandbox.";
-      setThreadError(message);
-    } finally {
-      setProbingCloudProjectId((current) => (current === project.id ? null : current));
-    }
-  }
-
   function handleStartDraftInCloudProject(projectId: string): void {
     openWorkspaceDraft({
       projectId,
-      clearProjectMenu: true,
       focusComposer: () => workspaceAskInputRef.current?.focus(),
     });
   }
@@ -4285,6 +4237,7 @@ export default function App() {
     setThreadErrorForThread,
     setIsSendingMessage,
     setThreadRunSending,
+    setThreadRunRequiresWorkspaceTools,
     setIsWorkspaceAtBottom,
     setWorkspaceWantsNewChatMode,
     setActiveThreadId,
@@ -4520,8 +4473,8 @@ export default function App() {
 
   const visibleThreads = useMemo(() => filterVisibleThreads(threads), [threads]);
   const cloudProjectById = useMemo(() => buildProjectByIdMap(cloudProjects), [cloudProjects]);
-  const generalCloudProjectId = useMemo(
-    () => resolveGeneralCloudProjectId(cloudProjects),
+  const defaultWorkspaceProjectId = useMemo(
+    () => resolveDefaultWorkspaceProjectId(cloudProjects),
     [cloudProjects],
   );
   const resolvedActiveCloudProjectName = useMemo(() => {
@@ -4529,14 +4482,14 @@ export default function App() {
       ? String(cloudProjectById.get(resolvedActiveCloudProjectId)?.name ?? "").trim()
       : "";
     if (activeName) return activeName;
-    if (!generalCloudProjectId) return "";
-    return String(cloudProjectById.get(generalCloudProjectId)?.name ?? "").trim();
-  }, [cloudProjectById, generalCloudProjectId, resolvedActiveCloudProjectId]);
+    if (!defaultWorkspaceProjectId) return "";
+    return String(cloudProjectById.get(defaultWorkspaceProjectId)?.name ?? "").trim();
+  }, [cloudProjectById, defaultWorkspaceProjectId, resolvedActiveCloudProjectId]);
   const resolveCloudThreadProjectId = useCallback(
     (thread: ThreadRecord): string | null => {
-      return resolveCloudThreadProjectIdShared(thread, cloudProjectById, generalCloudProjectId);
+      return resolveCloudThreadProjectIdShared(thread, cloudProjectById, defaultWorkspaceProjectId);
     },
-    [cloudProjectById, generalCloudProjectId],
+    [cloudProjectById, defaultWorkspaceProjectId],
   );
   const getThreadDisplayTitle = useCallback(
     (thread: ThreadRecord): string => {
@@ -4648,7 +4601,6 @@ export default function App() {
     }
     return enabledModels.find((toggle) => toggle.id === selectedModelId)?.label ?? selectedModelId;
   }, [enabledModels, selectedModelId]);
-
 	  const activeModelLabel = cloudSession ? selectedModelLabel : guestModelLabel;
 
   const inferProviderSection = (modelId: string): ModelSectionId => {
@@ -4956,7 +4908,6 @@ export default function App() {
       ? activeThreadStreamingContent !== null
       : isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
   );
-
   const showPublicSignIn = !cloudSession;
   const previewCommunityFallback = isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.community ?? null : null;
   const publicCommunityForSurface = publicCommunity ?? previewCommunityFallback;
@@ -5652,17 +5603,14 @@ export default function App() {
                     threadSearchResults,
                     projectThreadGroups: cloudProjectThreadGroups,
                     projectExpandedById: cloudProjectExpandedById,
-                    projectMenuProjectId: cloudProjectMenuProjectId,
                     generalThreads: [],
                     agentThreadsCount: 0,
                     chatThreadsCount: visibleThreads.length,
                     showChatSignInPrompt: false,
-                    probingProjectId: probingCloudProjectId,
                   }}
                   actions={{
                     onThreadLaneFilterChange: () => {},
                     onThreadSearchQueryChange: setThreadSearchQuery,
-                    onAddProject: handleAddCloudProject,
                     onToggleProjectExpanded: (projectId) => {
                       setCloudProjectExpandedById((prev) => ({
                         ...prev,
@@ -5673,13 +5621,6 @@ export default function App() {
                     onStartDraftInProject: (project) => {
                       handleStartDraftInCloudProject(project.id);
                     },
-                    onToggleProjectMenu: (projectId) => {
-                      setCloudProjectMenuProjectId((prev) => (prev === projectId ? null : projectId));
-                    },
-                    projectMenuRef: cloudProjectMenuRef,
-                    onRenameProject: handleRenameCloudProject,
-                    onProbeProject: handleProbeCloudProject,
-                    onRemoveProject: handleRemoveCloudProject,
                     renderSessionItem: (thread) => (
                       <div
                         key={thread.id}
@@ -6285,7 +6226,7 @@ export default function App() {
 		                                        {isStreamingWorkspaceTurn ? (
 		                                          <rect x="7" y="7" width="10" height="10" rx="2" />
 		                                        ) : (
-		                                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+		                                          <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
 		                                        )}
 		                                      </svg>
 		                                    </button>
@@ -6379,6 +6320,14 @@ export default function App() {
                         const messageModelId = !isUser
                           ? message.model_id ?? extractModelIdFromMessageContent(message.content_json)
                           : null;
+                        const messageRuntimeEvents =
+                          !isUser && typeof message.run_id === "string" && message.run_id.trim()
+                            ? message.run_id === activeThreadStreamingRunId &&
+                              Array.isArray(activeThreadStreamingState?.runtimeEvents) &&
+                              activeThreadStreamingState.runtimeEvents.length > 0
+                              ? activeThreadStreamingState.runtimeEvents
+                              : runtimeEventsByRunId[message.run_id] ?? []
+                            : [];
 	                      const modelLabel = !isUser
 	                        ? formatModelSignature(
                               messageModelId,
@@ -6392,6 +6341,9 @@ export default function App() {
                           className={isUser ? "message-item user" : "message-item assistant"}
                         >
                           <div className="message-text">
+                            {!isUser && messageRuntimeEvents.length > 0 ? (
+                              <RuntimeToolTrace events={messageRuntimeEvents} />
+                            ) : null}
                             {isUser ? textContent : renderMarkdown(textContent, { onCopyCode: copyTextToClipboard })}
                           </div>
                             {attachments.length > 0 && (
@@ -6447,6 +6399,10 @@ export default function App() {
                         !(activeThreadStreamingRunId && threadMessages.some((m) => m.run_id === activeThreadStreamingRunId && m.role === "assistant")) && (
                           <div className="message-item assistant streaming">
                             <div className="message-text streaming-text">
+                              {Array.isArray(activeThreadStreamingState?.runtimeEvents) &&
+                              activeThreadStreamingState.runtimeEvents.length > 0 ? (
+                                <RuntimeToolTrace events={activeThreadStreamingState.runtimeEvents} />
+                              ) : null}
                               {activeThreadStreamingContent.trim() ? (
                                 <>
                                   {renderMarkdown(activeThreadStreamingContent, { onCopyCode: copyTextToClipboard })}
@@ -6608,7 +6564,7 @@ export default function App() {
                         {isStreamingWorkspaceTurn ? (
                           <rect x="7" y="7" width="10" height="10" rx="2" />
                         ) : (
-                          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                          <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
                         )}
                       </svg>
                     </button>
@@ -6855,102 +6811,6 @@ export default function App() {
               void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
             }}
           />
-        )}
-
-        {showCreateCloudProjectModal && (
-          <div className="modal-overlay" onClick={closeCreateCloudProjectModal}>
-            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title">Create cloud project</div>
-                <button className="modal-close" onClick={closeCreateCloudProjectModal} title="Close">
-                  ×
-                </button>
-              </div>
-              <div className="modal-body">
-                <div className="create-community-form">
-                  <label className="create-community-field">
-                    <span>Name</span>
-                    <input
-                      type="text"
-                      placeholder="Project name"
-                      value={createCloudProjectName}
-                      onChange={(event) => setCreateCloudProjectName(event.target.value)}
-                      disabled={isCreatingCloudProject}
-                    />
-                  </label>
-                  {createCloudProjectError && <div className="auth-error">{createCloudProjectError}</div>}
-                </div>
-              </div>
-              <div className="modal-footer">
-                <div className="create-community-actions">
-                  <button
-                    className="create-community-primary"
-                    type="button"
-                    onClick={() => void handleConfirmCreateCloudProject()}
-                    disabled={isCreatingCloudProject || createCloudProjectName.trim().length === 0}
-                  >
-                    {isCreatingCloudProject ? "Creating..." : "Create project"}
-                  </button>
-                  <button
-                    className="create-community-secondary"
-                    type="button"
-                    onClick={closeCreateCloudProjectModal}
-                    disabled={isCreatingCloudProject}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showRenameCloudProjectModal && (
-          <div className="modal-overlay" onClick={closeRenameCloudProjectModal}>
-            <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title">Rename cloud project</div>
-                <button className="modal-close" onClick={closeRenameCloudProjectModal} title="Close">
-                  ×
-                </button>
-              </div>
-              <div className="modal-body">
-                <div className="create-community-form">
-                  <label className="create-community-field">
-                    <span>Name</span>
-                    <input
-                      type="text"
-                      placeholder="Project name"
-                      value={renameCloudProjectName}
-                      onChange={(event) => setRenameCloudProjectName(event.target.value)}
-                      disabled={isRenamingCloudProject}
-                    />
-                  </label>
-                  {renameCloudProjectError && <div className="auth-error">{renameCloudProjectError}</div>}
-                </div>
-              </div>
-              <div className="modal-footer">
-                <div className="create-community-actions">
-                  <button
-                    className="platform-save-button"
-                    type="button"
-                    onClick={() => void handleConfirmRenameCloudProject()}
-                    disabled={isRenamingCloudProject || renameCloudProjectName.trim().length === 0}
-                  >
-                    {isRenamingCloudProject ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    className="create-community-secondary"
-                    type="button"
-                    onClick={closeRenameCloudProjectModal}
-                    disabled={isRenamingCloudProject}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
         )}
 
 	      <WebCreateCommunityModal

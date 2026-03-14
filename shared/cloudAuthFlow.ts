@@ -1,5 +1,5 @@
 import {
-  beginCloudBridgeOAuthSignIn,
+  beginCloudOAuthSignIn,
   logoutCloudSessionRemote,
 } from "./cloudAuthCore";
 
@@ -11,7 +11,7 @@ export const CLOUD_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in ag
 
 export async function beginGoogleCloudSignIn(): Promise<BeginGoogleCloudSignInResult> {
   const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const authStart = await beginCloudBridgeOAuthSignIn({
+  const authStart = await beginCloudOAuthSignIn({
     provider: "GoogleOAuth",
     returnTo,
   });

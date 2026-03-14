@@ -13,6 +13,10 @@ type ConvexThreadContextRow = {
   updated_at: string;
 };
 
+type ConvexThreadLookupRow = {
+  _id?: string | null;
+};
+
 function parseContextVersion(value: unknown, fallback: number): number {
   const parsed =
     typeof value === "number"
@@ -31,17 +35,37 @@ async function bootstrapConvexOwner(sessionRaw: unknown): Promise<{
   return { client, authSubject };
 }
 
+async function resolveInternalThreadIdByThreadKey(params: {
+  client: ConvexClient;
+  authSubject: string;
+  threadKey: string;
+}): Promise<string | null> {
+  const row = (await params.client.query("threads:getCloudThreadByThreadKey" as any, {
+    authSubject: params.authSubject,
+    threadKey: params.threadKey,
+  })) as ConvexThreadLookupRow | null;
+  return String(row?._id ?? "").trim() || null;
+}
+
 export async function fetchCloudThreadContextById<SessionT>(
   params: CloudThreadContextGatewayParams<SessionT>,
 ): Promise<ThreadContextCloudState | null> {
   const { client, authSubject } = await bootstrapConvexOwner(params.session);
+  const threadKey = String(params.threadId ?? "").trim();
+  if (!threadKey) return null;
+  const internalThreadId = await resolveInternalThreadIdByThreadKey({
+    client,
+    authSubject,
+    threadKey,
+  });
+  if (!internalThreadId) return null;
   const row = (await client.query("threads:getCloudThreadContext" as any, {
     authSubject,
-    threadId: params.threadId,
+    threadId: internalThreadId,
   })) as ConvexThreadContextRow | null;
   if (!row?.thread_id) return null;
   return {
-    thread_id: row.thread_id,
+    thread_id: threadKey,
     community_id: row.community_id ?? null,
     context_version: parseContextVersion(row.context_version, 0),
     updated_at: row.updated_at,
@@ -58,16 +82,24 @@ export async function setCloudThreadContext<SessionT>(
   },
 ): Promise<ThreadContextCloudState | null> {
   const { client, authSubject } = await bootstrapConvexOwner(params.session);
+  const threadKey = String(params.threadId ?? "").trim();
+  if (!threadKey) return null;
+  const internalThreadId = await resolveInternalThreadIdByThreadKey({
+    client,
+    authSubject,
+    threadKey,
+  });
+  if (!internalThreadId) return null;
   const row = (await client.mutation("threads:setCloudThreadContext" as any, {
     authSubject,
-    threadId: params.threadId,
+    threadId: internalThreadId,
     expectedContextVersion: Math.max(0, Math.floor(params.expectedContextVersion)),
     communityId: params.communityId,
     updateCommunityId: params.updateCommunityId ?? true,
   })) as ConvexThreadContextRow | null;
   if (!row?.thread_id) return null;
   return {
-    thread_id: row.thread_id,
+    thread_id: threadKey,
     community_id: row.community_id ?? null,
     context_version: parseContextVersion(row.context_version, params.expectedContextVersion + 1),
     updated_at: row.updated_at,

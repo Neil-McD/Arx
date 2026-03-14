@@ -4,7 +4,6 @@ import type {
   ThreadSidebarPanelActions,
   ThreadSidebarPanelState,
 } from "./threadSidebarContracts";
-import { daytonaSandboxStatusBadge } from "../../shared/daytonaSandboxStatus";
 
 const PROJECT_THREAD_PREVIEW_LIMIT = 7;
 
@@ -25,12 +24,10 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
     threadSearchResults,
     projectThreadGroups,
     projectExpandedById,
-    projectMenuProjectId,
     generalThreads,
     agentThreadsCount,
     chatThreadsCount,
     showChatSignInPrompt,
-    probingProjectId,
   } = state;
   const [showAllThreadsByProjectId, setShowAllThreadsByProjectId] = useState<Record<string, true>>({});
 
@@ -103,20 +100,7 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
       </div>
       {(threadLaneFilter === "agent" || (threadLaneFilter === "chat" && !showChatSignInPrompt)) && (
         <div className="project-toolbar">
-          <div className="project-toolbar-label">
-            Projects
-          </div>
-          <button
-            type="button"
-            className="project-toolbar-add"
-            onClick={() => void actions.onAddProject()}
-            title={threadLaneFilter === "agent" ? "Add project folder" : "Create cloud project"}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              <path d="M12 11v6M9 14h6" />
-            </svg>
-          </button>
+          <div className="project-toolbar-label">Workspace</div>
         </div>
       )}
       <div className="session-list">
@@ -155,16 +139,6 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                     ? threads
                     : threads.slice(0, PROJECT_THREAD_PREVIEW_LIMIT);
                   const hiddenThreadCount = Math.max(0, threads.length - visibleThreads.length);
-                  const statusBadge =
-                    threadLaneFilter === "chat" ? daytonaSandboxStatusBadge(project.sandbox_status ?? null) : null;
-                  const statusDot =
-                    threadLaneFilter === "chat"
-                      ? (statusBadge ?? { label: "Not started", tone: "stopped" as const })
-                      : null;
-                  const isProbingProject =
-                    threadLaneFilter === "chat" &&
-                    typeof probingProjectId === "string" &&
-                    probingProjectId === project.id;
                   return (
                     <div key={project.id} className="project-group">
                       <div className={`project-group-header${expanded ? " expanded" : ""}`}>
@@ -184,14 +158,6 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                             </svg>
                           </span>
                           <span className="project-group-name">{label}</span>
-                          {statusDot && (
-                            <span
-                              className={`project-group-sandbox-dot ${statusDot.tone}`}
-                              role="img"
-                              aria-label={`Sandbox ${statusDot.label.toLowerCase()}`}
-                              title={`Sandbox ${statusDot.label}`}
-                            />
-                          )}
                         </button>
                         <button
                           type="button"
@@ -204,54 +170,6 @@ export function ThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                             <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
                         </button>
-                        <button
-                          type="button"
-                          className="project-group-menu-trigger"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            actions.onToggleProjectMenu(project.id);
-                          }}
-                          aria-haspopup="menu"
-                          aria-expanded={projectMenuProjectId === project.id}
-                          title="Project options"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <circle cx="6" cy="12" r="1.5" />
-                            <circle cx="12" cy="12" r="1.5" />
-                            <circle cx="18" cy="12" r="1.5" />
-                          </svg>
-                        </button>
-                        {projectMenuProjectId === project.id && (
-                          <div className="project-group-menu" role="menu" ref={actions.projectMenuRef}>
-                            {threadLaneFilter === "chat" && actions.onProbeProject && (
-                              <button
-                                type="button"
-                                className="project-group-menu-item"
-                                role="menuitem"
-                                disabled={isProbingProject}
-                                onClick={() => void actions.onProbeProject?.(project)}
-                              >
-                                {isProbingProject ? "Probing..." : "Probe sandbox"}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="project-group-menu-item"
-                              role="menuitem"
-                              onClick={() => void actions.onRenameProject(project)}
-                            >
-                              Rename
-                            </button>
-                            <button
-                              type="button"
-                              className="project-group-menu-item danger"
-                              role="menuitem"
-                              onClick={() => void actions.onRemoveProject(project)}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        )}
                       </div>
                       {expanded && (
                         <div className="project-group-threads">

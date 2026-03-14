@@ -2,8 +2,6 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
-const MAX_ACTIVE_CLOUD_PROJECTS_PER_USER = 5;
-
 type ThreadLike = {
   _id: any;
   ownerId: any;
@@ -13,7 +11,7 @@ type ThreadLike = {
   communityId?: string;
   modelId?: string;
   contextVersion?: number;
-  codingHandoff?: unknown;
+  workingState?: ThreadWorkingStateLike;
   lastSeq?: number;
   createdAt: number;
   updatedAt: number;
@@ -42,11 +40,11 @@ type RuntimeRunLike = {
   runId: string;
   lane: string;
   requestedExecutionTarget?: "chat" | "daytona_workspace";
+  requiresWorkspaceTools?: boolean;
   projectId?: any;
   modelId?: string;
   engineId?: string;
   executionMode?: string;
-  approvalMode?: string;
   sandboxMode?: string;
   contractName?: string;
   contractVersion?: string;
@@ -76,20 +74,20 @@ type RuntimeRunEventLike = {
   createdAt: number;
 };
 
-type CodingHandoffRecord = {
-  v: 1;
+type ThreadWorkingStateLike = {
   goal?: string;
-  latestAssistantSummary?: string;
-  discoveries?: string[];
-  accomplished?: string[];
-  relevantFiles?: string[];
-  openBlockers?: string[];
-  nextStep?: string;
-  lastCommandSummary?: string;
-  recentImportantActions?: string[];
-  sourceRunId?: string;
+  lastResult?: string;
+  filesChanged: string[];
+  verifiedFindings: string[];
+  openIssue?: string;
   updatedAt: number;
 };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -137,6 +135,173 @@ function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null
   return value.slice(0, maxLen);
 }
 
+function normalizeWorkingStateText(raw: unknown, maxLen = 240): string | undefined {
+  const value = normalizeOptionalSummaryText(raw, maxLen);
+  return value ?? undefined;
+}
+
+function normalizeWorkingStateList(raw: string[], maxItems = 6, maxLen = 180): string[] {
+  const out: string[] = [];
+  for (const value of raw) {
+    const normalized = normalizeWorkingStateText(value, maxLen);
+    if (!normalized) continue;
+    if (out.includes(normalized)) continue;
+    out.push(normalized);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function extractThreadMessageText(contentJson: unknown): string | null {
+  if (typeof contentJson === "string") {
+    return normalizeOptionalSummaryText(contentJson, 400);
+  }
+  const record = asRecord(contentJson);
+  if (!record) return null;
+  const textCandidate =
+    typeof record.text === "string"
+      ? record.text
+      : typeof record.content === "string"
+        ? record.content
+        : null;
+  return normalizeOptionalSummaryText(textCandidate, 400);
+}
+
+function extractToolArgsPath(payload: unknown): string | null {
+  const payloadRecord = asRecord(payload);
+  const argsRecord = asRecord(payloadRecord?.args);
+  return normalizeOptionalSummaryText(argsRecord?.path, 180);
+}
+
+function extractToolName(payload: unknown): string | null {
+  const payloadRecord = asRecord(payload);
+  return normalizeOptionalSummaryText(payloadRecord?.tool_name, 64);
+}
+
+function extractToolStatus(payload: unknown): string | null {
+  const payloadRecord = asRecord(payload);
+  return normalizeOptionalSummaryText(payloadRecord?.status, 32);
+}
+
+function extractToolErrorMessage(payload: unknown): string | null {
+  const payloadRecord = asRecord(payload);
+  return (
+    normalizeOptionalSummaryText(payloadRecord?.error_message, 240) ??
+    normalizeOptionalSummaryText(payloadRecord?.error_code, 120)
+  );
+}
+
+function summarizeThreadWorkingState(args: {
+  latestUserText: string | null;
+  runStatus: "ok" | "error" | "cancelled";
+  runReason?: string;
+  runErrorMessage?: string;
+  events: RuntimeRunEventLike[];
+  nowMs: number;
+}): ThreadWorkingStateLike {
+  const successfulReadPaths: string[] = [];
+  const changedFiles: string[] = [];
+  let successfulSearchCount = 0;
+  let successfulShellCount = 0;
+  let firstFailedTool: { toolName: string; path: string | null; message: string | null } | null = null;
+
+  for (const event of args.events) {
+    if (event.eventType !== "tool_call_finished") continue;
+    const toolName = extractToolName(event.payload);
+    if (!toolName) continue;
+    const status = extractToolStatus(event.payload);
+    const path = extractToolArgsPath(event.payload);
+    if (status === "ok") {
+      if (toolName === "read" && path && path !== ".") {
+        successfulReadPaths.push(path);
+      } else if ((toolName === "write" || toolName === "edit") && path) {
+        changedFiles.push(path);
+      } else if (toolName === "glob" || toolName === "grep") {
+        successfulSearchCount += 1;
+      } else if (toolName === "bash") {
+        successfulShellCount += 1;
+      }
+      continue;
+    }
+    if (!firstFailedTool) {
+      firstFailedTool = {
+        toolName,
+        path,
+        message: extractToolErrorMessage(event.payload),
+      };
+    }
+  }
+
+  const filesChanged = normalizeWorkingStateList(changedFiles, 8, 180);
+  const verifiedFindingsRaw: string[] = [];
+  const readPaths = normalizeWorkingStateList(successfulReadPaths, 3, 180);
+  for (const path of readPaths) {
+    verifiedFindingsRaw.push(`Inspected ${path}.`);
+  }
+  if (successfulSearchCount > 0) {
+    verifiedFindingsRaw.push(
+      `Completed ${successfulSearchCount} workspace ${successfulSearchCount === 1 ? "search" : "searches"}.`,
+    );
+  }
+  if (filesChanged.length > 0) {
+    verifiedFindingsRaw.push(
+      `Changed ${filesChanged.length} workspace ${filesChanged.length === 1 ? "file" : "files"}.`,
+    );
+  } else if (successfulShellCount > 0) {
+    verifiedFindingsRaw.push(
+      `Ran ${successfulShellCount} shell ${successfulShellCount === 1 ? "command" : "commands"} successfully.`,
+    );
+  }
+  const verifiedFindings = normalizeWorkingStateList(verifiedFindingsRaw, 4, 220);
+
+  let lastResult: string | undefined;
+  if (args.runStatus === "ok") {
+    if (filesChanged.length > 0) {
+      lastResult = normalizeWorkingStateText(
+        `Completed the last workspace run and verified changes in ${filesChanged.join(", ")}.`,
+        240,
+      );
+    } else if (readPaths.length > 0) {
+      lastResult = normalizeWorkingStateText(
+        `Completed the last workspace run after inspecting ${readPaths.join(", ")}.`,
+        240,
+      );
+    } else {
+      lastResult = "Completed the last workspace run successfully.";
+    }
+  } else if (firstFailedTool) {
+    lastResult = normalizeWorkingStateText(
+      `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
+      240,
+    );
+  } else {
+    lastResult = normalizeWorkingStateText(
+      `The last workspace run ended with status ${args.runStatus}.`,
+      240,
+    );
+  }
+
+  let openIssue: string | undefined;
+  if (args.runStatus !== "ok") {
+    openIssue =
+      normalizeWorkingStateText(
+        firstFailedTool
+          ? `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
+          : args.runErrorMessage || args.runReason || "The last workspace run did not complete successfully.",
+        240,
+      ) ?? "The last workspace run did not complete successfully.";
+  }
+
+  return {
+    goal: normalizeWorkingStateText(args.latestUserText, 240),
+    lastResult,
+    filesChanged,
+    verifiedFindings,
+    openIssue,
+    updatedAt: args.nowMs,
+  };
+}
+
 function normalizeRunId(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) throw new Error("run_id_required");
@@ -159,80 +324,20 @@ function normalizeRunLane(raw: unknown): string {
   return value.slice(0, 64);
 }
 
-function normalizeProjectName(raw: string): string {
-  const cleaned = String(raw ?? "").trim().replace(/\s+/g, " ");
-  if (!cleaned) throw new Error("project_name_required");
-  return cleaned.slice(0, 80);
-}
-
-function slugifyProjectName(raw: string): string {
-  const base = normalizeProjectName(raw)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || "project";
-}
-
-async function listActiveProjectsByOwner(ctx: any, ownerId: any) {
-  const rows = await ctx.db
-    .query("cloudProjects")
-    .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerId))
-    .collect();
-  return rows.filter((row: any) => row.status === "active");
-}
-
-async function reserveUniqueProjectSlug(args: {
-  ctx: any;
-  ownerId: any;
-  baseSlug: string;
-  excludeProjectId?: any;
-}): Promise<string> {
-  const normalizedBase = String(args.baseSlug ?? "").trim() || "project";
-  for (let suffix = 0; suffix < 300; suffix += 1) {
-    const candidate = suffix === 0 ? normalizedBase : `${normalizedBase}-${suffix + 1}`;
-    const existing = await args.ctx.db
-      .query("cloudProjects")
-      .withIndex("by_owner_slug", (q: any) => q.eq("ownerId", args.ownerId).eq("slug", candidate))
-      .first();
-    if (!existing) return candidate;
-    if (args.excludeProjectId && existing._id === args.excludeProjectId) return candidate;
-  }
-  throw new Error("project_slug_unavailable");
-}
-
 async function ensureDefaultProjectId(args: {
   ctx: any;
   ownerId: any;
   nowMs: number;
 }): Promise<any> {
-  const existingGeneral = await args.ctx.db
+  const existing = await args.ctx.db
     .query("cloudProjects")
-    .withIndex("by_owner_slug", (q: any) => q.eq("ownerId", args.ownerId).eq("slug", "general"))
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
     .first();
-  if (existingGeneral) {
-    if (existingGeneral.status !== "active") {
-      await args.ctx.db.patch(existingGeneral._id, { status: "active", updatedAt: args.nowMs });
-    }
-    return existingGeneral._id;
-  }
-
-  const activeRows = await listActiveProjectsByOwner(args.ctx, args.ownerId);
-  if (activeRows.length >= MAX_ACTIVE_CLOUD_PROJECTS_PER_USER) {
-    throw new Error("project_limit_reached");
-  }
-
-  const slug = await reserveUniqueProjectSlug({
-    ctx: args.ctx,
-    ownerId: args.ownerId,
-    baseSlug: slugifyProjectName("General"),
-  });
+  if (existing) return existing._id;
 
   return await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: "General",
-    slug,
-    description: "Default cloud project",
-    status: "active",
+    providerVolumeId: undefined,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -285,202 +390,6 @@ async function getRunningRuntimeRunByThread(args: {
     .first()) as RuntimeRunLike | null;
 }
 
-function extractPathCandidatesFromArgs(args: Record<string, unknown>): string[] {
-  const candidates: string[] = [];
-  const pushCandidate = (raw: unknown) => {
-    const value = String(raw ?? "").trim();
-    if (!value) return;
-    candidates.push(value);
-  };
-  pushCandidate(args.path);
-  pushCandidate(args.cwd);
-  pushCandidate(args.file);
-  pushCandidate(args.target);
-  return candidates;
-}
-
-function summarizeToolActionFromRequestedEvent(payload: Record<string, unknown>): string | null {
-  const toolName = String(payload.tool_name ?? "").trim();
-  const args =
-    payload.args && typeof payload.args === "object" && !Array.isArray(payload.args)
-      ? (payload.args as Record<string, unknown>)
-      : {};
-  const [pathCandidate] = extractPathCandidatesFromArgs(args);
-  if (toolName === "read") return normalizeOptionalSummaryText(`Read ${pathCandidate || "a file"}`, 120);
-  if (toolName === "list_dir") return normalizeOptionalSummaryText(`Listed ${pathCandidate || "."}`, 120);
-  if (toolName === "glob") return normalizeOptionalSummaryText(`Globbed ${pathCandidate || "."}`, 120);
-  if (toolName === "grep") return normalizeOptionalSummaryText(`Searched ${pathCandidate || "."}`, 120);
-  if (toolName === "sha256") return normalizeOptionalSummaryText(`Hashed ${pathCandidate || "a file"}`, 120);
-  if (toolName === "edit") return normalizeOptionalSummaryText(`Edited ${pathCandidate || "a file"}`, 120);
-  if (toolName === "write") return normalizeOptionalSummaryText(`Wrote ${pathCandidate || "a file"}`, 120);
-  if (toolName === "bash") {
-    const cmd = normalizeOptionalSummaryText(args.cmd, 96);
-    return cmd ? `Ran ${cmd}` : "Ran a command";
-  }
-  return normalizeOptionalSummaryText(`Used ${toolName}`, 120);
-}
-
-function summarizeFailureFromFinishedEvent(args: {
-  payload: Record<string, unknown>;
-  requestedPayload?: Record<string, unknown> | null;
-}): string | null {
-  const status = String(args.payload.status ?? "").trim().toLowerCase();
-  if (!status || status === "ok") return null;
-  const toolName = String(args.requestedPayload?.tool_name ?? "").trim() || "tool";
-  const errorMessage =
-    normalizeOptionalSummaryText(args.payload.error_message, 160) ??
-    normalizeOptionalSummaryText(args.payload.output_preview, 160);
-  if (toolName === "bash") {
-    const cmd = normalizeOptionalSummaryText(args.requestedPayload?.args && typeof args.requestedPayload.args === "object"
-      ? (args.requestedPayload.args as Record<string, unknown>).cmd
-      : null, 96);
-    return normalizeOptionalSummaryText(
-      cmd ? `Command failed: ${cmd}${errorMessage ? ` — ${errorMessage}` : ""}` : `Command failed${errorMessage ? ` — ${errorMessage}` : ""}`,
-      220,
-    );
-  }
-  return normalizeOptionalSummaryText(
-    `${toolName} failed${errorMessage ? ` — ${errorMessage}` : ""}`,
-    220,
-  );
-}
-
-function mergeUniqueSummaryItems(items: Array<string | null | undefined>, limit: number): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items) {
-    const normalized = normalizeOptionalSummaryText(item, 220);
-    if (!normalized) continue;
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(normalized);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
-function buildCodingHandoffFromRun(args: {
-  previous: CodingHandoffRecord | null;
-  userText: string;
-  assistantText: string;
-  runId: string;
-  events: RuntimeRunEventLike[];
-  nowMs: number;
-}): CodingHandoffRecord {
-  const requestedByToolCallId = new Map<string, Record<string, unknown>>();
-  const recentActions: string[] = [];
-  const relevantFiles: string[] = [];
-  const blockers: string[] = [];
-  let lastCommandSummary: string | null = null;
-
-  for (const event of args.events) {
-    const payload =
-      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-        ? (event.payload as Record<string, unknown>)
-        : null;
-    if (!payload) continue;
-
-    if (event.eventType === "tool_call_requested") {
-      const toolCallId = String(payload.tool_call_id ?? "").trim();
-      if (toolCallId) requestedByToolCallId.set(toolCallId, payload);
-      const action = summarizeToolActionFromRequestedEvent(payload);
-      if (action) recentActions.push(action);
-      const requestedArgs =
-        payload.args && typeof payload.args === "object" && !Array.isArray(payload.args)
-          ? (payload.args as Record<string, unknown>)
-          : {};
-      for (const candidate of extractPathCandidatesFromArgs(requestedArgs)) {
-        relevantFiles.push(candidate);
-      }
-      continue;
-    }
-
-    if (event.eventType === "tool_call_finished") {
-      const toolCallId = String(payload.tool_call_id ?? "").trim();
-      const requestedPayload = toolCallId ? requestedByToolCallId.get(toolCallId) ?? null : null;
-      const blocker = summarizeFailureFromFinishedEvent({ payload, requestedPayload });
-      if (blocker) blockers.push(blocker);
-      const requestedToolName = String(requestedPayload?.tool_name ?? "").trim();
-      if (requestedToolName === "bash") {
-        const status = String(payload.status ?? "").trim().toLowerCase() || "unknown";
-        const cmd = normalizeOptionalSummaryText(
-          requestedPayload?.args && typeof requestedPayload.args === "object"
-            ? (requestedPayload.args as Record<string, unknown>).cmd
-            : null,
-          96,
-        );
-        if (cmd) {
-          lastCommandSummary = normalizeOptionalSummaryText(
-            `${cmd} (${status}${typeof payload.exit_code === "number" ? `, exit ${payload.exit_code}` : ""})`,
-            180,
-          );
-        }
-      }
-    }
-  }
-
-  const userGoal = normalizeOptionalSummaryText(args.userText, 220);
-  const assistantSummary = normalizeOptionalSummaryText(args.assistantText, 260);
-  const previousRecord = args.previous ?? null;
-  const mergedActions = mergeUniqueSummaryItems(
-    [...recentActions, ...(previousRecord?.recentImportantActions ?? [])],
-    6,
-  );
-  const mergedFiles = mergeUniqueSummaryItems(
-    [...relevantFiles, ...(previousRecord?.relevantFiles ?? [])],
-    8,
-  );
-  const mergedBlockers = mergeUniqueSummaryItems(
-    [...blockers, ...(previousRecord?.openBlockers ?? [])],
-    4,
-  );
-  const discoveries = mergeUniqueSummaryItems(
-    [assistantSummary, ...(previousRecord?.discoveries ?? [])],
-    3,
-  );
-  const accomplished = mergeUniqueSummaryItems(
-    [...mergedActions, ...(previousRecord?.accomplished ?? [])],
-    4,
-  );
-
-  let nextStep = normalizeOptionalSummaryText(previousRecord?.nextStep, 180);
-  if (mergedBlockers.length > 0) {
-    nextStep = normalizeOptionalSummaryText(`Resolve blocker: ${mergedBlockers[0]}`, 180);
-  } else if (mergedActions.length > 0) {
-    nextStep = normalizeOptionalSummaryText(`Continue from ${mergedActions[0].toLowerCase()}`, 180);
-  }
-
-  return {
-    v: 1,
-    goal: userGoal ?? previousRecord?.goal,
-    latestAssistantSummary: assistantSummary ?? previousRecord?.latestAssistantSummary,
-    discoveries,
-    accomplished,
-    relevantFiles: mergedFiles,
-    openBlockers: mergedBlockers,
-    nextStep,
-    lastCommandSummary: lastCommandSummary ?? previousRecord?.lastCommandSummary,
-    recentImportantActions: mergedActions,
-    sourceRunId: args.runId,
-    updatedAt: args.nowMs,
-  };
-}
-
-function buildCodingContinuationPrompt(handoff: CodingHandoffRecord | null): string | null {
-  if (!handoff) return null;
-  const sections: string[] = [];
-  if (handoff.goal) sections.push(`Goal: ${handoff.goal}`);
-  if (handoff.latestAssistantSummary) sections.push(`Latest summary: ${handoff.latestAssistantSummary}`);
-  if (handoff.discoveries?.length) sections.push(`Discoveries:\n- ${handoff.discoveries.join("\n- ")}`);
-  if (handoff.accomplished?.length) sections.push(`Accomplished:\n- ${handoff.accomplished.join("\n- ")}`);
-  if (handoff.relevantFiles?.length) sections.push(`Relevant files:\n- ${handoff.relevantFiles.join("\n- ")}`);
-  if (handoff.openBlockers?.length) sections.push(`Open blockers:\n- ${handoff.openBlockers.join("\n- ")}`);
-  if (handoff.lastCommandSummary) sections.push(`Last command: ${handoff.lastCommandSummary}`);
-  if (handoff.nextStep) sections.push(`Next step: ${handoff.nextStep}`);
-  if (sections.length === 0) return null;
-  return ["CODING_CONTINUITY", ...sections].join("\n\n");
-}
 
 function deriveTitleFromContent(contentJson: unknown): string | undefined {
   if (typeof contentJson === "string") {
@@ -732,8 +641,6 @@ export const updateCloudThread = mutation({
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
-    communityId: v.optional(v.string()),
-    contextVersion: v.optional(v.number()),
     lastSeq: v.optional(v.number()),
     archivedAt: v.optional(v.union(v.number(), v.null())),
     nowMs: v.optional(v.number()),
@@ -759,12 +666,6 @@ export const updateCloudThread = mutation({
     if (args.titleSource) patch.titleSource = args.titleSource;
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
     if (args.projectId) patch.projectId = args.projectId;
-    if (typeof args.communityId === "string") {
-      patch.communityId = args.communityId.trim() || undefined;
-    }
-    if (typeof args.contextVersion === "number" && Number.isFinite(args.contextVersion)) {
-      patch.contextVersion = Math.max(0, Math.floor(args.contextVersion));
-    }
     if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
       patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
     }
@@ -1042,11 +943,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
     runId: v.string(),
     lane: v.optional(v.string()),
     requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
+    requiresWorkspaceTools: v.optional(v.boolean()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),
-    approvalMode: v.optional(v.string()),
     sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),
@@ -1092,14 +993,17 @@ export const ensureCloudRuntimeRunStarted = mutation({
       typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
     const lane = normalizeRunLane(args.lane);
     const requestedExecutionTarget = args.requestedExecutionTarget === "daytona_workspace" ? "daytona_workspace" : "chat";
+    const requiresWorkspaceTools =
+      typeof args.requiresWorkspaceTools === "boolean"
+        ? args.requiresWorkspaceTools
+        : requestedExecutionTarget === "daytona_workspace";
     const executionMode =
-      String(args.executionMode ?? "").trim() || (requestedExecutionTarget === "daytona_workspace" ? "agentic" : "chat");
+      String(args.executionMode ?? "").trim() || (requiresWorkspaceTools ? "agentic" : "chat");
     const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
     const modelId = String(args.modelId ?? "").trim() || undefined;
     const engineId = String(args.engineId ?? "").trim() || undefined;
     const projectId = args.projectId;
-    const approvalMode = String(args.approvalMode ?? "").trim() || undefined;
     const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
     const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
     const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
@@ -1115,11 +1019,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
       runId,
       lane,
       requestedExecutionTarget,
+      requiresWorkspaceTools,
       projectId,
       modelId,
       engineId,
       executionMode,
-      approvalMode,
       sandboxMode,
       contractName,
       contractVersion,
@@ -1143,12 +1047,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
       payload: {
         run_id: runId,
         lane,
-        requested_execution_target: requestedExecutionTarget,
+        requires_workspace_tools: requiresWorkspaceTools,
         project_id: projectId ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
         execution_mode: executionMode,
-        approval_mode: approvalMode ?? null,
         sandbox_mode: sandboxMode ?? null,
         contract_name: contractName,
         contract_version: contractVersion,
@@ -1275,6 +1178,29 @@ export const finishCloudRuntimeRun = mutation({
     const errorMessage = String(args.errorMessage ?? "").trim() || undefined;
     const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
 
+    const recentMessages = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id))
+      .order("desc")
+      .take(50)) as CloudMessageLike[];
+    const latestRunUserMessage = recentMessages.find(
+      (message) => message.runId === runId && message.role === "user",
+    );
+    const runEvents = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) =>
+        q.eq("ownerId", ownerId).eq("runId", runId),
+      )
+      .collect()) as RuntimeRunEventLike[];
+    const workingState = summarizeThreadWorkingState({
+      latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
+      runStatus: status,
+      runReason: reason,
+      runErrorMessage: errorMessage,
+      events: runEvents,
+      nowMs,
+    });
+
     await ctx.db.insert("runtimeRunEvents", {
       ownerId,
       threadId: thread._id,
@@ -1300,9 +1226,42 @@ export const finishCloudRuntimeRun = mutation({
       lastEventSeq: seq,
       updatedAt: nowMs,
     });
+    await ctx.db.patch(thread._id, {
+      workingState,
+      updatedAt: nowMs,
+    });
     const updated = (await ctx.db.get(run._id)) as RuntimeRunLike | null;
     if (!updated) throw new Error("runtime_run_not_found");
     return updated;
+  },
+});
+
+export const getCloudRunningRuntimeRunByThreadKey = query({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const threadKey = String(args.threadKey ?? "").trim();
+    if (!threadKey) throw new Error("thread_key_required");
+    const thread = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey,
+    });
+    if (!thread) return null;
+    const run = await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+    if (!run) return null;
+    return run;
   },
 });
 
@@ -1342,95 +1301,5 @@ export const listCloudRuntimeRunEvents = query({
     const out = rows.sort((a: RuntimeRunEventLike, b: RuntimeRunEventLike) => a.seq - b.seq);
     if (!args.threadId) return out;
     return out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
-  },
-});
-
-export const getCloudCodingContinuationContextInternal = internalQuery({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    const handoff =
-      thread.codingHandoff && typeof thread.codingHandoff === "object" && !Array.isArray(thread.codingHandoff)
-        ? (thread.codingHandoff as CodingHandoffRecord)
-        : null;
-    return {
-      handoff,
-      prompt: buildCodingContinuationPrompt(handoff),
-    };
-  },
-});
-
-export const updateCloudThreadCodingHandoffInternal = internalMutation({
-  args: {
-    ownerId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("threads"),
-    runId: v.string(),
-    userText: v.string(),
-    assistantText: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
-      ctx,
-      ownerId: args.ownerId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = args.nowMs ?? Date.now();
-    const thread = await requireOwnedCloudThread({
-      ctx,
-      ownerId,
-      threadId: args.threadId,
-    });
-    const runId = normalizeRunId(args.runId);
-    const run = await getRuntimeRunByOwnerRunId({
-      ctx,
-      ownerId,
-      runId,
-    });
-    if (!run) throw new Error("runtime_run_not_found");
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-
-    const events = ((await ctx.db
-      .query("runtimeRunEvents")
-      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", ownerId).eq("runId", runId))
-      .collect()) as RuntimeRunEventLike[]).sort((a, b) => a.seq - b.seq);
-
-    const previous =
-      thread.codingHandoff && typeof thread.codingHandoff === "object" && !Array.isArray(thread.codingHandoff)
-        ? (thread.codingHandoff as CodingHandoffRecord)
-        : null;
-
-    const nextHandoff = buildCodingHandoffFromRun({
-      previous,
-      userText: args.userText,
-      assistantText: args.assistantText,
-      runId,
-      events,
-      nowMs,
-    });
-
-    await ctx.db.patch(thread._id, {
-      codingHandoff: nextHandoff,
-      updatedAt: nowMs,
-    });
-
-    return {
-      handoff: nextHandoff,
-      prompt: buildCodingContinuationPrompt(nextHandoff),
-    };
   },
 });

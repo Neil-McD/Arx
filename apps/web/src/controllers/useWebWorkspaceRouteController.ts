@@ -14,7 +14,6 @@ type UseWebWorkspaceRouteControllerArgs = {
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveCloudProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
-  setCloudProjectMenuProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
 };
 
 export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControllerArgs) {
@@ -65,15 +64,11 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     (opts?: {
       replace?: boolean;
       projectId?: string | null;
-      clearProjectMenu?: boolean;
       focusComposer?: () => void;
     }) => {
       const current = argsRef.current;
       if (opts?.projectId !== undefined) {
         current.setActiveCloudProjectId?.(opts.projectId);
-      }
-      if (opts?.clearProjectMenu) {
-        current.setCloudProjectMenuProjectId?.(null);
       }
       current.setActivePage("workspace");
       current.setActiveView("home");

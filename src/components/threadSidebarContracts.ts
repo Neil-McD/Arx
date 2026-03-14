@@ -1,10 +1,9 @@
-import type { ReactNode, RefObject } from "react";
+import type { ReactNode } from "react";
 
 export type ProjectLike = {
   id: string;
   name: string | null;
   root_path: string;
-  sandbox_status?: string | null;
 };
 
 export type ProjectThreadGroup<TProject, TThread> = {
@@ -19,25 +18,17 @@ export type ThreadSidebarPanelState<TThread, TProject extends ProjectLike> = {
   threadSearchResults: TThread[];
   projectThreadGroups: Array<ProjectThreadGroup<TProject, TThread>>;
   projectExpandedById: Record<string, boolean>;
-  projectMenuProjectId: string | null;
   generalThreads: TThread[];
   agentThreadsCount: number;
   chatThreadsCount: number;
   showChatSignInPrompt?: boolean;
-  probingProjectId?: string | null;
 };
 
 export type ThreadSidebarPanelActions<TThread, TProject extends ProjectLike> = {
   onThreadLaneFilterChange: (lane: "chat" | "agent") => void;
   onThreadSearchQueryChange: (value: string) => void;
-  onAddProject: () => void | Promise<void>;
   onToggleProjectExpanded: (projectId: string) => void;
   onStartDraftInProject: (project: TProject) => void;
-  onToggleProjectMenu: (projectId: string) => void;
-  projectMenuRef: RefObject<HTMLDivElement>;
-  onProbeProject?: (project: TProject) => void | Promise<void>;
-  onRenameProject: (project: TProject) => void | Promise<void>;
-  onRemoveProject: (project: TProject) => void | Promise<void>;
   renderSessionItem: (thread: TThread, opts?: { showProjectHint?: boolean }) => ReactNode;
   onSignInForChat?: () => void | Promise<void>;
 };

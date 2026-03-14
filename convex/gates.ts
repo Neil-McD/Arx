@@ -18,7 +18,7 @@ type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "r
 type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 type RequestedExecutionTarget = "chat" | "daytona_workspace";
-type CapabilityFamily = "community_tools" | "coding_tools";
+type CapabilityFamily = "community_tools" | "web_research" | "workspace_tools";
 
 type GateDecision = {
   allowed: boolean;
@@ -45,8 +45,8 @@ function resolveEffectiveTier(authState: "anonymous" | "authenticated", canonica
 
 function resolveEntitledCapabilityFamilies(effectiveTier: EffectiveTier): CapabilityFamily[] {
   if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") return ["community_tools"];
-  return ["community_tools", "coding_tools"];
+  if (effectiveTier === "auth_free") return ["community_tools", "web_research"];
+  return ["community_tools", "web_research", "workspace_tools"];
 }
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
@@ -384,7 +384,8 @@ export const resolveGateBundle = query({
           (chatUserChatgpt.allowed && chatUserChatgpt.fundingSource === "user_chatgpt"),
         allowCloudTools: toolsPlatform.allowed && toolsPlatform.lane === "daytona_cloud",
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
-        allowCodingTools: entitledCapabilityFamilies.includes("coding_tools"),
+        allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
+        allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
         allowCommunityCreate: effectiveTier === "architect",
         allowPersonalMemory: effectiveTier === "builder" || effectiveTier === "architect",
       },

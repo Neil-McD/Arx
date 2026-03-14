@@ -17,6 +17,34 @@
   --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
   --web-floating-chrome-shadow: none;
   --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
+
+  --snippet-code-bg: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
+  --snippet-code-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
+  --snippet-code-border: color-mix(in srgb, var(--border-default) 78%, var(--bg-workspace) 22%);
+  --snippet-code-text: var(--text-primary);
+  --snippet-code-muted: var(--text-faint);
+  --snippet-code-accent: color-mix(in srgb, var(--accent-gold) 44%, var(--text-primary) 56%);
+
+  --snippet-artifact-bg: color-mix(in srgb, var(--bg-panel) 74%, var(--bg-card) 26%);
+  --snippet-artifact-header-bg: color-mix(in srgb, var(--bg-card-alt) 62%, var(--bg-panel) 38%);
+  --snippet-artifact-border: color-mix(in srgb, var(--border-muted) 84%, var(--bg-workspace) 16%);
+  --snippet-artifact-text: color-mix(in srgb, var(--text-primary) 92%, var(--text-secondary) 8%);
+  --snippet-artifact-muted: color-mix(in srgb, var(--text-muted) 82%, var(--text-faint) 18%);
+  --snippet-artifact-accent: color-mix(in srgb, var(--accent-gold) 40%, var(--text-primary) 60%);
+
+  --snippet-terminal-bg: color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-workspace) 12%);
+  --snippet-terminal-header-bg: color-mix(in srgb, var(--bg-terminal) 72%, var(--bg-card-alt) 28%);
+  --snippet-terminal-border: color-mix(in srgb, var(--border-default) 56%, var(--bg-terminal) 44%);
+  --snippet-terminal-text: var(--text-terminal);
+  --snippet-terminal-muted: color-mix(in srgb, var(--text-faint) 88%, var(--text-secondary) 12%);
+  --snippet-terminal-accent: color-mix(in srgb, var(--accent-gold) 30%, var(--text-terminal) 70%);
+
+  --snippet-diff-bg: color-mix(in srgb, var(--bg-card) 74%, var(--bg-workspace) 26%);
+  --snippet-diff-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
+  --snippet-diff-border: color-mix(in srgb, var(--border-default) 72%, var(--bg-workspace) 28%);
+  --snippet-diff-text: color-mix(in srgb, var(--text-primary) 94%, var(--text-secondary) 6%);
+  --snippet-diff-muted: color-mix(in srgb, var(--text-muted) 80%, var(--text-faint) 20%);
+  --snippet-diff-accent: color-mix(in srgb, #38a169 52%, var(--text-primary) 48%);
 }
 
 /* Web-only: remove the "bar" treatment so the header blends into the page.
@@ -1501,6 +1529,33 @@
   border-color: var(--border-default);
 }
 
+.ask-harness-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ask-harness-option-title,
+.ask-harness-option-subtitle {
+  display: block;
+}
+
+.ask-harness-option-title {
+  color: var(--text-primary);
+}
+
+.ask-harness-option-subtitle {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .model-picker-popover {
   position: absolute;
   left: 0;
@@ -2235,8 +2290,8 @@
 }
 
 .ask-send-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -2245,9 +2300,31 @@
 }
 
 .ask-send-btn.ask-send-btn-v2 {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
+  border: none;
+  background: #fff !important;
+  color: #111 !important;
+  box-shadow: none;
+}
+
+.ask-send-btn.ask-send-btn-v2 svg {
+  width: 23px;
+  height: 23px;
+}
+
+.ask-send-btn.ask-send-btn-v2:hover:not(:disabled) {
+  background: #fff !important;
+  color: #111 !important;
+  opacity: 0.95;
+}
+
+.ask-send-btn.ask-send-btn-v2:disabled {
+  background: #fff !important;
+  color: #111 !important;
+  opacity: 0.35;
+  box-shadow: none;
 }
 
 .community-chat .chat-messages {

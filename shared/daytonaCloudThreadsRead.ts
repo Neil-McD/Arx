@@ -33,6 +33,27 @@ type ConvexMessageRow = {
   createdAt?: number | null;
 };
 
+type ConvexRuntimeRunRow = {
+  _id?: string | null;
+  runId?: string | null;
+  threadId?: string | null;
+  status?: string | null;
+  requestedExecutionTarget?: string | null;
+  requiresWorkspaceTools?: boolean | null;
+  startedAt?: number | null;
+  updatedAt?: number | null;
+  lastEventSeq?: number | null;
+};
+
+type ConvexRuntimeRunEventRow = {
+  _id?: string | null;
+  runId?: string | null;
+  seq?: number | null;
+  eventType?: string | null;
+  payload?: unknown;
+  createdAt?: number | null;
+};
+
 export type DaytonaCloudThreadTransportRow = {
   id: string;
   title: string | null;
@@ -54,6 +75,26 @@ export type DaytonaCloudMessageTransportRow = {
   engine_id: string | null;
   model_id: string | null;
   run_id: string | null;
+  created_at: string;
+};
+
+export type DaytonaCloudRuntimeRunTransportRow = {
+  id: string;
+  run_id: string;
+  thread_id: string | null;
+  status: string | null;
+  requires_workspace_tools: boolean;
+  started_at: string;
+  updated_at: string;
+  last_event_seq: number;
+};
+
+export type DaytonaCloudRuntimeRunEventTransportRow = {
+  id: string;
+  run_id: string;
+  seq: number;
+  event_type: string;
+  payload: unknown;
   created_at: string;
 };
 
@@ -123,6 +164,44 @@ function mapConvexMessageRow(
     engine_id: typeof row.engineId === "string" ? row.engineId : null,
     model_id: typeof row.modelId === "string" ? row.modelId : null,
     run_id: typeof row.runId === "string" ? row.runId : null,
+    created_at: toIsoStringFromMs(row.createdAt),
+  };
+}
+
+function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): DaytonaCloudRuntimeRunTransportRow | null {
+  if (!row) return null;
+  const id = String(row._id ?? "").trim() || String(row.runId ?? "").trim();
+  const runId = String(row.runId ?? "").trim();
+  if (!id || !runId) return null;
+  const requiresWorkspaceTools =
+    typeof row.requiresWorkspaceTools === "boolean"
+      ? row.requiresWorkspaceTools
+      : row.requestedExecutionTarget === "daytona_workspace";
+  return {
+    id,
+    run_id: runId,
+    thread_id: typeof row.threadId === "string" ? row.threadId : null,
+    status: typeof row.status === "string" ? row.status : null,
+    requires_workspace_tools: requiresWorkspaceTools,
+    started_at: toIsoStringFromMs(row.startedAt),
+    updated_at: toIsoStringFromMs(row.updatedAt),
+    last_event_seq: Math.max(0, Math.floor(toFiniteNumber(row.lastEventSeq, 0))),
+  };
+}
+
+function mapConvexRuntimeRunEventRow(
+  row: ConvexRuntimeRunEventRow,
+): DaytonaCloudRuntimeRunEventTransportRow | null {
+  const id = String(row._id ?? "").trim();
+  const runId = String(row.runId ?? "").trim();
+  const eventType = String(row.eventType ?? "").trim();
+  if (!id || !runId || !eventType) return null;
+  return {
+    id,
+    run_id: runId,
+    seq: Math.max(0, Math.floor(toFiniteNumber(row.seq, 0))),
+    event_type: eventType,
+    payload: row.payload ?? null,
     created_at: toIsoStringFromMs(row.createdAt),
   };
 }
@@ -246,4 +325,47 @@ export async function listConvexCloudThreadMessagesByThreadKey(params: {
   }
 
   return rows;
+}
+
+export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
+  session: CloudAuthSession;
+  threadKey: string;
+}): Promise<DaytonaCloudRuntimeRunTransportRow | null> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) return null;
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadKey ?? "").trim();
+  if (!threadKey) return null;
+  const row = (await client.query("threads:getCloudRunningRuntimeRunByThreadKey" as any, {
+    authSubject,
+    threadKey,
+  })) as ConvexRuntimeRunRow | null;
+  if (!row) return null;
+  return mapConvexRuntimeRunRow(row);
+}
+
+export async function listConvexCloudRuntimeRunEvents(params: {
+  session: CloudAuthSession;
+  runId: string;
+  threadId?: string;
+  afterSeq?: number;
+  limit?: number;
+}): Promise<DaytonaCloudRuntimeRunEventTransportRow[] | null> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) return null;
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  if (!runId) return [];
+  const rows = (await client.query("threads:listCloudRuntimeRunEvents" as any, {
+    authSubject,
+    runId,
+    ...(typeof params.threadId === "string" && params.threadId.trim() ? { threadId: params.threadId } : null),
+    ...(typeof params.afterSeq === "number" && Number.isFinite(params.afterSeq)
+      ? { afterSeq: Math.max(0, Math.floor(params.afterSeq)) }
+      : null),
+    limit: Math.max(1, Math.min(500, Math.floor(params.limit ?? 200))),
+  })) as ConvexRuntimeRunEventRow[];
+  return (rows ?? [])
+    .map((row) => mapConvexRuntimeRunEventRow(row))
+    .filter((row): row is DaytonaCloudRuntimeRunEventTransportRow => Boolean(row));
 }

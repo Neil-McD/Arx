@@ -13,6 +13,8 @@ import type * as authIdentity from "../authIdentity.js";
 import type * as billing from "../billing.js";
 import type * as billingCore from "../billingCore.js";
 import type * as builderCommerce from "../builderCommerce.js";
+import type * as chatgptAuth from "../chatgptAuth.js";
+import type * as chatgptResponsesTransport from "../chatgptResponsesTransport.js";
 import type * as community from "../community.js";
 import type * as communityAccessQueries from "../communityAccessQueries.js";
 import type * as communityAdmin from "../communityAdmin.js";
@@ -27,6 +29,12 @@ import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityResources from "../communityResources.js";
+import type * as daytonaRuntimeEvents from "../daytonaRuntimeEvents.js";
+import type * as daytonaSandboxClient from "../daytonaSandboxClient.js";
+import type * as daytonaToolboxExecutor from "../daytonaToolboxExecutor.js";
+import type * as daytonaToolboxFileSystem from "../daytonaToolboxFileSystem.js";
+import type * as daytonaWorkspaceSession from "../daytonaWorkspaceSession.js";
+import type * as daytonaWorkspaceTools from "../daytonaWorkspaceTools.js";
 import type * as entitlements from "../entitlements.js";
 import type * as gates from "../gates.js";
 import type * as http from "../http.js";
@@ -41,14 +49,19 @@ import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
 import type * as modelRegistry from "../modelRegistry.js";
+import type * as openRouterNativeTransport from "../openRouterNativeTransport.js";
 import type * as personalMemory from "../personalMemory.js";
 import type * as probe from "../probe.js";
 import type * as profiles from "../profiles.js";
 import type * as projects from "../projects.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
+import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
+import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
+import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
 import type * as settings from "../settings.js";
 import type * as threads from "../threads.js";
+import type * as webResearchTools from "../webResearchTools.js";
 
 import type {
   ApiFromModules,
@@ -62,6 +75,8 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   billingCore: typeof billingCore;
   builderCommerce: typeof builderCommerce;
+  chatgptAuth: typeof chatgptAuth;
+  chatgptResponsesTransport: typeof chatgptResponsesTransport;
   community: typeof community;
   communityAccessQueries: typeof communityAccessQueries;
   communityAdmin: typeof communityAdmin;
@@ -76,6 +91,12 @@ declare const fullApi: ApiFromModules<{
   communityLifecycle: typeof communityLifecycle;
   communityPublic: typeof communityPublic;
   communityResources: typeof communityResources;
+  daytonaRuntimeEvents: typeof daytonaRuntimeEvents;
+  daytonaSandboxClient: typeof daytonaSandboxClient;
+  daytonaToolboxExecutor: typeof daytonaToolboxExecutor;
+  daytonaToolboxFileSystem: typeof daytonaToolboxFileSystem;
+  daytonaWorkspaceSession: typeof daytonaWorkspaceSession;
+  daytonaWorkspaceTools: typeof daytonaWorkspaceTools;
   entitlements: typeof entitlements;
   gates: typeof gates;
   http: typeof http;
@@ -90,14 +111,19 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
   modelRegistry: typeof modelRegistry;
+  openRouterNativeTransport: typeof openRouterNativeTransport;
   personalMemory: typeof personalMemory;
   probe: typeof probe;
   profiles: typeof profiles;
   projects: typeof projects;
   providerConnectionProbes: typeof providerConnectionProbes;
   providerConnections: typeof providerConnections;
+  runtimeTurnHandlers: typeof runtimeTurnHandlers;
+  runtimeTurnPersistence: typeof runtimeTurnPersistence;
+  runtimeTurnResolution: typeof runtimeTurnResolution;
   settings: typeof settings;
   threads: typeof threads;
+  webResearchTools: typeof webResearchTools;
 }>;
 
 /**

@@ -150,9 +150,10 @@ export default defineSchema({
 
   cloudProjects: defineTable({
     ownerId: v.id("users"),
-    name: v.string(),
-    slug: v.string(),
+    name: v.optional(v.string()),
+    slug: v.optional(v.string()),
     description: v.optional(v.string()),
+    status: v.optional(v.string()),
     providerSandboxId: v.optional(v.string()),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
@@ -160,13 +161,10 @@ export default defineSchema({
     providerVolumeName: v.optional(v.string()),
     providerVolumeState: v.optional(v.string()),
     providerVolumeLastSeenAt: v.optional(v.number()),
-    status: v.union(v.literal("active"), v.literal("archived")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerId"])
-    .index("by_owner_slug", ["ownerId", "slug"])
-    .index("by_owner_status", ["ownerId", "status"]),
+    .index("by_owner", ["ownerId"]),
 
   communities: defineTable({
     ownerId: v.id("users"),
@@ -345,7 +343,6 @@ export default defineSchema({
     score: v.number(),
     goodCount: v.number(),
     lowSignalCount: v.number(),
-    publishConfidence: v.number(),
     noveltyKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -410,7 +407,19 @@ export default defineSchema({
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
+    // Legacy coding-era continuity kept temporarily so the reduced runtime can deploy
+    // against existing rows while we finish migrating old thread documents.
     codingHandoff: v.optional(v.any()),
+    workingState: v.optional(
+      v.object({
+        goal: v.optional(v.string()),
+        lastResult: v.optional(v.string()),
+        filesChanged: v.array(v.string()),
+        verifiedFindings: v.array(v.string()),
+        openIssue: v.optional(v.string()),
+        updatedAt: v.number(),
+      }),
+    ),
     lastSeq: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -443,11 +452,11 @@ export default defineSchema({
     runId: v.string(),
     lane: v.string(),
     requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
+    requiresWorkspaceTools: v.optional(v.boolean()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),
-    approvalMode: v.optional(v.string()),
     sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),

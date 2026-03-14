@@ -1,7 +1,7 @@
 import {
-  beginBridgeOAuthSignIn as beginCloudBridgeOAuthSignIn,
-  bootstrapBridgeSession as bootstrapCloudBridgeSession,
-  completeBridgeOAuthCallback as completeCloudBridgeOAuthCallback,
+  beginOAuthSignIn as beginCloudOAuthSignIn,
+  bootstrapSession as bootstrapCloudSession,
+  completeOAuthCallback as completeCloudOAuthCallback,
   decodeAuthJwtPayload as decodeJwtPayload,
   ensureAuthSessionForRequest as ensureCloudSessionForRequest,
   fetchWithAuthShared as fetchWithCloudAuthShared,
@@ -177,9 +177,9 @@ export const getCloudRuntimeBaseUrl = getCloudUrl;
 
 export type { CloudSession, CloudUser };
 export {
-  beginCloudBridgeOAuthSignIn,
-  bootstrapCloudBridgeSession,
-  completeCloudBridgeOAuthCallback,
+  beginCloudOAuthSignIn,
+  bootstrapCloudSession,
+  completeCloudOAuthCallback,
   decodeJwtPayload,
   ensureCloudSessionForRequest,
   fetchWithCloudAuthShared,

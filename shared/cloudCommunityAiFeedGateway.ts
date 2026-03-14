@@ -46,8 +46,6 @@ export async function listCloudCommunityAiFeedRanked<SessionT, TPost = unknown>(
   return coerceObjectRows<TPost>(payload);
 }
 
-export const listCloudCommunityAiFeedImportant = listCloudCommunityAiFeedRanked;
-
 export async function reactToCloudCommunityAiFeedPost<SessionT>(
   params: CloudCommunityAiFeedGatewayParams<SessionT> & {
     postId: string;

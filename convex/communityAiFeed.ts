@@ -32,7 +32,6 @@ type FeedPostRow = {
   score: number;
   goodCount: number;
   lowSignalCount: number;
-  publishConfidence: number;
   noveltyKey?: string;
   createdAt: number;
   updatedAt: number;
@@ -68,12 +67,6 @@ function normalizeFeedStatus(raw: unknown): "live" | "hidden" {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "hidden") return value;
   return "live";
-}
-
-function normalizeFeedConfidence(raw: unknown): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.max(0, Math.min(6, Math.round(parsed)));
 }
 
 function normalizeNoveltyKey(raw: unknown): string | undefined {
@@ -140,7 +133,6 @@ async function mapFeedPostRow(args: {
     status: normalizeFeedStatus(post.status),
     score: Number(post.score ?? 0),
     effective_score: effectiveScoreForPost(post, nowMs),
-    publish_confidence: Number(post.publishConfidence ?? 0),
     reaction_counts: {
       good: Math.max(0, Number(post.goodCount ?? 0)),
       low_signal: Math.max(0, Number(post.lowSignalCount ?? 0)),
@@ -189,7 +181,6 @@ async function insertFeedPost(args: {
   body: string;
   whyNow?: string | null;
   evidence?: string[] | null;
-  publishConfidence?: number;
   noveltyKey?: string | null;
   nowMs: number;
 }) {
@@ -218,7 +209,6 @@ async function insertFeedPost(args: {
   const whyNow = normalizeOptionalText(args.whyNow, 280);
   const evidence = normalizeFeedEvidence(args.evidence);
   const authorLabel = normalizeName(args.authorLabel);
-  const normalizedConfidence = normalizeFeedConfidence(args.publishConfidence);
   const id = await args.ctx.db.insert("communityAiFeedPosts" as any, {
     communityId: args.communityId,
     authorType: args.authorType,
@@ -234,7 +224,6 @@ async function insertFeedPost(args: {
     score: 0,
     goodCount: 0,
     lowSignalCount: 0,
-    publishConfidence: normalizedConfidence,
     noveltyKey,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -398,8 +387,6 @@ export const listCommunityAiFeedRanked = query({
   },
 });
 
-export const listCommunityAiFeedImportant = listCommunityAiFeedRanked;
-
 export const reactToCommunityAiFeedPost = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -486,7 +473,6 @@ export const publishCommunityAiFeedAgentPost = mutation({
     body: v.string(),
     whyNow: v.optional(v.union(v.string(), v.null())),
     evidence: v.optional(v.union(v.array(v.string()), v.null())),
-    publishConfidence: v.optional(v.number()),
     noveltyKey: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
@@ -514,45 +500,8 @@ export const publishCommunityAiFeedAgentPost = mutation({
       body: args.body,
       whyNow: args.whyNow ?? null,
       evidence: args.evidence ?? null,
-      publishConfidence: args.publishConfidence,
       noveltyKey: args.noveltyKey ?? null,
       nowMs,
-    });
-  },
-});
-
-export const publishCommunityAiFeedPost = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    authorType: v.union(v.literal("agent"), v.literal("human")),
-    authorUserId: v.optional(v.id("users")),
-    agentKey: v.optional(v.union(v.string(), v.null())),
-    authorLabel: v.string(),
-    postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
-    title: v.optional(v.union(v.string(), v.null())),
-    body: v.string(),
-    whyNow: v.optional(v.union(v.string(), v.null())),
-    evidence: v.optional(v.union(v.array(v.string()), v.null())),
-    publishConfidence: v.optional(v.number()),
-    noveltyKey: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    return await insertFeedPost({
-      ctx,
-      communityId: args.communityId,
-      authorType: args.authorType,
-      authorUserId: args.authorUserId,
-      agentKey: args.agentKey ?? null,
-      authorLabel: args.authorLabel,
-      postType: args.postType,
-      title: args.title ?? null,
-      body: args.body,
-      whyNow: args.whyNow ?? null,
-      evidence: args.evidence ?? null,
-      publishConfidence: args.publishConfidence,
-      noveltyKey: args.noveltyKey ?? null,
-      nowMs: args.nowMs ?? Date.now(),
     });
   },
 });
