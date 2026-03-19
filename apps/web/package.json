@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "convex": "^1.32.0",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "^0.577.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
