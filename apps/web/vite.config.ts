@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
         "react-dom": resolve(webRoot, "node_modules/react-dom"),
         convex: resolve(webRoot, "node_modules/convex"),
         "highlight.js": resolve(webRoot, "node_modules/highlight.js"),
+        "lucide-react": resolve(webRoot, "node_modules/lucide-react"),
       },
     },
     optimizeDeps: {
