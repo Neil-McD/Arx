@@ -372,6 +372,16 @@ export async function runOpenRouterCompletion(params: {
         ? "Free model is temporarily saturated. Retry in a moment."
         : "Provider is rate limiting requests. Retry in a moment.";
     } else if (
+      response.status >= 500 ||
+      messageLower === "server error" ||
+      messageLower.includes("internal server error") ||
+      messageLower.includes("bad gateway") ||
+      messageLower.includes("gateway timeout") ||
+      messageLower.includes("temporarily unavailable")
+    ) {
+      code = "platform_inference_unavailable";
+      message = "Inference provider is temporarily unavailable.";
+    } else if (
       response.status === 402 ||
       messageLower.includes("quota") ||
       messageLower.includes("credit") ||
