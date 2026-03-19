@@ -129,9 +129,28 @@ export async function persistRuntimeAssistantMessage(args: {
   requestedModelId: string;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
   lane: "public" | "platform" | "chatgpt";
+  inferenceLaneFallbacks?: Array<{
+    from: "chatgpt" | "platform" | "public";
+    to: "chatgpt" | "platform" | "public";
+    reason: string;
+  }> | null;
   runId: string;
   content: string;
 }) {
+  const inferenceLaneFallbacks = Array.isArray(args.inferenceLaneFallbacks)
+    ? args.inferenceLaneFallbacks.filter(
+        (item): item is {
+          from: "chatgpt" | "platform" | "public";
+          to: "chatgpt" | "platform" | "public";
+          reason: string;
+        } =>
+          Boolean(item) &&
+          (item.from === "chatgpt" || item.from === "platform" || item.from === "public") &&
+          (item.to === "chatgpt" || item.to === "platform" || item.to === "public") &&
+          typeof item.reason === "string" &&
+          item.reason.trim().length > 0,
+      )
+    : [];
   const persisted = (await args.ctx.runMutation(
     api.threads.addCloudThreadMessage as any,
     {
@@ -145,6 +164,9 @@ export async function persistRuntimeAssistantMessage(args: {
           model_id: args.requestedModelId,
           inference_source: args.inferenceSource,
           lane: args.lane,
+          ...(inferenceLaneFallbacks.length > 0
+            ? { inference_lane_fallbacks: inferenceLaneFallbacks }
+            : null),
         },
       },
       engineId: "runtime_turn",

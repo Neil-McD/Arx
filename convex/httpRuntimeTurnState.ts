@@ -14,6 +14,11 @@ type RuntimeSuccessPayload = {
   promptTokens: number | null;
   completionTokens: number | null;
   resolvedInferenceSource: RuntimeInferenceSource;
+  inferenceLaneFallbacks?: Array<{
+    from: "chatgpt" | "platform" | "public";
+    to: "chatgpt" | "platform" | "public";
+    reason: string;
+  }> | null;
   userMessageId: string | null;
   userMessageKey: string | null;
   userMessageSeq: number | null;
@@ -52,6 +57,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
         engine_id: "runtime_convex",
         model_id: params.requestedModelId,
         inference_source: payload.resolvedInferenceSource,
+        inference_lane_fallbacks: payload.inferenceLaneFallbacks ?? null,
         content: payload.content,
         prompt_tokens: payload.promptTokens,
         completion_tokens: payload.completionTokens,
@@ -74,6 +80,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
           engine_id: "runtime_convex",
           model_id: params.requestedModelId,
           inference_source: payload.resolvedInferenceSource,
+          inference_lane_fallbacks: payload.inferenceLaneFallbacks ?? null,
           prompt_tokens: payload.promptTokens,
           completion_tokens: payload.completionTokens,
         },
@@ -99,6 +106,7 @@ export function buildRuntimeTurnSuccessResponder(params: {
           engine_id: "runtime_convex",
           model_id: params.requestedModelId,
           inference_source: payload.resolvedInferenceSource,
+          inference_lane_fallbacks: payload.inferenceLaneFallbacks ?? null,
           full_content: payload.content,
           prompt_tokens: payload.promptTokens,
           completion_tokens: payload.completionTokens,

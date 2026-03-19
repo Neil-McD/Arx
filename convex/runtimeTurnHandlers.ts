@@ -10,6 +10,7 @@ import {
   buildRuntimeTurnSuccessResponder,
 } from "./httpRuntimeTurnState";
 import { executeChatToolsAgentLoop } from "./httpDaytona";
+import { shouldFallbackFromChatgptErrorToPlatformCore } from "../shared/cloudFunctionErrorCore";
 import { composeCloudScopedSystemPrompt } from "../shared/runtimePrompt";
 import {
   PublicTurnInput,
@@ -387,6 +388,14 @@ export async function handleRuntimeTurnRequest(args: {
     let content = "";
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
+    let resolvedInferenceSource = inferenceSource;
+    let inferenceLaneFallbacks:
+      | Array<{
+          from: "chatgpt" | "platform" | "public";
+          to: "chatgpt" | "platform" | "public";
+          reason: string;
+        }>
+      | null = null;
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,
@@ -453,28 +462,67 @@ export async function handleRuntimeTurnRequest(args: {
         { role: "system" as const, content: authenticatedScopedSystemPrompt },
         ...conversationMessages,
       ];
-      const completion =
-        inferenceSource === "chatgpt"
-          ? await (async () => {
-              runtimeTurnStage = "chatgpt_completion";
-              return runChatgptCompletion({
-                ctx,
-                userId: actor.dbUserId,
-                modelId: requestedModelId,
-                messages: chatMessages,
-                maxTokens,
-              });
-            })()
-          : await (async () => {
-              runtimeTurnStage = "openrouter_completion";
-              return runOpenRouterCompletion({
-                req,
-                modelRef,
-                messages: chatMessages,
-                maxTokens,
-                apiKeyOverride: openRouterApiKeyOverride,
-              });
-            })();
+      let completion:
+        | Awaited<ReturnType<typeof runChatgptCompletion>>
+        | Awaited<ReturnType<typeof runOpenRouterCompletion>>;
+      if (inferenceSource === "chatgpt") {
+        runtimeTurnStage = "chatgpt_completion";
+        const chatgptCompletion = await runChatgptCompletion({
+          ctx,
+          userId: actor.dbUserId,
+          modelId: requestedModelId,
+          messages: chatMessages,
+          maxTokens,
+        });
+        if (
+          "ok" in chatgptCompletion &&
+          chatgptCompletion.ok === false &&
+          shouldFallbackFromChatgptErrorToPlatformCore(chatgptCompletion.message)
+        ) {
+          inferenceLaneFallbacks = [
+            {
+              from: "chatgpt",
+              to: "platform",
+              reason: chatgptCompletion.message.trim() || chatgptCompletion.code || "chatgpt_failed",
+            },
+          ];
+          await appendRunEvent({
+            eventType: "inference_lane_fallback",
+            eventKey: `${runId}:inference_lane_fallback:chatgpt_to_platform:1`,
+            payload: {
+              run_id: runId,
+              from: "chatgpt",
+              to: "platform",
+              reason: chatgptCompletion.message,
+              code: chatgptCompletion.code,
+              status: chatgptCompletion.status,
+            },
+          });
+          runtimeTurnStage = "chatgpt_fallback_openrouter_completion";
+          const fallbackCompletion = await runOpenRouterCompletion({
+            req,
+            modelRef,
+            messages: chatMessages,
+            maxTokens,
+            apiKeyOverride: openRouterApiKeyOverride,
+          });
+          if (!("ok" in fallbackCompletion) || fallbackCompletion.ok !== false) {
+            resolvedInferenceSource = "platform";
+          }
+          completion = fallbackCompletion;
+        } else {
+          completion = chatgptCompletion;
+        }
+      } else {
+        runtimeTurnStage = "openrouter_completion";
+        completion = await runOpenRouterCompletion({
+          req,
+          modelRef,
+          messages: chatMessages,
+          maxTokens,
+          apiKeyOverride: openRouterApiKeyOverride,
+        });
+      }
       if ("ok" in completion && completion.ok === false) {
         await finishRunBestEffortForRun({
           status: "error",
@@ -506,8 +554,9 @@ export async function handleRuntimeTurnRequest(args: {
           threadId: ownedThread._id,
           messageKey: assistantMessageKeyForRun,
           requestedModelId,
-          inferenceSource,
+          inferenceSource: resolvedInferenceSource,
           lane,
+          inferenceLaneFallbacks,
           runId,
           content,
         }));
@@ -535,7 +584,8 @@ export async function handleRuntimeTurnRequest(args: {
       content,
       promptTokens,
       completionTokens,
-      resolvedInferenceSource: inferenceSource,
+      resolvedInferenceSource,
+      inferenceLaneFallbacks,
       userMessageId,
       userMessageKey,
       userMessageSeq,
