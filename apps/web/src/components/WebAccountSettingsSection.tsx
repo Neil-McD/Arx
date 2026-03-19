@@ -74,10 +74,6 @@ type WebAccountSettingsSectionProps = {
   isSettingDevBuilderTier: boolean;
   setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
   devBuilderTierError: string | null;
-  isRunningDaytonaProbe: boolean;
-  runDaytonaProbe: () => Promise<void> | void;
-  daytonaProbeError: string | null;
-  daytonaProbeReport: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
   isRedeemingPendingPurchases: boolean;
@@ -124,10 +120,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     isSettingDevBuilderTier,
     setDevBuilderTier,
     devBuilderTierError,
-    isRunningDaytonaProbe,
-    runDaytonaProbe,
-    daytonaProbeError,
-    daytonaProbeReport,
     pendingPurchaseClaims,
     isLoadingPendingPurchases,
     isRedeemingPendingPurchases,
@@ -360,28 +352,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                         </button>
                       </div>
                     </div>
-                    <div className="account-row">
-                      <div className="account-identity">
-                        <span>Workspace runner probe (dev)</span>
-                        <strong>Creator-only Daytona substrate check</strong>
-                      </div>
-                      <div className="auth-actions">
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void runDaytonaProbe()}
-                          disabled={isRunningDaytonaProbe}
-                        >
-                          {isRunningDaytonaProbe ? "Probing…" : "Probe Daytona"}
-                        </button>
-                      </div>
-                    </div>
-                    {daytonaProbeReport && (
-                      <div className="auth-status" style={{ whiteSpace: "pre-wrap" }}>
-                        {daytonaProbeReport}
-                      </div>
-                    )}
-                    {daytonaProbeError && <div className="auth-error">{daytonaProbeError}</div>}
                   </>
                 )}
               </>
