@@ -47,7 +47,7 @@ async function fetchMappedDaytonaCloudProjectsViaConvex<TSession>(params: {
   session: TSession;
 }): Promise<DaytonaCloudProjectRecord[]> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
-  const row = (await client.action("projects:ensureDefaultCloudProjectWithVolumeForOwner" as any, {
+  const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow | null;
   return row ? [mapConvexProjectRowToRecord(row)] : [];
@@ -67,7 +67,7 @@ export async function ensureDefaultCloudProjectId<TSession>(params: {
   session: TSession;
 }): Promise<string> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as CloudAuthSession);
-  const row = (await client.action("projects:ensureDefaultCloudProjectWithVolumeForOwner" as any, {
+  const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow | null;
   const projectId = String(row?._id ?? "").trim();
