@@ -39,10 +39,18 @@ export default defineConfig(({ mode }) => {
         react: resolve(webRoot, "node_modules/react"),
         "react-dom": resolve(webRoot, "node_modules/react-dom"),
         convex: resolve(webRoot, "node_modules/convex"),
+        "highlight.js": resolve(webRoot, "node_modules/highlight.js"),
       },
     },
     optimizeDeps: {
-      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "convex/browser"],
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "react/jsx-dev-runtime",
+        "convex/browser",
+        "highlight.js/lib/core",
+      ],
     },
     // Keep one source of truth for local env: repo root `.env`
     envDir: repoRoot,
