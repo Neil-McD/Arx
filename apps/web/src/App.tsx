@@ -3683,7 +3683,7 @@ export default function App() {
       enterWorkspaceThread({
         threadId: thread.id,
         projectId: projectId || null,
-        communityId: thread.community_id ?? null,
+        communityId: thread.community_id ?? undefined,
       });
     },
     trace: traceThreadContext,
@@ -3945,7 +3945,7 @@ export default function App() {
       enterWorkspaceThread({
         threadId: thread.id,
         projectId: (thread.project_id ?? "").trim() || null,
-        communityId: thread.community_id ?? null,
+        communityId: thread.community_id ?? undefined,
       });
     },
     updateThreadModel,
@@ -6421,7 +6421,7 @@ export default function App() {
               enterWorkspaceThread({
                 threadId,
                 projectId: projectId || null,
-                communityId: thread?.community_id ?? null,
+                communityId: thread?.community_id ?? undefined,
               });
               setIsModelPickerOpen(true);
 	            window.setTimeout(() => {
