@@ -784,9 +784,9 @@ export default function App() {
         readFirstLocalStorageValue([APP_THEME_STORAGE_KEY, LEGACY_APP_THEME_STORAGE_KEY]),
       );
       if (stored) return stored;
-      return "dark";
+      return "polynet";
     } catch {
-      return "dark";
+      return "polynet";
     }
   });
   const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
