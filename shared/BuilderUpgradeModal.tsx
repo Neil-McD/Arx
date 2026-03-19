@@ -1,6 +1,5 @@
 import type { RefObject } from "react";
 import {
-  isBuilderTierArchitect,
   isBuilderTierBuilder,
   isBuilderTierFree,
   type BuilderCheckoutTier,
@@ -35,10 +34,9 @@ export function BuilderUpgradeModal({
 }: BuilderUpgradeModalProps) {
   if (!isOpen) return null;
 
+  void builderUpgradeContext;
   const freeIsCurrent = isBuilderTierFree(builderTier);
-  const builderIsCurrent = isBuilderTierBuilder(builderTier);
-  const architectIsCurrent = isBuilderTierArchitect(builderTier);
-  const createCommunityContext = builderUpgradeContext === "create_community";
+  const builderIsCurrent = isBuilderTierBuilder(builderTier) || builderTier === "architect" || builderTier === "pro";
   const feature = (included: boolean, label: string) => (
     <li className={`plan-feature${included ? " on" : " off"}`}>
       <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
@@ -52,22 +50,18 @@ export function BuilderUpgradeModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Upgrade plan</div>
+          <div className="modal-title">Become a Builder</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
             ×
           </button>
         </div>
         <div className="modal-body" ref={builderUpgradeModalBodyRef} onScroll={onModalBodyScroll}>
           <div className="model-note" style={{ marginBottom: 12 }}>
-            {createCommunityContext
-              ? "Choose an Architect plan to create and run your community."
-              : "Choose a plan that matches how you want to use Polynet."}
+            Choose the alpha plan that matches how you want to use Polynet.
           </div>
-          {createCommunityContext && (
-            <div className="model-note" style={{ marginBottom: 12 }}>
-              After checkout, we'll create your community automatically.
-            </div>
-          )}
+          <div className="model-note" style={{ marginBottom: 12 }}>
+            Community creation stays internal during alpha. Builder unlocks the full workspace layer.
+          </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
           <div className="plan-grid">
             <div className={`plan-card${freeIsCurrent ? " current" : ""}`}>
@@ -88,7 +82,7 @@ export function BuilderUpgradeModal({
                 {feature(false, "Polynet inference")}
                 {feature(false, "Daytona workspace")}
                 {feature(false, "Personal memory")}
-                {feature(false, "Create communities")}
+                {feature(false, "Builder workspace tools")}
               </ul>
               <button type="button" className="plan-cta" disabled>
                 {freeIsCurrent ? "Current plan" : "Free"}
@@ -110,59 +104,20 @@ export function BuilderUpgradeModal({
                 {feature(true, "Daytona workspace")}
                 {feature(true, "Project-bound build runtime")}
                 {feature(true, "Personal memory")}
-                {feature(false, "Create communities")}
-                {feature(false, "Community pricing and paid access")}
-                {feature(false, "Community AI agent customization")}
-                {feature(false, "Community operations")}
+                {feature(true, "Builder workspace tools")}
+                {feature(true, "Internal alpha access to the full workbench")}
               </ul>
               <button
                 type="button"
                 className="plan-cta"
                 onClick={() => onStartBuilderPlanCheckout("builder")}
-                disabled={isStartingBuilderCheckout || builderIsCurrent || createCommunityContext}
+                disabled={isStartingBuilderCheckout || builderIsCurrent}
               >
                 {builderIsCurrent
                   ? "Current plan"
-                  : createCommunityContext
-                    ? "No community creation"
-                    : isStartingBuilderCheckout
-                      ? "Starting…"
-                      : "Get Builder"}
-              </button>
-            </div>
-
-            <div className={`plan-card${architectIsCurrent ? " current" : ""}`}>
-              <div className="plan-card-header">
-                <div className="plan-name">Architect</div>
-                {architectIsCurrent && <div className="plan-badge">Current</div>}
-              </div>
-              <div className="plan-price">
-                <span className="plan-price-amount">$60</span>
-                <span className="plan-price-period">/mo</span>
-              </div>
-              <div className="plan-subtitle">Run communities, pricing, and agent systems</div>
-              <ul className="plan-features plan-features-checks">
-                {feature(true, "Everything in Builder")}
-                {feature(true, "Create up to 3 communities")}
-                {feature(true, "Community pricing configuration")}
-                {feature(true, "Community paid-access flows")}
-                {feature(true, "Community AI agent customization")}
-                {feature(true, "Community operations")}
-                {feature(true, "Public funnel and discovery")}
-              </ul>
-              <button
-                type="button"
-                className="plan-cta"
-                onClick={() => onStartBuilderPlanCheckout("architect")}
-                disabled={isStartingBuilderCheckout || architectIsCurrent}
-              >
-                {architectIsCurrent
-                  ? "Current plan"
                   : isStartingBuilderCheckout
                     ? "Starting…"
-                    : createCommunityContext
-                      ? "Get Architect"
-                      : "Get Architect"}
+                    : "Upgrade to Builder"}
               </button>
             </div>
           </div>

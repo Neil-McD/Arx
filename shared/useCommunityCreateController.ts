@@ -85,6 +85,9 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
     : error instanceof Error
       ? error.message
       : "Failed to create community.";
+  if (message === "community_creation_disabled_for_alpha") {
+    return "Community creation is temporarily internal-only during alpha.";
+  }
   if (message === "community_architect_required") {
     return "Architect is required to create a community.";
   }

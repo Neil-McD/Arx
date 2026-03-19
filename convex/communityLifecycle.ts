@@ -1,6 +1,7 @@
 import { api } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 import {
   type CommunityAgentConfigLike,
   type CommunityChatMessageLike,
@@ -117,6 +118,10 @@ export const createCommunity = mutation({
       userId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
+    const owner = await ctx.db.get(ownerId);
+    if (!isCreatorDevTierOverrideEmail(owner?.email ?? null)) {
+      throw new Error("community_creation_disabled_for_alpha");
+    }
     const nowMs = args.nowMs ?? Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getBuilderBillingStatus, {
       authSubject: args.authSubject ?? undefined,

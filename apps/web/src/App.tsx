@@ -5431,11 +5431,14 @@ export default function App() {
 		              <button
 		                type="button"
 		                className="community-rail-button community-rail-add"
-		                onClick={() => openCreateCommunityModal()}
-		                title="Create community"
-		                aria-label="Create community"
+		                onClick={() => {
+                      setBuilderUpgradeContext("builder");
+                      setIsBuilderUpgradeOpen(true);
+                    }}
+		                title="Become a Builder"
+		                aria-label="Become a Builder"
 		              >
-		                +
+		                B
 		              </button>
             </div>
             <div className="rail-footer">
@@ -6432,22 +6435,20 @@ export default function App() {
           }}
         />
 
-	      {cloudSession && (
-          <BuilderUpgradeModal
-            isOpen={isBuilderUpgradeOpen}
-            builderUpgradeContext={builderUpgradeContext}
-            builderTier={builderBillingStatus?.builder_tier}
-            isStartingBuilderCheckout={isStartingBuilderCheckout}
-            builderBillingError={builderBillingError}
-            showBuilderUpgradeScrollHint={showBuilderUpgradeScrollHint}
-            builderUpgradeModalBodyRef={builderUpgradeModalBodyRef}
-            onClose={() => setIsBuilderUpgradeOpen(false)}
-            onModalBodyScroll={updateBuilderUpgradeScrollHint}
-            onStartBuilderPlanCheckout={(tier) => {
-              void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
-            }}
-          />
-        )}
+	      <BuilderUpgradeModal
+          isOpen={isBuilderUpgradeOpen}
+          builderUpgradeContext={builderUpgradeContext}
+          builderTier={builderBillingStatus?.builder_tier}
+          isStartingBuilderCheckout={isStartingBuilderCheckout}
+          builderBillingError={builderBillingError}
+          showBuilderUpgradeScrollHint={showBuilderUpgradeScrollHint}
+          builderUpgradeModalBodyRef={builderUpgradeModalBodyRef}
+          onClose={() => setIsBuilderUpgradeOpen(false)}
+          onModalBodyScroll={updateBuilderUpgradeScrollHint}
+          onStartBuilderPlanCheckout={(tier) => {
+            void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
+          }}
+        />
 
 	      <WebCreateCommunityModal
           isOpen={showCreateCommunityModal}
