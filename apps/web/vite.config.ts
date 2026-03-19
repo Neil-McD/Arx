@@ -36,8 +36,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ["react", "react-dom"],
       alias: {
-        react: resolve(repoRoot, "node_modules/react"),
-        "react-dom": resolve(repoRoot, "node_modules/react-dom"),
+        react: resolve(webRoot, "node_modules/react"),
+        "react-dom": resolve(webRoot, "node_modules/react-dom"),
       },
     },
     optimizeDeps: {
