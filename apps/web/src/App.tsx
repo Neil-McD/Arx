@@ -32,6 +32,7 @@ import {
 import {
   formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderBillingReturn, } from "../../../shared/builderBilling";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
+import { probeCloudDaytonaWorkspaceAccess } from "../../../shared/daytonaProbeGateway";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 
 import {
@@ -821,6 +822,9 @@ export default function App() {
   const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
   const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
   const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
+  const [isRunningDaytonaProbe, setIsRunningDaytonaProbe] = useState(false);
+  const [daytonaProbeError, setDaytonaProbeError] = useState<string | null>(null);
+  const [daytonaProbeReport, setDaytonaProbeReport] = useState<string | null>(null);
   const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
   const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
   const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
@@ -3416,6 +3420,48 @@ export default function App() {
     }
   }
 
+  async function runDaytonaProbe(): Promise<void> {
+    const session = await ensureUsableCloudSession();
+    if (!session || !canUseDevTierOverride) return;
+    setIsRunningDaytonaProbe(true);
+    setDaytonaProbeError(null);
+    setDaytonaProbeReport(null);
+    try {
+      const result = await probeCloudDaytonaWorkspaceAccess({
+        session,
+      });
+      const lines = [
+        result.summary,
+        `api_base_url=${result.config.api_base_url ?? "missing"}`,
+        `auth_header_mode=${result.config.auth_header_mode ?? "unknown"}`,
+        `has_org_id=${result.config.has_org_id ? "true" : "false"}`,
+        `has_target=${result.config.has_target ? "true" : "false"}`,
+        `has_snapshot=${result.config.has_snapshot ? "true" : "false"}`,
+        ...result.probes.map((probe) => {
+          const detail = [
+            `${probe.method} ${probe.path}`,
+            `status=${probe.status ?? "network"}`,
+            `ok=${probe.ok ? "true" : "false"}`,
+          ];
+          if (probe.content_type) detail.push(`content_type=${probe.content_type}`);
+          if (probe.body_preview) detail.push(`body=${probe.body_preview}`);
+          return detail.join(" · ");
+        }),
+      ];
+      setDaytonaProbeReport(lines.join("\n"));
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to run Daytona probe.";
+      setDaytonaProbeError(message);
+    } finally {
+      setIsRunningDaytonaProbe(false);
+    }
+  }
+
   const {
     openCreateCommunityModal,
     closeCreateCommunityModal,
@@ -5578,6 +5624,10 @@ export default function App() {
                     isSettingDevBuilderTier={isSettingDevBuilderTier}
                     setDevBuilderTier={setDevBuilderTier}
                     devBuilderTierError={devBuilderTierError}
+                    isRunningDaytonaProbe={isRunningDaytonaProbe}
+                    runDaytonaProbe={runDaytonaProbe}
+                    daytonaProbeError={daytonaProbeError}
+                    daytonaProbeReport={daytonaProbeReport}
                     pendingPurchaseClaims={pendingPurchaseClaims}
                     isLoadingPendingPurchases={isLoadingPendingPurchases}
                     isRedeemingPendingPurchases={isRedeemingPendingPurchases}

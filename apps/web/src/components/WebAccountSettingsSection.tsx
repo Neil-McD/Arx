@@ -74,6 +74,10 @@ type WebAccountSettingsSectionProps = {
   isSettingDevBuilderTier: boolean;
   setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
   devBuilderTierError: string | null;
+  isRunningDaytonaProbe: boolean;
+  runDaytonaProbe: () => Promise<void> | void;
+  daytonaProbeError: string | null;
+  daytonaProbeReport: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
   isRedeemingPendingPurchases: boolean;
@@ -120,6 +124,10 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     isSettingDevBuilderTier,
     setDevBuilderTier,
     devBuilderTierError,
+    isRunningDaytonaProbe,
+    runDaytonaProbe,
+    daytonaProbeError,
+    daytonaProbeReport,
     pendingPurchaseClaims,
     isLoadingPendingPurchases,
     isRedeemingPendingPurchases,
@@ -319,38 +327,62 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   </div>
                 </div>
                 {canUseDevTierOverride && (
-                  <div className="account-row">
-                    <div className="account-identity">
-                      <span>Internal tier override (dev)</span>
-                      <strong>Creator-only testing control</strong>
+                  <>
+                    <div className="account-row">
+                      <div className="account-identity">
+                        <span>Internal tier override (dev)</span>
+                        <strong>Creator-only testing control</strong>
+                      </div>
+                      <div className="auth-actions">
+                        <button
+                          type="button"
+                          className={isBuilderTierFree(tier) ? "" : "secondary"}
+                          onClick={() => void setDevBuilderTier("free")}
+                          disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
+                        >
+                          Free
+                        </button>
+                        <button
+                          type="button"
+                          className={tier === "builder" ? "" : "secondary"}
+                          onClick={() => void setDevBuilderTier("builder")}
+                          disabled={isSettingDevBuilderTier || tier === "builder"}
+                        >
+                          Builder
+                        </button>
+                        <button
+                          type="button"
+                          className={tier === "architect" ? "" : "secondary"}
+                          onClick={() => void setDevBuilderTier("architect")}
+                          disabled={isSettingDevBuilderTier || tier === "architect"}
+                        >
+                          Architect
+                        </button>
+                      </div>
                     </div>
-                    <div className="auth-actions">
-                      <button
-                        type="button"
-                        className={isBuilderTierFree(tier) ? "" : "secondary"}
-                        onClick={() => void setDevBuilderTier("free")}
-                        disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
-                      >
-                        Free
-                      </button>
-                      <button
-                        type="button"
-                        className={tier === "builder" ? "" : "secondary"}
-                        onClick={() => void setDevBuilderTier("builder")}
-                        disabled={isSettingDevBuilderTier || tier === "builder"}
-                      >
-                        Builder
-                      </button>
-                      <button
-                        type="button"
-                        className={tier === "architect" ? "" : "secondary"}
-                        onClick={() => void setDevBuilderTier("architect")}
-                        disabled={isSettingDevBuilderTier || tier === "architect"}
-                      >
-                        Architect
-                      </button>
+                    <div className="account-row">
+                      <div className="account-identity">
+                        <span>Workspace runner probe (dev)</span>
+                        <strong>Creator-only Daytona substrate check</strong>
+                      </div>
+                      <div className="auth-actions">
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void runDaytonaProbe()}
+                          disabled={isRunningDaytonaProbe}
+                        >
+                          {isRunningDaytonaProbe ? "Probing…" : "Probe Daytona"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                    {daytonaProbeReport && (
+                      <div className="auth-status" style={{ whiteSpace: "pre-wrap" }}>
+                        {daytonaProbeReport}
+                      </div>
+                    )}
+                    {daytonaProbeError && <div className="auth-error">{daytonaProbeError}</div>}
+                  </>
                 )}
               </>
             );
