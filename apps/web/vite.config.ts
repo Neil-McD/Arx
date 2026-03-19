@@ -34,14 +34,15 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
-      dedupe: ["react", "react-dom"],
+      dedupe: ["react", "react-dom", "convex"],
       alias: {
         react: resolve(webRoot, "node_modules/react"),
         "react-dom": resolve(webRoot, "node_modules/react-dom"),
+        convex: resolve(webRoot, "node_modules/convex"),
       },
     },
     optimizeDeps: {
-      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+      include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "convex/browser"],
     },
     // Keep one source of truth for local env: repo root `.env`
     envDir: repoRoot,
