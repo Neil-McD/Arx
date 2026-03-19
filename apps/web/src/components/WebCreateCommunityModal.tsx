@@ -27,7 +27,6 @@ type WebCreateCommunityModalProps = {
   createCommunityError: string | null;
   builderBillingError: string | null;
   isCreatingCommunity: boolean;
-  isStartingBuilderPortal: boolean;
   communityInitials: (value: string) => string;
   onClose: () => void;
   onPrimaryAction: () => Promise<void> | void;
@@ -64,7 +63,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     createCommunityError,
     builderBillingError,
     isCreatingCommunity,
-    isStartingBuilderPortal,
     communityInitials,
     onClose,
     onPrimaryAction,
@@ -246,7 +244,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 className="create-community-primary"
                 type="button"
                 onClick={() => void onPrimaryAction()}
-                disabled={isCreatingCommunity || isStartingBuilderPortal || createCommunityName.trim().length === 0}
+                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
               >
                 {isCreatingCommunity
                   ? "Creating..."

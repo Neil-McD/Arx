@@ -2,16 +2,12 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BuilderCheckoutTier, BuilderUpgradeContextValue } from "./builderBilling";
 import { resolveCurrentSession } from "./ensureUsableSession";
 
-import {
-  openCloudBuilderBillingPortal,
-  startCloudBuilderCheckout,
-  startCloudConnectOnboarding,
-} from "./cloudBuilderBillingGateway";
+import { startCloudBuilderCheckout } from "./cloudBuilderBillingGateway";
 
 export type BuilderCheckoutRequestTier = BuilderCheckoutTier;
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
 
-type BillingActionKind = "checkout" | "portal" | "connect";
+type BillingActionKind = "checkout";
 
 type UseBuilderBillingActionsCoreArgs<SessionT> = {
   getSession: () => SessionT | null;
@@ -22,8 +18,6 @@ type UseBuilderBillingActionsCoreArgs<SessionT> = {
   ) => Promise<void> | void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
-  setIsStartingBuilderPortal: Dispatch<SetStateAction<boolean>>;
-  setIsStartingConnectOnboarding: Dispatch<SetStateAction<boolean>>;
   buildCheckoutPayload: (input: {
     tier: BuilderCheckoutTier;
     context: BuilderUpgradeContext;
@@ -32,8 +26,6 @@ type UseBuilderBillingActionsCoreArgs<SessionT> = {
     successUrl: string;
     cancelUrl: string;
   };
-  buildPortalPayload: (input: { context: BuilderUpgradeContext }) => { returnUrl: string };
-  buildConnectPayload: () => { returnUrl: string; refreshUrl: string };
   openUrl: (kind: BillingActionKind, url: string) => Promise<boolean> | boolean;
 };
 
@@ -87,65 +79,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
     [],
   );
 
-  const openBuilderBillingPortal = useCallback(
-    async (context: BuilderUpgradeContext = "builder"): Promise<void> => {
-      const current = argsRef.current;
-      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
-      if (!session) {
-        await current.onMissingAuth("portal", { context });
-        return;
-      }
-
-      current.setBuilderBillingError(null);
-      current.setIsStartingBuilderPortal(true);
-      try {
-        const payload = current.buildPortalPayload({ context });
-        const data = await openCloudBuilderBillingPortal({
-          session,
-          returnUrl: payload.returnUrl,
-        });
-        const portalUrl = readRequiredStringField(data, "url", "Missing portal URL.");
-        const opened = await current.openUrl("portal", portalUrl);
-        if (!opened) throw new Error("Failed to open billing portal.");
-      } catch (error) {
-        current.setBuilderBillingError(formatActionError(error, "Failed to open billing portal."));
-      } finally {
-        current.setIsStartingBuilderPortal(false);
-      }
-    },
-    [],
-  );
-
-  const startConnectOnboarding = useCallback(async (): Promise<void> => {
-    const current = argsRef.current;
-    const session = await resolveCurrentSession(current.getSession, current.ensureSession);
-    if (!session) {
-      await current.onMissingAuth("connect", {});
-      return;
-    }
-
-    current.setBuilderBillingError(null);
-    current.setIsStartingConnectOnboarding(true);
-    try {
-      const payload = current.buildConnectPayload();
-      const data = await startCloudConnectOnboarding({
-        session,
-        returnUrl: payload.returnUrl,
-        refreshUrl: payload.refreshUrl,
-      });
-      const linkUrl = readRequiredStringField(data, "url", "Missing onboarding URL.");
-      const opened = await current.openUrl("connect", linkUrl);
-      if (!opened) throw new Error("Failed to open onboarding.");
-    } catch (error) {
-      current.setBuilderBillingError(formatActionError(error, "Failed to start payout setup."));
-    } finally {
-      current.setIsStartingConnectOnboarding(false);
-    }
-  }, []);
-
   return {
     startBuilderPlanCheckout,
-    openBuilderBillingPortal,
-    startConnectOnboarding,
   };
 }

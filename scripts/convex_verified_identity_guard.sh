@@ -8,6 +8,7 @@ echo "== Convex verified identity guard =="
 
 TARGET_FILE="convex/http.ts"
 AUTH_FILE="convex/auth.ts"
+AUTH_ACTOR_FILE="convex/authActor.ts"
 GATES_FILE="convex/gates.ts"
 THREADS_FILE="convex/threads.ts"
 PROJECTS_FILE="convex/projects.ts"
@@ -56,8 +57,10 @@ fi
 echo "OK: no unconditional explicit-subject fallback in $AUTH_IDENTITY_FILE."
 
 echo "[5/13] Ensuring auth functions resolve authenticated subject via identity helper..."
-require_contains "$AUTH_FILE" 'resolveAuthenticatedSubject\(' \
-  "convex/auth.ts must resolve authenticated subject via identity helper"
+require_contains "$AUTH_ACTOR_FILE" 'resolveAuthenticatedSubject\(' \
+  "convex/authActor.ts must resolve authenticated subject via identity helper"
+require_contains "$AUTH_FILE" 'ensureAuthenticatedActor\(|findAuthenticatedActorState\(|resolveAuthenticatedActor\(' \
+  "convex/auth.ts delegates authenticated actor resolution through authActor seam"
 require_contains "$GATES_FILE" 'resolveAuthenticatedSubject\(' \
   "convex/gates.ts must resolve authenticated subject via identity helper"
 

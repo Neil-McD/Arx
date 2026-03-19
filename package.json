@@ -28,12 +28,14 @@
     "check:runtime-router-loop-contract-guard": "bash scripts/runtime_router_loop_contract_check.sh",
     "check:runtime-tool-loop-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_loop_proof.ts",
     "check:no-legacy-provider-repo-guard": "bash scripts/no_legacy_provider_repo_guard.sh",
+    "check:no-platform-fallback-guard": "bash scripts/no_platform_fallback_guard.sh",
     "check:gate-parity": "bash scripts/gate_parity_contract_check.sh",
     "check:foundation-baseline": "bash scripts/foundation_baseline_gate.sh"
   },
   "dependencies": {
     "convex": "^1.32.0",
     "highlight.js": "^11.11.1",
+    "lucide-react": "^0.577.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -13,6 +13,7 @@ RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
 SEND_FLOW_FILE="shared/useWebSendFlowController.ts"
+SCHEMA_FILE="convex/schema.ts"
 
 if [[ ! -f "$HTTP_FILE" ]]; then
   echo "FAIL: missing $HTTP_FILE"
@@ -40,6 +41,10 @@ if [[ ! -f "$THREADS_FILE" ]]; then
 fi
 if [[ ! -f "$SEND_FLOW_FILE" ]]; then
   echo "FAIL: missing $SEND_FLOW_FILE"
+  exit 1
+fi
+if [[ ! -f "$SCHEMA_FILE" ]]; then
+  echo "FAIL: missing $SCHEMA_FILE"
   exit 1
 fi
 require_match_in_file() {
@@ -119,12 +124,12 @@ require_match_in_file "$HANDLERS_FILE" 'if \(existingReplay\) \{' \
 ASSIST_LOOKUP_LINE="$(rg -n -S 'existingAssistant = \(await ctx\.runQuery\(' "$PERSISTENCE_FILE" | head -n 1 | cut -d: -f1)"
 CHATGPT_COMPLETION_LINE="$(rg -n -S 'runChatgptCompletion\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
 OPENROUTER_COMPLETION_LINE="$(rg -n -S 'runOpenRouterCompletion\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
-DAYTONA_LOOP_LINE="$(rg -n -S 'executeWorkspaceAgentLoop\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
+UNIFIED_TOOL_LOOP_LINE="$(rg -n -S 'executeChatToolsAgentLoop\(' "$HANDLERS_FILE" | tail -n 1 | cut -d: -f1)"
 if [[ -z "$ASSIST_LOOKUP_LINE" ]]; then
   echo "FAIL: unable to verify assistant lookup ordering in runtime turn path"
   exit 1
 fi
-for COMPLETION_LINE in "$CHATGPT_COMPLETION_LINE" "$OPENROUTER_COMPLETION_LINE" "$DAYTONA_LOOP_LINE"; do
+for COMPLETION_LINE in "$CHATGPT_COMPLETION_LINE" "$OPENROUTER_COMPLETION_LINE" "$UNIFIED_TOOL_LOOP_LINE"; do
   [[ -z "$COMPLETION_LINE" ]] && continue
   if (( ASSIST_LOOKUP_LINE >= COMPLETION_LINE )); then
     echo "FAIL: idempotency assistant lookup must occur before runtime inference/tool call"
@@ -156,10 +161,24 @@ require_match_in_file "$THREADS_FILE" 'return existingByMessageKey;' \
   "threads mutation returns existing row for duplicate messageKey"
 
 echo "[10/10] Guard passed."
-echo "[11/11] Ensuring browser execution target follows entitlement, not preferred lane..."
-require_match_in_file "$SEND_FLOW_FILE" 'return argsRef\.current\.hasPaidAccess \? "daytona_workspace" : "chat";' \
-  "authenticated browser turns request workspace solely from paid entitlement"
-forbid_match_in_file "$SEND_FLOW_FILE" 'preferredModelLane === "cloud"' \
-  "browser execution target does not depend on preferred model lane"
+echo "[11/11] Ensuring browser tool routing is structural, not heuristic..."
+require_match_in_file "$SEND_FLOW_FILE" 'function resolveAuthenticatedTurnRuntimeFlags\(' \
+  "browser send flow derives structural runtime flags"
+require_match_in_file "$SEND_FLOW_FILE" 'requestedAgenticTools: true' \
+  "authenticated turns stay tool-capable by default"
+forbid_match_in_file "$SEND_FLOW_FILE" 'requiresWorkspaceTools' \
+  "browser send flow no longer carries a workspace-mode flag"
+forbid_match_in_file "$SEND_FLOW_FILE" 'resolveAuthenticatedTurnToolMode' \
+  "browser send flow no longer uses heuristic tool mode classification"
+forbid_match_in_file "$SEND_FLOW_FILE" 'TRIVIAL_CHAT_MESSAGE_RE|CHAT_TOOLS_ACTION_RE|WORKSPACE_ACTION_RE' \
+  "browser send flow no longer uses regex intent heuristics"
+forbid_match_in_file "$SEND_FLOW_FILE" 'return argsRef\.current\.hasPaidAccess \? "daytona_workspace" : "chat";' \
+  "browser send flow no longer routes paid turns to workspace by default"
+forbid_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
+  "runtime no longer uses a separate eager workspace executor"
+forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
+  "runtimeRuns schema no longer carries requestedExecutionTarget compatibility residue"
+forbid_match_in_file "$SCHEMA_FILE" 'requiresWorkspaceTools' \
+  "runtimeRuns schema no longer carries requiresWorkspaceTools compatibility residue"
 
 echo "PASS: runtime turn contract markers are present and hardened."

@@ -10,7 +10,6 @@ type CommunityAiFeedPanelProps = {
   capabilities: {
     hasActiveCommunity: boolean;
     hasSession: boolean;
-    canPost: boolean;
     activeCommunityName: string | null;
   };
   state: {
@@ -184,12 +183,6 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
               </div>
               {post.title ? <h3 className="ai-feed-item-title">{post.title}</h3> : null}
               <p className="ai-feed-item-summary">{post.body}</p>
-              {post.why_now ? (
-                <div className="ai-feed-item-section">
-                  <div className="ai-feed-item-section-label">Why now</div>
-                  <div className="ai-feed-item-section-body">{post.why_now}</div>
-                </div>
-              ) : null}
               {hasEvidence(post) ? (
                 <div className="ai-feed-item-section">
                   <div className="ai-feed-item-section-label">Evidence</div>

@@ -266,7 +266,7 @@ Suggested shape:
 11. `primary_cta`
    - `sign_in`
    - `join`
-   - `request_access`
+   - `join_approval`
    - `checkout`
    - `open_community`
 

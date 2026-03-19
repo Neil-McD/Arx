@@ -14,18 +14,13 @@ type BuilderBillingStatus = {
   user_id: string;
   builder_tier: "free" | "builder" | "architect";
   max_communities: number;
-  platform_fee_bps: number;
-  has_payouts: boolean;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
 };
 
 type UseWebCommerceAffiliateActionsArgs = {
   getSession: () => CloudSession | null;
   ensureSession?: () => Promise<CloudSession | null>;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
-  openCommunityWorkspace: (communityId: string) => void;
+  openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
   loadCommunities: (session: CloudSession) => Promise<void>;
   clearPendingPurchaseClaimToken: () => void;
   storePendingPurchaseClaimToken: (token: string) => void;
@@ -57,7 +52,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       args.setIsRedeemingClaim(true);
       args.setRedeemClaimError(null);
       try {
-        const communityId = await redeemPurchaseClaimRpc({
+        const claim = await redeemPurchaseClaimRpc({
           session,
           token,
         });
@@ -65,7 +60,10 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
         args.setCheckoutClaimToken(null);
         args.setCheckoutStatus("idle");
 
-        args.openCommunityWorkspace(communityId);
+        args.openCommunityWorkspace({
+          communityId: claim.community_id,
+          communitySlug: claim.community_slug ?? null,
+        });
         await args.loadCommunities(session);
       } catch (error) {
         const message =
@@ -164,7 +162,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
         const rows = await redeemPendingPurchaseClaimsRpc({
           session,
         });
-        const claimedCommunityId = rows[0]?.community_id;
+        const claimedCommunity = rows[0] ?? null;
         if (rows.length === 0) {
           if (!opts?.silentNoop) {
             args.setPendingPurchasesSuccess("No pending purchases found.");
@@ -177,8 +175,11 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
         await args.loadCommunities(session);
         args.setPendingPurchaseClaims([]);
 
-        if (claimedCommunityId && opts?.navigate !== false) {
-          args.openCommunityWorkspace(claimedCommunityId);
+        if (claimedCommunity && opts?.navigate !== false) {
+          args.openCommunityWorkspace({
+            communityId: claimedCommunity.community_id,
+            communitySlug: claimedCommunity.community_slug ?? null,
+          });
         }
         return rows.length;
       } catch (error) {

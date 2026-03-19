@@ -304,7 +304,8 @@ export const redeemPurchaseClaim = mutation({
       nowMs,
     });
     if (!communityId) throw new Error("claim_not_redeemable");
-    return [{ community_id: communityId }];
+    const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
+    return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
   },
 });
 
@@ -364,7 +365,7 @@ export const redeemPendingPurchaseClaims = mutation({
       .query("purchaseClaims")
       .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
       .collect()) as PurchaseClaimLike[];
-    const out: Array<{ community_id: string }> = [];
+    const out: Array<{ community_id: string; community_slug: string | null }> = [];
     const seen = new Set<string>();
     for (const claim of rows) {
       const communityId = await redeemClaimRow({
@@ -376,7 +377,11 @@ export const redeemPendingPurchaseClaims = mutation({
       if (!communityId) continue;
       if (seen.has(communityId)) continue;
       seen.add(communityId);
-      out.push({ community_id: communityId });
+      const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
+      out.push({
+        community_id: communityId,
+        community_slug: String(community?.slug ?? "") || null,
+      });
     }
     return out;
   },

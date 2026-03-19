@@ -7,7 +7,6 @@ import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisi
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import {
   fetchCloudMyJoinRequestBySlug,
-  requestCloudCommunityAccessBySlug,
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
@@ -29,17 +28,15 @@ type UseWebPublicFunnelActionsArgs<
   ensureSession?: (session: CloudSession | null) => Promise<CloudSession | null>;
   openAuthGate: (intentInput: PendingAuthIntentInput) => void;
   loadCommunities: (session: CloudSession) => Promise<void>;
-  openCommunityWorkspace: (communityId: string) => void;
+  openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
   isUuid: (value: string) => boolean;
 
   setIsJoiningPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
-  setPublicRequestAccessError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunity: Dispatch<SetStateAction<PublicCommunityT | null>>;
 
   setIsLoadingMyPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
   setMyPublicCommunityJoinRequest: Dispatch<SetStateAction<MyCommunityJoinRequestT | null>>;
-  setIsRequestingPublicCommunityAccess: Dispatch<SetStateAction<boolean>>;
 
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
@@ -121,15 +118,24 @@ export function useWebPublicFunnelActions<
         });
         clearPendingPublicJoin();
 
-        args.openCommunityWorkspace(joinedId);
+        args.openCommunityWorkspace({
+          communityId: joinedId,
+          communitySlug: trimmedSlug || null,
+        });
         await args.loadCommunities(session);
       } catch (error) {
         const message = getErrorMessage(error, "Failed to join community.");
         const kind = classifyPublicCommunityJoinError(error);
-        if (kind === "approval_required") {
+        if (kind === "approval_pending" || kind === "approval_denied") {
           clearPendingPublicJoin();
           args.setPublicJoinError(null);
-          args.setPublicRequestAccessError("This community now requires approval. Request access to continue.");
+          if (trimmedId) {
+            args.setMyPublicCommunityJoinRequest({
+              community_id: trimmedId,
+              status: kind === "approval_denied" ? "denied" : "pending",
+              updated_at: new Date().toISOString(),
+            } as MyCommunityJoinRequestT);
+          }
           args.setPublicCommunity((prev) =>
             prev
               ? ({
@@ -145,7 +151,6 @@ export function useWebPublicFunnelActions<
         }
         if (kind === "paid_plan_required") {
           clearPendingPublicJoin();
-          args.setPublicRequestAccessError(null);
           args.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
           args.setPublicCommunity((prev) =>
             prev
@@ -165,76 +170,11 @@ export function useWebPublicFunnelActions<
     [args, loadMyJoinRequestBySlug],
   );
 
-  const requestCommunityAccess = useCallback(
-    async (opts: { communitySlug: string; message?: string | null }): Promise<void> => {
-      const trimmedSlug = (opts.communitySlug ?? "").trim();
-      if (!trimmedSlug) return;
-      const message = typeof opts.message === "string" ? opts.message.trim() || null : null;
-
-      const rawSession = args.getSession() ?? args.session;
-      const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
-      if (!session) {
-        args.openAuthGate({
-          reason: "request_community_access",
-          payload: { community_slug: trimmedSlug, message },
-        });
-        return;
-      }
-
-      args.setIsRequestingPublicCommunityAccess(true);
-      args.setPublicRequestAccessError(null);
-      try {
-        const row = await requestCloudCommunityAccessBySlug<CloudSession, MyCommunityJoinRequestT>({
-          session,
-          communitySlug: trimmedSlug,
-          message,
-        });
-        args.setMyPublicCommunityJoinRequest(row);
-        if (row && (row.status ?? "").trim().toLowerCase() === "approved") {
-          args.openCommunityWorkspace(row.community_id);
-          await args.loadCommunities(session);
-        }
-      } catch (error) {
-        const resolved = getErrorMessage(error, "Failed to request access.");
-        const kind = classifyPublicCommunityJoinError(error);
-        if (kind === "paid_communities_do_not_use_request_access") {
-          args.setPublicRequestAccessError("This community uses paid checkout. Select a plan to continue.");
-          args.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "paid_subscription",
-                } as PublicCommunityT)
-              : prev,
-          );
-          return;
-        }
-        if (kind === "request_access_not_required") {
-          args.setPublicRequestAccessError("Approval is no longer required. You can join for free now.");
-          args.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "open",
-                } as PublicCommunityT)
-              : prev,
-          );
-          return;
-        }
-        args.setPublicRequestAccessError(resolved);
-      } finally {
-        args.setIsRequestingPublicCommunityAccess(false);
-      }
-    },
-    [args],
-  );
-
   const loadPublicCommunity = useCallback(
     async (slug: string): Promise<void> => {
       args.setIsLoadingPublicCommunity(true);
       args.setPublicCommunityError(null);
       args.setPublicJoinError(null);
-      args.setPublicRequestAccessError(null);
       args.setPublicCommunity(null);
       args.setPublicCommunityPlans([]);
       args.setMyPublicCommunityJoinRequest(null);
@@ -253,7 +193,10 @@ export function useWebPublicFunnelActions<
               communitySlug: payload.community.slug,
             });
             if (access && (access.can_enter_community || access.is_owner)) {
-              args.openCommunityWorkspace(access.community_id);
+              args.openCommunityWorkspace({
+                communityId: access.community_id,
+                communitySlug: payload.community.slug,
+              });
               await args.loadCommunities(session);
               return;
             }
@@ -270,7 +213,7 @@ export function useWebPublicFunnelActions<
 
         if (
           session &&
-          deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "request_access"
+          deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "join_approval"
         ) {
           void loadMyJoinRequestBySlug(payload.community.slug, session);
         }
@@ -328,7 +271,6 @@ export function useWebPublicFunnelActions<
 
   return {
     joinPublicCommunity,
-    requestCommunityAccess,
     loadPublicCommunity,
     startCheckoutForPlan,
   };

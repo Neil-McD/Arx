@@ -1,6 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -25,32 +25,6 @@ function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boole
   if (startsAt > nowMs) return false;
   if (typeof endsAt === "number" && nowMs > endsAt) return false;
   return true;
-}
-
-function normalizeIdValue(raw: unknown): string {
-  return String(raw ?? "").trim();
-}
-
-async function resolveUserIdForAuthenticatedRequest(args: {
-  ctx: any;
-  userId?: any;
-  authSubject?: string | null;
-}): Promise<any> {
-  const userIdInput = normalizeIdValue(args.userId);
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
-  if (!user) throw new Error("user_not_found");
-  const resolvedUserId = normalizeIdValue(user._id);
-  if (userIdInput && userIdInput !== resolvedUserId) {
-    throw new Error("user_id_mismatch");
-  }
-  return user._id;
 }
 
 export const getCanonicalTierByUserId = query({

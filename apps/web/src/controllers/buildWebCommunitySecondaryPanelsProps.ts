@@ -3,7 +3,6 @@ import type { ComponentProps } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
-import { formatCommunityVisibilityLabel } from "../../../../shared/communityVisibility";
 import type { WebCommunitySecondaryPanelsProps } from "../components/WebCommunitySecondaryPanels";
 import { CommunityAiFeedPanel } from "../components/CommunityAiFeedPanel";
 import { WebCommunityAiAgentSection } from "../components/WebCommunityAiAgentSection";
@@ -11,6 +10,7 @@ import { WebCommunityAnalyticsSection } from "../components/WebCommunityAnalytic
 import { WebCommunityBannerEditorModal } from "../components/WebCommunityBannerEditorModal";
 import { WebCommunityFunnelSection } from "../components/WebCommunityFunnelSection";
 import { WebCommunityMembersSection } from "../components/WebCommunityMembersSection";
+import { WebCommunityPolynetSection } from "../components/WebCommunityPolynetSection";
 import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
 import { WebCommunityResourcesSection } from "../components/WebCommunityResourcesSection";
 import { WebCommunitySettingsSection } from "../components/WebCommunitySettingsSection";
@@ -18,6 +18,7 @@ import { WebCommunitySettingsSection } from "../components/WebCommunitySettingsS
 type SettingsSectionProps = ComponentProps<typeof WebCommunitySettingsSection>;
 type BannerEditorModalProps = ComponentProps<typeof WebCommunityBannerEditorModal>;
 type FeedPanelProps = ComponentProps<typeof CommunityAiFeedPanel>;
+type PolynetSectionProps = ComponentProps<typeof WebCommunityPolynetSection>;
 type AiAgentSectionProps = ComponentProps<typeof WebCommunityAiAgentSection>;
 type FunnelSectionProps = ComponentProps<typeof WebCommunityFunnelSection>;
 type AnalyticsSectionProps = ComponentProps<typeof WebCommunityAnalyticsSection>;
@@ -32,7 +33,7 @@ type BuildWebCommunitySecondaryPanelsPropsArgs = {
     actions: Omit<
       SettingsSectionProps["actions"],
       "openCommunityBannerFocusModal" | "closeCommunityBannerFocusModal" | "setCommunityPricingDirty" |
-      "communityInitials" | "slugifyCommunityName" | "formatCommunityVisibilityLabel"
+      "communityInitials" | "slugifyCommunityName"
     > & {
       communityPricingDirtyRef: MutableRefObject<boolean>;
     };
@@ -45,6 +46,7 @@ type BuildWebCommunitySecondaryPanelsPropsArgs = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   feed: FeedPanelProps;
+  polynet: PolynetSectionProps;
   aiAgent: AiAgentSectionProps;
   funnel: FunnelSectionProps;
   analytics: AnalyticsSectionProps;
@@ -67,7 +69,6 @@ export function buildWebCommunitySecondaryPanelsProps(
       },
       communityInitials,
       slugifyCommunityName,
-      formatCommunityVisibilityLabel,
     },
   };
 
@@ -91,6 +92,7 @@ export function buildWebCommunitySecondaryPanelsProps(
     settingsSectionProps,
     bannerEditorModalProps,
     feedPanelProps: args.feed,
+    polynetSectionProps: args.polynet,
     aiAgentSectionProps: args.aiAgent,
     funnelSectionProps: args.funnel,
     analyticsSectionProps: args.analytics,

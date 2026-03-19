@@ -18,5 +18,5 @@ Use these instead:
 Why it was superseded:
 
 1. It encoded older tier/runtime assumptions that no longer match the live worktree.
-2. It predated the current canonical `requestedExecutionTarget` and capability-family model.
+2. It predated the current capability-family model and structural tool-activation path.
 3. It should not be used for implementation decisions.

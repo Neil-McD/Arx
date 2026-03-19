@@ -3,6 +3,8 @@ import {
   bootstrapSession as bootstrapCloudSession,
   completeOAuthCallback as completeCloudOAuthCallback,
   decodeAuthJwtPayload as decodeJwtPayload,
+  ensureAuthSessionForAuthenticatedSendResult as ensureCloudSessionForAuthenticatedSendResult,
+  ensureAuthSessionForRequestResult as ensureCloudSessionForRequestResult,
   ensureAuthSessionForRequest as ensureCloudSessionForRequest,
   fetchWithAuthShared as fetchWithCloudAuthShared,
   fetchWithPublicShared as fetchWithCloudPublicShared,
@@ -13,11 +15,16 @@ import {
   isAuthJwtExpired as isCloudJwtExpired,
   isLikelyAuthJwt as isLikelyJwt,
   readAuthError as readCloudError,
+  refreshAuthSessionResult as refreshCloudSessionResult,
+  refreshAuthSessionWithLockResult as refreshCloudSessionWithLockResult,
   refreshAuthSessionWithLock as refreshCloudSessionWithLock,
   refreshAuthSession as refreshCloudSession,
   sendAuthMagicLinkOtp as sendCloudMagicLinkOtp,
+  type AuthSessionEnsureResult as CloudSessionEnsureResult,
   type AuthSession as CloudSession,
+  type AuthSessionRefreshResult as CloudSessionRefreshResult,
   type AuthUser as CloudUser,
+  type AuthSessionRefreshResultInFlightRef as CloudSessionRefreshResultInFlightRef,
 } from "../../../shared/authSessionCore";
 import { parseOAuthCallbackFromLocation as parseCloudOAuthCallbackFromLocation } from "../../../shared/authOAuthCallback";
 
@@ -170,6 +177,8 @@ export function clearPersistedCloudSession(): void {
 
 export type CloudAuthSession = CloudSession;
 export type CloudAuthUser = CloudUser;
+export type CloudAuthSessionRefreshResult = CloudSessionRefreshResult;
+export type CloudAuthSessionEnsureResult = CloudSessionEnsureResult;
 
 export const decodeCloudJwtPayload = decodeJwtPayload;
 export const getCloudPublishableKey = getCloudAnonKey;
@@ -181,6 +190,8 @@ export {
   bootstrapCloudSession,
   completeCloudOAuthCallback,
   decodeJwtPayload,
+  ensureCloudSessionForAuthenticatedSendResult,
+  ensureCloudSessionForRequestResult,
   ensureCloudSessionForRequest,
   fetchWithCloudAuthShared,
   fetchWithCloudPublicShared,
@@ -191,6 +202,8 @@ export {
   isLikelyJwt,
   isCloudJwtExpired,
   readCloudError,
+  refreshCloudSessionResult,
+  refreshCloudSessionWithLockResult,
   refreshCloudSessionWithLock,
   refreshCloudSession,
   sendCloudMagicLinkOtp,

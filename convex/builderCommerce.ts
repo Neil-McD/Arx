@@ -66,9 +66,8 @@ export const openBuilderBillingPortal = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const url = String(args.returnUrl ?? "").trim();
-    if (!url) throw new Error("portal_return_url_required");
-    return { url };
+    void args.returnUrl;
+    throw new Error("builder_billing_portal_unavailable");
   },
 });
 
@@ -85,9 +84,8 @@ export const startConnectOnboarding = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
+    void args.returnUrl;
     void args.refreshUrl;
-    const url = String(args.returnUrl ?? "").trim();
-    if (!url) throw new Error("connect_return_url_required");
-    return { url };
+    throw new Error("builder_payout_onboarding_unavailable");
   },
 });

@@ -15,13 +15,13 @@ export type CommunityFunnelHeroMediaKind = "image" | "video";
 export type CommunityFunnelConfig = {
   hero_media_url: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
-  about: string | null;
 };
 
 export type DiscoverCommunitySnapshot = {
   slug: string;
   name: string;
   one_liner: string | null;
+  about?: string | null;
   avatar_url: string | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
@@ -67,7 +67,7 @@ export type CommunityAccess = {
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: string | null;
-  primary_cta?: "open_community" | "join" | "request_access" | "checkout";
+  primary_cta?: "open_community" | "join" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;
   access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
@@ -108,14 +108,13 @@ export type CommunityAiFeedReactionCounts = {
 export type CommunityAiFeedPost = {
   id: string;
   community_id: string;
-  author_type: "agent" | "human";
+  author_type: "agent";
   author_user_id: string | null;
   agent_key: string | null;
   author_label: string;
   post_type: CommunityAiFeedPostType;
   title: string | null;
   body: string;
-  why_now: string | null;
   evidence: string[];
   status: CommunityAiFeedPostStatus;
   score: number;
@@ -128,54 +127,50 @@ export type CommunityAiFeedPost = {
   pending?: boolean;
 };
 
-export type CommunityCompilerRepeatedQuestion = {
-  label: string;
-  count_hint: number | null;
-  supporting_chat_message_ids: string[];
-};
-
-export type CommunityCompilerRelevantResource = {
-  resource_id: string;
-  title: string;
-  why_relevant: string | null;
-  url: string | null;
+export type CommunityRecentContextItem = {
+  source_type: "chat" | "ai_feed" | "resource";
+  source_id: string;
+  title: string | null;
   snippet: string;
-  score?: number | null;
-};
-
-export type CommunityCompilerRankedInsight = {
-  post_id: string;
-  title: string;
-  body: string;
-  effective_score: number;
   created_at: string;
+  score: number | null;
+  author_label?: string | null;
+  url?: string | null;
+  post_type?: "observation" | "recommendation" | "action" | null;
+  resource_type?: string | null;
 };
 
-export type CommunityCompilerRecentChatSignal = {
-  message_id: string;
-  sender_label: string;
-  snippet: string;
-  score?: number | null;
-  created_at: string;
-};
-
-export type CommunityCompilerReadModelV1 = {
+export type CommunityRecentContextReadModelV1 = {
   community_id: string;
-  compiled_at: string;
+  identity: {
+    community_id: string;
+    name: string | null;
+    slug: string | null;
+    one_liner: string | null;
+    about: string | null;
+  };
+  retrieved_at: string;
+  query: string;
   source_window: {
     chat_messages_considered: number;
+    ai_feed_items_considered: number;
     resources_considered: number;
-    ranked_feed_items_considered: number;
   };
-  summary: string | null;
-  repeated_questions: CommunityCompilerRepeatedQuestion[];
-  relevant_resources: CommunityCompilerRelevantResource[];
-  ranked_insights: CommunityCompilerRankedInsight[];
-  recent_chat_signals: CommunityCompilerRecentChatSignal[];
+  source_counts: {
+    chat: number;
+    ai_feed: number;
+    resource: number;
+  };
+  recent_context: CommunityRecentContextItem[];
   diagnostics: {
     version: 1;
     fallback_used: boolean;
-    compiler_latency_ms: number;
+    retrieval_version: string;
+    retrieval_latency_ms: number;
+    retrieved_items_used: number;
+    chat_fetch_ok: boolean;
+    ai_feed_fetch_ok: boolean;
+    resource_fetch_ok: boolean;
   };
 };
 
@@ -194,8 +189,6 @@ export type AnalyticsPoint = {
 };
 
 export type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
-
-export type AnalyticsChartMode = "members" | "revenue";
 
 export type CommunityPricingMode = "free" | "monthly" | "annual";
 

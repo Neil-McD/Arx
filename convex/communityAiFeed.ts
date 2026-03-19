@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -8,10 +8,8 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { upsertArchiveDocumentForAiFeedPost } from "./communityArchiveDocuments";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DECAY_WINDOW_DAYS = 3;
-const RANKED_THRESHOLD = 2;
 const HIDE_THRESHOLD = -2;
 const GOOD_WEIGHT = 1;
 const LOW_SIGNAL_WEIGHT = -1;
@@ -19,7 +17,7 @@ const LOW_SIGNAL_WEIGHT = -1;
 type FeedPostRow = {
   _id: any;
   communityId: any;
-  authorType: "agent" | "human";
+  authorType: "agent";
   authorUserId?: any;
   agentKey?: string;
   authorLabel: string;
@@ -42,10 +40,10 @@ type FeedReactionRow = {
   _id: any;
   communityId: any;
   postId: any;
-  actorType: "human" | "agent";
+  actorType?: "human" | "agent";
   actorKey: string;
   actorUserId?: any;
-  agentKey?: string;
+  actorAgentKey?: string;
   reactionType: "good" | "low_signal";
   createdAt: number;
   updatedAt: number;
@@ -89,26 +87,20 @@ function normalizeFeedEvidence(raw: unknown): string[] {
   return deduped;
 }
 
-function reactionWeight(args: {
-  actorType: "human" | "agent";
-  reactionType: "good" | "low_signal";
-}): number {
-  void args.actorType;
-  if (args.reactionType === "good") {
+function voteActorKeyForUser(userId: any): string {
+  return `user:${normalizeIdValue(userId)}`;
+}
+
+function reactionWeight(reactionType: "good" | "low_signal"): number {
+  if (reactionType === "good") {
     return GOOD_WEIGHT;
   }
   return LOW_SIGNAL_WEIGHT;
 }
 
-function decayForPost(post: FeedPostRow, nowMs: number): number {
-  return Math.max(
-    0,
-    Math.floor((Math.max(nowMs, post.createdAt) - post.createdAt) / (DAY_MS * DECAY_WINDOW_DAYS)),
-  );
-}
-
 function effectiveScoreForPost(post: FeedPostRow, nowMs: number): number {
-  return post.score - decayForPost(post, nowMs);
+  void nowMs;
+  return Number(post.score ?? 0);
 }
 
 async function mapFeedPostRow(args: {
@@ -128,7 +120,6 @@ async function mapFeedPostRow(args: {
     post_type: post.type,
     title: String(post.title ?? "").trim() || null,
     body: post.body,
-    why_now: String(post.whyNow ?? "").trim() || null,
     evidence: normalizeFeedEvidence(post.evidence),
     status: normalizeFeedStatus(post.status),
     score: Number(post.score ?? 0),
@@ -172,7 +163,6 @@ async function getFeedPostOrThrow(ctx: any, postId: string): Promise<FeedPostRow
 async function insertFeedPost(args: {
   ctx: any;
   communityId: any;
-  authorType: "agent" | "human";
   authorUserId?: any;
   agentKey?: string | null;
   authorLabel: string;
@@ -211,7 +201,7 @@ async function insertFeedPost(args: {
   const authorLabel = normalizeName(args.authorLabel);
   const id = await args.ctx.db.insert("communityAiFeedPosts" as any, {
     communityId: args.communityId,
-    authorType: args.authorType,
+    authorType: "agent",
     authorUserId: args.authorUserId,
     agentKey: normalizeNoveltyKey(args.agentKey),
     authorLabel,
@@ -229,6 +219,7 @@ async function insertFeedPost(args: {
     updatedAt: args.nowMs,
   });
   const created = await getFeedPostOrThrow(args.ctx, normalizeIdValue(id));
+  await upsertArchiveDocumentForAiFeedPost(args.ctx, created);
   return await mapFeedPostRow({
     ctx: args.ctx,
     post: created,
@@ -242,7 +233,6 @@ async function recomputeReactionState(args: {
   post: FeedPostRow;
   oldReaction: FeedReactionRow | null;
   nextReactionType: "good" | "low_signal";
-  actorType: "human" | "agent";
   nowMs: number;
 }) {
   const nextCounts = {
@@ -257,10 +247,7 @@ async function recomputeReactionState(args: {
     } else if (args.oldReaction.reactionType === "low_signal") {
       nextCounts.lowSignal = Math.max(0, nextCounts.lowSignal - 1);
     }
-    nextScore -= reactionWeight({
-      actorType: args.oldReaction.actorType,
-      reactionType: args.oldReaction.reactionType,
-    });
+    nextScore -= reactionWeight(args.oldReaction.reactionType);
   }
 
   if (args.nextReactionType === "good") {
@@ -269,10 +256,7 @@ async function recomputeReactionState(args: {
     nextCounts.lowSignal += 1;
   }
 
-  nextScore += reactionWeight({
-    actorType: args.actorType,
-    reactionType: args.nextReactionType,
-  });
+  nextScore += reactionWeight(args.nextReactionType);
 
   const nextStatus = nextScore <= HIDE_THRESHOLD ? "hidden" : "live";
   await args.ctx.db.patch(args.post._id as any, {
@@ -285,56 +269,75 @@ async function recomputeReactionState(args: {
   });
 }
 
-export const listCommunityAiFeedLive = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("communityAiFeedPosts" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .collect()) as FeedPostRow[];
-    const selected = rows
-      .slice()
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit);
-    const actorKey = `human:${normalizeIdValue(userId)}`;
-    const viewerReactionsByPostId = await getViewerReactionsByPostId({
-      ctx,
-      actorKey,
-      postIds: selected.map((row) => normalizeIdValue(row._id)),
-    });
-    return await Promise.all(
-      selected.map((post) =>
-        mapFeedPostRow({
-          ctx,
-          post,
-          viewerReaction: viewerReactionsByPostId.get(normalizeIdValue(post._id)) ?? null,
-          nowMs,
-        }),
-      ),
-    );
-  },
-});
+type FeedPostProjection = Awaited<ReturnType<typeof mapFeedPostRow>>;
 
-export const listCommunityAiFeedRanked = query({
+async function listCommunityAiFeedBundleInternal(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  limit?: number;
+}): Promise<{ live: FeedPostProjection[]; ranked: FeedPostProjection[] }> {
+  await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
+  const nowMs = Date.now();
+  const rows = (await args.ctx.db
+    .query("communityAiFeedPosts" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", args.communityId).eq("status", "live"),
+    )
+    .collect()) as FeedPostRow[];
+  const liveSelected = rows
+    .slice()
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit);
+  const rankedSelected = rows
+    .slice()
+    .sort((a, b) => {
+      const scoreDelta = effectiveScoreForPost(b, nowMs) - effectiveScoreForPost(a, nowMs);
+      if (scoreDelta !== 0) return scoreDelta;
+      return b.createdAt - a.createdAt;
+    })
+    .slice(0, limit);
+  const selectedById = new Map<string, FeedPostRow>();
+  for (const post of [...liveSelected, ...rankedSelected]) {
+    selectedById.set(normalizeIdValue(post._id), post);
+  }
+  const selectedRows = Array.from(selectedById.values());
+  const actorKey = voteActorKeyForUser(args.userId);
+  const viewerReactionsByPostId = await getViewerReactionsByPostId({
+    ctx: args.ctx,
+    actorKey,
+    postIds: selectedRows.map((row) => normalizeIdValue(row._id)),
+  });
+  const projections = new Map<string, FeedPostProjection>(
+    await Promise.all(
+      selectedRows.map(async (post) => {
+        const postId = normalizeIdValue(post._id);
+        const mapped = await mapFeedPostRow({
+          ctx: args.ctx,
+          post,
+          viewerReaction: viewerReactionsByPostId.get(postId) ?? null,
+          nowMs,
+        });
+        return [postId, mapped] as const;
+      }),
+    ),
+  );
+  return {
+    live: liveSelected
+      .map((post) => projections.get(normalizeIdValue(post._id)))
+      .filter((post): post is FeedPostProjection => Boolean(post)),
+    ranked: rankedSelected
+      .map((post) => projections.get(normalizeIdValue(post._id)))
+      .filter((post): post is FeedPostProjection => Boolean(post)),
+  };
+}
+
+export const listCommunityAiFeedBundle = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -347,43 +350,12 @@ export const listCommunityAiFeedRanked = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({
+    return await listCommunityAiFeedBundleInternal({
       ctx,
-      communityId: args.communityId,
       userId,
+      communityId: args.communityId,
+      limit: args.limit,
     });
-    const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("communityAiFeedPosts" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .collect()) as FeedPostRow[];
-    const selected = rows
-      .filter((post) => effectiveScoreForPost(post, nowMs) >= RANKED_THRESHOLD)
-      .sort((a, b) => {
-        const scoreDelta = effectiveScoreForPost(b, nowMs) - effectiveScoreForPost(a, nowMs);
-        if (scoreDelta !== 0) return scoreDelta;
-        return b.createdAt - a.createdAt;
-      })
-      .slice(0, limit);
-    const actorKey = `human:${normalizeIdValue(userId)}`;
-    const viewerReactionsByPostId = await getViewerReactionsByPostId({
-      ctx,
-      actorKey,
-      postIds: selected.map((row) => normalizeIdValue(row._id)),
-    });
-    return await Promise.all(
-      selected.map((post) =>
-        mapFeedPostRow({
-          ctx,
-          post,
-          viewerReaction: viewerReactionsByPostId.get(normalizeIdValue(post._id)) ?? null,
-          nowMs,
-        }),
-      ),
-    );
   },
 });
 
@@ -412,7 +384,7 @@ export const reactToCommunityAiFeedPost = mutation({
     }
 
     const reactionType = normalizeFeedReactionType(args.reactionType);
-    const actorKey = `human:${normalizeIdValue(userId)}`;
+    const actorKey = voteActorKeyForUser(userId);
     const existing = (await ctx.db
       .query("communityAiFeedReactions" as any)
       .withIndex("by_post_actorKey", (q: any) =>
@@ -433,7 +405,6 @@ export const reactToCommunityAiFeedPost = mutation({
       await ctx.db.insert("communityAiFeedReactions" as any, {
         communityId: post.communityId,
         postId: post._id,
-        actorType: "human",
         actorKey,
         actorUserId: userId,
         reactionType,
@@ -447,10 +418,10 @@ export const reactToCommunityAiFeedPost = mutation({
       post,
       oldReaction: existing,
       nextReactionType: reactionType,
-      actorType: "human",
       nowMs,
     });
     const updated = await getFeedPostOrThrow(ctx, normalizeIdValue(post._id));
+    await upsertArchiveDocumentForAiFeedPost(ctx, updated);
     const viewerReaction = (await ctx.db
       .query("communityAiFeedReactions" as any)
       .withIndex("by_post_actorKey", (q: any) =>
@@ -466,14 +437,10 @@ export const publishCommunityAiFeedAgentPost = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    agentKey: v.optional(v.union(v.string(), v.null())),
-    authorLabel: v.optional(v.union(v.string(), v.null())),
     postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     title: v.optional(v.union(v.string(), v.null())),
     body: v.string(),
-    whyNow: v.optional(v.union(v.string(), v.null())),
     evidence: v.optional(v.union(v.array(v.string()), v.null())),
-    noveltyKey: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -491,83 +458,13 @@ export const publishCommunityAiFeedAgentPost = mutation({
     return await insertFeedPost({
       ctx,
       communityId: args.communityId,
-      authorType: "agent",
       authorUserId: userId,
-      agentKey: args.agentKey ?? null,
-      authorLabel: normalizeOptionalText(args.authorLabel, 80) || "Community agent",
+      authorLabel: "Community agent",
       postType: args.postType,
       title: args.title ?? null,
       body: args.body,
-      whyNow: args.whyNow ?? null,
       evidence: args.evidence ?? null,
-      noveltyKey: args.noveltyKey ?? null,
       nowMs,
     });
-  },
-});
-
-export const reactToCommunityAiFeedPostAsAgent = internalMutation({
-  args: {
-    postId: v.id("communityAiFeedPosts"),
-    agentKey: v.string(),
-    reactionType: v.union(v.literal("good"), v.literal("low_signal")),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const post = await getFeedPostOrThrow(ctx, normalizeIdValue(args.postId));
-    if (post.status !== "live") {
-      return await mapFeedPostRow({ ctx, post, viewerReaction: null, nowMs });
-    }
-
-    const reactionType = normalizeFeedReactionType(args.reactionType);
-    const agentKey = normalizeNoveltyKey(args.agentKey);
-    if (!agentKey) throw new Error("community_ai_feed_agent_key_required");
-    const actorKey = `agent:${agentKey}`;
-    const existing = (await ctx.db
-      .query("communityAiFeedReactions" as any)
-      .withIndex("by_post_actorKey", (q: any) =>
-        q.eq("postId", post._id).eq("actorKey", actorKey),
-      )
-      .first()) as FeedReactionRow | null;
-
-    if (existing?.reactionType === reactionType) {
-      return await mapFeedPostRow({ ctx, post, viewerReaction: existing, nowMs });
-    }
-
-    if (existing) {
-      await ctx.db.patch(existing._id as any, {
-        reactionType,
-        updatedAt: nowMs,
-      });
-    } else {
-      await ctx.db.insert("communityAiFeedReactions" as any, {
-        communityId: post.communityId,
-        postId: post._id,
-        actorType: "agent",
-        actorKey,
-        agentKey,
-        reactionType,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-    }
-
-    await recomputeReactionState({
-      ctx,
-      post,
-      oldReaction: existing,
-      nextReactionType: reactionType,
-      actorType: "agent",
-      nowMs,
-    });
-    const updated = await getFeedPostOrThrow(ctx, normalizeIdValue(post._id));
-    const viewerReaction = (await ctx.db
-      .query("communityAiFeedReactions" as any)
-      .withIndex("by_post_actorKey", (q: any) =>
-        q.eq("postId", updated._id).eq("actorKey", actorKey),
-      )
-      .first()) as FeedReactionRow | null;
-    return await mapFeedPostRow({ ctx, post: updated, viewerReaction, nowMs });
   },
 });

@@ -13,6 +13,14 @@ import {
   toErrorMessage,
 } from "./webSendFlowCore";
 
+function resolveAuthenticatedTurnRuntimeFlags(): {
+  requestedAgenticTools: boolean;
+} {
+  return {
+    requestedAgenticTools: true,
+  };
+}
+
 export function useWebSendFlowController<
   SessionT,
   AttachmentT,
@@ -27,13 +35,6 @@ export function useWebSendFlowController<
   }, []);
 
   const resolvePreferredModelSelection = useCallback(() => resolvePreferredModelSelectionFromArgs(argsRef.current), []);
-
-  const resolveRequestedExecutionTargetForAuthenticatedTurn = useCallback(
-    (_threadId: string, _preferredModelLane: "public" | "cloud"): "chat" | "daytona_workspace" => {
-      return argsRef.current.hasPaidAccess ? "daytona_workspace" : "chat";
-    },
-    [],
-  );
 
   const persistGuestFromMessages = useCallback((messages: ThreadMessageT[]): void => {
     persistGuestThreadStorageFromMessages(argsRef.current, messages);
@@ -129,9 +130,12 @@ export function useWebSendFlowController<
       return;
     }
 
-    const hasActiveThreadInState = Boolean(
-      current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
-    );
+    const draftModeRequested = current.workspaceWantsNewChat === true;
+    const hasActiveThreadInState =
+      !draftModeRequested &&
+      Boolean(
+        current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
+      );
     if (hasActiveThreadInState && current.isThreadRunActive(current.activeThreadId)) {
       setErrorForThread(current.activeThreadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
       return;
@@ -149,18 +153,24 @@ export function useWebSendFlowController<
     current.setIsWorkspaceAtBottom(true);
     try {
       let threadId = hasActiveThreadInState ? current.activeThreadId : null;
+      let createdThreadRecord: ThreadRecordT | null = null;
       if (!threadId) {
         const created = await current.createThread(usableSession);
+        createdThreadRecord = created;
         threadId = created?.id ?? null;
         createdThreadId = threadId;
         if (!threadId) {
           const retryCreated = await current.createThread(usableSession);
+          if (!createdThreadRecord) createdThreadRecord = retryCreated;
           threadId = retryCreated?.id ?? null;
           if (!createdThreadId) createdThreadId = threadId;
         }
       }
       if (!threadId) {
         throw new Error("No thread available. Failed to create a cloud thread; please retry.");
+      }
+      if (startedInDraft && createdThreadRecord) {
+        current.onThreadCreated?.(createdThreadRecord);
       }
       runThreadId = threadId;
       current.setThreadRunSending(threadId, true);
@@ -237,11 +247,7 @@ export function useWebSendFlowController<
       const optimisticThreadMessages = [...priorThreadMessages, syntheticUserMessage];
       current.setThreadMessages(optimisticThreadMessages);
 
-      const requiresWorkspaceTools = usePublicModel
-        ? false
-        : resolveRequestedExecutionTargetForAuthenticatedTurn(threadId, preferredModelSelection.lane) ===
-          "daytona_workspace";
-      current.setThreadRunRequiresWorkspaceTools(threadId, requiresWorkspaceTools);
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "respond",
@@ -257,7 +263,7 @@ export function useWebSendFlowController<
                 ? "chatgpt"
                 : "platform",
         requestedFundingSource: preferredModelSelection.fundingSource,
-        requiresWorkspaceTools,
+        requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: messageId,
         messages: optimisticThreadMessages,
       });
@@ -277,14 +283,12 @@ export function useWebSendFlowController<
       if (startedInDraft) current.setIsSendingMessage(false);
       if (runThreadId) {
         current.setThreadRunSending(runThreadId, false);
-        current.setThreadRunRequiresWorkspaceTools(runThreadId, null);
       }
     }
   }, [
     maybeShowBuilderLimitUpgrade,
     persistGuestFromMessages,
     resolvePreferredModelSelection,
-    resolveRequestedExecutionTargetForAuthenticatedTurn,
     syncThreadModelSelection,
   ]);
 
@@ -325,17 +329,15 @@ export function useWebSendFlowController<
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
       const preferredModelSelection = resolvePreferredModelSelection();
       const preferredModelId = preferredModelSelection.modelId;
-      const usePublicModel = preferredModelSelection.lane === "public";
       const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
       if (!currentThreadModel || currentThreadModel !== preferredModelId) {
         syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
 
-      const requiresWorkspaceTools = usePublicModel
-        ? false
-        : resolveRequestedExecutionTargetForAuthenticatedTurn(threadId, preferredModelSelection.lane) ===
-          "daytona_workspace";
-      current.setThreadRunRequiresWorkspaceTools(threadId, requiresWorkspaceTools);
+      const latestUserText = current.extractTextFromContentJson(
+        currentThreadMessages[currentThreadMessages.length - 1]?.content_json,
+      );
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "respond",
@@ -351,7 +353,7 @@ export function useWebSendFlowController<
                 ? "chatgpt"
                 : "platform",
         requestedFundingSource: preferredModelSelection.fundingSource,
-        requiresWorkspaceTools,
+        requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
         messages: currentThreadMessages,
       });
@@ -363,12 +365,10 @@ export function useWebSendFlowController<
       maybeShowBuilderLimitUpgrade(message);
     } finally {
       current.setThreadRunSending(threadId, false);
-      current.setThreadRunRequiresWorkspaceTools(threadId, null);
     }
   }, [
     maybeShowBuilderLimitUpgrade,
     resolvePreferredModelSelection,
-    resolveRequestedExecutionTargetForAuthenticatedTurn,
     syncThreadModelSelection,
   ]);
 
@@ -433,11 +433,10 @@ export function useWebSendFlowController<
         await current.deleteThreadMessagesByIds(usableSession, trailingMessageIds);
 
       }
-      const requiresWorkspaceTools = usePublicModel
-        ? false
-        : resolveRequestedExecutionTargetForAuthenticatedTurn(threadId, preferredModelSelection.lane) ===
-          "daytona_workspace";
-      current.setThreadRunRequiresWorkspaceTools(threadId, requiresWorkspaceTools);
+      const latestUserText = current.extractTextFromContentJson(
+        messagesForTurn[messagesForTurn.length - 1]?.content_json,
+      );
+      const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "regenerate",
@@ -453,7 +452,7 @@ export function useWebSendFlowController<
                 ? "chatgpt"
                 : "platform",
         requestedFundingSource: preferredModelSelection.fundingSource,
-        requiresWorkspaceTools,
+        requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
         messages: messagesForTurn,
       });
@@ -465,12 +464,10 @@ export function useWebSendFlowController<
       maybeShowBuilderLimitUpgrade(message);
     } finally {
       current.setThreadRunSending(threadId, false);
-      current.setThreadRunRequiresWorkspaceTools(threadId, null);
     }
   }, [
     maybeShowBuilderLimitUpgrade,
     resolvePreferredModelSelection,
-    resolveRequestedExecutionTargetForAuthenticatedTurn,
     syncThreadModelSelection,
   ]);
 

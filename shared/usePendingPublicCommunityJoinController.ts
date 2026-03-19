@@ -120,9 +120,7 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
       const message = getErrorMessage(error, current.joinCommunityFailureMessage ?? "Failed to join community.");
       if (
         slug &&
-        (kind === "paid_plan_required" ||
-          kind === "approval_required" ||
-          kind === "paid_communities_do_not_use_request_access")
+        (kind === "paid_plan_required" || kind === "approval_pending" || kind === "approval_denied")
       ) {
         clearPendingPublicJoin();
         await openCommunityLandingExternal({ slug });
@@ -161,8 +159,8 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
       const message = getErrorMessage(error, current.joinCommunityFailureMessage ?? "Failed to join community.");
       if (
         kind === "paid_plan_required" ||
-        kind === "approval_required" ||
-        kind === "paid_communities_do_not_use_request_access"
+        kind === "approval_pending" ||
+        kind === "approval_denied"
       ) {
         clearPendingPublicJoin();
         await openCommunityLandingExternal(community);

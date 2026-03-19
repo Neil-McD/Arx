@@ -28,82 +28,77 @@ Scope: web + mobile, chat + agent, inference + Daytona sandbox entitlement
 The platform behavior is defined by 6 inputs:
 
 1. Surface: `web` | `mobile`
-2. Workspace substrate request: `chat` | `daytona_workspace`
+2. Funding source request: `demo_public` | `platform` | `user_key` | `user_chatgpt`
 3. Auth state: `anonymous` | `authenticated`
 4. Account tier: `free` | `builder` | `architect`
-5. Requested funding source: `demo_public` | `user_key` | `user_chatgpt` | `platform`
+5. Active project context: absent | present
 6. Active community lens: absent | present
 
 And 7 outputs:
 
-1. Runtime lane: `public` | `daytona` | `platform_fallback` | `chatgpt`
+1. Runtime lane: `public` | `platform` | `chatgpt`
 2. Resolved funding source: `demo_public` | `user_key` | `user_chatgpt` | `platform`
-3. Daytona sandbox entitlement: allowed/denied
+3. Workspace tool entitlement: allowed/denied
 4. Platform inference entitlement: allowed/denied
 5. Entitled capability families: `[]` | `["community_tools","web_research"]` | `["community_tools","web_research","workspace_tools"]`
-6. Community action mode: `join_free` | `request_access` | `checkout`
+6. Community action mode: `join_free` | `join_approval` | `checkout`
 7. Community create entitlement: allowed/denied
 
 ## 2) Canonical Routing + Gating Rules
 
-1. Server decides lane. Clients may express whether a turn needs workspace substrate; they do not authoritatively choose execution backend.
+1. Server decides lane. Clients do not authoritatively choose execution backend.
 2. `runtime_turn` is the canonical authenticated cloud runtime entrypoint.
 2a. Non-community cloud threads must be project-bound (`project_id` required). The server auto-assigns `General` where needed.
 3. Funding source, not price class, decides who pays for inference.
 4. `demo_public` is an optional low-reliability shared lane, not the default authenticated free strategy.
-5. Daytona sandbox is workbench-tier only:
-   - `free`: never create or use Daytona sandbox
-   - `builder`: Daytona sandbox allowed
-   - `architect`: Daytona sandbox allowed
-6. `requested_execution_target=daytona_workspace` is now a compatibility boundary signal meaning the turn requires workspace tools/substrate.
-6a. Daytona is only entered when that workspace-substrate signal is present and the user is entitled to `workspace_tools`.
-6b. Authenticated chat-target turns may use capability-composed tools without Daytona entitlement.
-6c. `web_research` does not imply Daytona entitlement.
-6d. `community_tools` do not imply Daytona entitlement.
-6e. Capability entitlements are tier-based:
+5. Workspace tools are workbench-tier only:
+   - `free`: never receives `workspace_tools`
+   - `builder`: `workspace_tools` allowed
+   - `architect`: `workspace_tools` allowed
+6. Capability entitlements are tier-based:
    - anonymous: `[]`
    - authenticated free: `["community_tools","web_research"]`
    - builder / architect: `["community_tools","web_research","workspace_tools"]`
-6f. Active run capability families are run-specific:
+7. Active run capability families are run-specific:
    - authenticated cloud chat with no active community lens: `["web_research"]`
    - authenticated cloud chat with an active community lens: `["community_tools","web_research"]`
-   - Daytona workspace: `["community_tools","web_research","workspace_tools"]` when a community lens is active, otherwise `["web_research","workspace_tools"]`
-7. Chat-only turns may route to:
+   - project-bound builder / architect run: `["community_tools","web_research","workspace_tools"]` when a community lens is active, otherwise `["web_research","workspace_tools"]`
+8. Chat turns may route to:
    - `public` for `demo_public`
-   - `platform_fallback` for `platform`
-   - `platform_fallback` for `user_key` because the cloud runtime substrate is the same even though the funding source differs
+   - `platform` for `platform`
+   - `platform` for `user_key` because the cloud runtime substrate is the same even though the funding source differs
    - `chatgpt` for `user_chatgpt`
-8. ChatGPT auth is a user-funded lane and does not imply Daytona entitlement.
-9. Community creation remains architect-tier-gated.
-10. Authenticated free never receives Polynet-funded inference; it must route through `user_chatgpt` or `user_key`.
+9. ChatGPT auth is a user-funded lane and does not imply workspace entitlement.
+10. Community creation remains architect-tier-gated.
+11. Authenticated free never receives Polynet-funded inference; it must route through `user_chatgpt` or `user_key`.
 
 ## 3) Behavior Matrix (Phase 1)
 
-| Surface | Lane | Auth | Tier | Requested funding source | workspace substrate request | Runtime lane | Resolved funding source | Daytona sandbox | Platform inference | Community create |
+| Surface | Lane | Auth | Tier | Requested funding source | Active project context | Runtime lane | Resolved funding source | Workspace tools | Platform inference | Community create |
 |---|---|---|---|---|---|---|---|---|---|
-| Web/Mobile | Chat | anonymous | n/a | `demo_public` | `chat` | `public` | `demo_public` | denied | denied | denied |
+| Web/Mobile | Chat | anonymous | n/a | `demo_public` | absent | `public` | `demo_public` | denied | denied | denied |
 | Web/Mobile | Chat | anonymous | n/a | `user_key` / `user_chatgpt` / `platform` | any | denied (`auth_required`) | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | free | `demo_public` | `chat` | `public` | `demo_public` | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | free | `user_key` | `chat` | `platform_fallback` | `user_key` | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | free | `user_chatgpt` | `chat` | `chatgpt` | `user_chatgpt` | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | free | `platform` | `chat` | `chatgpt` or `platform_fallback` when user-funded provider is connected, otherwise denied (`provider_connection_required`) | `user_chatgpt` or `user_key` | denied | denied | denied |
-| Web/Mobile | Chat | authenticated | builder | `platform` | `chat` | `platform_fallback` | `platform` | not required | allowed | denied |
-| Web/Mobile | Chat | authenticated | builder | `user_key` | `chat` | `platform_fallback` | `user_key` | not required | allowed | denied |
-| Web/Mobile | Chat | authenticated | builder | `user_chatgpt` | `chat` | `chatgpt` | `user_chatgpt` | not required | allowed | denied |
-| Web/Mobile | Chat | authenticated | builder | any | `daytona_workspace` | `daytona` | `platform` | allowed | allowed | denied |
-| Web/Mobile | Chat | authenticated | architect | `platform` | `chat` | `platform_fallback` | `platform` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | `user_key` | `chat` | `platform_fallback` | `user_key` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | `user_chatgpt` | `chat` | `chatgpt` | `user_chatgpt` | not required | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | any | `daytona_workspace` | `daytona` | `platform` | allowed | allowed | allowed |
+| Web/Mobile | Chat | authenticated | free | `demo_public` | absent | `public` | `demo_public` | denied | denied | denied |
+| Web/Mobile | Chat | authenticated | free | `user_key` | absent | `platform` | `user_key` | denied | denied | denied |
+| Web/Mobile | Chat | authenticated | free | `user_chatgpt` | absent | `chatgpt` | `user_chatgpt` | denied | denied | denied |
+| Web/Mobile | Chat | authenticated | free | `platform` | absent | `chatgpt` or `platform` when user-funded provider is connected, otherwise denied (`provider_connection_required`) | `user_chatgpt` or `user_key` | denied | denied | denied |
+| Web/Mobile | Chat | authenticated | builder | `platform` | absent | `platform` | `platform` | denied | allowed | denied |
+| Web/Mobile | Chat | authenticated | builder | `user_key` | absent | `platform` | `user_key` | denied | allowed | denied |
+| Web/Mobile | Chat | authenticated | builder | `user_chatgpt` | absent | `chatgpt` | `user_chatgpt` | denied | allowed | denied |
+| Web/Mobile | Chat | authenticated | builder | any | present | `platform` / `chatgpt` / `public` per funding source | varies | allowed | allowed | denied |
+| Web/Mobile | Chat | authenticated | architect | `platform` | absent | `platform` | `platform` | denied | allowed | allowed |
+| Web/Mobile | Chat | authenticated | architect | `user_key` | absent | `platform` | `user_key` | denied | allowed | allowed |
+| Web/Mobile | Chat | authenticated | architect | `user_chatgpt` | absent | `chatgpt` | `user_chatgpt` | denied | allowed | allowed |
+| Web/Mobile | Chat | authenticated | architect | any | present | `platform` / `chatgpt` / `public` per funding source | varies | allowed | allowed | allowed |
 
 Notes:
-- `daytona` is only for paid tiers and only when workspace substrate is requested.
+- Workspace tools are structural and project-bound, not chosen via a separate execution target.
 - Authenticated cloud chat may enter the same serial native loop with `web_research`, and with `community_tools` when a community lens is active.
-- `runtimeRuns` currently persist the compatibility field `requestedExecutionTarget`, plus active capability families and harness profile.
-- Phase 2 runtime detail: `daytona` now provisions/reuses a Daytona sandbox and executes a toolbox probe command (`pwd`) before response completion.
+- `runtimeRuns` persist active capability families and harness profile as runtime truth.
+- Phase 2 runtime detail: the unified tool loop provisions a Daytona sandbox lazily when a workspace tool is actually called.
 - Assistant response generation uses the Convex runtime endpoints (`/runtime/public_turn`, `/runtime/runtime_turn`).
 - Client wiring gate: `VITE_ENABLE_RUNTIME_TURN_V2=true` keeps authenticated cloud turns on the canonical `runtime_turn` path.
-- Community join mode remains server-authored (`join_free` / `request_access` / `checkout`).
+- Community join mode remains server-authored (`join_free` / `join_approval` / `checkout`).
 
 ## 4) Canonical Files (Source of Truth)
 
@@ -125,7 +120,7 @@ Any change to tier semantics, runtime lane routing, or sandbox entitlement must:
 1. Update this matrix doc.
 2. Keep matrix contract checks green.
 3. Keep runtime endpoint tests green for:
-   - free denied for Daytona
-   - paid allowed for Daytona
-   - user-funded chat-only lanes do not imply paid Daytona access
+   - free never receives `workspace_tools`
+   - builder / architect receive `workspace_tools` only through project-bound runs
+   - user-funded lanes do not imply workspace entitlement
    - idempotent run creation and replay behavior

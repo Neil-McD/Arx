@@ -22,6 +22,7 @@ import {
   normalizeSlug,
   normalizeVisibility,
   requireCommunityManager,
+  requireCommunityOwner,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
   resolvePublicUserId,
@@ -39,6 +40,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   name: string;
   owner_id: string;
   one_liner: string | null;
+  about: string | null;
   avatar_url: string | null;
   avatar_storage_id: string | null;
   banner_url: string | null;
@@ -60,6 +62,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     name: row.name,
     owner_id: (await resolvePublicUserId(ctx, row.ownerId, userIdCache)) ?? String(row.ownerId),
     one_liner: row.oneLiner ?? null,
+    about: row.about ?? null,
     avatar_url: branding.avatar_url,
     avatar_storage_id: branding.avatar_storage_id,
     banner_url: branding.banner_url,
@@ -190,6 +193,7 @@ export const saveCommunitySettings = mutation({
     name: v.string(),
     slug: v.string(),
     oneLiner: v.optional(v.union(v.string(), v.null())),
+    about: v.optional(v.union(v.string(), v.null())),
     avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
@@ -250,6 +254,7 @@ export const saveCommunitySettings = mutation({
     const currencyDecimals = Math.max(0, Math.floor(args.currencyDecimals ?? 2));
     const nextName = normalizeName(args.name);
     const nextOneLiner = normalizeOptionalText(args.oneLiner);
+    const nextAbout = normalizeOptionalText(args.about, 8_000);
     const nextAvatarStorageId =
       args.avatarStorageId !== undefined
         ? (args.avatarStorageId ?? undefined)
@@ -289,6 +294,7 @@ export const saveCommunitySettings = mutation({
       name: nextName,
       slug: normalizedSlug,
       oneLiner: nextOneLiner,
+      about: nextAbout,
       avatarUrl: nextAvatarUrl,
       avatarStorageId: nextAvatarStorageId,
       bannerUrl: nextBannerUrl,
@@ -392,6 +398,7 @@ export const saveCommunitySettings = mutation({
       name: updated.name,
       slug: updated.slug,
       one_liner: updated.oneLiner ?? null,
+      about: updated.about ?? null,
       avatar_url: branding.avatar_url,
       avatar_storage_id: branding.avatar_storage_id,
       banner_url: branding.banner_url,
@@ -442,7 +449,6 @@ export const saveCommunityPublicPresentation = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    oneLiner: v.optional(v.union(v.string(), v.null())),
     config: v.any(),
     nowMs: v.optional(v.number()),
   },
@@ -459,17 +465,16 @@ export const saveCommunityPublicPresentation = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const updatedCommunity = await saveCommunityOneLinerInternal(ctx, community, args.oneLiner, nowMs);
+    const normalizedFunnel = normalizeCommunityFunnelConfigInput(args.config);
     const funnel = await saveCommunityFunnelConfigInternal(
       ctx,
       args.communityId,
-      normalizeCommunityFunnelConfigInput(args.config),
+      normalizedFunnel,
       nowMs,
     );
     return {
-      community_id: String(updatedCommunity._id),
-      one_liner: updatedCommunity.oneLiner ?? null,
-      updated_at: toIsoString(updatedCommunity.updatedAt),
+      community_id: String(community._id),
+      updated_at: toIsoString(nowMs),
       funnel,
     };
   },
@@ -488,14 +493,11 @@ export const deleteCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const { community } = await requireCommunityManager({
+    const { community } = await requireCommunityOwner({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
     });
-    if (String(community.ownerId) !== String(args.userId)) {
-      throw new Error("community_owner_required");
-    }
 
     const memberships = (await ctx.db
       .query("communityMemberships")

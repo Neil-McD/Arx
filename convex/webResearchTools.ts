@@ -73,7 +73,7 @@ export async function searchWeb(params: {
     return {
       ok: false,
       code: "invalid_tool_args",
-      message: "web_search requires a non-empty query.",
+      message: "web_research search requires a non-empty query.",
     };
   }
 
@@ -93,9 +93,9 @@ export async function searchWeb(params: {
   } catch (error) {
     return {
       ok: false,
-      code: "web_search_unavailable",
+      code: "web_research_unavailable",
       message:
-        error instanceof Error ? error.message : "web_search request failed.",
+        error instanceof Error ? error.message : "web_research search request failed.",
     };
   }
 
@@ -103,8 +103,8 @@ export async function searchWeb(params: {
   if (!response.ok) {
     return {
       ok: false,
-      code: "web_search_unavailable",
-      message: `web_search failed (${response.status}).`,
+      code: "web_research_unavailable",
+      message: `web_research search failed (${response.status}).`,
       outputPreview: html.slice(0, 500),
     };
   }
@@ -162,7 +162,7 @@ export async function fetchWebPage(params: {
     return {
       ok: false,
       code: "invalid_tool_args",
-      message: "web_fetch requires a valid http or https URL.",
+      message: "web_research open_page requires a valid http or https URL.",
     };
   }
 
@@ -176,9 +176,9 @@ export async function fetchWebPage(params: {
   } catch (error) {
     return {
       ok: false,
-      code: "web_fetch_unavailable",
+      code: "web_research_unavailable",
       message:
-        error instanceof Error ? error.message : "web_fetch request failed.",
+        error instanceof Error ? error.message : "web_research open_page request failed.",
     };
   }
 
@@ -186,8 +186,8 @@ export async function fetchWebPage(params: {
   if (!response.ok) {
     return {
       ok: false,
-      code: "web_fetch_unavailable",
-      message: `web_fetch failed (${response.status}).`,
+      code: "web_research_unavailable",
+      message: `web_research open_page failed (${response.status}).`,
       outputPreview: text.slice(0, 500),
     };
   }

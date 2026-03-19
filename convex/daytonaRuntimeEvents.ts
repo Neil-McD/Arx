@@ -11,7 +11,7 @@ export async function appendWorkspaceToolCallStarted(params: {
     payload: Record<string, unknown>;
   }) => Promise<void>;
   runId: string;
-  harnessName: "workspace" | "chat_tools";
+  harnessName: "chat_tools";
   communityId?: string | null;
   iteration: number;
   providerCallId: string;
@@ -44,7 +44,7 @@ export async function appendWorkspaceToolCallFinished(params: {
     payload: Record<string, unknown>;
   }) => Promise<void>;
   runId: string;
-  harnessName: "workspace" | "chat_tools";
+  harnessName: "chat_tools";
   iteration: number;
   providerCallId: string;
   toolName: RetrievalToolName;

@@ -24,7 +24,6 @@ type CommunityLike = {
   entry_policy?: "open" | "approval" | "paid_subscription" | null;
   updated_at: string;
 };
-type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type UseCommunityMembersReviewControllerArgs<
   SessionT extends SessionLike,
@@ -34,7 +33,6 @@ type UseCommunityMembersReviewControllerArgs<
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  membersSurfaceMode: MembersSurfaceMode;
   isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
   loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void> | void;

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { DragEvent } from "react";
+import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
@@ -10,24 +11,16 @@ type ActiveCommunity = {
   slug: string;
   visibility: string;
   one_liner: string | null;
+  about: string | null;
 };
-
-type ActiveCommunityAccess = {
-  effective_role?: string | null;
-  entitlement_ends_at?: string | null;
-  is_owner?: boolean;
-} | null;
-
-type BuilderBillingStatus = {
-  has_payouts?: boolean | null;
-} | null;
 
 type WebCommunitySettingsSectionProps = {
   activeCommunity: ActiveCommunity | null;
   hasSession: boolean;
   canViewActiveCommunitySettings: boolean;
-  canManageMembersActiveCommunity: boolean;
-  isActiveCommunityOwner: boolean;
+  communitySettingsLayer: CommunitySettingsLayer;
+  canManageCommunitySettings: boolean;
+  canDeleteCommunity: boolean;
   openAuthGate: () => void;
   state: {
     isSettingsBannerDragOver: boolean;
@@ -43,15 +36,13 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsName: string;
     communitySettingsSlug: string;
     communitySettingsOneLiner: string;
+    communitySettingsAbout: string;
     communitySettingsVisibility: string;
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
-    builderBillingStatus: BuilderBillingStatus;
-    isStartingConnectOnboarding: boolean;
     communitySettingsError: string | null;
     isSavingCommunitySettings: boolean;
-    activeCommunityAccess: ActiveCommunityAccess;
     communityMemberMuted: boolean;
     isLoadingCommunityMemberSettings: boolean;
     isLeavingCommunity: boolean;
@@ -78,32 +69,269 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsSlug: (value: string) => void;
     slugifyCommunityName: (value: string) => string;
     setCommunitySettingsOneLiner: (value: string) => void;
+    setCommunitySettingsAbout: (value: string) => void;
     setCommunitySettingsVisibility: (value: string) => void;
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
     setCommunityPricingDirty: () => void;
-    startConnectOnboarding: () => Promise<void> | void;
     handleSaveCommunitySettings: () => Promise<void> | void;
     openDeleteCommunityModal: () => void;
-    formatChatTime: (value: string) => string;
-    formatCommunityVisibilityLabel: (value: string) => string;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
   };
 };
 
-export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionProps) {
-  const {
-    activeCommunity,
-    hasSession,
-    canViewActiveCommunitySettings,
-    canManageMembersActiveCommunity,
-    isActiveCommunityOwner,
-    openAuthGate,
-    state,
-    actions,
-  } = props;
+type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
+
+function CommunityPersonalSettingsSection({
+  state,
+  actions,
+  canLeaveCommunity,
+  title = "Personal",
+  description,
+}: SharedSettingsProps & {
+  canLeaveCommunity: boolean;
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">{title}</div>
+      {description ? <div className="settings-section-desc">{description}</div> : null}
+      <div className="model-list">
+        <label className="model-toggle">
+          <span>Mute community</span>
+          <input
+            type="checkbox"
+            checked={state.communityMemberMuted}
+            disabled={state.isLoadingCommunityMemberSettings || state.isLeavingCommunity}
+            onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
+          />
+        </label>
+      </div>
+      <div className="model-note">
+        Muted communities won't send notifications (when notifications ship).
+      </div>
+      {canLeaveCommunity ? (
+        <div className="create-community-actions" style={{ marginTop: 12 }}>
+          <button
+            className="danger"
+            type="button"
+            disabled={state.isLeavingCommunity || state.isLoadingCommunityMemberSettings}
+            onClick={() => void actions.handleLeaveCommunity()}
+          >
+            {state.isLeavingCommunity ? "Leaving…" : "Leave community"}
+          </button>
+        </div>
+      ) : null}
+      {state.communityMemberSettingsError ? (
+        <div className="auth-error" style={{ marginTop: 10 }}>
+          {state.communityMemberSettingsError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CommunityBrandingSettingsSection({
+  activeCommunity,
+  state,
+  actions,
+}: SharedSettingsProps & {
+  activeCommunity: ActiveCommunity;
+}) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Branding</div>
+      <div
+        className={`create-community-banner${state.isSettingsBannerDragOver ? " drag-over" : ""}`}
+        aria-busy={state.isProcessingCommunitySettingsBanner || undefined}
+        onDragOver={(event) => {
+          event.preventDefault();
+          actions.setIsSettingsBannerDragOver(true);
+        }}
+        onDragLeave={() => actions.setIsSettingsBannerDragOver(false)}
+        onDrop={actions.handleSettingsBannerDrop}
+      >
+        <div className="create-community-banner-media">
+          {state.communitySettingsBannerUrl ? (
+            <img
+              src={state.communitySettingsBannerUrl}
+              alt="Community banner preview"
+              draggable={false}
+              style={getCommunityBannerImageStyle({
+                focusX: state.communitySettingsBannerFocusX,
+                focusY: state.communitySettingsBannerFocusY,
+                zoom: state.communitySettingsBannerZoom,
+              })}
+            />
+          ) : (
+            <div className="create-community-banner-placeholder">Banner preview</div>
+          )}
+        </div>
+        <label
+          className={`create-banner-btn${state.isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
+        >
+          Upload banner
+          <input
+            type="file"
+            accept="image/*"
+            disabled={state.isProcessingCommunitySettingsBanner}
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              event.target.value = "";
+              void actions.handleCommunityBannerUpload(file);
+            }}
+          />
+        </label>
+        {state.communitySettingsBannerUrl ? (
+          <div className="banner-branding-actions">
+            <button
+              className="create-banner-btn"
+              type="button"
+              disabled={state.isProcessingCommunitySettingsBanner}
+              onClick={actions.openCommunityBannerFocusModal}
+            >
+              Adjust banner
+            </button>
+            <button
+              className="create-banner-remove"
+              type="button"
+              disabled={state.isProcessingCommunitySettingsBanner}
+              onClick={() => {
+                actions.setCommunitySettingsBannerUrl(null);
+                actions.setCommunitySettingsBannerFocusX(0.5);
+                actions.setCommunitySettingsBannerFocusY(0.5);
+                actions.setCommunitySettingsBannerZoom(1);
+                actions.setCommunitySettingsBannerUploadError(null);
+                actions.closeCommunityBannerFocusModal();
+                actions.markCommunitySettingsDirty();
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+        {state.isProcessingCommunitySettingsBanner ? (
+          <div className="create-upload-status">Processing banner…</div>
+        ) : null}
+        {state.communitySettingsBannerUploadError ? (
+          <div className="auth-error">{state.communitySettingsBannerUploadError}</div>
+        ) : null}
+      </div>
+      <div className="create-community-avatar-row">
+        <div
+          className={`create-community-avatar${state.isSettingsAvatarDragOver ? " drag-over" : ""}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            actions.setIsSettingsAvatarDragOver(true);
+          }}
+          onDragLeave={() => actions.setIsSettingsAvatarDragOver(false)}
+          onDrop={actions.handleSettingsAvatarDrop}
+        >
+          {state.communitySettingsAvatarUrl ? (
+            <img src={state.communitySettingsAvatarUrl} alt="Community avatar preview" draggable={false} />
+          ) : (
+            <span>
+              {actions.communityInitials(
+                state.communitySettingsName || activeCommunity?.name || "Community",
+              )}
+            </span>
+          )}
+        </div>
+        <div className="create-community-avatar-actions">
+          <label className="create-avatar-btn">
+            Upload avatar
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                void actions.handleCommunityAvatarUpload(file);
+              }}
+            />
+          </label>
+          {state.communitySettingsAvatarUrl ? (
+            <button
+              className="create-avatar-remove"
+              type="button"
+              onClick={() => {
+                actions.setCommunitySettingsAvatarUrl(null);
+                actions.markCommunitySettingsDirty();
+              }}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <label className="create-community-field">
+        <span>Name</span>
+        <input
+          type="text"
+          placeholder="Community name"
+          value={state.communitySettingsName}
+          onChange={(event) => {
+            actions.setCommunitySettingsName(event.target.value);
+            actions.markCommunitySettingsDirty();
+          }}
+        />
+      </label>
+      <label className="create-community-field">
+        <span>Slug</span>
+        <input
+          type="text"
+          placeholder="your-community"
+          value={state.communitySettingsSlug}
+          maxLength={32}
+          onChange={(event) => {
+            actions.setCommunitySettingsSlug(actions.slugifyCommunityName(event.target.value));
+            actions.markCommunitySettingsDirty();
+          }}
+        />
+        <span className="create-community-hint">
+          {`/c/${state.communitySettingsSlug.trim() || "your-community"}`}
+        </span>
+      </label>
+    </div>
+  );
+}
+
+function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Profile</div>
+      <label className="create-community-field">
+        <span>One-liner</span>
+        <textarea
+          placeholder="Short one-liner for the public funnel card"
+          rows={3}
+          value={state.communitySettingsOneLiner}
+          onChange={(event) => {
+            actions.setCommunitySettingsOneLiner(event.target.value);
+            actions.markCommunitySettingsDirty();
+          }}
+        />
+      </label>
+      <label className="create-community-field">
+        <span>About</span>
+        <textarea
+          placeholder="Long-form public description for who this community is for and what members get."
+          rows={6}
+          value={state.communitySettingsAbout}
+          onChange={(event) => {
+            actions.setCommunitySettingsAbout(event.target.value);
+            actions.markCommunitySettingsDirty();
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
+function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsProps) {
   const pricingOptions = [
     { key: "free", label: "Free" },
     { key: "monthly", label: "Monthly" },
@@ -113,6 +341,135 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     pricingOptions.length,
     pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
   );
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Access & Pricing</div>
+      <label className="create-community-field">
+        <span>Visibility</span>
+        <select
+          className="select-styled"
+          value={state.communitySettingsVisibility}
+          onChange={(event) => {
+            actions.setCommunitySettingsVisibility(event.target.value);
+            actions.markCommunitySettingsDirty();
+          }}
+        >
+          <option value="published">Published</option>
+          <option value="unlisted">Unlisted</option>
+        </select>
+        <span className="create-community-hint">
+          {state.communitySettingsVisibility === "published"
+            ? "Discoverable. Anyone can join to participate."
+            : "Not listed in discovery. Share the link when you're ready."}
+        </span>
+      </label>
+      <div className="create-community-field">
+        <span>Pricing</span>
+        <div
+          className="platform-switcher platform-switcher-compact"
+          role="tablist"
+          aria-label="Pricing options"
+          style={pricingSwitcherStyle}
+        >
+          {pricingOptions.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              className={`platform-switcher-btn${
+                state.communitySettingsPricingMode === opt.key ? " active" : ""
+              }`}
+              onClick={() => {
+                actions.setCommunitySettingsPricingMode(opt.key);
+                actions.setCommunityPricingDirty();
+                actions.markCommunitySettingsDirty();
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="create-community-hint">
+          Configure the member-facing pricing shown on your funnel and checkout.
+        </span>
+      </div>
+      {state.communitySettingsPricingMode === "monthly" ? (
+        <label className="create-community-field">
+          <span>Monthly price (USD)</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="29"
+            value={state.communitySettingsPriceUsdMonthly}
+            onChange={(event) => {
+              actions.setCommunitySettingsPriceUsdMonthly(event.target.value);
+              actions.setCommunityPricingDirty();
+              actions.markCommunitySettingsDirty();
+            }}
+          />
+          <span className="create-community-hint">Billed monthly.</span>
+        </label>
+      ) : null}
+      {state.communitySettingsPricingMode === "annual" ? (
+        <label className="create-community-field">
+          <span>Annual price (USD)</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="290"
+            value={state.communitySettingsPriceUsdAnnual}
+            onChange={(event) => {
+              actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
+              actions.setCommunityPricingDirty();
+              actions.markCommunitySettingsDirty();
+            }}
+          />
+          <span className="create-community-hint">Billed annually.</span>
+        </label>
+      ) : null}
+      <div className="settings-section-desc" style={{ marginTop: 12 }}>
+        Billing operations, payouts, and revenue reporting are not managed from this tab yet.
+      </div>
+    </div>
+  );
+}
+
+function CommunityDangerZoneSection({
+  state,
+  actions,
+}: Pick<WebCommunitySettingsSectionProps, "state"> & Pick<WebCommunitySettingsSectionProps, "actions">) {
+  return (
+    <div className="settings-section" style={{ marginTop: 18 }}>
+      <div className="settings-section-title">Danger zone</div>
+      <div className="settings-section-desc">
+        Permanently delete this community and all associated data.
+      </div>
+      <button
+        type="button"
+        className="danger delete-community-btn"
+        onClick={actions.openDeleteCommunityModal}
+        disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
+      >
+        Delete community
+      </button>
+    </div>
+  );
+}
+
+export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionProps) {
+  const {
+    activeCommunity,
+    hasSession,
+    canViewActiveCommunitySettings,
+    communitySettingsLayer,
+    canManageCommunitySettings,
+    canDeleteCommunity,
+    openAuthGate,
+    state,
+    actions,
+  } = props;
+  const isMemberSettingsLayer = communitySettingsLayer === "member";
+  const canLeaveCommunity = communitySettingsLayer !== "owner";
 
   useEffect(() => {
     if (!state.communitySettingsBannerUrl && state.isCommunityBannerFocusModalOpen) {
@@ -138,334 +495,21 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
         </div>
       ) : !canViewActiveCommunitySettings ? (
         <div className="chat-empty">Join this community to view settings.</div>
-      ) : canManageMembersActiveCommunity ? (
+      ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">
-            <div className="settings-section">
-              <div className="settings-section-title">Branding</div>
-              <div
-                className={`create-community-banner${state.isSettingsBannerDragOver ? " drag-over" : ""}`}
-                aria-busy={state.isProcessingCommunitySettingsBanner || undefined}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  actions.setIsSettingsBannerDragOver(true);
-                }}
-                onDragLeave={() => actions.setIsSettingsBannerDragOver(false)}
-                onDrop={actions.handleSettingsBannerDrop}
-              >
-                <div className="create-community-banner-media">
-                  {state.communitySettingsBannerUrl ? (
-                    <img
-                      src={state.communitySettingsBannerUrl}
-                      alt="Community banner preview"
-                      draggable={false}
-                      style={getCommunityBannerImageStyle({
-                        focusX: state.communitySettingsBannerFocusX,
-                        focusY: state.communitySettingsBannerFocusY,
-                        zoom: state.communitySettingsBannerZoom,
-                      })}
-                    />
-                  ) : (
-                    <div className="create-community-banner-placeholder">Banner preview</div>
-                  )}
-                </div>
-                <label
-                  className={`create-banner-btn${state.isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
-                >
-                  Upload banner
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={state.isProcessingCommunitySettingsBanner}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null;
-                      event.target.value = "";
-                      void actions.handleCommunityBannerUpload(file);
-                    }}
-                  />
-                </label>
-                {state.communitySettingsBannerUrl && (
-                  <div className="banner-branding-actions">
-                    <button
-                      className="create-banner-btn"
-                      type="button"
-                      disabled={state.isProcessingCommunitySettingsBanner}
-                      onClick={actions.openCommunityBannerFocusModal}
-                    >
-                      Adjust banner
-                    </button>
-                    <button
-                      className="create-banner-remove"
-                      type="button"
-                      disabled={state.isProcessingCommunitySettingsBanner}
-                      onClick={() => {
-                        actions.setCommunitySettingsBannerUrl(null);
-                        actions.setCommunitySettingsBannerFocusX(0.5);
-                        actions.setCommunitySettingsBannerFocusY(0.5);
-                        actions.setCommunitySettingsBannerZoom(1);
-                        actions.setCommunitySettingsBannerUploadError(null);
-                        actions.closeCommunityBannerFocusModal();
-                        actions.markCommunitySettingsDirty();
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-                {state.isProcessingCommunitySettingsBanner && (
-                  <div className="create-upload-status">Processing banner…</div>
-                )}
-                {state.communitySettingsBannerUploadError && (
-                  <div className="auth-error">{state.communitySettingsBannerUploadError}</div>
-                )}
-              </div>
-              <div className="create-community-avatar-row">
-                <div
-                  className={`create-community-avatar${state.isSettingsAvatarDragOver ? " drag-over" : ""}`}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    actions.setIsSettingsAvatarDragOver(true);
-                  }}
-                  onDragLeave={() => actions.setIsSettingsAvatarDragOver(false)}
-                  onDrop={actions.handleSettingsAvatarDrop}
-                >
-                  {state.communitySettingsAvatarUrl ? (
-                    <img src={state.communitySettingsAvatarUrl} alt="Community avatar preview" draggable={false} />
-                  ) : (
-                    <span>
-                      {actions.communityInitials(
-                        state.communitySettingsName || activeCommunity?.name || "Community",
-                      )}
-                    </span>
-                  )}
-                </div>
-                <div className="create-community-avatar-actions">
-                  <label className="create-avatar-btn">
-                    Upload avatar
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        event.target.value = "";
-                        void actions.handleCommunityAvatarUpload(file);
-                      }}
-                    />
-                  </label>
-                  {state.communitySettingsAvatarUrl && (
-                    <button
-                      className="create-avatar-remove"
-                      type="button"
-                      onClick={() => {
-                        actions.setCommunitySettingsAvatarUrl(null);
-                        actions.markCommunitySettingsDirty();
-                      }}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
-              <label className="create-community-field">
-                <span>Name</span>
-                <input
-                  type="text"
-                  placeholder="Community name"
-                  value={state.communitySettingsName}
-                  onChange={(event) => {
-                    actions.setCommunitySettingsName(event.target.value);
-                    actions.markCommunitySettingsDirty();
-                  }}
-                />
-              </label>
-              <label className="create-community-field">
-                <span>Slug</span>
-                <input
-                  type="text"
-                  placeholder="your-community"
-                  value={state.communitySettingsSlug}
-                  maxLength={32}
-                  onChange={(event) => {
-                    actions.setCommunitySettingsSlug(actions.slugifyCommunityName(event.target.value));
-                    actions.markCommunitySettingsDirty();
-                  }}
-                />
-                <span className="create-community-hint">
-                  {`/c/${state.communitySettingsSlug.trim() || "your-community"}`}
-                </span>
-              </label>
-            </div>
-
-            <div className="settings-section">
-              <div className="settings-section-title">Profile</div>
-              <label className="create-community-field">
-                <span>One-liner</span>
-                <textarea
-                  placeholder="Short one-liner for the public funnel card"
-                  rows={3}
-                  value={state.communitySettingsOneLiner}
-                  onChange={(event) => {
-                    actions.setCommunitySettingsOneLiner(event.target.value);
-                    actions.markCommunitySettingsDirty();
-                  }}
-                />
-              </label>
-            </div>
-
-            <div className="settings-section">
-              <div className="settings-section-title">Access & Pricing</div>
-              <label className="create-community-field">
-                <span>Visibility</span>
-                <select
-                  className="select-styled"
-                  value={state.communitySettingsVisibility}
-                  onChange={(event) => {
-                    actions.setCommunitySettingsVisibility(event.target.value);
-                    actions.markCommunitySettingsDirty();
-                  }}
-                >
-                  <option value="published">Published</option>
-                  <option value="unlisted">Unlisted</option>
-                </select>
-                <span className="create-community-hint">
-                  {state.communitySettingsVisibility === "published"
-                    ? "Discoverable. Anyone can join to participate."
-                    : "Not listed in discovery. Share the link when you're ready."}
-                </span>
-              </label>
-              <div className="create-community-field">
-                <span>Pricing</span>
-                <div
-                  className="platform-switcher platform-switcher-compact"
-                  role="tablist"
-                  aria-label="Pricing options"
-                  style={pricingSwitcherStyle}
-                >
-                  {pricingOptions.map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      className={`platform-switcher-btn${
-                        state.communitySettingsPricingMode === opt.key ? " active" : ""
-                      }`}
-                      onClick={() => {
-                        actions.setCommunitySettingsPricingMode(opt.key);
-                        actions.setCommunityPricingDirty();
-                        actions.markCommunitySettingsDirty();
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <span className="create-community-hint">
-                  Choose what billing options members see at checkout.
-                </span>
-              </div>
-              {state.communitySettingsPricingMode === "monthly" && (
-                <label className="create-community-field">
-                  <span>Monthly price (USD)</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="29"
-                    value={state.communitySettingsPriceUsdMonthly}
-                    onChange={(event) => {
-                      actions.setCommunitySettingsPriceUsdMonthly(event.target.value);
-                      actions.setCommunityPricingDirty();
-                      actions.markCommunitySettingsDirty();
-                    }}
-                  />
-                  <span className="create-community-hint">Billed monthly.</span>
-                </label>
-              )}
-              {state.communitySettingsPricingMode === "annual" && (
-                <label className="create-community-field">
-                  <span>Annual price (USD)</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="290"
-                    value={state.communitySettingsPriceUsdAnnual}
-                    onChange={(event) => {
-                      actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
-                      actions.setCommunityPricingDirty();
-                      actions.markCommunitySettingsDirty();
-                    }}
-                  />
-                  <span className="create-community-hint">Billed annually.</span>
-                </label>
-              )}
-              <div className="create-community-field">
-                <span>Payouts</span>
-                <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                  {state.builderBillingStatus?.has_payouts ? (
-                    <button type="button" className="secondary" disabled>
-                      Payouts connected
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => void actions.startConnectOnboarding()}
-                      disabled={state.isStartingConnectOnboarding}
-                      className="stripe-connect-btn"
-                    >
-                      <svg
-                        className="stripe-connect-icon"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <rect x="2" y="2" width="20" height="20" rx="6" fill="#635BFF" />
-                        <path
-                          fill="#FFFFFF"
-                          d="M14.85 9.14c-.84-.44-1.82-.66-2.78-.66-1.44 0-2.24.54-2.24 1.25 0 .78.84 1.12 2.35 1.46 2.2.5 3.34 1.24 3.34 2.9 0 1.76-1.5 2.95-4.03 2.95-1.38 0-2.66-.34-3.64-.93l.66-1.56c.98.58 2.04.88 3.06.88 1.5 0 2.34-.54 2.34-1.37 0-.78-.74-1.16-2.36-1.52-2.18-.5-3.33-1.24-3.33-2.87 0-1.66 1.5-2.87 3.9-2.87 1.3 0 2.5.28 3.48.74l-.7 1.6z"
-                        />
-                      </svg>
-                      <span>{state.isStartingConnectOnboarding ? "Opening…" : "Connect with Stripe"}</span>
-                    </button>
-                  )}
-                </div>
-                <span className="create-community-hint">
-                  Connect Stripe to receive payouts from paid memberships.
-                </span>
-              </div>
-            </div>
-
-            <div className="settings-section">
-              <div className="settings-section-title">Personal</div>
-              <div className="model-list">
-                <label className="model-toggle">
-                  <span>Mute community</span>
-                  <input
-                    type="checkbox"
-                    checked={state.communityMemberMuted}
-                    disabled={state.isLoadingCommunityMemberSettings || state.isLeavingCommunity}
-                    onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
-                  />
-                </label>
-              </div>
-              <div className="model-note">
-                Muted communities won't send notifications (when notifications ship).
-              </div>
-              {!state.activeCommunityAccess?.is_owner && (
-                <div className="create-community-actions" style={{ marginTop: 12 }}>
-                  <button
-                    className="danger"
-                    type="button"
-                    disabled={state.isLeavingCommunity || state.isLoadingCommunityMemberSettings}
-                    onClick={() => void actions.handleLeaveCommunity()}
-                  >
-                    {state.isLeavingCommunity ? "Leaving…" : "Leave community"}
-                  </button>
-                </div>
-              )}
-              {state.communityMemberSettingsError && (
-                <div className="auth-error" style={{ marginTop: 10 }}>
-                  {state.communityMemberSettingsError}
-                </div>
-              )}
-            </div>
+            <CommunityBrandingSettingsSection
+              activeCommunity={activeCommunity}
+              state={state}
+              actions={actions}
+            />
+            <CommunityProfileSettingsSection state={state} actions={actions} />
+            <CommunityMonetizationConfigSection state={state} actions={actions} />
+            <CommunityPersonalSettingsSection
+              state={state}
+              actions={actions}
+              canLeaveCommunity={canLeaveCommunity}
+            />
 
             {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
             <div className="create-community-actions">
@@ -481,110 +525,23 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     : "Save changes"}
               </button>
             </div>
-            {isActiveCommunityOwner && (
-              <div className="settings-section" style={{ marginTop: 18 }}>
-                <div className="settings-section-title">Danger zone</div>
-                <div className="settings-section-desc">
-                  Permanently delete this community and all associated data.
-                </div>
-                <button
-                  type="button"
-                  className="danger delete-community-btn"
-                  onClick={actions.openDeleteCommunityModal}
-                  disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
-                >
-                  Delete community
-                </button>
-              </div>
-            )}
+            {canDeleteCommunity ? <CommunityDangerZoneSection state={state} actions={actions} /> : null}
+          </div>
+        </>
+      ) : isMemberSettingsLayer ? (
+        <>
+          <div className="create-community-form community-settings-form">
+            <CommunityPersonalSettingsSection
+              state={state}
+              actions={actions}
+              canLeaveCommunity={canLeaveCommunity}
+              title="Personal settings"
+              description="Manage your relationship with this community."
+            />
           </div>
         </>
       ) : (
-        <>
-          <div className="panel-title">Personal settings</div>
-          <div className="settings-section">
-            <div className="settings-section-title">Access</div>
-            <div className="settings-section-desc">
-              Your role and entitlement status for this community.
-            </div>
-            <div className="model-list analytics-kpis">
-              {[
-                {
-                  label: "Role",
-                  value: state.activeCommunityAccess?.effective_role
-                    ? state.activeCommunityAccess.effective_role
-                    : "member",
-                },
-                {
-                  label: "Entitlement ends",
-                  value: state.activeCommunityAccess?.entitlement_ends_at
-                    ? actions.formatChatTime(state.activeCommunityAccess.entitlement_ends_at)
-                    : "—",
-                },
-              ].map((row) => (
-                <div key={row.label} className="model-toggle analytics-kpi">
-                  <span>{row.label}</span>
-                  <span className="analytics-kpi-value">{row.value}</span>
-                </div>
-              ))}
-            </div>
-            <div className="model-note">
-              Owners and admins manage community and commerce settings. Moderators and members manage their own settings here.
-            </div>
-          </div>
-          <div className="settings-section">
-            <div className="settings-section-title">About</div>
-            <div className="model-list analytics-kpis">
-              {[
-                { label: "Name", value: activeCommunity.name },
-                { label: "Slug", value: activeCommunity.slug },
-                { label: "Visibility", value: actions.formatCommunityVisibilityLabel(activeCommunity.visibility) },
-              ].map((row) => (
-                <div key={row.label} className="model-toggle analytics-kpi">
-                  <span>{row.label}</span>
-                  <span className="analytics-kpi-value">{row.value}</span>
-                </div>
-              ))}
-            </div>
-            {activeCommunity.one_liner && (
-              <div className="model-note">{activeCommunity.one_liner}</div>
-            )}
-          </div>
-          <div className="settings-section">
-            <div className="settings-section-title">You</div>
-            <div className="model-list">
-              <label className="model-toggle">
-                <span>Mute community</span>
-                <input
-                  type="checkbox"
-                  checked={state.communityMemberMuted}
-                  disabled={state.isLoadingCommunityMemberSettings || state.isLeavingCommunity}
-                  onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
-                />
-              </label>
-            </div>
-            <div className="model-note">
-              Muted communities won't send notifications (when notifications ship).
-            </div>
-            {!state.activeCommunityAccess?.is_owner && (
-              <div className="create-community-actions" style={{ marginTop: 12 }}>
-                <button
-                  className="danger"
-                  type="button"
-                  disabled={state.isLeavingCommunity || state.isLoadingCommunityMemberSettings}
-                  onClick={() => void actions.handleLeaveCommunity()}
-                >
-                  {state.isLeavingCommunity ? "Leaving…" : "Leave community"}
-                </button>
-              </div>
-            )}
-            {state.communityMemberSettingsError && (
-              <div className="auth-error" style={{ marginTop: 10 }}>
-                {state.communityMemberSettingsError}
-              </div>
-            )}
-          </div>
-        </>
+        <div className="chat-empty">Community settings are unavailable.</div>
       )}
     </div>
   );

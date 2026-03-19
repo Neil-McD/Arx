@@ -1,0 +1,209 @@
+import type { CloudCommunityArchiveHealthRow } from "../../../../shared/cloudCommunityAdminGateway";
+
+type WebCommunityPolynetSectionProps = {
+  hasActiveCommunity: boolean;
+  activeCommunityName: string | null;
+  hasSession: boolean;
+  canManagePolynet: boolean;
+  onOpenAuthGate: () => void;
+  state: {
+    health: CloudCommunityArchiveHealthRow | null;
+    isLoading: boolean;
+    error: string | null;
+    isBackfilling: boolean;
+    isProcessingPending: boolean;
+    isRetrying: boolean;
+  };
+  actions: {
+    refresh: () => void;
+    backfill: () => void;
+    processPending: () => void;
+    retryFailed: () => void;
+  };
+};
+
+const statGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: 12,
+} as const;
+
+const statCardStyle = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.03)",
+} as const;
+
+function formatPolynetNote(raw: string | null): string | null {
+  const message = String(raw ?? "").trim();
+  if (!message) return null;
+  if (message.includes("Could not find public function")) {
+    return "Polynet backend changes are not live in Convex yet.";
+  }
+  return message;
+}
+
+export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProps) {
+  const {
+    hasActiveCommunity,
+    activeCommunityName,
+    hasSession,
+    canManagePolynet,
+    onOpenAuthGate,
+    state,
+    actions,
+  } = props;
+
+  if (!hasActiveCommunity) {
+    return <div className="settings-panel community-settings-panel"><div className="chat-empty">Select a community to open Polynet.</div></div>;
+  }
+
+  if (!hasSession) {
+    return (
+      <div className="settings-panel community-settings-panel">
+        <div className="chat-empty">
+          <div>Sign in to access Polynet.</div>
+          <button className="secondary" type="button" onClick={onOpenAuthGate} style={{ marginTop: 12 }}>
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canManagePolynet) {
+    return (
+      <div className="settings-panel community-settings-panel">
+        <div className="chat-empty">Only owners and admins can manage Polynet.</div>
+      </div>
+    );
+  }
+
+  const health = state.health;
+  const polynetNote = formatPolynetNote(state.error);
+
+  return (
+    <div className="settings-panel community-settings-panel">
+      <div style={{ marginBottom: 20 }}>
+        <div
+          style={{
+            color: "rgba(255,255,255,0.56)",
+            fontSize: 12,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            marginBottom: 6,
+          }}
+        >
+          Polynet
+        </div>
+        <div style={{ color: "rgba(255,255,255,0.74)", fontSize: 16, lineHeight: 1.4 }}>
+          Community archive and retrieval health for {activeCommunityName ?? "this community"}.
+        </div>
+        <div style={{ color: "rgba(255,255,255,0.52)", fontSize: 13, lineHeight: 1.5, marginTop: 8 }}>
+          Backfill and process pending documents here to make archive memory searchable.
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <button className="secondary" type="button" onClick={actions.refresh} disabled={state.isLoading}>
+          {state.isLoading ? "Refreshing…" : "Refresh"}
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={actions.backfill}
+          disabled={state.isBackfilling || state.isProcessingPending || state.isRetrying}
+        >
+          {state.isBackfilling ? "Backfilling…" : "Backfill archive"}
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={actions.processPending}
+          disabled={state.isProcessingPending || state.isBackfilling || state.isRetrying}
+        >
+          {state.isProcessingPending ? "Processing…" : "Process pending"}
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={actions.retryFailed}
+          disabled={state.isRetrying || state.isBackfilling || state.isProcessingPending}
+        >
+          {state.isRetrying ? "Retrying…" : "Retry failed"}
+        </button>
+      </div>
+
+      {polynetNote ? (
+        <div
+          style={{
+            marginBottom: 16,
+            color: "rgba(255,255,255,0.58)",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {polynetNote}
+        </div>
+      ) : null}
+
+      {!health && state.isLoading ? (
+        <div className="chat-empty">Loading Polynet health…</div>
+      ) : !health ? (
+        <div className="chat-empty">No archive health is available yet. Run a backfill to start indexing this community.</div>
+      ) : (
+        <>
+          <div style={statGridStyle}>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Total docs</div>
+              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.total_documents}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Pending</div>
+              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.pending}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Embedded</div>
+              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.embedded}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Failed</div>
+              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.failed}</div>
+            </div>
+          </div>
+
+          <div style={{ ...statGridStyle, marginTop: 16 }}>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Chat docs</div>
+              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.chat}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>AI Feed docs</div>
+              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.ai_feed}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Resource docs</div>
+              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.resource}</div>
+            </div>
+            <div style={statCardStyle}>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>PDF docs</div>
+              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.pdf_counts.pdf_documents}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 18, color: "rgba(255,255,255,0.72)", fontSize: 14, lineHeight: 1.5 }}>
+            <div>
+              Last embedded: {health.last_embedding_updated_at ? health.last_embedding_updated_at : "Never"}
+            </div>
+            {health.latest_failure_message ? (
+              <div style={{ marginTop: 8 }}>
+                Latest failure: {health.latest_failure_message}
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

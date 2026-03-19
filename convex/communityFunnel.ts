@@ -10,7 +10,6 @@ type CommunityFunnelRowLike = {
   communityId: unknown;
   heroMediaUrl?: string | null;
   heroMediaKind?: "image" | "video" | null;
-  about?: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -74,13 +73,14 @@ function isSupportedCommunityFunnelVideoUrl(raw: string | null): boolean {
   return false;
 }
 
-async function mapCommunityFunnelRow(ctx: any, row: CommunityFunnelRowLike | null) {
-  void ctx;
-  if (!row) return null;
+async function buildCommunityFunnelConfig(
+  ctx: any,
+  communityId: any,
+  row: CommunityFunnelRowLike | null,
+) {
   return {
-    hero_media_url: normalizeTrimmedString(row.heroMediaUrl, 2_000),
-    hero_media_kind: normalizeHeroMediaKind(row.heroMediaKind),
-    about: normalizeTrimmedString(row.about, 8_000),
+    hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
+    hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
   };
 }
 
@@ -94,7 +94,6 @@ export function normalizeCommunityFunnelConfigInput(raw: unknown) {
   return {
     hero_media_url: heroMediaUrl,
     hero_media_kind: heroMediaKind,
-    about: normalizeTrimmedString(value.about, 8_000),
   };
 }
 
@@ -112,10 +111,16 @@ export async function saveCommunityFunnelConfigInternal(
   nowMs: number,
 ) {
   const existing = await getCommunityFunnelRow(ctx, communityId);
+  const hasHeroMedia = Boolean(normalized?.hero_media_url);
+  if (!hasHeroMedia) {
+    if (existing) {
+      await ctx.db.delete(existing._id as any);
+    }
+    return await buildCommunityFunnelConfig(ctx, communityId, null);
+  }
   const nextFields = {
-    heroMediaUrl: normalized?.hero_media_url ?? undefined,
-    heroMediaKind: normalized?.hero_media_kind ?? "image",
-    about: normalized?.about ?? undefined,
+    heroMediaUrl: normalized.hero_media_url ?? undefined,
+    heroMediaKind: normalized.hero_media_kind ?? "image",
     communityId,
     createdAt: existing?.createdAt ?? nowMs,
     updatedAt: nowMs,
@@ -123,17 +128,15 @@ export async function saveCommunityFunnelConfigInternal(
   if (existing) {
     await ctx.db.replace(existing._id as any, nextFields);
   } else {
-    await ctx.db.insert("communityFunnels" as any, {
-      ...nextFields,
-    });
+    await ctx.db.insert("communityFunnels" as any, nextFields);
   }
   const saved = await getCommunityFunnelRow(ctx, communityId);
-  return await mapCommunityFunnelRow(ctx, saved);
+  return await buildCommunityFunnelConfig(ctx, communityId, saved);
 }
 
 export async function resolveCommunityFunnelConfigByCommunityId(ctx: any, communityId: any) {
   const row = await getCommunityFunnelRow(ctx, communityId);
-  return await mapCommunityFunnelRow(ctx, row);
+  return await buildCommunityFunnelConfig(ctx, communityId, row);
 }
 
 export const getCommunityFunnelConfig = query({
@@ -155,6 +158,6 @@ export const getCommunityFunnelConfig = query({
       userId: args.userId,
     });
     const row = await getCommunityFunnelRow(ctx, args.communityId);
-    return await mapCommunityFunnelRow(ctx, row);
+    return await buildCommunityFunnelConfig(ctx, args.communityId, row);
   },
 });

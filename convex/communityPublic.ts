@@ -9,12 +9,12 @@ import {
   communityMembershipRowIsActive,
   mapActivePlanSummaries,
   mapJoinRequestRow,
-  normalizeOptionalText,
   normalizeSlug,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
+  resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
@@ -71,6 +71,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
 
   const onlineUserIds: any[] = [];
   const seenOnlineUserIds = new Set<string>();
+  const userIdCache = new Map<string, string | null>();
   for (const row of recentPresenceRows) {
     const normalizedUserId = String(row.userId ?? "").trim();
     if (!normalizedUserId || seenOnlineUserIds.has(normalizedUserId) || !eligibleUserIds.has(normalizedUserId)) {
@@ -86,7 +87,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
         const user = await ctx.db.get(userId);
         if (!user) return null;
         return {
-          user_id: String(user._id),
+          user_id: (await resolvePublicUserId(ctx, user._id, userIdCache)) ?? String(user._id),
           display_name: user.displayName ?? null,
           avatar_url: user.avatarUrl ?? null,
         };
@@ -127,6 +128,7 @@ export const resolvePublicFunnelBySlug = query({
         slug: community.slug,
         name: community.name,
         one_liner: community.oneLiner ?? null,
+        about: community.about ?? null,
         avatar_url: branding.avatar_url,
         banner_url: branding.banner_url,
         banner_focus_x: branding.banner_focus_x,
@@ -288,73 +290,30 @@ export const getMyJoinRequestBySlug = query({
   },
 });
 
-export const requestCommunityAccessBySlug = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communitySlug: v.string(),
-    message: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    const entryPolicy = resolveCommunityEntryPolicy(community);
-    if (entryPolicy === "paid_subscription") {
-      throw new Error("paid_communities_do_not_use_request_access");
-    }
-    if (entryPolicy === "open") {
-      throw new Error("request_access_not_required");
-    }
+async function ensurePendingCommunityJoinRequest(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  nowMs: number;
+}): Promise<CommunityJoinRequestLike> {
+  const existing = (await args.ctx.db
+    .query("communityJoinRequests")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
+    .first()) as CommunityJoinRequestLike | null;
+  if (existing) return existing;
 
-    const existing = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", args.userId))
-      .first()) as CommunityJoinRequestLike | null;
-    const message = normalizeOptionalText(args.message, 5000);
-
-    if (existing) {
-      const nextStatus = String(existing.status ?? "").trim().toLowerCase() === "approved" ? "approved" : "pending";
-      await ctx.db.patch(existing._id, {
-        status: nextStatus,
-        message,
-        updatedAt: nowMs,
-      });
-      const refreshed = (await ctx.db.get(existing._id)) as CommunityJoinRequestLike | null;
-      if (!refreshed) throw new Error("join_request_not_found");
-      return mapJoinRequestRow({
-        communityId: String(community._id),
-        row: refreshed,
-      });
-    }
-
-    const id = await ctx.db.insert("communityJoinRequests", {
-      communityId: community._id,
-      userId: args.userId,
-      status: "pending",
-      message,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const created = (await ctx.db.get(id)) as CommunityJoinRequestLike | null;
-    if (!created) throw new Error("join_request_create_failed");
-    return mapJoinRequestRow({
-      communityId: String(community._id),
-      row: created,
-    });
-  },
-});
+  const id = await args.ctx.db.insert("communityJoinRequests", {
+    communityId: args.communityId,
+    userId: args.userId,
+    status: "pending",
+    message: null,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const created = (await args.ctx.db.get(id)) as CommunityJoinRequestLike | null;
+  if (!created) throw new Error("join_request_create_failed");
+  return created;
+}
 
 async function joinPublicCommunityInternal(args: {
   ctx: any;
@@ -391,8 +350,20 @@ async function joinPublicCommunityInternal(args: {
     const status = String(joinRequest?.status ?? "")
       .trim()
       .toLowerCase();
-    if (status !== "approved") {
-      throw new Error("approval_required");
+    if (status === "approved") {
+      // approved requests may enter immediately
+    } else if (status === "pending") {
+      throw new Error("approval_pending");
+    } else if (status === "denied") {
+      throw new Error("approval_denied");
+    } else {
+      await ensurePendingCommunityJoinRequest({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+        nowMs: args.nowMs,
+      });
+      throw new Error("approval_pending");
     }
   }
 

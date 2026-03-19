@@ -15,7 +15,6 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 
-export type RequestedExecutionTarget = "chat" | "daytona_workspace";
 export type RuntimeCapabilityFamily =
   | "community_tools"
   | "web_research"
@@ -25,7 +24,7 @@ export type RuntimeTurnInput = {
   thread_id?: string;
   model_id?: string | null;
   surface?: "web" | "mobile";
-  requested_execution_target?: "chat" | "daytona_workspace" | null;
+  requested_agentic_tools?: boolean | null;
   requested_funding_source?:
     | "demo_public"
     | "user_key"
@@ -78,9 +77,7 @@ export type RuntimeTurnResolution = {
   };
   conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
   requestedModelId: string;
-  requestedExecutionTarget: RequestedExecutionTarget;
-  requiresWorkspaceTools: boolean;
-  lane: "public" | "platform" | "chatgpt" | "daytona_cloud";
+  lane: "public" | "platform" | "chatgpt";
   modelRef: string;
   maxTokens: number;
   stream: boolean;
@@ -88,6 +85,9 @@ export type RuntimeTurnResolution = {
   openRouterApiKeyOverride: string | null;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
+  runtimeCommunitySlug: string | null;
+  runtimeCommunityOneLiner: string | null;
+  runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
   runtimeProjectId: string | null;
   runtimeSandboxMode: "workspace_write" | undefined;
@@ -96,6 +96,10 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
 };
+
+function resolveRequestedAgenticTools(raw: unknown): boolean {
+  return raw === true;
+}
 
 function readEnv(name: string): string {
   try {
@@ -146,14 +150,6 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
   };
 }
 
-export function resolveRequestedExecutionTarget(
-  raw: unknown,
-): RequestedExecutionTarget {
-  const normalized = String(raw ?? "").trim().toLowerCase();
-  if (normalized === "daytona_workspace") return "daytona_workspace";
-  return "chat";
-}
-
 export function resolveAllowedToolNames(params: {
   activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
 }): RetrievalToolName[] {
@@ -172,7 +168,7 @@ export function resolveAllowedToolNames(params: {
 
 export function resolveRuntimeCapabilityFamilies(params: {
   entitledCapabilityFamilies: readonly RuntimeCapabilityFamily[];
-  requiresWorkspaceTools: boolean;
+  hasProjectContext: boolean;
   hasCommunityContext: boolean;
 }): RuntimeCapabilityFamily[] {
   const active: RuntimeCapabilityFamily[] = [];
@@ -185,7 +181,7 @@ export function resolveRuntimeCapabilityFamilies(params: {
   if (params.entitledCapabilityFamilies.includes("web_research")) {
     active.push("web_research");
   }
-  if (params.requiresWorkspaceTools && params.entitledCapabilityFamilies.includes("workspace_tools")) {
+  if (params.hasProjectContext && params.entitledCapabilityFamilies.includes("workspace_tools")) {
     active.push("workspace_tools");
   }
   return active.filter((value, index, list) => list.indexOf(value) === index);
@@ -194,9 +190,6 @@ export function resolveRuntimeCapabilityFamilies(params: {
 export function resolveRuntimeHarnessProfile(params: {
   activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
 }): string {
-  if (params.activeCapabilityFamilies.includes("workspace_tools")) {
-    return "authenticated_cloud_workspace";
-  }
   if (params.activeCapabilityFamilies.length > 0) {
     return "authenticated_cloud_tools";
   }
@@ -274,10 +267,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const platformMap = loadPlatformModelMap();
   const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.4";
   const publicRef = publicMap[requestedModelId];
-  const requestedExecutionTarget = resolveRequestedExecutionTarget(
-    input.requested_execution_target,
+  const requestedAgenticTools = resolveRequestedAgenticTools(
+    input.requested_agentic_tools,
   );
-  const requiresWorkspaceTools = requestedExecutionTarget === "daytona_workspace";
   const requestedFundingSource = parseRequestedFundingSource(
     input.requested_funding_source,
     publicRef ? "demo_public" : "platform",
@@ -297,7 +289,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     authSubject: actor.authSubject,
     surface: normalizeSurface(input.surface, "web"),
     modelClass: publicRef ? "free_model" : "paid_model",
-    requestedExecutionTarget,
     requestedFundingSource,
     hasUserKeyConnection,
     hasUserChatgptConnection,
@@ -310,7 +301,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         req,
         {
           decision: gateDecision,
-          requiresWorkspaceTools,
           requestedModelId,
         },
       ),
@@ -318,10 +308,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   setStage("provider_connection");
-  const lane = mapGateLaneToRuntimeLane({
-    requiresWorkspaceTools,
-    lane: gateDecision.lane,
-  });
+  const lane = mapGateLaneToRuntimeLane({ lane: gateDecision.lane });
   const fallbackPublicRef = Object.values(publicMap).find(
     (value) => typeof value === "string" && value.trim().length > 0,
   );
@@ -391,6 +378,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
 
   let runtimeCommunityId: string | null = null;
   let runtimeCommunityName: string | null = null;
+  let runtimeCommunitySlug: string | null = null;
+  let runtimeCommunityOneLiner: string | null = null;
+  let runtimeCommunityAbout: string | null = null;
   let runtimeCommunitySystemPrompt: string | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
   if (threadCommunityId) {
@@ -405,12 +395,21 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       )) as {
         community_id?: unknown;
         community_name?: unknown;
+        community_slug?: unknown;
+        community_one_liner?: unknown;
+        community_about?: unknown;
         system_prompt?: unknown;
       } | null;
       runtimeCommunityId =
         String(resolvedCommunity?.community_id ?? "").trim() || null;
       runtimeCommunityName =
         String(resolvedCommunity?.community_name ?? "").trim() || null;
+      runtimeCommunitySlug =
+        String(resolvedCommunity?.community_slug ?? "").trim() || null;
+      runtimeCommunityOneLiner =
+        String(resolvedCommunity?.community_one_liner ?? "").trim() || null;
+      runtimeCommunityAbout =
+        String(resolvedCommunity?.community_about ?? "").trim() || null;
       runtimeCommunitySystemPrompt =
         String(resolvedCommunity?.system_prompt ?? "").trim() || null;
     } catch (error) {
@@ -426,12 +425,16 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
   const resolvedRuntimeCapabilityFamilies = resolveRuntimeCapabilityFamilies({
     entitledCapabilityFamilies: gateDecision.entitledCapabilityFamilies,
-    requiresWorkspaceTools,
+    hasProjectContext: Boolean(runtimeProjectId),
     hasCommunityContext: Boolean(runtimeCommunityId),
   });
   const allowedToolNames = resolveAllowedToolNames({
     activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
   });
+  const runtimeExecutionMode: "agentic" | "chat" =
+    requestedAgenticTools && allowedToolNames.length > 0
+      ? "agentic"
+      : "chat";
   return {
     ok: true,
     value: {
@@ -444,8 +447,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       },
       conversationMessages,
       requestedModelId,
-      requestedExecutionTarget,
-      requiresWorkspaceTools,
       lane,
       modelRef,
       maxTokens,
@@ -454,15 +455,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       openRouterApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
+      runtimeCommunitySlug,
+      runtimeCommunityOneLiner,
+      runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeProjectId,
-      runtimeSandboxMode: requiresWorkspaceTools ? "workspace_write" : undefined,
+      runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
+        ? "workspace_write"
+        : undefined,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile: resolveRuntimeHarnessProfile({
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
-      runtimeExecutionMode: allowedToolNames.length > 0 ? "agentic" : "chat",
+      runtimeExecutionMode,
     },
   };
 }

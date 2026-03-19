@@ -24,7 +24,7 @@ export async function ensureRuntimeRunStarted(args: {
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message === "thread_run_in_progress") {
+    if (message === "thread_run_in_progress" || message.includes("thread_run_in_progress")) {
       return {
         ok: false,
         response: fail(409, {
@@ -128,7 +128,7 @@ export async function persistRuntimeAssistantMessage(args: {
   messageKey: string;
   requestedModelId: string;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
-  lane: "public" | "platform" | "chatgpt" | "daytona_cloud";
+  lane: "public" | "platform" | "chatgpt";
   runId: string;
   content: string;
 }) {

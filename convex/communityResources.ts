@@ -4,6 +4,7 @@ import {
   type CommunityResourceLike,
   getCommunityAndMembership,
   mapCommunityResourceRow,
+  normalizeIdValue,
   normalizeName,
   normalizeOptionalFileKey,
   normalizeOptionalText,
@@ -15,6 +16,10 @@ import {
   requireCommunityModerator,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import {
+  deleteArchiveDocumentBySource,
+  upsertArchiveDocumentForResource,
+} from "./communityArchiveDocuments";
 
 export const listCommunityResources = query({
   args: {
@@ -138,6 +143,7 @@ export const saveCommunityResource = mutation({
       });
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
       if (!updated) throw new Error("community_resource_not_found");
+      await upsertArchiveDocumentForResource(ctx, updated);
       return await mapCommunityResourceRow(ctx, updated);
     }
 
@@ -174,6 +180,7 @@ export const saveCommunityResource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
+    await upsertArchiveDocumentForResource(ctx, created);
     return await mapCommunityResourceRow(ctx, created);
   },
 });
@@ -199,6 +206,11 @@ export const deleteCommunityResource = mutation({
       userId: args.userId,
     });
     await ctx.db.delete(resource._id as any);
+    await deleteArchiveDocumentBySource(ctx, {
+      communityId: resource.communityId,
+      sourceType: "resource",
+      sourceId: normalizeIdValue(resource._id),
+    });
     return { ok: true };
   },
 });

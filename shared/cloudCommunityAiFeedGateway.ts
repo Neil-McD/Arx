@@ -4,6 +4,11 @@ type CloudCommunityAiFeedGatewayParams<SessionT> = {
   session: SessionT;
 };
 
+type CommunityAiFeedBundle<TPost> = {
+  live: TPost[];
+  ranked: TPost[];
+};
+
 function coerceObjectRows<TRow>(payload: unknown): TRow[] {
   if (Array.isArray(payload)) return payload as TRow[];
   if (!payload || typeof payload !== "object") return [];
@@ -16,34 +21,30 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
   return [payload as TRow];
 }
 
-export async function listCloudCommunityAiFeedLive<SessionT, TPost = unknown>(
-  params: CloudCommunityAiFeedGatewayParams<SessionT> & {
-    communityId: string;
-    limit?: number;
-  },
-): Promise<TPost[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityAiFeedLive" as any, {
-    authSubject,
-    communityId: params.communityId,
-    limit: params.limit ?? 100,
-  });
-  return coerceObjectRows<TPost>(payload);
+function coerceFeedBundle<TPost>(payload: unknown): CommunityAiFeedBundle<TPost> {
+  if (!payload || typeof payload !== "object") {
+    return { live: [], ranked: [] };
+  }
+  const payloadObj = payload as Record<string, unknown>;
+  return {
+    live: coerceObjectRows<TPost>(payloadObj.live),
+    ranked: coerceObjectRows<TPost>(payloadObj.ranked),
+  };
 }
 
-export async function listCloudCommunityAiFeedRanked<SessionT, TPost = unknown>(
+export async function listCloudCommunityAiFeedBundle<SessionT, TPost = unknown>(
   params: CloudCommunityAiFeedGatewayParams<SessionT> & {
     communityId: string;
     limit?: number;
   },
-): Promise<TPost[]> {
+): Promise<CommunityAiFeedBundle<TPost>> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityAiFeedRanked" as any, {
+  const payload = await client.query("community:listCommunityAiFeedBundle" as any, {
     authSubject,
     communityId: params.communityId,
     limit: params.limit ?? 100,
   });
-  return coerceObjectRows<TPost>(payload);
+  return coerceFeedBundle<TPost>(payload);
 }
 
 export async function reactToCloudCommunityAiFeedPost<SessionT>(

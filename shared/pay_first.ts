@@ -157,9 +157,8 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 
 export type PublicCommunityJoinErrorKind =
   | "paid_plan_required"
-  | "approval_required"
-  | "paid_communities_do_not_use_request_access"
-  | "request_access_not_required"
+  | "approval_pending"
+  | "approval_denied"
   | "authentication_required"
   | "community_not_found"
   | "forbidden"
@@ -183,9 +182,9 @@ export function classifyPublicCommunityJoinError(error: unknown): PublicCommunit
     values.some((value) => value === token || value.includes(token));
 
   if (has("paid_plan_required")) return "paid_plan_required";
-  if (has("approval_required")) return "approval_required";
-  if (has("paid_communities_do_not_use_request_access")) return "paid_communities_do_not_use_request_access";
-  if (has("request_access_not_required")) return "request_access_not_required";
+  if (has("approval_pending")) return "approval_pending";
+  if (has("approval_denied")) return "approval_denied";
+  if (has("approval_required")) return "approval_pending";
   if (has("community_not_found") || has("community not found")) return "community_not_found";
   if (has("forbidden") || has("42501")) return "forbidden";
   if (has("authentication required") || has("28000")) return "authentication_required";
@@ -196,17 +195,21 @@ export function classifyPublicCommunityJoinError(error: unknown): PublicCommunit
 export async function redeemPurchaseClaimRpc<S extends CloudSessionLike>(opts: {
   session: S;
   token: string;
-}): Promise<string> {
+}): Promise<{ community_id: string; community_slug: string | null }> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const rows =
     ((await client.mutation("billing:redeemPurchaseClaim" as any, {
       authSubject,
       token: opts.token,
       nowMs: Date.now(),
-    })) as Array<{ community_id?: string }> | null) ?? [];
-  const communityId = rows[0]?.community_id;
+    })) as Array<{ community_id?: string; community_slug?: string | null }> | null) ?? [];
+  const claim = rows[0] ?? null;
+  const communityId = claim?.community_id;
   if (!communityId) throw new Error("Redeem succeeded but community missing.");
-  return communityId;
+  return {
+    community_id: communityId,
+    community_slug: typeof claim?.community_slug === "string" ? claim.community_slug : null,
+  };
 }
 
 export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
@@ -222,12 +225,12 @@ export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(o
 
 export async function redeemPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
   session: S;
-}): Promise<Array<{ community_id: string }>> {
+}): Promise<Array<{ community_id: string; community_slug: string | null }>> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const rows = (await client.mutation("billing:redeemPendingPurchaseClaims" as any, {
     authSubject,
     nowMs: Date.now(),
-  })) as Array<{ community_id: string }> | null;
+  })) as Array<{ community_id: string; community_slug?: string | null }> | null;
   return Array.isArray(rows) ? rows : [];
 }
 

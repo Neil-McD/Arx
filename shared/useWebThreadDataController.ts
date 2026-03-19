@@ -140,6 +140,14 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
         current.setThreads(nextList);
         const visible = nextList.filter((thread) => thread.last_seq > 0);
 
+        if (current.workspaceWantsNewChatRef.current) {
+          if (current.activeThreadId !== null) {
+            current.setActiveThreadId(null);
+          }
+          current.threadsHydratedRef.current = true;
+          return;
+        }
+
         if (!current.activeThreadId) {
           if (!current.threadsHydratedRef.current && !current.workspaceWantsNewChatRef.current) {
             current.setActiveThreadId(visible[0]?.id ?? null);
@@ -149,7 +157,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
         }
 
         const selected = nextList.find((thread) => thread.id === current.activeThreadId) ?? null;
-        if (selected && selected.last_seq <= 0) {
+        if (!selected) {
           current.setActiveThreadId(visible[0]?.id ?? null);
         }
         current.threadsHydratedRef.current = true;

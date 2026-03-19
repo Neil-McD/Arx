@@ -1,3 +1,4 @@
+import { Brain } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
@@ -13,6 +14,7 @@ type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
   communityTab: CommunityTab;
   canViewActiveCommunitySettings: boolean;
+  canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   onSelectTab: (tab: CommunityTab) => void;
@@ -24,6 +26,7 @@ export function CommunityNav({
   activeCommunity,
   communityTab,
   canViewActiveCommunitySettings,
+  canViewActiveCommunityPolynet,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
   onSelectTab,
@@ -145,6 +148,19 @@ export function CommunityNav({
             </span>
             Settings
           </button>
+          {canViewActiveCommunityPolynet && (
+            <button
+              className={communityTab === "polynet" ? "nav-item active" : "nav-item"}
+              type={buttonType}
+              onClick={() => onSelectTab("polynet")}
+              title={maybeTitle("Polynet")}
+            >
+              <span className="nav-icon">
+                <Brain size={19} strokeWidth={1.8} />
+              </span>
+              Polynet
+            </button>
+          )}
           {canManageMembersActiveCommunity && (
             <button
               className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}

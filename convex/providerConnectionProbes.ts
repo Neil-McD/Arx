@@ -1,5 +1,5 @@
 import { action } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getFreshChatgptAuthForUser, isWebChatgptSpikeEnabled, runChatgptCompletion } from "./httpChatgpt";
 
@@ -21,16 +21,12 @@ export const probeChatgptConnection = action({
   handler: async (ctx, args) => {
     if (!isWebChatgptSpikeEnabled()) throw new Error("Web ChatGPT auth is disabled.");
 
-    const actor = (await ctx.runQuery(api.auth.getActor as any, {
-      authState: "authenticated",
+    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject ?? undefined,
-    })) as { authSubject?: unknown } | null;
+    })) as { authSubject?: unknown; dbUserId?: unknown } | null;
     const authSubject = normalizeString(actor?.authSubject);
     if (!authSubject) throw new Error("authenticated_user_required");
-
-    const userId = await ctx.runQuery(internal.providerConnections.getUserIdByAuthSubjectInternal as any, {
-      authSubject,
-    });
+    const userId = actor?.dbUserId;
     if (!userId) throw new Error("authenticated_user_required");
 
     const modelId = normalizeString(args.modelId) || "gpt-5.4";

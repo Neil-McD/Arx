@@ -55,6 +55,7 @@ export type UseWebSendFlowControllerArgs<
   ensureWorkspaceThreadLensBeforeSend: (threadId: string, session: SessionT) => Promise<void>;
 
   createThread: (session: SessionT) => Promise<ThreadRecordT | null>;
+  onThreadCreated?: (thread: ThreadRecordT) => void;
   updateThreadModel: (threadId: string, modelId: string, session: SessionT) => Promise<void>;
   maybeSetThreadTitleFromText: (threadId: string, userText: string, session: SessionT) => Promise<void>;
   createPersonalMemoryItemDirect: (params: { content: string; pinned: boolean }) => Promise<unknown>;
@@ -79,7 +80,7 @@ export type UseWebSendFlowControllerArgs<
       systemPrompt?: string | null;
       inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
       requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
-      requiresWorkspaceTools?: boolean;
+      requestedAgenticTools?: boolean;
       replyToId?: string;
       messages?: ThreadMessageT[];
     },
@@ -96,6 +97,7 @@ export type UseWebSendFlowControllerArgs<
 
   messageInput: string;
   workspaceAttachments: AttachmentT[];
+  workspaceWantsNewChat: boolean;
   isSendingMessage: boolean;
   isThreadRunActive: (threadId: string | null) => boolean;
   activeThreadId: string | null;
@@ -104,10 +106,11 @@ export type UseWebSendFlowControllerArgs<
   activeModelId: string | null;
   modelToggles: ModelToggle[];
   userMemoryRememberEnabled: boolean;
-  builderTier: string;
+  builderTier: string | null;
   hasPaidAccess: boolean;
   hasUserKeyConnection: boolean;
   hasUserChatgptConnection: boolean;
+  loadBuilderBillingStatus?: (session: SessionT) => Promise<{ builder_tier?: string | null } | null>;
   guestThreadId: string;
   guestModelId: string;
   guestModelAllowlist: ReadonlySet<string>;
@@ -124,7 +127,6 @@ export type UseWebSendFlowControllerArgs<
   ) => void;
   setIsSendingMessage: (value: boolean | ((prev: boolean) => boolean)) => void;
   setThreadRunSending: (threadId: string, sending: boolean) => void;
-  setThreadRunRequiresWorkspaceTools: (threadId: string, requiresWorkspaceTools: boolean | null) => void;
   setIsWorkspaceAtBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;

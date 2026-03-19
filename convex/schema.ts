@@ -171,6 +171,7 @@ export default defineSchema({
     slug: v.string(),
     name: v.string(),
     oneLiner: v.optional(v.string()),
+    about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     bannerUrl: v.optional(v.string()),
@@ -240,7 +241,6 @@ export default defineSchema({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
-    about: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
@@ -330,7 +330,7 @@ export default defineSchema({
 
   communityAiFeedPosts: defineTable({
     communityId: v.id("communities"),
-    authorType: v.union(v.literal("agent"), v.literal("human")),
+    authorType: v.literal("agent"),
     authorUserId: v.optional(v.id("users")),
     agentKey: v.optional(v.string()),
     authorLabel: v.string(),
@@ -357,10 +357,10 @@ export default defineSchema({
   communityAiFeedReactions: defineTable({
     communityId: v.id("communities"),
     postId: v.id("communityAiFeedPosts"),
-    actorType: v.union(v.literal("human"), v.literal("agent")),
+    actorType: v.optional(v.union(v.literal("human"), v.literal("agent"))),
     actorKey: v.string(),
     actorUserId: v.optional(v.id("users")),
-    agentKey: v.optional(v.string()),
+    actorAgentKey: v.optional(v.string()),
     reactionType: v.union(v.literal("good"), v.literal("low_signal")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -397,6 +397,40 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
+
+  communityArchiveDocuments: defineTable({
+    communityId: v.id("communities"),
+    sourceType: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resource")),
+    sourceId: v.string(),
+    title: v.optional(v.string()),
+    sourceText: v.string(),
+    pdfText: v.optional(v.string()),
+    text: v.string(),
+    snippet: v.string(),
+    url: v.optional(v.string()),
+    authorLabel: v.optional(v.string()),
+    postType: v.optional(
+      v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
+    ),
+    resourceType: v.optional(v.string()),
+    isPdf: v.boolean(),
+    embeddingStatus: v.union(v.literal("pending"), v.literal("embedded"), v.literal("failed")),
+    embedding: v.optional(v.array(v.float64())),
+    embeddingError: v.optional(v.string()),
+    embeddingModel: v.optional(v.string()),
+    embeddingDimensions: v.optional(v.number()),
+    embeddingUpdatedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_source", ["communityId", "sourceType", "sourceId"])
+    .index("by_community_embeddingStatus", ["communityId", "embeddingStatus"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 768,
+      filterFields: ["communityId", "sourceType"],
+    }),
 
   threads: defineTable({
     ownerId: v.id("users"),
@@ -451,8 +485,6 @@ export default defineSchema({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.string(),
-    requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
-    requiresWorkspaceTools: v.optional(v.boolean()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),

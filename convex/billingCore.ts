@@ -1,4 +1,5 @@
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveCommunityEntryPolicy } from "./communityCore";
 
 export type CommunityLike = {
@@ -56,32 +57,6 @@ export type PurchaseClaimLike = {
   createdAt: number;
   updatedAt: number;
 };
-
-function normalizeIdValue(raw: unknown): string {
-  return String(raw ?? "").trim();
-}
-
-export async function resolveUserIdForAuthenticatedRequest(args: {
-  ctx: any;
-  userId?: any;
-  authSubject?: string | null;
-}): Promise<any> {
-  const userIdInput = normalizeIdValue(args.userId);
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
-  if (!user) throw new Error("user_not_found");
-  const resolvedUserId = normalizeIdValue(user._id);
-  if (userIdInput && userIdInput !== resolvedUserId) {
-    throw new Error("user_id_mismatch");
-  }
-  return user._id;
-}
 
 export function normalizeBillingPeriod(raw: unknown): "monthly" | "annual" {
   const period = String(raw ?? "")

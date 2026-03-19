@@ -7,7 +7,6 @@ type CommunityLike = {
   entry_policy?: string | null;
   visibility?: string | null;
 };
-type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type LifecycleParams<
   SessionT,
@@ -19,7 +18,7 @@ type LifecycleParams<
   session: SessionT | null;
   activeCommunityId: string | null;
   communities: CommunityT[];
-  membersSurfaceMode: MembersSurfaceMode;
+  canReviewJoinRequests: boolean;
   activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
   isJoinRequestsModalOpen: boolean;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
@@ -69,7 +68,7 @@ export function useCommunityMembersReviewLifecycle<
       params.setIsJoinRequestsModalOpen(false);
       return;
     }
-    if (params.membersSurfaceMode === "viewer") {
+    if (!params.canReviewJoinRequests) {
       params.setCommunityJoinRequests([]);
       params.setIsLoadingCommunityJoinRequests(false);
       params.setCommunityJoinRequestsError(null);
@@ -134,7 +133,7 @@ export function useCommunityMembersReviewLifecycle<
     params.communityTab,
     params.session,
     params.activeCommunityId,
-    params.membersSurfaceMode,
+    params.canReviewJoinRequests,
     params.activeCommunityMembersJoinReviewMode,
     params.communities,
   ]);
@@ -145,7 +144,7 @@ export function useCommunityMembersReviewLifecycle<
       params.activePage !== "community" ||
       params.communityTab !== "members" ||
       !params.activeCommunityId ||
-      params.membersSurfaceMode === "viewer" ||
+      !params.canReviewJoinRequests ||
       params.activeCommunityMembersJoinReviewMode !== "free_approval"
     ) {
       params.setIsJoinRequestsModalOpen(false);
@@ -155,7 +154,7 @@ export function useCommunityMembersReviewLifecycle<
     params.activePage,
     params.communityTab,
     params.activeCommunityId,
-    params.membersSurfaceMode,
+    params.canReviewJoinRequests,
     params.activeCommunityMembersJoinReviewMode,
   ]);
 }

@@ -1,5 +1,4 @@
 import type {
-  AnalyticsChartMode,
   AnalyticsPoint,
   AnalyticsRange,
   CommunityAnalyticsSummary,
@@ -16,14 +15,9 @@ export type CommunityAnalyticsState = {
   isLoadingCommunityAnalytics: boolean;
   communityAnalyticsError: string | null;
   communityAnalyticsSummary: CommunityAnalyticsSummary;
-  communityAnalyticsChartMode: AnalyticsChartMode;
   communityAnalyticsSeries: AnalyticsPoint[];
-  communityRevenueMeta: { currency: string; currency_decimals: number } | null;
-  communityRevenueSeries: AnalyticsPoint[];
-  communityRevenueError: string | null;
 };
 
 export type CommunityAnalyticsActions = {
   setCommunityAnalyticsRange: (value: AnalyticsRange) => void;
-  setCommunityAnalyticsChartMode: (value: AnalyticsChartMode) => void;
 };

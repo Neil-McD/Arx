@@ -22,13 +22,10 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     session: SessionT;
     shouldIgnore: () => boolean;
   }) => Promise<void>;
-  loadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
-  setActiveCommunityAccess: Dispatch<SetStateAction<CommunityAccess | null>>;
-  setIsLoadingCommunityAccess: Dispatch<SetStateAction<boolean>>;
 }) {
   const session = params.session;
 
@@ -91,13 +88,4 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     params.activeCommunityAccess?.can_manage_members,
     params.loadCommunityPricing,
   ]);
-
-  useEffect(() => {
-    if (!session || !params.activeCommunityId) {
-      params.setActiveCommunityAccess(null);
-      params.setIsLoadingCommunityAccess(false);
-      return;
-    }
-    void params.loadCommunityAccess(params.activeCommunityId, session);
-  }, [session, params.activeCommunityId]);
 }

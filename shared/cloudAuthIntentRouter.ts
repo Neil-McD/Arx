@@ -10,17 +10,8 @@ type PendingAuthIntentHandlers = {
   join_public_community: (
     payload: Extract<PendingAuthIntent, { reason: "join_public_community" }>["payload"],
   ) => void;
-  request_community_access: (
-    payload: Extract<PendingAuthIntent, { reason: "request_community_access" }>["payload"],
-  ) => void;
   start_builder_checkout: (
     payload: Extract<PendingAuthIntent, { reason: "start_builder_checkout" }>["payload"],
-  ) => void;
-  open_builder_billing_portal: (
-    payload: Extract<PendingAuthIntent, { reason: "open_builder_billing_portal" }>["payload"],
-  ) => void;
-  start_payouts_onboarding: (
-    payload: Extract<PendingAuthIntent, { reason: "start_payouts_onboarding" }>["payload"],
   ) => void;
   redeem_pending_purchases: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_pending_purchases" }>["payload"],
@@ -44,17 +35,8 @@ export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: Pend
     case "join_public_community":
       handlers.join_public_community(intent.payload);
       return;
-    case "request_community_access":
-      handlers.request_community_access(intent.payload);
-      return;
     case "start_builder_checkout":
       handlers.start_builder_checkout(intent.payload);
-      return;
-    case "open_builder_billing_portal":
-      handlers.open_builder_billing_portal(intent.payload);
-      return;
-    case "start_payouts_onboarding":
-      handlers.start_payouts_onboarding(intent.payload);
       return;
     case "redeem_pending_purchases":
       handlers.redeem_pending_purchases(intent.payload);

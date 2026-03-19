@@ -111,7 +111,7 @@ export function BuilderUpgradeModal({
                 {feature(true, "Project-bound build runtime")}
                 {feature(true, "Personal memory")}
                 {feature(false, "Create communities")}
-                {feature(false, "Community pricing and payouts")}
+                {feature(false, "Community pricing and paid access")}
                 {feature(false, "Community AI agent customization")}
                 {feature(false, "Community operations")}
               </ul>
@@ -144,11 +144,11 @@ export function BuilderUpgradeModal({
               <ul className="plan-features plan-features-checks">
                 {feature(true, "Everything in Builder")}
                 {feature(true, "Create up to 3 communities")}
-                {feature(true, "Community pricing and subscriptions")}
-                {feature(true, "Stripe payouts")}
+                {feature(true, "Community pricing configuration")}
+                {feature(true, "Community paid-access flows")}
                 {feature(true, "Community AI agent customization")}
                 {feature(true, "Community operations")}
-                {feature(false, "Default hosted member inference")}
+                {feature(true, "Public funnel and discovery")}
               </ul>
               <button
                 type="button"

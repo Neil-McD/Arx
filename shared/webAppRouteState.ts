@@ -69,6 +69,7 @@ export type CommunityFunnelPreviewRouteCommunity = {
   slug?: string | null;
   name: string;
   one_liner: string | null;
+  about: string | null;
   avatar_url?: string | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
@@ -89,7 +90,7 @@ export type CommunityFunnelPreviewRouteState = {
   community: CommunityFunnelPreviewRouteCommunity;
   visibilityLabel: string;
   memberCount: number | null;
-  joinMode: "join_free" | "request_access" | "checkout";
+  joinMode: "join_free" | "join_approval" | "checkout";
   one_liner: string | null;
   funnel: CommunityFunnelConfig;
   savedAt: number;
@@ -105,6 +106,19 @@ function normalizePreviewOneLiner(raw: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizePreviewAbout(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizePreviewJoinMode(raw: unknown): CommunityFunnelPreviewRouteState["joinMode"] {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "checkout") return "checkout";
+  if (value === "join_approval" || value === "request_access") return "join_approval";
+  return "join_free";
+}
+
 export function buildCommunityFunnelPreviewHistoryState(
   draft: CommunityFunnelPreviewRouteState,
 ): HistoryStateWithPreview {
@@ -117,11 +131,12 @@ export function buildCommunityFunnelPreviewHistoryState(
         slug: String(draft.community.slug ?? draft.slug ?? "").trim() || null,
         name: String(draft.community.name ?? "Community").trim() || "Community",
         one_liner: normalizePreviewOneLiner(draft.community.one_liner),
+        about: normalizePreviewAbout(draft.community.about),
         visibility: String(draft.community.visibility ?? "unlisted").trim() || "unlisted",
       },
       visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
       memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-      joinMode: draft.joinMode === "checkout" || draft.joinMode === "request_access" ? draft.joinMode : "join_free",
+      joinMode: normalizePreviewJoinMode(draft.joinMode),
       one_liner: normalizePreviewOneLiner(draft.one_liner),
       savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
     },
@@ -145,11 +160,12 @@ export function readCommunityFunnelPreviewHistoryState(
       slug: String(draft.community.slug ?? slug).trim() || slug,
       name: String(draft.community.name ?? "Community").trim() || "Community",
       one_liner: normalizePreviewOneLiner(draft.community.one_liner),
+      about: normalizePreviewAbout(draft.community.about),
       visibility: String(draft.community.visibility ?? "unlisted").trim() || "unlisted",
     },
     visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
     memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-    joinMode: draft.joinMode === "checkout" || draft.joinMode === "request_access" ? draft.joinMode : "join_free",
+    joinMode: normalizePreviewJoinMode(draft.joinMode),
     one_liner: normalizePreviewOneLiner(draft.one_liner),
     savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
   };

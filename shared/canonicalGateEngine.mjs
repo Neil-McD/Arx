@@ -11,7 +11,6 @@ const VALID_REQUESTED_FUNDING_SOURCE = new Set([
   "platform",
   "auto",
 ]);
-const VALID_REQUESTED_EXECUTION_TARGET = new Set(["chat", "daytona_workspace"]);
 const VALID_CAPABILITY_FAMILY = new Set(["community_tools", "web_research", "workspace_tools"]);
 
 function toLowerTrimmed(value) {
@@ -49,16 +48,6 @@ function normalizeRequestedFundingSource(rawRequestedFundingSource, rawModelClas
   return legacyModelClass === "free_model" ? "demo_public" : "platform";
 }
 
-function normalizeRequestedExecutionTarget(rawRequestedExecutionTarget) {
-  const normalized = toLowerTrimmed(rawRequestedExecutionTarget);
-  if (VALID_REQUESTED_EXECUTION_TARGET.has(normalized)) return normalized;
-  return "chat";
-}
-
-export function resolveRequiresWorkspaceToolsForGate(input) {
-  return normalizeRequestedExecutionTarget(input?.requestedExecutionTarget) === "daytona_workspace";
-}
-
 function normalizeCanonicalTier(rawTier) {
   const normalized = toLowerTrimmed(rawTier);
   if (normalized === "pro" || normalized === "architect") return "architect";
@@ -82,6 +71,10 @@ function normalizeHasCommunityContext(rawValue) {
   return rawValue === true;
 }
 
+function normalizeHasProjectContext(rawValue) {
+  return rawValue === true;
+}
+
 export function resolveEntitledCapabilityFamiliesForGate(input) {
   const effectiveTier = resolveEffectiveTier({
     authState: input?.authState,
@@ -93,8 +86,8 @@ export function resolveEntitledCapabilityFamiliesForGate(input) {
 }
 
 export function resolveActiveCapabilityFamiliesForGate(input) {
-  const requiresWorkspaceTools = resolveRequiresWorkspaceToolsForGate(input);
   const hasCommunityContext = normalizeHasCommunityContext(input?.hasCommunityContext);
+  const hasProjectContext = normalizeHasProjectContext(input?.hasProjectContext);
   const entitled = resolveEntitledCapabilityFamiliesForGate(input);
   const active = [];
   if (hasCommunityContext && entitled.includes("community_tools")) {
@@ -103,7 +96,7 @@ export function resolveActiveCapabilityFamiliesForGate(input) {
   if (entitled.includes("web_research")) {
     active.push("web_research");
   }
-  if (requiresWorkspaceTools && entitled.includes("workspace_tools")) {
+  if (hasProjectContext && entitled.includes("workspace_tools")) {
     active.push("workspace_tools");
   }
   return active.filter((value, index, list) => VALID_CAPABILITY_FAMILY.has(value) && list.indexOf(value) === index);
@@ -112,11 +105,7 @@ export function resolveActiveCapabilityFamiliesForGate(input) {
 export function resolveHarnessProfileForGate(input) {
   const authState = normalizeAuthState(input?.authState);
   if (authState === "anonymous") return "anonymous_demo";
-  const requiresWorkspaceTools = resolveRequiresWorkspaceToolsForGate(input);
   const active = resolveActiveCapabilityFamiliesForGate(input);
-  if (requiresWorkspaceTools) {
-    return "authenticated_cloud_workspace";
-  }
   return active.length > 0 ? "authenticated_cloud_tools" : "authenticated_cloud_chat";
 }
 
@@ -147,7 +136,6 @@ export function evaluateCanonicalGate(rawInput) {
     rawInput?.requestedFundingSource,
     rawInput?.modelClass,
   );
-  const requestedExecutionTarget = normalizeRequestedExecutionTarget(rawInput?.requestedExecutionTarget);
   const authState = normalizeAuthState(rawInput?.authState);
   const effectiveTier = resolveEffectiveTier({
     authState,
@@ -157,67 +145,6 @@ export function evaluateCanonicalGate(rawInput) {
   const hasUserChatGptConnection = Boolean(rawInput?.hasUserChatGptConnection);
   const hasWorkbenchAccess = isPaidEffectiveTier(effectiveTier);
   const isAnonymous = effectiveTier === "anon_free";
-
-  if (requestedExecutionTarget === "daytona_workspace") {
-    if (requestedFundingSource === "user_chatgpt") {
-      if (isAnonymous) {
-        return {
-          ...deny("auth_required", "sign_in"),
-          effectiveTier,
-        };
-      }
-      if (!hasWorkbenchAccess) {
-        return {
-          ...deny("tier_required", "upgrade"),
-          effectiveTier,
-        };
-      }
-      if (hasUserChatGptConnection) {
-        return {
-          ...allow("daytona_cloud", "user_chatgpt"),
-          effectiveTier,
-        };
-      }
-      return {
-        ...deny("provider_connection_required", "connect_provider"),
-        effectiveTier,
-      };
-    }
-    if (requestedFundingSource === "user_key") {
-      if (isAnonymous) {
-        return {
-          ...deny("auth_required", "sign_in"),
-          effectiveTier,
-        };
-      }
-      if (!hasWorkbenchAccess) {
-        return {
-          ...deny("tier_required", "upgrade"),
-          effectiveTier,
-        };
-      }
-      if (hasUserKeyConnection) {
-        return {
-          ...allow("daytona_cloud", "user_key"),
-          effectiveTier,
-        };
-      }
-      return {
-        ...deny("provider_connection_required", "connect_provider"),
-        effectiveTier,
-      };
-    }
-    if (hasWorkbenchAccess) {
-      return {
-        ...allow("daytona_cloud", "platform"),
-        effectiveTier,
-      };
-    }
-    return {
-      ...deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade"),
-      effectiveTier,
-    };
-  }
 
   if (requestedFundingSource === "demo_public") {
     return {
@@ -296,10 +223,6 @@ export function evaluateCanonicalGate(rawInput) {
 
 export function normalizeTierForGate(rawTier) {
   return normalizeCanonicalTier(rawTier);
-}
-
-export function resolveRequestedExecutionTargetForGate(input) {
-  return normalizeRequestedExecutionTarget(input?.requestedExecutionTarget);
 }
 
 export function resolveEffectiveTierForGate(input) {

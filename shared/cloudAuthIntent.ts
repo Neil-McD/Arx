@@ -48,31 +48,10 @@ export type PendingAuthIntent =
     }
   | {
       v: 1;
-      reason: "request_community_access";
-      return_to: string;
-      created_at_ms: number;
-      payload: { community_slug: string; message: string | null };
-    }
-  | {
-      v: 1;
       reason: "start_builder_checkout";
       return_to: string;
       created_at_ms: number;
       payload: { tier: BuilderCheckoutTier; context: BuilderUpgradeContext };
-    }
-  | {
-      v: 1;
-      reason: "open_builder_billing_portal";
-      return_to: string;
-      created_at_ms: number;
-      payload: { context: BuilderUpgradeContext };
-    }
-  | {
-      v: 1;
-      reason: "start_payouts_onboarding";
-      return_to: string;
-      created_at_ms: number;
-      payload: Record<string, never>;
     }
   | {
       v: 1;
@@ -138,13 +117,6 @@ function normalizePendingAuthIntent(
     return { v: 1, reason, return_to, created_at_ms, payload: { community_id, community_slug, brandos_aid } };
   }
 
-  if (reason === "request_community_access") {
-    const communitySlugRaw = typeof payload.community_slug === "string" ? payload.community_slug.trim() : "";
-    if (!communitySlugRaw) return null;
-    const message = typeof payload.message === "string" ? payload.message.trim() || null : null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { community_slug: communitySlugRaw, message } };
-  }
-
   if (reason === "start_builder_checkout") {
     const rawTier = payload.tier;
     const context = payload.context;
@@ -157,16 +129,6 @@ function normalizePendingAuthIntent(
     if (!tier) return null;
     if (context !== "builder" && context !== "create_community") return null;
     return { v: 1, reason, return_to, created_at_ms, payload: { tier, context } };
-  }
-
-  if (reason === "open_builder_billing_portal") {
-    const context = payload.context;
-    if (context !== "builder" && context !== "create_community") return null;
-    return { v: 1, reason, return_to, created_at_ms, payload: { context } };
-  }
-
-  if (reason === "start_payouts_onboarding") {
-    return { v: 1, reason, return_to, created_at_ms, payload: {} };
   }
 
   if (reason === "redeem_pending_purchases") {

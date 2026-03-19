@@ -4,7 +4,9 @@ import {
   completeCloudOAuthCallback,
   decodeJwtPayload,
   ensureCloudSessionForAuthenticatedSend,
+  ensureCloudSessionForAuthenticatedSendResult,
   ensureCloudSessionForRequest,
+  ensureCloudSessionForRequestResult,
   fetchCloudUser,
   fetchWithCloudAuthShared,
   fetchWithCloudPublicShared,
@@ -17,12 +19,17 @@ import {
   logoutCloudSessionRemote,
   readCloudError,
   refreshCloudSession,
+  refreshCloudSessionResult,
   refreshCloudSessionWithLock,
+  refreshCloudSessionWithLockResult,
   sendCloudMagicLinkOtp,
   transcribeCloudVoice,
   type CloudSession,
+  type CloudSessionEnsureResult,
   type CloudSessionRef,
+  type CloudSessionRefreshResult,
   type CloudSessionRefreshInFlightRef,
+  type CloudSessionRefreshResultInFlightRef,
   type CloudUser,
 } from "./cloudAuthCore";
 
@@ -30,13 +37,18 @@ export type AuthUser = CloudUser;
 export type AuthSession = CloudSession;
 export type AuthSessionRef = CloudSessionRef;
 export type AuthSessionRefreshInFlightRef = CloudSessionRefreshInFlightRef;
+export type AuthSessionRefreshResultInFlightRef = CloudSessionRefreshResultInFlightRef;
+export type AuthSessionRefreshResult = CloudSessionRefreshResult;
+export type AuthSessionEnsureResult = CloudSessionEnsureResult;
 
 export {
   beginCloudOAuthSignIn as beginOAuthSignIn,
   bootstrapCloudSession as bootstrapSession,
   completeCloudOAuthCallback as completeOAuthCallback,
   decodeJwtPayload as decodeAuthJwtPayload,
+  ensureCloudSessionForAuthenticatedSendResult as ensureAuthSessionForAuthenticatedSendResult,
   ensureCloudSessionForAuthenticatedSend as ensureAuthSessionForAuthenticatedSend,
+  ensureCloudSessionForRequestResult as ensureAuthSessionForRequestResult,
   ensureCloudSessionForRequest as ensureAuthSessionForRequest,
   fetchCloudUser as fetchAuthUser,
   fetchWithCloudAuthShared as fetchWithAuthShared,
@@ -49,7 +61,9 @@ export {
   isLikelyJwt as isLikelyAuthJwt,
   logoutCloudSessionRemote as logoutAuthSessionRemote,
   readCloudError as readAuthError,
+  refreshCloudSessionResult as refreshAuthSessionResult,
   refreshCloudSession as refreshAuthSession,
+  refreshCloudSessionWithLockResult as refreshAuthSessionWithLockResult,
   refreshCloudSessionWithLock as refreshAuthSessionWithLock,
   sendCloudMagicLinkOtp as sendAuthMagicLinkOtp,
   transcribeCloudVoice as transcribeVoice,

@@ -94,7 +94,7 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
 const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["body", "evidence"],
+  required: ["post_type", "title", "body", "evidence"],
   properties: {
     post_type: {
       type: "string",
@@ -109,10 +109,6 @@ const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
       minLength: 1,
       maxLength: 12000,
     },
-    why_now: {
-      type: "string",
-      maxLength: 280,
-    },
     evidence: {
       type: "array",
       minItems: 1,
@@ -122,18 +118,6 @@ const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
         minLength: 1,
         maxLength: 180,
       },
-    },
-    novelty_key: {
-      type: "string",
-      maxLength: 256,
-    },
-    author_label: {
-      type: "string",
-      maxLength: 80,
-    },
-    agent_key: {
-      type: "string",
-      maxLength: 120,
     },
   },
 };
@@ -242,7 +226,7 @@ const BASH_TOOL_SCHEMA: JsonSchema = {
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   community_search: {
     name: "community_search",
-    description: "Search the active community's compiled context for relevant community resources, insights, and chat signal.",
+    description: "Search the active community's recent context and archived memory for relevant chat, AI feed, resource, and PDF-linked knowledge.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
   },
   community_write: {
@@ -254,38 +238,6 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "web_research",
     description: "Research the live web by searching documentation, opening a page, or finding text within a page.",
     inputSchema: WEB_RESEARCH_TOOL_SCHEMA,
-  },
-  web_search: {
-    name: "web_search",
-    description: "Compatibility alias for web_research search.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["query"],
-      properties: {
-        query: {
-          type: "string",
-          minLength: 1,
-          maxLength: 512,
-        },
-      },
-    },
-  },
-  web_fetch: {
-    name: "web_fetch",
-    description: "Compatibility alias for web_research open_page.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["url"],
-      properties: {
-        url: {
-          type: "string",
-          minLength: 1,
-          maxLength: 2048,
-        },
-      },
-    },
   },
   list_dir: {
     name: "list_dir",
@@ -457,10 +409,7 @@ export function normalizeToolArguments(
     const body = normalizeString(args.body);
     if (!body) throw new Error("community_write requires body.");
     const title = normalizeString(args.title);
-    const whyNow = normalizeString(args.why_now);
-    const noveltyKey = normalizeString(args.novelty_key);
-    const authorLabel = normalizeString(args.author_label);
-    const agentKey = normalizeString(args.agent_key);
+    if (!title) throw new Error("community_write requires title.");
     const evidence = Array.isArray(args.evidence)
       ? args.evidence
           .map((value) => normalizeString(value))
@@ -469,18 +418,14 @@ export function normalizeToolArguments(
       : [];
     if (evidence.length === 0) throw new Error("community_write requires evidence.");
     const postType = normalizeString(args.post_type)?.toLowerCase();
+    if (!postType || (postType !== "observation" && postType !== "recommendation" && postType !== "action")) {
+      throw new Error("community_write requires post_type.");
+    }
     return {
-      ...(postType &&
-      (postType === "observation" || postType === "recommendation" || postType === "action")
-        ? { post_type: postType }
-        : null),
-      ...(title ? { title: title.slice(0, 180) } : null),
+      post_type: postType,
+      title: title.slice(0, 180),
       body: body.slice(0, 12000),
-      ...(whyNow ? { why_now: whyNow.slice(0, 280) } : null),
       evidence: evidence.map((value) => value.slice(0, 180)),
-      ...(noveltyKey ? { novelty_key: noveltyKey.slice(0, 256) } : null),
-      ...(authorLabel ? { author_label: authorLabel.slice(0, 80) } : null),
-      ...(agentKey ? { agent_key: agentKey.slice(0, 120) } : null),
     };
   }
   if (toolName === "web_research") {
@@ -515,16 +460,6 @@ export function normalizeToolArguments(
       };
     }
     throw new Error("web_research action must be search, open_page, or find_in_page.");
-  }
-  if (toolName === "web_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("web_search requires query.");
-    return { action: "search", query: query.slice(0, 512) };
-  }
-  if (toolName === "web_fetch") {
-    const url = normalizeString(args.url);
-    if (!url) throw new Error("web_fetch requires url.");
-    return { action: "open_page", url: url.slice(0, 2048) };
   }
   if (toolName === "read") {
     const path = normalizeString(args.path);

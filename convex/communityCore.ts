@@ -1,4 +1,5 @@
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
   _id: any;
@@ -6,6 +7,7 @@ export type CommunityLike = {
   slug: string;
   name: string;
   oneLiner?: string;
+  about?: string;
   avatarUrl?: string;
   avatarStorageId?: any;
   bannerUrl?: string;
@@ -21,7 +23,7 @@ export type CommunityLike = {
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
-export type CommunityPrimaryCta = "open_community" | "join" | "request_access" | "checkout";
+export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
 
 export type CommunityMembershipLike = {
   _id: any;
@@ -176,28 +178,6 @@ export type PublicPlanSummaryLike = {
 
 export function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
-}
-
-export async function resolveUserIdForAuthenticatedRequest(args: {
-  ctx: any;
-  userId?: any;
-  authSubject?: string | null;
-}): Promise<any> {
-  const userIdInput = normalizeIdValue(args.userId);
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
-  if (!user) throw new Error("user_not_found");
-  const resolvedUserId = normalizeIdValue(user._id);
-  if (userIdInput && userIdInput !== resolvedUserId) {
-    throw new Error("user_id_mismatch");
-  }
-  return user._id;
 }
 
 export function toIsoString(value: number): string {
@@ -701,9 +681,7 @@ export async function resolveCommunityAccessBundle(args: {
     ? "open_community"
     : entryPolicy === "paid_subscription"
       ? "checkout"
-      : entryPolicy === "approval"
-        ? "request_access"
-        : "join";
+      : "join";
 
   return {
     community_id: String(args.community._id),
@@ -759,6 +737,18 @@ export async function requireCommunityManager(args: {
   const role = normalizeCommunityRoleForOutput(membership?.role);
   if (!(community.ownerId === args.userId || (entitlement.isEntitled && role === "admin"))) {
     throw new Error("community_forbidden");
+  }
+  return { community };
+}
+
+export async function requireCommunityOwner(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<{ community: CommunityLike }> {
+  const { community } = await getCommunityAndMembership(args);
+  if (String(community.ownerId) !== String(args.userId)) {
+    throw new Error("community_owner_required");
   }
   return { community };
 }

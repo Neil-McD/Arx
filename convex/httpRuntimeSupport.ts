@@ -3,7 +3,6 @@ import { api, internal } from "./_generated/api";
 type InferenceRole = "user" | "assistant" | "system";
 type RuntimeSurface = "web" | "mobile";
 type GateModelClass = "free_model" | "paid_model";
-type RequestedExecutionTarget = "chat" | "daytona_workspace";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -14,8 +13,8 @@ type GateCode =
   | "community_role_required"
   | "project_required"
   | "runner_unavailable";
-type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
-type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
+type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "checkout";
+type GateLane = "public" | "platform" | "chatgpt";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
 type CapabilityFamily = "community_tools" | "web_research" | "workspace_tools";
 type ResolvedGateDecision = {
@@ -116,7 +115,6 @@ function normalizeGateCta(raw: unknown, fallback: GateCta): GateCta {
   if (value === "upgrade") return "upgrade";
   if (value === "connect_provider") return "connect_provider";
   if (value === "join") return "join";
-  if (value === "request_access") return "request_access";
   if (value === "checkout") return "checkout";
   return fallback;
 }
@@ -128,7 +126,6 @@ function normalizeGateLane(raw: unknown): GateLane | null {
   if (value === "public") return "public";
   if (value === "platform") return "platform";
   if (value === "chatgpt") return "chatgpt";
-  if (value === "daytona_cloud") return "daytona_cloud";
   return null;
 }
 
@@ -176,7 +173,6 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
   authSubject: string;
   surface: RuntimeSurface;
   modelClass: GateModelClass;
-  requestedExecutionTarget: RequestedExecutionTarget;
   requestedFundingSource: RequestedFundingSource;
   hasUserKeyConnection?: boolean;
   hasUserChatgptConnection?: boolean;
@@ -187,7 +183,6 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     surface: params.surface,
     executionMode: "cloud",
     modelClass: params.modelClass,
-    requestedExecutionTarget: params.requestedExecutionTarget,
     requestedFundingSource: params.requestedFundingSource,
     hasUserKeyConnection: Boolean(params.hasUserKeyConnection),
     hasUserChatGptConnection: Boolean(params.hasUserChatgptConnection),
@@ -217,14 +212,12 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
 }
 
 export function mapGateLaneToRuntimeLane(params: {
-  requiresWorkspaceTools: boolean;
   lane: GateLane | null;
-}): "public" | "platform" | "daytona" | "chatgpt" {
+}): "public" | "platform" | "chatgpt" {
   if (params.lane === "public") return "public";
   if (params.lane === "platform") return "platform";
   if (params.lane === "chatgpt") return "chatgpt";
-  if (params.lane === "daytona_cloud") return "daytona";
-  return params.requiresWorkspaceTools ? "daytona" : "platform";
+  return "platform";
 }
 
 export function gateDeniedResponse(
@@ -232,7 +225,6 @@ export function gateDeniedResponse(
   req: Request,
   params: {
     decision: ResolvedGateDecision;
-    requiresWorkspaceTools: boolean;
     requestedModelId: string | null;
   },
 ): Response {
@@ -250,15 +242,11 @@ export function gateDeniedResponse(
   }
 
   if (params.decision.code === "tier_required" || params.decision.code === "plan_required") {
-    const message =
-      params.requiresWorkspaceTools
-        ? "Paid tier required for Daytona workspace execution."
-        : "Paid tier required for platform inference.";
     return jsonResponse(req, 403, {
       ok: false,
       code: "platform_inference_not_allowed",
       error: "platform_inference_not_allowed",
-      message,
+      message: "Paid tier required for platform inference.",
       gate_code: params.decision.code,
       cta: params.decision.cta,
       lane: params.decision.lane,

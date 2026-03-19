@@ -42,12 +42,12 @@ reject_multiline_match() {
 
 echo "[1/5] Ensuring browser-facing auth/billing queries resolve authenticated subject..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getBuilderBillingStatus = query\([\s\S]*?const subject = await resolveAuthenticatedSubject\(\{\s*ctx,\s*authSubject: args\.authSubject \?\? null,' \
+  'export const getBuilderBillingStatus = query\([\s\S]*?const \{ authSubject, actor \} = await findAuthenticatedActorState\(\{\s*ctx,\s*authSubject: args\.authSubject \?\? null,' \
   "getBuilderBillingStatus resolves authenticated subject"
 
 echo "[2/5] Ensuring builder billing status returns public user IDs..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getBuilderBillingStatus = query\([\s\S]*?user_id: String\(user\.authSubject \?\? subject\)\.trim\(\) \|\| String\(user\._id\)' \
+  'export const getBuilderBillingStatus = query\([\s\S]*?user_id: actor\.authSubject' \
   "getBuilderBillingStatus returns public user_id"
 
 echo "[3/5] Ensuring dev-tier override response stays minimal and avoids public userId residue..."

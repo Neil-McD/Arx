@@ -1,6 +1,12 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import {
+  evaluateCanonicalGate,
+  normalizeTierForGate,
+  resolveEffectiveTierForGate,
+  resolveEntitledCapabilityFamiliesForGate,
+} from "../shared/canonicalGateEngine.mjs";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -14,10 +20,9 @@ type GateCode =
   | "community_role_required"
   | "project_required"
   | "runner_unavailable";
-type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "request_access" | "checkout";
-type GateLane = "public" | "platform" | "chatgpt" | "daytona_cloud";
+type GateCta = "none" | "sign_in" | "upgrade" | "connect_provider" | "join" | "checkout";
+type GateLane = "public" | "platform" | "chatgpt";
 type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "platform";
-type RequestedExecutionTarget = "chat" | "daytona_workspace";
 type CapabilityFamily = "community_tools" | "web_research" | "workspace_tools";
 
 type GateDecision = {
@@ -27,27 +32,6 @@ type GateDecision = {
   lane: GateLane | null;
   fundingSource: RequestedFundingSource | null;
 };
-
-function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "architect";
-  return "free";
-}
-
-function resolveEffectiveTier(authState: "anonymous" | "authenticated", canonicalTier: CanonicalTier): EffectiveTier {
-  if (authState === "anonymous") return "anon_free";
-  if (canonicalTier === "free") return "auth_free";
-  return canonicalTier;
-}
-
-function resolveEntitledCapabilityFamilies(effectiveTier: EffectiveTier): CapabilityFamily[] {
-  if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") return ["community_tools", "web_research"];
-  return ["community_tools", "web_research", "workspace_tools"];
-}
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
   if (startsAt > nowMs) return false;
@@ -74,41 +58,8 @@ async function getCanonicalTierBySubject(params: {
     .sort((a: any, b: any) => b.startsAt - a.startsAt);
   return {
     userId: user._id,
-    canonicalTier: normalizeCanonicalTier(activeRows[0]?.tier ?? "free"),
+    canonicalTier: normalizeTierForGate(activeRows[0]?.tier ?? "free"),
   };
-}
-
-function normalizeRequestedFundingSource(
-  rawRequestedFundingSource: unknown,
-  rawModelClass: unknown,
-): RequestedFundingSource {
-  const normalized = String(rawRequestedFundingSource ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "demo_public") return "demo_public";
-  if (normalized === "user_key") return "user_key";
-  if (normalized === "user_chatgpt" || normalized === "chatgpt") return "user_chatgpt";
-  if (normalized === "platform") return "platform";
-  const modelClass = String(rawModelClass ?? "")
-    .trim()
-    .toLowerCase();
-  return modelClass === "free_model" ? "demo_public" : "platform";
-}
-
-function normalizeRequestedExecutionTarget(rawRequestedExecutionTarget: unknown): RequestedExecutionTarget {
-  const normalized = String(rawRequestedExecutionTarget ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "daytona_workspace") return "daytona_workspace";
-  return "chat";
-}
-
-function allow(lane: GateLane, fundingSource: RequestedFundingSource | null): GateDecision {
-  return { allowed: true, code: "ok", cta: "none", lane, fundingSource };
-}
-
-function deny(code: Exclude<GateCode, "ok">, cta: GateCta): GateDecision {
-  return { allowed: false, code, cta, lane: null, fundingSource: null };
 }
 
 function evaluateDecision(input: {
@@ -116,62 +67,27 @@ function evaluateDecision(input: {
   surface: "web" | "mobile";
   executionMode: "cloud";
   requestedFundingSource: RequestedFundingSource;
-  requestedExecutionTarget: RequestedExecutionTarget;
-  effectiveTier: EffectiveTier;
+  canonicalTier: CanonicalTier;
   hasUserKeyConnection: boolean;
   hasUserChatGptConnection: boolean;
-}): GateDecision {
-  const isAnonymous = input.effectiveTier === "anon_free";
-  const hasWorkbenchAccess = input.effectiveTier === "builder" || input.effectiveTier === "architect";
-  const hasPlatformInference = hasWorkbenchAccess;
-
-  if (input.requestedExecutionTarget === "daytona_workspace") {
-    if (input.requestedFundingSource === "user_chatgpt") {
-      if (isAnonymous) return deny("auth_required", "sign_in");
-      if (!hasWorkbenchAccess) return deny("tier_required", "upgrade");
-      if (input.hasUserChatGptConnection) return allow("daytona_cloud", "user_chatgpt");
-      return deny("provider_connection_required", "connect_provider");
-    }
-    if (input.requestedFundingSource === "user_key") {
-      if (isAnonymous) return deny("auth_required", "sign_in");
-      if (!hasWorkbenchAccess) return deny("tier_required", "upgrade");
-      if (input.hasUserKeyConnection) return allow("daytona_cloud", "user_key");
-      return deny("provider_connection_required", "connect_provider");
-    }
-    if (hasWorkbenchAccess) return allow("daytona_cloud", "platform");
-    return deny(isAnonymous ? "auth_required" : "tier_required", isAnonymous ? "sign_in" : "upgrade");
-  }
-
-  if (input.requestedFundingSource === "demo_public") return allow("public", "demo_public");
-
-  if (input.requestedFundingSource === "user_key") {
-    if (isAnonymous) return deny("auth_required", "sign_in");
-    if (input.hasUserKeyConnection) return allow("platform", "user_key");
-    return deny("provider_connection_required", "connect_provider");
-  }
-
-  if (input.requestedFundingSource === "user_chatgpt") {
-    if (isAnonymous) return deny("auth_required", "sign_in");
-    if (input.hasUserChatGptConnection) {
-      return allow("chatgpt", "user_chatgpt");
-    }
-    return deny(
-      input.hasUserChatGptConnection ? "runner_unavailable" : "provider_connection_required",
-      input.hasUserChatGptConnection ? "none" : "connect_provider",
-    );
-  }
-
-  if (hasPlatformInference) return allow("platform", "platform");
-
-  if (input.authState === "authenticated" && input.hasUserChatGptConnection) {
-    return allow("chatgpt", "user_chatgpt");
-  }
-
-  if (input.authState === "authenticated" && input.hasUserKeyConnection) {
-    return allow("platform", "user_key");
-  }
-
-  return deny(isAnonymous ? "auth_required" : "provider_connection_required", isAnonymous ? "sign_in" : "connect_provider");
+}): GateDecision & { effectiveTier: EffectiveTier } {
+  const decision = evaluateCanonicalGate({
+    authState: input.authState,
+    surface: input.surface,
+    executionMode: input.executionMode,
+    requestedFundingSource: input.requestedFundingSource,
+    tier: input.canonicalTier,
+    hasUserKeyConnection: input.hasUserKeyConnection,
+    hasUserChatGptConnection: input.hasUserChatGptConnection,
+  });
+  return {
+    allowed: Boolean(decision.allowed),
+    code: decision.code as GateCode,
+    cta: decision.cta as GateCta,
+    lane: (decision.lane ?? null) as GateLane | null,
+    fundingSource: (decision.fundingSource ?? null) as RequestedFundingSource | null,
+    effectiveTier: decision.effectiveTier as EffectiveTier,
+  };
 }
 
 export const resolveGateContext = query({
@@ -198,14 +114,20 @@ export const resolveGateContext = query({
       authSubject: authSubjectInput || null,
     });
     const resolved = await getCanonicalTierBySubject({ ctx, authSubject, nowMs });
-    const effectiveTier = resolveEffectiveTier("authenticated", resolved.canonicalTier);
+    const effectiveTier = resolveEffectiveTierForGate({
+      authState: "authenticated",
+      tier: resolved.canonicalTier,
+    }) as EffectiveTier;
     return {
       authState: "authenticated" as const,
       authSubject,
       userId: resolved.userId,
       canonicalTier: resolved.canonicalTier,
       effectiveTier,
-      entitledCapabilityFamilies: resolveEntitledCapabilityFamilies(effectiveTier),
+      entitledCapabilityFamilies: resolveEntitledCapabilityFamiliesForGate({
+        authState: "authenticated",
+        tier: resolved.canonicalTier,
+      }) as CapabilityFamily[],
     };
   },
 });
@@ -217,7 +139,6 @@ export const resolveGateDecision = query({
     surface: v.union(v.literal("web"), v.literal("mobile")),
     executionMode: v.literal("cloud"),
     modelClass: v.optional(v.union(v.literal("free_model"), v.literal("paid_model"))),
-    requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
     requestedFundingSource: v.optional(
       v.union(
         v.literal("demo_public"),
@@ -248,16 +169,22 @@ export const resolveGateDecision = query({
       canonicalTier = resolved.canonicalTier;
     }
 
-    const effectiveTier = resolveEffectiveTier(authState, canonicalTier);
-    const entitledCapabilityFamilies = resolveEntitledCapabilityFamilies(effectiveTier);
-    const requestedExecutionTarget = normalizeRequestedExecutionTarget(args.requestedExecutionTarget);
+    const effectiveTier = resolveEffectiveTierForGate({
+      authState,
+      tier: canonicalTier,
+    }) as EffectiveTier;
+    const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+      authState,
+      tier: canonicalTier,
+    }) as CapabilityFamily[];
     const decision = evaluateDecision({
       authState,
       surface: args.surface,
       executionMode: args.executionMode,
-      requestedFundingSource: normalizeRequestedFundingSource(args.requestedFundingSource, args.modelClass),
-      requestedExecutionTarget,
-      effectiveTier,
+      requestedFundingSource:
+        args.requestedFundingSource ??
+        (args.modelClass === "free_model" ? "demo_public" : "platform"),
+      canonicalTier,
       hasUserKeyConnection: Boolean(args.hasUserKeyConnection),
       hasUserChatGptConnection: Boolean(args.hasUserChatGptConnection),
     });
@@ -269,7 +196,6 @@ export const resolveGateDecision = query({
       userId,
       canonicalTier,
       effectiveTier,
-      requestedExecutionTarget,
       entitledCapabilityFamilies,
     };
   },
@@ -302,8 +228,14 @@ export const resolveGateBundle = query({
       canonicalTier = resolved.canonicalTier;
     }
 
-    const effectiveTier = resolveEffectiveTier(authState, canonicalTier);
-    const entitledCapabilityFamilies = resolveEntitledCapabilityFamilies(effectiveTier);
+    const effectiveTier = resolveEffectiveTierForGate({
+      authState,
+      tier: canonicalTier,
+    }) as EffectiveTier;
+    const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+      authState,
+      tier: canonicalTier,
+    }) as CapabilityFamily[];
     const hasUserKeyConnection = Boolean(args.hasUserKeyConnection);
     const hasUserChatGptConnection = Boolean(args.hasUserChatGptConnection);
     const chatDemoPublic = evaluateDecision({
@@ -311,8 +243,7 @@ export const resolveGateBundle = query({
       surface: args.surface,
       executionMode: "cloud",
       requestedFundingSource: "demo_public",
-      requestedExecutionTarget: "chat",
-      effectiveTier,
+      canonicalTier,
       hasUserKeyConnection,
       hasUserChatGptConnection,
     });
@@ -321,8 +252,7 @@ export const resolveGateBundle = query({
       surface: args.surface,
       executionMode: "cloud",
       requestedFundingSource: "user_key",
-      requestedExecutionTarget: "chat",
-      effectiveTier,
+      canonicalTier,
       hasUserKeyConnection,
       hasUserChatGptConnection,
     });
@@ -331,8 +261,7 @@ export const resolveGateBundle = query({
       surface: args.surface,
       executionMode: "cloud",
       requestedFundingSource: "user_chatgpt",
-      requestedExecutionTarget: "chat",
-      effectiveTier,
+      canonicalTier,
       hasUserKeyConnection,
       hasUserChatGptConnection,
     });
@@ -341,8 +270,7 @@ export const resolveGateBundle = query({
       surface: args.surface,
       executionMode: "cloud",
       requestedFundingSource: "platform",
-      requestedExecutionTarget: "chat",
-      effectiveTier,
+      canonicalTier,
       hasUserKeyConnection,
       hasUserChatGptConnection,
     });
@@ -351,8 +279,7 @@ export const resolveGateBundle = query({
       surface: args.surface,
       executionMode: "cloud",
       requestedFundingSource: "platform",
-      requestedExecutionTarget: "daytona_workspace",
-      effectiveTier,
+      canonicalTier,
       hasUserKeyConnection,
       hasUserChatGptConnection,
     });
@@ -382,7 +309,7 @@ export const resolveGateBundle = query({
         allowUserFundedInference:
           (chatUserKey.allowed && chatUserKey.fundingSource === "user_key") ||
           (chatUserChatgpt.allowed && chatUserChatgpt.fundingSource === "user_chatgpt"),
-        allowCloudTools: toolsPlatform.allowed && toolsPlatform.lane === "daytona_cloud",
+        allowCloudTools: toolsPlatform.allowed && toolsPlatform.lane === "platform",
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),

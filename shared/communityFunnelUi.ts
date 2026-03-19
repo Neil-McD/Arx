@@ -18,7 +18,7 @@ export type CommunityFunnelUiFaceLike = {
   avatar_url: string | null;
 };
 
-export type CommunityFunnelUiMode = "join_free" | "request_access" | "checkout" | "private";
+export type CommunityFunnelUiMode = "join_free" | "join_approval" | "checkout" | "private";
 
 export function getCommunityInitials(name: string): string {
   return (
@@ -81,8 +81,8 @@ export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {
   if (mode === "checkout") {
     return { eyebrow: "Paid access", body: "Unlock access and continue into the community." };
   }
-  if (mode === "request_access") {
-    return { eyebrow: "Approval required", body: "Request access to enter the community." };
+  if (mode === "join_approval") {
+    return { eyebrow: "Approval required", body: "Join to enter the pending approvals queue." };
   }
   if (mode === "join_free") {
     return { eyebrow: "Open access", body: "Enter immediately and start participating." };

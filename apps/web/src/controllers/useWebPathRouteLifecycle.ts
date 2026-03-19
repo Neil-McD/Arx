@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   clearBuilderBillingQueryParams,
   parseBuilderBillingReturn,
@@ -12,25 +12,12 @@ export function useWebPathRouteLifecycle(params: {
   activePage: AppPage;
   activeView: AppView;
   settingsPage: SettingsPage;
-  activeCommunityId: string | null;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   activeThreadId: string | null;
-  workspaceWantsNewChat: boolean;
-  threadsHydratedRef: MutableRefObject<boolean>;
   setPublicRoute: Dispatch<SetStateAction<PublicRoute>>;
-  setActivePage: Dispatch<SetStateAction<AppPage>>;
-  setActiveView: Dispatch<SetStateAction<AppView>>;
-  setSettingsPage: Dispatch<SetStateAction<SettingsPage>>;
-  setActiveCommunityId: Dispatch<SetStateAction<string | null>>;
-  setActiveCommunitySlug: Dispatch<SetStateAction<string | null>>;
-  setCommunityTab: Dispatch<SetStateAction<CommunityTab>>;
   applyPublicRouteState: (route: PublicRoute) => void;
-  applyWorkspaceRouteState: (state: {
-    page: AppPage;
-    view: AppView;
-    threadId: string | null;
-  }) => void;
+  applyAppRouteState: (route: AppRouteState) => void;
   setBuilderBillingReturn: Dispatch<SetStateAction<BuilderBillingReturn | null>>;
   readPublicRouteFromLocation: () => PublicRoute;
   readAppRouteFromLocation: () => AppRouteState;
@@ -43,26 +30,19 @@ export function useWebPathRouteLifecycle(params: {
     threadId: string | null;
   }) => string | null;
 }) {
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+
   const applyLocationToState = () => {
-    const nextPublicRoute = params.readPublicRouteFromLocation();
-    params.setPublicRoute(nextPublicRoute);
+    const current = paramsRef.current;
+    const nextPublicRoute = current.readPublicRouteFromLocation();
+    current.setPublicRoute(nextPublicRoute);
     if (nextPublicRoute.kind !== "app") {
-      params.applyPublicRouteState(nextPublicRoute);
+      current.applyPublicRouteState(nextPublicRoute);
       return;
     }
 
-    const nextAppRoute = params.readAppRouteFromLocation();
-    params.setActivePage(nextAppRoute.page);
-    params.setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
-    params.setSettingsPage(nextAppRoute.settingsPage);
-    params.setActiveCommunityId(nextAppRoute.communityId);
-    params.setActiveCommunitySlug(nextAppRoute.communitySlug);
-    params.setCommunityTab(nextAppRoute.communityTab);
-    params.applyWorkspaceRouteState({
-      page: nextAppRoute.page,
-      view: nextAppRoute.page === "workspace" ? nextAppRoute.view : "home",
-      threadId: nextAppRoute.threadId,
-    });
+    current.applyAppRouteState(current.readAppRouteFromLocation());
   };
 
   useEffect(() => {
@@ -107,7 +87,5 @@ export function useWebPathRouteLifecycle(params: {
     params.activeCommunitySlug,
     params.communityTab,
     params.activeThreadId,
-    params.workspaceWantsNewChat,
-    params.threadsHydratedRef,
   ]);
 }

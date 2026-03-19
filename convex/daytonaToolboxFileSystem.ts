@@ -111,7 +111,7 @@ async function requestToolboxFile<T>(params: {
     if (!response.ok) {
       const text = await readResponseText(response);
       const retryable = shouldRetryWithAlternateToolboxBase(response.status, text);
-      lastFailure = {
+      const failure: DaytonaFsFailure = {
         ok: false,
         status: response.status,
         code: response.status === 404 ? "file_not_found" : "runner_unavailable",
@@ -121,10 +121,11 @@ async function requestToolboxFile<T>(params: {
           url: url.toString(),
         },
       };
+      lastFailure = failure;
       if (retryable) {
         continue;
       }
-      continue;
+      return failure;
     }
 
     if (params.expectText) {

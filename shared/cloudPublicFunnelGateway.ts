@@ -25,21 +25,6 @@ export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
   return firstGatewayRow<TRow>(payload);
 }
 
-export async function requestCloudCommunityAccessBySlug<SessionT, TRow = unknown>(
-  params: CloudPublicFunnelAuthParams<SessionT> & {
-    communitySlug: string;
-    message?: string | null;
-  },
-): Promise<TRow | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:requestCommunityAccessBySlug" as any, {
-    authSubject,
-    communitySlug: params.communitySlug,
-    message: params.message ?? null,
-  });
-  return firstGatewayRow<TRow>(payload);
-}
-
 export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPublicPlan>(
   params: CloudPublicFunnelParams<SessionT> & {
     communitySlug: string;

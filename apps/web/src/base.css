@@ -7380,6 +7380,17 @@ button.chat-reply-quote:hover {
   text-align: left;
 }
 
+a.message-citation-chip {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+a.message-citation-chip:hover,
+a.message-citation-chip:focus-visible {
+  color: var(--text-primary);
+  background: var(--hover-overlay);
+}
+
 button.message-citation-chip {
   cursor: pointer;
   font: inherit;
@@ -8698,6 +8709,20 @@ h3.md-header {
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 0.15s ease;
+}
+
+.runtime-tool-trace .runtime-tool-trace-link {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--text-secondary) 45%, transparent);
+}
+
+.runtime-tool-trace .runtime-tool-trace-link:hover,
+.runtime-tool-trace .runtime-tool-trace-link:focus-visible {
+  color: var(--text-primary);
+  text-decoration-color: color-mix(in srgb, var(--text-primary) 55%, transparent);
 }
 
 .runtime-tool-trace-row:not(.static):hover .runtime-tool-trace-title,

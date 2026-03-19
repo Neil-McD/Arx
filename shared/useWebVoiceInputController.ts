@@ -32,7 +32,7 @@ type UseWebVoiceInputControllerArgs<CloudSessionT> = {
   sessionRef: MutableRefObject<CloudSessionT | null>;
   ensureSession?: (session: CloudSessionT | null) => Promise<CloudSessionT | null>;
   activeCommunity: unknown | null;
-  activeCommunityJoinMode: "checkout" | "request_access" | "join_free" | null;
+  activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
   normalizedBuilderTier: "free" | "builder" | "architect";
   openAuthGate: () => void;
@@ -73,8 +73,8 @@ export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInput
         const joinMessage =
           args.activeCommunityJoinMode === "checkout"
             ? "Pick a plan to use voice input in this community."
-            : args.activeCommunityJoinMode === "request_access"
-              ? "Request access to use voice input in this community."
+            : args.activeCommunityJoinMode === "join_approval"
+              ? "Join and wait for approval to use voice input in this community."
               : "Join this community to use voice input.";
         return {
           mode: "join_community",

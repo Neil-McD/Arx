@@ -34,7 +34,6 @@ type UseCommunityCreateControllerArgs<
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
   loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
-  openBuilderBillingPortal: (context: "create_community") => Promise<void>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onStartUpgradeFlow: () => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
@@ -292,7 +291,7 @@ export function useCommunityCreateController<
     current.persistCreateCommunityIntent(draft);
     closeCreateCommunityModal();
     if (limitReached) {
-      await current.openBuilderBillingPortal("create_community");
+      current.onOwnedCommunityLimitReached?.();
       return;
     }
     current.onStartUpgradeFlow();

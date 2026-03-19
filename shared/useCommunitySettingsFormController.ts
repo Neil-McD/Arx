@@ -6,6 +6,7 @@ type CommunityLike = {
   name: string | null;
   slug: string | null;
   one_liner: string | null;
+  about: string | null;
   visibility: string | null;
   avatar_url: string | null;
   banner_url: string | null;
@@ -25,6 +26,7 @@ type UseCommunitySettingsFormControllerArgs = {
   setCommunitySettingsName: Dispatch<SetStateAction<string>>;
   setCommunitySettingsSlug: Dispatch<SetStateAction<string>>;
   setCommunitySettingsOneLiner: Dispatch<SetStateAction<string>>;
+  setCommunitySettingsAbout: Dispatch<SetStateAction<string>>;
   setCommunitySettingsVisibility: Dispatch<SetStateAction<string>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
@@ -78,6 +80,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsName("");
       current.setCommunitySettingsSlug("");
       current.setCommunitySettingsOneLiner("");
+      current.setCommunitySettingsAbout("");
       current.setCommunitySettingsVisibility("unlisted");
       current.setCommunitySettingsAvatarUrl(null);
       current.setCommunitySettingsBannerUrl(null);
@@ -99,6 +102,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     current.setCommunitySettingsName(selectedCommunity.name ?? "");
     current.setCommunitySettingsSlug(current.slugifyCommunityName(selectedCommunity.slug ?? ""));
     current.setCommunitySettingsOneLiner(selectedCommunity.one_liner ?? "");
+    current.setCommunitySettingsAbout(selectedCommunity.about ?? "");
     current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
     current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
     current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);

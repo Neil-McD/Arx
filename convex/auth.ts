@@ -1,6 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import {
+  ensureAuthenticatedActor,
+  findAuthenticatedActorState,
+  resolveAuthenticatedActor,
+} from "./authActor";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -70,26 +74,6 @@ async function getCanonicalTierByUserIdInternal(
   return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
 }
 
-async function ensureDefaultFreeEntitlement(
-  ctx: Parameters<(typeof mutation)["handler"]>[0],
-  userId: any,
-  nowMs: number,
-): Promise<void> {
-  const rows = await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .take(1);
-  if (rows.length > 0) return;
-  await ctx.db.insert("userEntitlements", {
-    userId,
-    tier: "free",
-    source: "default",
-    startsAt: nowMs,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-}
-
 function resolveAnonymousSubject(args: {
   authState: AuthState;
   anonymousId?: string;
@@ -114,23 +98,42 @@ export const bootstrapActor = mutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const subject =
-      args.authState === "authenticated"
-        ? await resolveAuthenticatedSubject({ ctx, authSubject: args.authSubject ?? null })
-        : resolveAnonymousSubject({
-            authState: args.authState,
-            anonymousId: args.anonymousId,
-          });
+    if (args.authState === "authenticated") {
+      const actor = await ensureAuthenticatedActor({
+        ctx,
+        authSubject: args.authSubject ?? null,
+        email: args.email ?? null,
+        displayName: args.displayName ?? null,
+        avatarUrl: args.avatarUrl ?? null,
+        nowMs,
+      });
+      const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
+      const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
 
+      return {
+        authState: args.authState,
+        authSubject: actor.authSubject,
+        canonicalTier,
+        effectiveTier,
+        email: actor.email,
+        displayName: actor.displayName,
+        avatarUrl: actor.avatarUrl,
+        createdAt: actor.createdAt,
+        updatedAt: actor.updatedAt,
+      };
+    }
+
+    const subject = resolveAnonymousSubject({
+      authState: args.authState,
+      anonymousId: args.anonymousId,
+    });
     const email = String(args.email ?? "").trim() || undefined;
     const displayName = String(args.displayName ?? "").trim() || undefined;
     const avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
-
     const existing = await ctx.db
       .query("users")
       .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
       .first();
-
     let userId = existing?._id ?? null;
     if (!existing) {
       userId = await ctx.db.insert("users", {
@@ -157,8 +160,7 @@ export const bootstrapActor = mutation({
       }
       userId = existing._id;
     }
-
-    await ensureDefaultFreeEntitlement(ctx, userId, nowMs);
+    if (!userId) throw new Error("user_not_found");
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, userId, nowMs);
     const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
     const user = await ctx.db.get(userId);
@@ -186,13 +188,36 @@ export const getActor = query({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const subject =
-      args.authState === "authenticated"
-        ? await resolveAuthenticatedSubject({ ctx, authSubject: args.authSubject ?? null })
-        : resolveAnonymousSubject({
-            authState: args.authState,
-            anonymousId: args.anonymousId,
-          });
+    if (args.authState === "authenticated") {
+      const { authSubject, actor } = await findAuthenticatedActorState({
+        ctx,
+        authSubject: args.authSubject ?? null,
+      });
+      if (!actor) {
+        const canonicalTier = "free" as const;
+        return {
+          authState: args.authState,
+          authSubject,
+          canonicalTier,
+          effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+        };
+      }
+      const canonicalTier = await getCanonicalTierByUserIdInternal(ctx, actor.dbUserId, nowMs);
+      return {
+        authState: args.authState,
+        authSubject,
+        canonicalTier,
+        effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+        email: actor.email,
+        displayName: actor.displayName,
+        avatarUrl: actor.avatarUrl,
+      };
+    }
+
+    const subject = resolveAnonymousSubject({
+      authState: args.authState,
+      anonymousId: args.anonymousId,
+    });
     const user = await ctx.db
       .query("users")
       .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
@@ -227,25 +252,20 @@ export const setDevTierOverride = mutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const subject = await resolveAuthenticatedSubject({
+    const actor = await resolveAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
-      .first();
-    if (!user) throw new Error("user_not_found");
 
     await ctx.db.insert("userEntitlements", {
-      userId: user._id,
+      userId: actor.dbUserId,
       tier: args.tier,
       source: "admin_override",
       startsAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, user._id, nowMs);
+    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     return {
       ok: true,
       canonicalTier,
@@ -261,29 +281,18 @@ export const getBuilderBillingStatus = query({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const subject = await resolveAuthenticatedSubject({
+    const { authSubject, actor } = await findAuthenticatedActorState({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
-      .first();
-    if (!user) return null;
-
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, user._id, nowMs);
+    if (!actor) return null;
+    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     const meta = builderTierMeta(canonicalTier);
 
     return {
-      user_id: String(user.authSubject ?? subject).trim() || String(user._id),
+      user_id: actor.authSubject,
       builder_tier: canonicalTier,
       max_communities: meta.maxCommunities,
-      platform_fee_bps: meta.platformFeeBps,
-      has_payouts: meta.hasPayouts,
-      subscription_status: canonicalTier === "free" ? null : "active",
-      current_period_end: null,
-      cancel_at_period_end: null,
     };
   },
 });

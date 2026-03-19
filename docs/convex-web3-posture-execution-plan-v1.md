@@ -52,7 +52,7 @@ Execution board:
 Scope:
 1. Align `/runtime/runtime_turn` behavior with `canonical-cloud-run-v1` target semantics.
 2. Harden deterministic event/run/tool lifecycle behavior for cloud tool-capable turns.
-3. Remove or strictly bound implicit fallback behavior for `requested_execution_target=daytona_workspace` turns.
+3. Remove or strictly bound any remaining compatibility fallback behavior from the old workspace-target model.
 
 Acceptance:
 1. Cloud tool turns emit canonical lifecycle semantics per active contract docs.
@@ -67,7 +67,7 @@ Scope:
 3. Preserve tier and community entitlement contract behavior during migration hardening.
 
 Acceptance:
-1. Foundation and journey smoke gates remain green.
+1. Foundation baseline gate remains green.
 2. Verified identity guard remains green.
 3. Gate parity matrix remains behaviorally consistent.
 

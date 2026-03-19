@@ -88,6 +88,7 @@ export const listCommunityMemberships = query({
         : {
             ...base,
             one_liner: community.oneLiner ?? null,
+            about: community.about ?? null,
             avatar_url: branding.avatar_url,
             avatar_storage_id: branding.avatar_storage_id,
             banner_url: branding.banner_url,
@@ -729,10 +730,7 @@ export const leaveCommunity = mutation({
       .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
       .first()) as CommunityJoinRequestLike | null;
     if (joinRequest) {
-      await ctx.db.patch(joinRequest._id as any, {
-        status: "denied",
-        updatedAt: nowMs,
-      });
+      await ctx.db.delete(joinRequest._id as any);
     }
     return { ok: true };
   },
@@ -758,11 +756,6 @@ export const listCommunityRevenueSeries = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    return [] as Array<{
-      bucket_start: string;
-      net_base_units: number;
-      currency: string;
-      currency_decimals: number;
-    }>;
+    throw new Error("community_revenue_not_available");
   },
 });

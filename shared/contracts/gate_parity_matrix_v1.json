@@ -8,7 +8,6 @@
         "authState": "anonymous",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "demo_public"
       },
       "expected": {
@@ -26,7 +25,6 @@
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "demo_public"
       },
       "expected": {
@@ -44,7 +42,6 @@
         "authState": "authenticated",
         "tier": "builder",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "platform"
       },
       "expected": {
@@ -62,7 +59,6 @@
         "authState": "authenticated",
         "tier": "architect",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "platform"
       },
       "expected": {
@@ -75,54 +71,51 @@
       }
     },
     {
-      "id": "auth_builder_tools_platform_cloud",
+      "id": "auth_builder_platform_cloud_duplicate",
       "input": {
         "authState": "authenticated",
         "tier": "builder",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "daytona_workspace",
         "requestedFundingSource": "platform"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
-        "lane": "daytona_cloud",
+        "lane": "platform",
         "fundingSource": "platform",
         "effectiveTier": "builder"
       }
     },
     {
-      "id": "auth_architect_tools_platform_cloud",
+      "id": "auth_architect_platform_cloud_duplicate",
       "input": {
         "authState": "authenticated",
         "tier": "architect",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "daytona_workspace",
         "requestedFundingSource": "platform"
       },
       "expected": {
         "allowed": true,
         "code": "ok",
         "cta": "none",
-        "lane": "daytona_cloud",
+        "lane": "platform",
         "fundingSource": "platform",
         "effectiveTier": "architect"
       }
     },
     {
-      "id": "auth_free_tools_denied_cloud",
+      "id": "auth_free_platform_requires_connection",
       "input": {
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "daytona_workspace",
-        "requestedFundingSource": "demo_public"
+        "requestedFundingSource": "platform"
       },
       "expected": {
         "allowed": false,
-        "code": "tier_required",
-        "cta": "upgrade",
+        "code": "provider_connection_required",
+        "cta": "connect_provider",
         "lane": null,
         "fundingSource": null,
         "effectiveTier": "auth_free"
@@ -134,7 +127,6 @@
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "user_key",
         "hasUserKeyConnection": false
       },
@@ -153,7 +145,6 @@
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "user_key",
         "hasUserKeyConnection": true
       },
@@ -173,7 +164,6 @@
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "platform",
         "hasUserChatGptConnection": true
       },
@@ -193,7 +183,6 @@
         "authState": "authenticated",
         "tier": "free",
         "executionMode": "cloud",
-        "requestedExecutionTarget": "chat",
         "requestedFundingSource": "platform",
         "hasUserKeyConnection": true
       },

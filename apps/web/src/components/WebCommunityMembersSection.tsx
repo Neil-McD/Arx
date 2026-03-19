@@ -22,12 +22,14 @@ type UserProfile = {
   display_name?: string | null;
   avatar_url?: string | null;
 };
-type MembersSurfaceMode = "viewer" | "moderator" | "admin";
 
 type WebCommunityMembersSectionProps = {
   activeCommunity: ActiveCommunity | null;
   capabilities: {
-    membersSurfaceMode: MembersSurfaceMode;
+    canManageMembers: boolean;
+    canManageJoinPolicy: boolean;
+    canReviewJoinRequests: boolean;
+    canViewMemberPlanDetails: boolean;
     isActiveCommunityOwner: boolean;
   };
   state: {
@@ -64,9 +66,10 @@ type WebCommunityMembersSectionProps = {
 
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
   const { activeCommunity, capabilities, state, actions } = props;
-  const isAdminMode = capabilities.membersSurfaceMode === "admin";
-  const isModeratorMode = capabilities.membersSurfaceMode === "moderator";
-  const canReviewJoinRequests = isAdminMode || isModeratorMode;
+  const canManageMembers = capabilities.canManageMembers;
+  const canManageJoinPolicy = capabilities.canManageJoinPolicy;
+  const canReviewJoinRequests = capabilities.canReviewJoinRequests;
+  const canViewMemberPlanDetails = capabilities.canViewMemberPlanDetails;
   const [didCopyJoinPath, setDidCopyJoinPath] = useState(false);
   const copyResetTimeoutRef = useRef<number | null>(null);
   const joinPath = activeCommunity ? `/c/${encodeURIComponent(activeCommunity.slug)}` : "";
@@ -112,7 +115,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
     }
   };
   const formatMemberAccess = (member: CommunityMember): string | null => {
-    if (!isAdminMode) return null;
+    if (!canViewMemberPlanDetails) return null;
     const amount = formatAmount(member);
     const period =
       member.billing_period === "monthly" ? "/mo" : member.billing_period === "annual" ? "/yr" : "";
@@ -123,7 +126,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   const planOptions = (() => {
     const seenPricePoints = new Set<string>();
     const dynamicPlanOptions: Array<{ value: string; label: string; amount: number }> = [];
-    if (!isAdminMode) {
+    if (!canViewMemberPlanDetails) {
       return [{ value: "all", label: "All plans" }];
     }
     for (const member of state.communityMembers) {
@@ -162,17 +165,19 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   return (
     <>
       <div className="community-panel members-panel">
-        <div className={`members-layout${isAdminMode ? " with-invites" : ""}`}>
+        <div className={`members-layout${canManageMembers ? " with-invites" : ""}`}>
           <section className="members-section">
             <div className="members-header-row">
               <div className="members-header">Members</div>
-              <div className="members-count">
-                {state.communityMembersRoleFilter !== "all"
-                  ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
-                  : state.communityMembers.length}
-              </div>
+              {canManageMembers ? (
+                <div className="members-count">
+                  {state.communityMembersRoleFilter !== "all"
+                    ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
+                    : state.communityMembers.length}
+                </div>
+              ) : null}
             </div>
-            {capabilities.membersSurfaceMode !== "viewer" && (
+            {canManageMembers && (
               <div className="members-filter-row">
                 <label className="members-filter-field">
                   <span>Role</span>
@@ -188,7 +193,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <option value="member">Member</option>
                   </select>
                 </label>
-                {isAdminMode ? (
+                {canViewMemberPlanDetails ? (
                   <label className="members-filter-field">
                     <span>Plan</span>
                     <select
@@ -214,24 +219,30 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     Let free members join immediately instead of sending them to a review queue.
                   </div>
                 </div>
-                <label
-                  className={`members-switch${
-                    state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode ? " is-disabled" : ""
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={autoApproveNewMembers}
-                    disabled={state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode}
-                    onChange={(event) => {
-                      const nextAutoApprove = event.target.checked;
-                      void actions.handleSetCommunityFreeAccessMode(nextAutoApprove ? "open" : "approval");
-                    }}
-                  />
-                  <span className="members-switch-track">
-                    <span className="members-switch-thumb" />
-                  </span>
-                </label>
+                {canManageJoinPolicy ? (
+                  <label
+                    className={`members-switch${
+                      state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode ? " is-disabled" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={autoApproveNewMembers}
+                      disabled={state.isLoadingCommunityJoinRequests || state.isSavingFreeAccessMode}
+                      onChange={(event) => {
+                        const nextAutoApprove = event.target.checked;
+                        void actions.handleSetCommunityFreeAccessMode(nextAutoApprove ? "open" : "approval");
+                      }}
+                    />
+                    <span className="members-switch-track">
+                      <span className="members-switch-thumb" />
+                    </span>
+                  </label>
+                ) : (
+                  <div className="members-policy-text">
+                    Owners and admins can change join approval mode.
+                  </div>
+                )}
               </div>
             )}
             {showPendingApprovals && (
@@ -315,7 +326,11 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
               </div>
             )}
             <div className="members-list">
-              {state.communityMembers.length === 0 ? (
+              {!canManageMembers ? (
+                <div className="members-empty">
+                  Moderators can review join requests here. Member management is limited to owners and admins.
+                </div>
+              ) : state.communityMembers.length === 0 ? (
                 <div className="members-empty">No members yet.</div>
               ) : state.filteredCommunityMembers.length === 0 ? (
                 <div className="members-empty">No matching members.</div>
@@ -330,7 +345,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     activeCommunity && activeCommunity.owner_id === member.user_id,
                   );
                   const viewerIsOwner = capabilities.isActiveCommunityOwner;
-                  const viewerIsAdmin = isAdminMode && !viewerIsOwner;
+                  const viewerIsAdmin = canManageMembers && !viewerIsOwner;
                   const memberIsAdmin = member.role === "admin";
                   const memberIsModerator = member.role === "moderator";
                   const memberPriceLabel = formatMemberAccess(member);
@@ -362,7 +377,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         <div className="member-meta">
                           <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
                         </div>
-                        {!isAdminMode || memberIsOwner ? null : (
+                        {!canManageMembers || memberIsOwner ? null : (
                           <div className="member-controls">
                             <select
                               className="select-styled"
@@ -399,7 +414,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             </div>
           </section>
 
-          {activeCommunity && isAdminMode && (
+          {activeCommunity && canManageMembers && (
             <section className="invites-section">
               <div className="members-header-row">
                 <div className="members-header">Join path</div>

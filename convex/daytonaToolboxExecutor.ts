@@ -50,27 +50,38 @@ export function buildDaytonaToolboxBaseCandidates(toolboxProxyUrl: string, sandb
     pushUnique(String(toolboxProxyUrl ?? "").trim());
     return out;
   }
-  pushUnique(parsed.toString());
   const encodedSandboxId = encodeURIComponent(String(sandboxId ?? "").trim());
-  if (!encodedSandboxId) return out;
+  if (!encodedSandboxId) {
+    pushUnique(parsed.toString());
+    return out;
+  }
   const normalizedPath = normalizeUrlPath(parsed.pathname);
   const toolboxIndex = normalizedPath.indexOf("/toolbox");
-  const pathCandidates = new Set<string>();
-  pathCandidates.add(joinUrlPath(normalizedPath, encodedSandboxId));
   if (toolboxIndex >= 0) {
     const pathPrefix = normalizedPath.slice(0, toolboxIndex);
-    pathCandidates.add(joinUrlPath(pathPrefix, "toolbox"));
-    pathCandidates.add(joinUrlPath(pathPrefix, "toolbox", encodedSandboxId));
-    pathCandidates.add(joinUrlPath(pathPrefix, "toolbox", encodedSandboxId, "toolbox"));
+    // Daytona's toolbox proxy URL is a root prefix like /toolbox, but the actual
+    // process and file APIs are sandbox-scoped under /toolbox/{sandboxId}/...
+    parsed.pathname = joinUrlPath(pathPrefix, "toolbox", encodedSandboxId);
+    pushUnique(parsed.toString());
+    parsed.pathname = joinUrlPath(pathPrefix, "toolbox", encodedSandboxId, "toolbox");
+    pushUnique(parsed.toString());
+    parsed.pathname = joinUrlPath(pathPrefix, "toolbox");
+    pushUnique(parsed.toString());
   } else {
-    pathCandidates.add(joinUrlPath(normalizedPath, "toolbox"));
-    pathCandidates.add(joinUrlPath(normalizedPath, "toolbox", encodedSandboxId));
-    pathCandidates.add(joinUrlPath(normalizedPath, "toolbox", encodedSandboxId, "toolbox"));
-    pathCandidates.add(joinUrlPath("/", "toolbox", encodedSandboxId));
-    pathCandidates.add(joinUrlPath("/", "toolbox", encodedSandboxId, "toolbox"));
+    for (const candidatePath of [
+      joinUrlPath(normalizedPath, encodedSandboxId),
+      joinUrlPath(normalizedPath, "toolbox", encodedSandboxId),
+      joinUrlPath(normalizedPath, "toolbox", encodedSandboxId, "toolbox"),
+      joinUrlPath("/", "toolbox", encodedSandboxId),
+      joinUrlPath("/", "toolbox", encodedSandboxId, "toolbox"),
+      normalizedPath,
+    ]) {
+      parsed.pathname = candidatePath;
+      pushUnique(parsed.toString());
+    }
   }
-  for (const candidatePath of pathCandidates) {
-    parsed.pathname = candidatePath;
+  if (out.length === 0) {
+    parsed.pathname = normalizedPath;
     pushUnique(parsed.toString());
   }
   return out;
@@ -78,7 +89,7 @@ export function buildDaytonaToolboxBaseCandidates(toolboxProxyUrl: string, sandb
 
 export function shouldRetryWithAlternateToolboxBase(status: number, text: string): boolean {
   const body = String(text ?? "").toLowerCase();
-  if (status === 401 && body.includes("failed to get auth url")) return true;
+  if (status === 401) return true;
   if (body.includes("invalid host format")) return true;
   if (body.includes("sandbox id not found")) return true;
   if (status === 404 && body.includes("toolbox")) return true;

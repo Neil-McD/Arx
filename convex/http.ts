@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
@@ -208,13 +208,12 @@ async function requireAuthenticatedActor(
   const authIdentity = await requireVerifiedIdentity(ctx, req);
   if (!authIdentity.ok) return authIdentity;
   const { authSubject, email, displayName, avatarUrl } = authIdentity.identity;
-  const actor = (await ctx.runMutation(api.auth.bootstrapActor as any, {
-    authState: "authenticated",
+  const actor = (await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
     authSubject,
     ...(email ? { email } : null),
     ...(displayName ? { displayName } : null),
     ...(avatarUrl ? { avatarUrl } : null),
-  })) as { authSubject?: string | null };
+  })) as { authSubject?: string | null; dbUserId?: any };
   const actorAuthSubject = String(actor?.authSubject ?? "").trim();
   if (actorAuthSubject && actorAuthSubject !== authSubject) {
     return {
@@ -227,9 +226,7 @@ async function requireAuthenticatedActor(
       }),
     };
   }
-  const dbUserId = await ctx.runQuery(internal.providerConnections.getUserIdByAuthSubjectInternal as any, {
-    authSubject,
-  });
+  const dbUserId = actor?.dbUserId;
   if (!dbUserId) {
     return {
       ok: false,

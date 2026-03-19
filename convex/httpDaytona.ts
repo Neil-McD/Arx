@@ -1,4 +1,4 @@
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   runChatgptNativeToolCompletion,
   type ChatgptFunctionTool,
@@ -43,7 +43,11 @@ import {
   buildResponsesApiFunctionTools,
   normalizeToolArguments,
 } from "../shared/toolRegistry";
-import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt";
+import {
+  buildWorkspaceRuntimeSystemPrompt,
+  type RuntimeCommunityPromptFields,
+  type ThreadWorkingStatePrompt,
+} from "../shared/runtimePrompt";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -116,7 +120,7 @@ async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = await params.ctx.runQuery(api.community.readCompiledCommunityContext as any, {
+      const payload = await params.ctx.runAction(internal.communityArchive.searchCommunityKnowledgeInternal as any, {
         userId: params.userId,
         authSubject: params.authSubject ?? undefined,
         communityId: params.communityId,
@@ -168,20 +172,12 @@ async function executeRetrievalHarnessTool(params: {
         userId: params.userId,
         authSubject: params.authSubject ?? undefined,
         communityId: params.communityId,
-        agentKey:
-          typeof normalizedArgs.agent_key === "string" ? normalizedArgs.agent_key : undefined,
-        authorLabel:
-          typeof normalizedArgs.author_label === "string" ? normalizedArgs.author_label : undefined,
-        postType:
-          typeof normalizedArgs.post_type === "string" ? normalizedArgs.post_type : "observation",
+        postType: String(normalizedArgs.post_type ?? "observation"),
         title: typeof normalizedArgs.title === "string" ? normalizedArgs.title : undefined,
         body: String(normalizedArgs.body ?? ""),
-        whyNow: typeof normalizedArgs.why_now === "string" ? normalizedArgs.why_now : undefined,
         evidence: Array.isArray(normalizedArgs.evidence)
           ? normalizedArgs.evidence.map((value) => String(value ?? ""))
           : [],
-        noveltyKey:
-          typeof normalizedArgs.novelty_key === "string" ? normalizedArgs.novelty_key : undefined,
       });
       return {
         status: "ok",
@@ -203,9 +199,7 @@ async function executeRetrievalHarnessTool(params: {
   }
 
   if (
-    params.toolName === "web_research" ||
-    params.toolName === "web_search" ||
-    params.toolName === "web_fetch"
+    params.toolName === "web_research"
   ) {
     const result = await executeWebResearch({
       action:
@@ -419,7 +413,7 @@ async function runProviderNativeToolCompletion(params: {
   });
 }
 
-async function executeRetrievalAgentLoop(params: {
+async function executeRetrievalAgentLoop(params: RuntimeCommunityPromptFields & {
   ctx: any;
   req: Request;
   userId: string;
@@ -429,14 +423,12 @@ async function executeRetrievalAgentLoop(params: {
   messages: InferenceMessage[];
   maxTokens: number;
   runId: string;
-  harnessName: "workspace" | "chat_tools";
+  harnessName: "chat_tools";
   maxIterations: number;
   allowedToolNames: readonly RetrievalToolName[];
-  communityId?: string | null;
-  communityName?: string | null;
   communitySystemPrompt?: string | null;
   projectId?: string | null;
-  threadWorkingState?: import("../shared/runtimePrompt").ThreadWorkingStatePrompt | null;
+  threadWorkingState?: ThreadWorkingStatePrompt | null;
   authSubject?: string | null;
   workspaceSession?: WorkspaceSandboxSession | null;
   apiKeyOverride?: string | null;
@@ -446,6 +438,8 @@ async function executeRetrievalAgentLoop(params: {
     payload: Record<string, unknown>;
   }) => Promise<void>;
 }): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
+  const ownsWorkspaceSession = !params.workspaceSession;
+  let lazyWorkspaceSession = params.workspaceSession ?? null;
   const projectLabel = await resolveWorkspaceProjectLabel({
     ctx: params.ctx,
     projectId: params.projectId,
@@ -458,6 +452,9 @@ async function executeRetrievalAgentLoop(params: {
     harnessName: params.harnessName,
     communityId: params.communityId,
     communityName: params.communityName,
+    communitySlug: params.communitySlug,
+    communityOneLiner: params.communityOneLiner,
+    communityAbout: params.communityAbout,
     customCommunitySystemPrompt: params.communitySystemPrompt,
     projectLabel,
     threadWorkingState: params.threadWorkingState,
@@ -474,181 +471,179 @@ async function executeRetrievalAgentLoop(params: {
   ];
   const nativeTools = buildOpenAiFunctionTools(params.allowedToolNames);
   const chatgptNativeTools = buildResponsesApiFunctionTools(params.allowedToolNames);
-  const loopResult = await runSerialNativeToolLoop<RetrievalToolName>({
-    messages: nativeTranscript,
-    maxIterations: params.maxIterations,
-    runCompletion: async (messages) => {
-      const completion = await runProviderNativeToolCompletion({
-        ctx: params.ctx,
-        userId: params.userId,
-        requestedModelId: params.requestedModelId,
-        inferenceSource: params.inferenceSource,
-        modelRef: params.modelRef,
-        messages,
-        maxTokens: params.maxTokens,
-        openRouterTools: nativeTools,
-        chatgptTools: chatgptNativeTools,
-        apiKeyOverride: params.apiKeyOverride,
-      });
-      if (!completion.ok) return completion;
-      if (
-        completion.type === "tool_call" &&
-        !params.allowedToolNames.includes(completion.toolName as RetrievalToolName)
-      ) {
-        return {
-          ok: false,
-          status: 502,
-          code: "invalid_model_output",
-          message: "Provider returned an unknown tool name.",
-          pendingToolCallId: completion.providerCallId,
-          pendingToolName: completion.toolName,
-        };
-      }
-      return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
-    },
-    normalizeToolArguments,
-    executeTool: async ({ toolName, normalizedArgs }) =>
-      await executeRetrievalHarnessTool({
-        ctx: params.ctx,
-        userId: params.userId,
-        communityId: params.communityId,
-        authSubject: params.authSubject,
-        projectId: params.projectId,
-        runId: params.runId,
-        toolName,
-        args: normalizedArgs,
-        workspaceSession: params.workspaceSession,
-      }),
-    onToolStepStart: async ({ iteration, step }) => {
-      await appendWorkspaceToolCallStarted({
-        appendRunEvent: params.appendRunEvent,
-        runId: params.runId,
-        harnessName: params.harnessName,
-        communityId: params.communityId,
-        iteration,
-        providerCallId: step.providerCallId,
-        toolName: step.toolName,
-        args: step.normalizedArgs,
-      });
-    },
-    onToolStepFinish: async ({ iteration, step, toolResult, toolResultEnvelope }) => {
-      await appendWorkspaceToolCallFinished({
-        appendRunEvent: params.appendRunEvent,
-        runId: params.runId,
-        harnessName: params.harnessName,
-        iteration,
-        providerCallId: step.providerCallId,
-        toolName: step.toolName,
-        args: step.normalizedArgs,
-        toolResult,
-        toolResultEnvelope,
-      });
-      if (toolResult.status !== "ok") {
-        console.error("[workspace-loop] tool call failed", {
+  try {
+    const loopResult = await runSerialNativeToolLoop<RetrievalToolName>({
+      messages: nativeTranscript,
+      maxIterations: params.maxIterations,
+      runCompletion: async (messages) => {
+        const completion = await runProviderNativeToolCompletion({
+          ctx: params.ctx,
+          userId: params.userId,
+          requestedModelId: params.requestedModelId,
+          inferenceSource: params.inferenceSource,
+          modelRef: params.modelRef,
+          messages,
+          maxTokens: params.maxTokens,
+          openRouterTools: nativeTools,
+          chatgptTools: chatgptNativeTools,
+          apiKeyOverride: params.apiKeyOverride,
+        });
+        if (!completion.ok) return completion;
+        if (
+          completion.type === "tool_call" &&
+          !params.allowedToolNames.includes(completion.toolName as RetrievalToolName)
+        ) {
+          return {
+            ok: false,
+            status: 502,
+            code: "invalid_model_output",
+            message: "Provider returned an unknown tool name.",
+            pendingToolCallId: completion.providerCallId,
+            pendingToolName: completion.toolName,
+          };
+        }
+        return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
+      },
+      normalizeToolArguments,
+      executeTool: async ({ toolName, normalizedArgs }) => {
+        const needsWorkspaceSession =
+          toolName === "list_dir" ||
+          toolName === "read" ||
+          toolName === "glob" ||
+          toolName === "grep" ||
+          toolName === "sha256" ||
+          toolName === "write" ||
+          toolName === "edit" ||
+          toolName === "bash";
+
+        if (needsWorkspaceSession && !lazyWorkspaceSession) {
+          const projectId = String(params.projectId ?? "").trim();
+          const authSubject = String(params.authSubject ?? "").trim();
+          if (!projectId || !authSubject) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "project_required",
+              errorMessage: `${toolName} requires a bound project workspace.`,
+            };
+          }
+          const created = await createWorkspaceSandboxSession({
+            ctx: params.ctx,
+            userId: params.userId,
+            authSubject,
+            projectId,
+            runId: params.runId,
+          });
+          if (!created.ok) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: String((created as any).details?.output_preview ?? ""),
+              errorCode: created.code,
+              errorMessage: created.message,
+            };
+          }
+          lazyWorkspaceSession = created.session;
+          await params.appendRunEvent({
+            eventType: "sandbox_started",
+            eventKey: `${params.runId}:workspace_sandbox_started:1`,
+            payload: {
+              run_id: params.runId,
+              sandbox_id: created.session.providerSandboxId,
+              region: created.session.region,
+              project_id: projectId,
+            },
+          });
+        }
+
+        return await executeRetrievalHarnessTool({
+          ctx: params.ctx,
+          userId: params.userId,
+          communityId: params.communityId,
+          authSubject: params.authSubject,
+          projectId: params.projectId,
+          runId: params.runId,
+          toolName,
+          args: normalizedArgs,
+          workspaceSession: lazyWorkspaceSession,
+        });
+      },
+      onToolStepStart: async ({ iteration, step }) => {
+        await appendWorkspaceToolCallStarted({
+          appendRunEvent: params.appendRunEvent,
           runId: params.runId,
           harnessName: params.harnessName,
-          toolName: step.toolName,
-          providerCallId: step.providerCallId,
+          communityId: params.communityId,
           iteration,
-          errorCode: toolResult.errorCode,
-          errorMessage: toolResult.errorMessage,
-          exitCode: toolResult.exitCode,
-          outputPreview: toolResult.outputText.slice(0, 2000),
+          providerCallId: step.providerCallId,
+          toolName: step.toolName,
+          args: step.normalizedArgs,
         });
-      }
-    },
-  });
-
-  if (!loopResult.ok && loopResult.code === "empty_response") {
-    return {
-      ok: false,
-      status: 502,
-      code: "empty_response",
-      message: `${params.harnessName} harness model returned an empty response.`,
-    };
-  }
-  if (!loopResult.ok && loopResult.code === "run_loop_limit_exceeded") {
-    return {
-      ok: false,
-      status: 502,
-      code: "run_loop_limit_exceeded",
-      message: `${params.harnessName} harness run exceeded max tool iterations (${params.maxIterations}).`,
-    };
-  }
-  return loopResult;
-}
-
-async function executeWorkspaceAgentLoop(params: {
-  ctx: any;
-  req: Request;
-  userId: string;
-  authSubject: string;
-  projectId: string;
-  requestedModelId: string;
-  inferenceSource: RuntimeInferenceSource;
-  modelRef: string;
-  messages: InferenceMessage[];
-  maxTokens: number;
-  runId: string;
-  allowedToolNames: readonly RetrievalToolName[];
-  communityId?: string | null;
-  communityName?: string | null;
-  communitySystemPrompt?: string | null;
-  threadWorkingState?: import("../shared/runtimePrompt").ThreadWorkingStatePrompt | null;
-  apiKeyOverride?: string | null;
-  appendRunEvent: (params: {
-    eventType: string;
-    eventKey?: string;
-    payload: Record<string, unknown>;
-  }) => Promise<void>;
-}): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
-  const workspaceSession = await createWorkspaceSandboxSession({
-    ctx: params.ctx,
-    userId: params.userId,
-    authSubject: params.authSubject,
-    projectId: params.projectId,
-    runId: params.runId,
-  });
-  if (!workspaceSession.ok) {
-    return {
-      ok: false,
-      status: workspaceSession.status,
-      code: workspaceSession.code,
-      message: workspaceSession.message,
-    };
-  }
-  await params.appendRunEvent({
-    eventType: "sandbox_started",
-    eventKey: `${params.runId}:workspace_sandbox_started:1`,
-    payload: {
-      run_id: params.runId,
-      sandbox_id: workspaceSession.session.providerSandboxId,
-      region: workspaceSession.session.region,
-      project_id: params.projectId,
-    },
-  });
-  try {
-    return await executeRetrievalAgentLoop({
-      ...params,
-      harnessName: "workspace",
-      maxIterations: 30,
-      allowedToolNames: params.allowedToolNames,
-      workspaceSession: workspaceSession.session,
+      },
+      onToolStepFinish: async ({ iteration, step, toolResult, toolResultEnvelope }) => {
+        await appendWorkspaceToolCallFinished({
+          appendRunEvent: params.appendRunEvent,
+          runId: params.runId,
+          harnessName: params.harnessName,
+          iteration,
+          providerCallId: step.providerCallId,
+          toolName: step.toolName,
+          args: step.normalizedArgs,
+          toolResult,
+          toolResultEnvelope,
+        });
+        if (toolResult.status !== "ok") {
+          console.error("[tool-loop] tool call failed", {
+            runId: params.runId,
+            harnessName: params.harnessName,
+            toolName: step.toolName,
+            providerCallId: step.providerCallId,
+            iteration,
+            errorCode: toolResult.errorCode,
+            errorMessage: toolResult.errorMessage,
+            exitCode: toolResult.exitCode,
+            outputPreview: toolResult.outputText.slice(0, 2000),
+          });
+        }
+      },
     });
+
+    if (!loopResult.ok && loopResult.code === "empty_response") {
+      return {
+        ok: false,
+        status: 502,
+        code: "empty_response",
+        message: `${params.harnessName} harness model returned an empty response.`,
+      };
+    }
+    if (!loopResult.ok && loopResult.code === "run_loop_limit_exceeded") {
+      return {
+        ok: false,
+        status: 502,
+        code: "run_loop_limit_exceeded",
+        message: `${params.harnessName} harness run exceeded max tool iterations (${params.maxIterations}).`,
+      };
+    }
+    return loopResult;
   } finally {
-    await cleanupWorkspaceSandboxSession({
-      session: workspaceSession.session,
-      runId: params.runId,
-      projectId: params.projectId,
-      appendRunEvent: params.appendRunEvent,
-    });
+    if (ownsWorkspaceSession && lazyWorkspaceSession) {
+      await cleanupWorkspaceSandboxSession({
+        session: lazyWorkspaceSession,
+        runId: params.runId,
+        projectId: String(params.projectId ?? lazyWorkspaceSession.projectId ?? "").trim(),
+        appendRunEvent: params.appendRunEvent,
+      });
+    }
   }
 }
 
-async function executeChatToolsAgentLoop(params: {
+async function executeChatToolsAgentLoop(params: RuntimeCommunityPromptFields & {
   ctx: any;
   req: Request;
   userId: string;
+  authSubject?: string | null;
+  projectId?: string | null;
   requestedModelId: string;
   inferenceSource: RuntimeInferenceSource;
   modelRef: string;
@@ -656,10 +651,8 @@ async function executeChatToolsAgentLoop(params: {
   maxTokens: number;
   runId: string;
   allowedToolNames: readonly RetrievalToolName[];
-  communityId?: string | null;
-  communityName?: string | null;
   communitySystemPrompt?: string | null;
-  threadWorkingState?: import("../shared/runtimePrompt").ThreadWorkingStatePrompt | null;
+  threadWorkingState?: ThreadWorkingStatePrompt | null;
   apiKeyOverride?: string | null;
   appendRunEvent: (params: {
     eventType: string;
@@ -677,7 +670,6 @@ async function executeChatToolsAgentLoop(params: {
 export type { DaytonaConfig };
 export {
   executeChatToolsAgentLoop,
-  executeWorkspaceAgentLoop,
   listDaytonaWorkspaceDirectory,
   loadDaytonaConfig,
 };

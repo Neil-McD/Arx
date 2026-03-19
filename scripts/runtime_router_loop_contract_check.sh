@@ -47,10 +47,10 @@ require_match_in_file "$RESOLUTION_FILE" 'function resolveAllowedToolNames\(' \
   "runtime derives allowed tools directly"
 require_match_in_file "$HANDLERS_FILE" 'tool_policy_resolved' \
   "runtime emits tool_policy_resolved event"
-require_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
-  "runtime still supports workspace agent loop"
 require_match_in_file "$HANDLERS_FILE" 'executeChatToolsAgentLoop\(' \
-  "runtime supports non-workspace tool loop"
+  "runtime supports the unified tool loop"
+forbid_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
+  "runtime no longer keeps a separate eager workspace agent loop"
 require_match_in_file "$HANDLERS_FILE" 'runtimeExecutionMode === "agentic"' \
   "runtime branches on execution mode for tool-capable turns"
 
@@ -65,8 +65,10 @@ forbid_match_in_file "$HANDLERS_FILE" 'debug_force_router_level' \
 
 require_match_in_file "$DAYTONA_FILE" 'function executeRetrievalAgentLoop\(' \
   "shared loop core still exists"
-require_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
-  "workspace loop uses unified harness name"
+require_match_in_file "$DAYTONA_FILE" 'harnessName: "chat_tools"' \
+  "runtime uses the unified chat_tools harness name"
+forbid_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
+  "runtime no longer carries a separate workspace harness name"
 require_match_in_file "$PROMPT_FILE" 'Use native tool calling when a tool is needed' \
   "workspace prompt instructs native tool calling"
 require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \

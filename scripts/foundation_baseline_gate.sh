@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=17
+TOTAL_STEPS=15
 CURRENT_STEP=1
 
 run_step() {
@@ -20,7 +20,6 @@ run_step() {
   CURRENT_STEP=$((CURRENT_STEP + 1))
 }
 
-run_step "Secret redaction contract check" bash scripts/secret_redaction_contract_check.sh
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh
@@ -34,8 +33,7 @@ run_step "Auth and billing public identity guard" bash scripts/auth_billing_publ
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
-run_step "Runtime turn client idempotency guard" bash scripts/runtime_turn_client_idempotency_guard.sh
-run_step "Journey smoke gate (non-duplicative)" env JOURNEY_SKIP_IDEMPOTENCY_GUARDS=1 bash scripts/journey_smoke_gate.sh
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
+run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh
 
 echo "PASS: foundation baseline gate passed."

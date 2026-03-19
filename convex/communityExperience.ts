@@ -9,7 +9,6 @@ export {
   resolvePublicFunnelBySlug,
   listPublicDiscoverCommunities,
   getMyJoinRequestBySlug,
-  requestCommunityAccessBySlug,
   joinPublicCommunityBySlug,
   joinPublicCommunity,
 } from "./communityPublic";

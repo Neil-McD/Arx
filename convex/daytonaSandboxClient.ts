@@ -168,6 +168,10 @@ function isDaytonaStartedState(daytonaState: string | null | undefined): boolean
   return String(daytonaState ?? "").trim().toLowerCase() === "started";
 }
 
+function isDaytonaStoppedState(daytonaState: string | null | undefined): boolean {
+  return String(daytonaState ?? "").trim().toLowerCase() === "stopped";
+}
+
 function isDaytonaTerminalErrorState(daytonaState: string | null | undefined): boolean {
   const state = String(daytonaState ?? "").trim().toLowerCase();
   return state === "error" || state === "build_failed" || state === "destroyed" || state === "destroying" || state === "unknown";
@@ -285,7 +289,11 @@ export async function deleteDaytonaSandbox(params: {
     path: `/sandbox/${encodeURIComponent(params.sandboxId)}`,
     method: "DELETE",
   });
-  if (!res.ok) return res;
+  if (!res.ok) {
+    const detailsText = String(res.details?.response_text ?? "").toLowerCase();
+    if (detailsText.includes("not found")) return { ok: true };
+    return res;
+  }
   return { ok: true };
 }
 
@@ -330,6 +338,58 @@ export async function waitForDaytonaSandboxReady(params: {
     status: 503,
     code: "runner_unavailable",
     message: "Timed out waiting for Daytona sandbox readiness.",
+  };
+}
+
+export async function waitForDaytonaSandboxStopped(params: {
+  config: DaytonaConfig;
+  sandboxId: string;
+  timeoutMs?: number;
+  intervalMs?: number;
+}): Promise<
+  | { ok: true; sandbox: DaytonaSandboxApiDto | null }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const timeoutMs = Math.max(1000, Math.floor(params.timeoutMs ?? 30_000));
+  const intervalMs = Math.max(250, Math.floor(params.intervalMs ?? 1000));
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const lookup = await daytonaApiRequest<DaytonaSandboxApiDto>({
+      config: params.config,
+      path: `/sandbox/${encodeURIComponent(params.sandboxId)}`,
+      method: "GET",
+    });
+    if (!lookup.ok) {
+      const detailsText = String(lookup.details?.response_text ?? "").toLowerCase();
+      if (detailsText.includes("not found")) {
+        return { ok: true, sandbox: null };
+      }
+      return lookup;
+    }
+    if (isDaytonaStoppedState(lookup.payload.state)) {
+      return { ok: true, sandbox: lookup.payload };
+    }
+    if (isDaytonaTerminalErrorState(lookup.payload.state)) {
+      return {
+        ok: false,
+        status: 503,
+        code: "runner_unavailable",
+        message: `Daytona sandbox entered terminal state '${String(lookup.payload.state ?? "unknown")}' while stopping.`,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return {
+    ok: false,
+    status: 503,
+    code: "runner_unavailable",
+    message: "Timed out waiting for Daytona sandbox stop.",
   };
 }
 

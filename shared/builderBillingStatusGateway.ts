@@ -5,11 +5,6 @@ export type BuilderBillingStatus = {
   user_id: string;
   builder_tier: "free" | "builder" | "architect";
   max_communities: number;
-  platform_fee_bps: number;
-  has_payouts: boolean;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
 };
 
 export type DevBuilderTier = "free" | "builder" | "architect";
@@ -33,14 +28,6 @@ async function loadBuilderBillingStatusViaConvex(session: CloudAuthSession): Pro
     ...row,
     builder_tier: normalizeBuilderTier(row.builder_tier),
     max_communities: Number(row.max_communities ?? 0),
-    platform_fee_bps: Number(row.platform_fee_bps ?? 0),
-    has_payouts: Boolean(row.has_payouts),
-    subscription_status: row.subscription_status ?? null,
-    current_period_end: row.current_period_end ?? null,
-    cancel_at_period_end:
-      row.cancel_at_period_end === null || row.cancel_at_period_end === undefined
-        ? null
-        : Boolean(row.cancel_at_period_end),
   };
 }
 

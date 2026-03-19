@@ -37,10 +37,9 @@ import {
   listThreadUserMessageSenderIds as listThreadUserMessageSenderIdsImpl,
   patchOwnMessageContent as patchOwnMessageContentImpl,
 } from "./communityChat";
-import { readCompiledCommunityContext as readCompiledCommunityContextImpl } from "./communityCompiler";
+import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
-  listCommunityAiFeedRanked as listCommunityAiFeedRankedImpl,
-  listCommunityAiFeedLive as listCommunityAiFeedLiveImpl,
+  listCommunityAiFeedBundle as listCommunityAiFeedBundleImpl,
   publishCommunityAiFeedAgentPost as publishCommunityAiFeedAgentPostImpl,
   reactToCommunityAiFeedPost as reactToCommunityAiFeedPostImpl,
 } from "./communityAiFeed";
@@ -56,7 +55,6 @@ import {
   joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
   listCommunityResources as listCommunityResourcesImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
-  requestCommunityAccessBySlug as requestCommunityAccessBySlugImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   saveCommunityResource as saveCommunityResourceImpl,
 } from "./communityExperience";
@@ -68,6 +66,12 @@ import {
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
   saveCommunitySettings as saveCommunitySettingsImpl,
 } from "./communityLifecycle";
+import {
+  getCommunityArchiveHealth as getCommunityArchiveHealthImpl,
+  processCommunityArchivePending as processCommunityArchivePendingImpl,
+  requestCommunityArchiveBackfill as requestCommunityArchiveBackfillImpl,
+  retryCommunityArchiveFailures as retryCommunityArchiveFailuresImpl,
+} from "./communityArchive";
 
 export const createCommunity = createCommunityImpl;
 export const generateCommunityBrandingUploadUrl = generateCommunityBrandingUploadUrlImpl;
@@ -76,7 +80,7 @@ export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
-export const readCompiledCommunityContext = readCompiledCommunityContextImpl;
+export const readCommunityRecentContext = readCommunityRecentContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
 export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;
 export const denyCommunityJoinRequest = denyCommunityJoinRequestImpl;
@@ -99,7 +103,6 @@ export const resolvePublicFunnelBySlug = resolvePublicFunnelBySlugImpl;
 export const listPublicDiscoverCommunities = listPublicDiscoverCommunitiesImpl;
 export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
 export const getMyJoinRequestBySlug = getMyJoinRequestBySlugImpl;
-export const requestCommunityAccessBySlug = requestCommunityAccessBySlugImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
 export const joinPublicCommunity = joinPublicCommunityImpl;
 export const ensureCommunityChatThread = ensureCommunityChatThreadImpl;
@@ -112,13 +115,16 @@ export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
 export const listThreadUserMessageSenderIds = listThreadUserMessageSenderIdsImpl;
-export const listCommunityAiFeedLive = listCommunityAiFeedLiveImpl;
-export const listCommunityAiFeedRanked = listCommunityAiFeedRankedImpl;
+export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
 export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const deleteCommunity = deleteCommunityImpl;
+export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
+export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;
+export const processCommunityArchivePending = processCommunityArchivePendingImpl;
+export const retryCommunityArchiveFailures = retryCommunityArchiveFailuresImpl;
 export const getCommunityAgentConfig = getCommunityAgentConfigImpl;
 export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;

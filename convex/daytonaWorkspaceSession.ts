@@ -7,6 +7,7 @@ import {
   loadDaytonaConfig,
   stopDaytonaSandbox,
   waitForDaytonaSandboxReady,
+  waitForDaytonaSandboxStopped,
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
@@ -205,12 +206,30 @@ export async function cleanupWorkspaceSandboxSession(params: {
       error_message: stopped.ok ? null : stopped.message,
     },
   });
-  const deleted = params.session.lifecycleMode === "manual_delete_fallback"
-    ? await deleteDaytonaSandbox({
+
+  const stopSettled = stopped.ok
+    ? await waitForDaytonaSandboxStopped({
         config: params.session.config,
         sandboxId: params.session.providerSandboxId,
       })
-    : { ok: true as const };
+    : { ok: false as const, status: stopped.status, code: stopped.code, message: stopped.message, details: stopped.details };
+
+  const deleted =
+    stopSettled.ok
+      ? stopSettled.sandbox === null
+        ? ({ ok: true as const })
+        : await deleteDaytonaSandbox({
+            config: params.session.config,
+            sandboxId: params.session.providerSandboxId,
+          })
+      : ({
+          ok: false as const,
+          status: stopSettled.status,
+          code: stopSettled.code,
+          message: stopSettled.message,
+          details: stopSettled.details,
+        });
+
   await params.appendRunEvent({
     eventType: "sandbox_deleted",
     eventKey: `${params.runId}:workspace_sandbox_deleted:1`,
@@ -220,7 +239,7 @@ export async function cleanupWorkspaceSandboxSession(params: {
       status: deleted.ok ? "ok" : "error",
       error_code: deleted.ok ? null : deleted.code,
       error_message: deleted.ok ? null : deleted.message,
-      lifecycle_mode: params.session.lifecycleMode,
+      lifecycle_mode: "explicit_stop_then_delete",
     },
   });
 }

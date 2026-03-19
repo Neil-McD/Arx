@@ -17,6 +17,8 @@ export type CommunityNavVisibility = {
   canViewAnalytics: boolean;
 };
 
+export type CommunitySettingsLayer = "member" | "admin" | "owner";
+
 export type CommunityActionGuards = {
   canPostMessages: boolean;
   canManageResources: boolean;
@@ -31,7 +33,6 @@ export function deriveCommunityAccessCapabilities(
   const isOwner = Boolean(access?.is_owner);
   const canManageMembers = Boolean(access?.can_manage_members);
   const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : true;
-  const effectiveRole = String(access?.effective_role ?? "").trim().toLowerCase();
   return {
     canViewCommunity: canEnterCommunity,
     isOwner,
@@ -39,10 +40,18 @@ export function deriveCommunityAccessCapabilities(
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
     canManageResources: Boolean(access?.can_manage_resources),
     canManageMembers,
-    canReviewJoinRequests:
-      Boolean(access?.can_review_join_requests) || isOwner || effectiveRole === "admin" || effectiveRole === "moderator",
+    canReviewJoinRequests: Boolean(access?.can_review_join_requests),
     canViewAnalytics: canManageMembers,
   };
+}
+
+export function deriveCommunitySettingsLayer(
+  access: CommunityAccess | null | undefined,
+): CommunitySettingsLayer {
+  if (Boolean(access?.is_owner)) return "owner";
+  const effectiveRole = String(access?.effective_role ?? "").trim().toLowerCase();
+  if (effectiveRole === "admin") return "admin";
+  return "member";
 }
 
 export function deriveCommunityNavVisibility(

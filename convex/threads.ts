@@ -39,8 +39,6 @@ type RuntimeRunLike = {
   threadId: any;
   runId: string;
   lane: string;
-  requestedExecutionTarget?: "chat" | "daytona_workspace";
-  requiresWorkspaceTools?: boolean;
   projectId?: any;
   modelId?: string;
   engineId?: string;
@@ -82,6 +80,8 @@ type ThreadWorkingStateLike = {
   openIssue?: string;
   updatedAt: number;
 };
+
+const RUNTIME_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -388,6 +388,98 @@ async function getRunningRuntimeRunByThread(args: {
     .withIndex("by_thread_status_startedAt", (q: any) => q.eq("threadId", args.threadId).eq("status", "running"))
     .order("desc")
     .first()) as RuntimeRunLike | null;
+}
+
+function isRuntimeRunStale(args: {
+  run: RuntimeRunLike;
+  nowMs: number;
+}): boolean {
+  const lastProgressAt =
+    typeof args.run.updatedAt === "number" && Number.isFinite(args.run.updatedAt)
+      ? Math.floor(args.run.updatedAt)
+      : Math.floor(args.run.startedAt);
+  return Math.max(0, args.nowMs - lastProgressAt) >= RUNTIME_RUN_STALE_AFTER_MS;
+}
+
+async function finalizeRuntimeRunRecord(args: {
+  ctx: any;
+  ownerId: any;
+  thread: ThreadLike;
+  run: RuntimeRunLike;
+  status: "ok" | "error" | "cancelled";
+  reason?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  nowMs: number;
+  finishedAt?: number;
+}): Promise<RuntimeRunLike> {
+  const status = normalizeRunStatus(args.status);
+  const run = args.run;
+  if (run.threadId !== args.thread._id) throw new Error("run_thread_conflict");
+  if (run.status !== "running") return run;
+
+  const finishedAt =
+    typeof args.finishedAt === "number" && Number.isFinite(args.finishedAt) ? Math.floor(args.finishedAt) : args.nowMs;
+  const reason = String(args.reason ?? "").trim() || undefined;
+  const errorCode = String(args.errorCode ?? "").trim() || undefined;
+  const errorMessage = String(args.errorMessage ?? "").trim() || undefined;
+  const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+
+  const recentMessages = (await args.ctx.db
+    .query("cloudMessages")
+    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", args.thread._id))
+    .order("desc")
+    .take(50)) as CloudMessageLike[];
+  const latestRunUserMessage = recentMessages.find(
+    (message) => message.runId === run.runId && message.role === "user",
+  );
+  const runEvents = (await args.ctx.db
+    .query("runtimeRunEvents")
+    .withIndex("by_owner_run_seq", (q: any) =>
+      q.eq("ownerId", args.ownerId).eq("runId", run.runId),
+    )
+    .collect()) as RuntimeRunEventLike[];
+  const workingState = summarizeThreadWorkingState({
+    latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
+    runStatus: status,
+    runReason: reason,
+    runErrorMessage: errorMessage,
+    events: runEvents,
+    nowMs: args.nowMs,
+  });
+
+  await args.ctx.db.insert("runtimeRunEvents", {
+    ownerId: args.ownerId,
+    threadId: args.thread._id,
+    runId: run.runId,
+    seq,
+    eventType: "run_finished",
+    eventKey: "run_finished",
+    payload: {
+      run_id: run.runId,
+      status,
+      reason: reason ?? null,
+      error_code: errorCode ?? null,
+      error_message: errorMessage ?? null,
+    },
+    createdAt: finishedAt,
+  });
+  await args.ctx.db.patch(run._id, {
+    status,
+    reason,
+    errorCode,
+    errorMessage,
+    finishedAt,
+    lastEventSeq: seq,
+    updatedAt: args.nowMs,
+  });
+  await args.ctx.db.patch(args.thread._id, {
+    workingState,
+    updatedAt: args.nowMs,
+  });
+  const updated = (await args.ctx.db.get(run._id)) as RuntimeRunLike | null;
+  if (!updated) throw new Error("runtime_run_not_found");
+  return updated;
 }
 
 
@@ -942,8 +1034,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.optional(v.string()),
-    requestedExecutionTarget: v.optional(v.union(v.literal("chat"), v.literal("daytona_workspace"))),
-    requiresWorkspaceTools: v.optional(v.boolean()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
@@ -980,10 +1070,28 @@ export const ensureCloudRuntimeRunStarted = mutation({
       return existing;
     }
 
-    const runningRun = await getRunningRuntimeRunByThread({
+    let runningRun = await getRunningRuntimeRunByThread({
       ctx,
       threadId: thread._id,
     });
+    if (runningRun && runningRun.runId !== runId && isRuntimeRunStale({ run: runningRun, nowMs })) {
+      await finalizeRuntimeRunRecord({
+        ctx,
+        ownerId,
+        thread,
+        run: runningRun,
+        status: "error",
+        reason: "stale_run_reconciled",
+        errorCode: "stale_run_reconciled",
+        errorMessage: "Previous run lost liveness and was reconciled before starting a new turn.",
+        nowMs,
+        finishedAt: nowMs,
+      });
+      runningRun = await getRunningRuntimeRunByThread({
+        ctx,
+        threadId: thread._id,
+      });
+    }
     if (runningRun) {
       if (runningRun.runId === runId) return runningRun;
       throw new Error("thread_run_in_progress");
@@ -992,13 +1100,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const startedAt =
       typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
     const lane = normalizeRunLane(args.lane);
-    const requestedExecutionTarget = args.requestedExecutionTarget === "daytona_workspace" ? "daytona_workspace" : "chat";
-    const requiresWorkspaceTools =
-      typeof args.requiresWorkspaceTools === "boolean"
-        ? args.requiresWorkspaceTools
-        : requestedExecutionTarget === "daytona_workspace";
-    const executionMode =
-      String(args.executionMode ?? "").trim() || (requiresWorkspaceTools ? "agentic" : "chat");
+    const executionMode = String(args.executionMode ?? "").trim() || "chat";
     const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
     const modelId = String(args.modelId ?? "").trim() || undefined;
@@ -1018,8 +1120,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
       threadId: thread._id,
       runId,
       lane,
-      requestedExecutionTarget,
-      requiresWorkspaceTools,
       projectId,
       modelId,
       engineId,
@@ -1047,7 +1147,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
       payload: {
         run_id: runId,
         lane,
-        requires_workspace_tools: requiresWorkspaceTools,
         project_id: projectId ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
@@ -1171,68 +1270,18 @@ export const finishCloudRuntimeRun = mutation({
     if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
     if (run.status !== "running") return run;
 
-    const finishedAt =
-      typeof args.finishedAt === "number" && Number.isFinite(args.finishedAt) ? Math.floor(args.finishedAt) : nowMs;
-    const reason = String(args.reason ?? "").trim() || undefined;
-    const errorCode = String(args.errorCode ?? "").trim() || undefined;
-    const errorMessage = String(args.errorMessage ?? "").trim() || undefined;
-    const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
-
-    const recentMessages = (await ctx.db
-      .query("cloudMessages")
-      .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id))
-      .order("desc")
-      .take(50)) as CloudMessageLike[];
-    const latestRunUserMessage = recentMessages.find(
-      (message) => message.runId === runId && message.role === "user",
-    );
-    const runEvents = (await ctx.db
-      .query("runtimeRunEvents")
-      .withIndex("by_owner_run_seq", (q: any) =>
-        q.eq("ownerId", ownerId).eq("runId", runId),
-      )
-      .collect()) as RuntimeRunEventLike[];
-    const workingState = summarizeThreadWorkingState({
-      latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
-      runStatus: status,
-      runReason: reason,
-      runErrorMessage: errorMessage,
-      events: runEvents,
-      nowMs,
-    });
-
-    await ctx.db.insert("runtimeRunEvents", {
+    return await finalizeRuntimeRunRecord({
+      ctx,
       ownerId,
-      threadId: thread._id,
-      runId,
-      seq,
-      eventType: "run_finished",
-      eventKey: "run_finished",
-      payload: {
-        run_id: runId,
-        status,
-        reason: reason ?? null,
-        error_code: errorCode ?? null,
-        error_message: errorMessage ?? null,
-      },
-      createdAt: finishedAt,
-    });
-    await ctx.db.patch(run._id, {
+      thread,
+      run,
       status,
-      reason,
-      errorCode,
-      errorMessage,
-      finishedAt,
-      lastEventSeq: seq,
-      updatedAt: nowMs,
+      reason: args.reason,
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      nowMs,
+      finishedAt: args.finishedAt,
     });
-    await ctx.db.patch(thread._id, {
-      workingState,
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(run._id)) as RuntimeRunLike | null;
-    if (!updated) throw new Error("runtime_run_not_found");
-    return updated;
   },
 });
 
@@ -1261,6 +1310,7 @@ export const getCloudRunningRuntimeRunByThreadKey = query({
       threadId: thread._id,
     });
     if (!run) return null;
+    if (isRuntimeRunStale({ run, nowMs: Date.now() })) return null;
     return run;
   },
 });

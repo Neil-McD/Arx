@@ -14,6 +14,7 @@ type UseWebWorkspaceRouteControllerArgs = {
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveCloudProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
+  syncCommunitySelection?: (opts: { communityId: string | null; communitySlug?: string | null }) => void;
 };
 
 export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControllerArgs) {
@@ -85,10 +86,8 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       threadId: string;
       replace?: boolean;
       projectId?: string | null;
-      beforeSelect?: () => void;
     }) => {
       const current = argsRef.current;
-      opts.beforeSelect?.();
       if (opts.projectId !== undefined) {
         current.setActiveCloudProjectId?.(opts.projectId);
       }
@@ -99,6 +98,30 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       current.navigateTo(buildWorkspaceThreadPath(opts.threadId), { replace: opts.replace ?? true });
     },
     [],
+  );
+
+  const enterWorkspaceThread = useCallback(
+    (opts: {
+      threadId: string;
+      replace?: boolean;
+      projectId?: string | null;
+      communityId?: string | null;
+      communitySlug?: string | null;
+    }) => {
+      const current = argsRef.current;
+      if (opts.communityId !== undefined || opts.communitySlug !== undefined) {
+        current.syncCommunitySelection?.({
+          communityId: opts.communityId ?? null,
+          communitySlug: opts.communitySlug,
+        });
+      }
+      openWorkspaceThread({
+        threadId: opts.threadId,
+        replace: opts.replace,
+        projectId: opts.projectId,
+      });
+    },
+    [openWorkspaceThread],
   );
 
   const handleNewWorkspaceThread = useCallback(
@@ -129,6 +152,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     applyGuestWorkspaceState,
     openWorkspaceDraft,
     openWorkspaceThread,
+    enterWorkspaceThread,
     handleNewWorkspaceThread,
   };
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type SetStateAction } from "react";
 import "highlight.js/styles/github-dark.css";
 import {
-  bootstrapCloudSession, clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, completeCloudOAuthCallback, ensureCloudSessionForRequest, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, refreshCloudSessionWithLock, refreshCloudSession, type CloudSession as CloudAuthSession
+  bootstrapCloudSession, clearPersistedCloudSession, clearCloudAuthFlowPending, clearCloudSignedOutIntentMarker, completeCloudOAuthCallback, ensureCloudSessionForRequest, ensureCloudSessionForRequestResult, fetchWithCloudAuthShared, fetchWithCloudPublicShared, getOAuthRedirectUrl, getCloudAuthUid, getCloudAnonKey, getCloudUrl, hasRecentCloudAuthFlowPending, markCloudAuthFlowPending, parseCloudOAuthCallbackFromLocation, readCloudError, sendCloudMagicLinkOtp, CLOUD_SIGNED_OUT_INTENT_KEY, CLOUD_SIGNED_OUT_TAB_INTENT_KEY, refreshCloudSessionWithLockResult, refreshCloudSessionResult, type CloudSession as CloudAuthSession, type CloudAuthSessionRefreshResult
 } from "./cloudAuth";
 import {
   captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
@@ -14,9 +14,6 @@ import {
   buildProjectByIdMap, buildProjectThreadGroups, filterVisibleThreads, resolveCloudThreadProjectId as resolveCloudThreadProjectIdShared, resolveDefaultWorkspaceProjectId, resolvePreferredCloudProjectId, searchThreads, } from "../../../shared/threadSidebarSelectors";
 import {
   fetchMappedDaytonaCloudProjects, } from "../../../shared/daytonaCloudProjects";
-import {
-  listConvexCloudRuntimeRunEvents,
-} from "../../../shared/daytonaCloudThreadsRead";
 import {
   isUuid, } from "../../../shared/appIdentity";
 import {
@@ -38,19 +35,13 @@ import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 
 import {
-  listCloudCommunityAiFeedLive,
-  listCloudCommunityAiFeedRanked,
-  reactToCloudCommunityAiFeedPost,
-} from "../../../shared/cloudCommunityAiFeedGateway";
+  useCommunityAiFeedController,
+} from "../../../shared/useCommunityAiFeedController";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
-import {
-  fetchCloudCommunityPresenceSummary,
-  heartbeatCloudCommunityPresence,
-} from "../../../shared/cloudPublicFunnelGateway";
 import {
   beginCloudChatgptConnect,
   beginCloudChatgptManualConnect,
@@ -84,7 +75,6 @@ import {
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
   CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
-  AnalyticsChartMode as SharedAnalyticsChartMode,
   AnalyticsPoint as SharedAnalyticsPoint,
   AnalyticsRange as SharedAnalyticsRange,
   ChatLightboxImage as SharedChatLightboxImage,
@@ -101,11 +91,6 @@ import type {
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
 import {
-  deriveCommunityAccessCapabilities,
-  deriveCommunityActionGuards,
-  deriveCommunityNavVisibility,
-} from "../../../shared/communityAccessViewModel";
-import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
   deriveOpenDiscoverTransition,
@@ -120,7 +105,6 @@ import {
   buildCommunityFunnelPreviewPath,
   buildCommunityFunnelPreviewHistoryState,
   readAppRouteFromLocation,
-  readCommunityFunnelPreviewHistoryState,
   readPublicRouteFromLocation,
 } from "../../../shared/webAppRouteState";
 import {
@@ -217,6 +201,7 @@ import { useWebThreadMutationController } from "../../../shared/useWebThreadMuta
 import { useWebTurnRunnerController } from "../../../shared/useWebTurnRunnerController";
 import type { ThreadStreamingRuntimeEvent, ThreadStreamingState } from "../../../shared/webTurnRunnerCore";
 import { RuntimeToolTrace } from "./components/RuntimeToolTrace";
+import { RuntimeWebSources } from "./components/RuntimeWebSources";
 import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspaceActionsController";
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
@@ -283,9 +268,14 @@ import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActio
 import { useWebAuthSessionLifecycle } from "./controllers/useWebAuthSessionLifecycle";
 import { buildWebCommunitySecondaryPanelsProps } from "./controllers/buildWebCommunitySecondaryPanelsProps";
 import { useWebGuestThreadLifecycle } from "./controllers/useWebGuestThreadLifecycle";
+import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPathRouteLifecycle } from "./controllers/useWebPathRouteLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
+import { useWebActiveCommunityShellController } from "./controllers/useWebActiveCommunityShellController";
+import { useWebJoinedCommunityRouteResolution } from "./controllers/useWebJoinedCommunityRouteResolution";
+import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
+import { useWebRuntimeRunLifecycle } from "./controllers/useWebRuntimeRunLifecycle";
 import { useWebWorkspaceRouteController } from "./controllers/useWebWorkspaceRouteController";
 import { useWebThreadDiscoverChatLifecycle } from "./controllers/useWebThreadDiscoverChatLifecycle";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
@@ -333,6 +323,7 @@ type CommunityRecord = {
   slug: string;
   name: string;
   one_liner: string | null;
+  about: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
   banner_url: string | null;
@@ -351,6 +342,7 @@ type PublicCommunityRecord = {
   slug: string;
   name: string;
   one_liner: string | null;
+  about: string | null;
   avatar_url: string | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
@@ -361,17 +353,6 @@ type PublicCommunityRecord = {
   created_at: string;
   updated_at: string;
   funnel?: SharedCommunityFunnelConfig | null;
-  member_count?: number | null;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }> | null;
-};
-
-type CommunityPresenceSummaryRecord = {
   member_count?: number | null;
   admin_count?: number | null;
   online_count?: number | null;
@@ -566,12 +547,9 @@ type CommunityAccess = SharedCommunityAccess;
 type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
 type AnalyticsPoint = SharedAnalyticsPoint;
 type AnalyticsRange = SharedAnalyticsRange;
-type AnalyticsChartMode = SharedAnalyticsChartMode;
 type CommunityPricingMode = SharedCommunityPricingMode;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
-type MembersSurfaceMode = "viewer" | "moderator" | "admin";
-
 type CommunityJoinRequest = {
   id: string;
   community_id: string;
@@ -588,7 +566,6 @@ type CommunityJoinRequest = {
 type MyCommunityJoinRequest = {
   community_id: string;
   status: string;
-  denied_until: string | null;
   updated_at: string;
 };
 
@@ -611,11 +588,6 @@ type BuilderBillingStatus = {
   user_id: string;
   builder_tier: "free" | "builder" | "architect";
   max_communities: number;
-  platform_fee_bps: number;
-  has_payouts: boolean;
-  subscription_status: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
 };
 
 type NavSnapshot = {
@@ -660,6 +632,7 @@ export default function App() {
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
 
   const [cloudSession, setCloudSession] = useState<CloudAuthSession | null>(null);
+  const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const cloudSessionArg = { session: cloudSession } as const;
   const profileStorageUserId = (cloudSession?.user?.id ?? "").trim() || null;
   const initialProfileDraft = useMemo(
@@ -672,11 +645,16 @@ export default function App() {
   const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
 
   const sessionRef = useRef<CloudAuthSession | null>(null);
-  const refreshInFlightRef = useRef<Promise<CloudAuthSession | null> | null>(null);
+  const refreshResultInFlightRef = useRef<Promise<CloudAuthSessionRefreshResult> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
+
+  const markAuthBootstrapComplete = useCallback(() => {
+    authBootstrapCompleteRef.current = true;
+    setIsAuthBootstrapComplete(true);
+  }, []);
 
   async function resetSessionStateAfterSessionLoss(): Promise<void> {
     sessionRef.current = null;
@@ -749,11 +727,11 @@ export default function App() {
     await resetSessionStateAfterSessionLoss();
   }, []);
 
-  const refreshCloudSessionLocked = useCallback(async (): Promise<CloudAuthSession | null> => {
+  const refreshCloudSessionLockedResult = useCallback(async (): Promise<CloudAuthSessionRefreshResult> => {
     const epochAtRefreshStart = authSessionEpochRef.current;
-    return await refreshCloudSessionWithLock({
-      inFlightRef: refreshInFlightRef,
-      refreshSession: () => refreshCloudSession(),
+    return await refreshCloudSessionWithLockResult({
+      inFlightRef: refreshResultInFlightRef,
+      refreshSession: () => refreshCloudSessionResult(),
       onRefreshed: (refreshed) => {
         if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
@@ -763,22 +741,30 @@ export default function App() {
     });
   }, []);
 
+  const refreshCloudSessionLocked = useCallback(async (): Promise<CloudAuthSession | null> => {
+    const refreshed = await refreshCloudSessionLockedResult();
+    return refreshed.status === "refreshed" ? refreshed.session : null;
+  }, [refreshCloudSessionLockedResult]);
+
   const ensureUsableCloudSession = useCallback(async (
     session: CloudAuthSession | null | undefined = sessionRef.current ?? cloudSession,
   ): Promise<CloudAuthSession | null> => {
     const requestSession = session ?? null;
     if (!requestSession) return null;
 
-    const ensured = await ensureCloudSessionForRequest(requestSession, refreshCloudSessionLocked);
-    if (!ensured) {
+    const ensured = await ensureCloudSessionForRequestResult(requestSession, refreshCloudSessionLockedResult);
+    if (ensured.status === "terminal_failure") {
       await expireCloudSessionLocally();
       return null;
     }
-    if (!sessionsEqual(ensured, requestSession)) {
-      adoptCloudSession(ensured);
+    if (ensured.status !== "ready") {
+      return null;
     }
-    return sessionRef.current ?? ensured;
-  }, [cloudSession, expireCloudSessionLocally]);
+    if (!sessionsEqual(ensured.session, requestSession)) {
+      adoptCloudSession(ensured.session);
+    }
+    return sessionRef.current ?? ensured.session;
+  }, [cloudSession, expireCloudSessionLocally, refreshCloudSessionLockedResult]);
 
   const authenticatedCloudSessionArg = {
     session: cloudSession,
@@ -822,8 +808,6 @@ export default function App() {
   const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
   const [myPublicCommunityJoinRequest, setMyPublicCommunityJoinRequest] = useState<MyCommunityJoinRequest | null>(null);
   const [isLoadingMyPublicCommunityJoinRequest, setIsLoadingMyPublicCommunityJoinRequest] = useState(false);
-  const [isRequestingPublicCommunityAccess, setIsRequestingPublicCommunityAccess] = useState(false);
-  const [publicRequestAccessError, setPublicRequestAccessError] = useState<string | null>(null);
 
   const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaim[]>([]);
   const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
@@ -838,8 +822,6 @@ export default function App() {
   const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
   const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
   const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
-  const [isStartingBuilderPortal, setIsStartingBuilderPortal] = useState(false);
-  const [isStartingConnectOnboarding, setIsStartingConnectOnboarding] = useState(false);
   const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
   const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
   const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
@@ -930,8 +912,6 @@ export default function App() {
     if (!activeCommunityId) return null;
     return communities.find((community) => community.id === activeCommunityId) ?? null;
   }, [activeCommunityId, communities]);
-  const [activeCommunityPresenceSummary, setActiveCommunityPresenceSummary] =
-    useState<CommunityPresenceSummaryRecord | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${cloudSession?.user?.id ?? "local"}`,
     [cloudSession?.user?.id],
@@ -958,52 +938,11 @@ export default function App() {
   const [isCreatingCommunity, setIsCreatingCommunity] = useState(false);
   const [isCreateAvatarDragOver, setIsCreateAvatarDragOver] = useState(false);
   const [isCreateBannerDragOver, setIsCreateBannerDragOver] = useState(false);
-  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
-  const communityAccessCapabilities = useMemo(
-    () => deriveCommunityAccessCapabilities(activeCommunityAccess),
-    [activeCommunityAccess],
-  );
-  const communityNavVisibility = useMemo(
-    () => deriveCommunityNavVisibility(communityAccessCapabilities),
-    [communityAccessCapabilities],
-  );
-  const communityActionGuards = useMemo(
-    () => deriveCommunityActionGuards(communityAccessCapabilities),
-    [communityAccessCapabilities],
-  );
-  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
-  const isActiveCommunityAdmin =
-    String(activeCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
-  const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
-  const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
-  const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
-  const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
-  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
-  const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
-  const membersSurfaceMode: MembersSurfaceMode = canViewMemberPlanDetailsActiveCommunity
-    ? "admin"
-    : canReviewJoinRequestsActiveCommunity
-      ? "moderator"
-      : "viewer";
-  const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
-  const [, setIsLoadingCommunityAccess] = useState(false);
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
-  const [communityFeedByCommunityId, setCommunityFeedByCommunityId] = useState<
-    Record<
-      string,
-      {
-        live: CommunityAiFeedPost[];
-        ranked: CommunityAiFeedPost[];
-        isLoading: boolean;
-        error: string | null;
-      }
-    >
-  >({});
-  const [communityFeedReactingPostId, setCommunityFeedReactingPostId] = useState<string | null>(null);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<MessageAttachment[]>([]);
   const workspaceAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [threadErrorById, setThreadErrorById] = useState<Record<string, string | null>>({});
@@ -1251,6 +1190,37 @@ export default function App() {
   const [decidingCommunityJoinRequestId, setDecidingCommunityJoinRequestId] = useState<string | null>(null);
   const [isJoinRequestsModalOpen, setIsJoinRequestsModalOpen] = useState(false);
   const [isSavingFreeAccessMode, setIsSavingFreeAccessMode] = useState(false);
+  const {
+    activeCommunityAccess,
+    communityAccessCapabilities,
+    communityNavVisibility,
+    communityActionGuards,
+    isActiveCommunityOwner,
+    isActiveCommunityAdmin,
+    communitySettingsLayer,
+    canManageCommunitySettings,
+    canDeleteActiveCommunity,
+    canViewActiveCommunityPolynet,
+    canViewMemberPlanDetailsActiveCommunity,
+    canViewActiveCommunitySettings,
+    canPostMessagesActiveCommunity,
+    canManageResourcesActiveCommunity,
+    canManageMembersActiveCommunity,
+    canReviewJoinRequestsActiveCommunity,
+    canViewActiveCommunityAnalytics,
+    funnelPreviewAdminCount,
+    funnelPreviewOnlineCount,
+    funnelPreviewOnlineFaces,
+    reloadActiveCommunityAccess,
+  } = useWebActiveCommunityShellController<CloudAuthSession, CommunityRecord, CommunityMember>({
+    activePage,
+    activeCommunityId,
+    activeCommunity,
+    communityTab,
+    communityMembers,
+    session: cloudSession,
+    ensureSession: ensureUsableCloudSession,
+  });
 
   const {
     loadCommunityResources,
@@ -1307,10 +1277,6 @@ export default function App() {
     resources_added_window: null,
   });
   const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<AnalyticsPoint[]>([]);
-  const [communityAnalyticsChartMode, setCommunityAnalyticsChartMode] = useState<AnalyticsChartMode>("members");
-  const [communityRevenueSeries, setCommunityRevenueSeries] = useState<AnalyticsPoint[]>([]);
-  const [communityRevenueMeta, setCommunityRevenueMeta] = useState<{ currency: string; currency_decimals: number } | null>(null);
-  const [communityRevenueError, setCommunityRevenueError] = useState<string | null>(null);
   const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
     try {
       const stored = readFirstLocalStorageValue([
@@ -1331,6 +1297,7 @@ export default function App() {
   const [communitySettingsName, setCommunitySettingsName] = useState("");
   const [communitySettingsSlug, setCommunitySettingsSlug] = useState("");
   const [communitySettingsOneLiner, setCommunitySettingsOneLiner] = useState("");
+  const [communitySettingsAbout, setCommunitySettingsAbout] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("unlisted");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
@@ -1387,9 +1354,7 @@ export default function App() {
   const [communityFunnelSaveError, setCommunityFunnelSaveError] = useState<string | null>(null);
   const communityFunnelLoadedCommunityIdRef = useRef<string | null>(null);
   const communityFunnelSavedConfigRef = useRef<CommunityFunnelConfig>(DEFAULT_COMMUNITY_FUNNEL_CONFIG);
-  const communityFunnelSavedOneLinerRef = useRef("");
   const communityFunnelDirtyRef = useRef(false);
-  const [communityFunnelOneLiner, setCommunityFunnelOneLiner] = useState("");
   const markCommunityFunnelDirty = useCallback(() => {
     communityFunnelDirtyRef.current = true;
   }, []);
@@ -1402,7 +1367,6 @@ export default function App() {
   }, []);
   const handleResetCommunityFunnel = useCallback(() => {
     setCommunityFunnelConfig(communityFunnelSavedConfigRef.current);
-    setCommunityFunnelOneLiner(communityFunnelSavedOneLinerRef.current);
     setCommunityFunnelSaveError(null);
     communityFunnelDirtyRef.current = false;
   }, []);
@@ -1432,6 +1396,40 @@ export default function App() {
     });
   };
 
+  const resolveKnownCommunityIdBySlug = useCallback((communitySlug: string | null | undefined): string | null => {
+    const normalizedSlug = String(communitySlug ?? "").trim();
+    if (!normalizedSlug) return null;
+    const matchedCommunity =
+      communities.find((community) => String(community.slug ?? "").trim() === normalizedSlug) ?? null;
+    return matchedCommunity?.id ?? null;
+  }, [communities]);
+
+  const resolveKnownCommunitySlugById = useCallback((communityId: string | null | undefined): string | null => {
+    const normalizedId = String(communityId ?? "").trim();
+    if (!normalizedId) return null;
+    const matchedCommunity = communities.find((community) => String(community.id ?? "").trim() === normalizedId) ?? null;
+    const slug = String(matchedCommunity?.slug ?? "").trim();
+    return slug || null;
+  }, [communities]);
+
+  const applyCommunityShellState = useCallback((opts: {
+    communityId?: string | null;
+    communitySlug?: string | null;
+    communityTab?: CommunityTab;
+  }) => {
+    const resolvedCommunityId =
+      opts.communityId !== undefined ? opts.communityId : activeCommunityId;
+    const resolvedCommunitySlug =
+      opts.communitySlug !== undefined
+        ? String(opts.communitySlug ?? "").trim() || null
+        : resolveKnownCommunitySlugById(resolvedCommunityId) ?? activeCommunitySlug;
+    setActiveCommunityId(resolvedCommunityId);
+    setActiveCommunitySlug(resolvedCommunitySlug);
+    if (opts.communityTab !== undefined) {
+      setCommunityTab(opts.communityTab);
+    }
+  }, [activeCommunityId, activeCommunitySlug, resolveKnownCommunitySlugById]);
+
   function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {
     const historyState = opts.state ?? {};
     if (opts.replace) {
@@ -1445,21 +1443,106 @@ export default function App() {
       setActivePage("workspace");
       setActiveView("home");
       setSettingsPage("agent");
-      setCommunityTab("chat");
-      setActiveCommunityId(null);
-      setActiveCommunitySlug(null);
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
       setActiveThreadId(null);
       setWorkspaceWantsNewChatMode(true);
       setActiveCloudProjectId(null);
+      return;
     }
+    applyAppRouteStateFromLocation();
   }
 
+  const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
+    const resolvedCommunityId =
+      nextAppRoute.page === "community"
+        ? resolveKnownCommunityIdBySlug(nextAppRoute.communitySlug) ?? nextAppRoute.communityId
+        : nextAppRoute.communityId;
+    const nextThreadId =
+      nextAppRoute.page === "workspace" && nextAppRoute.view === "home" ? nextAppRoute.threadId : null;
+    setActivePage(nextAppRoute.page);
+    setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
+    setSettingsPage(nextAppRoute.settingsPage);
+    applyCommunityShellState({
+      communityId: resolvedCommunityId,
+      communitySlug: nextAppRoute.communitySlug,
+      communityTab: nextAppRoute.communityTab,
+    });
+    setActiveThreadId(nextThreadId);
+    setWorkspaceWantsNewChatMode(
+      nextAppRoute.page === "workspace" && nextAppRoute.view === "home" && nextThreadId === null,
+    );
+    if (nextAppRoute.page !== "workspace") {
+      setActiveCloudProjectId(null);
+    }
+  }, [applyCommunityShellState, resolveKnownCommunityIdBySlug]);
+
+  function applyAppRouteStateFromLocation() {
+    applyAppRouteState(readAppRouteFromLocation());
+  }
+
+  const resolvedActiveCloudProjectId = useMemo(
+    () => resolvePreferredCloudProjectId(cloudProjects, activeCloudProjectId),
+    [activeCloudProjectId, cloudProjects],
+  );
+
+  const navStackRef = useRef<NavSnapshot[]>([]);
+  const readCurrentRoutePath = () =>
+    `${window.location.pathname}${window.location.search}` || "/";
+  const buildCurrentAppRoutePath = (): string | null =>
+    buildAppRoutePath({
+      page: activePage,
+      view: activeView,
+      settingsPage,
+      communitySlug: activeCommunitySlug,
+      communityTab,
+      threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
+    });
+  const takeNavSnapshot = (): NavSnapshot => ({
+    page: activePage,
+    view: activeView,
+    settingsPage,
+    communityId: activeCommunityId,
+    communitySlug: activeCommunitySlug,
+    communityTab,
+    threadId: activeThreadId,
+    workspaceWantsNewChat,
+    routePath: buildCurrentAppRoutePath() ?? readCurrentRoutePath(),
+  });
+  const pushNavSnapshot = () => {
+    const snapshot = takeNavSnapshot();
+    pushUniqueNavSnapshot(navStackRef.current, snapshot, {
+      includeWorkspaceWantsNewChat: true,
+    });
+  };
+  const {
+    syncCommunitySelection,
+    openCommunityTab,
+    openCommunityChat,
+    openCommunityBySlug,
+  } = useWebCommunityRouteController<CommunityRecord>({
+    activePage,
+    activeView,
+    activeCommunityId,
+    activeCommunitySlug,
+    communityTab,
+    communities,
+    navigateTo,
+    pushNavSnapshot,
+    setActivePage,
+    setActiveView,
+    applyCommunityShellState,
+    setUnreadCount,
+  });
   const {
     syncWorkspaceSelection,
     applyWorkspaceRouteState,
     applyGuestWorkspaceState,
     openWorkspaceDraft,
-    openWorkspaceThread,
+    enterWorkspaceThread,
     handleNewWorkspaceThread,
   } = useWebWorkspaceRouteController({
     activePage,
@@ -1471,92 +1554,39 @@ export default function App() {
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
     setActiveCloudProjectId,
-  });
-
-  const resolvedActiveCloudProjectId = useMemo(
-    () => resolvePreferredCloudProjectId(cloudProjects, activeCloudProjectId),
-    [activeCloudProjectId, cloudProjects],
-  );
-
-  const navStackRef = useRef<NavSnapshot[]>([]);
-  const readCurrentRoutePath = () =>
-    `${window.location.pathname}${window.location.search}` || "/";
-  const takeNavSnapshot = (): NavSnapshot => ({
-    page: activePage,
-    view: activeView,
-    settingsPage,
-    communityId: activeCommunityId,
-    communitySlug: activeCommunitySlug,
-    communityTab,
-    threadId: activeThreadId,
-    workspaceWantsNewChat,
-    routePath: readCurrentRoutePath(),
-  });
-  const pushNavSnapshot = () => {
-    const snapshot = takeNavSnapshot();
-    pushUniqueNavSnapshot(navStackRef.current, snapshot, {
-      includeWorkspaceWantsNewChat: true,
-    });
-  };
-  const {
-    resolveCommunitySlugById,
     syncCommunitySelection,
-    clearCommunitySelection,
-    openPublicCommunityFunnel,
-    openCommunityTab,
-    openCommunityChat,
-    openJoinedCommunityBySlug,
-  } = useWebCommunityRouteController<CommunityRecord>({
-    activePage,
-    activeView,
-    activeCommunityId,
-    activeCommunitySlug,
-    communityTab,
-    communities,
-    isLoadingCommunities,
-    publicRouteKind: publicRoute.kind,
-    navigateTo,
-    pushNavSnapshot,
-    setActivePage,
-    setActiveView,
-    setActiveCommunityId,
-    setActiveCommunitySlug,
-    setCommunityTab,
-    setUnreadCount,
   });
   const applyPublicRouteState = useCallback((route: PublicRoute) => {
     setPublicRoute(route);
     setActivePage("workspace");
     setActiveView("home");
     setSettingsPage("agent");
-    setCommunityTab("chat");
-    clearCommunitySelection();
+    applyCommunityShellState({
+      communityId: null,
+      communitySlug: null,
+      communityTab: "chat",
+    });
     applyWorkspaceRouteState({
       page: "workspace",
       view: "home",
       threadId: null,
     });
-  }, [applyWorkspaceRouteState, clearCommunitySelection]);
+  }, [applyCommunityShellState, applyWorkspaceRouteState]);
+  const enterJoinedCommunity = useCallback((opts: { communityId: string; communitySlug?: string | null }) => {
+    const communityId = String(opts.communityId ?? "").trim();
+    if (!communityId) return;
+    const resolvedSlug =
+      String(opts.communitySlug ?? "").trim() || resolveKnownCommunitySlugById(communityId);
+    const nextPath = buildCommunityTabPath(resolvedSlug, "chat");
+    if (nextPath) {
+      navigateTo(nextPath, { replace: true });
+      return;
+    }
+    openCommunityChat(communityId, { pushSnapshot: false });
+  }, [navigateTo, openCommunityChat, resolveKnownCommunitySlugById]);
   const restoreNavSnapshot = (snapshot: NavSnapshot) => {
     const nextRoutePath = snapshot.routePath?.trim() || "/";
-    const currentRoutePath = readCurrentRoutePath();
-    if (currentRoutePath !== nextRoutePath) {
-      window.history.replaceState({}, document.title, nextRoutePath);
-      setPublicRoute(readPublicRouteFromLocation());
-    }
-    setActivePage(snapshot.page);
-    setActiveView(snapshot.page === "workspace" ? snapshot.view : "home");
-    setSettingsPage(snapshot.settingsPage);
-    syncCommunitySelection({
-      communityId: snapshot.communityId,
-      communitySlug: snapshot.communitySlug ?? null,
-    });
-    setCommunityTab(snapshot.communityTab);
-    applyWorkspaceRouteState({
-      page: snapshot.page,
-      view: snapshot.page === "workspace" ? snapshot.view : "home",
-      threadId: snapshot.threadId,
-    });
+    navigateTo(nextRoutePath, { replace: true });
   };
   const goBack = (): boolean => {
     const snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
@@ -1583,17 +1613,10 @@ export default function App() {
   const communityAgentLandingFetchSeqRef = useRef(0);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [threadSendingStateById, setThreadSendingStateById] = useState<Record<string, boolean>>({});
-  const [threadRunRequiresWorkspaceToolsById, setThreadRunRequiresWorkspaceToolsById] = useState<
-    Record<string, boolean>
-  >({});
   const [threadStreamingStateById, setThreadStreamingStateById] = useState<
     Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
   >({});
-  const threadStreamingStateByIdRef = useRef(threadStreamingStateById);
-  const loadThreadsRef = useRef<((session: CloudAuthSession) => Promise<void>) | null>(null);
-  const loadThreadMessagesRef = useRef<((threadId: string, session: CloudAuthSession) => Promise<void>) | null>(null);
   const [runtimeEventsByRunId, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
-  const runtimeEventsLoadingByRunIdRef = useRef<Record<string, boolean>>({});
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [streamingRunId, setStreamingRunId] = useState<string | null>(null);
   const [streamingMeta, setStreamingMeta] = useState<{
@@ -1622,139 +1645,6 @@ export default function App() {
     message: string | null;
   } | null>(null);
   const [isPlatformQuotaModalRunning] = useState(false);
-  const hasActiveStreamingRuns = useMemo(
-    () =>
-      Object.values(threadStreamingStateById).some(
-        (value) => typeof value?.runId === "string" && value.runId.trim().length > 0,
-      ),
-    [threadStreamingStateById],
-  );
-
-  useEffect(() => {
-    threadStreamingStateByIdRef.current = threadStreamingStateById;
-  }, [threadStreamingStateById]);
-
-  useEffect(() => {
-    if (cloudSession) return;
-    setRuntimeEventsByRunId({});
-    runtimeEventsLoadingByRunIdRef.current = {};
-  }, [cloudSession]);
-
-  useEffect(() => {
-    if (!cloudSession || !hasActiveStreamingRuns) return;
-    let cancelled = false;
-    let timeoutId: number | null = null;
-
-    const pollRuntimeEvents = async () => {
-      if (cancelled) return;
-      const activeEntries = Object.entries(threadStreamingStateByIdRef.current).filter(
-        ([, value]) => typeof value?.runId === "string" && value.runId.trim().length > 0,
-      );
-      for (const [threadId, state] of activeEntries) {
-        const runId = String(state?.runId ?? "").trim();
-        if (!runId) continue;
-        const afterSeq =
-          typeof state?.lastRuntimeEventSeq === "number" && Number.isFinite(state.lastRuntimeEventSeq)
-            ? Math.max(0, Math.floor(state.lastRuntimeEventSeq))
-            : 0;
-        const rows = await listConvexCloudRuntimeRunEvents({
-          session: cloudSession,
-          runId,
-          afterSeq,
-          limit: 200,
-        });
-        if (cancelled || !rows || rows.length === 0) continue;
-        const runFinished = rows.some((row) => row.event_type === "run_finished");
-        setRuntimeEventsByRunId((prev) => {
-          const existing = prev[runId] ?? [];
-          const seenIds = new Set(existing.map((row) => row.id));
-          const merged = [...existing];
-          for (const row of rows) {
-            if (seenIds.has(row.id)) continue;
-            merged.push(row);
-            seenIds.add(row.id);
-          }
-          merged.sort((a, b) => a.seq - b.seq);
-          return {
-            ...prev,
-            [runId]: merged,
-          };
-        });
-        setThreadStreamingStateById((prev) => {
-          const current = prev[threadId] ?? null;
-          if (!current || String(current.runId ?? "").trim() !== runId) return prev;
-          const nextRows = [...(current.runtimeEvents ?? [])];
-          const seenIds = new Set(nextRows.map((row) => row.id));
-          let nextLastSeq = Math.max(0, Math.floor(current.lastRuntimeEventSeq ?? 0));
-          for (const row of rows) {
-            if (seenIds.has(row.id)) continue;
-            nextRows.push(row);
-            seenIds.add(row.id);
-            nextLastSeq = Math.max(nextLastSeq, Math.floor(row.seq ?? 0));
-          }
-          nextRows.sort((a, b) => a.seq - b.seq);
-          return {
-            ...prev,
-            [threadId]: {
-              ...current,
-              runtimeEvents: nextRows,
-              lastRuntimeEventSeq: nextLastSeq,
-            },
-          };
-        });
-        if (runFinished) {
-          setThreadStreamingStateById((prev) => {
-            if (!(threadId in prev)) return prev;
-            const next = { ...prev };
-            delete next[threadId];
-            return next;
-          });
-          void loadThreadMessagesRef.current?.(threadId, cloudSession).catch(() => null);
-          void loadThreadsRef.current?.(cloudSession).catch(() => null);
-        }
-      }
-      if (!cancelled) {
-        timeoutId = window.setTimeout(pollRuntimeEvents, 900);
-      }
-    };
-
-    void pollRuntimeEvents();
-    return () => {
-      cancelled = true;
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-    };
-  }, [cloudSession, hasActiveStreamingRuns, setThreadStreamingStateById]);
-
-  useEffect(() => {
-    if (!cloudSession) return;
-    const runIds = Array.from(
-      new Set(
-        threadMessages
-          .map((message) => (typeof message.run_id === "string" ? message.run_id.trim() : ""))
-          .filter(Boolean),
-      ),
-    );
-    for (const runId of runIds) {
-      if (runtimeEventsByRunId[runId]?.length) continue;
-      if (runtimeEventsLoadingByRunIdRef.current[runId]) continue;
-      runtimeEventsLoadingByRunIdRef.current[runId] = true;
-      void listConvexCloudRuntimeRunEvents({
-        session: cloudSession,
-        runId,
-        limit: 200,
-      })
-        .then((rows) => {
-          if (!rows) return;
-          setRuntimeEventsByRunId((prev) => ({
-            ...prev,
-            [runId]: rows,
-          }));
-        })
-        .finally(() => {
-          delete runtimeEventsLoadingByRunIdRef.current[runId];
-        });
-    }
-  }, [cloudSession, runtimeEventsByRunId, threadMessages]);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -1829,10 +1719,9 @@ export default function App() {
     storePendingAuthIntent(buildPendingAuthIntent({ reason: "create_community", payload: { draft } }, returnTo));
   }, []);
 
-  const { loadCommunities, loadCommunityAccess, loadUserProfiles } = useWebCommunityAccessController<
+  const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
     CloudAuthSession,
     CommunityRecord,
-    CommunityAccess,
     UserProfile
   >({
     toCanonicalCommunityVisibility,
@@ -1842,8 +1731,6 @@ export default function App() {
     setCommunityRoleById,
     setCommunities,
     setActiveCommunityId,
-    setIsLoadingCommunityAccess,
-    setActiveCommunityAccess,
     setProfilesByUserId,
   });
 
@@ -1868,7 +1755,7 @@ export default function App() {
     ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
-    reloadCommunityAccess: loadCommunityAccess,
+    reloadCommunityAccess: reloadActiveCommunityAccess,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
     getProfileSaveSession: () => sessionRef.current ?? cloudSession,
     profileName,
@@ -1896,11 +1783,8 @@ export default function App() {
     setProfileSaveSuccess,
     setIsLoadingCommunityAnalytics,
     setCommunityAnalyticsError,
-    setCommunityRevenueError,
     setCommunityAnalyticsSummary,
     setCommunityAnalyticsSeries,
-    setCommunityRevenueSeries,
-    setCommunityRevenueMeta,
   });
 
   const {
@@ -1940,19 +1824,13 @@ export default function App() {
       const saved = await saveCloudCommunityPublicPresentation<CloudAuthSession, CommunityFunnelConfig>({
         session,
         communityId,
-        oneLiner: communityFunnelOneLiner.trim() || null,
         config: normalizedConfig,
       });
-      const resolvedOneLiner = saved?.one_liner ?? null;
-      communityFunnelSavedOneLinerRef.current = resolvedOneLiner ?? "";
-      setCommunityFunnelOneLiner(resolvedOneLiner ?? "");
-      setCommunitySettingsOneLiner(resolvedOneLiner ?? "");
       setCommunities((prev) =>
         prev.map((community) =>
           community.id === communityId
             ? {
                 ...community,
-                one_liner: resolvedOneLiner,
                 updated_at: saved?.updated_at || community.updated_at,
               }
             : community,
@@ -1987,6 +1865,7 @@ export default function App() {
     setCommunitySettingsName,
     setCommunitySettingsSlug,
     setCommunitySettingsOneLiner,
+    setCommunitySettingsAbout,
     setCommunitySettingsVisibility,
     setCommunitySettingsAvatarUrl,
     setCommunitySettingsBannerUrl,
@@ -2032,10 +1911,13 @@ export default function App() {
     confirmAction: (message) => confirm(message),
     loadCommunities,
     onLeaveCommunityLocalState: (leavingId) => {
-      clearCommunitySelection();
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
       setActivePage("workspace");
       setActiveView("home");
-      setCommunityTab("chat");
       setCommunities((prev) => prev.filter((community) => community.id !== leavingId));
     },
     setCommunityMemberSettingsError,
@@ -2045,6 +1927,7 @@ export default function App() {
     communitySettingsName,
     communitySettingsSlug,
     communitySettingsOneLiner,
+    communitySettingsAbout,
     communitySettingsVisibility,
     communitySettingsAvatarUrl,
     communitySettingsBannerUrl,
@@ -2066,6 +1949,7 @@ export default function App() {
                 name: result.name,
                 slug: result.slug,
                 one_liner: result.one_liner,
+                about: result.about ?? null,
                 avatar_url: result.avatar_url,
                 avatar_storage_id: result.avatar_storage_id ?? null,
                 banner_url: result.banner_url,
@@ -2123,7 +2007,6 @@ export default function App() {
   >({
     activeCommunityId,
     ...authenticatedCloudSessionArg,
-    membersSurfaceMode,
     isSavingFreeAccessMode,
     loadUserProfiles: (userIds, session) => void loadUserProfiles(userIds, session),
     loadCommunityMembers,
@@ -2174,8 +2057,6 @@ export default function App() {
     setModelProviderById,
     isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "web"),
   });
-  loadThreadsRef.current = loadThreads;
-  loadThreadMessagesRef.current = loadThreadMessages;
 
   const {
     loadUserMemorySettings,
@@ -2354,27 +2235,6 @@ export default function App() {
     });
   }, []);
 
-  const setThreadRunRequiresWorkspaceTools = useCallback(
-    (threadId: string, requiresWorkspaceTools: boolean | null): void => {
-      const trimmedThreadId = threadId.trim();
-      if (!trimmedThreadId) return;
-      setThreadRunRequiresWorkspaceToolsById((prev) => {
-        if (requiresWorkspaceTools !== null) {
-          if (prev[trimmedThreadId] === requiresWorkspaceTools) return prev;
-          return {
-            ...prev,
-            [trimmedThreadId]: requiresWorkspaceTools,
-          };
-        }
-        if (!(trimmedThreadId in prev)) return prev;
-        const next = { ...prev };
-        delete next[trimmedThreadId];
-        return next;
-      });
-    },
-    [],
-  );
-
   const {
     stopStreamingTurn,
     stopAllStreamingTurns,
@@ -2413,12 +2273,28 @@ export default function App() {
     streamingRafRef,
     streamingAbortRef,
     streamingUserCancelledRef,
-    onCloudRunLifecycleEvent: () => {
-      refreshCloudProjectStatuses();
-    },
     runtimeTurnV2Enabled: String(((import.meta as any)?.env?.VITE_ENABLE_RUNTIME_TURN_V2 ?? "true"))
       .trim()
       .toLowerCase() === "true",
+  });
+  useWebRuntimeRunLifecycle<
+    CloudAuthSession,
+    ThreadMessage,
+    MemoryUsedItem,
+    HistoryUsedItem,
+    CommunityEvidenceUsedV1
+  >({
+    cloudSession,
+    activeThreadId,
+    threadSendingStateById,
+    threadStreamingStateById,
+    setThreadStreamingStateById,
+    runtimeEventsByRunId,
+    setRuntimeEventsByRunId,
+    threadMessages,
+    setThreadErrorForThread: (threadId, value) => setThreadErrorForThread(threadId, value),
+    loadThreads,
+    loadThreadMessages,
   });
   useWebAuthSessionLifecycle<CloudAuthSession>({
     session: cloudSession,
@@ -2430,6 +2306,7 @@ export default function App() {
       const parsedOAuthCallback = parseCloudOAuthCallbackFromLocation();
       let hasSignedOutIntent = false;
       const finalizeSignedInSession = (session: CloudAuthSession, markJustSignedIn: boolean): void => {
+        markAuthBootstrapComplete();
         clearCloudSignedOutIntentMarker();
         if (markJustSignedIn) {
           didJustSignInRef.current = true;
@@ -2453,20 +2330,7 @@ export default function App() {
         const nextPublicRoute = readPublicRouteFromLocation();
         if (nextPublicRoute.kind === "app") {
           setPublicRoute(nextPublicRoute);
-          const nextAppRoute = readAppRouteFromLocation();
-          setActivePage(nextAppRoute.page);
-          setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
-          setSettingsPage(nextAppRoute.settingsPage);
-          syncCommunitySelection({
-            communityId: nextAppRoute.communityId,
-            communitySlug: nextAppRoute.communitySlug,
-          });
-          setCommunityTab(nextAppRoute.communityTab);
-          applyWorkspaceRouteState({
-            page: nextAppRoute.page,
-            view: nextAppRoute.page === "workspace" ? nextAppRoute.view : "home",
-            threadId: nextAppRoute.threadId,
-          });
+          applyAppRouteState(readAppRouteFromLocation());
         } else {
           applyPublicRouteState(nextPublicRoute);
         }
@@ -2480,6 +2344,7 @@ export default function App() {
       }
 
       if (parsedOAuthCallback?.kind === "error") {
+        markAuthBootstrapComplete();
         setAuthError(`Google sign-in failed: ${parsedOAuthCallback.error}`);
         clearOAuthCallbackParamsFromLocation();
         clearCloudAuthFlowPending();
@@ -2529,25 +2394,27 @@ export default function App() {
       }
 
       if (hasSignedOutIntent) {
+        markAuthBootstrapComplete();
         clearOAuthCallbackParamsFromLocation();
         clearCloudAuthFlowPending();
         return;
       }
 
       if (parsedOAuthCallback?.kind === "code") {
+        markAuthBootstrapComplete();
         setAuthError("Failed to bootstrap auth session.");
         clearOAuthCallbackParamsFromLocation();
         clearCloudAuthFlowPending();
         return;
       }
-      authBootstrapCompleteRef.current = true;
+      markAuthBootstrapComplete();
     },
     onDidJustSignIn: () => {
       // If the user arrived via an auth gate (e.g. locked model selection), apply it immediately.
       resumePendingAuthIntent();
     },
     onSessionAvailable: (session) => {
-      authBootstrapCompleteRef.current = true;
+      markAuthBootstrapComplete();
       void (async () => {
         const usableSession = await ensureUsableCloudSession(session);
         if (!usableSession) return;
@@ -2556,15 +2423,21 @@ export default function App() {
           loadCloudProjects(usableSession),
           loadThreads(usableSession),
           loadModelRegistry(usableSession),
+          loadBuilderBillingStatus(usableSession),
           loadSelfProfile(usableSession),
         ]);
       })();
     },
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
+      markAuthBootstrapComplete();
       void (async () => {
         await resetSessionStateAfterSessionLoss();
-        clearCommunitySelection();
+        applyCommunityShellState({
+          communityId: null,
+          communitySlug: null,
+          communityTab: "chat",
+        });
         setCloudProjects([]);
         setActiveCloudProjectId(null);
         threadsHydratedRef.current = false;
@@ -2624,71 +2497,6 @@ export default function App() {
     activeCommunityIdRef.current = activeCommunityId;
   }, [activeCommunityId]);
 
-  useEffect(() => {
-    if (!cloudSession || activePage !== "community" || !activeCommunityId) return;
-    let cancelled = false;
-    const tick = async () => {
-      if (cancelled || document.visibilityState !== "visible") return;
-      try {
-        const usableSession = await ensureUsableCloudSession(cloudSession);
-        if (!usableSession) return;
-        await heartbeatCloudCommunityPresence<CloudAuthSession>({
-          session: usableSession,
-          communityId: activeCommunityId,
-        });
-      } catch (error) {
-        if (!cancelled) {
-          console.warn("Failed to heartbeat community presence:", error);
-        }
-      }
-    };
-    void tick();
-    const intervalId = window.setInterval(() => {
-      void tick();
-    }, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeCommunityId, activePage, cloudSession, ensureUsableCloudSession]);
-
-  useEffect(() => {
-    if (!cloudSession || activePage !== "community" || communityTab !== "funnel" || !activeCommunityId) {
-      setActiveCommunityPresenceSummary(null);
-      return;
-    }
-    let cancelled = false;
-    const refresh = async () => {
-      if (cancelled || document.visibilityState !== "visible") return;
-      try {
-        const usableSession = await ensureUsableCloudSession(cloudSession);
-        if (!usableSession) return;
-        const summary = await fetchCloudCommunityPresenceSummary<
-          CloudAuthSession,
-          CommunityPresenceSummaryRecord
-        >({
-          session: usableSession,
-          communityId: activeCommunityId,
-        });
-        if (!cancelled) {
-          setActiveCommunityPresenceSummary(summary ?? null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.warn("Failed to load community presence summary:", error);
-        }
-      }
-    };
-    void refresh();
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeCommunityId, activePage, cloudSession, communityTab, ensureUsableCloudSession]);
-
   useCommunityAgentLandingLifecycle<CloudAuthSession>({
     ...authenticatedCloudSessionArg,
     activeCommunityId,
@@ -2721,6 +2529,16 @@ export default function App() {
     loadCommunityFunnelConfig,
   ]);
 
+  const communityPolynetController = useWebCommunityPolynetController<CloudAuthSession>({
+    activePage,
+    communityTab,
+    activeCommunityId,
+    session: cloudSession,
+    ensureUsableCloudSession,
+    openAuthGate: () => openAuthGate(),
+    canManagePolynet: canViewActiveCommunityPolynet,
+  });
+
   useEffect(() => {
     captureBrandosAidFromLocation();
   }, []);
@@ -2730,21 +2548,12 @@ export default function App() {
     activePage,
     activeView,
     settingsPage,
-    activeCommunityId,
     activeCommunitySlug,
     communityTab,
     activeThreadId,
-    workspaceWantsNewChat,
-    threadsHydratedRef,
     setPublicRoute,
-    setActivePage,
-    setActiveView,
-    setSettingsPage,
-    setActiveCommunityId,
-    setActiveCommunitySlug,
-    setCommunityTab,
     applyPublicRouteState,
-    applyWorkspaceRouteState,
+    applyAppRouteState,
     setBuilderBillingReturn,
     readPublicRouteFromLocation,
     readAppRouteFromLocation,
@@ -2849,6 +2658,7 @@ export default function App() {
     ...cloudSessionArg,
     publicRouteKind: publicRoute.kind,
     activeThreadId,
+    workspaceWantsNewChat,
     guestThreadId: GUEST_THREAD_ID,
     loadGuestThreadStorage,
     guestStoredToThreadMessages,
@@ -2947,101 +2757,24 @@ export default function App() {
     syncCommunitySettingsSelection,
     loadCommunityMemberSettings,
     loadCommunityPricing,
-    loadCommunityAccess,
     setCommunityMemberMuted,
     setCommunitySettingsPricingMode,
     setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdAnnual,
-    setActiveCommunityAccess,
-    setIsLoadingCommunityAccess,
   });
 
-  const loadCommunityAiFeed = useCallback(async (communityId: string) => {
-    const session = await ensureUsableCloudSession(cloudSession);
-    if (!session) {
-      setCommunityFeedByCommunityId((prev) => ({
-        ...prev,
-        [communityId]: {
-          live: [],
-          ranked: [],
-          isLoading: false,
-          error: "Sign in to view the AI feed.",
-        },
-      }));
-      return;
-    }
-    setCommunityFeedByCommunityId((prev) => ({
-      ...prev,
-      [communityId]: {
-        live: prev[communityId]?.live ?? [],
-        ranked: prev[communityId]?.ranked ?? [],
-        isLoading: true,
-        error: null,
-      },
-    }));
-    try {
-      const [live, ranked] = await Promise.all([
-        listCloudCommunityAiFeedLive<CloudAuthSession, CommunityAiFeedPost>({
-          session,
-          communityId,
-          limit: 100,
-        }),
-        listCloudCommunityAiFeedRanked<CloudAuthSession, CommunityAiFeedPost>({
-          session,
-          communityId,
-          limit: 100,
-        }),
-      ]);
-      setCommunityFeedByCommunityId((prev) => ({
-        ...prev,
-        [communityId]: {
-          live,
-          ranked,
-          isLoading: false,
-          error: null,
-        },
-      }));
-    } catch (error) {
-      setCommunityFeedByCommunityId((prev) => ({
-        ...prev,
-        [communityId]: {
-          live: prev[communityId]?.live ?? [],
-          ranked: prev[communityId]?.ranked ?? [],
-          isLoading: false,
-          error: error instanceof Error ? error.message : "Failed to load AI feed.",
-        },
-      }));
-    }
-  }, [cloudSession, ensureUsableCloudSession]);
-
-  const handleReactToCommunityFeedPost = useCallback(
-    async (postId: string, reactionType: CommunityAiFeedReactionType) => {
-      const session = await ensureUsableCloudSession(cloudSession);
-      if (!session || !activeCommunityId) return;
-      setCommunityFeedReactingPostId(postId);
-      try {
-        await reactToCloudCommunityAiFeedPost({
-          session,
-          postId,
-          reactionType,
-        });
-        await loadCommunityAiFeed(activeCommunityId);
-      } catch (error) {
-        setCommunityFeedByCommunityId((prev) => ({
-          ...prev,
-          [activeCommunityId]: {
-            live: prev[activeCommunityId]?.live ?? [],
-            ranked: prev[activeCommunityId]?.ranked ?? [],
-            isLoading: false,
-            error: error instanceof Error ? error.message : "Failed to update AI feed.",
-          },
-        }));
-      } finally {
-        setCommunityFeedReactingPostId(null);
-      }
-    },
-    [activeCommunityId, cloudSession, ensureUsableCloudSession, loadCommunityAiFeed],
-  );
+  const {
+    activeCommunityFeedState,
+    reactingPostId: communityFeedReactingPostId,
+    reactToPost: handleReactToCommunityFeedPost,
+    retry: retryCommunityAiFeed,
+  } = useCommunityAiFeedController<CloudAuthSession>({
+    activeCommunityId,
+    isAiFeedTabActive: communityTab === "ai_feed",
+    viewerCacheKey: cloudSession?.user?.id ?? "anonymous",
+    session: cloudSession,
+    ensureSession: ensureUsableCloudSession,
+  });
 
   useCommunityAgentMembersLifecycle<CloudAuthSession, CommunityAgentConfig>({
     activePage,
@@ -3072,7 +2805,7 @@ export default function App() {
     ...cloudSessionArg,
     activeCommunityId,
     communities,
-    membersSurfaceMode,
+    canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
     isJoinRequestsModalOpen,
     loadCommunityJoinRequests,
@@ -3149,20 +2882,8 @@ export default function App() {
           communitySlug: payload.community_slug ?? undefined,
         });
       },
-      request_community_access: (payload) => {
-        void requestCommunityAccess({
-          communitySlug: payload.community_slug,
-          message: payload.message,
-        });
-      },
       start_builder_checkout: (payload) => {
         void startBuilderPlanCheckout(payload.tier, { context: payload.context });
-      },
-      open_builder_billing_portal: (payload) => {
-        void openBuilderBillingPortal(payload.context);
-      },
-      start_payouts_onboarding: () => {
-        void startConnectOnboarding();
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
@@ -3593,6 +3314,7 @@ export default function App() {
       session: sessionRef.current ?? session,
       sessionRef,
       refreshLocked: refreshCloudSessionLocked,
+      refreshLockedResult: refreshCloudSessionLockedResult,
       onSessionExpired: () => {
         authSessionEpochRef.current += 1;
         return resetSessionStateAfterSessionLoss();
@@ -3603,7 +3325,6 @@ export default function App() {
 
   const {
     joinPublicCommunity,
-    requestCommunityAccess,
     loadPublicCommunity,
     startCheckoutForPlan,
   } = useWebPublicFunnelActions<
@@ -3616,15 +3337,14 @@ export default function App() {
     ...cloudSessionArg,
     openAuthGate,
     loadCommunities,
-    openCommunityWorkspace: (communityId) => openCommunityChat(communityId, { pushSnapshot: false }),
+    openCommunityWorkspace: ({ communityId, communitySlug }) =>
+      enterJoinedCommunity({ communityId, communitySlug }),
     isUuid,
     setIsJoiningPublicCommunity,
     setPublicJoinError,
-    setPublicRequestAccessError,
     setPublicCommunity,
     setIsLoadingMyPublicCommunityJoinRequest,
     setMyPublicCommunityJoinRequest,
-    setIsRequestingPublicCommunityAccess,
     setIsLoadingPublicCommunity,
     setPublicCommunityError,
     setPublicCommunityPlans,
@@ -3633,15 +3353,13 @@ export default function App() {
     navigateToUrl: (url) => window.location.assign(url),
   });
 
-  const { startBuilderPlanCheckout, openBuilderBillingPortal, startConnectOnboarding } =
+  const { startBuilderPlanCheckout } =
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableCloudSession,
       openAuthGate: (intent) => openAuthGate(intent),
       setBuilderBillingError,
       setIsStartingBuilderCheckout,
-      setIsStartingBuilderPortal,
-      setIsStartingConnectOnboarding,
       navigateToUrl: (url) => window.location.assign(url),
     });
 
@@ -3654,7 +3372,8 @@ export default function App() {
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableCloudSession,
     openAuthGate,
-    openCommunityWorkspace: (communityId) => openCommunityChat(communityId, { pushSnapshot: false }),
+    openCommunityWorkspace: ({ communityId, communitySlug }) =>
+      enterJoinedCommunity({ communityId, communitySlug }),
     loadCommunities,
     clearPendingPurchaseClaimToken,
     storePendingPurchaseClaimToken,
@@ -3712,7 +3431,6 @@ export default function App() {
     communities,
     communityRoleById,
     loadBuilderBillingStatus,
-    openBuilderBillingPortal,
     persistCreateCommunityIntent,
     onStartUpgradeFlow: () => {
       setBuilderUpgradeContext("create_community");
@@ -3766,13 +3484,35 @@ export default function App() {
     resumeCreateCommunityIntent(intent.payload.draft ?? null);
   }, [resumeCreateCommunityIntent]);
 
-  const publicFunnelSlug =
-    publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview"
-      ? publicRoute.slug
-      : null;
-  const isPublicFunnelPreviewRoute = publicRoute.kind === "community_funnel_preview";
-  const checkoutSuccessSessionId = publicRoute.kind === "checkout_success" ? publicRoute.sessionId : null;
-  const claimTokenParam = publicRoute.kind === "claim" ? publicRoute.token : null;
+  const {
+    publicFunnelSlug,
+    isPublicFunnelPreviewRoute,
+    publicFunnelPreviewDraft,
+    checkoutSuccessSessionId,
+    claimTokenParam,
+    isPublicCommunityFunnel,
+    showPublicSignIn,
+    selectedPublicCommunityPlan,
+    publicVisibilityLabel,
+    resolvedPublicCommunity,
+    publicJoinMode,
+    canJoinForFree,
+    canJoinWithApproval,
+    canJoinWithCheckout,
+    approvalPending,
+    approvalDenied,
+    memberCountOverride,
+  } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
+    publicRoute,
+    publicCommunity,
+    publicCommunityPlans,
+    myPublicCommunityJoinRequest,
+    isSignedIn: Boolean(cloudSession),
+    isAuthBootstrapComplete,
+    sessionDependency: cloudSession,
+    loadPublicCommunity,
+    navigateTo,
+  });
   const pendingPurchaseBannerKey = pendingPurchaseClaims
     .map((claim) => claim.community_id)
     .sort()
@@ -3782,14 +3522,19 @@ export default function App() {
     setIsPendingPurchasesBannerDismissed(false);
   }, [pendingPurchaseBannerKey]);
 
-  useEffect(() => {
-    if (!publicFunnelSlug) return;
-    void loadPublicCommunity(publicFunnelSlug);
-  }, [publicFunnelSlug]);
-
-  const publicFunnelPreviewDraft = isPublicFunnelPreviewRoute
-    ? readCommunityFunnelPreviewHistoryState(publicFunnelSlug)
-    : null;
+  useWebJoinedCommunityRouteResolution<CloudAuthSession, CommunityRecord, CommunityAccess>({
+    publicRouteKind: publicRoute.kind,
+    activePage,
+    activeCommunityId,
+    activeCommunitySlug,
+    communities,
+    cloudSession,
+    isAuthBootstrapComplete,
+    ensureSession: ensureUsableCloudSession,
+    loadCommunities,
+    syncCommunitySelection,
+    navigateTo,
+  });
 
   useWebPostAuthBillingLifecycle({
     session: cloudSession,
@@ -3935,12 +3680,10 @@ export default function App() {
     },
     onSelectThread: (thread: ThreadRecord) => {
       const projectId = (thread.project_id ?? "").trim();
-      openWorkspaceThread({
+      enterWorkspaceThread({
         threadId: thread.id,
         projectId: projectId || null,
-        beforeSelect: () => {
-          syncCommunitySelection({ communityId: thread.community_id ?? null });
-        },
+        communityId: thread.community_id ?? null,
       });
     },
     trace: traceThreadContext,
@@ -4198,6 +3941,13 @@ export default function App() {
     openAuthGate,
     ensureWorkspaceThreadLensBeforeSend,
     createThread,
+    onThreadCreated: (thread) => {
+      enterWorkspaceThread({
+        threadId: thread.id,
+        projectId: (thread.project_id ?? "").trim() || null,
+        communityId: thread.community_id ?? null,
+      });
+    },
     updateThreadModel,
     maybeSetThreadTitleFromText,
     createPersonalMemoryItemDirect,
@@ -4212,6 +3962,7 @@ export default function App() {
     storeGuestThreadStorage,
     messageInput,
     workspaceAttachments,
+    workspaceWantsNewChat,
     isSendingMessage,
     isThreadRunActive,
     activeThreadId,
@@ -4220,10 +3971,11 @@ export default function App() {
     activeModelId,
     modelToggles,
     userMemoryRememberEnabled: userMemorySettings.remember_intent_enabled !== false,
-    builderTier: String(builderBillingStatus?.builder_tier ?? "free").trim().toLowerCase(),
+    builderTier: builderBillingStatus?.builder_tier ?? null,
     hasPaidAccess:
       Boolean(cloudSession) &&
       hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
+    loadBuilderBillingStatus,
     hasUserKeyConnection,
     hasUserChatgptConnection,
     guestThreadId: GUEST_THREAD_ID,
@@ -4237,7 +3989,6 @@ export default function App() {
     setThreadErrorForThread,
     setIsSendingMessage,
     setThreadRunSending,
-    setThreadRunRequiresWorkspaceTools,
     setIsWorkspaceAtBottom,
     setWorkspaceWantsNewChatMode,
     setActiveThreadId,
@@ -4299,36 +4050,6 @@ export default function App() {
     setProfileAvatarUrl,
     setAuthError,
   });
-
-  useEffect(() => {
-    const nextOneLiner = activeCommunity?.one_liner ?? "";
-    communityFunnelSavedOneLinerRef.current = nextOneLiner;
-    setCommunityFunnelOneLiner(nextOneLiner);
-  }, [activeCommunity?.one_liner, activeCommunityId]);
-  const activeCommunityFeedState = useMemo(() => {
-    if (!activeCommunityId) {
-      return {
-        live: [] as CommunityAiFeedPost[],
-        ranked: [] as CommunityAiFeedPost[],
-        isLoading: false,
-        error: null as string | null,
-      };
-    }
-    return (
-      communityFeedByCommunityId[activeCommunityId] ?? {
-        live: [] as CommunityAiFeedPost[],
-        ranked: [] as CommunityAiFeedPost[],
-        isLoading: communityTab === "ai_feed",
-        error: null as string | null,
-      }
-    );
-  }, [activeCommunityId, communityFeedByCommunityId, communityTab]);
-
-  useEffect(() => {
-    if (communityTab !== "ai_feed") return;
-    if (!activeCommunityId) return;
-    void loadCommunityAiFeed(activeCommunityId);
-  }, [activeCommunityId, communityTab, loadCommunityAiFeed]);
 
   const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
@@ -4770,8 +4491,6 @@ export default function App() {
 	    return "Open your guest chat.";
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
-	  const isPublicCommunityFunnel =
-      publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
 	  const showCommunityRail = true;
 	  const showCommunityNav = publicRoute.kind === "app" && activePage === "community";
 	  const isWorkspaceSettings = activePage === "workspace" && activeView === "settings";
@@ -4793,42 +4512,23 @@ export default function App() {
   const funnelPreviewJoinMode = deriveCommunityJoinMode({
     entry_policy: activeCommunity?.entry_policy,
   });
-  const funnelPreviewAdminCount = useMemo(() => {
-    if (typeof activeCommunityPresenceSummary?.admin_count === "number") {
-      return activeCommunityPresenceSummary.admin_count;
-    }
-    if (!activeCommunity) return null;
-    const adminLikeCount = communityMembers.filter((member) => {
-      const normalizedRole = String(member.role ?? "").trim().toLowerCase();
-      return normalizedRole === "owner" || normalizedRole === "admin";
-    }).length;
-    return adminLikeCount > 0 ? adminLikeCount : null;
-  }, [activeCommunity, activeCommunityPresenceSummary?.admin_count, communityMembers]);
-  const funnelPreviewOnlineCount = useMemo(() => {
-    if (typeof activeCommunityPresenceSummary?.online_count === "number") {
-      return activeCommunityPresenceSummary.online_count;
-    }
-    return null;
-  }, [activeCommunityPresenceSummary?.online_count]);
-  const funnelPreviewOnlineFaces = useMemo(() => {
-    if (activeCommunityPresenceSummary?.online_faces?.length) {
-      return activeCommunityPresenceSummary.online_faces
-        .filter((face) => Boolean(face?.avatar_url))
-        .slice(0, 4);
-    }
-    return [];
-  }, [activeCommunityPresenceSummary?.online_faces]);
   const handlePreviewCommunityFunnel = useCallback(() => {
     const slug = String(activeCommunity?.slug ?? "").trim();
     if (!slug) return;
+    const currentFunnelPath = buildCommunityTabPath(slug, "funnel");
     const previewPath = buildCommunityFunnelPreviewPath(slug);
-    if (!previewPath) return;
+    if (!previewPath || !currentFunnelPath) return;
+    const currentRoutePath = readCurrentRoutePath();
+    if (currentRoutePath !== currentFunnelPath) {
+      window.history.replaceState(window.history.state ?? {}, document.title, currentFunnelPath);
+    }
     const previewState = buildCommunityFunnelPreviewHistoryState({
       slug,
       community: {
         slug,
         name: activeCommunity?.name ?? "Community",
         one_liner: activeCommunity?.one_liner ?? null,
+        about: communitySettingsAbout.trim() || activeCommunity?.about || null,
         avatar_url: activeCommunity?.avatar_url ?? null,
         banner_url: activeCommunity?.banner_url ?? null,
         banner_focus_x: activeCommunity?.banner_focus_x ?? null,
@@ -4842,7 +4542,7 @@ export default function App() {
       visibilityLabel: funnelPreviewVisibilityLabel,
       memberCount: activeCommunity ? communityMembers.length : null,
       joinMode: funnelPreviewJoinMode,
-      one_liner: communityFunnelOneLiner.trim() || null,
+      one_liner: activeCommunity?.one_liner ?? null,
       funnel: communityFunnelConfig,
       savedAt: Date.now(),
     });
@@ -4851,13 +4551,13 @@ export default function App() {
   }, [
     activeCommunity,
     communityMembers.length,
-    communityFunnelOneLiner,
     communityFunnelConfig,
     funnelPreviewAdminCount,
     funnelPreviewJoinMode,
     funnelPreviewOnlineCount,
     funnelPreviewOnlineFaces,
     funnelPreviewVisibilityLabel,
+    readCurrentRoutePath,
   ]);
 
   useEffect(() => {
@@ -4908,55 +4608,9 @@ export default function App() {
       ? activeThreadStreamingContent !== null
       : isSendingMessage && streamingThreadId === workspaceThreadKey && streamingContent !== null,
   );
-  const showPublicSignIn = !cloudSession;
-  const previewCommunityFallback = isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.community ?? null : null;
-  const publicCommunityForSurface = publicCommunity ?? previewCommunityFallback;
-  const selectedPublicCommunityPlan =
-    publicCommunityPlans.find((plan) => plan.billing_period === "monthly") ??
-    publicCommunityPlans.find((plan) => plan.billing_period === "annual") ??
-    publicCommunityPlans[0] ??
-    null;
-  const publicVisibility = toCanonicalCommunityVisibility(publicCommunityForSurface?.visibility, "unlisted");
-  const publicVisibilityLabel = isPublicFunnelPreviewRoute
-    ? publicFunnelPreviewDraft?.visibilityLabel ?? formatCommunityVisibilityLabel(publicVisibility)
-    : formatCommunityVisibilityLabel(publicVisibility);
-  const resolvedPublicCommunity = useMemo(() => {
-    if (!publicCommunityForSurface) return null;
-    if (!publicFunnelPreviewDraft) return publicCommunityForSurface;
-    return {
-      ...publicCommunityForSurface,
-      one_liner:
-        publicFunnelPreviewDraft.one_liner ??
-        publicCommunityForSurface.one_liner ??
-        null,
-      funnel: publicFunnelPreviewDraft.funnel,
-    };
-  }, [publicCommunityForSurface, publicFunnelPreviewDraft]);
-  const publicJoinMode: CommunityJoinMode | null = isPublicFunnelPreviewRoute
-    ? publicFunnelPreviewDraft?.joinMode ?? null
-    : publicCommunity
-      ? deriveCommunityJoinMode({
-          entry_policy: publicCommunity.entry_policy,
-        })
-      : null;
-  const canJoinForFree = publicJoinMode === "join_free";
-  const canRequestAccessForFree = publicJoinMode === "request_access";
-  const canJoinWithCheckout = publicJoinMode === "checkout";
   const pendingToken =
     (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
     readPendingPurchaseClaimToken();
-  const myJoinRequestStatus = isPublicFunnelPreviewRoute
-    ? ""
-    : String(myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
-  const deniedUntilIso = myPublicCommunityJoinRequest?.denied_until ?? null;
-  const deniedUntilMs = deniedUntilIso ? new Date(deniedUntilIso).getTime() : NaN;
-  const requestCooldownActive =
-    myJoinRequestStatus === "denied" && Number.isFinite(deniedUntilMs) && deniedUntilMs > Date.now();
-  const requestPending = myJoinRequestStatus === "pending";
-  const requestDeniedDateLabel =
-    requestCooldownActive && deniedUntilIso
-      ? new Date(deniedUntilIso).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
-      : "";
   const handlePublicLandingPrimaryAction = () => {
     if (isPublicFunnelPreviewRoute) return;
     if (!publicCommunity) return;
@@ -4968,11 +4622,7 @@ export default function App() {
       );
       return;
     }
-    if (canRequestAccessForFree) {
-      void requestCommunityAccess({ communitySlug: publicCommunity.slug });
-      return;
-    }
-    if (!canJoinForFree) return;
+    if (!canJoinForFree && !canJoinWithApproval) return;
     void joinPublicCommunity({ communitySlug: publicCommunity.slug });
   };
 
@@ -5074,8 +4724,9 @@ export default function App() {
       activeCommunity,
       hasSession: Boolean(cloudSession),
       canViewActiveCommunitySettings,
-      canManageMembersActiveCommunity,
-      isActiveCommunityOwner,
+      communitySettingsLayer,
+      canManageCommunitySettings,
+      canDeleteCommunity: canDeleteActiveCommunity,
       openAuthGate,
       state: {
         isSettingsBannerDragOver,
@@ -5091,15 +4742,13 @@ export default function App() {
         communitySettingsName,
         communitySettingsSlug,
         communitySettingsOneLiner,
+        communitySettingsAbout,
         communitySettingsVisibility,
         communitySettingsPricingMode,
         communitySettingsPriceUsdMonthly,
         communitySettingsPriceUsdAnnual,
-        builderBillingStatus,
-        isStartingConnectOnboarding,
         communitySettingsError,
         isSavingCommunitySettings,
-        activeCommunityAccess,
         communityMemberMuted,
         isLoadingCommunityMemberSettings,
         isLeavingCommunity,
@@ -5122,15 +4771,14 @@ export default function App() {
         setCommunitySettingsName,
         setCommunitySettingsSlug,
         setCommunitySettingsOneLiner,
+        setCommunitySettingsAbout,
         setCommunitySettingsVisibility,
         setCommunitySettingsPricingMode,
         setCommunitySettingsPriceUsdMonthly,
         setCommunitySettingsPriceUsdAnnual,
         communityPricingDirtyRef,
-        startConnectOnboarding,
         handleSaveCommunitySettings,
         openDeleteCommunityModal,
-        formatChatTime,
         handleToggleCommunityMute,
         handleLeaveCommunity,
       },
@@ -5153,7 +4801,6 @@ export default function App() {
       capabilities: {
         hasActiveCommunity: Boolean(activeCommunity),
         hasSession: Boolean(cloudSession),
-        canPost: canPostMessagesActiveCommunity,
         activeCommunityName: activeCommunity?.name ?? null,
       },
       state: {
@@ -5165,11 +4812,17 @@ export default function App() {
       },
       actions: {
         react: handleReactToCommunityFeedPost,
-        retry: () => {
-          if (!activeCommunityId) return;
-          void loadCommunityAiFeed(activeCommunityId);
-        },
+        retry: retryCommunityAiFeed,
       },
+    },
+    polynet: {
+      hasActiveCommunity: Boolean(activeCommunity),
+      activeCommunityName: activeCommunity?.name ?? null,
+      hasSession: Boolean(cloudSession),
+      canManagePolynet: canViewActiveCommunityPolynet,
+      onOpenAuthGate: () => openAuthGate(),
+      state: communityPolynetController.state,
+      actions: communityPolynetController.actions,
     },
     aiAgent: {
       activeCommunity,
@@ -5208,8 +4861,6 @@ export default function App() {
         handleSaveCommunityFunnel,
         handleResetCommunityFunnel,
         handlePreviewCommunityFunnel,
-        communityOneLiner: communityFunnelOneLiner,
-        setCommunityOneLiner: setCommunityFunnelOneLiner,
         isSavingCommunityFunnel,
         communityFunnelSaveError,
         communityFunnelConfig,
@@ -5219,6 +4870,7 @@ export default function App() {
           slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
           one_liner: activeCommunity?.one_liner ?? null,
+          about: activeCommunity?.about ?? null,
           avatar_url: activeCommunity?.avatar_url ?? null,
           banner_url: activeCommunity?.banner_url ?? null,
           banner_focus_x: activeCommunity?.banner_focus_x ?? null,
@@ -5244,15 +4896,10 @@ export default function App() {
         isLoadingCommunityAnalytics,
         communityAnalyticsError,
         communityAnalyticsSummary,
-        communityAnalyticsChartMode,
         communityAnalyticsSeries,
-        communityRevenueMeta,
-        communityRevenueSeries,
-        communityRevenueError,
       },
       actions: {
         setCommunityAnalyticsRange,
-        setCommunityAnalyticsChartMode,
       },
     },
     resources: {
@@ -5277,7 +4924,10 @@ export default function App() {
     members: {
       activeCommunity,
       capabilities: {
-        membersSurfaceMode,
+        canManageMembers: canManageMembersActiveCommunity,
+        canManageJoinPolicy: canManageMembersActiveCommunity,
+        canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
+        canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
       },
       state: {
@@ -5420,27 +5070,11 @@ export default function App() {
   };
 	  const activateDiscoverCommunityCard = (opts: {
 	    canActivate: boolean;
-	    memberCommunity: CommunityRecord | null;
 	    slug: string;
 	  }) => {
 	    if (!opts.canActivate) return;
-	    if (opts.memberCommunity) {
-	      if (
-	        !confirmDiscardUnsavedCommunitySettingsWeb({
-	          isCommunitySettingsDirty: communitySettingsDirtyRef.current,
-	          isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
-	          activeCommunityId,
-	          nextCommunityId: opts.memberCommunity.id,
-	          confirmDiscard: (message) => window.confirm(message),
-	        })
-	      ) {
-	        return;
-	      }
-	      openJoinedCommunityBySlug(opts.memberCommunity.slug, { pushSnapshot: true });
-	      return;
-	    }
 	    if (!opts.slug) return;
-      openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
+	    openCommunityBySlug(opts.slug, { pushSnapshot: true });
 	  };
 	  const showHeaderIslands = publicRoute.kind === "app" && activePage === "workspace" && activeView === "home";
 	  const communityHomeButton = activeCommunity ? (
@@ -5843,6 +5477,7 @@ export default function App() {
             activeCommunity={activeCommunity}
             communityTab={communityTab}
             canViewActiveCommunitySettings={canViewActiveCommunitySettings}
+            canViewActiveCommunityPolynet={canViewActiveCommunityPolynet}
             canManageMembersActiveCommunity={canManageMembersActiveCommunity}
             canViewActiveCommunityAnalytics={canViewActiveCommunityAnalytics}
             buttonType="button"
@@ -5855,7 +5490,7 @@ export default function App() {
                   return;
                 }
               }
-              setCommunityTab(tab);
+              applyCommunityShellState({ communityTab: tab });
             }}
           />
         )}
@@ -5938,8 +5573,6 @@ export default function App() {
                       setBuilderUpgradeContext(context);
                       setIsBuilderUpgradeOpen(true);
                     }}
-                    openBuilderBillingPortal={openBuilderBillingPortal}
-                    isStartingBuilderPortal={isStartingBuilderPortal}
                     builderBillingError={builderBillingError}
                     canUseDevTierOverride={canUseDevTierOverride}
                     isSettingDevBuilderTier={isSettingDevBuilderTier}
@@ -6008,27 +5641,30 @@ export default function App() {
                     isPreviewMode={isPublicFunnelPreviewRoute}
                     publicVisibilityLabel={publicVisibilityLabel}
                     selectedPublicCommunityPlanLabel={
-                      selectedPublicCommunityPlan ? formatPlanPrice(selectedPublicCommunityPlan) : null
+                      isPublicFunnelPreviewRoute
+                        ? null
+                        : selectedPublicCommunityPlan
+                          ? formatPlanPrice(selectedPublicCommunityPlan)
+                          : null
                     }
-                    hasSelectedPublicCommunityPlan={Boolean(selectedPublicCommunityPlan)}
+                    hasSelectedPublicCommunityPlan={
+                      isPublicFunnelPreviewRoute ? false : Boolean(selectedPublicCommunityPlan)
+                    }
                     isLoadingPublicCommunity={isLoadingPublicCommunity}
                     canJoinForFree={canJoinForFree}
-                    canRequestAccessForFree={canRequestAccessForFree}
+                    canJoinWithApproval={canJoinWithApproval}
                     canJoinWithCheckout={canJoinWithCheckout}
                     checkoutStatus={checkoutStatus}
                     isJoiningPublicCommunity={isJoiningPublicCommunity}
-                    isRequestingPublicCommunityAccess={isRequestingPublicCommunityAccess}
                     isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
-                    requestPending={requestPending}
-                    requestCooldownActive={requestCooldownActive}
-                    requestDeniedDateLabel={requestDeniedDateLabel}
+                    approvalPending={approvalPending}
+                    approvalDenied={approvalDenied}
                     onPrimaryJoinAction={handlePublicLandingPrimaryAction}
                     publicCommunityError={publicCommunityError}
                     publicJoinError={publicJoinError}
-                    publicRequestAccessError={publicRequestAccessError}
                     checkoutError={checkoutError}
                     showSignIn={isPublicFunnelPreviewRoute ? true : showPublicSignIn}
-                    memberCountOverride={isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.memberCount ?? null : null}
+                    memberCountOverride={memberCountOverride}
                   />
                 </div>
               </div>
@@ -6392,6 +6028,9 @@ export default function App() {
                                   ) : null}
 	                              </MessageFooter>
 		                          )}
+                              {!isUser && messageRuntimeEvents.length > 0 ? (
+                                <RuntimeWebSources events={messageRuntimeEvents} />
+                              ) : null}
 	                        </div>
 	                      );
 	                    })}
@@ -6652,11 +6291,10 @@ export default function App() {
 	                              community.one_liner && community.one_liner.trim().length > 0
 	                                ? community.one_liner
 	                                : "No one-liner yet.";
-                              const canActivate = alreadyMember || Boolean(community.slug);
+                              const canActivate = Boolean(community.slug);
                               const activateDiscoverCard = () => {
                                 activateDiscoverCommunityCard({
                                   canActivate,
-                                  memberCommunity,
                                   slug: community.slug,
                                 });
                               };
@@ -6780,14 +6418,12 @@ export default function App() {
 	            setPlatformQuotaModal(null);
               const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
               const projectId = (thread?.project_id ?? "").trim();
-              openWorkspaceThread({
+              enterWorkspaceThread({
                 threadId,
                 projectId: projectId || null,
-                beforeSelect: () => {
-                  syncCommunitySelection({ communityId: thread?.community_id ?? null });
-                },
+                communityId: thread?.community_id ?? null,
               });
-	            setIsModelPickerOpen(true);
+              setIsModelPickerOpen(true);
 	            window.setTimeout(() => {
 	              const root = modelPickerRef.current;
 	              const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
@@ -6830,7 +6466,6 @@ export default function App() {
           createCommunityError={createCommunityError}
           builderBillingError={builderBillingError}
           isCreatingCommunity={isCreatingCommunity}
-          isStartingBuilderPortal={isStartingBuilderPortal}
           communityInitials={communityInitials}
           onClose={closeCreateCommunityModal}
           onPrimaryAction={handleCreateCommunityPrimaryAction}

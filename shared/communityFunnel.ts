@@ -6,7 +6,6 @@ import type {
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
   hero_media_kind: "image",
-  about: null,
 };
 
 function normalizeTrimmedString(raw: unknown, maxLength: number): string | null {
@@ -28,6 +27,5 @@ export function normalizeCommunityFunnelConfig(raw: unknown): CommunityFunnelCon
   return {
     hero_media_url: normalizeTrimmedString(value.hero_media_url, 2_000),
     hero_media_kind: normalizeHeroMediaKind(value.hero_media_kind),
-    about: normalizeTrimmedString(value.about, 8_000),
   };
 }

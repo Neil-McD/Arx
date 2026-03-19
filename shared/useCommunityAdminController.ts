@@ -11,7 +11,6 @@ import {
 import {
   countCloudCommunityResourceRows,
   fetchCloudCommunityEntitledMemberCount,
-  listCloudCommunityRevenueSeriesRows,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -61,11 +60,8 @@ type UseCommunityAdminControllerArgs<
 
   setIsLoadingCommunityAnalytics: Dispatch<SetStateAction<boolean>>;
   setCommunityAnalyticsError: Dispatch<SetStateAction<string | null>>;
-  setCommunityRevenueError: Dispatch<SetStateAction<string | null>>;
   setCommunityAnalyticsSummary: Dispatch<SetStateAction<AnalyticsSummaryLike>>;
   setCommunityAnalyticsSeries: Dispatch<SetStateAction<AnalyticsPointLike[]>>;
-  setCommunityRevenueSeries: Dispatch<SetStateAction<AnalyticsPointLike[]>>;
-  setCommunityRevenueMeta: Dispatch<SetStateAction<{ currency: string; currency_decimals: number } | null>>;
 };
 
 export function useCommunityAdminController<
@@ -219,7 +215,6 @@ export function useCommunityAdminController<
     if (!usableSession) return;
     current.setIsLoadingCommunityAnalytics(true);
     current.setCommunityAnalyticsError(null);
-    current.setCommunityRevenueError(null);
 
     const now = Date.now();
     const windowStart = resolveAnalyticsWindowStart({
@@ -307,48 +302,6 @@ export function useCommunityAdminController<
           dateKeyLocal: current.dateKeyLocal,
         }),
       );
-
-      try {
-        const rows = await listCloudCommunityRevenueSeriesRows({
-          session: usableSession,
-          communityId,
-          range,
-        });
-        const metaCurrency = rows[0]?.currency ?? null;
-        const metaDecimals = rows[0]?.currency_decimals ?? null;
-        if (metaCurrency && metaDecimals != null) {
-          current.setCommunityRevenueMeta({ currency: metaCurrency, currency_decimals: metaDecimals });
-        } else {
-          current.setCommunityRevenueMeta(null);
-        }
-        current.setCommunityRevenueSeries(
-          rows.map((row) => {
-            const date = new Date(row.bucket_start);
-            return {
-              label: analyticsBucketLabel(date, chartBucket),
-              value: Number(row.net_base_units ?? 0) || 0,
-            };
-          }),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to load revenue.";
-        if (message.includes("schema cache")) {
-          current.setCommunityRevenueSeries(
-            buildAnalyticsSeries({
-              rows: [],
-              start: windowStart ?? new Date(now - 30 * 86400000),
-              bucket: chartBucket,
-              dateKeyLocal: current.dateKeyLocal,
-            }),
-          );
-          current.setCommunityRevenueMeta(null);
-          current.setCommunityRevenueError(null);
-        } else {
-          current.setCommunityRevenueSeries([]);
-          current.setCommunityRevenueMeta(null);
-          current.setCommunityRevenueError(message);
-        }
-      }
     } catch (error) {
       const message = typeof error === "string"
         ? error
@@ -365,9 +318,6 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     current.setCommunityAnalyticsSummary(emptyAnalyticsSummary());
     current.setCommunityAnalyticsSeries([]);
-    current.setCommunityRevenueSeries([]);
-    current.setCommunityRevenueMeta(null);
-    current.setCommunityRevenueError(null);
     current.setCommunityAnalyticsError(null);
     current.setIsLoadingCommunityAnalytics(false);
   }, []);

@@ -32,6 +32,7 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsName: string;
   communitySettingsSlug: string;
   communitySettingsOneLiner: string;
+  communitySettingsAbout: string;
   communitySettingsVisibility: string;
   communitySettingsAvatarUrl: string | null;
   communitySettingsBannerUrl: string | null;
@@ -187,6 +188,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         name,
         slug,
         oneLiner: current.communitySettingsOneLiner.trim() || null,
+        about: current.communitySettingsAbout.trim() || null,
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
         bannerStorageId: bannerField.storageId ?? null,

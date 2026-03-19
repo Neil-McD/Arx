@@ -69,8 +69,6 @@ type WebAccountSettingsSectionProps = {
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
   openBuilderUpgrade: (context: "builder" | "architect") => void;
-  openBuilderBillingPortal: () => Promise<void> | void;
-  isStartingBuilderPortal: boolean;
   builderBillingError: string | null;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
@@ -117,8 +115,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     openOwnedCommunitySettings,
     communityInitials,
     openBuilderUpgrade,
-    openBuilderBillingPortal,
-    isStartingBuilderPortal,
     builderBillingError,
     canUseDevTierOverride,
     isSettingDevBuilderTier,
@@ -318,14 +314,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                         Upgrade plan
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => void openBuilderBillingPortal()}
-                        disabled={isStartingBuilderPortal}
-                      >
-                        {isStartingBuilderPortal ? "Opening…" : "Manage billing"}
-                      </button>
+                      <span className="auth-status">Billing management will appear here after live billing is enabled.</span>
                     )}
                   </div>
                 </div>
@@ -373,11 +362,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
 
       {cloudSession && (
         <div className="settings-section">
-          <div className="settings-section-title">
-            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-            Your communities
-          </div>
-          <div className="settings-section-desc">Open a community to manage pricing and payouts.</div>
+        <div className="settings-section-title">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+          Your communities
+        </div>
+          <div className="settings-section-desc">Open a community to manage pricing and paid access.</div>
           {(() => {
             const owned = communities
               .filter((community) => communityRoleById[community.id] === "owner")

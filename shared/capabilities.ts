@@ -44,7 +44,6 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
   const paidModelDecision = evaluateCanonicalGate({
     surface: input.surface,
     executionMode: "cloud",
-    requestedExecutionTarget: "chat",
     requestedFundingSource: "platform",
     authState: input.authState,
     tier: input.builderTier ?? null,

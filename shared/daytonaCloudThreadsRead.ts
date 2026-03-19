@@ -38,8 +38,6 @@ type ConvexRuntimeRunRow = {
   runId?: string | null;
   threadId?: string | null;
   status?: string | null;
-  requestedExecutionTarget?: string | null;
-  requiresWorkspaceTools?: boolean | null;
   startedAt?: number | null;
   updatedAt?: number | null;
   lastEventSeq?: number | null;
@@ -83,7 +81,6 @@ export type DaytonaCloudRuntimeRunTransportRow = {
   run_id: string;
   thread_id: string | null;
   status: string | null;
-  requires_workspace_tools: boolean;
   started_at: string;
   updated_at: string;
   last_event_seq: number;
@@ -173,16 +170,11 @@ function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): DaytonaCloudRuntimeRu
   const id = String(row._id ?? "").trim() || String(row.runId ?? "").trim();
   const runId = String(row.runId ?? "").trim();
   if (!id || !runId) return null;
-  const requiresWorkspaceTools =
-    typeof row.requiresWorkspaceTools === "boolean"
-      ? row.requiresWorkspaceTools
-      : row.requestedExecutionTarget === "daytona_workspace";
   return {
     id,
     run_id: runId,
     thread_id: typeof row.threadId === "string" ? row.threadId : null,
     status: typeof row.status === "string" ? row.status : null,
-    requires_workspace_tools: requiresWorkspaceTools,
     started_at: toIsoStringFromMs(row.startedAt),
     updated_at: toIsoStringFromMs(row.updatedAt),
     last_event_seq: Math.max(0, Math.floor(toFiniteNumber(row.lastEventSeq, 0))),

@@ -161,9 +161,15 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
     });
     const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
     const communityName = String(community.name ?? "").trim() || String(community.slug ?? "").trim() || null;
+    const communitySlug = String(community.slug ?? "").trim() || null;
+    const communityOneLiner = String(community.oneLiner ?? "").trim() || null;
+    const communityAbout = String(community.about ?? "").trim() || null;
     return {
       community_id: String(args.communityId),
       community_name: communityName,
+      community_slug: communitySlug,
+      community_one_liner: communityOneLiner,
+      community_about: communityAbout,
       system_prompt: config?.systemPrompt ?? null,
     };
   },

@@ -77,11 +77,6 @@ export type UseWebTurnRunnerControllerArgs<
   setThreadStreamingStateById: Dispatch<
     SetStateAction<Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>>
   >;
-  onCloudRunLifecycleEvent?: (payload: {
-    threadId: string;
-    runId: string | null;
-    phase: "start" | "done";
-  }) => void;
 
   streamingContentRef: MutableRefObject<string | null>;
   streamingRafRef: MutableRefObject<number | null>;
@@ -111,7 +106,7 @@ export type RunAgentTurnParams = {
   systemPrompt?: string | null;
   inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
   requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
-  requiresWorkspaceTools?: boolean;
+  requestedAgenticTools?: boolean;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
 };

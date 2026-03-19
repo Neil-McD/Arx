@@ -1,5 +1,5 @@
 import { AnalyticsLineChart } from "../../shared/AnalyticsLineChart";
-import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../shared/contentFormatting";
+import { formatCount, formatPercent } from "../../shared/contentFormatting";
 import { buildPlatformSwitcherStyle } from "../../shared/platformSwitcherUi";
 import type {
   CommunityAnalyticsActions,
@@ -16,14 +16,9 @@ type CommunityAnalyticsPanelProps = {
 export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
   const { capabilities, state, actions } = props;
   const rangeOptions = ["7d", "30d", "90d", "1y", "all"] as const;
-  const metricOptions = ["members", "revenue"] as const;
   const rangeSwitcherStyle = buildPlatformSwitcherStyle(
     rangeOptions.length,
     rangeOptions.findIndex((value) => value === state.communityAnalyticsRange),
-  );
-  const metricSwitcherStyle = buildPlatformSwitcherStyle(
-    metricOptions.length,
-    metricOptions.findIndex((value) => value === state.communityAnalyticsChartMode),
   );
   if (!capabilities.hasActiveCommunity) {
     return <div className="chat-empty">Select a community to view analytics.</div>;
@@ -73,8 +68,8 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
         <div className="analytics-kpi-strip" aria-label="Key performance indicators">
           {[
             { label: "Members", value: formatCount(state.communityAnalyticsSummary.total_members) },
-            { label: "MRR", value: "—" },
-            { label: "Conversion", value: "—" },
+            { label: "New", value: formatCount(state.communityAnalyticsSummary.new_members_window) },
+            { label: "Active", value: formatCount(state.communityAnalyticsSummary.active_members_window) },
             { label: "Retention", value: formatPercent(state.communityAnalyticsSummary.retention_window) },
           ].map((kpi) => (
             <div key={kpi.label} className="analytics-kpi-tile">
@@ -88,66 +83,14 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
       <div className="settings-section">
         <div className="analytics-chart-card">
           <div className="analytics-chart-header">
-            <div
-              className="platform-switcher platform-switcher-compact analytics-mode-toggle"
-              role="tablist"
-              aria-label="Metric"
-              style={metricSwitcherStyle}
-            >
-              {metricOptions.map((value) => (
-                <button
-                  key={value}
-                  className={
-                    value === state.communityAnalyticsChartMode
-                      ? "platform-switcher-btn is-active"
-                      : "platform-switcher-btn"
-                  }
-                  type="button"
-                  onClick={() => actions.setCommunityAnalyticsChartMode(value)}
-                  aria-pressed={value === state.communityAnalyticsChartMode}
-                >
-                  {value === "members" ? "Members" : "Revenue"}
-                </button>
-              ))}
-            </div>
+            <div className="analytics-chart-label">Member growth</div>
             <div className="analytics-chart-stat">
-              {state.communityAnalyticsChartMode === "members"
-                ? state.communityAnalyticsSeries.length === 0
-                  ? "—"
-                  : formatCount(state.communityAnalyticsSeries.reduce((sum, point) => sum + point.value, 0))
-                : !state.communityRevenueMeta || state.communityRevenueSeries.length === 0
-                  ? "—"
-                  : formatMoneyBaseUnits(
-                      state.communityRevenueSeries.reduce((sum, point) => sum + point.value, 0),
-                      state.communityRevenueMeta.currency,
-                      state.communityRevenueMeta.currency_decimals,
-                    )}
+              {state.communityAnalyticsSeries.length === 0
+                ? "—"
+                : formatCount(state.communityAnalyticsSeries.reduce((sum, point) => sum + point.value, 0))}
             </div>
           </div>
-          {state.communityAnalyticsChartMode === "members" ? (
-            <AnalyticsLineChart points={state.communityAnalyticsSeries} />
-          ) : (
-            <AnalyticsLineChart
-              points={state.communityRevenueSeries}
-              valueFormatter={
-                state.communityRevenueMeta
-                  ? (value) =>
-                      formatMoneyBaseUnits(
-                        value,
-                        state.communityRevenueMeta!.currency,
-                        state.communityRevenueMeta!.currency_decimals,
-                      )
-                  : undefined
-              }
-            />
-          )}
-          {state.communityAnalyticsChartMode === "revenue" && state.communityRevenueError && (
-            <div className="analytics-chart-note">
-              {state.communityRevenueError.includes("schema cache")
-                ? "Revenue is still syncing. Refresh in a moment."
-                : state.communityRevenueError}
-            </div>
-          )}
+          <AnalyticsLineChart points={state.communityAnalyticsSeries} />
         </div>
       </div>
     </>

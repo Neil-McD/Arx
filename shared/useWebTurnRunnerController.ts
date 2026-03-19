@@ -15,6 +15,7 @@ import {
   deleteCloudThreadMessage,
   ensureCloudThreadRecord,
 } from "./cloudThreadsGateway";
+import { listConvexCloudRuntimeRunEvents } from "./daytonaCloudThreadsRead";
 import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
@@ -47,6 +48,31 @@ export function useWebTurnRunnerController<
   const threadStreamingAbortRefById = useRef<Record<string, AbortController | null>>({});
   const threadStreamingRafRefById = useRef<Record<string, number | null>>({});
   const threadStreamingUserCancelledRefById = useRef<Record<string, boolean>>({});
+
+  const waitForPersistedRuntimeRun = useCallback(
+    async (session: SessionT, runId: string): Promise<boolean> => {
+      const normalizedRunId = String(runId ?? "").trim();
+      if (!normalizedRunId) return false;
+      const delaysMs = [0, 200, 500, 1000];
+      for (const delayMs of delaysMs) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        }
+        try {
+          const rows = await listConvexCloudRuntimeRunEvents({
+            session: session as any,
+            runId: normalizedRunId,
+            limit: 1,
+          });
+          if (Array.isArray(rows) && rows.length > 0) return true;
+        } catch {
+          // ignore and keep retrying; a failed read should not mask the original transport error
+        }
+      }
+      return false;
+    },
+    [],
+  );
 
   const setThreadStreamingState = useCallback(
     (
@@ -425,87 +451,12 @@ export function useWebTurnRunnerController<
         });
       };
 
-      const kickoffBackgroundWorkspaceTurn = async (createRuntimeTurnRequest: () => Promise<Response>): Promise<void> => {
-        let runtimeTurn: Response;
-        try {
-          runtimeTurn = await createRuntimeTurnRequest();
-        } catch (error) {
-          const cancelled =
-            threadStreamingUserCancelledRefById.current[threadId] === true || abort.signal.aborted || isAbortError(error);
-          if (cancelled) {
-            resetThreadStreamingState(threadId);
-            return;
-          }
-          const rawMessage =
-            typeof error === "string" ? error : error instanceof Error ? error.message : "Runtime transport failed.";
-          setThreadStreamingState(threadId, (entry) =>
-            entry
-              ? {
-                  ...entry,
-                  content: null,
-                }
-              : null,
-          );
-          current.setThreadErrorForThread(threadId, rawMessage || "Runtime transport failed.");
-          resetThreadStreamingState(threadId);
-          return;
-        }
-        responseStarted = true;
-        runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
-        runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
-        if (runtimeTurn.ok) return;
-
-        let failure = await readCloudFunctionError(runtimeTurn);
-        runtimeRequestId = failure.requestId ?? runtimeRequestId;
-        runtimeStage = failure.stage ?? runtimeStage;
-        const failureMessage = String(failure.message ?? "").toLowerCase();
-        const canRetryThreadMirror =
-          failure.status === 404 &&
-          (failureMessage.includes("thread_not_found") || String(failure.code ?? "").toLowerCase() === "thread_not_found");
-        if (canRetryThreadMirror) {
-          try {
-            await ensureCloudThreadRecordForRuntime(session, threadId);
-            runtimeTurn = await createRuntimeTurnRequest();
-            responseStarted = true;
-            runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
-            runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
-            if (runtimeTurn.ok) return;
-            failure = await readCloudFunctionError(runtimeTurn);
-            runtimeRequestId = failure.requestId ?? runtimeRequestId;
-            runtimeStage = failure.stage ?? runtimeStage;
-          } catch (mirrorError) {
-            console.warn("Non-fatal: retry ensure cloud thread record failed:", mirrorError);
-          }
-        }
-
-        // Workspace turns now trust persisted run state over a late transport failure.
-        // If the edge times out after the backend has already started the run, the
-        // polling loop will reconcile completion from runtimeRuns/runtimeRunEvents.
-        if (failure.status >= 500) {
-          return;
-        }
-
-        if (failure.category === "quota" || failure.category === "misconfigured" || failure.category === "disabled" || failure.category === "plan") {
-          current.setPlatformQuotaModal({
-            reason: mapPlatformFailureReason(failure.category),
-            threadId,
-            mode: params.mode === "regenerate" ? "regenerate" : "respond",
-            message: failure.message.trim() || null,
-          });
-        } else {
-          current.setThreadErrorForThread(threadId, formatCloudFunctionErrorMessage(failure));
-        }
-        resetThreadStreamingState(threadId);
-      };
-
       try {
-        const requiresWorkspaceTools = Boolean(params.requiresWorkspaceTools);
-        const requestedExecutionTarget = requiresWorkspaceTools ? "daytona_workspace" : "chat";
-        const streamRuntimeTurn = !requiresWorkspaceTools;
+        const streamRuntimeTurn = true;
         const laneMessages = Array.isArray(params.messages)
           ? buildPublicTurnMessages({
               messages: params.messages,
-              systemPrompt: requiresWorkspaceTools ? null : params.systemPrompt,
+              systemPrompt: params.systemPrompt,
               extractTextFromContentJson: current.extractTextFromContentJson,
             })
           : [];
@@ -517,26 +468,16 @@ export function useWebTurnRunnerController<
               thread_id: threadId,
               stream: streamRuntimeTurn,
               surface: "web",
-              requested_execution_target: requestedExecutionTarget,
               model_id: params.preferredModelId,
               requested_funding_source: params.requestedFundingSource ?? "platform",
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,
+              requested_agentic_tools: params.requestedAgenticTools === true,
               ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,
           });
         };
-
-        if (requiresWorkspaceTools) {
-          current.onCloudRunLifecycleEvent?.({
-            threadId,
-            runId: params.runIdHint,
-            phase: "start",
-          });
-          void kickoffBackgroundWorkspaceTurn(createRuntimeTurnRequest);
-          return { cancelled: false, error: null };
-        }
 
         let runtimeTurn = await createRuntimeTurnRequest();
         responseStarted = true;
@@ -596,40 +537,6 @@ export function useWebTurnRunnerController<
           throw new Error(formatCloudFunctionErrorMessage(failure));
           }
         }
-
-        if (!streamRuntimeTurn) {
-          const payload = (await runtimeTurn.json()) as {
-            run_id?: unknown;
-            content?: unknown;
-            assistant_message_id?: unknown;
-            stage?: unknown;
-            request_id?: unknown;
-          };
-          if (typeof payload?.request_id === "string" && payload.request_id.trim()) {
-            runtimeRequestId = payload.request_id.trim();
-          }
-          if (typeof payload?.stage === "string" && payload.stage.trim()) {
-            runtimeStage = payload.stage.trim();
-          }
-          if (typeof payload?.run_id === "string" && payload.run_id.trim()) {
-            runIdFromServer = payload.run_id.trim();
-          }
-          const finalContent = typeof payload?.content === "string" ? payload.content : "";
-          const persistedAssistantMessageId =
-            typeof payload?.assistant_message_id === "string" && payload.assistant_message_id.trim()
-              ? payload.assistant_message_id.trim()
-              : null;
-          if (!finalContent.trim()) {
-            throw new Error("Runtime turn returned empty content.");
-          }
-          if (!persistedAssistantMessageId) {
-            throw new Error("Runtime turn did not persist assistant message.");
-          }
-          await current.loadThreadMessages(threadId, session);
-          await current.loadThreads(session);
-          return { cancelled: false, error: null };
-        }
-
         const reader = runtimeTurn.body?.getReader();
         if (!reader) throw new Error("Missing streaming response.");
 
@@ -638,29 +545,8 @@ export function useWebTurnRunnerController<
           let eventName = "message";
           let dataBuffer = "";
           let seenDone = false;
-          let runtimeLane: string | null = null;
           let persistedAssistantMessageId: string | null = null;
           let finalContent = "";
-          let cloudLifecycleStarted = false;
-          let cloudLifecycleDone = false;
-
-          const maybeEmitCloudLifecycle = (phase: "start" | "done", laneValue: string | null | undefined): void => {
-            const lane = String(laneValue ?? "").trim().toLowerCase();
-            if (lane !== "daytona" && lane !== "daytona_cloud") return;
-            if (phase === "start") {
-              if (cloudLifecycleStarted) return;
-              cloudLifecycleStarted = true;
-            } else if (cloudLifecycleDone) {
-              return;
-            } else {
-              cloudLifecycleDone = true;
-            }
-            current.onCloudRunLifecycleEvent?.({
-              threadId,
-              runId: runIdFromServer,
-              phase,
-            });
-          };
 
           const flushEvent = () => {
             const raw = dataBuffer.trim();
@@ -692,8 +578,6 @@ export function useWebTurnRunnerController<
                   : null,
               );
             }
-            if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
-            maybeEmitCloudLifecycle("start", runtimeLane);
           } else if (eventName === "delta") {
             const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
             const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
@@ -712,14 +596,11 @@ export function useWebTurnRunnerController<
               scheduleStreamingFlush();
             }
             if (typeof parsed?.run_id === "string") runIdFromServer = parsed.run_id;
-            if (typeof parsed?.lane === "string") runtimeLane = parsed.lane;
             if (typeof parsed?.assistant_message_id === "string" && parsed.assistant_message_id.trim()) {
               persistedAssistantMessageId = parsed.assistant_message_id.trim();
             }
-            maybeEmitCloudLifecycle("done", runtimeLane);
             seenDone = true;
           } else if (eventName === "error") {
-            maybeEmitCloudLifecycle("done", runtimeLane);
             const msg =
               (typeof parsed?.error === "string" && parsed.error.trim()) ||
               (typeof parsed?.message === "string" && parsed.message.trim()) ||
@@ -758,7 +639,6 @@ export function useWebTurnRunnerController<
             }
           }
           flushEvent();
-          maybeEmitCloudLifecycle("done", runtimeLane);
 
           const safeAssistantText = sanitizeUserFacingAssistantText({
             text: finalContent,
@@ -799,9 +679,7 @@ export function useWebTurnRunnerController<
           error: details.length > 0 ? `${inferredMessage} (${details.join(", ")})` : inferredMessage,
         };
       } finally {
-        if (!params.requiresWorkspaceTools) {
-          resetThreadStreamingState(threadId);
-        }
+        resetThreadStreamingState(threadId);
       }
     },
     [ensureCloudThreadRecordForRuntime, resetThreadStreamingState, setThreadStreamingState],
@@ -825,7 +703,7 @@ export function useWebTurnRunnerController<
       });
       return messageId;
     },
-    [],
+    [waitForPersistedRuntimeRun],
   );
 
   const createAssistantTextMessage = useCallback(

@@ -5,12 +5,17 @@ import {
   type CommunityChatThreadLike,
   type CommunityMessageReactionLike,
   parseIsoMs,
+  normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityModerator,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  deleteArchiveDocumentBySource,
+  upsertArchiveDocumentForChatMessage,
+} from "./communityArchiveDocuments";
 
 type StoredCommunityChatAttachment = {
   id: string;
@@ -367,6 +372,10 @@ export const createThreadUserMessage = mutation({
     });
     const row = (await ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
     if (!row) throw new Error("message_create_failed");
+    await upsertArchiveDocumentForChatMessage(ctx, {
+      thread,
+      message: row,
+    });
     return await mapCommunityChatMessageRow(ctx, row);
   },
 });
@@ -416,6 +425,13 @@ export const patchOwnMessageContent = mutation({
       contentJson: nextAttachments.length > 0 ? { text: nextText, attachments: nextAttachments } : { text: nextText },
       updatedAt: nowMs,
     });
+    const updated = (await ctx.db.get(message._id as any)) as CommunityChatMessageLike | null;
+    if (updated) {
+      await upsertArchiveDocumentForChatMessage(ctx, {
+        thread,
+        message: updated,
+      });
+    }
     return { ok: true };
   },
 });
@@ -461,6 +477,11 @@ export const deleteOwnMessage = mutation({
       await ctx.db.delete(reaction._id as any);
     }
     await ctx.db.delete(message._id as any);
+    await deleteArchiveDocumentBySource(ctx, {
+      communityId: thread.communityId,
+      sourceType: "chat",
+      sourceId: normalizeIdValue(message._id),
+    });
     await ctx.db.patch(thread._id as any, {
       updatedAt: nowMs,
     });

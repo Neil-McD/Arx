@@ -1,7 +1,7 @@
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type ProviderConnectionProvider = "openrouter" | "chatgpt";
 export type ProviderConnectionAuthKind = "api_key" | "oauth_tokens";
@@ -228,35 +228,16 @@ function toPublicChatgptConnection(row: ProviderConnectionRow | null): PublicCha
   };
 }
 
-async function resolveUserIdForAuthenticatedRequest(args: {
-  ctx: any;
-  authSubject?: string | null;
-}): Promise<any> {
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
-  if (!user) throw new Error("user_not_found");
-  return user._id;
-}
-
 async function resolveActionUser(args: {
   ctx: any;
   authSubject?: string | null;
 }): Promise<{ userId: any; authSubject: string }> {
-  const actor = (await args.ctx.runQuery(api.auth.getActor as any, {
-    authState: "authenticated",
+  const actor = (await args.ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
     authSubject: args.authSubject ?? undefined,
-  })) as { authSubject?: unknown } | null;
+  })) as { authSubject?: unknown; dbUserId?: unknown } | null;
   const authSubject = normalizeString(actor?.authSubject);
   if (!authSubject) throw new Error("authenticated_user_required");
-  const userId = await args.ctx.runQuery(internal.providerConnections.getUserIdByAuthSubjectInternal as any, {
-    authSubject,
-  });
+  const userId = actor?.dbUserId;
   if (!userId) throw new Error("authenticated_user_required");
   return { userId, authSubject };
 }
@@ -656,19 +637,6 @@ export const getOpenRouterConnectionForUserInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     return await getProviderConnectionRow(ctx, args.userId, "openrouter");
-  },
-});
-
-export const getUserIdByAuthSubjectInternal = internalQuery({
-  args: {
-    authSubject: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q: any) => q.eq("authSubject", args.authSubject))
-      .first();
-    return user?._id ?? null;
   },
 });
 

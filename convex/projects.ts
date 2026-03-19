@@ -1,7 +1,7 @@
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
 
 function normalizeIdValue(raw: unknown): string {
@@ -13,21 +13,18 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
   ownerId?: any;
   authSubject?: string | null;
 }): Promise<any> {
-  const ownerIdInput = normalizeIdValue(args.ownerId);
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
-  if (!user) throw new Error("user_not_found");
-  const resolvedOwnerId = normalizeIdValue(user._id);
-  if (ownerIdInput && ownerIdInput !== resolvedOwnerId) {
-    throw new Error("owner_id_mismatch");
+  try {
+    return await resolveUserIdForAuthenticatedRequest({
+      ctx: args.ctx,
+      userId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "user_id_mismatch") {
+      throw new Error("owner_id_mismatch");
+    }
+    throw error;
   }
-  return user._id;
 }
 
 async function ensureDefaultProjectInternal(args: {
@@ -245,15 +242,12 @@ async function resolveActionUser(args: {
   ctx: any;
   authSubject?: string | null;
 }): Promise<{ authSubject: string; userId: any }> {
-  const actor = (await args.ctx.runQuery(api.auth.getActor as any, {
-    authState: "authenticated",
+  const actor = (await args.ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
     authSubject: args.authSubject ?? undefined,
-  })) as { authSubject?: unknown } | null;
+  })) as { authSubject?: unknown; dbUserId?: unknown } | null;
   const authSubject = normalizeIdValue(actor?.authSubject);
   if (!authSubject) throw new Error("authenticated_user_required");
-  const userId = await args.ctx.runQuery(internal.providerConnections.getUserIdByAuthSubjectInternal as any, {
-    authSubject,
-  });
+  const userId = actor?.dbUserId;
   if (!userId) throw new Error("authenticated_user_required");
   return { authSubject, userId };
 }

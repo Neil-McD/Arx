@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as authActor from "../authActor.js";
 import type * as authIdentity from "../authIdentity.js";
 import type * as billing from "../billing.js";
 import type * as billingCore from "../billingCore.js";
@@ -20,14 +21,19 @@ import type * as communityAccessQueries from "../communityAccessQueries.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
 import type * as communityAiFeed from "../communityAiFeed.js";
+import type * as communityArchive from "../communityArchive.js";
+import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
+import type * as communityArchiveEmbeddingPipeline from "../communityArchiveEmbeddingPipeline.js";
+import type * as communityArchiveRetrieval from "../communityArchiveRetrieval.js";
+import type * as communityArchiveShared from "../communityArchiveShared.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCommerce from "../communityCommerce.js";
-import type * as communityCompiler from "../communityCompiler.js";
 import type * as communityCore from "../communityCore.js";
 import type * as communityExperience from "../communityExperience.js";
 import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
+import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityResources from "../communityResources.js";
 import type * as daytonaRuntimeEvents from "../daytonaRuntimeEvents.js";
 import type * as daytonaSandboxClient from "../daytonaSandboxClient.js";
@@ -71,6 +77,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  authActor: typeof authActor;
   authIdentity: typeof authIdentity;
   billing: typeof billing;
   billingCore: typeof billingCore;
@@ -82,14 +89,19 @@ declare const fullApi: ApiFromModules<{
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
   communityAiFeed: typeof communityAiFeed;
+  communityArchive: typeof communityArchive;
+  communityArchiveDocuments: typeof communityArchiveDocuments;
+  communityArchiveEmbeddingPipeline: typeof communityArchiveEmbeddingPipeline;
+  communityArchiveRetrieval: typeof communityArchiveRetrieval;
+  communityArchiveShared: typeof communityArchiveShared;
   communityChat: typeof communityChat;
   communityCommerce: typeof communityCommerce;
-  communityCompiler: typeof communityCompiler;
   communityCore: typeof communityCore;
   communityExperience: typeof communityExperience;
   communityFunnel: typeof communityFunnel;
   communityLifecycle: typeof communityLifecycle;
   communityPublic: typeof communityPublic;
+  communityRecentContext: typeof communityRecentContext;
   communityResources: typeof communityResources;
   daytonaRuntimeEvents: typeof daytonaRuntimeEvents;
   daytonaSandboxClient: typeof daytonaSandboxClient;

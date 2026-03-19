@@ -6,7 +6,6 @@ type CloudCommunityFunnelGatewayParams<SessionT> = {
 
 export type CloudCommunityPublicPresentationSaveResult<TConfig = unknown> = {
   community_id: string;
-  one_liner: string | null;
   updated_at: string;
   funnel: TConfig | null;
 };
@@ -42,7 +41,6 @@ export async function fetchCloudCommunityFunnelConfig<SessionT, TConfig = unknow
 export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = unknown>(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
-    oneLiner: string | null;
     config: TConfig;
   },
 ): Promise<CloudCommunityPublicPresentationSaveResult<TConfig> | null> {
@@ -50,19 +48,12 @@ export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = u
   const payload = await client.mutation("community:saveCommunityPublicPresentation" as any, {
     authSubject,
     communityId: params.communityId,
-    oneLiner: params.oneLiner,
     config: params.config,
   });
   const row = firstObjectRow(payload);
   if (!row) return null;
   return {
     community_id: String(row.community_id ?? params.communityId).trim() || params.communityId,
-    one_liner:
-      typeof row.one_liner === "string"
-        ? row.one_liner
-        : row.one_liner === null
-          ? null
-          : null,
     updated_at: String(row.updated_at ?? "").trim(),
     funnel: (row.funnel as TConfig | null | undefined) ?? null,
   };

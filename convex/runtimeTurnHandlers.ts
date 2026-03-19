@@ -9,7 +9,7 @@ import {
   buildRuntimeRunPersistenceHelpers,
   buildRuntimeTurnSuccessResponder,
 } from "./httpRuntimeTurnState";
-import { executeChatToolsAgentLoop, executeWorkspaceAgentLoop } from "./httpDaytona";
+import { executeChatToolsAgentLoop } from "./httpDaytona";
 import { composeCloudScopedSystemPrompt } from "../shared/runtimePrompt";
 import {
   PublicTurnInput,
@@ -209,6 +209,17 @@ export async function handleRuntimeTurnRequest(args: {
         })),
       ),
     );
+  let startedRunId: string | null = null;
+  let finishRunBestEffort:
+    | ((
+        params: {
+          status: "ok" | "error" | "cancelled";
+          reason?: string;
+          errorCode?: string;
+          errorMessage?: string;
+        },
+      ) => Promise<void>)
+    | null = null;
 
   let input: RuntimeTurnInput;
   try {
@@ -242,8 +253,6 @@ export async function handleRuntimeTurnRequest(args: {
       ownedThread,
       conversationMessages,
       requestedModelId,
-      requestedExecutionTarget,
-      requiresWorkspaceTools,
       lane,
       modelRef,
       maxTokens,
@@ -252,6 +261,9 @@ export async function handleRuntimeTurnRequest(args: {
       openRouterApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
+      runtimeCommunitySlug,
+      runtimeCommunityOneLiner,
+      runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeProjectId,
       runtimeSandboxMode,
@@ -263,6 +275,7 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
+    startedRunId = runId;
     runtimeTurnStage = "run_start";
     const explicitUserMessageKey = String(input.user_message_key ?? "").trim();
     const userMessageKeyForRun =
@@ -277,16 +290,14 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: ownedThread._id,
       runId,
       lane,
-      requestedExecutionTarget,
-      requiresWorkspaceTools,
       projectId: runtimeProjectId ?? undefined,
       modelId: requestedModelId,
       engineId: "runtime_turn",
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
       contractName:
-        requiresWorkspaceTools
-          ? "capability_composed_workspace_v1"
+        runtimeExecutionMode === "agentic"
+          ? "capability_composed_tools_v1"
           : "capability_composed_chat_v1",
       contractVersion: "v1",
       harnessProfile: resolvedRuntimeHarnessProfile,
@@ -304,13 +315,14 @@ export async function handleRuntimeTurnRequest(args: {
     });
     if (!runStart.ok) return runStart.response;
 
-    const { appendRunEvent, finishRunBestEffort } =
+    const { appendRunEvent, finishRunBestEffort: finishRunBestEffortForRun } =
       buildRuntimeRunPersistenceHelpers({
         ctx,
         userId: actor.dbUserId,
         threadId: String(ownedThread._id),
         runId,
       });
+    finishRunBestEffort = finishRunBestEffortForRun;
 
     const successResponse = buildRuntimeTurnSuccessResponder({
       req,
@@ -334,7 +346,7 @@ export async function handleRuntimeTurnRequest(args: {
       inferenceSource,
     });
     if (existingReplay) {
-      await finishRunBestEffort({
+      await finishRunBestEffortForRun({
         status: "ok",
         reason: "idempotent_replay",
       });
@@ -357,7 +369,7 @@ export async function handleRuntimeTurnRequest(args: {
         }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await finishRunBestEffort({
+      await finishRunBestEffortForRun({
         status: "error",
         reason: "user_message_persist_failed",
         errorCode: "user_message_persist_failed",
@@ -380,74 +392,38 @@ export async function handleRuntimeTurnRequest(args: {
       eventKey: `${runId}:tool_policy_resolved:1`,
         payload: {
           run_id: runId,
-          requires_workspace_tools: requiresWorkspaceTools,
           allowed_tool_names: allowedToolNames,
           capability_families: resolvedRuntimeCapabilityFamilies,
           harness_profile: resolvedRuntimeHarnessProfile,
       },
     });
     if (runtimeExecutionMode === "agentic") {
-      if (requiresWorkspaceTools && !runtimeProjectId) {
-        await finishRunBestEffort({
-          status: "error",
-          reason: "project_required",
-          errorCode: "project_required",
-          errorMessage: "Workspace turns require a bound project.",
-        });
-        return runtimeJsonResponse(400, {
-          ok: false,
-          code: "project_required",
-          error: "project_required",
-          message: "Workspace turns require a bound project.",
-          run_id: runId,
-        });
-      }
-      runtimeTurnStage =
-        requiresWorkspaceTools
-          ? "workspace_loop"
-          : "agent_loop";
-      const loopResult =
-        requiresWorkspaceTools
-          ? await executeWorkspaceAgentLoop({
-              ctx,
-              req,
-              userId: actor.dbUserId,
-              authSubject: actor.authSubject,
-              projectId: runtimeProjectId!,
-              requestedModelId,
-              inferenceSource,
-              modelRef,
-              messages: conversationMessages,
-              maxTokens,
-              runId,
-              communityId: runtimeCommunityId,
-              communityName: runtimeCommunityName,
-              communitySystemPrompt: runtimeCommunitySystemPrompt,
-              threadWorkingState: ownedThread.workingState ?? null,
-              allowedToolNames,
-              apiKeyOverride: openRouterApiKeyOverride,
-              appendRunEvent,
-            })
-          : await executeChatToolsAgentLoop({
-              ctx,
-              req,
-              userId: actor.dbUserId,
-              requestedModelId,
-              inferenceSource,
-              modelRef,
-              messages: conversationMessages,
-              maxTokens,
-              runId,
-              communityId: runtimeCommunityId,
-              communityName: runtimeCommunityName,
-              communitySystemPrompt: runtimeCommunitySystemPrompt,
-              threadWorkingState: ownedThread.workingState ?? null,
-              allowedToolNames,
-              apiKeyOverride: openRouterApiKeyOverride,
-              appendRunEvent,
-            });
+      runtimeTurnStage = "agent_loop";
+      const loopResult = await executeChatToolsAgentLoop({
+        ctx,
+        req,
+        userId: actor.dbUserId,
+        authSubject: actor.authSubject,
+        projectId: runtimeProjectId,
+        requestedModelId,
+        inferenceSource,
+        modelRef,
+        messages: conversationMessages,
+        maxTokens,
+        runId,
+        communityId: runtimeCommunityId,
+        communityName: runtimeCommunityName,
+        communitySlug: runtimeCommunitySlug,
+        communityOneLiner: runtimeCommunityOneLiner,
+        communityAbout: runtimeCommunityAbout,
+        communitySystemPrompt: runtimeCommunitySystemPrompt,
+        threadWorkingState: ownedThread.workingState ?? null,
+        allowedToolNames,
+        apiKeyOverride: openRouterApiKeyOverride,
+        appendRunEvent,
+      });
       if (!loopResult.ok) {
-        await finishRunBestEffort({
+        await finishRunBestEffortForRun({
           status: "error",
           reason: loopResult.code,
           errorCode: loopResult.code,
@@ -468,6 +444,9 @@ export async function handleRuntimeTurnRequest(args: {
       const authenticatedScopedSystemPrompt = composeCloudScopedSystemPrompt({
         communityId: runtimeCommunityId,
         communityName: runtimeCommunityName,
+        communitySlug: runtimeCommunitySlug,
+        communityOneLiner: runtimeCommunityOneLiner,
+        communityAbout: runtimeCommunityAbout,
         customCommunitySystemPrompt: runtimeCommunitySystemPrompt,
       });
       const chatMessages = [
@@ -497,7 +476,7 @@ export async function handleRuntimeTurnRequest(args: {
               });
             })();
       if ("ok" in completion && completion.ok === false) {
-        await finishRunBestEffort({
+        await finishRunBestEffortForRun({
           status: "error",
           reason: completion.code,
           errorCode: completion.code,
@@ -534,7 +513,7 @@ export async function handleRuntimeTurnRequest(args: {
         }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await finishRunBestEffort({
+      await finishRunBestEffortForRun({
         status: "error",
         reason: "assistant_message_persist_failed",
         errorCode: "assistant_message_persist_failed",
@@ -549,7 +528,7 @@ export async function handleRuntimeTurnRequest(args: {
       });
     }
 
-    await finishRunBestEffort({
+    await finishRunBestEffortForRun({
       status: "ok",
     });
     return successResponse({
@@ -566,6 +545,14 @@ export async function handleRuntimeTurnRequest(args: {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (finishRunBestEffort) {
+      await finishRunBestEffort({
+        status: "error",
+        reason: "runtime_turn_unhandled",
+        errorCode: "runtime_turn_unhandled",
+        errorMessage: message || "Runtime turn failed unexpectedly.",
+      });
+    }
     console.error("runtime_turn_unhandled", {
       requestId,
       stage: runtimeTurnStage,
@@ -578,6 +565,7 @@ export async function handleRuntimeTurnRequest(args: {
       message: `runtime_turn_unhandled: ${
         message || "Runtime turn failed unexpectedly."
       }`,
+      ...(startedRunId ? { run_id: startedRunId } : null),
     });
   }
 }

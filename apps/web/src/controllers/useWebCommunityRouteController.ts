@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShellNavigation";
-import type { PublicRoute } from "../../../../shared/webAppRouteState";
 import { deriveOpenCommunityTabTransition } from "../../../../shared/appNavTransitions";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
@@ -18,15 +17,15 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   communities: TCommunity[];
-  isLoadingCommunities: boolean;
-  publicRouteKind: PublicRoute["kind"];
   navigateTo: NavigateFn;
   pushNavSnapshot: () => void;
   setActivePage: Dispatch<SetStateAction<AppPage>>;
   setActiveView: Dispatch<SetStateAction<AppView>>;
-  setActiveCommunityId: Dispatch<SetStateAction<string | null>>;
-  setActiveCommunitySlug: Dispatch<SetStateAction<string | null>>;
-  setCommunityTab: Dispatch<SetStateAction<CommunityTab>>;
+  applyCommunityShellState: (opts: {
+    communityId?: string | null;
+    communitySlug?: string | null;
+    communityTab?: CommunityTab;
+  }) => void;
   setUnreadCount?: Dispatch<SetStateAction<number>>;
 }) {
   const paramsRef = useRef(params);
@@ -50,7 +49,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     const current = paramsRef.current;
     const slug = resolveCommunitySlugById(current.activeCommunityId);
     if (!slug || slug === current.activeCommunitySlug) return;
-    current.setActiveCommunitySlug(slug);
+    current.applyCommunityShellState({ communitySlug: slug });
   }, [params.activeCommunityId, params.communities, params.activeCommunitySlug, resolveCommunitySlugById]);
 
   useEffect(() => {
@@ -61,20 +60,14 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     const activeSlug = resolveCommunitySlugById(current.activeCommunityId);
     if (activeSlug === slug) return;
     const match = resolveCommunityBySlug(slug);
-    if (match) {
-      if (current.activeCommunityId !== match.id) current.setActiveCommunityId(match.id);
-      return;
-    }
-    if (!current.isLoadingCommunities && current.publicRouteKind === "app") {
-      current.navigateTo(`/c/${encodeURIComponent(slug)}`, { replace: true });
+    if (match && current.activeCommunityId !== match.id) {
+      current.applyCommunityShellState({ communityId: match.id });
     }
   }, [
     params.activePage,
     params.activeCommunityId,
     params.activeCommunitySlug,
     params.communities,
-    params.isLoadingCommunities,
-    params.publicRouteKind,
     resolveCommunityBySlug,
     resolveCommunitySlugById,
   ]);
@@ -93,10 +86,12 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
       communitySlug?: string | null;
     }) => {
       const current = paramsRef.current;
-      current.setActiveCommunityId(opts.communityId);
       const resolvedSlug =
         opts.communitySlug !== undefined ? String(opts.communitySlug ?? "").trim() || null : resolveCommunitySlugById(opts.communityId);
-      current.setActiveCommunitySlug(resolvedSlug);
+      current.applyCommunityShellState({
+        communityId: opts.communityId,
+        communitySlug: resolvedSlug,
+      });
     },
     [resolveCommunitySlugById],
   );
@@ -121,11 +116,13 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
       if ((opts?.pushSnapshot ?? true) && transition.shouldPushSnapshot) current.pushNavSnapshot();
       current.setActiveView(transition.nextView);
       current.setActivePage(transition.nextPage);
-      current.setCommunityTab(transition.nextCommunityTab);
+      current.applyCommunityShellState({
+        communityId: transition.nextCommunityId,
+        communityTab: transition.nextCommunityTab,
+      });
       if (opts?.clearUnread) current.setUnreadCount?.(0);
-      syncCommunitySelection({ communityId: transition.nextCommunityId });
     },
-    [syncCommunitySelection],
+    [],
   );
 
   const openCommunityChat = useCallback(
@@ -135,16 +132,33 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     [openCommunityTab],
   );
 
-  const openJoinedCommunityBySlug = useCallback(
-    (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
-      const community = resolveCommunityBySlug(communitySlug);
-      if (!community) {
-        openPublicCommunityFunnel(communitySlug, opts);
+  const openCommunityBySlug = useCallback(
+    (communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
+      const current = paramsRef.current;
+      const slug = String(communitySlug ?? "").trim();
+      if (!slug) return;
+      const matchedCommunity = resolveCommunityBySlug(slug);
+      if (matchedCommunity) {
+        openCommunityChat(matchedCommunity.id, opts);
         return;
       }
-      openCommunityChat(community.id, opts);
+      if (opts?.pushSnapshot ?? true) current.pushNavSnapshot();
+      current.setActiveView("home");
+      current.setActivePage("community");
+      current.applyCommunityShellState({
+        communityId: null,
+        communitySlug: slug,
+        communityTab: "chat",
+      });
     },
-    [openCommunityChat, openPublicCommunityFunnel, resolveCommunityBySlug],
+    [openCommunityChat, resolveCommunityBySlug],
+  );
+
+  const openJoinedCommunityBySlug = useCallback(
+    (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+      openCommunityBySlug(communitySlug, opts);
+    },
+    [openCommunityBySlug],
   );
 
   return {
@@ -155,6 +169,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityChat,
+    openCommunityBySlug,
     openJoinedCommunityBySlug,
   };
 }

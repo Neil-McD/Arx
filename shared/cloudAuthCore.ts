@@ -22,6 +22,20 @@ export type CloudSessionRefreshInFlightRef = {
   current: Promise<CloudSession | null> | null;
 };
 
+export type CloudSessionRefreshResult =
+  | { status: "refreshed"; session: CloudSession }
+  | { status: "transient_failure"; reason: string }
+  | { status: "terminal_failure"; reason: string };
+
+export type CloudSessionRefreshResultInFlightRef = {
+  current: Promise<CloudSessionRefreshResult> | null;
+};
+
+export type CloudSessionEnsureResult =
+  | { status: "ready"; session: CloudSession }
+  | { status: "transient_failure"; reason: string }
+  | { status: "terminal_failure"; reason: string };
+
 function readFirstNonEmptyEnv(keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = (import.meta.env[key as keyof ImportMetaEnv] as string | undefined) ?? "";
@@ -526,13 +540,12 @@ export async function bootstrapCloudSession(): Promise<CloudSession | null> {
   if (!record) return null;
   const nowSec = Math.floor(Date.now() / 1000);
   if (record.expires_at > nowSec + 60) {
-    return {
-      access_token: record.access_token,
-      expires_at: record.expires_at,
-      user: record.user,
-    };
+    return toCloudSession(record);
   }
-  return await refreshCloudSession();
+  const refreshed = await refreshCloudSessionResult();
+  if (refreshed.status === "refreshed") return refreshed.session;
+  if (refreshed.status === "transient_failure") return toCloudSession(record);
+  return null;
 }
 
 export async function completeCloudOAuthCallback(params: {
@@ -596,11 +609,88 @@ export async function logoutCloudSessionRemote(params: {
   if (!runtimeResponse || runtimeResponse.ok) return;
 }
 
-export async function refreshCloudSession(): Promise<CloudSession | null> {
+function toCloudSession(record: PersistedCloudSessionRecord): CloudSession {
+  return {
+    access_token: record.access_token,
+    expires_at: record.expires_at,
+    user: record.user,
+  };
+}
+
+function includesRefreshFailureText(value: string, patterns: readonly string[]): boolean {
+  const lower = value.trim().toLowerCase();
+  if (!lower) return false;
+  return patterns.some((pattern) => lower.includes(pattern));
+}
+
+function isTerminalRefreshFailureText(value: string): boolean {
+  return includesRefreshFailureText(value, [
+    "invalid_grant",
+    "invalid refresh token",
+    "refresh token invalid",
+    "refresh token expired",
+    "refresh token revoked",
+    "revoked refresh token",
+    "missing refresh token",
+    "malformed refresh token",
+    "invalid token",
+    "token expired",
+    "token revoked",
+    "session expired",
+    "session not found",
+    "unauthorized_client",
+    "invalid_client",
+    "unsupported grant type",
+  ]);
+}
+
+function isTransientRefreshFailureText(value: string): boolean {
+  return includesRefreshFailureText(value, [
+    "temporarily unavailable",
+    "try again",
+    "timeout",
+    "timed out",
+    "upstream unavailable",
+    "auth_upstream_unavailable",
+    "auth_verifier_misconfigured",
+    "service unavailable",
+    "rate limit",
+    "too many requests",
+    "network",
+  ]);
+}
+
+async function classifyCloudRefreshFailureResponse(response: Response): Promise<CloudSessionRefreshResult> {
+  const reason = (await readCloudError(response)).trim() || `auth_refresh_failed_${response.status}`;
+  if (response.status === 429 || response.status >= 500) {
+    return { status: "transient_failure", reason };
+  }
+  if (response.status === 400 || response.status === 401 || response.status === 403) {
+    if (isTransientRefreshFailureText(reason)) {
+      return { status: "transient_failure", reason };
+    }
+    if (isTerminalRefreshFailureText(reason)) {
+      return { status: "terminal_failure", reason };
+    }
+    return { status: "terminal_failure", reason };
+  }
+  return { status: "transient_failure", reason };
+}
+
+function ensureResultFromRefreshFailure(
+  refresh: Exclude<CloudSessionRefreshResult, { status: "refreshed"; session: CloudSession }>,
+): CloudSessionEnsureResult {
+  if (refresh.status === "terminal_failure") {
+    return { status: "terminal_failure", reason: refresh.reason };
+  }
+  return { status: "transient_failure", reason: refresh.reason };
+}
+
+export async function refreshCloudSessionResult(): Promise<CloudSessionRefreshResult> {
   const existing = readPersistedCloudSessionRecord();
   if (!existing?.refresh_token) {
     clearPersistedCloudSessionRecord();
-    return null;
+    return { status: "terminal_failure", reason: "missing_refresh_token" };
   }
   const runtimeResponse = await callConvexRuntimeAuthEndpoint({
     path: CLOUD_RUNTIME_AUTH_REFRESH_PATH,
@@ -609,9 +699,15 @@ export async function refreshCloudSession(): Promise<CloudSession | null> {
       refresh_token: existing.refresh_token,
     },
   });
-  if (!runtimeResponse || !runtimeResponse.ok) {
-    clearPersistedCloudSessionRecord();
-    return null;
+  if (!runtimeResponse) {
+    return { status: "transient_failure", reason: "auth_runtime_unavailable" };
+  }
+  if (!runtimeResponse.ok) {
+    const failure = await classifyCloudRefreshFailureResponse(runtimeResponse);
+    if (failure.status === "terminal_failure") {
+      clearPersistedCloudSessionRecord();
+    }
+    return failure;
   }
   try {
     const payload = (await runtimeResponse.json()) as unknown;
@@ -619,8 +715,7 @@ export async function refreshCloudSession(): Promise<CloudSession | null> {
       requireRefreshToken: false,
     });
     if (!refreshed) {
-      clearPersistedCloudSessionRecord();
-      return null;
+      return { status: "transient_failure", reason: "invalid_refresh_payload" };
     }
     const merged: PersistedCloudSessionRecord = {
       ...refreshed,
@@ -628,18 +723,24 @@ export async function refreshCloudSession(): Promise<CloudSession | null> {
     };
     if (!merged.refresh_token) {
       clearPersistedCloudSessionRecord();
-      return null;
+      return { status: "terminal_failure", reason: "missing_refresh_token" };
     }
     persistCloudSessionRecord(merged);
-    return {
-      access_token: merged.access_token,
-      expires_at: merged.expires_at,
-      user: merged.user,
-    };
+    return { status: "refreshed", session: toCloudSession(merged) };
   } catch {
-    clearPersistedCloudSessionRecord();
-    return null;
+    return { status: "transient_failure", reason: "invalid_refresh_response" };
   }
+}
+
+export async function refreshCloudSession(): Promise<CloudSession | null> {
+  const refreshed = await refreshCloudSessionResult();
+  if (refreshed.status === "refreshed") {
+    return refreshed.session;
+  }
+  if (refreshed.status === "terminal_failure") {
+    clearPersistedCloudSessionRecord();
+  }
+  return null;
 }
 
 export async function sendCloudMagicLinkOtp(params: {
@@ -757,9 +858,28 @@ export async function ensureCloudSessionForRequest(
   session: CloudSession,
   refreshLocked: () => Promise<CloudSession | null>,
 ): Promise<CloudSession | null> {
+  const ensured = await ensureCloudSessionForRequestResult(session, async () => {
+    const refreshed = await refreshLocked();
+    if (!refreshed) return { status: "terminal_failure", reason: "refresh_failed" } as const;
+    return { status: "refreshed", session: refreshed } as const;
+  });
+  return ensured.status === "ready" ? ensured.session : null;
+}
+
+export async function ensureCloudSessionForRequestResult(
+  session: CloudSession,
+  refreshLockedResult: () => Promise<CloudSessionRefreshResult>,
+): Promise<CloudSessionEnsureResult> {
   const now = Math.floor(Date.now() / 1000);
-  if (session.expires_at > now + 60) return session;
-  return await refreshLocked();
+  if (session.expires_at > now + 60) return { status: "ready", session };
+  const refreshed = await refreshLockedResult();
+  if (refreshed.status === "refreshed") {
+    return { status: "ready", session: refreshed.session };
+  }
+  if (refreshed.status === "transient_failure" && session.expires_at > now) {
+    return { status: "ready", session };
+  }
+  return ensureResultFromRefreshFailure(refreshed);
 }
 
 export async function ensureCloudSessionForAuthenticatedSend(params: {
@@ -767,7 +887,24 @@ export async function ensureCloudSessionForAuthenticatedSend(params: {
   sessionRef?: CloudSessionRef;
   refreshLocked: () => Promise<CloudSession | null>;
 }): Promise<CloudSession | null> {
-  const { session, sessionRef, refreshLocked } = params;
+  const ensured = await ensureCloudSessionForAuthenticatedSendResult({
+    session: params.session,
+    sessionRef: params.sessionRef,
+    refreshLockedResult: async () => {
+      const refreshed = await params.refreshLocked();
+      if (!refreshed) return { status: "terminal_failure", reason: "refresh_failed" } as const;
+      return { status: "refreshed", session: refreshed } as const;
+    },
+  });
+  return ensured.status === "ready" ? ensured.session : null;
+}
+
+export async function ensureCloudSessionForAuthenticatedSendResult(params: {
+  session: CloudSession;
+  sessionRef?: CloudSessionRef;
+  refreshLockedResult: () => Promise<CloudSessionRefreshResult>;
+}): Promise<CloudSessionEnsureResult> {
+  const { session, sessionRef, refreshLockedResult } = params;
   const sameSession = (a: CloudSession | null | undefined, b: CloudSession | null | undefined): boolean => {
     if (!a || !b) return false;
     return a.access_token === b.access_token;
@@ -775,27 +912,33 @@ export async function ensureCloudSessionForAuthenticatedSend(params: {
 
   // Step 1: ensure not expiring imminently.
   const base = sessionRef?.current ?? session;
-  let current = await ensureCloudSessionForRequest(base, refreshLocked);
-  if (!current) return null;
+  const ensuredBase = await ensureCloudSessionForRequestResult(base, refreshLockedResult);
+  if (ensuredBase.status !== "ready") return ensuredBase;
+  let current = ensuredBase.session;
 
   // Step 2: verify the bearer is accepted by Convex runtime auth.
   const firstAccepted = await isCloudSessionAcceptedForRuntime(current);
-  if (firstAccepted) return current;
+  if (firstAccepted) return { status: "ready", session: current };
 
   // Step 3: if another concurrent path already rotated session, try it.
   const latest = sessionRef?.current ?? null;
   if (latest && !sameSession(latest, current)) {
     const latestAccepted = await isCloudSessionAcceptedForRuntime(latest);
-    if (latestAccepted) return latest;
+    if (latestAccepted) return { status: "ready", session: latest };
     current = latest;
   }
 
   // Step 4: one locked refresh + one verification retry.
-  const refreshed = await refreshLocked();
-  if (!refreshed) return null;
-  const refreshedAccepted = await isCloudSessionAcceptedForRuntime(refreshed);
-  if (!refreshedAccepted) return null;
-  return refreshed;
+  const refreshed = await refreshLockedResult();
+  if (refreshed.status !== "refreshed") return ensureResultFromRefreshFailure(refreshed);
+  const refreshedAccepted = await isCloudSessionAcceptedForRuntime(refreshed.session);
+  if (!refreshedAccepted) {
+    return {
+      status: "transient_failure",
+      reason: "runtime_auth_verification_failed",
+    };
+  }
+  return { status: "ready", session: refreshed.session };
 }
 
 export async function fetchCloudUser(accessToken: string): Promise<CloudUser | null> {
@@ -835,14 +978,39 @@ export async function refreshCloudSessionWithLock(params: {
   }
 }
 
+export async function refreshCloudSessionWithLockResult(params: {
+  inFlightRef: CloudSessionRefreshResultInFlightRef;
+  refreshSession: () => Promise<CloudSessionRefreshResult>;
+  onRefreshed: (session: CloudSession) => void | Promise<void>;
+}): Promise<CloudSessionRefreshResult> {
+  const { inFlightRef, refreshSession, onRefreshed } = params;
+  if (inFlightRef.current) {
+    return await inFlightRef.current;
+  }
+  const promise = (async () => {
+    const refreshed = await refreshSession();
+    if (refreshed.status !== "refreshed") return refreshed;
+    await onRefreshed(refreshed.session);
+    return refreshed;
+  })();
+  inFlightRef.current = promise;
+  try {
+    return await promise;
+  } finally {
+    inFlightRef.current = null;
+  }
+}
+
 export async function fetchWithCloudAuthShared(params: {
   url: string;
   init: RequestInit;
   session: CloudSession;
   sessionRef: CloudSessionRef;
   refreshLocked: () => Promise<CloudSession | null>;
+  refreshLockedResult?: () => Promise<CloudSessionRefreshResult>;
   onSessionExpired: () => void | Promise<void>;
   sessionExpiredMessage?: string;
+  transientFailureMessage?: string;
 }): Promise<Response> {
   const apiKey = getCloudAnonKey();
 
@@ -852,14 +1020,28 @@ export async function fetchWithCloudAuthShared(params: {
     session,
     sessionRef,
     refreshLocked,
+    refreshLockedResult,
     onSessionExpired,
     sessionExpiredMessage = "Session expired. Please sign in again.",
+    transientFailureMessage = "Auth refresh is temporarily unavailable. Retry in a moment.",
   } = params;
 
   const expireSession = async (): Promise<never> => {
     await onSessionExpired();
     throw new Error(sessionExpiredMessage);
   };
+
+  const failTransiently = (reason?: string): never => {
+    throw new Error(reason?.trim() || transientFailureMessage);
+  };
+
+  const refreshResult = refreshLockedResult
+    ? refreshLockedResult
+    : async (): Promise<CloudSessionRefreshResult> => {
+        const refreshed = await refreshLocked();
+        if (!refreshed) return { status: "terminal_failure", reason: transientFailureMessage };
+        return { status: "refreshed", session: refreshed };
+      };
 
   const doFetch = async (current: CloudSession): Promise<Response> => {
     const headers = new Headers(init.headers);
@@ -881,10 +1063,15 @@ export async function fetchWithCloudAuthShared(params: {
   };
 
   const tryRefreshAndFetch = async (): Promise<Response | null> => {
-    const refreshed = await refreshLocked();
-    if (!refreshed) return null;
-    requestSession = refreshed;
-    return await doFetch(refreshed);
+    const refreshed = await refreshResult();
+    if (refreshed.status !== "refreshed") {
+      if (refreshed.status === "terminal_failure") {
+        return await expireSession();
+      }
+      failTransiently(transientFailureMessage);
+    }
+    requestSession = refreshed.session;
+    return await doFetch(refreshed.session);
   };
 
   const isAuthFailureStatus = (response: Response): boolean =>
@@ -899,9 +1086,13 @@ export async function fetchWithCloudAuthShared(params: {
 
   const baseSession = sessionRef.current ?? session;
   let requestSession = baseSession;
-  const opportunisticRefresh = await ensureCloudSessionForRequest(baseSession, refreshLocked);
-  if (opportunisticRefresh) {
-    requestSession = opportunisticRefresh;
+  const opportunisticEnsure = await ensureCloudSessionForRequestResult(baseSession, refreshResult);
+  if (opportunisticEnsure.status === "ready") {
+    requestSession = opportunisticEnsure.session;
+  } else if (opportunisticEnsure.status === "terminal_failure") {
+    return await expireSession();
+  } else {
+    failTransiently(transientFailureMessage);
   }
 
   const first = await doFetch(requestSession);
@@ -913,17 +1104,16 @@ export async function fetchWithCloudAuthShared(params: {
     if (refreshedAttempt && !isAuthFailureStatus(refreshedAttempt)) return refreshedAttempt;
 
     let finalFailure = refreshedAttempt ?? latestAttempt ?? first;
-    const verifiedSession = await ensureCloudSessionForAuthenticatedSend({
+    const verifiedSession = await ensureCloudSessionForAuthenticatedSendResult({
       session: requestSession,
       sessionRef,
-      refreshLocked,
+      refreshLockedResult: refreshResult,
     });
-    // If Auth cannot validate/refresh this session, fail closed and clear it.
-    // We only avoid forced expiry when we can still prove a valid session.
-    if (!verifiedSession) return await expireSession();
-    if (canRetryWithSession(verifiedSession, requestSession)) {
-      requestSession = verifiedSession;
-      const verifiedAttempt = await doFetch(verifiedSession);
+    if (verifiedSession.status === "terminal_failure") return await expireSession();
+    if (verifiedSession.status === "transient_failure") failTransiently(transientFailureMessage);
+    if (canRetryWithSession(verifiedSession.session, requestSession)) {
+      requestSession = verifiedSession.session;
+      const verifiedAttempt = await doFetch(verifiedSession.session);
       if (!isAuthFailureStatus(verifiedAttempt)) return verifiedAttempt;
       finalFailure = verifiedAttempt;
     }

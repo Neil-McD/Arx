@@ -1,4 +1,4 @@
-export type CommunityJoinMode = "join_free" | "request_access" | "checkout";
+export type CommunityJoinMode = "join_free" | "join_approval" | "checkout";
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityMembersJoinReviewMode = "paid" | "free_auto" | "free_approval";
 
@@ -11,10 +11,10 @@ export function deriveCommunityJoinMode(args: {
 }): CommunityJoinMode {
   if (isCommunityEntryPolicy(args.entry_policy)) {
     if (args.entry_policy === "paid_subscription") return "checkout";
-    if (args.entry_policy === "approval") return "request_access";
+    if (args.entry_policy === "approval") return "join_approval";
     return "join_free";
   }
-  return "request_access";
+  return "join_approval";
 }
 
 export function deriveCommunityMembersJoinReviewMode(args: {
