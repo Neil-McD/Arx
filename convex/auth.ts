@@ -5,6 +5,7 @@ import {
   findAuthenticatedActorState,
   resolveAuthenticatedActor,
 } from "./authActor";
+import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -256,6 +257,9 @@ export const setDevTierOverride = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
+    if (!isCreatorDevTierOverrideEmail(actor.email)) {
+      throw new Error("dev_tier_override_forbidden");
+    }
 
     await ctx.db.insert("userEntitlements", {
       userId: actor.dbUserId,

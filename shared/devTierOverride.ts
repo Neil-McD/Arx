@@ -9,6 +9,11 @@ function normalizeEmail(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+export function isCreatorDevTierOverrideEmail(email: string | null | undefined): boolean {
+  const normalized = normalizeEmail(email);
+  return Boolean(normalized) && CREATOR_EMAIL_ALLOWLIST.has(normalized);
+}
+
 function isTruthyFlag(value: unknown): boolean {
   const raw = String(value ?? "")
     .trim()
@@ -21,7 +26,6 @@ export function canUseCreatorDevTierOverride(input: {
   isDev: boolean;
   featureFlag: unknown;
 }): boolean {
-  const email = normalizeEmail(input.email);
-  if (!email || !CREATOR_EMAIL_ALLOWLIST.has(email)) return false;
+  if (!isCreatorDevTierOverrideEmail(input.email)) return false;
   return input.isDev || isTruthyFlag(input.featureFlag);
 }
