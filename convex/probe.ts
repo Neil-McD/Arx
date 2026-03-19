@@ -1,6 +1,6 @@
 import { action, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveAuthenticatedActor } from "./authActor";
 import { loadDaytonaConfig, daytonaHeaders } from "./daytonaSandboxClient";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
@@ -71,10 +71,10 @@ export const probeDaytonaWorkspaceAccess = action({
     authSubject: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const actor = await resolveAuthenticatedActor({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
+    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+      authSubject: args.authSubject ?? undefined,
+    })) as { email?: string | null } | null;
+    if (!actor) throw new Error("authenticated_user_required");
     if (!isCreatorDevTierOverrideEmail(actor.email)) {
       throw new Error("daytona_probe_forbidden");
     }
