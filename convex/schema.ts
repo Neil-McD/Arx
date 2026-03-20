@@ -33,6 +33,11 @@ export default defineSchema({
   checkoutSessions: defineTable({
     sessionId: v.string(),
     mode: v.union(v.literal("community_join"), v.literal("builder_upgrade")),
+    provider: v.optional(v.literal("stripe")),
+    providerCheckoutSessionId: v.optional(v.string()),
+    providerCustomerId: v.optional(v.string()),
+    providerSubscriptionId: v.optional(v.string()),
+    providerPriceId: v.optional(v.string()),
     communityId: v.optional(v.id("communities")),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
@@ -48,6 +53,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_sessionId", ["sessionId"])
+    .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
+    .index("by_providerSubscriptionId", ["providerSubscriptionId"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"]),
 

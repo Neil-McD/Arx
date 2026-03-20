@@ -1,12 +1,176 @@
-import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   newOpaqueToken,
   normalizeBuilderTier,
-  resolveUserIdForAuthenticatedRequest,
 } from "./billingCore";
+import { getStripeClient, readStripeBuilderPriceId } from "./stripeCore";
 
-export const startBuilderCheckout = mutation({
+function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
+  if (startsAt > nowMs) return false;
+  if (typeof endsAt === "number" && nowMs > endsAt) return false;
+  return true;
+}
+
+export const createPendingBuilderCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    ownerUserId: v.id("users"),
+    targetTier: v.union(v.literal("builder"), v.literal("architect")),
+    providerPriceId: v.optional(v.string()),
+    expiresAt: v.number(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.insert("checkoutSessions", {
+      sessionId: args.sessionId,
+      mode: "builder_upgrade",
+      provider: "stripe",
+      providerPriceId: args.providerPriceId,
+      targetTier: args.targetTier,
+      ownerUserId: args.ownerUserId,
+      status: "pending",
+      expiresAt: args.expiresAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const attachBuilderStripeCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    providerCheckoutSessionId: v.string(),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    providerPriceId: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    if (!row) throw new Error("builder_checkout_session_not_found");
+    await ctx.db.patch(row._id, {
+      provider: "stripe",
+      providerCheckoutSessionId: args.providerCheckoutSessionId,
+      providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
+      providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
+      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const expireBuilderCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    if (!row) return;
+    await ctx.db.patch(row._id, {
+      status: "expired",
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const syncBuilderStripeSubscriptionInternal = internalMutation({
+  args: {
+    localSessionId: v.string(),
+    providerCheckoutSessionId: v.optional(v.union(v.string(), v.null())),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    providerPriceId: v.optional(v.union(v.string(), v.null())),
+    targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"), v.null())),
+    subscriptionStatus: v.string(),
+    grantsAccess: v.optional(v.union(v.boolean(), v.null())),
+    markCheckoutComplete: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.localSessionId))
+      .first();
+    if (!row) throw new Error("builder_checkout_session_not_found");
+    if (row.mode !== "builder_upgrade") throw new Error("builder_checkout_session_invalid");
+    if (!row.ownerUserId) throw new Error("builder_checkout_owner_missing");
+
+    const targetTier = normalizeBuilderTier(args.targetTier ?? row.targetTier ?? "builder");
+    await ctx.db.patch(row._id, {
+      provider: "stripe",
+      providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || row.providerCheckoutSessionId,
+      providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
+      providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      targetTier,
+      status: args.markCheckoutComplete ? "complete" : row.status,
+      updatedAt: nowMs,
+    });
+
+    const entitlementRows = await ctx.db
+      .query("userEntitlements")
+      .withIndex("by_user", (q) => q.eq("userId", row.ownerUserId))
+      .collect();
+    const activeStripeRows = entitlementRows.filter(
+      (entry) =>
+        entry.source === "stripe" &&
+        isActiveWindow(nowMs, entry.startsAt, entry.endsAt),
+    );
+
+    if (args.grantsAccess === true) {
+      let hasMatchingTier = false;
+      for (const entitlement of activeStripeRows) {
+        if (entitlement.tier === targetTier) {
+          hasMatchingTier = true;
+          continue;
+        }
+        await ctx.db.patch(entitlement._id, {
+          endsAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      if (!hasMatchingTier) {
+        await ctx.db.insert("userEntitlements", {
+          userId: row.ownerUserId,
+          tier: targetTier,
+          source: "stripe",
+          startsAt: nowMs,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+    } else if (args.grantsAccess === false) {
+      for (const entitlement of activeStripeRows) {
+        await ctx.db.patch(entitlement._id, {
+          endsAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      ownerUserId: String(row.ownerUserId),
+      targetTier,
+      subscriptionStatus: String(args.subscriptionStatus ?? "").trim().toLowerCase(),
+    };
+  },
+});
+
+export const startBuilderCheckout = action({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -16,41 +180,79 @@ export const startBuilderCheckout = mutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
     const nowMs = args.nowMs ?? Date.now();
     const targetTier = normalizeBuilderTier(args.tier);
+    if (targetTier !== "builder") throw new Error("builder_checkout_architect_unavailable");
     const successUrl = String(args.successUrl ?? "").trim();
     const cancelUrl = String(args.cancelUrl ?? "").trim();
     if (!successUrl) throw new Error("checkout_success_url_required");
     if (!cancelUrl) throw new Error("checkout_cancel_url_required");
-
-    await ctx.db.insert("userEntitlements", {
-      userId,
-      tier: targetTier,
-      source: "manual_grant",
-      startsAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
     const sessionId = newOpaqueToken("builder");
-    await ctx.db.insert("checkoutSessions", {
+    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+      authSubject: args.authSubject ?? null,
+    })) as { dbUserId?: unknown; email?: string | null };
+    const userId = actor?.dbUserId;
+    if (!userId) throw new Error("user_not_found");
+    const priceId = readStripeBuilderPriceId();
+    await ctx.runMutation(internal.builderCommerce.createPendingBuilderCheckoutSessionInternal as any, {
       sessionId,
-      mode: "builder_upgrade",
-      targetTier,
       ownerUserId: userId,
-      status: "complete",
+      targetTier,
+      providerPriceId: priceId,
       expiresAt: nowMs + 14 * 24 * 60 * 60 * 1000,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      nowMs,
     });
 
-    return {
-      checkout_url: successUrl,
-    };
+    try {
+      const stripe = getStripeClient();
+      const checkoutSession = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        client_reference_id: sessionId,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          local_session_id: sessionId,
+          target_tier: targetTier,
+        },
+        subscription_data: {
+          metadata: {
+            local_session_id: sessionId,
+            target_tier: targetTier,
+          },
+        },
+        ...(typeof actor?.email === "string" && actor.email.trim()
+          ? { customer_email: actor.email.trim() }
+          : {}),
+      });
+      const checkoutUrl = String(checkoutSession.url ?? "").trim();
+      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
+      await ctx.runMutation(internal.builderCommerce.attachBuilderStripeCheckoutSessionInternal as any, {
+        sessionId,
+        providerCheckoutSessionId: checkoutSession.id,
+        providerCustomerId:
+          typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
+        providerSubscriptionId:
+          typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
+        providerPriceId: priceId,
+        nowMs: Date.now(),
+      });
+      return {
+        checkout_url: checkoutUrl,
+      };
+    } catch (error) {
+      await ctx.runMutation(internal.builderCommerce.expireBuilderCheckoutSessionInternal as any, {
+        sessionId,
+        nowMs: Date.now(),
+      });
+      throw error;
+    }
+
   },
 });
 

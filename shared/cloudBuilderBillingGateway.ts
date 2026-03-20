@@ -14,7 +14,7 @@ export async function startCloudBuilderCheckout<SessionT>(
   },
 ): Promise<{ checkout_url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.mutation("billing:startBuilderCheckout" as any, {
+  return (await client.action("billing:startBuilderCheckout" as any, {
     authSubject,
     tier: params.tier,
     successUrl: params.successUrl,

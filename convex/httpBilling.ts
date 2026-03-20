@@ -1,4 +1,6 @@
 import { internal } from "./_generated/api";
+import { isBuilderStripePriceId, verifyStripeWebhookSignature } from "./stripeCore";
+import Stripe from "stripe";
 
 type HttpRouterLike = {
   route: (config: {
@@ -95,6 +97,42 @@ function readSyncSecret(req: Request): string | null {
   return headerSecret || null;
 }
 
+function readStripeSignature(req: Request): string | null {
+  const signature = String(req.headers.get("stripe-signature") ?? "").trim();
+  return signature || null;
+}
+
+function readStripeMetadataString(
+  metadata: Stripe.Metadata | null | undefined,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function readStripeLocalSessionIdFromCheckoutSession(session: Stripe.Checkout.Session): string | null {
+  const clientReferenceId = String(session.client_reference_id ?? "").trim();
+  if (clientReferenceId) return clientReferenceId;
+  return readStripeMetadataString(session.metadata, "local_session_id");
+}
+
+function readStripeTargetTier(raw: unknown): "builder" | "architect" | null {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "builder") return "builder";
+  if (value === "architect") return "architect";
+  return null;
+}
+
+function normalizeStripeSubscriptionStatus(raw: unknown): string {
+  return String(raw ?? "").trim().toLowerCase();
+}
+
+function stripeSubscriptionGrantsBuilder(status: string): boolean {
+  return status === "active" || status === "trialing";
+}
+
 export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse } = args;
 
@@ -177,6 +215,120 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
           code: message || "billing_sync_failed",
           error: message || "billing_sync_failed",
           message: message || "Billing sync failed.",
+        });
+      }
+    }),
+  });
+
+  http.route({
+    path: "/billing/stripe_webhook",
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
+      const signature = readStripeSignature(req);
+      if (!signature) {
+        return jsonResponse(req, 400, {
+          ok: false,
+          code: "stripe_signature_missing",
+          error: "stripe_signature_missing",
+          message: "Missing Stripe signature.",
+        });
+      }
+
+      const payload = await req.text();
+      let event: Stripe.Event;
+      try {
+        event = verifyStripeWebhookSignature({ payload, signature });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return jsonResponse(req, 400, {
+          ok: false,
+          code: "stripe_signature_invalid",
+          error: "stripe_signature_invalid",
+          message,
+        });
+      }
+
+      try {
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const localSessionId = readStripeLocalSessionIdFromCheckoutSession(session);
+          if (!localSessionId) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "builder_local_session_id_missing",
+            });
+          }
+          await (ctx as any).runMutation(internal.builderCommerce.syncBuilderStripeSubscriptionInternal as any, {
+            localSessionId,
+            providerCheckoutSessionId: session.id,
+            providerCustomerId: typeof session.customer === "string" ? session.customer : null,
+            providerSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
+            targetTier: readStripeTargetTier(readStripeMetadataString(session.metadata, "target_tier")),
+            subscriptionStatus: "checkout_completed",
+            grantsAccess: null,
+            markCheckoutComplete: true,
+            nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
+          });
+          return jsonResponse(req, 200, {
+            ok: true,
+            received: true,
+            event: event.type,
+          });
+        }
+
+        if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+          const subscription = event.data.object as Stripe.Subscription;
+          const localSessionId = readStripeMetadataString(subscription.metadata, "local_session_id");
+          if (!localSessionId) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "builder_local_session_id_missing",
+            });
+          }
+          const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+          if (!isBuilderStripePriceId(providerPriceId)) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "non_builder_price",
+            });
+          }
+          const subscriptionStatus = normalizeStripeSubscriptionStatus(subscription.status);
+          await (ctx as any).runMutation(internal.builderCommerce.syncBuilderStripeSubscriptionInternal as any, {
+            localSessionId,
+            providerCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
+            providerSubscriptionId: subscription.id,
+            providerPriceId,
+            targetTier: readStripeTargetTier(readStripeMetadataString(subscription.metadata, "target_tier")),
+            subscriptionStatus,
+            grantsAccess: stripeSubscriptionGrantsBuilder(subscriptionStatus),
+            markCheckoutComplete: true,
+            nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
+          });
+          return jsonResponse(req, 200, {
+            ok: true,
+            received: true,
+            event: event.type,
+          });
+        }
+
+        return jsonResponse(req, 200, {
+          ok: true,
+          ignored: true,
+          event: event.type,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return jsonResponse(req, 400, {
+          ok: false,
+          code: message || "stripe_webhook_failed",
+          error: message || "stripe_webhook_failed",
+          message: message || "Stripe webhook failed.",
         });
       }
     }),

@@ -66,6 +66,7 @@ import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
 import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
 import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
 import type * as settings from "../settings.js";
+import type * as stripeCore from "../stripeCore.js";
 import type * as threads from "../threads.js";
 import type * as webResearchTools from "../webResearchTools.js";
 
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   runtimeTurnPersistence: typeof runtimeTurnPersistence;
   runtimeTurnResolution: typeof runtimeTurnResolution;
   settings: typeof settings;
+  stripeCore: typeof stripeCore;
   threads: typeof threads;
   webResearchTools: typeof webResearchTools;
 }>;
