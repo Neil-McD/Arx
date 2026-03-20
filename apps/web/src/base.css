@@ -10099,6 +10099,16 @@ h3.md-header {
   background: #ffffff;
 }
 
+:root[data-theme-family="lightlike"] .modal.modal-upgrade .plan-cta {
+  background: #141414;
+  color: #ffffff;
+}
+
+:root[data-theme-family="lightlike"] .modal.modal-upgrade .plan-cta:hover {
+  background: #000000;
+  color: #ffffff;
+}
+
 .modal.modal-upgrade .plan-card.free.current {
   opacity: 0.82;
 }
