@@ -105,7 +105,7 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
         if (candidate && current.isUuid(candidate)) return candidate;
         return null;
       })();
-      const joinedId = await joinPublicCommunityRpc({
+      const joinResult = await joinPublicCommunityRpc({
         session,
         communityId: id || undefined,
         communitySlug: slug || undefined,
@@ -113,8 +113,20 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
       });
       clearPendingPublicJoin();
 
-      await current.loadCommunities(session);
-      current.onJoinSuccess(joinedId);
+      if (joinResult.outcome === "joined") {
+        await current.loadCommunities(session);
+        current.onJoinSuccess(joinResult.community_id);
+        return;
+      }
+      if (
+        slug &&
+        (joinResult.outcome === "paid_plan_required" ||
+          joinResult.outcome === "approval_pending" ||
+          joinResult.outcome === "approval_denied")
+      ) {
+        await openCommunityLandingExternal({ slug });
+        return;
+      }
     } catch (error) {
       const kind = classifyPublicCommunityJoinError(error);
       const message = getErrorMessage(error, current.joinCommunityFailureMessage ?? "Failed to join community.");
@@ -145,15 +157,26 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
     try {
       const brandosAid = current.getBrandosAidForCommunitySlug(community.slug ?? null);
       const resolvedBrandosAid = brandosAid && current.isUuid(brandosAid) ? brandosAid : null;
-      const joinedId = await joinPublicCommunityRpc({
+      const joinResult = await joinPublicCommunityRpc({
         session: current.session,
         communitySlug: community.slug,
         brandosAid: resolvedBrandosAid,
       });
       clearPendingPublicJoin();
 
-      await current.loadCommunities(current.session);
-      current.onJoinSuccess(joinedId);
+      if (joinResult.outcome === "joined") {
+        await current.loadCommunities(current.session);
+        current.onJoinSuccess(joinResult.community_id);
+        return;
+      }
+      if (
+        joinResult.outcome === "paid_plan_required" ||
+        joinResult.outcome === "approval_pending" ||
+        joinResult.outcome === "approval_denied"
+      ) {
+        await openCommunityLandingExternal(community);
+        return;
+      }
     } catch (error) {
       const kind = classifyPublicCommunityJoinError(error);
       const message = getErrorMessage(error, current.joinCommunityFailureMessage ?? "Failed to join community.");

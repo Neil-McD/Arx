@@ -339,7 +339,11 @@ async function joinPublicCommunityInternal(args: {
   community: CommunityLike;
   userId: any;
   nowMs: number;
-}): Promise<string> {
+}): Promise<{
+  outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
+  community_id: string;
+  reapply_at?: string | null;
+}> {
   const existingMembership = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
@@ -354,12 +358,18 @@ async function joinPublicCommunityInternal(args: {
         updatedAt: args.nowMs,
       });
     }
-    return String(args.community._id);
+    return {
+      outcome: "joined",
+      community_id: String(args.community._id),
+    };
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
   if (entryPolicy === "paid_subscription") {
-    throw new Error("paid_plan_required");
+    return {
+      outcome: "paid_plan_required",
+      community_id: String(args.community._id),
+    };
   }
   if (entryPolicy === "approval") {
     const joinRequest = (await args.ctx.db
@@ -372,7 +382,10 @@ async function joinPublicCommunityInternal(args: {
     if (status === "approved") {
       // approved requests may enter immediately
     } else if (status === "pending") {
-      throw new Error("approval_pending");
+      return {
+        outcome: "approval_pending",
+        community_id: String(args.community._id),
+      };
     } else if (status === "denied") {
       if (communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
         await ensurePendingCommunityJoinRequest({
@@ -381,9 +394,19 @@ async function joinPublicCommunityInternal(args: {
           userId: args.userId,
           nowMs: args.nowMs,
         });
-        throw new Error("approval_pending");
+        return {
+          outcome: "approval_pending",
+          community_id: String(args.community._id),
+        };
       }
-      throw new Error("approval_denied");
+      return {
+        outcome: "approval_denied",
+        community_id: String(args.community._id),
+        reapply_at:
+          typeof joinRequest?.reapplyAt === "number"
+            ? toIsoString(joinRequest.reapplyAt)
+            : null,
+      };
     } else {
       await ensurePendingCommunityJoinRequest({
         ctx: args.ctx,
@@ -391,7 +414,10 @@ async function joinPublicCommunityInternal(args: {
         userId: args.userId,
         nowMs: args.nowMs,
       });
-      throw new Error("approval_pending");
+      return {
+        outcome: "approval_pending",
+        community_id: String(args.community._id),
+      };
     }
   }
 
@@ -404,7 +430,10 @@ async function joinPublicCommunityInternal(args: {
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
-  return String(args.community._id);
+  return {
+    outcome: "joined",
+    community_id: String(args.community._id),
+  };
 }
 
 export const joinPublicCommunityBySlug = mutation({
@@ -430,13 +459,12 @@ export const joinPublicCommunityBySlug = mutation({
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     void args.brandosAid;
-    const communityId = await joinPublicCommunityInternal({
+    return await joinPublicCommunityInternal({
       ctx,
       community,
       userId: args.userId,
       nowMs,
     });
-    return [{ community_id: communityId }];
   },
 });
 
@@ -459,12 +487,11 @@ export const joinPublicCommunity = mutation({
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     void args.brandosAid;
-    const communityId = await joinPublicCommunityInternal({
+    return await joinPublicCommunityInternal({
       ctx,
       community,
       userId: args.userId,
       nowMs,
     });
-    return [{ community_id: communityId }];
   },
 });

@@ -208,7 +208,7 @@ export function useWebPublicFunnelActions<
           (brandosAid && args.isUuid(brandosAid) ? brandosAid : null) ||
           (pendingBrandosAid && args.isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
 
-        const joinedId = await joinPublicCommunityRpc({
+        const joinResult = await joinPublicCommunityRpc({
           session,
           communityId: trimmedId || undefined,
           communitySlug: trimmedSlug || undefined,
@@ -216,11 +216,49 @@ export function useWebPublicFunnelActions<
         });
         clearPendingPublicJoin();
 
-        args.openCommunityWorkspace({
-          communityId: joinedId,
-          communitySlug: trimmedSlug || null,
-        });
-        await args.loadCommunities(session);
+        if (joinResult.outcome === "joined") {
+          args.openCommunityWorkspace({
+            communityId: joinResult.community_id,
+            communitySlug: trimmedSlug || null,
+          });
+          await args.loadCommunities(session);
+          return;
+        }
+        if (joinResult.outcome === "approval_pending") {
+          applyApprovalJoinState({
+            status: "pending",
+            communityId: joinResult.community_id,
+            communitySlug: trimmedSlug || null,
+          });
+          if (trimmedSlug) {
+            void loadMyJoinRequestBySlug(trimmedSlug, session);
+          }
+          return;
+        }
+        if (joinResult.outcome === "approval_denied") {
+          applyApprovalJoinState({
+            status: "denied",
+            communityId: joinResult.community_id,
+            communitySlug: trimmedSlug || null,
+            reapplyAt: joinResult.reapply_at ?? null,
+          });
+          if (trimmedSlug) {
+            void loadMyJoinRequestBySlug(trimmedSlug, session);
+          }
+          return;
+        }
+        if (joinResult.outcome === "paid_plan_required") {
+          args.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
+          args.setPublicCommunity((prev) =>
+            prev
+              ? ({
+                  ...prev,
+                  entry_policy: "paid_subscription",
+                } as PublicCommunityT)
+              : prev,
+          );
+          return;
+        }
       } catch (error) {
         const message = getErrorMessage(error, "Failed to join community.");
         const kind = classifyPublicCommunityJoinError(error);
