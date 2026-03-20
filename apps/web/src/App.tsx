@@ -628,6 +628,8 @@ function formatModelSignature(
 }
 
 export default function App() {
+  const GOOGLE_AUTH_START_SEARCH_PARAM = "auth_start";
+  const GOOGLE_AUTH_START_SEARCH_VALUE = "google";
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
 
@@ -650,11 +652,52 @@ export default function App() {
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
+  const hasAutoStartedGoogleAuthRef = useRef(false);
 
   const markAuthBootstrapComplete = useCallback(() => {
     authBootstrapCompleteRef.current = true;
     setIsAuthBootstrapComplete(true);
   }, []);
+
+  const readCurrentAuthReturnTo = useCallback((options?: { stripGoogleAuthStart?: boolean }): string => {
+    const currentUrl = new URL(window.location.href);
+    if (options?.stripGoogleAuthStart) {
+      currentUrl.searchParams.delete(GOOGLE_AUTH_START_SEARCH_PARAM);
+    }
+    const search = currentUrl.searchParams.toString();
+    return `${currentUrl.pathname}${search ? `?${search}` : ""}${currentUrl.hash}`;
+  }, [GOOGLE_AUTH_START_SEARCH_PARAM]);
+
+  const resolveCanonicalGoogleAuthStartUrl = useCallback((): string | null => {
+    let canonicalOrigin: string;
+    try {
+      canonicalOrigin = new URL(getOAuthRedirectUrl(), window.location.origin).origin;
+    } catch {
+      return null;
+    }
+    if (!canonicalOrigin || canonicalOrigin === window.location.origin) return null;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete(GOOGLE_AUTH_START_SEARCH_PARAM);
+    const targetUrl = new URL(
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+      canonicalOrigin,
+    );
+    targetUrl.searchParams.set(GOOGLE_AUTH_START_SEARCH_PARAM, GOOGLE_AUTH_START_SEARCH_VALUE);
+    return targetUrl.toString();
+  }, [GOOGLE_AUTH_START_SEARCH_PARAM, GOOGLE_AUTH_START_SEARCH_VALUE]);
+
+  const beginGoogleSignInFlow = useCallback(async () => {
+    setAuthError(null);
+    clearCloudSignedOutIntentMarker();
+    markCloudAuthFlowPending();
+    storeAuthReturnTo(readCurrentAuthReturnTo({ stripGoogleAuthStart: true }));
+    const result = await beginGoogleCloudSignIn();
+    if (!result.ok) {
+      setAuthError(result.error);
+      return;
+    }
+    window.location.assign(result.authUrl);
+  }, [readCurrentAuthReturnTo]);
 
   async function resetSessionStateAfterSessionLoss(): Promise<void> {
     sessionRef.current = null;
@@ -2543,6 +2586,24 @@ export default function App() {
     captureBrandosAidFromLocation();
   }, []);
 
+  useEffect(() => {
+    if (cloudSession) return;
+    const currentUrl = new URL(window.location.href);
+    const shouldAutoStartGoogleAuth =
+      currentUrl.searchParams.get(GOOGLE_AUTH_START_SEARCH_PARAM) === GOOGLE_AUTH_START_SEARCH_VALUE;
+    if (!shouldAutoStartGoogleAuth || hasAutoStartedGoogleAuthRef.current) return;
+    hasAutoStartedGoogleAuthRef.current = true;
+    currentUrl.searchParams.delete(GOOGLE_AUTH_START_SEARCH_PARAM);
+    const cleanPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+    window.history.replaceState(window.history.state ?? {}, document.title, cleanPath || "/");
+    void beginGoogleSignInFlow();
+  }, [
+    GOOGLE_AUTH_START_SEARCH_PARAM,
+    GOOGLE_AUTH_START_SEARCH_VALUE,
+    beginGoogleSignInFlow,
+    cloudSession,
+  ]);
+
   useWebPathRouteLifecycle({
     publicRouteKind: publicRoute.kind,
     activePage,
@@ -2837,18 +2898,14 @@ export default function App() {
     resetCommunityAnalytics,
   });
 
-  async function handleSignIn() {
-    setAuthError(null);
-    clearCloudSignedOutIntentMarker();
-    markCloudAuthFlowPending();
-    storeAuthReturnTo(`${window.location.pathname}${window.location.search}`);
-    const result = await beginGoogleCloudSignIn();
-    if (!result.ok) {
-      setAuthError(result.error);
+  const handleSignIn = useCallback(async () => {
+    const canonicalAuthStartUrl = resolveCanonicalGoogleAuthStartUrl();
+    if (canonicalAuthStartUrl) {
+      window.location.assign(canonicalAuthStartUrl);
       return;
     }
-    window.location.assign(result.authUrl);
-  }
+    await beginGoogleSignInFlow();
+  }, [beginGoogleSignInFlow, resolveCanonicalGoogleAuthStartUrl]);
 
   function resumePendingAuthIntent(): void {
     if (!cloudSession) return;
