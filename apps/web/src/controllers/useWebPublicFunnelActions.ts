@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   classifyPublicCommunityJoinError, clearPendingPublicJoin, getBrandosAidForCommunitySlug, getErrorMessage, joinPublicCommunityRpc, readPendingPublicJoinBrandosAid, storePendingPublicJoin, } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
@@ -60,6 +60,12 @@ export function useWebPublicFunnelActions<
   PublicPlanT extends { billing_period: CommunityBillingPeriod },
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 >(args: UseWebPublicFunnelActionsArgs<PublicCommunityT, PublicPlanT, MyCommunityJoinRequestT>) {
+  const argsRef = useRef(args);
+
+  useEffect(() => {
+    argsRef.current = args;
+  }, [args]);
+
   const applyApprovalJoinState = useCallback(
     (opts: {
       status: "pending" | "denied";
@@ -68,15 +74,16 @@ export function useWebPublicFunnelActions<
       reapplyAt?: string | null;
       deniedUntil?: string | null;
     }) => {
-      args.setPublicJoinError(null);
-      args.setMyPublicCommunityJoinRequest({
+      const current = argsRef.current;
+      current.setPublicJoinError(null);
+      current.setMyPublicCommunityJoinRequest({
         community_id: (opts.communityId ?? opts.communitySlug ?? "__pending__").trim() || "__pending__",
         status: opts.status,
         updated_at: new Date().toISOString(),
         reapply_at: opts.reapplyAt ?? null,
         denied_until: opts.deniedUntil ?? opts.reapplyAt ?? null,
       } as MyCommunityJoinRequestT);
-      args.setPublicCommunity((prev) =>
+      current.setPublicCommunity((prev) =>
         prev
           ? ({
               ...prev,
@@ -85,7 +92,7 @@ export function useWebPublicFunnelActions<
           : prev,
       );
     },
-    [args],
+    [],
   );
 
   const reconcileJoinOutcomeBySlug = useCallback(
@@ -108,12 +115,13 @@ export function useWebPublicFunnelActions<
         const access = accessResult.value;
         if (access && (access.can_enter_community || access.is_owner) && access.community_id) {
           clearPendingPublicJoin();
-          args.setPublicCommunityAccess(access);
-          args.openCommunityWorkspace({
+          const current = argsRef.current;
+          current.setPublicCommunityAccess(access);
+          current.openCommunityWorkspace({
             communityId: access.community_id,
             communitySlug: trimmedSlug,
           });
-          await args.loadCommunities(session);
+          await current.loadCommunities(session);
           return "entered";
         }
       }
@@ -123,9 +131,10 @@ export function useWebPublicFunnelActions<
         const status = String(joinRequest?.status ?? "").trim().toLowerCase();
         if (status === "pending") {
           clearPendingPublicJoin();
-          args.setPublicJoinError(null);
-          args.setMyPublicCommunityJoinRequest(joinRequest);
-          args.setPublicCommunity((prev) =>
+          const current = argsRef.current;
+          current.setPublicJoinError(null);
+          current.setMyPublicCommunityJoinRequest(joinRequest);
+          current.setPublicCommunity((prev) =>
             prev
               ? ({
                   ...prev,
@@ -137,9 +146,10 @@ export function useWebPublicFunnelActions<
         }
         if (status === "denied") {
           clearPendingPublicJoin();
-          args.setPublicJoinError(null);
-          args.setMyPublicCommunityJoinRequest(joinRequest);
-          args.setPublicCommunity((prev) =>
+          const current = argsRef.current;
+          current.setPublicJoinError(null);
+          current.setMyPublicCommunityJoinRequest(joinRequest);
+          current.setPublicCommunity((prev) =>
             prev
               ? ({
                   ...prev,
@@ -153,28 +163,28 @@ export function useWebPublicFunnelActions<
 
       return "none";
     },
-    [applyApprovalJoinState, args],
+    [],
   );
 
   const loadMyJoinRequestBySlug = useCallback(
     async (communitySlug: string, session: CloudSession): Promise<void> => {
       const trimmed = communitySlug.trim();
       if (!trimmed) return;
-      args.setIsLoadingMyPublicCommunityJoinRequest(true);
+      const current = argsRef.current;
+      current.setIsLoadingMyPublicCommunityJoinRequest(true);
       try {
         const row = await fetchCloudMyJoinRequestBySlug<CloudSession, MyCommunityJoinRequestT>({
           session,
           communitySlug: trimmed,
         });
-        args.setMyPublicCommunityJoinRequest(row);
+        current.setMyPublicCommunityJoinRequest(row);
       } catch (error) {
         console.warn("Failed to load join request:", error);
-        args.setMyPublicCommunityJoinRequest(null);
       } finally {
-        args.setIsLoadingMyPublicCommunityJoinRequest(false);
+        current.setIsLoadingMyPublicCommunityJoinRequest(false);
       }
     },
-    [args],
+    [],
   );
 
   const joinPublicCommunity = useCallback(
@@ -185,11 +195,12 @@ export function useWebPublicFunnelActions<
 
       const brandosAid = trimmedSlug ? getBrandosAidForCommunitySlug(trimmedSlug) : null;
 
-      const rawSession = args.getSession();
-      const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
+      const current = argsRef.current;
+      const rawSession = current.getSession();
+      const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) {
         storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
-        args.openAuthGate({
+        current.openAuthGate({
           reason: "join_public_community",
           payload: {
             community_id: trimmedId || null,
@@ -200,13 +211,13 @@ export function useWebPublicFunnelActions<
         return;
       }
 
-      args.setIsJoiningPublicCommunity(true);
-      args.setPublicJoinError(null);
+      current.setIsJoiningPublicCommunity(true);
+      current.setPublicJoinError(null);
       try {
         const pendingBrandosAid = readPendingPublicJoinBrandosAid();
         const resolvedBrandosAid =
-          (brandosAid && args.isUuid(brandosAid) ? brandosAid : null) ||
-          (pendingBrandosAid && args.isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
+          (brandosAid && current.isUuid(brandosAid) ? brandosAid : null) ||
+          (pendingBrandosAid && current.isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
 
         const joinResult = await joinPublicCommunityRpc({
           session,
@@ -217,11 +228,11 @@ export function useWebPublicFunnelActions<
         clearPendingPublicJoin();
 
         if (joinResult.outcome === "joined") {
-          args.openCommunityWorkspace({
+          current.openCommunityWorkspace({
             communityId: joinResult.community_id,
             communitySlug: trimmedSlug || null,
           });
-          await args.loadCommunities(session);
+          await current.loadCommunities(session);
           return;
         }
         if (joinResult.outcome === "approval_pending") {
@@ -230,9 +241,6 @@ export function useWebPublicFunnelActions<
             communityId: joinResult.community_id,
             communitySlug: trimmedSlug || null,
           });
-          if (trimmedSlug) {
-            void loadMyJoinRequestBySlug(trimmedSlug, session);
-          }
           return;
         }
         if (joinResult.outcome === "approval_denied") {
@@ -242,14 +250,11 @@ export function useWebPublicFunnelActions<
             communitySlug: trimmedSlug || null,
             reapplyAt: joinResult.reapply_at ?? null,
           });
-          if (trimmedSlug) {
-            void loadMyJoinRequestBySlug(trimmedSlug, session);
-          }
           return;
         }
         if (joinResult.outcome === "paid_plan_required") {
-          args.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          args.setPublicCommunity((prev) =>
+          current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
+          current.setPublicCommunity((prev) =>
             prev
               ? ({
                   ...prev,
@@ -269,15 +274,12 @@ export function useWebPublicFunnelActions<
             communityId: trimmedId || null,
             communitySlug: trimmedSlug || null,
           });
-          if (trimmedSlug) {
-            void loadMyJoinRequestBySlug(trimmedSlug, session);
-          }
           return;
         }
         if (kind === "paid_plan_required") {
           clearPendingPublicJoin();
-          args.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          args.setPublicCommunity((prev) =>
+          current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
+          current.setPublicCommunity((prev) =>
             prev
               ? ({
                   ...prev,
@@ -293,29 +295,30 @@ export function useWebPublicFunnelActions<
             return;
           }
         }
-        args.setPublicJoinError(message);
+        current.setPublicJoinError(message);
       } finally {
-        args.setIsJoiningPublicCommunity(false);
+        current.setIsJoiningPublicCommunity(false);
       }
     },
-    [applyApprovalJoinState, args, loadMyJoinRequestBySlug, reconcileJoinOutcomeBySlug],
+    [applyApprovalJoinState, reconcileJoinOutcomeBySlug],
   );
 
   const loadPublicCommunity = useCallback(
     async (slug: string): Promise<void> => {
       const requestedSlug = slug.trim();
       if (!requestedSlug) return;
-      const currentSlug = args.getCurrentPublicCommunitySlug();
+      const current = argsRef.current;
+      const currentSlug = current.getCurrentPublicCommunitySlug();
       const isSameSlugRefresh = currentSlug === requestedSlug;
 
-      args.setIsLoadingPublicCommunity(true);
-      args.setPublicCommunityError(null);
-      args.setPublicJoinError(null);
+      current.setIsLoadingPublicCommunity(true);
+      current.setPublicCommunityError(null);
+      current.setPublicJoinError(null);
       if (!isSameSlugRefresh) {
-        args.setPublicCommunity(null);
-        args.setPublicCommunityPlans([]);
-        args.setMyPublicCommunityJoinRequest(null);
-        args.setPublicCommunityAccess(null);
+        current.setPublicCommunity(null);
+        current.setPublicCommunityPlans([]);
+        current.setMyPublicCommunityJoinRequest(null);
+        current.setPublicCommunityAccess(null);
       }
       try {
         const payload = await resolveCloudPublicFunnel<CloudSession, PublicCommunityT, PublicPlanT>({
@@ -323,27 +326,27 @@ export function useWebPublicFunnelActions<
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
-        args.setPublicCommunity({
+        current.setPublicCommunity({
           ...payload.community,
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
         } as PublicCommunityT);
-        args.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
+        current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
 
-        const rawSession = args.getSession();
-        const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
+        const rawSession = current.getSession();
+        const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
         if (session) {
           try {
             const access = await fetchCloudMyCommunityAccessBySlug<CloudSession, CommunityAccessRow>({
               session,
               communitySlug: payload.community.slug,
             });
-            args.setPublicCommunityAccess(access);
+            current.setPublicCommunityAccess(access);
           } catch {
-            args.setPublicCommunityAccess(null);
+            current.setPublicCommunityAccess(null);
             // ignore; fall back to the public funnel
           }
         } else {
-          args.setPublicCommunityAccess(null);
+          current.setPublicCommunityAccess(null);
         }
 
         if (
@@ -360,25 +363,26 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to load community.";
-        args.setPublicCommunityError(message);
+        current.setPublicCommunityError(message);
       } finally {
-        args.setIsLoadingPublicCommunity(false);
+        current.setIsLoadingPublicCommunity(false);
       }
     },
-    [args, loadMyJoinRequestBySlug],
+    [loadMyJoinRequestBySlug],
   );
 
   const startCheckoutForPlan = useCallback(
     async (communitySlug: string, billingPeriod: CommunityBillingPeriod, cancelPath: string): Promise<void> => {
-      args.setCheckoutStatus("loading");
-      args.setCheckoutError(null);
+      const current = argsRef.current;
+      current.setCheckoutStatus("loading");
+      current.setCheckoutError(null);
       try {
         const origin = window.location.origin.replace(/\/+$/, "");
         const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${origin}${cancelPath}`;
         const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
-        const rawSession = args.getSession();
-        const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
+        const rawSession = current.getSession();
+        const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
         const data = await startCloudPublicFunnelCheckout<CloudSession>({
           session,
           communitySlug,
@@ -389,7 +393,7 @@ export function useWebPublicFunnelActions<
         });
         const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
         if (!checkoutUrl) throw new Error("Missing checkout_url.");
-        args.navigateToUrl(checkoutUrl);
+        current.navigateToUrl(checkoutUrl);
       } catch (error) {
         const message =
           typeof error === "string"
@@ -397,11 +401,11 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to start checkout.";
-        args.setCheckoutError(message);
-        args.setCheckoutStatus("error");
+        current.setCheckoutError(message);
+        current.setCheckoutStatus("error");
       }
     },
-    [args],
+    [],
   );
 
   return {
