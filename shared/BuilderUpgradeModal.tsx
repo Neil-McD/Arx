@@ -37,14 +37,6 @@ export function BuilderUpgradeModal({
   void builderUpgradeContext;
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = isBuilderTierBuilder(builderTier) || builderTier === "architect" || builderTier === "pro";
-  const feature = (included: boolean, label: string) => (
-    <li className={`plan-feature${included ? " on" : " off"}`}>
-      <span className={`plan-feature-icon ${included ? "check" : "x"}`} aria-hidden="true">
-        {included ? "✓" : "×"}
-      </span>
-      <span className="plan-feature-text">{label}</span>
-    </li>
-  );
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -56,15 +48,20 @@ export function BuilderUpgradeModal({
           </button>
         </div>
         <div className="modal-body" ref={builderUpgradeModalBodyRef} onScroll={onModalBodyScroll}>
-          <div className="model-note" style={{ marginBottom: 12 }}>
-            Choose the alpha plan that matches how you want to use Polynet.
-          </div>
-          <div className="model-note" style={{ marginBottom: 12 }}>
-            Community creation stays internal during alpha. Builder unlocks the full workspace layer.
+          <div className="upgrade-copy">
+            <div className="upgrade-kicker">Alpha access</div>
+            <div className="upgrade-lead">
+              Free lets you tap into Polynet&apos;s community intelligence. Builder puts that
+              intelligence to work inside your own private AI workspace.
+            </div>
+            <div className="upgrade-footnote">
+              During alpha, community creation stays internal while we harden the platform.
+              Builder is the paid path we&apos;re opening first.
+            </div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
           <div className="plan-grid">
-            <div className={`plan-card${freeIsCurrent ? " current" : ""}`}>
+            <div className={`plan-card free${freeIsCurrent ? " current" : ""}`}>
               <div className="plan-card-header">
                 <div className="plan-name">Free</div>
                 {freeIsCurrent && <div className="plan-badge">Current</div>}
@@ -73,23 +70,15 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$0</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">For using communities, apps, and agents</div>
-              <ul className="plan-features plan-features-checks">
-                {feature(true, "OpenRouter free models")}
-                {feature(true, "Use your own ChatGPT or OpenRouter connection")}
-                {feature(true, "Cloud threads and community sync")}
-                {feature(true, "Join communities as a member")}
-                {feature(false, "Polynet inference")}
-                {feature(false, "Daytona workspace")}
-                {feature(false, "Personal memory")}
-                {feature(false, "Builder workspace tools")}
+              <div className="plan-subtitle">For members using Polynet&apos;s collective intelligence.</div>
+              <ul className="plan-points">
+                <li>Tap into community intelligence as it compounds.</li>
+                <li>Research, ask, and learn across the network.</li>
+                <li>Keep your threads and context in sync.</li>
               </ul>
-              <button type="button" className="plan-cta" disabled>
-                {freeIsCurrent ? "Current plan" : "Free"}
-              </button>
             </div>
 
-            <div className={`plan-card${builderIsCurrent ? " current" : ""}`}>
+            <div className={`plan-card builder${builderIsCurrent ? " current" : ""}`}>
               <div className="plan-card-header">
                 <div className="plan-name">Builder</div>
                 {builderIsCurrent && <div className="plan-badge">Current</div>}
@@ -98,27 +87,25 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$20</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">Private Daytona workspace for build and test runs</div>
-              <ul className="plan-features plan-features-checks">
-                {feature(true, "Some Polynet inference")}
-                {feature(true, "Daytona workspace")}
-                {feature(true, "Project-bound build runtime")}
-                {feature(true, "Personal memory")}
-                {feature(true, "Builder workspace tools")}
-                {feature(true, "Internal alpha access to the full workbench")}
+              <div className="plan-subtitle">
+                For turning community intelligence into real execution.
+              </div>
+              <ul className="plan-points">
+                <li>Bring compounding community intelligence into your own build loop.</li>
+                <li>Work inside a private AI workspace and cloud computer.</li>
+                <li>Move faster with deeper context, continuity, and execution.</li>
+                <li>Start building with Polynet during alpha.</li>
               </ul>
-              <button
-                type="button"
-                className="plan-cta"
-                onClick={() => onStartBuilderPlanCheckout("builder")}
-                disabled={isStartingBuilderCheckout || builderIsCurrent}
-              >
-                {builderIsCurrent
-                  ? "Current plan"
-                  : isStartingBuilderCheckout
-                    ? "Starting…"
-                    : "Upgrade to Builder"}
-              </button>
+              {!builderIsCurrent ? (
+                <button
+                  type="button"
+                  className="plan-cta"
+                  onClick={() => onStartBuilderPlanCheckout("builder")}
+                  disabled={isStartingBuilderCheckout}
+                >
+                  {isStartingBuilderCheckout ? "Starting…" : "Upgrade to Builder"}
+                </button>
+              ) : null}
             </div>
           </div>
           <div className={`modal-scroll-hint${showBuilderUpgradeScrollHint ? " show" : ""}`} aria-hidden="true">

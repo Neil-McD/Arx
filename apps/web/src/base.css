@@ -7473,6 +7473,33 @@ button.message-citation-chip:hover {
   width: min(980px, calc(100vw - 32px));
 }
 
+.modal.modal-upgrade .modal-header {
+  border-bottom: none;
+  padding: 22px 24px 4px;
+}
+
+.modal.modal-upgrade .modal-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.modal.modal-upgrade .modal-close {
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.modal.modal-upgrade .modal-close:hover {
+  background: var(--hover-overlay);
+}
+
+.modal.modal-upgrade .modal-body {
+  padding: 6px 24px 24px;
+}
+
 /* Auth gate: minimal + on-brand sign-in modal. */
 .modal.modal-auth-gate {
   width: min(420px, calc(100vw - 32px));
@@ -9780,6 +9807,12 @@ h3.md-header {
   gap: 14px;
 }
 
+.modal.modal-upgrade .plan-grid {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
 .plan-card {
   border: 1px solid var(--border-muted);
   background: var(--bg-card-alt);
@@ -9800,6 +9833,28 @@ h3.md-header {
   opacity: 0.92;
 }
 
+.modal.modal-upgrade .plan-card {
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: none;
+}
+
+.modal.modal-upgrade .plan-card.free {
+  background: color-mix(in srgb, var(--bg-card-alt) 90%, transparent);
+  border-color: color-mix(in srgb, var(--border-muted) 72%, transparent);
+}
+
+.modal.modal-upgrade .plan-card.builder {
+  background:
+    radial-gradient(circle at top right, rgba(233, 120, 255, 0.08), transparent 32%),
+    radial-gradient(circle at top left, rgba(97, 196, 255, 0.08), transparent 30%),
+    var(--bg-card-alt);
+  border-color: color-mix(in srgb, var(--border-default) 60%, rgba(233, 120, 255, 0.35));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 20px 48px rgba(0, 0, 0, 0.18);
+}
+
 .plan-card-header {
   display: flex;
   justify-content: space-between;
@@ -9811,6 +9866,11 @@ h3.md-header {
   font-size: 14px;
   font-weight: 650;
   color: var(--text-primary);
+}
+
+.modal.modal-upgrade .plan-name {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .plan-badge {
@@ -9838,15 +9898,34 @@ h3.md-header {
   color: var(--text-primary);
 }
 
+.modal.modal-upgrade .plan-price {
+  margin-top: 14px;
+}
+
+.modal.modal-upgrade .plan-price-amount {
+  font-size: 56px;
+}
+
 .plan-price-period {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.modal.modal-upgrade .plan-price-period {
+  font-size: 15px;
 }
 
 .plan-subtitle {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.modal.modal-upgrade .plan-subtitle {
+  margin-top: 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .plan-features {
@@ -9934,6 +10013,108 @@ h3.md-header {
 
 :root[data-theme-family="lightlike"] .plan-cta:hover {
   background: #000000;
+}
+
+.upgrade-copy {
+  display: grid;
+  gap: 10px;
+  max-width: 760px;
+  margin-bottom: 22px;
+}
+
+.upgrade-kicker {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.upgrade-lead {
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  font-weight: 640;
+  color: var(--text-primary);
+  max-width: 18ch;
+}
+
+.upgrade-footnote {
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.plan-points {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.plan-points li {
+  position: relative;
+  padding-left: 18px;
+}
+
+.plan-points li::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 82%, transparent);
+}
+
+.modal.modal-upgrade .plan-card.builder .plan-points li::before {
+  background: color-mix(in srgb, var(--accent-gold) 72%, white 8%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-gold) 20%, transparent);
+}
+
+.modal.modal-upgrade .plan-card .plan-cta {
+  margin-top: auto;
+}
+
+.modal.modal-upgrade .plan-cta {
+  margin-top: 22px;
+  height: 48px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text-primary) 96%, white 4%);
+  color: #090909;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.modal.modal-upgrade .plan-cta:hover {
+  background: #ffffff;
+}
+
+.modal.modal-upgrade .plan-card.free.current {
+  opacity: 0.82;
+}
+
+.modal.modal-upgrade .plan-card.builder.current {
+  opacity: 1;
+}
+
+@media (max-width: 860px) {
+  .modal.modal-upgrade .plan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal.modal-upgrade .modal-body {
+    padding: 6px 18px 18px;
+  }
+
+  .modal.modal-upgrade .plan-price-amount {
+    font-size: 48px;
+  }
 }
 
 .action-card {
