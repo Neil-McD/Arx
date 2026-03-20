@@ -1564,6 +1564,7 @@ export default function App() {
   };
   const {
     syncCommunitySelection,
+    openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityChat,
     openCommunityBySlug,
