@@ -3569,6 +3569,9 @@ export default function App() {
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
+    publicPrimaryCtaState,
+    isPublicDebugEnabled,
+    publicDebugState,
     memberCountOverride,
   } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
     publicRoute,
@@ -5747,6 +5750,18 @@ export default function App() {
                     checkoutError={checkoutError}
                     showSignIn={isPublicFunnelPreviewRoute ? true : showPublicSignIn}
                     memberCountOverride={memberCountOverride}
+                    debugEnabled={isPublicDebugEnabled}
+                    debugState={{
+                      ...publicDebugState,
+                      is_loading_public_community: isLoadingPublicCommunity,
+                      is_loading_join_request: isLoadingMyPublicCommunityJoinRequest,
+                      is_joining_public_community: isJoiningPublicCommunity,
+                      checkout_status: checkoutStatus,
+                      public_join_error: publicJoinError,
+                      public_community_error: publicCommunityError,
+                      checkout_error: checkoutError,
+                      primary_action_label: publicPrimaryCtaState,
+                    }}
                   />
                 </div>
               </div>

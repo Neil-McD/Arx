@@ -55,6 +55,7 @@ type CommunityFunnelSurfaceProps = {
   inlineActionClassName?: string;
   sidebarActionClassName?: string;
   showPoweredBy?: boolean;
+  debugPanel?: ReactNode;
 };
 
 function normalizeHref(url: string): string {
@@ -325,6 +326,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     inlineActionClassName = "public-funnel-inline-cta",
     sidebarActionClassName = "public-funnel-action-card",
     showPoweredBy = false,
+    debugPanel = null,
   } = props;
 
   return (
@@ -394,6 +396,7 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
           ) : null}
         </aside>
       </div>
+      {debugPanel ? <div className="public-funnel-debug-wrap">{debugPanel}</div> : null}
     </div>
   );
 }

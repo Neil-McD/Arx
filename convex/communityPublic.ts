@@ -29,6 +29,10 @@ type PublicCommunityFace = {
 
 const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
 
+function logPublicJoinEvent(event: string, payload: Record<string, unknown>): void {
+  console.log("[public-join]", event, payload);
+}
+
 async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Promise<PublicPlanSummaryLike[]> {
   const currentPricePoints = (await ctx.db
     .query("communityPricePoints" as any)
@@ -306,6 +310,10 @@ async function ensurePendingCommunityJoinRequest(args: {
       String(existing.status ?? "").trim().toLowerCase() === "denied" &&
       communityJoinRequestCanReapply(existing, args.nowMs)
     ) {
+      logPublicJoinEvent("join_request_reopen", {
+        communityId: String(args.communityId),
+        userId: String(args.userId),
+      });
       await args.ctx.db.patch(existing._id as any, {
         status: "pending",
         deniedAt: undefined,
@@ -316,9 +324,18 @@ async function ensurePendingCommunityJoinRequest(args: {
       if (!reopened) throw new Error("join_request_reopen_failed");
       return reopened;
     }
+    logPublicJoinEvent("join_request_existing", {
+      communityId: String(args.communityId),
+      userId: String(args.userId),
+      status: String(existing.status ?? ""),
+    });
     return existing;
   }
 
+  logPublicJoinEvent("join_request_create", {
+    communityId: String(args.communityId),
+    userId: String(args.userId),
+  });
   const id = await args.ctx.db.insert("communityJoinRequests", {
     communityId: args.communityId,
     userId: args.userId,
@@ -346,6 +363,11 @@ async function joinPublicCommunityInternal(args: {
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
     .first()) as CommunityMembershipLike | null;
   if (existingMembership) {
+    logPublicJoinEvent("join_outcome_joined_existing_membership", {
+      communityId: String(args.community._id),
+      userId: String(args.userId),
+      active: communityMembershipRowIsActive(existingMembership),
+    });
     if (!communityMembershipRowIsActive(existingMembership)) {
       await args.ctx.db.patch(existingMembership._id as any, {
         accessSource: existingMembership.accessSource ?? "free_grant",
@@ -363,6 +385,10 @@ async function joinPublicCommunityInternal(args: {
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
   if (entryPolicy === "paid_subscription") {
+    logPublicJoinEvent("join_outcome_paid_plan_required", {
+      communityId: String(args.community._id),
+      userId: String(args.userId),
+    });
     return {
       outcome: "paid_plan_required",
       community_id: String(args.community._id),
@@ -379,12 +405,20 @@ async function joinPublicCommunityInternal(args: {
     if (status === "approved") {
       // approved requests may enter immediately
     } else if (status === "pending") {
+      logPublicJoinEvent("join_outcome_approval_pending_existing", {
+        communityId: String(args.community._id),
+        userId: String(args.userId),
+      });
       return {
         outcome: "approval_pending",
         community_id: String(args.community._id),
       };
     } else if (status === "denied") {
       if (communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
+        logPublicJoinEvent("join_outcome_approval_reapply", {
+          communityId: String(args.community._id),
+          userId: String(args.userId),
+        });
         await ensurePendingCommunityJoinRequest({
           ctx: args.ctx,
           communityId: args.community._id,
@@ -396,6 +430,14 @@ async function joinPublicCommunityInternal(args: {
           community_id: String(args.community._id),
         };
       }
+      logPublicJoinEvent("join_outcome_approval_denied_locked", {
+        communityId: String(args.community._id),
+        userId: String(args.userId),
+        reapplyAt:
+          typeof joinRequest?.reapplyAt === "number"
+            ? toIsoString(joinRequest.reapplyAt)
+            : null,
+      });
       return {
         outcome: "approval_denied",
         community_id: String(args.community._id),
@@ -405,6 +447,10 @@ async function joinPublicCommunityInternal(args: {
             : null,
       };
     } else {
+      logPublicJoinEvent("join_outcome_approval_pending_created", {
+        communityId: String(args.community._id),
+        userId: String(args.userId),
+      });
       await ensurePendingCommunityJoinRequest({
         ctx: args.ctx,
         communityId: args.community._id,
@@ -426,6 +472,10 @@ async function joinPublicCommunityInternal(args: {
     active: true,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
+  });
+  logPublicJoinEvent("join_outcome_joined_new_membership", {
+    communityId: String(args.community._id),
+    userId: String(args.userId),
   });
   return {
     outcome: "joined",
@@ -456,12 +506,27 @@ export const joinPublicCommunityBySlug = mutation({
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     void args.brandosAid;
-    return await joinPublicCommunityInternal({
-      ctx,
-      community,
-      userId: args.userId,
-      nowMs,
+    logPublicJoinEvent("join_by_slug_start", {
+      communitySlug: slug,
+      communityId: String(community._id),
+      userId: String(args.userId),
     });
+    try {
+      return await joinPublicCommunityInternal({
+        ctx,
+        community,
+        userId: args.userId,
+        nowMs,
+      });
+    } catch (error) {
+      console.error("[public-join] join_by_slug_error", {
+        communitySlug: slug,
+        communityId: String(community._id),
+        userId: String(args.userId),
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   },
 });
 
@@ -484,11 +549,24 @@ export const joinPublicCommunity = mutation({
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     void args.brandosAid;
-    return await joinPublicCommunityInternal({
-      ctx,
-      community,
-      userId: args.userId,
-      nowMs,
+    logPublicJoinEvent("join_by_id_start", {
+      communityId: String(community._id),
+      userId: String(args.userId),
     });
+    try {
+      return await joinPublicCommunityInternal({
+        ctx,
+        community,
+        userId: args.userId,
+        nowMs,
+      });
+    } catch (error) {
+      console.error("[public-join] join_by_id_error", {
+        communityId: String(community._id),
+        userId: String(args.userId),
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   },
 });
