@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { isBuilderStripePriceId, verifyStripeWebhookSignature } from "./stripeCore";
+import { getStripeClient, isBuilderStripePriceId, verifyStripeWebhookSignature } from "./stripeCore";
 import Stripe from "stripe";
 
 type HttpRouterLike = {
@@ -237,7 +237,7 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
       const payload = await req.text();
       let event: Stripe.Event;
       try {
-        event = verifyStripeWebhookSignature({ payload, signature });
+        event = await verifyStripeWebhookSignature({ payload, signature });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return jsonResponse(req, 400, {
@@ -260,14 +260,35 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
               reason: "builder_local_session_id_missing",
             });
           }
+          let providerCustomerId =
+            typeof session.customer === "string" ? session.customer : null;
+          let providerSubscriptionId =
+            typeof session.subscription === "string" ? session.subscription : null;
+          let providerPriceId: string | null = null;
+          let subscriptionStatus = "checkout_completed";
+          let grantsAccess: boolean | null = null;
+          const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+          if (subscriptionId) {
+            const stripe = getStripeClient();
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            providerCustomerId =
+              typeof subscription.customer === "string" ? subscription.customer : providerCustomerId;
+            providerSubscriptionId = subscription.id;
+            providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+            subscriptionStatus = normalizeStripeSubscriptionStatus(subscription.status);
+            if (providerPriceId && isBuilderStripePriceId(providerPriceId)) {
+              grantsAccess = stripeSubscriptionGrantsBuilder(subscriptionStatus);
+            }
+          }
           await (ctx as any).runMutation(internal.builderCommerce.syncBuilderStripeSubscriptionInternal as any, {
             localSessionId,
             providerCheckoutSessionId: session.id,
-            providerCustomerId: typeof session.customer === "string" ? session.customer : null,
-            providerSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
+            providerCustomerId,
+            providerSubscriptionId,
+            providerPriceId,
             targetTier: readStripeTargetTier(readStripeMetadataString(session.metadata, "target_tier")),
-            subscriptionStatus: "checkout_completed",
-            grantsAccess: null,
+            subscriptionStatus,
+            grantsAccess,
             markCheckoutComplete: true,
             nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
           });

@@ -38,11 +38,11 @@ export function readStripeWebhookSecret(): string {
   return secret;
 }
 
-export function verifyStripeWebhookSignature(args: {
+export async function verifyStripeWebhookSignature(args: {
   payload: string;
   signature: string;
-}): Stripe.Event {
-  return getStripeClient().webhooks.constructEvent(
+}): Promise<Stripe.Event> {
+  return await getStripeClient().webhooks.constructEventAsync(
     args.payload,
     args.signature,
     readStripeWebhookSecret(),
