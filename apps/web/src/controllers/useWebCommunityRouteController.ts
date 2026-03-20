@@ -134,7 +134,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
 
   const openCommunityBySlug = useCallback(
     (communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
-      const current = paramsRef.current;
       const slug = String(communitySlug ?? "").trim();
       if (!slug) return;
       const matchedCommunity = resolveCommunityBySlug(slug);
@@ -142,16 +141,9 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
         openCommunityChat(matchedCommunity.id, opts);
         return;
       }
-      if (opts?.pushSnapshot ?? true) current.pushNavSnapshot();
-      current.setActiveView("home");
-      current.setActivePage("community");
-      current.applyCommunityShellState({
-        communityId: null,
-        communitySlug: slug,
-        communityTab: "chat",
-      });
+      openPublicCommunityFunnel(slug, opts);
     },
-    [openCommunityChat, resolveCommunityBySlug],
+    [openCommunityChat, openPublicCommunityFunnel, resolveCommunityBySlug],
   );
 
   const openJoinedCommunityBySlug = useCallback(

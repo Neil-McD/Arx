@@ -5128,9 +5128,14 @@ export default function App() {
 	  const activateDiscoverCommunityCard = (opts: {
 	    canActivate: boolean;
 	    slug: string;
+      alreadyMember: boolean;
 	  }) => {
 	    if (!opts.canActivate) return;
 	    if (!opts.slug) return;
+      if (!opts.alreadyMember) {
+        openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
+        return;
+      }
 	    openCommunityBySlug(opts.slug, { pushSnapshot: true });
 	  };
 	  const showHeaderIslands = publicRoute.kind === "app" && activePage === "workspace" && activeView === "home";
@@ -6356,6 +6361,7 @@ export default function App() {
                                 activateDiscoverCommunityCard({
                                   canActivate,
                                   slug: community.slug,
+                                  alreadyMember,
                                 });
                               };
 		                            return (
