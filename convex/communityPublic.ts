@@ -316,8 +316,6 @@ async function ensurePendingCommunityJoinRequest(args: {
       });
       await args.ctx.db.patch(existing._id as any, {
         status: "pending",
-        deniedAt: undefined,
-        reapplyAt: undefined,
         updatedAt: args.nowMs,
       });
       const reopened = (await args.ctx.db.get(existing._id as any)) as CommunityJoinRequestLike | null;
@@ -372,8 +370,6 @@ async function joinPublicCommunityInternal(args: {
       await args.ctx.db.patch(existingMembership._id as any, {
         accessSource: existingMembership.accessSource ?? "free_grant",
         active: true,
-        revokedAt: undefined,
-        revokedReason: undefined,
         updatedAt: args.nowMs,
       });
     }
