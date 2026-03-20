@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveCurrentSession } from "../../../../shared/ensureUsableSession";
 import {
   listPendingPurchaseClaimsRpc,
@@ -40,6 +40,26 @@ type UseWebCommerceAffiliateActionsArgs = {
 };
 
 export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActionsArgs) {
+  const builderBillingLoadRequestIdRef = useRef(0);
+  const builderBillingLoadPendingCountRef = useRef(0);
+
+  function isTransportBillingStatusError(error: unknown): boolean {
+    const message =
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : String(error ?? "");
+    const normalized = message.trim().toLowerCase();
+    return (
+      normalized === "failed to fetch" ||
+      normalized.includes("networkerror") ||
+      normalized.includes("network error") ||
+      normalized.includes("load failed") ||
+      normalized.includes("fetch failed")
+    );
+  }
+
   const redeemPurchaseClaim = useCallback(
     async (token: string): Promise<void> => {
       const session = await resolveCurrentSession(args.getSession, args.ensureSession);
@@ -112,18 +132,25 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
 
   const loadBuilderBillingStatus = useCallback(
     async (session: CloudSession): Promise<BuilderBillingStatus | null> => {
+      const requestId = ++builderBillingLoadRequestIdRef.current;
+      builderBillingLoadPendingCountRef.current += 1;
       args.setIsLoadingBuilderBilling(true);
-      args.setBuilderBillingError(null);
+      args.setBuilderBillingError((prev) => (prev === "Failed to fetch" ? null : prev));
       try {
         const usableSession = await resolveCurrentSession(() => session, args.ensureSession);
         if (!usableSession) {
-          args.setBuilderBillingStatus(null);
+          if (requestId === builderBillingLoadRequestIdRef.current) {
+            args.setBuilderBillingStatus(null);
+          }
           return null;
         }
         const row = await loadBuilderBillingStatusCanonical({
           session: usableSession,
         });
-        args.setBuilderBillingStatus(row);
+        if (requestId === builderBillingLoadRequestIdRef.current) {
+          args.setBuilderBillingStatus(row);
+          args.setBuilderBillingError((prev) => (prev === "Failed to fetch" ? null : prev));
+        }
         return row;
       } catch (error) {
         const message =
@@ -132,11 +159,21 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
             : error instanceof Error
               ? error.message
               : "Failed to load billing status.";
-        args.setBuilderBillingError(message);
-        args.setBuilderBillingStatus(null);
+
+        // Background billing refresh should not nuke working UI state or leak raw transport noise.
+        if (!isTransportBillingStatusError(error) && requestId === builderBillingLoadRequestIdRef.current) {
+          args.setBuilderBillingError(message);
+          args.setBuilderBillingStatus(null);
+        } else {
+          console.warn("Builder billing status refresh failed:", error);
+        }
         return null;
       } finally {
-        args.setIsLoadingBuilderBilling(false);
+        builderBillingLoadPendingCountRef.current = Math.max(
+          0,
+          builderBillingLoadPendingCountRef.current - 1,
+        );
+        args.setIsLoadingBuilderBilling(builderBillingLoadPendingCountRef.current > 0);
       }
     },
     [args],
