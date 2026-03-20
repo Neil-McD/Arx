@@ -83,8 +83,8 @@ function buildPrimaryActionLabel(args: {
   if (args.mode === "checkout") return "Join now";
   if (args.mode === "join_approval") {
     if (args.isJoiningPublicCommunity) return "Joining…";
-    if (args.approvalPending) return "Pending";
-    if (args.approvalDenied) return "Denied";
+    if (args.approvalPending) return "Request sent";
+    if (args.approvalDenied) return "Request denied";
     return "Join now";
   }
   if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";

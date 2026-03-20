@@ -2016,6 +2016,33 @@ body {
   color: var(--text-secondary);
 }
 
+.public-funnel-status-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary, var(--border-default)) 28%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-primary, var(--bg-card-alt)) 10%, var(--bg-card-alt));
+}
+
+.public-funnel-status-card-title {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 620;
+  color: var(--text-primary);
+}
+
+.public-funnel-status-card-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.public-funnel-status-card-error {
+  border-color: color-mix(in srgb, var(--accent-error, #c75a4a) 34%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-error, #c75a4a) 10%, var(--bg-card-alt));
+}
+
 .public-funnel-status-error {
   color: var(--accent-error, #c75a4a);
 }

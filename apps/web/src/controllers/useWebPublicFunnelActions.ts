@@ -131,13 +131,11 @@ export function useWebPublicFunnelActions<
         if (kind === "approval_pending" || kind === "approval_denied") {
           clearPendingPublicJoin();
           args.setPublicJoinError(null);
-          if (trimmedId) {
-            args.setMyPublicCommunityJoinRequest({
-              community_id: trimmedId,
-              status: kind === "approval_denied" ? "denied" : "pending",
-              updated_at: new Date().toISOString(),
-            } as MyCommunityJoinRequestT);
-          }
+          args.setMyPublicCommunityJoinRequest({
+            community_id: trimmedId || trimmedSlug || "__pending__",
+            status: kind === "approval_denied" ? "denied" : "pending",
+            updated_at: new Date().toISOString(),
+          } as MyCommunityJoinRequestT);
           args.setPublicCommunity((prev) =>
             prev
               ? ({
