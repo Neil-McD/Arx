@@ -26,7 +26,7 @@ export function parseAppTheme(input: string | null | undefined): AppTheme | null
 }
 
 function themeFamilyForTheme(theme: AppTheme): AppThemeFamily {
-  if (theme === "dark" || theme === "dark-warm") return "dark";
+  if (theme === "dark" || theme === "dark-warm" || theme === "polynet") return "dark";
   return "lightlike";
 }
 
