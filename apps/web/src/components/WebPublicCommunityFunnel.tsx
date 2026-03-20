@@ -152,11 +152,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   });
   const isPrimaryActionDisabled =
     isPreviewMode ||
-    isLoadingPublicCommunity ||
     !publicCommunity ||
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
-    isLoadingMyPublicCommunityJoinRequest ||
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || approvalDenied));
