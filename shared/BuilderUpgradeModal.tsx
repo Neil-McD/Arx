@@ -35,6 +35,8 @@ export function BuilderUpgradeModal({
   if (!isOpen) return null;
 
   void builderUpgradeContext;
+  void showBuilderUpgradeScrollHint;
+  void onModalBodyScroll;
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = isBuilderTierBuilder(builderTier) || builderTier === "architect" || builderTier === "pro";
 
@@ -47,12 +49,12 @@ export function BuilderUpgradeModal({
             ×
           </button>
         </div>
-        <div className="modal-body" ref={builderUpgradeModalBodyRef} onScroll={onModalBodyScroll}>
+        <div className="modal-body" ref={builderUpgradeModalBodyRef}>
           <div className="upgrade-copy">
             <div className="upgrade-kicker">Alpha access</div>
             <div className="upgrade-lead">
-              Free lets you tap into Polynet&apos;s community intelligence. Builder puts that
-              intelligence to work inside your own private AI workspace.
+              Free taps into Polynet&apos;s community intelligence. Builder puts it to work in
+              your private AI workspace.
             </div>
             <div className="upgrade-footnote">
               During alpha, community creation stays internal while we harden the platform.
@@ -72,7 +74,7 @@ export function BuilderUpgradeModal({
               </div>
               <div className="plan-subtitle">For members using Polynet&apos;s collective intelligence.</div>
               <ul className="plan-points">
-                <li>Tap into community intelligence as it compounds.</li>
+                <li>Tap into intelligence that compounds with the community.</li>
                 <li>Research, ask, and learn across the network.</li>
                 <li>Keep your threads and context in sync.</li>
               </ul>
@@ -91,10 +93,9 @@ export function BuilderUpgradeModal({
                 For turning community intelligence into real execution.
               </div>
               <ul className="plan-points">
-                <li>Bring compounding community intelligence into your own build loop.</li>
-                <li>Work inside a private AI workspace and cloud computer.</li>
+                <li>Bring community intelligence directly into your private build loop.</li>
+                <li>Work with a dedicated AI workspace and cloud computer.</li>
                 <li>Move faster with deeper context, continuity, and execution.</li>
-                <li>Start building with Polynet during alpha.</li>
               </ul>
               {!builderIsCurrent ? (
                 <button
@@ -106,13 +107,6 @@ export function BuilderUpgradeModal({
                   {isStartingBuilderCheckout ? "Starting…" : "Upgrade to Builder"}
                 </button>
               ) : null}
-            </div>
-          </div>
-          <div className={`modal-scroll-hint${showBuilderUpgradeScrollHint ? " show" : ""}`} aria-hidden="true">
-            <div className="modal-scroll-hint-icon">
-              <svg viewBox="0 0 24 24">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
             </div>
           </div>
         </div>
