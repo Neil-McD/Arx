@@ -567,6 +567,9 @@ type MyCommunityJoinRequest = {
   community_id: string;
   status: string;
   updated_at: string;
+  denied_at?: string | null;
+  reapply_at?: string | null;
+  denied_until?: string | null;
 };
 
 type PersonalMemoryItem = {
@@ -3564,6 +3567,8 @@ export default function App() {
     canJoinWithCheckout,
     approvalPending,
     approvalDenied,
+    canRequestAgain,
+    approvalReapplyLabel,
     memberCountOverride,
   } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
     publicRoute,
@@ -5734,6 +5739,8 @@ export default function App() {
                     isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
                     approvalPending={approvalPending}
                     approvalDenied={approvalDenied}
+                    canRequestAgain={canRequestAgain}
+                    approvalReapplyLabel={approvalReapplyLabel}
                     onPrimaryJoinAction={handlePublicLandingPrimaryAction}
                     publicCommunityError={publicCommunityError}
                     publicJoinError={publicJoinError}

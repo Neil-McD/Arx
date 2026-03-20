@@ -65,12 +65,16 @@ export function useWebPublicFunnelActions<
       status: "pending" | "denied";
       communityId?: string | null;
       communitySlug?: string | null;
+      reapplyAt?: string | null;
+      deniedUntil?: string | null;
     }) => {
       args.setPublicJoinError(null);
       args.setMyPublicCommunityJoinRequest({
         community_id: (opts.communityId ?? opts.communitySlug ?? "__pending__").trim() || "__pending__",
         status: opts.status,
         updated_at: new Date().toISOString(),
+        reapply_at: opts.reapplyAt ?? null,
+        denied_until: opts.deniedUntil ?? opts.reapplyAt ?? null,
       } as MyCommunityJoinRequestT);
       args.setPublicCommunity((prev) =>
         prev
@@ -119,20 +123,30 @@ export function useWebPublicFunnelActions<
         const status = String(joinRequest?.status ?? "").trim().toLowerCase();
         if (status === "pending") {
           clearPendingPublicJoin();
-          applyApprovalJoinState({
-            status: "pending",
-            communityId: joinRequest?.community_id ?? null,
-            communitySlug: trimmedSlug,
-          });
+          args.setPublicJoinError(null);
+          args.setMyPublicCommunityJoinRequest(joinRequest);
+          args.setPublicCommunity((prev) =>
+            prev
+              ? ({
+                  ...prev,
+                  entry_policy: "approval",
+                } as PublicCommunityT)
+              : prev,
+          );
           return "pending";
         }
         if (status === "denied") {
           clearPendingPublicJoin();
-          applyApprovalJoinState({
-            status: "denied",
-            communityId: joinRequest?.community_id ?? null,
-            communitySlug: trimmedSlug,
-          });
+          args.setPublicJoinError(null);
+          args.setMyPublicCommunityJoinRequest(joinRequest);
+          args.setPublicCommunity((prev) =>
+            prev
+              ? ({
+                  ...prev,
+                  entry_policy: "approval",
+                } as PublicCommunityT)
+              : prev,
+          );
           return "denied";
         }
       }

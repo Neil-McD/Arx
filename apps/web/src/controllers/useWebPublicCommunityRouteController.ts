@@ -25,6 +25,8 @@ type PublicCommunityLike = {
 
 type PublicJoinRequestLike = {
   status: string;
+  reapply_at?: string | null;
+  denied_until?: string | null;
 };
 
 type PublicCommunityAccessLike = {
@@ -132,6 +134,25 @@ export function useWebPublicCommunityRouteController<
     : String(params.myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
   const approvalPending = myJoinRequestStatus === "pending";
   const approvalDenied = myJoinRequestStatus === "denied";
+  const approvalReapplyAtIso = !approvalDenied
+    ? null
+    : String(
+        params.myPublicCommunityJoinRequest?.reapply_at ??
+          params.myPublicCommunityJoinRequest?.denied_until ??
+          "",
+      ).trim() || null;
+  const approvalReapplyAtMs =
+    approvalReapplyAtIso && Number.isFinite(Date.parse(approvalReapplyAtIso))
+      ? Date.parse(approvalReapplyAtIso)
+      : null;
+  const canRequestAgain = Boolean(approvalDenied && approvalReapplyAtMs !== null && approvalReapplyAtMs <= Date.now());
+  const approvalReapplyLabel =
+    approvalDenied && approvalReapplyAtMs !== null
+      ? new Intl.DateTimeFormat(undefined, {
+          month: "short",
+          day: "numeric",
+        }).format(new Date(approvalReapplyAtMs))
+      : null;
 
   return {
     publicFunnelSlug,
@@ -151,6 +172,8 @@ export function useWebPublicCommunityRouteController<
     canJoinWithCheckout,
     approvalPending,
     approvalDenied,
+    canRequestAgain,
+    approvalReapplyLabel,
     memberCountOverride: isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.memberCount ?? null : null,
   };
 }

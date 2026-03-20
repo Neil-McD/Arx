@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
   type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
@@ -373,6 +374,8 @@ export const approveCommunityJoinRequest = mutation({
     }
     await ctx.db.patch(request._id as any, {
       status: "approved",
+      deniedAt: undefined,
+      reapplyAt: undefined,
       updatedAt: nowMs,
     });
     return { ok: true };
@@ -403,6 +406,8 @@ export const denyCommunityJoinRequest = mutation({
     });
     await ctx.db.patch(request._id as any, {
       status: "denied",
+      deniedAt: nowMs,
+      reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
       updatedAt: nowMs,
     });
     return { ok: true };
@@ -507,6 +512,8 @@ export const removeCommunityMember = mutation({
     if (joinRequest) {
       await ctx.db.patch(joinRequest._id as any, {
         status: "denied",
+        deniedAt: nowMs,
+        reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
         updatedAt: nowMs,
       });
     }

@@ -67,6 +67,7 @@ export type CommunityAccess = {
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: string | null;
+  join_request_reapply_at?: string | null;
   primary_cta?: "open_community" | "join" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;

@@ -31,6 +31,8 @@ export type CommunityFunnelSurfaceAction = {
   showSignIn: boolean;
   approvalPending: boolean;
   approvalDenied: boolean;
+  canRequestAgain: boolean;
+  approvalReapplyLabel?: string | null;
   isPreviewMode: boolean;
 };
 
@@ -279,17 +281,19 @@ function CommunityFunnelActionModule(props: {
 
         {action.canJoinWithApproval && !action.showSignIn && action.approvalPending ? (
           <div className="public-funnel-status-card" role="status" aria-live="polite">
-            <div className="public-funnel-status-card-title">Request sent</div>
+            <div className="public-funnel-status-card-title">Request pending</div>
             <div className="public-funnel-status-card-body">
               You&apos;re waiting for approval to join {action.communityName}.
             </div>
           </div>
         ) : null}
-        {action.canJoinWithApproval && !action.showSignIn && action.approvalDenied ? (
+        {action.canJoinWithApproval && !action.showSignIn && action.approvalDenied && !action.canRequestAgain ? (
           <div className="public-funnel-status-card public-funnel-status-card-error" role="status" aria-live="polite">
             <div className="public-funnel-status-card-title">Request denied</div>
             <div className="public-funnel-status-card-body">
-              Your join request for {action.communityName} was denied.
+              {action.approvalReapplyLabel
+                ? `Your join request for ${action.communityName} was denied. You can request access again on ${action.approvalReapplyLabel}.`
+                : `Your join request for ${action.communityName} was denied.`}
             </div>
           </div>
         ) : null}

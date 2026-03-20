@@ -51,6 +51,8 @@ type WebPublicCommunityFunnelProps = {
   isLoadingMyPublicCommunityJoinRequest: boolean;
   approvalPending: boolean;
   approvalDenied: boolean;
+  canRequestAgain: boolean;
+  approvalReapplyLabel: string | null;
   onPrimaryJoinAction: () => void;
   publicCommunityError: string | null;
   publicJoinError: string | null;
@@ -78,13 +80,14 @@ function buildPrimaryActionLabel(args: {
   isJoiningPublicCommunity: boolean;
   approvalPending: boolean;
   approvalDenied: boolean;
+  canRequestAgain: boolean;
 }): string {
   if (args.mode === "enter") return "Enter community";
   if (args.mode === "checkout") return "Join now";
   if (args.mode === "join_approval") {
     if (args.isJoiningPublicCommunity) return "Joining…";
-    if (args.approvalPending) return "Request sent";
-    if (args.approvalDenied) return "Request denied";
+    if (args.approvalPending) return "Request pending";
+    if (args.approvalDenied) return args.canRequestAgain ? "Request again" : "Request denied";
     return "Join now";
   }
   if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
@@ -109,6 +112,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     isLoadingMyPublicCommunityJoinRequest,
     approvalPending,
     approvalDenied,
+    canRequestAgain,
+    approvalReapplyLabel,
     onPrimaryJoinAction,
     publicCommunityError,
     publicJoinError,
@@ -149,6 +154,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     isJoiningPublicCommunity,
     approvalPending,
     approvalDenied,
+    canRequestAgain,
   });
   const isPrimaryActionDisabled =
     isPreviewMode ||
@@ -157,7 +163,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     isJoiningPublicCommunity ||
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
-    (canJoinWithApproval && (approvalPending || approvalDenied));
+    (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
   const heroStyle = buildCommunityHeroStyle(publicCommunity);
   const actionCardArtStyle = buildCommunityFunnelActionCardArtStyle({
     community: publicCommunity,
@@ -183,6 +189,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     showSignIn,
     approvalPending,
     approvalDenied,
+    canRequestAgain,
+    approvalReapplyLabel,
     isPreviewMode,
   };
 

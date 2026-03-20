@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  communityJoinRequestCanReapply,
   type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMembershipLike,
@@ -298,15 +299,33 @@ async function ensurePendingCommunityJoinRequest(args: {
 }): Promise<CommunityJoinRequestLike> {
   const existing = (await args.ctx.db
     .query("communityJoinRequests")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-    .first()) as CommunityJoinRequestLike | null;
-  if (existing) return existing;
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
+      .first()) as CommunityJoinRequestLike | null;
+  if (existing) {
+    if (
+      String(existing.status ?? "").trim().toLowerCase() === "denied" &&
+      communityJoinRequestCanReapply(existing, args.nowMs)
+    ) {
+      await args.ctx.db.patch(existing._id as any, {
+        status: "pending",
+        deniedAt: undefined,
+        reapplyAt: undefined,
+        updatedAt: args.nowMs,
+      });
+      const reopened = (await args.ctx.db.get(existing._id as any)) as CommunityJoinRequestLike | null;
+      if (!reopened) throw new Error("join_request_reopen_failed");
+      return reopened;
+    }
+    return existing;
+  }
 
   const id = await args.ctx.db.insert("communityJoinRequests", {
     communityId: args.communityId,
     userId: args.userId,
     status: "pending",
     message: null,
+    deniedAt: undefined,
+    reapplyAt: undefined,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -355,6 +374,15 @@ async function joinPublicCommunityInternal(args: {
     } else if (status === "pending") {
       throw new Error("approval_pending");
     } else if (status === "denied") {
+      if (communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
+        await ensurePendingCommunityJoinRequest({
+          ctx: args.ctx,
+          communityId: args.community._id,
+          userId: args.userId,
+          nowMs: args.nowMs,
+        });
+        throw new Error("approval_pending");
+      }
       throw new Error("approval_denied");
     } else {
       await ensurePendingCommunityJoinRequest({

@@ -82,6 +82,8 @@ export type CommunityJoinRequestLike = {
   userId: any;
   status: string;
   message?: string;
+  deniedAt?: number;
+  reapplyAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -381,6 +383,34 @@ export function communityMembershipRowIsActive(membership: CommunityMembershipLi
   return true;
 }
 
+export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function resolveCommunityJoinRequestReapplyAtMs(
+  request: CommunityJoinRequestLike | null | undefined,
+): number | null {
+  if (!request) return null;
+  const status = String(request.status ?? "").trim().toLowerCase();
+  if (status !== "denied") return null;
+  if (typeof request.reapplyAt === "number" && Number.isFinite(request.reapplyAt)) {
+    return request.reapplyAt;
+  }
+  const base = typeof request.deniedAt === "number" && Number.isFinite(request.deniedAt)
+    ? request.deniedAt
+    : typeof request.updatedAt === "number" && Number.isFinite(request.updatedAt)
+      ? request.updatedAt
+      : null;
+  if (base === null) return null;
+  return base + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS;
+}
+
+export function communityJoinRequestCanReapply(
+  request: CommunityJoinRequestLike | null | undefined,
+  nowMs: number,
+): boolean {
+  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(request);
+  return reapplyAt !== null && reapplyAt <= nowMs;
+}
+
 export function communitySubscriptionStatusGrantsAccess(
   status: CommunitySubscriptionLike["status"] | null,
 ): boolean {
@@ -602,12 +632,17 @@ export function mapJoinRequestRow(args: {
   communityId: string;
   row: CommunityJoinRequestLike;
 }) {
+  const deniedAt = typeof args.row.deniedAt === "number" ? args.row.deniedAt : null;
+  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(args.row);
   return {
     community_id: args.communityId,
     status: String(args.row.status ?? "").trim().toLowerCase() || "pending",
     message: args.row.message ?? null,
     created_at: toIsoString(args.row.createdAt),
     updated_at: toIsoString(args.row.updatedAt),
+    denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,
+    reapply_at: reapplyAt !== null ? toIsoString(reapplyAt) : null,
+    denied_until: reapplyAt !== null ? toIsoString(reapplyAt) : null,
   };
 }
 
@@ -648,6 +683,7 @@ export async function resolveCommunityAccessBundle(args: {
   const isAdmin = !isOwner && isEntitled && role === "admin";
   const isModerator = !isOwner && isEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
+  let joinRequestReapplyAt: number | null = null;
   if (!isEntitled) {
     const joinRequest = (await args.ctx.db
       .query("communityJoinRequests")
@@ -656,6 +692,7 @@ export async function resolveCommunityAccessBundle(args: {
       )
       .first()) as CommunityJoinRequestLike | null;
     joinRequestStatus = joinRequest ? String(joinRequest.status ?? "").trim().toLowerCase() || "pending" : null;
+    joinRequestReapplyAt = resolveCommunityJoinRequestReapplyAtMs(joinRequest);
   }
   const relation: CommunityAccessRelation = isOwner
     ? "owner"
@@ -690,6 +727,7 @@ export async function resolveCommunityAccessBundle(args: {
     entry_policy: entryPolicy,
     visibility: args.community.visibility,
     join_request_status: joinRequestStatus,
+    join_request_reapply_at: joinRequestReapplyAt !== null ? toIsoString(joinRequestReapplyAt) : null,
     primary_cta: primaryCta,
     is_owner: isOwner,
     is_entitled: isEntitled,

@@ -237,6 +237,8 @@ export default defineSchema({
     userId: v.id("users"),
     status: v.string(),
     message: v.optional(v.string()),
+    deniedAt: v.optional(v.number()),
+    reapplyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
