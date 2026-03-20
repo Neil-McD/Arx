@@ -1572,6 +1572,7 @@ body {
   border: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--bg-card) 60%, transparent);
   overflow: hidden;
+  position: relative;
 }
 
 .public-funnel-media-shell-skeleton {
@@ -1595,6 +1596,43 @@ body {
   display: block;
   border: 0;
   background: color-mix(in srgb, var(--bg-card) 84%, black);
+}
+
+.public-funnel-media-deferred {
+  padding: 0;
+  cursor: pointer;
+}
+
+.public-funnel-media-deferred::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.22));
+  pointer-events: none;
+}
+
+.public-funnel-media-placeholder-rich {
+  height: 100%;
+  border: 0;
+  background:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent-gold) 26%, transparent), transparent 28%),
+    color-mix(in srgb, var(--bg-card) 84%, black);
+}
+
+.public-funnel-media-play-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 78px;
+  height: 78px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: color-mix(in srgb, var(--bg-app) 34%, rgba(0, 0, 0, 0.68));
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
 }
 
 .public-funnel-media-placeholder-text {

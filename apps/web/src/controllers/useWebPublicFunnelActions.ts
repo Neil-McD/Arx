@@ -194,6 +194,12 @@ export function useWebPublicFunnelActions<
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
+        args.setPublicCommunity({
+          ...payload.community,
+          visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
+        } as PublicCommunityT);
+        args.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
+
         const rawSession = args.getSession();
         const session = args.ensureSession ? await args.ensureSession(rawSession) : rawSession;
         if (session) {
@@ -210,12 +216,6 @@ export function useWebPublicFunnelActions<
         } else {
           args.setPublicCommunityAccess(null);
         }
-
-        args.setPublicCommunity({
-          ...payload.community,
-          visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
-        } as PublicCommunityT);
-        args.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
 
         if (
           session &&

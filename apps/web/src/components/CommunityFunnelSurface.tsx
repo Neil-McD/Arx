@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
@@ -118,6 +118,46 @@ function renderAvatar(name: string, imageUrl: string | null | undefined, classNa
   return <span className={fallbackClassName}>{getCommunityInitials(name)}</span>;
 }
 
+function DeferredEmbedHero(props: { embedSrc: string; thumbnailUrl?: string | null }) {
+  const [isActive, setIsActive] = useState(false);
+
+  if (isActive) {
+    return (
+      <div className="public-funnel-media-shell">
+        <iframe
+          className="public-funnel-media-embed"
+          src={props.embedSrc}
+          title="Community funnel video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className="public-funnel-media-shell public-funnel-media-deferred"
+      type="button"
+      onClick={() => setIsActive(true)}
+      aria-label="Play community funnel video"
+    >
+      {props.thumbnailUrl ? (
+        <img className="public-funnel-media-image" src={props.thumbnailUrl} alt="" draggable={false} loading="lazy" />
+      ) : (
+        <div className="public-funnel-media-placeholder public-funnel-media-placeholder-rich">
+          <div className="public-funnel-media-placeholder-text">Play video</div>
+        </div>
+      )}
+      <span className="public-funnel-media-play-badge" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.28-6.86a1 1 0 0 0 0-1.66L9.53 4.29A1 1 0 0 0 8 5.14Z" />
+        </svg>
+      </span>
+    </button>
+  );
+}
+
 function renderHeroMedia(kind: CommunityFunnelHeroMediaKind, url: string | null) {
   if (!url) {
     return (
@@ -128,19 +168,17 @@ function renderHeroMedia(kind: CommunityFunnelHeroMediaKind, url: string | null)
   }
   if (kind === "video") {
     const embed = parseEmbedUrl(url);
+    if (embed) {
+      return (
+        <DeferredEmbedHero
+          embedSrc={embed.src}
+          thumbnailUrl={"thumbnailUrl" in embed ? embed.thumbnailUrl : null}
+        />
+      );
+    }
     return (
       <div className="public-funnel-media-shell">
-        {embed ? (
-          <iframe
-            className="public-funnel-media-embed"
-            src={embed.src}
-            title="Community funnel video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowFullScreen
-          />
-        ) : (
-          <video className="public-funnel-media-video" src={url} controls playsInline preload="metadata" />
-        )}
+        <video className="public-funnel-media-video" src={url} controls playsInline preload="metadata" />
       </div>
     );
   }

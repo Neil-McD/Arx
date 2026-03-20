@@ -77,11 +77,9 @@ export function useWebPublicCommunityRouteController<
   useEffect(() => {
     if (!publicFunnelSlug) return;
     if (isPublicFunnelPreviewRoute) return;
-    if (!params.isAuthBootstrapComplete) return;
     void params.loadPublicCommunity(publicFunnelSlug);
   }, [
     params.sessionDependency,
-    params.isAuthBootstrapComplete,
     isPublicFunnelPreviewRoute,
     publicFunnelSlug,
     params.loadPublicCommunity,
