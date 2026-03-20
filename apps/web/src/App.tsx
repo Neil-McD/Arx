@@ -6435,7 +6435,7 @@ export default function App() {
           }}
         />
 
-	      <BuilderUpgradeModal
+        <BuilderUpgradeModal
           isOpen={isBuilderUpgradeOpen}
           builderUpgradeContext={builderUpgradeContext}
           builderTier={builderBillingStatus?.builder_tier}
@@ -6446,6 +6446,14 @@ export default function App() {
           onClose={() => setIsBuilderUpgradeOpen(false)}
           onModalBodyScroll={updateBuilderUpgradeScrollHint}
           onStartBuilderPlanCheckout={(tier) => {
+            if (!cloudSession) {
+              setIsBuilderUpgradeOpen(false);
+              openAuthGate({
+                reason: "start_builder_checkout",
+                payload: { tier, context: builderUpgradeContext },
+              });
+              return;
+            }
             void startBuilderPlanCheckout(tier, { context: builderUpgradeContext });
           }}
         />

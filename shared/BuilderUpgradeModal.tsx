@@ -53,8 +53,8 @@ export function BuilderUpgradeModal({
           <div className="upgrade-copy">
             <div className="upgrade-kicker">Alpha access</div>
             <div className="upgrade-lead">
-              Free taps into Polynet&apos;s community intelligence. Builder puts it to work in
-              your private AI workspace.
+              Tap into Polynet&apos;s community intelligence or put it to work in your private AI
+              workspace.
             </div>
             <div className="upgrade-footnote">
               During alpha, community creation stays internal while we harden the platform.

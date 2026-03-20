@@ -10017,9 +10017,9 @@ h3.md-header {
 
 .upgrade-copy {
   display: grid;
-  gap: 10px;
-  max-width: 760px;
-  margin-bottom: 22px;
+  gap: 8px;
+  max-width: 720px;
+  margin-bottom: 18px;
 }
 
 .upgrade-kicker {
@@ -10030,18 +10030,18 @@ h3.md-header {
 }
 
 .upgrade-lead {
-  font-size: clamp(22px, 2.8vw, 34px);
-  line-height: 1.04;
+  font-size: clamp(20px, 2.45vw, 30px);
+  line-height: 1.02;
   letter-spacing: -0.04em;
   font-weight: 640;
   color: var(--text-primary);
-  max-width: 24ch;
+  max-width: 20ch;
 }
 
 .upgrade-footnote {
   max-width: 64ch;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
@@ -10078,7 +10078,11 @@ h3.md-header {
 }
 
 .modal.modal-upgrade .plan-card .plan-cta {
-  margin-top: auto;
+  margin-top: 16px;
+  align-self: flex-start;
+  width: auto;
+  min-width: 232px;
+  padding-inline: 24px;
 }
 
 .modal.modal-upgrade .plan-cta {
@@ -10114,6 +10118,12 @@ h3.md-header {
 
   .modal.modal-upgrade .plan-price-amount {
     font-size: 48px;
+  }
+
+  .modal.modal-upgrade .plan-card .plan-cta {
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
   }
 }
 
