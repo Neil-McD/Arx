@@ -323,9 +323,6 @@ async function ensurePendingCommunityJoinRequest(args: {
     communityId: args.communityId,
     userId: args.userId,
     status: "pending",
-    message: null,
-    deniedAt: undefined,
-    reapplyAt: undefined,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
