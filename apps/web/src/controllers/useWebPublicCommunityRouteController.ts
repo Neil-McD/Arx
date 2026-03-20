@@ -27,6 +27,11 @@ type PublicJoinRequestLike = {
   status: string;
 };
 
+type PublicCommunityAccessLike = {
+  can_enter_community?: boolean;
+  is_owner: boolean;
+};
+
 export function useWebPublicCommunityRouteController<
   TPublicCommunity extends PublicCommunityLike,
   TJoinRequest extends PublicJoinRequestLike,
@@ -34,6 +39,7 @@ export function useWebPublicCommunityRouteController<
   publicRoute: PublicRoute;
   publicCommunity: TPublicCommunity | null;
   publicCommunityPlans: PublicPlanSummary[];
+  publicCommunityAccess: PublicCommunityAccessLike | null;
   myPublicCommunityJoinRequest: TJoinRequest | null;
   isSignedIn: boolean;
   isAuthBootstrapComplete: boolean;
@@ -120,6 +126,9 @@ export function useWebPublicCommunityRouteController<
   const canJoinForFree = publicJoinMode === "join_free";
   const canJoinWithApproval = publicJoinMode === "join_approval";
   const canJoinWithCheckout = publicJoinMode === "checkout";
+  const canEnterPublicCommunity = Boolean(
+    params.publicCommunityAccess && (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
+  );
   const myJoinRequestStatus = isPublicFunnelPreviewRoute
     ? ""
     : String(params.myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
@@ -138,6 +147,7 @@ export function useWebPublicCommunityRouteController<
     publicVisibilityLabel,
     resolvedPublicCommunity,
     publicJoinMode,
+    canEnterPublicCommunity,
     canJoinForFree,
     canJoinWithApproval,
     canJoinWithCheckout,

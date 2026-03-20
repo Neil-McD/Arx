@@ -24,6 +24,7 @@ type UseWebPublicFunnelActionsArgs<
   MyCommunityJoinRequestT extends { community_id: string; status: string },
 > = {
   getSession: () => CloudSession | null;
+  getCurrentPublicCommunitySlug: () => string | null;
   session: CloudSession | null;
   ensureSession?: (session: CloudSession | null) => Promise<CloudSession | null>;
   openAuthGate: (intentInput: PendingAuthIntentInput) => void;
@@ -34,6 +35,7 @@ type UseWebPublicFunnelActionsArgs<
   setIsJoiningPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunity: Dispatch<SetStateAction<PublicCommunityT | null>>;
+  setPublicCommunityAccess: Dispatch<SetStateAction<CommunityAccessRow | null>>;
 
   setIsLoadingMyPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
   setMyPublicCommunityJoinRequest: Dispatch<SetStateAction<MyCommunityJoinRequestT | null>>;
@@ -172,15 +174,23 @@ export function useWebPublicFunnelActions<
 
   const loadPublicCommunity = useCallback(
     async (slug: string): Promise<void> => {
+      const requestedSlug = slug.trim();
+      if (!requestedSlug) return;
+      const currentSlug = args.getCurrentPublicCommunitySlug();
+      const isSameSlugRefresh = currentSlug === requestedSlug;
+
       args.setIsLoadingPublicCommunity(true);
       args.setPublicCommunityError(null);
       args.setPublicJoinError(null);
-      args.setPublicCommunity(null);
-      args.setPublicCommunityPlans([]);
-      args.setMyPublicCommunityJoinRequest(null);
+      if (!isSameSlugRefresh) {
+        args.setPublicCommunity(null);
+        args.setPublicCommunityPlans([]);
+        args.setMyPublicCommunityJoinRequest(null);
+        args.setPublicCommunityAccess(null);
+      }
       try {
         const payload = await resolveCloudPublicFunnel<CloudSession, PublicCommunityT, PublicPlanT>({
-          communitySlug: slug,
+          communitySlug: requestedSlug,
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
@@ -192,17 +202,13 @@ export function useWebPublicFunnelActions<
               session,
               communitySlug: payload.community.slug,
             });
-            if (access && (access.can_enter_community || access.is_owner)) {
-              args.openCommunityWorkspace({
-                communityId: access.community_id,
-                communitySlug: payload.community.slug,
-              });
-              await args.loadCommunities(session);
-              return;
-            }
+            args.setPublicCommunityAccess(access);
           } catch {
+            args.setPublicCommunityAccess(null);
             // ignore; fall back to the public funnel
           }
+        } else {
+          args.setPublicCommunityAccess(null);
         }
 
         args.setPublicCommunity({

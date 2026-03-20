@@ -845,6 +845,7 @@ export default function App() {
 
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityRecord | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanSummary[]>([]);
+  const [publicCommunityAccess, setPublicCommunityAccess] = useState<CommunityAccess | null>(null);
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
@@ -2803,6 +2804,7 @@ export default function App() {
     setIsWorkspaceAtBottom,
     setLoadingThreadMessagesThreadId,
     setThreadMessages,
+    discoverCommunitiesCount: discoverCommunities.length,
     loadThreadMessages,
     loadDiscoverCommunities,
     loadCommunityChat,
@@ -3390,6 +3392,7 @@ export default function App() {
     MyCommunityJoinRequest
   >({
     getSession: () => sessionRef.current,
+    getCurrentPublicCommunitySlug: () => publicCommunity?.slug ?? null,
     ensureSession: ensureUsableCloudSession,
     ...cloudSessionArg,
     openAuthGate,
@@ -3400,6 +3403,7 @@ export default function App() {
     setIsJoiningPublicCommunity,
     setPublicJoinError,
     setPublicCommunity,
+    setPublicCommunityAccess,
     setIsLoadingMyPublicCommunityJoinRequest,
     setMyPublicCommunityJoinRequest,
     setIsLoadingPublicCommunity,
@@ -3553,6 +3557,7 @@ export default function App() {
     publicVisibilityLabel,
     resolvedPublicCommunity,
     publicJoinMode,
+    canEnterPublicCommunity,
     canJoinForFree,
     canJoinWithApproval,
     canJoinWithCheckout,
@@ -3563,6 +3568,7 @@ export default function App() {
     publicRoute,
     publicCommunity,
     publicCommunityPlans,
+    publicCommunityAccess,
     myPublicCommunityJoinRequest,
     isSignedIn: Boolean(cloudSession),
     isAuthBootstrapComplete,
@@ -4671,6 +4677,13 @@ export default function App() {
   const handlePublicLandingPrimaryAction = () => {
     if (isPublicFunnelPreviewRoute) return;
     if (!publicCommunity) return;
+    if (canEnterPublicCommunity && publicCommunityAccess?.community_id) {
+      enterJoinedCommunity({
+        communityId: publicCommunityAccess.community_id,
+        communitySlug: publicCommunity.slug,
+      });
+      return;
+    }
     if (canJoinWithCheckout && selectedPublicCommunityPlan) {
       void startCheckoutForPlan(
         publicCommunity.slug,
@@ -5128,15 +5141,10 @@ export default function App() {
 	  const activateDiscoverCommunityCard = (opts: {
 	    canActivate: boolean;
 	    slug: string;
-      alreadyMember: boolean;
 	  }) => {
 	    if (!opts.canActivate) return;
 	    if (!opts.slug) return;
-      if (!opts.alreadyMember) {
-        openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
-        return;
-      }
-	    openCommunityBySlug(opts.slug, { pushSnapshot: true });
+	    openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
 	  };
 	  const showHeaderIslands = publicRoute.kind === "app" && activePage === "workspace" && activeView === "home";
 	  const communityHomeButton = activeCommunity ? (
@@ -5716,6 +5724,7 @@ export default function App() {
                       isPublicFunnelPreviewRoute ? false : Boolean(selectedPublicCommunityPlan)
                     }
                     isLoadingPublicCommunity={isLoadingPublicCommunity}
+                    canEnterCommunity={canEnterPublicCommunity}
                     canJoinForFree={canJoinForFree}
                     canJoinWithApproval={canJoinWithApproval}
                     canJoinWithCheckout={canJoinWithCheckout}
@@ -6345,8 +6354,6 @@ export default function App() {
 	                          </div>
 	                        )}
 	                        {filteredDiscoverCommunities.map((community) => {
-	                            const memberCommunity = communities.find((c) => c.slug === community.slug) ?? null;
-	                            const alreadyMember = Boolean(memberCommunity);
 	                            const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
                             const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
                             const visibilityClass = isPublishedCommunityVisibility(community.visibility)
@@ -6361,7 +6368,6 @@ export default function App() {
                                 activateDiscoverCommunityCard({
                                   canActivate,
                                   slug: community.slug,
-                                  alreadyMember,
                                 });
                               };
 		                            return (
@@ -6381,11 +6387,7 @@ export default function App() {
 		                                isPublishedVisibility={isPublishedCommunityVisibility(community.visibility)}
 		                                clickable={canActivate}
 		                                ariaLabel={
-		                                  canActivate
-		                                    ? alreadyMember
-		                                      ? `Open ${community.name}`
-		                                      : `View ${community.name}`
-		                                    : undefined
+		                                  canActivate ? `View ${community.name}` : undefined
 		                                }
 		                                onActivate={activateDiscoverCard}
 		                              />

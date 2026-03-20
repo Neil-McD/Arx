@@ -9,7 +9,7 @@ import {
 } from "../../../../shared/communityFunnelUi";
 import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
 
-type FunnelMode = "join_free" | "join_approval" | "checkout" | "private";
+type FunnelMode = "enter" | "join_free" | "join_approval" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
@@ -42,6 +42,7 @@ type WebPublicCommunityFunnelProps = {
   selectedPublicCommunityPlanLabel: string | null;
   hasSelectedPublicCommunityPlan: boolean;
   isLoadingPublicCommunity: boolean;
+  canEnterCommunity: boolean;
   canJoinForFree: boolean;
   canJoinWithApproval: boolean;
   canJoinWithCheckout: boolean;
@@ -60,10 +61,12 @@ type WebPublicCommunityFunnelProps = {
 };
 
 function deriveFunnelMode(args: {
+  canEnterCommunity: boolean;
   canJoinWithCheckout: boolean;
   canJoinWithApproval: boolean;
   canJoinForFree: boolean;
 }): FunnelMode {
+  if (args.canEnterCommunity) return "enter";
   if (args.canJoinWithCheckout) return "checkout";
   if (args.canJoinWithApproval) return "join_approval";
   if (args.canJoinForFree) return "join_free";
@@ -76,6 +79,7 @@ function buildPrimaryActionLabel(args: {
   approvalPending: boolean;
   approvalDenied: boolean;
 }): string {
+  if (args.mode === "enter") return "Enter community";
   if (args.mode === "checkout") return "Join now";
   if (args.mode === "join_approval") {
     if (args.isJoiningPublicCommunity) return "Joining…";
@@ -96,6 +100,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     selectedPublicCommunityPlanLabel,
     hasSelectedPublicCommunityPlan,
     isLoadingPublicCommunity,
+    canEnterCommunity,
     canJoinForFree,
     canJoinWithApproval,
     canJoinWithCheckout,
@@ -132,6 +137,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const pricingLabel = isFreePricing ? "FREE" : selectedPublicCommunityPlanLabel;
 
   const funnelMode = deriveFunnelMode({
+    canEnterCommunity,
     canJoinWithCheckout,
     canJoinWithApproval,
     canJoinForFree,
@@ -151,8 +157,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
     isLoadingMyPublicCommunityJoinRequest ||
-    (canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
-    (!canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
+    (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
+    (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || approvalDenied));
   const heroStyle = buildCommunityHeroStyle(publicCommunity);
   const actionCardArtStyle = buildCommunityFunnelActionCardArtStyle({

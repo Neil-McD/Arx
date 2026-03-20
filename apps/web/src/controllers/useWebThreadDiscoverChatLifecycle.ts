@@ -14,6 +14,7 @@ export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(para
   setIsWorkspaceAtBottom: Dispatch<SetStateAction<boolean>>;
   setLoadingThreadMessagesThreadId: Dispatch<SetStateAction<string | null>>;
   setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
+  discoverCommunitiesCount: number;
   loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
   loadDiscoverCommunities: () => Promise<void>;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
@@ -53,8 +54,9 @@ export function useWebThreadDiscoverChatLifecycle<SessionT, ThreadMessageT>(para
 
   useEffect(() => {
     if (params.activePage !== "discover") return;
+    if (params.discoverCommunitiesCount > 0) return;
     void params.loadDiscoverCommunities();
-  }, [params.activePage]);
+  }, [params.activePage, params.discoverCommunitiesCount]);
 
   useEffect(() => {
     if (
