@@ -7,7 +7,7 @@ import {
 
 import type { CommunityFunnelConfig } from "../../../../shared/communityTypes";
 import {
-  buildCommunityFunnelActionCardArtStyle,
+  buildCommunityFunnelActionCardArt,
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
   formatCommunityLink,
@@ -75,7 +75,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const cardOneLiner = previewCommunity.one_liner?.trim() || funnelCopy.body;
   const aboutText = previewCommunity.about?.trim() || "";
   const communityLink = previewCommunity.slug ? formatCommunityLink(previewCommunity.slug) : null;
-  const actionCardArtStyle = buildCommunityFunnelActionCardArtStyle({
+  const actionCardArt = buildCommunityFunnelActionCardArt({
     community: previewCommunity,
     funnel: communityFunnelConfig,
     heroMediaUrlOverride: mediaPreviewUrl,
@@ -248,7 +248,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           isFreePricing={isFreePricing}
           inlineAction={previewAction}
           sidebarAction={previewAction}
-          heroArtStyle={actionCardArtStyle}
+          heroArtImageUrl={actionCardArt.imageUrl}
+          heroArtImageStyle={actionCardArt.imageStyle ?? null}
           aboutText={aboutText}
           emptyAboutContent={(
             <div className="public-funnel-note">

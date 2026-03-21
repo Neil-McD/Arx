@@ -1706,15 +1706,25 @@ body {
 }
 
 .public-funnel-hero-art {
+  position: relative;
   width: 100%;
   height: 140px;
   background:
     radial-gradient(circle at 15% 18%, rgba(255, 255, 255, 0.14), transparent 44%),
     linear-gradient(125deg, color-mix(in srgb, var(--accent-gold) 18%, transparent), color-mix(in srgb, var(--accent-cyan) 16%, transparent));
-  background-position: center;
-  background-size: cover;
   border-top-left-radius: inherit;
   border-top-right-radius: inherit;
+  overflow: hidden;
+}
+
+.public-funnel-hero-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .public-funnel-action-content {
@@ -2041,33 +2051,31 @@ body {
 
 .public-funnel-status-card-dismiss {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 14px;
+  right: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 26px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
-  color: var(--text-muted);
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
   font-size: 11px;
   font-weight: 560;
   letter-spacing: 0.01em;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease,
     color 0.15s ease,
-    opacity 0.15s ease;
+    opacity 0.15s ease,
+    text-decoration-color 0.15s ease;
 }
 
 .public-funnel-status-card-dismiss:hover:not(:disabled),
 .public-funnel-status-card-dismiss:focus-visible {
-  border-color: color-mix(in srgb, var(--accent-primary, var(--border-default)) 34%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary, var(--bg-card)) 14%, var(--bg-card));
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .public-funnel-status-card-dismiss:disabled {

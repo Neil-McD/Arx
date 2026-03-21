@@ -2,9 +2,8 @@ import type {
   CommunityFunnelConfig,
 } from "../../../../shared/communityTypes";
 import {
-  buildCommunityFunnelActionCardArtStyle,
+  buildCommunityFunnelActionCardArt,
   buildCommunityFunnelCopy,
-  buildCommunityHeroStyle,
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
 import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
@@ -168,8 +167,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
-  const heroStyle = buildCommunityHeroStyle(publicCommunity);
-  const actionCardArtStyle = buildCommunityFunnelActionCardArtStyle({
+  const actionCardArt = buildCommunityFunnelActionCardArt({
     community: publicCommunity,
     funnel,
   });
@@ -265,7 +263,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       isFreePricing={isFreePricing}
       inlineAction={action}
       sidebarAction={action}
-      heroArtStyle={actionCardArtStyle ?? heroStyle}
+      heroArtImageUrl={actionCardArt.imageUrl}
+      heroArtImageStyle={actionCardArt.imageStyle ?? null}
       aboutText={aboutText}
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       showPoweredBy

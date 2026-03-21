@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import { getCommunityBannerBackgroundStyle } from "./communityBannerUi";
+import { getCommunityBannerImageStyle } from "./communityBannerUi";
 import type { CommunityFunnelConfig } from "./communityTypes";
 
 export type CommunityFunnelUiCommunityLike = {
@@ -47,31 +47,28 @@ export function formatCommunityLink(slug: string): string {
   return `polynet.com/c/${slug}`;
 }
 
-export function buildCommunityHeroStyle(
-  community: CommunityFunnelUiCommunityLike | null | undefined,
-): CSSProperties | undefined {
-  return getCommunityBannerBackgroundStyle({
-    imageUrl: community?.banner_url,
-    focusX: community?.banner_focus_x,
-    focusY: community?.banner_focus_y,
-    zoom: community?.banner_zoom,
-  });
-}
-
-export function buildCommunityFunnelActionCardArtStyle(args: {
+export function buildCommunityFunnelActionCardArt(args: {
   community: CommunityFunnelUiCommunityLike | null | undefined;
   funnel: Pick<CommunityFunnelConfig, "hero_media_kind" | "hero_media_url"> | null | undefined;
   heroMediaUrlOverride?: string | null;
-}): CSSProperties | undefined {
+}): { imageUrl: string | null; imageStyle?: CSSProperties } {
   const heroMediaUrl = args.heroMediaUrlOverride ?? args.funnel?.hero_media_url ?? null;
   if (args.funnel?.hero_media_kind === "image" && heroMediaUrl) {
     return {
-      backgroundImage: `url(${heroMediaUrl})`,
-      backgroundPosition: "center",
-      backgroundSize: "cover",
+      imageUrl: heroMediaUrl,
+      imageStyle: {
+        objectPosition: "center center",
+      },
     };
   }
-  return buildCommunityHeroStyle(args.community);
+  return {
+    imageUrl: args.community?.banner_url ?? null,
+    imageStyle: getCommunityBannerImageStyle({
+      focusX: args.community?.banner_focus_x,
+      focusY: args.community?.banner_focus_y,
+      zoom: args.community?.banner_zoom,
+    }),
+  };
 }
 
 export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {

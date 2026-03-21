@@ -52,7 +52,8 @@ type CommunityFunnelSurfaceProps = {
   isFreePricing: boolean;
   inlineAction: CommunityFunnelSurfaceAction;
   sidebarAction?: CommunityFunnelSurfaceAction;
-  heroArtStyle?: CSSProperties | null;
+  heroArtImageUrl?: string | null;
+  heroArtImageStyle?: CSSProperties | null;
   aboutText: string;
   emptyAboutContent?: ReactNode;
   alertMessages?: string[];
@@ -198,20 +199,33 @@ function renderHeroMedia(kind: CommunityFunnelHeroMediaKind, url: string | null)
 function CommunityFunnelActionModule(props: {
   className?: string;
   includeHeroArt?: boolean;
-  heroStyle?: CSSProperties | null;
+  heroArtImageUrl?: string | null;
+  heroArtImageStyle?: CSSProperties | null;
   action: CommunityFunnelSurfaceAction;
 }) {
   const {
     className,
     includeHeroArt = false,
-    heroStyle = null,
+    heroArtImageUrl = null,
+    heroArtImageStyle = null,
     action,
   } = props;
 
   return (
     <div className={className}>
       {includeHeroArt ? (
-        <div className="public-funnel-hero-art" style={heroStyle ?? undefined} aria-hidden="true" />
+        <div className="public-funnel-hero-art" aria-hidden="true">
+          {heroArtImageUrl ? (
+            <img
+              className="public-funnel-hero-art-img"
+              src={heroArtImageUrl}
+              alt=""
+              draggable={false}
+              loading="lazy"
+              style={heroArtImageStyle ?? undefined}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       <div className="public-funnel-action-content">
@@ -332,7 +346,8 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
     isFreePricing,
     inlineAction,
     sidebarAction = inlineAction,
-    heroArtStyle = null,
+    heroArtImageUrl = null,
+    heroArtImageStyle = null,
     aboutText,
     emptyAboutContent = null,
     alertMessages = [],
@@ -396,7 +411,8 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
             className={sidebarActionClassName}
             action={sidebarAction}
             includeHeroArt
-            heroStyle={heroArtStyle}
+            heroArtImageUrl={heroArtImageUrl}
+            heroArtImageStyle={heroArtImageStyle}
           />
           {showPoweredBy ? (
             <div className="public-funnel-powered-by">
