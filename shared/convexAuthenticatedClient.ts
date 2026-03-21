@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import {
   resolveCloudAuthSubject,
+  resolveCloudIdentityToken,
   resolveCloudSessionAvatarUrl,
   resolveCloudSessionDisplayName,
   resolveCloudSessionEmail,
@@ -93,9 +94,9 @@ export async function bootstrapConvexAuthenticatedClient(
   }
 
   const client = createConvexClientForUrl(convexUrl);
-  const accessToken = String(session?.access_token ?? "").trim();
-  if (accessToken) {
-    client.setAuth(accessToken);
+  const identityToken = resolveCloudIdentityToken(session);
+  if (identityToken) {
+    client.setAuth(identityToken);
   }
 
   let actor: { authSubject?: string | null } | null = null;

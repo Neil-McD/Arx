@@ -10,6 +10,7 @@ export type CloudUser = {
 
 export type CloudSession = {
   access_token: string;
+  id_token?: string;
   expires_at: number; // epoch seconds
   user: CloudUser;
 };
@@ -88,7 +89,7 @@ export function decodeJwtPayload(token: string): unknown | null {
 }
 
 export function getCloudAuthUid(session: CloudSession): string {
-  const payload = decodeJwtPayload(session.access_token);
+  const payload = decodeJwtPayload(session.id_token ?? session.access_token);
   const sub =
     payload && typeof payload === "object" && "sub" in payload && typeof (payload as any).sub === "string"
       ? String((payload as any).sub)
@@ -333,8 +334,8 @@ function coerceSessionExpiresAt(
   return null;
 }
 
-function decodeCloudUserFromAccessToken(accessToken: string): CloudUser | null {
-  const payload = decodeJwtPayload(accessToken);
+function decodeCloudUserFromIdentityToken(token: string): CloudUser | null {
+  const payload = decodeJwtPayload(token);
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
   const id = readString(record.sub);
@@ -378,6 +379,7 @@ function toPersistedCloudSessionRecord(
   const sessionPayload = findSessionPayload(payload, requireRefreshToken);
   if (!sessionPayload) return null;
   const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
+  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]);
   const refreshToken = readObjectString(sessionPayload, ["refresh_token", "refreshToken"]);
   if (!accessToken) return null;
   if (requireRefreshToken && !refreshToken) return null;
@@ -385,9 +387,10 @@ function toPersistedCloudSessionRecord(
   if (!expiresAt) return null;
   const user =
     coerceCloudUser(sessionPayload.user) ??
-    decodeCloudUserFromAccessToken(accessToken) ?? { id: "" };
+    decodeCloudUserFromIdentityToken(idToken ?? accessToken) ?? { id: "" };
   return {
     access_token: accessToken,
+    ...(idToken ? { id_token: idToken } : null),
     refresh_token: refreshToken ?? "",
     expires_at: expiresAt,
     user,
@@ -404,6 +407,7 @@ function coerceCloudSession(
   if (!record) return null;
   return {
     access_token: record.access_token,
+    ...(record.id_token ? { id_token: record.id_token } : null),
     expires_at: record.expires_at,
     user: record.user,
   };
@@ -941,18 +945,16 @@ export async function ensureCloudSessionForAuthenticatedSendResult(params: {
   return { status: "ready", session: refreshed.session };
 }
 
-export async function fetchCloudUser(accessToken: string): Promise<CloudUser | null> {
-  return decodeCloudUserFromAccessToken(accessToken);
+export async function fetchCloudUser(token: string): Promise<CloudUser | null> {
+  return decodeCloudUserFromIdentityToken(token);
 }
 
 async function isCloudSessionAcceptedForRuntime(session: CloudSession): Promise<boolean> {
   try {
-    if (await probeConvexAuthenticatedActorSession(session)) return true;
+    return await probeConvexAuthenticatedActorSession(session);
   } catch {
     return false;
   }
-  const tokenUser = await fetchCloudUser(session.access_token);
-  return Boolean(tokenUser?.id);
 }
 
 export async function refreshCloudSessionWithLock(params: {

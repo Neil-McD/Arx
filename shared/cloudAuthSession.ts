@@ -1,5 +1,6 @@
 export type CloudAuthSession = {
   access_token?: string | null;
+  id_token?: string | null;
   user?: {
     id?: string | null;
     email?: string | null;
@@ -30,16 +31,23 @@ function decodeJwtSub(token: string): string | null {
   return sub || null;
 }
 
+export function resolveCloudIdentityToken(session: CloudAuthSession): string | null {
+  const idToken = String(session?.id_token ?? "").trim();
+  if (idToken) return idToken;
+  const accessToken = String(session?.access_token ?? "").trim();
+  return accessToken || null;
+}
+
 export function resolveCloudAuthSubject(session: CloudAuthSession): string | null {
   const userId = String(session?.user?.id ?? "").trim();
   if (userId) return userId;
-  return decodeJwtSub(String(session?.access_token ?? ""));
+  return decodeJwtSub(resolveCloudIdentityToken(session) ?? "");
 }
 
 export function resolveCloudSessionEmail(session: CloudAuthSession): string | undefined {
   const email = String(session?.user?.email ?? "").trim();
   if (email) return email;
-  const payload = decodeJwtPayload(String(session?.access_token ?? ""));
+  const payload = decodeJwtPayload(resolveCloudIdentityToken(session) ?? "");
   const tokenEmail = typeof payload?.email === "string" ? payload.email.trim() : "";
   return tokenEmail || undefined;
 }
@@ -47,7 +55,7 @@ export function resolveCloudSessionEmail(session: CloudAuthSession): string | un
 export function resolveCloudSessionDisplayName(session: CloudAuthSession): string | undefined {
   const displayName = String(session?.user?.displayName ?? "").trim();
   if (displayName) return displayName;
-  const payload = decodeJwtPayload(String(session?.access_token ?? ""));
+  const payload = decodeJwtPayload(resolveCloudIdentityToken(session) ?? "");
   const direct =
     typeof payload?.name === "string"
       ? payload.name.trim()
@@ -74,7 +82,7 @@ export function resolveCloudSessionDisplayName(session: CloudAuthSession): strin
 export function resolveCloudSessionAvatarUrl(session: CloudAuthSession): string | undefined {
   const avatarUrl = String(session?.user?.avatarUrl ?? "").trim();
   if (avatarUrl) return avatarUrl;
-  const payload = decodeJwtPayload(String(session?.access_token ?? ""));
+  const payload = decodeJwtPayload(resolveCloudIdentityToken(session) ?? "");
   const tokenAvatar =
     typeof payload?.picture === "string"
       ? payload.picture.trim()

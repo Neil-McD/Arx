@@ -3362,7 +3362,7 @@ export default function App() {
     b: CloudAuthSession | null | undefined,
   ): boolean {
     if (!a || !b) return false;
-    return a.access_token === b.access_token;
+    return a.access_token === b.access_token && (a.id_token ?? null) === (b.id_token ?? null);
   }
 
   function adoptCloudSession(session: CloudAuthSession): void {

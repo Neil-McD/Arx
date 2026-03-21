@@ -1,6 +1,6 @@
 import { ConvexReactClient } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { resolveCloudAuthSubject } from "./cloudAuthSession";
+import { resolveCloudAuthSubject, resolveCloudIdentityToken } from "./cloudAuthSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 
 type CloudCommunityChatGatewayParams<SessionT> = {
@@ -29,8 +29,8 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
   return [payload as TRow];
 }
 
-function resolveSessionAccessToken(sessionRaw: unknown): string {
-  return String((sessionRaw as { access_token?: unknown } | null)?.access_token ?? "").trim();
+function resolveSessionIdentityToken(sessionRaw: unknown): string {
+  return String(resolveCloudIdentityToken((sessionRaw ?? null) as any) ?? "").trim();
 }
 
 export function createCloudCommunityChatLiveClient<SessionT>(
@@ -40,13 +40,13 @@ export function createCloudCommunityChatLiveClient<SessionT>(
   if (!authSubject) {
     throw new Error("convex_auth_subject_required");
   }
-  const accessToken = resolveSessionAccessToken(params.session);
-  if (!accessToken) {
-    throw new Error("convex_access_token_required");
+  const identityToken = resolveSessionIdentityToken(params.session);
+  if (!identityToken) {
+    throw new Error("convex_identity_token_required");
   }
 
   const client = new ConvexReactClient(requireConvexUrl());
-  client.setAuth(async () => resolveSessionAccessToken(params.session) || null);
+  client.setAuth(async () => resolveSessionIdentityToken(params.session) || null);
   return {
     client,
     authSubject,
