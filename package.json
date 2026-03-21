@@ -8,6 +8,7 @@
     "dev:web": "npm --prefix apps/web run dev -- --port 5174 --strictPort",
     "build": "npm --prefix apps/web run build",
     "preview": "npm --prefix apps/web run preview",
+    "deploy:web:prod": "bash scripts/vercel_prod_deploy.sh",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy -y",
     "convex:codegen": "convex codegen",
