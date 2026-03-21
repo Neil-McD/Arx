@@ -290,6 +290,7 @@ import { BuilderUpgradeModal } from "../../../shared/BuilderUpgradeModal";
 import { DiscoverCommunityCard } from "../../../shared/DiscoverCommunityCard";
 import { SettingsNavList } from "../../../shared/SettingsNavList";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
+import { fetchCloudMyCommunityAccessBySlug } from "../../../shared/cloudCommunityAccessGateway";
 import {
   EXTERNAL_MEMORY_IMPORT_PROMPT,
   normalizeImportedMemoryContentKey,
@@ -5151,14 +5152,40 @@ export default function App() {
       onClose: closeCommunityChatLightbox,
     },
   };
-	  const activateDiscoverCommunityCard = (opts: {
+	  const activateDiscoverCommunityCard = useCallback(async (opts: {
 	    canActivate: boolean;
 	    slug: string;
 	  }) => {
 	    if (!opts.canActivate) return;
-	    if (!opts.slug) return;
-	    openPublicCommunityFunnel(opts.slug, { pushSnapshot: true });
-	  };
+	    const slug = opts.slug.trim();
+	    if (!slug) return;
+	    setDiscoverError(null);
+
+	    const rawSession = cloudSession;
+	    const session = ensureUsableCloudSession ? await ensureUsableCloudSession(rawSession) : rawSession;
+	    if (!session) {
+	      openPublicCommunityFunnel(slug, { pushSnapshot: true });
+	      return;
+	    }
+
+	    try {
+	      const access = await fetchCloudMyCommunityAccessBySlug<CloudAuthSession, CommunityAccess>({
+	        session,
+	        communitySlug: slug,
+	      });
+	      if (access?.community_id && (access.can_enter_community || access.is_owner)) {
+	        enterJoinedCommunity({
+	          communityId: access.community_id,
+	          communitySlug: slug,
+	        });
+	        return;
+	      }
+	    } catch {
+	      // Fall back to the public landing if access lookup fails.
+	    }
+
+	    openPublicCommunityFunnel(slug, { pushSnapshot: true });
+	  }, [cloudSession, ensureUsableCloudSession, enterJoinedCommunity, openPublicCommunityFunnel]);
 	  const showHeaderIslands = publicRoute.kind === "app" && activePage === "workspace" && activeView === "home";
 	  const communityHomeButton = activeCommunity ? (
 	    <button
