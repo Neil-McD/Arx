@@ -9,19 +9,6 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-function normalizeUrlHost(value: string): string {
-  try {
-    return new URL(value).hostname.trim().toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function isLikelyWorkOsAuthKitIssuer(value: string): boolean {
-  const host = normalizeUrlHost(value);
-  return host.endsWith(".authkit.app") || host === "authkit.app";
-}
-
 const issuer = readEnv("ARX_AUTH_JWT_ISSUER");
 
 const explicitJwks = readEnv("ARX_AUTH_JWT_JWKS_URL");
@@ -34,7 +21,7 @@ const algorithm: "RS256" | "ES256" = algorithmRaw === "ES256" ? "ES256" : "RS256
 
 const providers: AuthConfig["providers"] = [];
 
-if (issuer && jwks && !isLikelyWorkOsAuthKitIssuer(issuer)) {
+if (issuer && jwks) {
   providers.push({
     type: "customJwt",
     issuer,
