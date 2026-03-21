@@ -191,6 +191,10 @@ export function useWebPostAuthBillingLifecycle<
     const session = params.session;
     if (!session) return;
     if (params.isRedeemingClaim || params.isJoiningPublicCommunity) return;
+    if (typeof window !== "undefined") {
+      const pathname = String(window.location.pathname ?? "").trim();
+      if (pathname.startsWith("/c/")) return;
+    }
     const claimToken = readPendingPurchaseClaimToken();
     if (claimToken) return;
     const communitySlug = readPendingPublicJoinCommunitySlug();

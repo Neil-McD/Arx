@@ -357,6 +357,7 @@ export function useWebPublicFunnelActions<
             return;
           }
         }
+        clearPendingPublicJoin();
         current.setPublicJoinError(message);
       } finally {
         current.setIsJoiningPublicCommunity(false);
@@ -375,12 +376,12 @@ export function useWebPublicFunnelActions<
 
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
-      current.setPublicJoinError(null);
       logPublicJoinDebug("loadPublicCommunity:start", {
         requestedSlug,
         isSameSlugRefresh,
       });
       if (!isSameSlugRefresh) {
+        current.setPublicJoinError(null);
         current.setPublicCommunity(null);
         current.setPublicCommunityPlans([]);
         current.setMyPublicCommunityJoinRequest(null);
