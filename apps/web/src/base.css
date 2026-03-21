@@ -2017,9 +2017,10 @@ body {
 }
 
 .public-funnel-status-card {
+  position: relative;
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
+  padding: 16px 72px 12px 14px;
   border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--accent-primary, var(--border-default)) 28%, var(--border-muted));
   background: color-mix(in srgb, var(--accent-primary, var(--bg-card-alt)) 10%, var(--bg-card-alt));
@@ -2036,6 +2037,42 @@ body {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.public-funnel-status-card-dismiss {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.public-funnel-status-card-dismiss:hover:not(:disabled),
+.public-funnel-status-card-dismiss:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-primary, var(--border-default)) 34%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-primary, var(--bg-card)) 14%, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.public-funnel-status-card-dismiss:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .public-funnel-status-card-error {

@@ -48,12 +48,14 @@ type WebPublicCommunityFunnelProps = {
   canJoinWithCheckout: boolean;
   checkoutStatus: CheckoutStatus;
   isJoiningPublicCommunity: boolean;
+  isCancellingPublicCommunityJoinRequest: boolean;
   isLoadingMyPublicCommunityJoinRequest: boolean;
   approvalPending: boolean;
   approvalDenied: boolean;
   canRequestAgain: boolean;
   approvalReapplyLabel: string | null;
   onPrimaryJoinAction: () => void;
+  onCancelPendingJoinRequest: () => void;
   publicCommunityError: string | null;
   publicJoinError: string | null;
   checkoutError: string | null;
@@ -109,12 +111,14 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     canJoinWithCheckout,
     checkoutStatus,
     isJoiningPublicCommunity,
+    isCancellingPublicCommunityJoinRequest,
     isLoadingMyPublicCommunityJoinRequest,
     approvalPending,
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
     onPrimaryJoinAction,
+    onCancelPendingJoinRequest,
     publicCommunityError,
     publicJoinError,
     checkoutError,
@@ -191,6 +195,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
+    canCancelPendingRequest: approvalPending,
+    cancelPendingRequestLabel: isCancellingPublicCommunityJoinRequest ? "Canceling…" : "Cancel",
+    isCancelPendingRequestDisabled: isCancellingPublicCommunityJoinRequest,
+    onCancelPendingRequest: onCancelPendingJoinRequest,
     isPreviewMode,
   };
   if (isLoadingPublicCommunity && !publicCommunity) {

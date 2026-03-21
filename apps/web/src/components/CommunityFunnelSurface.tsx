@@ -33,6 +33,10 @@ export type CommunityFunnelSurfaceAction = {
   approvalDenied: boolean;
   canRequestAgain: boolean;
   approvalReapplyLabel?: string | null;
+  canCancelPendingRequest?: boolean;
+  cancelPendingRequestLabel?: string | null;
+  isCancelPendingRequestDisabled?: boolean;
+  onCancelPendingRequest?: (() => void) | null;
   isPreviewMode: boolean;
 };
 
@@ -281,6 +285,16 @@ function CommunityFunnelActionModule(props: {
 
         {action.canJoinWithApproval && !action.showSignIn && action.approvalPending ? (
           <div className="public-funnel-status-card" role="status" aria-live="polite">
+            {action.canCancelPendingRequest && action.onCancelPendingRequest ? (
+              <button
+                className="public-funnel-status-card-dismiss"
+                type="button"
+                onClick={action.onCancelPendingRequest}
+                disabled={action.isCancelPendingRequestDisabled}
+              >
+                {action.cancelPendingRequestLabel ?? "Cancel"}
+              </button>
+            ) : null}
             <div className="public-funnel-status-card-title">Request pending</div>
             <div className="public-funnel-status-card-body">
               You&apos;re waiting for approval to join {action.communityName}.

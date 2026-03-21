@@ -489,3 +489,40 @@ export const joinPublicCommunity = mutation({
     });
   },
 });
+
+export const cancelMyJoinRequestBySlug = mutation({
+  args: {
+    communitySlug: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    const nowMs = args.nowMs ?? Date.now();
+    const slug = normalizeSlug(args.communitySlug);
+    const community = (await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first()) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+
+    const joinRequestRows = (await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId))
+      .collect()) as CommunityJoinRequestLike[];
+    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
+    const status = String(joinRequest?.status ?? "").trim().toLowerCase();
+
+    if (!joinRequest || status === "" || status === "canceled") {
+      return { outcome: "none" as const };
+    }
+    if (status !== "pending") {
+      return { outcome: "ignored" as const, status };
+    }
+
+    await ctx.db.patch(joinRequest._id, {
+      status: "canceled",
+      updatedAt: nowMs,
+    });
+    return { outcome: "canceled" as const };
+  },
+});

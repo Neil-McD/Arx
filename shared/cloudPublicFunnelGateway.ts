@@ -25,6 +25,18 @@ export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
   return firstGatewayRow<TRow>(payload);
 }
 
+export async function cancelCloudMyJoinRequestBySlug<SessionT>(
+  params: CloudPublicFunnelAuthParams<SessionT> & {
+    communitySlug: string;
+  },
+): Promise<{ outcome?: "canceled" | "none" | "ignored"; status?: string }> {
+  const { client } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.mutation("community:cancelMyJoinRequestBySlug" as any, {
+    communitySlug: params.communitySlug,
+    nowMs: Date.now(),
+  })) as { outcome?: "canceled" | "none" | "ignored"; status?: string };
+}
+
 export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPublicPlan>(
   params: CloudPublicFunnelParams<SessionT> & {
     communitySlug: string;

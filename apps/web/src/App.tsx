@@ -852,6 +852,7 @@ export default function App() {
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
+  const [isCancellingPublicCommunityJoinRequest, setIsCancellingPublicCommunityJoinRequest] = useState(false);
   const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
   const [myPublicCommunityJoinRequest, setMyPublicCommunityJoinRequest] = useState<MyCommunityJoinRequest | null>(null);
   const [isLoadingMyPublicCommunityJoinRequest, setIsLoadingMyPublicCommunityJoinRequest] = useState(false);
@@ -3387,6 +3388,7 @@ export default function App() {
   }
 
   const {
+    cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
     startCheckoutForPlan,
@@ -3405,6 +3407,7 @@ export default function App() {
       enterJoinedCommunity({ communityId, communitySlug }),
     isUuid,
     setIsJoiningPublicCommunity,
+    setIsCancellingPublicCommunityJoinRequest,
     setPublicJoinError,
     setPublicCommunity,
     setPublicCommunityAccess,
@@ -4715,6 +4718,11 @@ export default function App() {
     if (!token) return;
     void redeemPurchaseClaim(token);
   };
+  const handleCancelPendingPublicJoinRequest = () => {
+    const slug = publicCommunity?.slug ?? publicFunnelSlug ?? "";
+    if (!slug || !approvalPending) return;
+    void cancelMyPendingJoinRequest(slug);
+  };
 
   if (publicRoute.kind === "checkout_success" || publicRoute.kind === "claim") {
       return (
@@ -5735,12 +5743,14 @@ export default function App() {
                     canJoinWithCheckout={canJoinWithCheckout}
                     checkoutStatus={checkoutStatus}
                     isJoiningPublicCommunity={isJoiningPublicCommunity}
+                    isCancellingPublicCommunityJoinRequest={isCancellingPublicCommunityJoinRequest}
                     isLoadingMyPublicCommunityJoinRequest={isLoadingMyPublicCommunityJoinRequest}
                     approvalPending={approvalPending}
                     approvalDenied={approvalDenied}
                     canRequestAgain={canRequestAgain}
                     approvalReapplyLabel={approvalReapplyLabel}
                     onPrimaryJoinAction={handlePublicLandingPrimaryAction}
+                    onCancelPendingJoinRequest={handleCancelPendingPublicJoinRequest}
                     publicCommunityError={publicCommunityError}
                     publicJoinError={publicJoinError}
                     checkoutError={checkoutError}

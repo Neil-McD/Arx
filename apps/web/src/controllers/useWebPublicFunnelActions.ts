@@ -6,6 +6,7 @@ import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisi
 
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import {
+  cancelCloudMyJoinRequestBySlug,
   fetchCloudMyJoinRequestBySlug,
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
@@ -33,6 +34,7 @@ type UseWebPublicFunnelActionsArgs<
   isUuid: (value: string) => boolean;
 
   setIsJoiningPublicCommunity: Dispatch<SetStateAction<boolean>>;
+  setIsCancellingPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunity: Dispatch<SetStateAction<PublicCommunityT | null>>;
   setPublicCommunityAccess: Dispatch<SetStateAction<CommunityAccessRow | null>>;
@@ -303,6 +305,35 @@ export function useWebPublicFunnelActions<
     [applyApprovalJoinState, reconcileJoinOutcomeBySlug],
   );
 
+  const cancelMyPendingJoinRequest = useCallback(
+    async (communitySlug: string): Promise<void> => {
+      const trimmedSlug = communitySlug.trim();
+      if (!trimmedSlug) return;
+      const current = argsRef.current;
+      const rawSession = current.getSession();
+      const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
+      if (!session) return;
+
+      current.setIsCancellingPublicCommunityJoinRequest(true);
+      current.setPublicJoinError(null);
+      try {
+        const result = await cancelCloudMyJoinRequestBySlug({
+          session,
+          communitySlug: trimmedSlug,
+        });
+        if (result?.outcome === "canceled" || result?.outcome === "none") {
+          current.setMyPublicCommunityJoinRequest(null);
+        }
+      } catch (error) {
+        const message = getErrorMessage(error, "Failed to cancel join request.");
+        current.setPublicJoinError(message);
+      } finally {
+        current.setIsCancellingPublicCommunityJoinRequest(false);
+      }
+    },
+    [],
+  );
+
   const loadPublicCommunity = useCallback(
     async (slug: string): Promise<void> => {
       const requestedSlug = slug.trim();
@@ -409,6 +440,7 @@ export function useWebPublicFunnelActions<
   );
 
   return {
+    cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
     startCheckoutForPlan,
