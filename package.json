@@ -9,7 +9,7 @@
     "build": "npm --prefix apps/web run build",
     "preview": "npm --prefix apps/web run preview",
     "convex:dev": "convex dev",
-    "convex:deploy": "convex deploy",
+    "convex:deploy": "convex deploy -y",
     "convex:codegen": "convex codegen",
     "check:convex-cut-runtime-guard": "bash scripts/convex_cut_runtime_guard.sh",
     "check:legacy-route-surface-guard": "bash scripts/legacy_route_surface_guard.sh",

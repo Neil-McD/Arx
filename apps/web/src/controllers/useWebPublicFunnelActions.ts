@@ -14,20 +14,6 @@ import type { CloudSession } from "../cloudAuth";
 import { deriveCommunityJoinMode } from "../communityJoinPolicy";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 
-function isPublicJoinDebugEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return new URLSearchParams(window.location.search).get("debug") === "1";
-  } catch {
-    return false;
-  }
-}
-
-function logPublicJoinDebug(event: string, payload?: Record<string, unknown>): void {
-  if (!isPublicJoinDebugEnabled()) return;
-  console.info("[public-join]", event, payload ?? {});
-}
-
 type UseWebPublicFunnelActionsArgs<
   PublicCommunityT extends {
     slug: string;
@@ -89,7 +75,6 @@ export function useWebPublicFunnelActions<
       deniedUntil?: string | null;
     }) => {
       const current = argsRef.current;
-      logPublicJoinDebug("applyApprovalJoinState", opts);
       current.setPublicJoinError(null);
       current.setMyPublicCommunityJoinRequest({
         community_id: (opts.communityId ?? opts.communitySlug ?? "__pending__").trim() || "__pending__",
@@ -129,10 +114,6 @@ export function useWebPublicFunnelActions<
       if (accessResult.status === "fulfilled") {
         const access = accessResult.value;
         if (access && (access.can_enter_community || access.is_owner) && access.community_id) {
-          logPublicJoinDebug("reconcileJoinOutcomeBySlug:entered", {
-            communitySlug: trimmedSlug,
-            communityId: access.community_id,
-          });
           clearPendingPublicJoin();
           const current = argsRef.current;
           current.setPublicCommunityAccess(access);
@@ -149,9 +130,6 @@ export function useWebPublicFunnelActions<
         const joinRequest = joinRequestResult.value;
         const status = String(joinRequest?.status ?? "").trim().toLowerCase();
         if (status === "pending") {
-          logPublicJoinDebug("reconcileJoinOutcomeBySlug:pending", {
-            communitySlug: trimmedSlug,
-          });
           clearPendingPublicJoin();
           const current = argsRef.current;
           current.setPublicJoinError(null);
@@ -167,9 +145,6 @@ export function useWebPublicFunnelActions<
           return "pending";
         }
         if (status === "denied") {
-          logPublicJoinDebug("reconcileJoinOutcomeBySlug:denied", {
-            communitySlug: trimmedSlug,
-          });
           clearPendingPublicJoin();
           const current = argsRef.current;
           current.setPublicJoinError(null);
@@ -185,10 +160,6 @@ export function useWebPublicFunnelActions<
           return "denied";
         }
       }
-
-      logPublicJoinDebug("reconcileJoinOutcomeBySlug:none", {
-        communitySlug: trimmedSlug,
-      });
       return "none";
     },
     [],
@@ -205,16 +176,8 @@ export function useWebPublicFunnelActions<
           session,
           communitySlug: trimmed,
         });
-        logPublicJoinDebug("loadMyJoinRequestBySlug:success", {
-          communitySlug: trimmed,
-          status: String((row as { status?: unknown } | null)?.status ?? ""),
-        });
         current.setMyPublicCommunityJoinRequest(row);
       } catch (error) {
-        logPublicJoinDebug("loadMyJoinRequestBySlug:error", {
-          communitySlug: trimmed,
-          message: getErrorMessage(error, "unknown_error"),
-        });
         console.warn("Failed to load join request:", error);
       } finally {
         current.setIsLoadingMyPublicCommunityJoinRequest(false);
@@ -235,10 +198,6 @@ export function useWebPublicFunnelActions<
       const rawSession = current.getSession();
       const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) {
-        logPublicJoinDebug("joinPublicCommunity:auth_required", {
-          communityId: trimmedId || null,
-          communitySlug: trimmedSlug || null,
-        });
         storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
         current.openAuthGate({
           reason: "join_public_community",
@@ -254,11 +213,6 @@ export function useWebPublicFunnelActions<
       current.setIsJoiningPublicCommunity(true);
       current.setPublicJoinError(null);
       try {
-        logPublicJoinDebug("joinPublicCommunity:start", {
-          communityId: trimmedId || null,
-          communitySlug: trimmedSlug || null,
-          hasSession: Boolean(session),
-        });
         const pendingBrandosAid = readPendingPublicJoinBrandosAid();
         const resolvedBrandosAid =
           (brandosAid && current.isUuid(brandosAid) ? brandosAid : null) ||
@@ -269,13 +223,6 @@ export function useWebPublicFunnelActions<
           communityId: trimmedId || undefined,
           communitySlug: trimmedSlug || undefined,
           brandosAid: resolvedBrandosAid,
-        });
-        logPublicJoinDebug("joinPublicCommunity:result", {
-          communityId: trimmedId || null,
-          communitySlug: trimmedSlug || null,
-          outcome: joinResult.outcome,
-          returnedCommunityId: joinResult.community_id,
-          reapplyAt: joinResult.reapply_at ?? null,
         });
         clearPendingPublicJoin();
 
@@ -319,12 +266,6 @@ export function useWebPublicFunnelActions<
       } catch (error) {
         const message = getErrorMessage(error, "Failed to join community.");
         const kind = classifyPublicCommunityJoinError(error);
-        logPublicJoinDebug("joinPublicCommunity:error", {
-          communityId: trimmedId || null,
-          communitySlug: trimmedSlug || null,
-          kind,
-          message,
-        });
         if (kind === "approval_pending" || kind === "approval_denied") {
           clearPendingPublicJoin();
           applyApprovalJoinState({
@@ -349,10 +290,6 @@ export function useWebPublicFunnelActions<
         }
         if (trimmedSlug) {
           const reconciled = await reconcileJoinOutcomeBySlug(trimmedSlug, session);
-          logPublicJoinDebug("joinPublicCommunity:reconciled", {
-            communitySlug: trimmedSlug,
-            reconciled,
-          });
           if (reconciled !== "none") {
             return;
           }
@@ -376,10 +313,6 @@ export function useWebPublicFunnelActions<
 
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
-      logPublicJoinDebug("loadPublicCommunity:start", {
-        requestedSlug,
-        isSameSlugRefresh,
-      });
       if (!isSameSlugRefresh) {
         current.setPublicJoinError(null);
         current.setPublicCommunity(null);
@@ -398,12 +331,6 @@ export function useWebPublicFunnelActions<
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
         } as PublicCommunityT);
         current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
-        logPublicJoinDebug("loadPublicCommunity:resolved", {
-          requestedSlug,
-          resolvedSlug: payload.community.slug,
-          entryPolicy: (payload.community as { entry_policy?: unknown }).entry_policy ?? null,
-          hasActivePlan: Boolean(payload.active_plan),
-        });
 
         const rawSession = current.getSession();
         const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
@@ -414,23 +341,12 @@ export function useWebPublicFunnelActions<
               communitySlug: payload.community.slug,
             });
             current.setPublicCommunityAccess(access);
-            logPublicJoinDebug("loadPublicCommunity:access", {
-              requestedSlug,
-              canEnter: Boolean(access?.can_enter_community || access?.is_owner),
-              communityId: access?.community_id ?? null,
-            });
           } catch {
             current.setPublicCommunityAccess(null);
-            logPublicJoinDebug("loadPublicCommunity:access_missing", {
-              requestedSlug,
-            });
             // ignore; fall back to the public funnel
           }
         } else {
           current.setPublicCommunityAccess(null);
-          logPublicJoinDebug("loadPublicCommunity:no_session", {
-            requestedSlug,
-          });
         }
 
         if (
@@ -447,10 +363,6 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to load community.";
-        logPublicJoinDebug("loadPublicCommunity:error", {
-          requestedSlug,
-          message,
-        });
         current.setPublicCommunityError(message);
       } finally {
         current.setIsLoadingPublicCommunity(false);
@@ -464,10 +376,6 @@ export function useWebPublicFunnelActions<
       const current = argsRef.current;
       current.setCheckoutStatus("loading");
       current.setCheckoutError(null);
-      logPublicJoinDebug("startCheckoutForPlan:start", {
-        communitySlug,
-        billingPeriod,
-      });
       try {
         const origin = window.location.origin.replace(/\/+$/, "");
         const successUrl = `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -485,11 +393,6 @@ export function useWebPublicFunnelActions<
         });
         const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
         if (!checkoutUrl) throw new Error("Missing checkout_url.");
-        logPublicJoinDebug("startCheckoutForPlan:success", {
-          communitySlug,
-          billingPeriod,
-          checkoutUrl,
-        });
         current.navigateToUrl(checkoutUrl);
       } catch (error) {
         const message =
@@ -498,11 +401,6 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to start checkout.";
-        logPublicJoinDebug("startCheckoutForPlan:error", {
-          communitySlug,
-          billingPeriod,
-          message,
-        });
         current.setCheckoutError(message);
         current.setCheckoutStatus("error");
       }

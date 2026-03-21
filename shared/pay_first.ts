@@ -244,7 +244,7 @@ export async function joinPublicCommunityRpc<S extends CloudSessionLike>(opts: {
   community_id: string;
   reapply_at?: string | null;
 }> {
-  const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
+  const { client } = await bootstrapConvexUserForPayFirst(opts.session);
   const slug = (opts.communitySlug ?? "").trim();
   const id = (opts.communityId ?? "").trim();
   const aid = (opts.brandosAid ?? "").trim() || null;
@@ -257,7 +257,6 @@ export async function joinPublicCommunityRpc<S extends CloudSessionLike>(opts: {
     | null = null;
   if (slug) {
     result = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
-      authSubject,
       communitySlug: slug,
       brandosAid: aid,
       nowMs: Date.now(),
@@ -268,7 +267,6 @@ export async function joinPublicCommunityRpc<S extends CloudSessionLike>(opts: {
     } | null) ?? null;
   } else if (id) {
     result = ((await client.mutation("community:joinPublicCommunity" as any, {
-      authSubject,
       communityId: id,
       brandosAid: aid,
       nowMs: Date.now(),

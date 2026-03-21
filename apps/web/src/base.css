@@ -2052,59 +2052,6 @@ body {
   gap: 10px;
 }
 
-.public-funnel-debug-wrap {
-  margin-top: 18px;
-}
-
-.public-funnel-debug-card {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-card-alt) 90%, transparent);
-}
-
-.public-funnel-debug-title {
-  font-size: 12px;
-  line-height: 1.2;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
-
-.public-funnel-debug-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-}
-
-.public-funnel-debug-item {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
-}
-
-.public-funnel-debug-key {
-  font-size: 11px;
-  line-height: 1.2;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.public-funnel-debug-value {
-  font-size: 13px;
-  line-height: 1.45;
-  font-weight: 560;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
 .public-funnel-loading-title {
   width: min(240px, 48%);
   height: 54px;

@@ -44,7 +44,6 @@ export function useWebPublicCommunityRouteController<
   publicCommunityAccess: PublicCommunityAccessLike | null;
   myPublicCommunityJoinRequest: TJoinRequest | null;
   isSignedIn: boolean;
-  isAuthBootstrapComplete: boolean;
   sessionDependency: unknown;
   loadPublicCommunity: (slug: string) => Promise<void> | void;
   navigateTo: NavigateFn;
@@ -61,14 +60,6 @@ export function useWebPublicCommunityRouteController<
   const claimTokenParam = params.publicRoute.kind === "claim" ? params.publicRoute.token : null;
   const isPublicCommunityFunnel =
     params.publicRoute.kind === "community_funnel" || params.publicRoute.kind === "community_funnel_preview";
-  const isPublicDebugEnabled = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return new URLSearchParams(window.location.search).get("debug") === "1";
-    } catch {
-      return false;
-    }
-  }, [params.publicRoute.kind, publicFunnelSlug, checkoutSuccessSessionId, claimTokenParam]);
 
   useEffect(() => {
     if (!isPublicFunnelPreviewRoute) return;
@@ -161,45 +152,6 @@ export function useWebPublicCommunityRouteController<
           day: "numeric",
         }).format(new Date(approvalReapplyAtMs))
       : null;
-  const publicPrimaryCtaState = canEnterPublicCommunity
-    ? "enter"
-    : canJoinWithCheckout
-      ? "checkout"
-      : approvalPending
-        ? "request_pending"
-        : approvalDenied && !canRequestAgain
-          ? "request_denied"
-          : approvalDenied && canRequestAgain
-            ? "request_again"
-            : canJoinWithApproval
-              ? "join_approval"
-              : canJoinForFree
-                ? "join_free"
-                : "private";
-  const publicDebugState = {
-    route_kind: params.publicRoute.kind,
-    route_slug: publicFunnelSlug ?? null,
-    preview_mode: isPublicFunnelPreviewRoute,
-    show_sign_in: !params.isSignedIn,
-    community_slug: resolvedPublicCommunity?.slug ?? null,
-    entry_policy: resolvedPublicCommunity?.entry_policy ?? null,
-    join_mode: publicJoinMode ?? null,
-    cta_state: publicPrimaryCtaState,
-    can_enter: canEnterPublicCommunity,
-    can_join_free: canJoinForFree,
-    can_join_approval: canJoinWithApproval,
-    can_join_checkout: canJoinWithCheckout,
-    join_request_status: myJoinRequestStatus || null,
-    approval_pending: approvalPending,
-    approval_denied: approvalDenied,
-    can_request_again: canRequestAgain,
-    reapply_label: approvalReapplyLabel ?? null,
-    plan_label:
-      selectedPublicCommunityPlan
-        ? `${selectedPublicCommunityPlan.billing_period}:${selectedPublicCommunityPlan.amount_base_units}`
-        : null,
-  };
-
   return {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
@@ -220,9 +172,6 @@ export function useWebPublicCommunityRouteController<
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
-    publicPrimaryCtaState,
-    isPublicDebugEnabled,
-    publicDebugState,
     memberCountOverride: isPublicFunnelPreviewRoute ? publicFunnelPreviewDraft?.memberCount ?? null : null,
   };
 }

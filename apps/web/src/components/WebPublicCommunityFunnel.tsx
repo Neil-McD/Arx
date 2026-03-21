@@ -60,8 +60,6 @@ type WebPublicCommunityFunnelProps = {
   showSignIn: boolean;
   funnelConfigOverride?: CommunityFunnelConfig | null;
   memberCountOverride?: number | null;
-  debugEnabled?: boolean;
-  debugState?: Record<string, string | number | boolean | null | undefined>;
 };
 
 function deriveFunnelMode(args: {
@@ -123,8 +121,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     showSignIn,
     funnelConfigOverride,
     memberCountOverride,
-    debugEnabled = false,
-    debugState = {},
   } = props;
 
   const communityName = publicCommunity?.name ?? publicRouteSlug ?? "Community";
@@ -197,8 +193,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     approvalReapplyLabel,
     isPreviewMode,
   };
-  const debugEntries = Object.entries(debugState);
-
   if (isLoadingPublicCommunity && !publicCommunity) {
     return (
       <div className="public-funnel-page">
@@ -267,21 +261,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       aboutText={aboutText}
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       showPoweredBy
-      debugPanel={
-        debugEnabled ? (
-          <section className="public-funnel-debug-card" aria-label="Public funnel debug state">
-            <div className="public-funnel-debug-title">Debug</div>
-            <div className="public-funnel-debug-grid">
-              {debugEntries.map(([key, value]) => (
-                <div key={key} className="public-funnel-debug-item">
-                  <div className="public-funnel-debug-key">{key}</div>
-                  <div className="public-funnel-debug-value">{String(value ?? "null")}</div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null
-      }
     />
   );
 }
