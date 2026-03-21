@@ -4,6 +4,7 @@ import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudComm
 import { type CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 
 type CommunityMember = CloudCommunityMembershipAdminRow;
+type MemberSettingsTab = "status" | "payments";
 
 type CommunityJoinRequest = {
   id: string;
@@ -71,6 +72,8 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   const canReviewJoinRequests = capabilities.canReviewJoinRequests;
   const canViewMemberPlanDetails = capabilities.canViewMemberPlanDetails;
   const [didCopyJoinPath, setDidCopyJoinPath] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [memberSettingsTab, setMemberSettingsTab] = useState<MemberSettingsTab>("status");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const joinPath = activeCommunity ? `/c/${encodeURIComponent(activeCommunity.slug)}` : "";
   const joinUrl = activeCommunity
@@ -85,6 +88,9 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
       }
     };
   }, []);
+  const selectedMember = selectedMemberId
+    ? state.communityMembers.find((member) => member.id === selectedMemberId) ?? null
+    : null;
 
   const handleCopyJoinPath = async () => {
     if (!joinUrl) return;
@@ -97,6 +103,14 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
       setDidCopyJoinPath(false);
       copyResetTimeoutRef.current = null;
     }, 1400);
+  };
+  const openMemberSettings = (memberId: string) => {
+    setSelectedMemberId(memberId);
+    setMemberSettingsTab("status");
+  };
+  const closeMemberSettings = () => {
+    setSelectedMemberId(null);
+    setMemberSettingsTab("status");
   };
   const formatAmount = (member: CommunityMember): string | null => {
     const amount = Number(member.amount_base_units);
@@ -122,6 +136,15 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
     if (!String(member.price_point_id ?? "").trim()) return null;
     if (amount) return `${amount}${period}`;
     return null;
+  };
+  const formatJoinedAt = (value: string): string => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(parsed);
   };
   const planOptions = (() => {
     const seenPricePoints = new Set<string>();
@@ -351,6 +374,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   const memberPriceLabel = formatMemberAccess(member);
                   const canEditThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
                   const canRemoveThisMember = !memberIsOwner && (viewerIsOwner || viewerIsAdmin);
+                  const canOpenSettings = canManageMembers && !memberIsOwner;
                   const roleOptions =
                     viewerIsOwner || viewerIsAdmin
                       ? (["member", "moderator", "admin"] as const)
@@ -377,36 +401,21 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         <div className="member-meta">
                           <span className="member-role">{memberIsOwner ? "owner" : member.role}</span>
                         </div>
-                        {!canManageMembers || memberIsOwner ? null : (
-                          <div className="member-controls">
-                            <select
-                              className="select-styled"
-                              value={member.role}
-                              disabled={!canEditThisMember}
-                              onChange={(event) => {
-                                const next = event.target.value as "admin" | "moderator" | "member";
-                                if (next === member.role) return;
-                                void actions.handleSetCommunityMemberRole(member.user_id, next);
-                              }}
-                            >
-                              {roleOptions.map((role) => (
-                                <option key={role} value={role}>
-                                  {role}
-                                </option>
-                              ))}
-                            </select>
-                            {canRemoveThisMember && (
-                              <button
-                                className="danger"
-                                type="button"
-                                onClick={() => void actions.handleRemoveCommunityMember(member.user_id)}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        )}
                       </div>
+                      {canOpenSettings ? (
+                        <button
+                          className="member-settings-trigger"
+                          type="button"
+                          aria-label={`Open settings for ${actions.displayName(member.user_id)}`}
+                          title="Member settings"
+                          onClick={() => openMemberSettings(member.id)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 8.75a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5Z" />
+                            <path d="M19.4 15a1 1 0 0 0 .2 1.1l.05.05a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.05-.05a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.91V20a2 2 0 0 1-4 0v-.08a1 1 0 0 0-.65-.92 1 1 0 0 0-1.1.2l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05a1 1 0 0 0 .2-1.1 1 1 0 0 0-.91-.6H4a2 2 0 0 1 0-4h.08a1 1 0 0 0 .92-.65 1 1 0 0 0-.2-1.1l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.91V4a2 2 0 0 1 4 0v.08a1 1 0 0 0 .65.92 1 1 0 0 0 1.1-.2l.05-.05a2 2 0 0 1 2.83 2.83l-.05.05a1 1 0 0 0-.2 1.1 1 1 0 0 0 .91.6H20a2 2 0 0 1 0 4h-.08a1 1 0 0 0-.92.65A1 1 0 0 0 19.4 15Z" />
+                          </svg>
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })
@@ -458,7 +467,141 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
           )}
         </div>
       </div>
-
+      {selectedMember && activeCommunity && (
+        <div className="modal-overlay" onClick={closeMemberSettings}>
+          <div
+            className="modal member-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="member-settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="create-community-heading">
+                <div className="modal-title" id="member-settings-title">
+                  Member settings
+                </div>
+                <div className="create-community-subtitle">
+                  Review status and billing details for {actions.displayName(selectedMember.user_id)}.
+                </div>
+              </div>
+              <button className="modal-close" onClick={closeMemberSettings} title="Close">
+                ×
+              </button>
+            </div>
+            <div className="modal-body member-settings-modal-body">
+              <div className="member-settings-tablist" role="tablist" aria-label="Member settings sections">
+                <button
+                  type="button"
+                  className={`member-settings-tab${memberSettingsTab === "status" ? " is-active" : ""}`}
+                  aria-selected={memberSettingsTab === "status"}
+                  onClick={() => setMemberSettingsTab("status")}
+                >
+                  Member status
+                </button>
+                <button
+                  type="button"
+                  className={`member-settings-tab${memberSettingsTab === "payments" ? " is-active" : ""}`}
+                  aria-selected={memberSettingsTab === "payments"}
+                  onClick={() => setMemberSettingsTab("payments")}
+                >
+                  Payment history
+                </button>
+              </div>
+              {memberSettingsTab === "status" ? (
+                <div className="member-settings-section">
+                  <div className="member-settings-summary">
+                    <div
+                      className={`member-avatar member-settings-avatar${(state.profilesByUserId[selectedMember.user_id]?.avatar_url ?? null) ? " has-image" : ""}`}
+                      style={
+                        state.profilesByUserId[selectedMember.user_id]?.avatar_url
+                          ? undefined
+                          : { backgroundColor: actions.getAvatarColor(selectedMember.user_id) }
+                      }
+                    >
+                      {state.profilesByUserId[selectedMember.user_id]?.avatar_url ? (
+                        <img
+                          src={state.profilesByUserId[selectedMember.user_id]?.avatar_url ?? undefined}
+                          alt={actions.displayName(selectedMember.user_id)}
+                          draggable={false}
+                        />
+                      ) : (
+                        state.profilesByUserId[selectedMember.user_id]?.display_name
+                          ? actions.communityInitials(state.profilesByUserId[selectedMember.user_id]?.display_name ?? "")
+                          : actions.getInitials(selectedMember.user_id)
+                      )}
+                    </div>
+                    <div className="member-settings-summary-copy">
+                      <div className="member-settings-summary-name">
+                        {actions.displayName(selectedMember.user_id)}
+                      </div>
+                      <div className="member-settings-summary-meta">
+                        Joined {formatJoinedAt(selectedMember.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="member-settings-grid">
+                    <div className="member-settings-field">
+                      <span>Status</span>
+                      <div className="member-settings-value">
+                        {selectedMember.role === "owner" ? "Owner" : selectedMember.role}
+                      </div>
+                    </div>
+                    <div className="member-settings-field">
+                      <span>Joined</span>
+                      <div className="member-settings-value">{formatJoinedAt(selectedMember.created_at)}</div>
+                    </div>
+                  </div>
+                  <div className="member-settings-actions">
+                    <label className="member-settings-field member-settings-field-full">
+                      <span>Role</span>
+                      <select
+                        className="select-styled members-surface-select"
+                        value={selectedMember.role}
+                        onChange={(event) => {
+                          const next = event.target.value as "admin" | "moderator" | "member";
+                          if (next === selectedMember.role) return;
+                          void actions.handleSetCommunityMemberRole(selectedMember.user_id, next);
+                        }}
+                      >
+                        {(["member", "moderator", "admin"] as const).map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      className="danger member-settings-remove"
+                      type="button"
+                      onClick={() => {
+                        closeMemberSettings();
+                        void actions.handleRemoveCommunityMember(selectedMember.user_id);
+                      }}
+                    >
+                      Remove member
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="member-settings-section">
+                  {formatMemberAccess(selectedMember) ? (
+                    <div className="member-settings-payment-card">
+                      <div className="member-settings-payment-title">Current plan</div>
+                      <div className="member-settings-payment-value">{formatMemberAccess(selectedMember)}</div>
+                      <div className="member-settings-payment-note">
+                        Historical payments are not available yet. This view shows the current membership billing snapshot.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="member-settings-empty">No payment history.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
