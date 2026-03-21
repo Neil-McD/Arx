@@ -10,7 +10,10 @@ import {
   communityMembershipRowIsActive,
   mapActivePlanSummaries,
   mapJoinRequestRow,
+  normalizeCommunityRoleForOutput,
   normalizeSlug,
+  pickMostRelevantCommunityJoinRequest,
+  pickMostRelevantCommunityMembership,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
@@ -283,10 +286,11 @@ export const getMyJoinRequestBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return null;
-    const row = (await ctx.db
+    const rows = (await ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", args.userId))
-      .first()) as CommunityJoinRequestLike | null;
+      .collect()) as CommunityJoinRequestLike[];
+    const row = pickMostRelevantCommunityJoinRequest(rows);
     if (!row) return null;
     return mapJoinRequestRow({
       communityId: String(community._id),
@@ -301,10 +305,11 @@ async function ensurePendingCommunityJoinRequest(args: {
   userId: any;
   nowMs: number;
 }): Promise<CommunityJoinRequestLike> {
-  const existing = (await args.ctx.db
+  const existingRows = (await args.ctx.db
     .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityJoinRequestLike | null;
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
+    .collect()) as CommunityJoinRequestLike[];
+  const existing = pickMostRelevantCommunityJoinRequest(existingRows);
   if (existing) {
     if (
       String(existing.status ?? "").trim().toLowerCase() === "denied" &&
@@ -314,11 +319,14 @@ async function ensurePendingCommunityJoinRequest(args: {
         communityId: String(args.communityId),
         userId: String(args.userId),
       });
-      await args.ctx.db.patch(existing._id as any, {
+      const reopenedId = await args.ctx.db.insert("communityJoinRequests", {
+        communityId: args.communityId,
+        userId: args.userId,
         status: "pending",
+        createdAt: args.nowMs,
         updatedAt: args.nowMs,
       });
-      const reopened = (await args.ctx.db.get(existing._id as any)) as CommunityJoinRequestLike | null;
+      const reopened = (await args.ctx.db.get(reopenedId)) as CommunityJoinRequestLike | null;
       if (!reopened) throw new Error("join_request_reopen_failed");
       return reopened;
     }
@@ -356,10 +364,11 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
-  const existingMembership = (await args.ctx.db
+  const existingMembershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
-    .first()) as CommunityMembershipLike | null;
+    .collect()) as CommunityMembershipLike[];
+  const existingMembership = pickMostRelevantCommunityMembership(existingMembershipRows);
   if (existingMembership) {
     logPublicJoinEvent("join_outcome_joined_existing_membership", {
       communityId: String(args.community._id),
@@ -367,9 +376,14 @@ async function joinPublicCommunityInternal(args: {
       active: communityMembershipRowIsActive(existingMembership),
     });
     if (!communityMembershipRowIsActive(existingMembership)) {
-      await args.ctx.db.patch(existingMembership._id as any, {
-        accessSource: existingMembership.accessSource ?? "free_grant",
+      const role = normalizeCommunityRoleForOutput(existingMembership.role) || "member";
+      await args.ctx.db.insert("communityMemberships", {
+        communityId: args.community._id,
+        userId: args.userId,
+        role,
+        accessSource: "free_grant",
         active: true,
+        createdAt: args.nowMs,
         updatedAt: args.nowMs,
       });
     }
@@ -391,10 +405,11 @@ async function joinPublicCommunityInternal(args: {
     };
   }
   if (entryPolicy === "approval") {
-    const joinRequest = (await args.ctx.db
+    const joinRequestRows = (await args.ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
-      .first()) as CommunityJoinRequestLike | null;
+      .collect()) as CommunityJoinRequestLike[];
+    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
     const status = String(joinRequest?.status ?? "")
       .trim()
       .toLowerCase();

@@ -383,6 +383,21 @@ export function communityMembershipRowIsActive(membership: CommunityMembershipLi
   return true;
 }
 
+export function pickMostRelevantCommunityMembership(
+  rows: CommunityMembershipLike[] | null | undefined,
+): CommunityMembershipLike | null {
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  if (list.length === 0) return null;
+  list.sort((a, b) => {
+    const aActive = communityMembershipRowIsActive(a);
+    const bActive = communityMembershipRowIsActive(b);
+    if (aActive !== bActive) return aActive ? -1 : 1;
+    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+    return b.createdAt - a.createdAt;
+  });
+  return list[0] ?? null;
+}
+
 export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function resolveCommunityJoinRequestReapplyAtMs(
@@ -401,6 +416,18 @@ export function resolveCommunityJoinRequestReapplyAtMs(
       : null;
   if (base === null) return null;
   return base + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS;
+}
+
+export function pickMostRelevantCommunityJoinRequest(
+  rows: CommunityJoinRequestLike[] | null | undefined,
+): CommunityJoinRequestLike | null {
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  if (list.length === 0) return null;
+  list.sort((a, b) => {
+    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+    return b.createdAt - a.createdAt;
+  });
+  return list[0] ?? null;
 }
 
 export function communityJoinRequestCanReapply(
@@ -553,10 +580,11 @@ export async function getCommunityAndMembership(args: {
 }> {
   const community = (await args.ctx.db.get(args.communityId)) as CommunityLike | null;
   if (!community) throw new Error("community_not_found");
-  const membership = (await args.ctx.db
+  const membershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-    .first()) as CommunityMembershipLike | null;
+    .collect()) as CommunityMembershipLike[];
+  const membership = pickMostRelevantCommunityMembership(membershipRows);
   return { community, membership };
 }
 
@@ -685,12 +713,13 @@ export async function resolveCommunityAccessBundle(args: {
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
   if (!isEntitled) {
-    const joinRequest = (await args.ctx.db
+    const joinRequestRows = (await args.ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) =>
         q.eq("communityId", args.community._id).eq("userId", args.userId),
       )
-      .first()) as CommunityJoinRequestLike | null;
+      .collect()) as CommunityJoinRequestLike[];
+    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
     joinRequestStatus = joinRequest ? String(joinRequest.status ?? "").trim().toLowerCase() || "pending" : null;
     joinRequestReapplyAt = resolveCommunityJoinRequestReapplyAtMs(joinRequest);
   }
