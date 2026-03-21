@@ -52,7 +52,6 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     .withIndex("by_community", (q) => q.eq("communityId", community._id))
     .collect()) as CommunityMembershipLike[];
   const activeMemberships = memberships.filter((row) => communityMembershipRowIsActive(row));
-  const memberCount = activeMemberships.length;
 
   const eligibleUserIds = new Set<string>([String(community.ownerId)]);
   const adminUserIds = new Set<string>([String(community.ownerId)]);
@@ -63,6 +62,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
       adminUserIds.add(normalizedUserId);
     }
   }
+  const memberCount = eligibleUserIds.size;
 
   const cutoff = Date.now() - COMMUNITY_ONLINE_WINDOW_MS;
   const recentPresenceRows = (await ctx.db
