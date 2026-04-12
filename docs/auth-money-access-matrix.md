@@ -97,7 +97,6 @@ Notes:
 - `runtimeRuns` persist active capability families and harness profile as runtime truth.
 - Phase 2 runtime detail: the unified tool loop provisions a Daytona sandbox lazily when a workspace tool is actually called.
 - Assistant response generation uses the Convex runtime endpoints (`/runtime/public_turn`, `/runtime/runtime_turn`).
-- Client wiring gate: `VITE_ENABLE_RUNTIME_TURN_V2=true` keeps authenticated cloud turns on the canonical `runtime_turn` path.
 - Community join mode remains server-authored (`join_free` / `join_approval` / `checkout`).
 
 ## 4) Canonical Files (Source of Truth)

@@ -28,15 +28,17 @@ type RuntimeAuthLogoutInput = {
   access_token?: unknown;
 };
 
+type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
+
 type HttpRouterLike = {
   route: (config: {
     path: string;
-    method: string;
-    handler: unknown;
+    method: HttpRouteMethod;
+    handler: PublicHttpAction;
   }) => void;
 };
 
-type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => PublicHttpAction;
 
 type RegisterRuntimeAuthRoutesArgs = {
   http: HttpRouterLike;
@@ -652,3 +654,4 @@ export function registerRuntimeAuthRoutes(args: RegisterRuntimeAuthRoutesArgs): 
     }),
   });
 }
+import type { PublicHttpAction } from "convex/server";

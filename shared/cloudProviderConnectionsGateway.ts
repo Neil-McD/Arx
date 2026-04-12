@@ -157,7 +157,7 @@ export async function disconnectCloudOpenRouterApiKey<SessionT>(
   };
 }
 
-export async function beginCloudChatgptConnect<SessionT>(
+export async function beginChatgptConnect<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT> & {
     returnToPath?: string | null;
   },
@@ -190,7 +190,7 @@ export async function beginCloudChatgptConnect<SessionT>(
   };
 }
 
-export async function beginCloudChatgptManualConnect<SessionT>(
+export async function beginChatgptManualConnect<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT> & {
     returnToPath?: string | null;
   },

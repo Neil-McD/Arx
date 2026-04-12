@@ -1,0 +1,265 @@
+import type { ReactNode } from "react";
+import { WebMobileDrawer } from "./WebMobileDrawer";
+import { WebThreadSidebarPanel } from "./WebThreadSidebarPanel";
+import type { WorkspaceSidebarState } from "./WebWorkspaceSidebarStateHost";
+import type { ProjectLike } from "./threadSidebarContracts";
+
+type MobileOverlay = "agent" | "community" | "community_selector" | null;
+
+type ThreadLike = {
+  id: string;
+};
+
+export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject extends ProjectLike> = {
+  sessionsDrawerEnabled: boolean;
+  isSessionsDrawerOpen: boolean;
+  showMobileAppShell: boolean;
+  showMobileShell: boolean;
+  mobileOverlay: MobileOverlay;
+  setMobileOverlay: (value: MobileOverlay) => void;
+  sidebar: WorkspaceSidebarState<TThread, TProject>;
+  threadError: string | null;
+  displayedThreadError: ReactNode;
+  showGuestRateLimitSignInAction: boolean;
+  session: unknown | null;
+  authError: string | null;
+  openAuthGate: () => void;
+  openMobileAgentSettings: () => void;
+  activeThreadId: string | null;
+  guestThreadId: string;
+  guestThreadHasMessages: boolean;
+  guestThreadPreview: string;
+  renderProjectToolbarAction: () => ReactNode;
+  getThreadDisplayTitle: (thread: TThread) => string;
+  selectThread: (thread: TThread) => void;
+  startDraftInProject: (projectId: string) => void;
+  editProject: (project: TProject) => void | Promise<void>;
+  deleteProject: (project: TProject) => void | Promise<void>;
+  applyGuestWorkspaceState: (params: { guestThreadId: string; hasMessages: boolean }) => void;
+  resetGuestThread: () => void;
+};
+
+export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject extends ProjectLike>(
+  props: WebWorkspaceShellPanelsProps<TThread, TProject>,
+) {
+  const renderCloudSidebar = (closeOverlay?: () => void, showWorkspaceToolbar = false) => (
+    <WebThreadSidebarPanel<TThread, TProject>
+      showThreadLaneSwitch={false}
+      showWorkspaceToolbar={showWorkspaceToolbar}
+      projectToolbarAction={props.renderProjectToolbarAction()}
+      state={{
+        threadLaneFilter: "chat",
+        threadSearchQuery: props.sidebar.threadSearchQuery,
+        normalizedThreadSearch: props.sidebar.normalizedThreadSearch,
+        threadSearchResults: props.sidebar.threadSearchResults,
+        projectThreadGroups: props.sidebar.projectThreadGroups,
+        projectExpandedById: props.sidebar.projectExpandedById,
+        generalThreads: [],
+        agentThreadsCount: 0,
+        chatThreadsCount: props.sidebar.visibleThreadsCount,
+        showChatSignInPrompt: false,
+      }}
+      actions={{
+        onThreadLaneFilterChange: () => {},
+        onThreadSearchQueryChange: props.sidebar.setThreadSearchQuery,
+        onToggleProjectExpanded: props.sidebar.toggleProjectExpanded,
+        onStartDraftInProject: (project) => {
+          closeOverlay?.();
+          props.startDraftInProject(project.id);
+        },
+        onEditProject: async (project) => {
+          closeOverlay?.();
+          await props.editProject(project);
+        },
+        onDeleteProject: async (project) => {
+          closeOverlay?.();
+          await props.deleteProject(project);
+        },
+        renderSessionItem: (thread) => (
+          <div
+            key={thread.id}
+            className={`session-item${thread.id === props.activeThreadId ? " active" : ""}`}
+            onClick={() => {
+              closeOverlay?.();
+              props.selectThread(thread);
+            }}
+          >
+            <div className="session-content">
+              <div className="session-title">{props.getThreadDisplayTitle(thread)}</div>
+            </div>
+          </div>
+        ),
+      }}
+    />
+  );
+
+  const renderDesktopGuestSidebar = () => (
+    <div className="session-list">
+      <div
+        className={`session-item${(props.activeThreadId === props.guestThreadId || (!props.activeThreadId && !props.guestThreadHasMessages)) ? " active" : ""}`}
+        onClick={() => {
+          props.applyGuestWorkspaceState({
+            guestThreadId: props.guestThreadId,
+            hasMessages: props.guestThreadHasMessages,
+          });
+        }}
+      >
+        <div className="session-content">
+          <div className="session-title">Guest thread</div>
+          <div className="session-preview">{props.guestThreadPreview}</div>
+        </div>
+      </div>
+      <div className="guest-thread-signin">
+        <p className="guest-thread-signin-title">Sign in</p>
+        <p className="guest-thread-signin-copy">Save chats, unlock more models, and join communities.</p>
+        {props.authError ? <div className="auth-error">{props.authError}</div> : null}
+        <button
+          type="button"
+          className="auth-gate-google-button guest-thread-google-button"
+          onClick={() => props.openAuthGate()}
+        >
+          <svg className="auth-gate-google-icon" width="18" height="18" viewBox="0 0 46 46" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.72 1.22 9.22 3.22l6.84-6.84C35.82 2.12 30.22 0 24 0 14.62 0 6.4 5.38 2.44 13.22l7.94 6.16C12.22 13.22 17.62 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46 24.5c0-1.64-.14-2.86-.42-4.08H24v7.72h12.52c-.26 2.08-1.64 5.22-4.68 7.32l7.2 5.6C43.74 36.5 46 30.96 46 24.5z" />
+            <path fill="#FBBC05" d="M10.38 27.38c-.5-1.5-.8-3.1-.8-4.76s.3-3.26.78-4.76l-7.94-6.16C.88 14.9 0 19.34 0 23.62c0 4.28.88 8.72 2.44 12.92l7.94-6.16z" />
+            <path fill="#34A853" d="M24 46c6.22 0 11.46-2.04 15.28-5.58l-7.2-5.6c-1.92 1.34-4.5 2.28-8.08 2.28-6.38 0-11.78-3.72-13.62-8.88l-7.94 6.16C6.4 40.62 14.62 46 24 46z" />
+            <path fill="none" d="M0 0h46v46H0z" />
+          </svg>
+          Continue with Google
+        </button>
+        <button
+          type="button"
+          className="guest-thread-reset-button"
+          disabled={!props.guestThreadHasMessages}
+          onClick={() => {
+            if (!props.guestThreadHasMessages) return;
+            const confirmed = window.confirm("Clear this guest chat from this browser?");
+            if (!confirmed) return;
+            props.resetGuestThread();
+          }}
+        >
+          Start fresh
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderMobileGuestSidebar = () => (
+    <>
+      <div className="session-search-row">
+        <div className="session-search" role="search" aria-label="Guest threads">
+          <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input value="" readOnly aria-label="Search threads" placeholder="Search threads…" />
+        </div>
+      </div>
+      <button
+        type="button"
+        className="auth-gate-google-button mobile-agent-drawer-google"
+        onClick={() => {
+          props.setMobileOverlay(null);
+          props.openAuthGate();
+        }}
+      >
+        <svg className="auth-gate-google-icon" width="18" height="18" viewBox="0 0 46 46" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.72 1.22 9.22 3.22l6.84-6.84C35.82 2.12 30.22 0 24 0 14.62 0 6.4 5.38 2.44 13.22l7.94 6.16C12.22 13.22 17.62 9.5 24 9.5z" />
+          <path fill="#4285F4" d="M46 24.5c0-1.64-.14-2.86-.42-4.08H24v7.72h12.52c-.26 2.08-1.64 5.22-4.68 7.32l7.2 5.6C43.74 36.5 46 30.96 46 24.5z" />
+          <path fill="#FBBC05" d="M10.38 27.38c-.5-1.5-.8-3.1-.8-4.76s.3-3.26.78-4.76l-7.94-6.16C.88 14.9 0 19.34 0 23.62c0 4.28.88 8.72 2.44 12.92l7.94-6.16z" />
+          <path fill="#34A853" d="M24 46c6.22 0 11.46-2.04 15.28-5.58l-7.2-5.6c-1.92 1.34-4.5 2.28-8.08 2.28-6.38 0-11.78-3.72-13.62-8.88l-7.94 6.16C6.4 40.62 14.62 46 24 46z" />
+          <path fill="none" d="M0 0h46v46H0z" />
+        </svg>
+        Continue with Google
+      </button>
+      <div className="mobile-agent-drawer-caption">
+        Save chats, unlock more models, and join communities.
+      </div>
+      <div className="session-list">
+        <div
+          className={`session-item${(props.activeThreadId === props.guestThreadId || (!props.activeThreadId && !props.guestThreadHasMessages)) ? " active" : ""}`}
+          onClick={() => {
+            props.setMobileOverlay(null);
+            props.applyGuestWorkspaceState({
+              guestThreadId: props.guestThreadId,
+              hasMessages: props.guestThreadHasMessages,
+            });
+          }}
+        >
+          <div className="session-content">
+            <div className="session-title">Guest thread</div>
+            <div className="session-preview">{props.guestThreadPreview}</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {!props.showMobileAppShell && props.sessionsDrawerEnabled && (
+        <aside
+          className={`sessions web-sessions-drawer${props.isSessionsDrawerOpen ? " open" : ""}`}
+          aria-hidden={!props.isSessionsDrawerOpen}
+        >
+          {props.threadError && (
+            <div className="auth-error">
+              {props.displayedThreadError}
+              {props.showGuestRateLimitSignInAction ? (
+                <button type="button" className="auth-error-link" onClick={() => props.openAuthGate()}>
+                  Sign in
+                </button>
+              ) : null}
+            </div>
+          )}
+          {props.session ? renderCloudSidebar() : renderDesktopGuestSidebar()}
+        </aside>
+      )}
+
+      {props.showMobileShell && (
+        <WebMobileDrawer
+          isOpen={props.mobileOverlay === "agent"}
+          ariaLabel="Agent navigation"
+          className="mobile-agent-drawer"
+          hideHeader={true}
+          footer={
+            <div className="mobile-agent-drawer-footer">
+              <button
+                type="button"
+                className="mobile-agent-drawer-settings-link"
+                onClick={props.openMobileAgentSettings}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                Settings
+              </button>
+            </div>
+          }
+          onClose={() => props.setMobileOverlay(null)}
+        >
+          <div className="mobile-agent-drawer-content">
+            <div className="mobile-agent-drawer-main">
+              {props.threadError && (
+                <div className="auth-error">
+                  {props.displayedThreadError}
+                  {props.showGuestRateLimitSignInAction ? (
+                    <button type="button" className="auth-error-link" onClick={() => props.openAuthGate()}>
+                      Sign in
+                    </button>
+                  ) : null}
+                </div>
+              )}
+              {props.session ? (
+                <div className="thread-sidebar-panel">{renderCloudSidebar(() => props.setMobileOverlay(null), true)}</div>
+              ) : (
+                renderMobileGuestSidebar()
+              )}
+            </div>
+          </div>
+        </WebMobileDrawer>
+      )}
+    </>
+  );
+}

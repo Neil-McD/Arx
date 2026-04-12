@@ -1,0 +1,1642 @@
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  ChangeEventHandler,
+  Dispatch,
+  MutableRefObject,
+  ReactNode,
+  SetStateAction,
+} from "react";
+import {
+  getProjectWorkspaceTerminalPreviewUrl,
+  listProjectWorkspaceTerminalSnapshot,
+  stopAllProjectWorkspaceTerminals,
+  stopProjectWorkspaceTerminal,
+  type DaytonaWorkspaceTerminalPreview,
+  type DaytonaWorkspaceTerminalRecord,
+} from "../../../../shared/daytonaWorkspaceTerminals";
+import type { AuthSessionLike } from "../../../../shared/authSession";
+import type { ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
+import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
+import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
+import { useModelPickerController } from "../../../../shared/useModelPickerController";
+import { useModelPickerLifecycleEffects } from "../../../../shared/useModelPickerLifecycleEffects";
+import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
+import {
+  emitWorkspaceEvent,
+  formatWorkspaceInstrumentationError,
+} from "../lib/workspaceInstrumentation";
+import { useWebThreadMessagesLifecycle } from "../controllers/useWebThreadMessagesLifecycle";
+import type { WorkspacePickerModel } from "../controllers/useWebWorkspaceModelStateController";
+import {
+  WebWorkspaceAppPreview,
+  isRetryablePreviewStatus,
+  type WorkspacePreviewLifecycleState,
+} from "./WebWorkspaceAppPreview";
+import { WebBackgroundTerminalRail } from "./WebBackgroundTerminalRail";
+import { WebModelPickerPopover } from "./WebModelPickerPopover";
+import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
+import { WebWorkspaceThreadError } from "./WebWorkspaceThreadError";
+import { WebWorkspaceThreadMessageList } from "./WebWorkspaceThreadMessageList";
+import { WebWorkspaceStreamingMessage } from "./WebWorkspaceStreamingMessage";
+import type {
+  WorkspaceMarkdownRenderer,
+  WorkspaceStreamingMessageView,
+  WorkspaceThreadContextPayload,
+  WorkspaceThreadErrorView,
+  WorkspaceThreadMessageView,
+} from "./webWorkspaceThreadViews";
+
+type WorkspaceAttachmentView = {
+  id: string;
+  name: string;
+  type: string;
+  data_url?: string | null;
+};
+
+type LandingActionButton = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+export type WorkspaceComposerDraft = {
+  text: string;
+  attachments: WorkspaceAttachmentView[];
+};
+
+export type WorkspaceComposerApi = {
+  focus: () => void;
+  clear: () => void;
+  reset: () => void;
+  appendTranscript: (transcript: string) => void;
+  pinToBottom: () => void;
+};
+
+export type WebWorkspaceHostProps = {
+  session: AuthSessionLike | null;
+  hasSession: boolean;
+  activeThreadId: string | null;
+  guestThreadId: string;
+  isEmptyWorkspaceThread: boolean;
+  showEmptyThreadLandingSkeleton: boolean;
+  isHydratingActiveWorkspaceThread: boolean;
+  isActiveWorkspaceThreadBusy: boolean;
+  isStreamingWorkspaceTurn: boolean;
+  inferenceToast: string | null;
+  memoryToast: string | null;
+  emptyThreadClassName: string;
+  emptyThreadAvatar: ReactNode;
+  emptyThreadTitle: ReactNode;
+  emptyThreadSubtitle: ReactNode;
+  guestSignupRail: ReactNode;
+  emptyThreadChatgptCard: ReactNode;
+  initialComposerDraft: WorkspaceComposerDraft;
+  onComposerDraftChange: (draft: WorkspaceComposerDraft) => void;
+  onRegisterComposerApi: (api: WorkspaceComposerApi | null) => void;
+  landingActionButtons: LandingActionButton[];
+  authedWorkspaceComposerPlaceholder: string;
+  guestWorkspaceComposerPlaceholder: string;
+  setWorkspaceError: Dispatch<SetStateAction<string | null>>;
+  ingestWorkspaceAttachmentsFromFileList: (
+    files: FileList,
+    existing: WorkspaceAttachmentView[],
+    onError: (message: string) => void,
+  ) => Promise<WorkspaceAttachmentView[]>;
+  setLoadingThreadMessagesThreadId: Dispatch<SetStateAction<string | null>>;
+  setThreadMessages: Dispatch<SetStateAction<any[]>>;
+  loadThreadMessages: (threadId: string, session: unknown) => Promise<void>;
+  onSendMessage: (payload: {
+    text: string;
+    attachments: WorkspaceAttachmentView[];
+    clearComposer: () => void;
+  }) => void;
+  onStopStreamingTurn: () => void;
+  resolveWorkspaceSession: () => Promise<unknown | null>;
+  activeProjectId: string | null;
+  showAppToastMessage: (message: string) => void;
+  activeModelLabel: string;
+  curatedPickerModels: WorkspacePickerModel[];
+  selectedPickerModelId: string | null;
+  modelToggles: ModelToggle[];
+  hasUserKeyConnection: boolean;
+  hasUserChatgptConnection: boolean;
+  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
+  onSelectPickerModel: (model: WorkspacePickerModel) => void;
+  workspaceVoiceUiState: "idle" | "recording" | "transcribing";
+  workspaceVoiceTitle: string;
+  onWorkspaceVoiceClick: () => void;
+  modelPickerOpenRequestKey: number;
+  onRequestPreviewFitRepair: (params: {
+    terminal: DaytonaWorkspaceTerminalRecord;
+    mode: "inline" | "expanded";
+    viewportWidth: number;
+    viewportHeight: number;
+    overflowX: boolean;
+    overflowY: boolean;
+  }) => void;
+  activeThreadStreamingRunId?: string | null;
+  activeThreadRuntimeEvents?: ThreadStreamingRuntimeEvent[] | null;
+  runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
+  threadErrorView: WorkspaceThreadErrorView | null;
+  onOpenThreadErrorAuthGate: () => void;
+  onRetryLastThreadError: () => Promise<void> | void;
+  threadMessageViews: WorkspaceThreadMessageView[];
+  streamingMessageView: WorkspaceStreamingMessageView | null;
+  copiedMessageId: string | null;
+  handleCopyMessage: (messageId: string, text: string) => Promise<void> | void;
+  openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
+  renderMarkdown: WorkspaceMarkdownRenderer;
+  copyTextToClipboard: (text: string) => Promise<void> | void;
+};
+
+function parsePreviewRunAnchor(
+  event: ThreadStreamingRuntimeEvent,
+): { runId: string; terminalId: string; updatedAt: number } | null {
+  if (event.event_type !== "tool_call_finished") return null;
+  const payload =
+    event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : null;
+  if (!payload) return null;
+  if (payload.tool_name !== "terminal_start" || payload.success !== true) return null;
+  const details =
+    payload.details && typeof payload.details === "object" && !Array.isArray(payload.details)
+      ? (payload.details as Record<string, unknown>)
+      : null;
+  if (!details) return null;
+  const terminalId = String(details.terminal_session_id ?? "").trim();
+  const previewPort =
+    typeof details.preview_port === "number" && Number.isFinite(details.preview_port)
+      ? Math.floor(details.preview_port)
+      : null;
+  const runId = String(event.run_id ?? "").trim();
+  if (!terminalId || !runId || previewPort == null || previewPort < 3000) return null;
+  return {
+    runId,
+    terminalId,
+    updatedAt: Date.parse(event.created_at) || 0,
+  };
+}
+
+function buildLatestPreviewRunIdByTerminalId(params: {
+  activeThreadStreamingRunId?: string | null;
+  activeThreadRuntimeEvents?: readonly ThreadStreamingRuntimeEvent[] | null;
+  runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
+}): Record<string, string> {
+  const next = new Map<string, { runId: string; updatedAt: number }>();
+  const ingest = (events: readonly ThreadStreamingRuntimeEvent[] | null | undefined) => {
+    if (!Array.isArray(events)) return;
+    for (const event of events) {
+      const anchor = parsePreviewRunAnchor(event);
+      if (!anchor) continue;
+      const current = next.get(anchor.terminalId);
+      if (!current || anchor.updatedAt >= current.updatedAt) {
+        next.set(anchor.terminalId, { runId: anchor.runId, updatedAt: anchor.updatedAt });
+      }
+    }
+  };
+
+  for (const events of Object.values(params.runtimeEventsByRunId ?? {})) ingest(events);
+  if (params.activeThreadStreamingRunId) ingest(params.activeThreadRuntimeEvents);
+
+  const byTerminalId: Record<string, string> = {};
+  for (const [terminalId, value] of next.entries()) {
+    byTerminalId[terminalId] = value.runId;
+  }
+  return byTerminalId;
+}
+
+function resolvePreviewOwningRunId(
+  terminal: DaytonaWorkspaceTerminalRecord,
+  latestPreviewRunIdByTerminalId: Record<string, string>,
+): string | null {
+  const anchoredRunId = String(latestPreviewRunIdByTerminalId[terminal.id] ?? "").trim();
+  if (anchoredRunId) return anchoredRunId;
+  const persistedRunId = String(terminal.run_id_started_by ?? "").trim();
+  return persistedRunId || null;
+}
+
+function isTerminalSnapshotStatusActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
+  return status === "starting" || status === "running";
+}
+
+function areTerminalRecordsEqual(
+  left: readonly DaytonaWorkspaceTerminalRecord[],
+  right: readonly DaytonaWorkspaceTerminalRecord[],
+): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.run_id_started_by !== b.run_id_started_by ||
+      a.status !== b.status ||
+      a.command !== b.command ||
+      a.cwd !== b.cwd ||
+      a.preview_label !== b.preview_label ||
+      a.preview_path !== b.preview_path ||
+      a.preview_port !== b.preview_port ||
+      a.exit_code !== b.exit_code ||
+      a.output_tail !== b.output_tail
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function applyTerminalSnapshotIfChanged(
+  next: { active: DaytonaWorkspaceTerminalRecord[] },
+  setActive: Dispatch<SetStateAction<DaytonaWorkspaceTerminalRecord[]>>,
+): void {
+  setActive((prev) => (areTerminalRecordsEqual(prev, next.active) ? prev : next.active));
+}
+
+function isPreviewCapableTerminal(terminal: DaytonaWorkspaceTerminalRecord): boolean {
+  return (
+    typeof terminal.preview_port === "number" &&
+    Number.isFinite(terminal.preview_port) &&
+    terminal.preview_port >= 3000
+  );
+}
+
+function arePreviewLifecycleStatesEqual(
+  left: Record<string, WorkspacePreviewLifecycleState>,
+  right: Record<string, WorkspacePreviewLifecycleState>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (const key of leftKeys) {
+    const a = left[key];
+    const b = right[key];
+    if (!a || !b) return false;
+    if (a.phase !== b.phase || a.error !== b.error) return false;
+    const aPreview = a.preview;
+    const bPreview = b.preview;
+    if (!aPreview && !bPreview) continue;
+    if (!aPreview || !bPreview) return false;
+    if (
+      aPreview.preview_url !== bPreview.preview_url ||
+      aPreview.preview_proxy_token !== bPreview.preview_proxy_token ||
+      aPreview.preview_path !== bPreview.preview_path
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const PREVIEW_RESOLUTION_TIMEOUT_MS = 12000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+    void promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
+  isEmptyWorkspaceThread: boolean;
+  showEmptyThreadLandingSkeleton: boolean;
+  isHydratingActiveWorkspaceThread: boolean;
+  emptyThreadClassName: string;
+  emptyThreadAvatar: ReactNode;
+  emptyThreadTitle: ReactNode;
+  emptyThreadSubtitle: ReactNode;
+  emptyThreadChatgptCard: ReactNode;
+  landingActionButtons: LandingActionButton[];
+  hasSession: boolean;
+  isActiveWorkspaceThreadBusy: boolean;
+  isStreamingWorkspaceTurn: boolean;
+  workspaceAttachments: WorkspaceAttachmentView[];
+  messageInput: string;
+  setMessageInput: Dispatch<SetStateAction<string>>;
+  workspaceAskInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>;
+  authedWorkspaceComposerPlaceholder: string;
+  guestWorkspaceComposerPlaceholder: string;
+  activeModelLabel: string;
+  curatedPickerModels: WorkspacePickerModel[];
+  selectedPickerModelId: string | null;
+  modelToggles: ModelToggle[];
+  hasUserKeyConnection: boolean;
+  hasUserChatgptConnection: boolean;
+  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
+  onSelectPickerModel: (model: WorkspacePickerModel) => void;
+  workspaceVoiceUiState: "idle" | "recording" | "transcribing";
+  workspaceVoiceTitle: string;
+  onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onRemoveWorkspaceAttachment: (attachmentId: string) => void;
+  onSendMessage: () => void;
+  onSendLandingAction: (prompt: string) => void;
+  onStopStreamingTurn: () => void;
+  onWorkspaceVoiceClick: () => void;
+  modelPickerOpenRequestKey: number;
+  guestSignupRail: ReactNode;
+  session: AuthSessionLike | null;
+  threadErrorView: WorkspaceThreadErrorView | null;
+  onOpenThreadErrorAuthGate: () => void;
+  onRetryLastThreadError: () => Promise<void> | void;
+  threadMessageViews: WorkspaceThreadMessageView[];
+  streamingMessageView: WorkspaceStreamingMessageView | null;
+  copiedMessageId: string | null;
+  handleCopyMessage: (messageId: string, text: string) => Promise<void> | void;
+  openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
+  renderMarkdown: WorkspaceMarkdownRenderer;
+  copyTextToClipboard: (text: string) => Promise<void> | void;
+  renderPreviewForRun: (runId: string | null) => ReactNode;
+}) {
+  return (
+    <>
+      {props.isEmptyWorkspaceThread ? (
+        <>
+          {props.showEmptyThreadLandingSkeleton || props.isHydratingActiveWorkspaceThread ? (
+            <div className="web-empty-thread web-empty-thread-skeleton" role="status" aria-live="polite">
+              <div className="web-empty-thread-avatar web-skeleton-block" aria-hidden="true" />
+              <div className="web-skeleton-block web-skeleton-title" aria-hidden="true" />
+              <div className="web-skeleton-block web-skeleton-subtitle" aria-hidden="true" />
+              <div className="web-empty-thread-composer web-empty-thread-composer-skeleton" aria-hidden="true">
+                <div className="web-skeleton-composer web-skeleton-block" />
+              </div>
+              <div className="web-empty-thread-actions web-empty-thread-actions-skeleton" aria-hidden="true">
+                <div className="web-skeleton-card" />
+                <div className="web-skeleton-card" />
+                <div className="web-skeleton-card" />
+              </div>
+            </div>
+          ) : (
+            <div className={props.emptyThreadClassName} role="region" aria-label="Start a new thread">
+              {props.emptyThreadAvatar}
+              <div className="web-empty-thread-title">{props.emptyThreadTitle}</div>
+              {props.emptyThreadSubtitle}
+              <div className="web-empty-thread-composer">
+                <WorkspaceComposer
+                  landing
+                  hasSession={props.hasSession}
+                  isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
+                  isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
+                  messageInput={props.messageInput}
+                  setMessageInput={props.setMessageInput}
+                  workspaceAttachments={props.workspaceAttachments}
+                  workspaceAskInputRef={props.workspaceAskInputRef}
+                  workspaceFileInputRef={props.workspaceFileInputRef}
+                  workspaceComposerPlaceholder={
+                    props.hasSession
+                      ? props.workspaceAttachments.length > 0
+                        ? "Add a message or send files..."
+                        : props.authedWorkspaceComposerPlaceholder
+                      : props.guestWorkspaceComposerPlaceholder
+                  }
+                  terminals={[]}
+                  busyTerminalIds={[]}
+                  isStoppingAllTerminals={false}
+                  guestSignupRail={props.guestSignupRail}
+                  activeModelLabel={props.activeModelLabel}
+                  curatedPickerModels={props.curatedPickerModels}
+                  selectedPickerModelId={props.selectedPickerModelId}
+                  modelToggles={props.modelToggles}
+                  hasUserKeyConnection={props.hasUserKeyConnection}
+                  hasUserChatgptConnection={props.hasUserChatgptConnection}
+                  canSelectPickerModel={props.canSelectPickerModel}
+                  onSelectPickerModel={props.onSelectPickerModel}
+                  workspaceVoiceUiState={props.workspaceVoiceUiState}
+                  workspaceVoiceTitle={props.workspaceVoiceTitle}
+                  onWorkspaceFileInputChange={props.onWorkspaceFileInputChange}
+                  onRemoveWorkspaceAttachment={props.onRemoveWorkspaceAttachment}
+                  onSendMessage={props.onSendMessage}
+                  onStopStreamingTurn={props.onStopStreamingTurn}
+                  onStopTerminal={() => {}}
+                  onStopAllTerminals={() => {}}
+                  onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
+                  modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
+                />
+              </div>
+              <div className="web-empty-thread-actions" role="list">
+                {props.landingActionButtons.map((button) => (
+                  <button
+                    key={button.id}
+                    className="web-empty-thread-action"
+                    type="button"
+                    disabled={props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+                    onClick={() => props.onSendLandingAction(button.prompt)}
+                  >
+                    <span className="web-empty-thread-action-text">{button.label}</span>
+                    <span className="web-empty-thread-action-arrow" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {props.emptyThreadChatgptCard}
+            </div>
+          )}
+        </>
+      ) : null}
+      <WebWorkspaceThreadError
+        view={props.threadErrorView}
+        onOpenAuthGate={props.onOpenThreadErrorAuthGate}
+        onRetryLastTurn={props.onRetryLastThreadError}
+      />
+      <WebWorkspaceThreadMessageList
+        messages={props.threadMessageViews}
+        copiedMessageId={props.copiedMessageId}
+        session={props.session}
+        renderMarkdown={props.renderMarkdown}
+        copyTextToClipboard={props.copyTextToClipboard}
+        handleCopyMessage={props.handleCopyMessage}
+        openMessageContextModal={props.openMessageContextModal}
+        renderPreviewForRun={props.renderPreviewForRun}
+      />
+      <WebWorkspaceStreamingMessage
+        view={props.streamingMessageView}
+        session={props.session}
+        renderMarkdown={props.renderMarkdown}
+        copyTextToClipboard={props.copyTextToClipboard}
+      />
+    </>
+  );
+}, (prev, next) => {
+  if (
+    prev.isEmptyWorkspaceThread !== next.isEmptyWorkspaceThread ||
+    prev.showEmptyThreadLandingSkeleton !== next.showEmptyThreadLandingSkeleton ||
+    prev.isHydratingActiveWorkspaceThread !== next.isHydratingActiveWorkspaceThread ||
+    prev.renderPreviewForRun !== next.renderPreviewForRun ||
+    prev.onOpenThreadErrorAuthGate !== next.onOpenThreadErrorAuthGate ||
+    prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
+    prev.handleCopyMessage !== next.handleCopyMessage ||
+    prev.openMessageContextModal !== next.openMessageContextModal ||
+    prev.renderMarkdown !== next.renderMarkdown ||
+    prev.copyTextToClipboard !== next.copyTextToClipboard ||
+    !areWorkspaceThreadErrorViewsEqual(prev.threadErrorView, next.threadErrorView) ||
+    !areWorkspaceThreadMessageViewsEqual(prev.threadMessageViews, next.threadMessageViews) ||
+    !areWorkspaceStreamingMessageViewsEqual(
+      prev.streamingMessageView,
+      next.streamingMessageView,
+    )
+  ) {
+    return false;
+  }
+  if (!prev.isEmptyWorkspaceThread && !next.isEmptyWorkspaceThread) {
+    return true;
+  }
+  return (
+    prev.messageInput === next.messageInput &&
+    prev.workspaceAttachments === next.workspaceAttachments &&
+    prev.isActiveWorkspaceThreadBusy === next.isActiveWorkspaceThreadBusy &&
+    prev.isStreamingWorkspaceTurn === next.isStreamingWorkspaceTurn
+  );
+});
+
+function areWorkspaceThreadErrorViewsEqual(
+  left: WorkspaceThreadErrorView | null,
+  right: WorkspaceThreadErrorView | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.displayedError === right.displayedError &&
+    left.showSignInAction === right.showSignInAction &&
+    left.showRetryAction === right.showRetryAction
+  );
+}
+
+function areWorkspaceThreadAttachmentViewsEqual(
+  left: WorkspaceThreadMessageView["attachments"],
+  right: WorkspaceThreadMessageView["attachments"],
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.imageUrl !== b.imageUrl ||
+      a.openUrl !== b.openUrl
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areWorkspaceThreadMessageViewsEqual(
+  left: WorkspaceThreadMessageView[],
+  right: WorkspaceThreadMessageView[],
+): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (!a || !b) return false;
+    if (
+      a.id !== b.id ||
+      a.role !== b.role ||
+      a.textContent !== b.textContent ||
+      a.runId !== b.runId ||
+      a.requireLiveDesktop !== b.requireLiveDesktop ||
+      a.modelLabel !== b.modelLabel ||
+      a.contextPayload !== b.contextPayload ||
+      a.runtimeEvents !== b.runtimeEvents ||
+      !areWorkspaceThreadAttachmentViewsEqual(a.attachments, b.attachments)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areWorkspaceStreamingMessageViewsEqual(
+  left: WorkspaceStreamingMessageView | null,
+  right: WorkspaceStreamingMessageView | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.content === right.content && left.runtimeEvents === right.runtimeEvents;
+}
+
+function WorkspaceAttachmentPreview(props: {
+  attachments: WorkspaceAttachmentView[];
+  onRemove: (attachmentId: string) => void;
+}) {
+  if (props.attachments.length === 0) return null;
+  return (
+    <div className="attachments-preview workspace-attachments-preview">
+      {props.attachments.map((att) => (
+        <div key={att.id} className="attachment-item">
+          {att.type === "image" && att.data_url ? (
+            <img src={att.data_url} alt={att.name} className="attachment-thumb" />
+          ) : (
+            <div className="attachment-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M16 13H8" />
+                <path d="M16 17H8" />
+                <path d="M10 9H8" />
+              </svg>
+            </div>
+          )}
+          <span className="attachment-name" title={att.name}>
+            {att.name}
+          </span>
+          <button
+            className="attachment-remove"
+            type="button"
+            onClick={() => props.onRemove(att.id)}
+            title="Remove"
+            aria-label={`Remove ${att.name}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkspaceComposer(props: {
+  landing?: boolean;
+  hasSession: boolean;
+  isActiveWorkspaceThreadBusy: boolean;
+  isStreamingWorkspaceTurn: boolean;
+  messageInput: string;
+  setMessageInput: Dispatch<SetStateAction<string>>;
+  workspaceAttachments: WorkspaceAttachmentView[];
+  workspaceAskInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  workspaceFileInputRef: MutableRefObject<HTMLInputElement | null>;
+  workspaceComposerPlaceholder: string;
+  terminals: DaytonaWorkspaceTerminalRecord[];
+  busyTerminalIds: readonly string[];
+  isStoppingAllTerminals: boolean;
+  guestSignupRail: ReactNode;
+  activeModelLabel: string;
+  curatedPickerModels: WorkspacePickerModel[];
+  selectedPickerModelId: string | null;
+  modelToggles: ModelToggle[];
+  hasUserKeyConnection: boolean;
+  hasUserChatgptConnection: boolean;
+  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
+  onSelectPickerModel: (model: WorkspacePickerModel) => void;
+  workspaceVoiceUiState: "idle" | "recording" | "transcribing";
+  workspaceVoiceTitle: string;
+  onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onRemoveWorkspaceAttachment: (attachmentId: string) => void;
+  onSendMessage: () => void;
+  onStopStreamingTurn: () => void;
+  onStopTerminal: (terminalSessionId: string) => void;
+  onStopAllTerminals: () => void;
+  onWorkspaceVoiceClick: () => void;
+  modelPickerOpenRequestKey: number;
+  showTerminalRail?: boolean;
+}) {
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
+  const [modelPickerQuery, setModelPickerQuery] = useState("");
+  const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  const modelPickerSearchRef = useRef<HTMLInputElement>(null);
+  const { visiblePickerModels, openModelPicker, closeModelPicker } = useModelPickerController<
+    WorkspacePickerModel,
+    ModelSectionId
+  >({
+    curatedPickerModels: props.curatedPickerModels,
+    modelPickerQuery,
+    modelPickerSection,
+    setModelPickerQuery,
+    setModelPickerSection,
+    setIsModelPickerOpen,
+    allSectionId: "all",
+  });
+
+  useModelPickerLifecycleEffects({
+    isModelPickerOpen,
+    modelPickerRef,
+    modelPickerSearchRef,
+    closeModelPicker,
+  });
+
+  useEffect(() => {
+    if (props.modelPickerOpenRequestKey <= 0) return;
+    openModelPicker();
+    window.setTimeout(() => {
+      const root = modelPickerRef.current;
+      const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
+      btn?.focus();
+    }, 60);
+  }, [openModelPicker, props.modelPickerOpenRequestKey]);
+
+  const askBar = (
+    <div className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}`}>
+      <textarea
+        ref={(node) => {
+          props.workspaceAskInputRef.current = node;
+        }}
+        className={`ask-input ask-input-v2${props.landing ? " ask-input-landing" : ""}`}
+        placeholder={props.landing ? "Describe what you need help with..." : props.workspaceComposerPlaceholder}
+        value={props.messageInput}
+        onChange={(event) => props.setMessageInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            props.onSendMessage();
+          }
+        }}
+        disabled={props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+        rows={1}
+      />
+      <WorkspaceAttachmentPreview
+        attachments={props.workspaceAttachments}
+        onRemove={props.onRemoveWorkspaceAttachment}
+      />
+      <div className={`ask-footer${props.landing ? " ask-footer-landing" : ""}`}>
+        <div className="ask-footer-left">
+          <button
+            className="ask-icon-btn ask-plus"
+            type="button"
+            onClick={() => props.workspaceFileInputRef.current?.click()}
+            disabled={!props.hasSession || props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+            aria-label="Attach files"
+            title="Attach files"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <input
+            ref={(node) => {
+              props.workspaceFileInputRef.current = node;
+            }}
+            type="file"
+            multiple
+            accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
+            style={{ display: "none" }}
+            onChange={props.onWorkspaceFileInputChange}
+          />
+          <WebModelPickerPopover
+            modelPickerRef={modelPickerRef}
+            modelPickerSearchRef={modelPickerSearchRef}
+            isOpen={isModelPickerOpen}
+            activeModelLabel={props.activeModelLabel}
+            curatedPickerModels={props.curatedPickerModels}
+            modelPickerQuery={modelPickerQuery}
+            setModelPickerQuery={setModelPickerQuery}
+            modelPickerSection={modelPickerSection}
+            setModelPickerSection={setModelPickerSection}
+            visiblePickerModels={visiblePickerModels}
+            selectedPickerModelId={props.selectedPickerModelId}
+            modelToggles={props.modelToggles}
+            hasUserKeyConnection={props.hasUserKeyConnection}
+            hasUserChatgptConnection={props.hasUserChatgptConnection}
+            hasSession={props.hasSession}
+            canSelectPickerModel={props.canSelectPickerModel}
+            onSelectModel={(model) => {
+              props.onSelectPickerModel(model);
+              closeModelPicker();
+            }}
+            onOpen={openModelPicker}
+            onClose={closeModelPicker}
+          />
+        </div>
+        <div className={`ask-actions${props.landing ? " ask-actions-landing" : ""}`}>
+          <VoiceInputButton
+            state={props.workspaceVoiceUiState}
+            title={props.workspaceVoiceTitle}
+            onClick={props.onWorkspaceVoiceClick}
+          />
+          <button
+            className="chat-send ask-send-btn ask-send-btn-v2"
+            type="button"
+            onClick={() => (props.isStreamingWorkspaceTurn ? props.onStopStreamingTurn() : props.onSendMessage())}
+            disabled={
+              props.isStreamingWorkspaceTurn
+                ? false
+                : props.isActiveWorkspaceThreadBusy ||
+                  (props.messageInput.trim().length === 0 && props.workspaceAttachments.length === 0)
+            }
+            aria-label={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
+            title={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {props.isStreamingWorkspaceTurn ? (
+                <rect x="7" y="7" width="10" height="10" rx="2" />
+              ) : (
+                <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+              )}
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (props.landing) {
+    return (
+      <>
+        {!props.hasSession ? props.guestSignupRail : null}
+        {askBar}
+      </>
+    );
+  }
+
+  return (
+    <div className="workspace-composer-lane">
+      {props.showTerminalRail === false ? null : (
+        <WebBackgroundTerminalRail
+          terminals={props.terminals}
+          busyTerminalIds={props.busyTerminalIds}
+          isStoppingAll={props.isStoppingAllTerminals}
+          onStopTerminal={props.onStopTerminal}
+          onStopAll={props.onStopAllTerminals}
+        />
+      )}
+      {!props.hasSession ? props.guestSignupRail : null}
+      {askBar}
+    </div>
+  );
+}
+
+export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
+  const [messageInput, setMessageInput] = useState(props.initialComposerDraft.text);
+  const [workspaceAttachments, setWorkspaceAttachments] = useState<WorkspaceAttachmentView[]>(
+    props.initialComposerDraft.attachments,
+  );
+  const workspaceAttachmentsRef = useRef<WorkspaceAttachmentView[]>(props.initialComposerDraft.attachments);
+  const workspaceAskInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const workspaceFileInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceMessageListRef = useRef<HTMLDivElement | null>(null);
+  const workspaceMessageListContentRef = useRef<HTMLDivElement | null>(null);
+  const [isWorkspaceAtBottom, setIsWorkspaceAtBottom] = useState(true);
+  const workspacePinnedToBottomRef = useRef(true);
+  const isLoadingThreadRef = useRef(false);
+  const resolveWorkspaceSessionRef = useRef(props.resolveWorkspaceSession);
+  const activeProjectIdRef = useRef<string | null>(props.activeProjectId);
+  const activeProjectInstanceRef = useRef(0);
+  const [activeWorkspaceTerminals, setActiveWorkspaceTerminals] = useState<DaytonaWorkspaceTerminalRecord[]>([]);
+  const [busyWorkspaceTerminalIds, setBusyWorkspaceTerminalIds] = useState<string[]>([]);
+  const [isStoppingAllWorkspaceTerminals, setIsStoppingAllWorkspaceTerminals] = useState(false);
+  const [expandedPreviewTerminalId, setExpandedPreviewTerminalId] = useState<string | null>(null);
+  const [previewStateByTerminalId, setPreviewStateByTerminalId] = useState<Record<string, WorkspacePreviewLifecycleState>>({});
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
+    typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
+  );
+  const savedThreadScrollTopRef = useRef<number | null>(null);
+  const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
+  const attemptedPreviewRepairKeysRef = useRef<Set<string>>(new Set());
+  const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
+  const inflightPreviewIdsRef = useRef<Set<string>>(new Set());
+  const latestPreviewRunIdByTerminalId = useMemo(
+    () =>
+      buildLatestPreviewRunIdByTerminalId({
+        activeThreadStreamingRunId: props.activeThreadStreamingRunId,
+        activeThreadRuntimeEvents: props.activeThreadRuntimeEvents,
+        runtimeEventsByRunId: props.runtimeEventsByRunId,
+      }),
+    [props.activeThreadRuntimeEvents, props.activeThreadStreamingRunId, props.runtimeEventsByRunId],
+  );
+  const activePreviewCapableTerminals = useMemo(
+    () =>
+      activeWorkspaceTerminals.filter(
+        (terminal) => isTerminalSnapshotStatusActive(terminal.status) && isPreviewCapableTerminal(terminal),
+      ),
+    [activeWorkspaceTerminals],
+  );
+
+  const {
+    handleAttachmentFileInputChange: handleWorkspaceFileInputChange,
+    removeAttachment: removeWorkspaceAttachment,
+  } = useMessageAttachmentInputController<WorkspaceAttachmentView>({
+    attachmentsRef: workspaceAttachmentsRef,
+    setAttachments: setWorkspaceAttachments,
+    setError: props.setWorkspaceError,
+    ingestAttachmentsFromFileList: props.ingestWorkspaceAttachmentsFromFileList,
+  });
+
+  useEffect(() => {
+    workspaceAttachmentsRef.current = workspaceAttachments;
+  }, [workspaceAttachments]);
+
+  useEffect(() => {
+    props.onComposerDraftChange({ text: messageInput, attachments: workspaceAttachments });
+  }, [messageInput, props.onComposerDraftChange, workspaceAttachments]);
+
+  useLayoutEffect(() => {
+    const el = workspaceAskInputRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const maxPx = 220;
+    const next = Math.min(el.scrollHeight, maxPx);
+    el.style.height = `${Math.max(next, 24)}px`;
+  }, [messageInput]);
+
+  const clearComposer = useCallback(() => {
+    setMessageInput("");
+    setWorkspaceAttachments([]);
+    if (workspaceFileInputRef.current) {
+      workspaceFileInputRef.current.value = "";
+    }
+  }, []);
+
+  useEffect(() => {
+    props.onRegisterComposerApi({
+      focus: () => {
+        workspaceAskInputRef.current?.focus();
+      },
+      clear: clearComposer,
+      reset: () => {
+        clearComposer();
+        window.setTimeout(() => {
+          workspaceAskInputRef.current?.focus();
+        }, 0);
+      },
+      appendTranscript: (transcript: string) => {
+        if (!transcript) return;
+        setMessageInput((prev) => {
+          const base = prev.trim();
+          const next = transcript.trim();
+          if (!base) return next;
+          if (!next) return prev;
+          return `${base} ${next}`.trim();
+        });
+      },
+      pinToBottom: () => {
+        workspacePinnedToBottomRef.current = true;
+        setIsWorkspaceAtBottom(true);
+      },
+    });
+    return () => {
+      props.onRegisterComposerApi(null);
+    };
+  }, [clearComposer, props.onRegisterComposerApi]);
+
+  useEffect(() => {
+    activeProjectIdRef.current = props.activeProjectId;
+    activeProjectInstanceRef.current += 1;
+    setActiveWorkspaceTerminals([]);
+    setPreviewStateByTerminalId({});
+    setBusyWorkspaceTerminalIds([]);
+    setIsStoppingAllWorkspaceTerminals(false);
+  }, [props.activeProjectId]);
+
+  useEffect(() => {
+    resolveWorkspaceSessionRef.current = props.resolveWorkspaceSession;
+  }, [props.resolveWorkspaceSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(min-width: 901px)");
+    const applyViewport = (matches: boolean) => {
+      setIsDesktopViewport(matches);
+    };
+    applyViewport(mediaQuery.matches);
+    const listener = (event: MediaQueryListEvent) => applyViewport(event.matches);
+    mediaQuery.addEventListener("change", listener);
+    return () => {
+      mediaQuery.removeEventListener("change", listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    setPreviewStateByTerminalId((prev) => {
+      const activeIds = new Set(
+        activePreviewCapableTerminals.map((terminal) => terminal.id),
+      );
+      const next: Record<string, WorkspacePreviewLifecycleState> = {};
+      for (const [terminalId, state] of Object.entries(prev)) {
+        if (activeIds.has(terminalId)) next[terminalId] = state;
+      }
+      return arePreviewLifecycleStatesEqual(prev, next) ? prev : next;
+    });
+  }, [activePreviewCapableTerminals]);
+
+  const isCurrentTerminalScope = useCallback(
+    (projectId: string | null, projectInstance: number): boolean =>
+      Boolean(projectId) &&
+      activeProjectIdRef.current === projectId &&
+      activeProjectInstanceRef.current === projectInstance,
+    [],
+  );
+
+  const { handleWorkspaceScroll } = useWorkspaceAutoScroll({
+    workspaceMessageListRef,
+    workspaceMessageListContentRef,
+    isLoadingThreadRef,
+    workspacePinnedToBottomRef,
+    setIsWorkspaceAtBottom,
+    scrollBehavior: "auto",
+  });
+
+  useWebThreadMessagesLifecycle<unknown, any>({
+    session: props.session,
+    activeThreadId: props.activeThreadId,
+    guestThreadId: props.guestThreadId,
+    isLoadingThreadRef,
+    workspacePinnedToBottomRef,
+    setIsWorkspaceAtBottom,
+    setLoadingThreadMessagesThreadId: props.setLoadingThreadMessagesThreadId,
+    setThreadMessages: props.setThreadMessages,
+    loadThreadMessages: props.loadThreadMessages,
+  });
+
+  useEffect(() => {
+    if (!props.session || !props.activeProjectId) {
+      return;
+    }
+    let cancelled = false;
+    const projectId = props.activeProjectId;
+    const projectInstance = activeProjectInstanceRef.current;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const session = await withTimeout(
+          resolveWorkspaceSessionRef.current(),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace session timed out.",
+        );
+        if (!session || !projectId || cancelled) return;
+        const next = await withTimeout(
+          listProjectWorkspaceTerminalSnapshot({
+            session,
+            projectId,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace terminal sync timed out.",
+        );
+        if (!cancelled && isCurrentTerminalScope(projectId, projectInstance)) {
+          applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
+        }
+      } catch (error) {
+        console.warn("Failed to load active workspace terminals:", error);
+        emitWorkspaceEvent({
+          scope: "preview",
+          name: "workspace_terminals_load",
+          status: "failure",
+          projectId,
+          error: formatWorkspaceInstrumentationError(error),
+        });
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, props.isStreamingWorkspaceTurn || activeWorkspaceTerminals.some((terminal) => terminal.status === "starting") ? 1500 : 6000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    activeWorkspaceTerminals,
+    isCurrentTerminalScope,
+    props.activeProjectId,
+    props.session,
+    props.isStreamingWorkspaceTurn,
+  ]);
+
+  useEffect(() => {
+    const signature = JSON.stringify({
+      projectId: props.activeProjectId,
+      terminals: activeWorkspaceTerminals.map((terminal) => ({
+        id: terminal.id,
+        status: terminal.status,
+        previewPort: terminal.preview_port ?? null,
+        runId: terminal.run_id_started_by ?? null,
+      })),
+    });
+    if (signature === lastTerminalSnapshotSignatureRef.current) return;
+    lastTerminalSnapshotSignatureRef.current = signature;
+    emitWorkspaceEvent({
+      scope: "preview",
+      name: "workspace_terminals_snapshot",
+      status: "success",
+      projectId: props.activeProjectId,
+      detail: {
+        terminalCount: activeWorkspaceTerminals.length,
+        previewCapableCount: activePreviewCapableTerminals.length,
+      },
+    });
+  }, [activePreviewCapableTerminals.length, activeWorkspaceTerminals, props.activeProjectId]);
+
+  const handleStopWorkspaceTerminal = async (terminalSessionId: string): Promise<void> => {
+    const requestProjectId = props.activeProjectId;
+    const requestProjectInstance = activeProjectInstanceRef.current;
+    emitWorkspaceEvent({
+      scope: "preview",
+      name: "terminal_stop",
+      status: "start",
+      projectId: requestProjectId,
+      detail: {
+        terminalSessionId,
+      },
+    });
+    setBusyWorkspaceTerminalIds((prev) => (prev.includes(terminalSessionId) ? prev : [...prev, terminalSessionId]));
+    try {
+      const session = await withTimeout(
+        resolveWorkspaceSessionRef.current(),
+        PREVIEW_RESOLUTION_TIMEOUT_MS,
+        "Workspace session timed out.",
+      );
+      if (!session || !requestProjectId) {
+        props.showAppToastMessage("Authentication session not available.");
+        return;
+      }
+      await withTimeout(
+        stopProjectWorkspaceTerminal({
+          session,
+          terminalSessionId,
+        }),
+        PREVIEW_RESOLUTION_TIMEOUT_MS,
+        "Stopping background terminal timed out.",
+      );
+      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+        const next = await withTimeout(
+          listProjectWorkspaceTerminalSnapshot({
+            session,
+            projectId: requestProjectId,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace terminal sync timed out.",
+        );
+        if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+          applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
+        }
+      }
+      emitWorkspaceEvent({
+        scope: "preview",
+        name: "terminal_stop",
+        status: "success",
+        projectId: requestProjectId,
+        detail: {
+          terminalSessionId,
+        },
+      });
+    } catch (error) {
+      console.warn("Failed to stop workspace terminal:", error);
+      props.showAppToastMessage("Failed to stop background terminal.");
+      emitWorkspaceEvent({
+        scope: "preview",
+        name: "terminal_stop",
+        status: "failure",
+        projectId: requestProjectId,
+        detail: {
+          terminalSessionId,
+        },
+        error: formatWorkspaceInstrumentationError(error),
+      });
+    } finally {
+      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+        setBusyWorkspaceTerminalIds((prev) => prev.filter((value) => value !== terminalSessionId));
+      }
+    }
+  };
+
+  const handleStopAllWorkspaceTerminals = async (): Promise<void> => {
+    const requestProjectId = props.activeProjectId;
+    const requestProjectInstance = activeProjectInstanceRef.current;
+    emitWorkspaceEvent({
+      scope: "preview",
+      name: "terminal_stop_all",
+      status: "start",
+      projectId: requestProjectId,
+    });
+    setIsStoppingAllWorkspaceTerminals(true);
+    try {
+      const session = await withTimeout(
+        resolveWorkspaceSessionRef.current(),
+        PREVIEW_RESOLUTION_TIMEOUT_MS,
+        "Workspace session timed out.",
+      );
+      if (!session || !requestProjectId) {
+        props.showAppToastMessage("Authentication session not available.");
+        return;
+      }
+      await withTimeout(
+        stopAllProjectWorkspaceTerminals({
+          session,
+          projectId: requestProjectId,
+        }),
+        PREVIEW_RESOLUTION_TIMEOUT_MS,
+        "Stopping background terminals timed out.",
+      );
+      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+        const next = await withTimeout(
+          listProjectWorkspaceTerminalSnapshot({
+            session,
+            projectId: requestProjectId,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Workspace terminal sync timed out.",
+        );
+        if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+          applyTerminalSnapshotIfChanged(next, setActiveWorkspaceTerminals);
+        }
+      }
+      emitWorkspaceEvent({
+        scope: "preview",
+        name: "terminal_stop_all",
+        status: "success",
+        projectId: requestProjectId,
+      });
+    } catch (error) {
+      console.warn("Failed to stop all workspace terminals:", error);
+      props.showAppToastMessage("Failed to stop background terminals.");
+      emitWorkspaceEvent({
+        scope: "preview",
+        name: "terminal_stop_all",
+        status: "failure",
+        projectId: requestProjectId,
+        error: formatWorkspaceInstrumentationError(error),
+      });
+    } finally {
+      if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
+        setIsStoppingAllWorkspaceTerminals(false);
+        setBusyWorkspaceTerminalIds([]);
+      }
+    }
+  };
+
+  const handleEnsurePreview = useCallback(
+    async (terminalSessionId: string, opts?: { force?: boolean }): Promise<DaytonaWorkspaceTerminalPreview | null> => {
+      const terminal = activePreviewCapableTerminals.find((candidate) => candidate.id === terminalSessionId) ?? null;
+      if (!terminal || !isPreviewCapableTerminal(terminal)) return null;
+      const existing = previewStateByTerminalId[terminalSessionId] ?? null;
+      if (!opts?.force && existing) {
+        if (existing.phase === "resolving" || existing.phase === "loading" || existing.phase === "ready") {
+          return existing.preview ?? null;
+        }
+      }
+      if (inflightPreviewIdsRef.current.has(terminalSessionId)) return null;
+      emitWorkspaceEvent({
+        scope: "preview",
+        name: "preview_attach",
+        status: "start",
+        projectId: props.activeProjectId,
+        runId: String(terminal.run_id_started_by ?? "").trim() || null,
+        detail: {
+          terminalSessionId,
+          force: opts?.force === true,
+          status: terminal.status,
+        },
+      });
+      inflightPreviewIdsRef.current.add(terminalSessionId);
+      setPreviewStateByTerminalId((prev) => ({
+        ...prev,
+        [terminalSessionId]: {
+          phase: "resolving",
+          preview: opts?.force ? null : prev[terminalSessionId]?.preview ?? null,
+          error: null,
+        },
+      }));
+      try {
+        const session = await withTimeout(
+          resolveWorkspaceSessionRef.current(),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Preview connection timed out.",
+        );
+        if (!session) throw new Error("Authentication session not available.");
+        const preview = await withTimeout(
+          getProjectWorkspaceTerminalPreviewUrl({
+            session,
+            terminalSessionId,
+          }),
+          PREVIEW_RESOLUTION_TIMEOUT_MS,
+          "Preview connection timed out.",
+        );
+        if (!preview?.preview_url) {
+          throw new Error("Preview is not ready yet.");
+        }
+        setPreviewStateByTerminalId((prev) => ({
+          ...prev,
+          [terminalSessionId]: {
+            phase: "loading",
+            preview,
+            error: null,
+          },
+        }));
+        emitWorkspaceEvent({
+          scope: "preview",
+          name: "preview_attach",
+          status: "success",
+          projectId: props.activeProjectId,
+          runId: String(terminal.run_id_started_by ?? "").trim() || null,
+          detail: {
+            terminalSessionId,
+            previewUrlPresent: Boolean(preview?.preview_url),
+          },
+        });
+        return preview;
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : "Failed to load preview.";
+        const shouldRetry =
+          message === "Preview is not ready yet." &&
+          terminal &&
+          isRetryablePreviewStatus(terminal.status);
+        setPreviewStateByTerminalId((prev) => ({
+          ...prev,
+          [terminalSessionId]: {
+            phase: shouldRetry ? "idle" : "error",
+            preview: null,
+            error: shouldRetry ? null : message,
+          },
+        }));
+        emitWorkspaceEvent({
+          scope: "preview",
+          name: "preview_attach",
+          status: shouldRetry ? "skip" : "failure",
+          projectId: props.activeProjectId,
+          runId: String(terminal.run_id_started_by ?? "").trim() || null,
+          detail: {
+            terminalSessionId,
+            shouldRetry,
+            status: terminal.status,
+          },
+          error: shouldRetry ? null : message,
+        });
+        return null;
+      } finally {
+        inflightPreviewIdsRef.current.delete(terminalSessionId);
+      }
+    },
+    [activePreviewCapableTerminals, previewStateByTerminalId, props.activeProjectId],
+  );
+
+  const handlePreviewLifecyclePhaseChange = useCallback((params: {
+    terminal: DaytonaWorkspaceTerminalRecord;
+    phase: "loading" | "ready" | "error";
+  }) => {
+    setPreviewStateByTerminalId((prev) => {
+      const current = prev[params.terminal.id] ?? {
+        phase: "idle" as const,
+        preview: null,
+        error: null,
+      };
+      const next: WorkspacePreviewLifecycleState =
+        params.phase === "error"
+          ? {
+              phase: "error",
+              preview: current.preview,
+              error: current.error ?? "Failed to load preview.",
+            }
+          : {
+              phase: params.phase,
+              preview: current.preview,
+              error: null,
+            };
+      if (
+        current.phase === next.phase &&
+        current.error === next.error &&
+        current.preview === next.preview
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [params.terminal.id]: next,
+      };
+    });
+  }, []);
+
+  const expandedPreviewTerminal = useMemo(() => {
+    if (!expandedPreviewTerminalId || !isDesktopViewport) return null;
+    return (
+      activePreviewCapableTerminals.find((terminal) => terminal.id === expandedPreviewTerminalId) ?? null
+    );
+  }, [activePreviewCapableTerminals, expandedPreviewTerminalId, isDesktopViewport]);
+
+  const handleExpandPreview = useCallback(
+    (terminalSessionId: string) => {
+      if (!isDesktopViewport) return;
+      savedThreadScrollTopRef.current = workspaceMessageListRef.current?.scrollTop ?? 0;
+      setExpandedPreviewTerminalId(terminalSessionId);
+    },
+    [isDesktopViewport],
+  );
+
+  const handleCollapsePreview = useCallback(() => {
+    pendingRestoreThreadScrollTopRef.current = savedThreadScrollTopRef.current;
+    setExpandedPreviewTerminalId(null);
+  }, []);
+
+  const handlePreviewFitReport = useCallback(
+    (params: {
+      terminal: DaytonaWorkspaceTerminalRecord;
+      mode: "inline" | "expanded";
+      viewportWidth: number;
+      viewportHeight: number;
+      overflowX: boolean;
+      overflowY: boolean;
+    }) => {
+      if (!params.overflowX && !params.overflowY) return;
+      const runId = String(params.terminal.run_id_started_by ?? "").trim();
+      if (!runId) return;
+      const repairKey = `${params.terminal.id}:${params.mode}`;
+      if (attemptedPreviewRepairKeysRef.current.has(repairKey)) return;
+      attemptedPreviewRepairKeysRef.current.add(repairKey);
+      props.onRequestPreviewFitRepair(params);
+    },
+    [props],
+  );
+
+  useEffect(() => {
+    if (!expandedPreviewTerminalId) return;
+    if (!isDesktopViewport || !expandedPreviewTerminal) {
+      pendingRestoreThreadScrollTopRef.current = savedThreadScrollTopRef.current;
+      setExpandedPreviewTerminalId(null);
+    }
+  }, [expandedPreviewTerminal, expandedPreviewTerminalId, isDesktopViewport]);
+
+  useLayoutEffect(() => {
+    if (expandedPreviewTerminalId !== null) return;
+    const nextScrollTop = pendingRestoreThreadScrollTopRef.current;
+    if (nextScrollTop == null) return;
+    const el = workspaceMessageListRef.current;
+    if (!el) return;
+    el.scrollTop = nextScrollTop;
+    const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= 24;
+    workspacePinnedToBottomRef.current = atBottom;
+    setIsWorkspaceAtBottom(atBottom);
+    pendingRestoreThreadScrollTopRef.current = null;
+  }, [expandedPreviewTerminalId]);
+
+  const renderPreviewForRun = useCallback(
+    (runId: string | null): ReactNode => {
+      const normalizedRunId = String(runId ?? "").trim();
+      if (!normalizedRunId) return null;
+      const runTerminals = activeWorkspaceTerminals.filter(
+        (terminal) =>
+          isTerminalSnapshotStatusActive(terminal.status) &&
+          resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId) === normalizedRunId,
+      );
+      if (runTerminals.length === 0) return null;
+      return (
+        <WebWorkspaceAppPreview
+          terminals={runTerminals}
+          previewStateByTerminalId={previewStateByTerminalId}
+          busyTerminalIds={busyWorkspaceTerminalIds}
+          mode="inline"
+          allowExpand={isDesktopViewport}
+          onEnsurePreview={handleEnsurePreview}
+          onExpandPreview={handleExpandPreview}
+          onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+          onPreviewFitReport={handlePreviewFitReport}
+          onStopTerminal={(terminalSessionId) => {
+            void handleStopWorkspaceTerminal(terminalSessionId);
+          }}
+        />
+      );
+    },
+    [
+      handleExpandPreview,
+      handleEnsurePreview,
+      handlePreviewLifecyclePhaseChange,
+      isDesktopViewport,
+      activeWorkspaceTerminals,
+      latestPreviewRunIdByTerminalId,
+      previewStateByTerminalId,
+    ],
+  );
+
+  const isDesktopExpandedPreview = isDesktopViewport && expandedPreviewTerminal !== null;
+
+  return (
+    <>
+      <div className={`workspace-body${isDesktopExpandedPreview ? " preview-expanded" : ""}`}>
+        {props.inferenceToast ? <div className="memory-toast success-toast">{props.inferenceToast}</div> : null}
+        {props.memoryToast ? <div className="memory-toast success-toast">{props.memoryToast}</div> : null}
+        {isDesktopExpandedPreview ? (
+          <div className="workspace-expanded-preview-shell">
+            <WebWorkspaceAppPreview
+              terminals={[expandedPreviewTerminal]}
+              previewStateByTerminalId={previewStateByTerminalId}
+              busyTerminalIds={busyWorkspaceTerminalIds}
+              mode="expanded"
+              expandedTerminalId={expandedPreviewTerminal.id}
+              allowExpand={false}
+              onEnsurePreview={handleEnsurePreview}
+              onCollapsePreview={handleCollapsePreview}
+              onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+              onPreviewFitReport={handlePreviewFitReport}
+              onStopTerminal={(terminalSessionId) => {
+                void handleStopWorkspaceTerminal(terminalSessionId);
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            className={`message-list${props.isEmptyWorkspaceThread ? " message-list-empty-thread" : ""}`}
+            ref={workspaceMessageListRef}
+            onScroll={handleWorkspaceScroll}
+          >
+            <div className="message-list-inner" ref={workspaceMessageListContentRef}>
+              <WorkspaceTimelinePane
+                isEmptyWorkspaceThread={props.isEmptyWorkspaceThread}
+                showEmptyThreadLandingSkeleton={props.showEmptyThreadLandingSkeleton}
+                isHydratingActiveWorkspaceThread={props.isHydratingActiveWorkspaceThread}
+                emptyThreadClassName={props.emptyThreadClassName}
+                emptyThreadAvatar={props.emptyThreadAvatar}
+                emptyThreadTitle={props.emptyThreadTitle}
+                emptyThreadSubtitle={props.emptyThreadSubtitle}
+                emptyThreadChatgptCard={props.emptyThreadChatgptCard}
+                landingActionButtons={props.landingActionButtons}
+                hasSession={props.hasSession}
+                isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
+                isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
+                workspaceAttachments={workspaceAttachments}
+                messageInput={messageInput}
+                setMessageInput={setMessageInput}
+                workspaceAskInputRef={workspaceAskInputRef}
+                workspaceFileInputRef={workspaceFileInputRef}
+                authedWorkspaceComposerPlaceholder={props.authedWorkspaceComposerPlaceholder}
+                guestWorkspaceComposerPlaceholder={props.guestWorkspaceComposerPlaceholder}
+                activeModelLabel={props.activeModelLabel}
+                curatedPickerModels={props.curatedPickerModels}
+                selectedPickerModelId={props.selectedPickerModelId}
+                modelToggles={props.modelToggles}
+                hasUserKeyConnection={props.hasUserKeyConnection}
+                hasUserChatgptConnection={props.hasUserChatgptConnection}
+                canSelectPickerModel={props.canSelectPickerModel}
+                onSelectPickerModel={props.onSelectPickerModel}
+                workspaceVoiceUiState={props.workspaceVoiceUiState}
+                workspaceVoiceTitle={props.workspaceVoiceTitle}
+                onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
+                onRemoveWorkspaceAttachment={removeWorkspaceAttachment}
+                onSendMessage={() =>
+                  props.onSendMessage({
+                    text: messageInput,
+                    attachments: workspaceAttachments,
+                    clearComposer,
+                  })
+                }
+                onSendLandingAction={(prompt) =>
+                  props.onSendMessage({
+                    text: prompt,
+                    attachments: workspaceAttachments,
+                    clearComposer,
+                  })
+                }
+                onStopStreamingTurn={props.onStopStreamingTurn}
+                onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
+                modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
+                guestSignupRail={props.guestSignupRail}
+                session={props.session}
+                threadErrorView={props.threadErrorView}
+                onOpenThreadErrorAuthGate={props.onOpenThreadErrorAuthGate}
+                onRetryLastThreadError={props.onRetryLastThreadError}
+                threadMessageViews={props.threadMessageViews}
+                streamingMessageView={props.streamingMessageView}
+                copiedMessageId={props.copiedMessageId}
+                handleCopyMessage={props.handleCopyMessage}
+                openMessageContextModal={props.openMessageContextModal}
+                renderMarkdown={props.renderMarkdown}
+                copyTextToClipboard={props.copyTextToClipboard}
+                renderPreviewForRun={renderPreviewForRun}
+              />
+            </div>
+          </div>
+        )}
+        {!isDesktopExpandedPreview && !isWorkspaceAtBottom ? (
+          <button
+            className="scroll-to-bottom workspace"
+            type="button"
+            onClick={() => {
+              const el = workspaceMessageListRef.current;
+              if (!el) return;
+              workspacePinnedToBottomRef.current = true;
+              setIsWorkspaceAtBottom(true);
+              el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            }}
+            aria-label="Scroll to bottom"
+            title="Scroll to bottom"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14" />
+              <path d="M19 12l-7 7-7-7" />
+            </svg>
+          </button>
+        ) : null}
+      </div>
+      {!props.isEmptyWorkspaceThread ? (
+        <div className={`workspace-composer-shell${isDesktopExpandedPreview ? " preview-expanded" : ""}`}>
+            <WorkspaceComposer
+            hasSession={props.hasSession}
+            isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
+            isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
+            messageInput={messageInput}
+            setMessageInput={setMessageInput}
+            workspaceAttachments={workspaceAttachments}
+            workspaceAskInputRef={workspaceAskInputRef}
+            workspaceFileInputRef={workspaceFileInputRef}
+            workspaceComposerPlaceholder={
+              props.hasSession
+                ? workspaceAttachments.length > 0
+                  ? "Add a message or send files..."
+                  : props.authedWorkspaceComposerPlaceholder
+                : props.guestWorkspaceComposerPlaceholder
+            }
+              terminals={activeWorkspaceTerminals.filter((terminal) => isTerminalSnapshotStatusActive(terminal.status))}
+            busyTerminalIds={busyWorkspaceTerminalIds}
+            isStoppingAllTerminals={isStoppingAllWorkspaceTerminals}
+            guestSignupRail={props.guestSignupRail}
+            activeModelLabel={props.activeModelLabel}
+            curatedPickerModels={props.curatedPickerModels}
+            selectedPickerModelId={props.selectedPickerModelId}
+            modelToggles={props.modelToggles}
+            hasUserKeyConnection={props.hasUserKeyConnection}
+            hasUserChatgptConnection={props.hasUserChatgptConnection}
+            canSelectPickerModel={props.canSelectPickerModel}
+            onSelectPickerModel={props.onSelectPickerModel}
+            workspaceVoiceUiState={props.workspaceVoiceUiState}
+            workspaceVoiceTitle={props.workspaceVoiceTitle}
+            onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
+            onRemoveWorkspaceAttachment={removeWorkspaceAttachment}
+            onSendMessage={() =>
+              props.onSendMessage({
+                text: messageInput,
+                attachments: workspaceAttachments,
+                clearComposer,
+              })
+            }
+            onStopStreamingTurn={props.onStopStreamingTurn}
+            onStopTerminal={(terminalSessionId) => {
+              void handleStopWorkspaceTerminal(terminalSessionId);
+            }}
+            onStopAllTerminals={() => {
+              void handleStopAllWorkspaceTerminals();
+            }}
+            onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
+            modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
+            showTerminalRail={!isDesktopExpandedPreview}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}

@@ -5,6 +5,10 @@ export {
 } from "./builderCommerce";
 
 export {
+  startWorkspaceCreditTopupCheckout,
+} from "./workspaceCredits";
+
+export {
   syncCommunitySubscriptionLifecycleInternal,
   startPublicCommunityCheckout,
   finalizeCheckoutSession,

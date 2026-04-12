@@ -39,6 +39,23 @@ export async function openCloudBuilderBillingPortal<SessionT>(
   };
 }
 
+export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
+  params: CloudBuilderBillingGatewayParams<SessionT> & {
+    successUrl: string;
+    cancelUrl: string;
+  },
+): Promise<{ checkout_url?: unknown }> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  return (await client.action("billing:startWorkspaceCreditTopupCheckout" as any, {
+    authSubject,
+    successUrl: params.successUrl,
+    cancelUrl: params.cancelUrl,
+    nowMs: Date.now(),
+  })) as {
+    checkout_url?: unknown;
+  };
+}
+
 export async function startCloudConnectOnboarding<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
     returnUrl: string;

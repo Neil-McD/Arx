@@ -39,6 +39,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
   maxTokens: number;
   tools: OpenAiCompatibleFunctionTool[];
   apiKeyOverride?: string | null;
+  signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<RetrievalToolName>
   | {
@@ -55,7 +56,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
     return {
       ok: false,
       status: 503,
-      code: "platform_inference_misconfigured",
+      code: "provider_inference_misconfigured",
       message: params.apiKeyOverride ? "User provider key is unavailable." : "OPENROUTER_API_KEY is not configured.",
     };
   }
@@ -84,13 +85,14 @@ export async function runOpenRouterNativeToolCompletion(params: {
         "HTTP-Referer": referer,
         "X-Title": "Arx",
       },
+      signal: params.signal,
       body: JSON.stringify(requestBody),
     });
   } catch {
     return {
       ok: false,
       status: 503,
-      code: "platform_inference_unavailable",
+      code: "provider_inference_unavailable",
       message: "Inference provider is temporarily unavailable.",
     };
   }
@@ -100,7 +102,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
     const parsed = parseOpenRouterError(raw);
     const messageLower = String(parsed.message ?? "").toLowerCase();
     const isFreeModel = params.modelRef.toLowerCase().includes(":free");
-    let code = parsed.code || "platform_inference_error";
+    let code = parsed.code || "provider_inference_error";
     let message = parsed.message || `OpenRouter error (${response.status})`;
     if (response.status === 429) {
       code = "rate_limited";
@@ -113,9 +115,9 @@ export async function runOpenRouterNativeToolCompletion(params: {
       messageLower.includes("credit") ||
       messageLower.includes("insufficient")
     ) {
-      code = "platform_inference_quota_exceeded";
+      code = "provider_inference_quota_exceeded";
     } else if (response.status === 401 || response.status === 403) {
-      code = "platform_inference_misconfigured";
+      code = "provider_inference_misconfigured";
     }
     return {
       ok: false,
@@ -205,7 +207,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
     return {
       ok: false,
       status: 502,
-      code: "platform_inference_error",
+      code: "provider_inference_error",
       message: "OpenRouter returned invalid JSON.",
     };
   }

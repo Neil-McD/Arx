@@ -1,4 +1,4 @@
-import { type CloudAuthSession } from "./cloudAuthSession";
+import { type AuthSessionLike } from "./authSession";
 import { type ConvexClient } from "./convexAuthenticatedClient";
 import {
   bootstrapGatewayAuthContextIfAvailable,
@@ -40,7 +40,7 @@ async function resolveInternalThreadId(params: {
 }
 
 export async function ensureCloudThreadRecord(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   thread: CloudThreadRecordInput;
   nowMs?: number;
 }): Promise<void> {
@@ -67,7 +67,7 @@ export async function ensureCloudThreadRecord(params: {
 }
 
 export async function updateCloudThreadRecord(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   thread: Omit<CloudThreadRecordInput, "communityId" | "contextVersion">;
   nowMs?: number;
 }): Promise<void> {
@@ -102,7 +102,7 @@ export async function updateCloudThreadRecord(params: {
 }
 
 export async function addCloudThreadMessage(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   message: CloudThreadMessageInput;
   nowMs?: number;
 }): Promise<void> {
@@ -142,7 +142,7 @@ export async function addCloudThreadMessage(params: {
 }
 
 export async function deleteCloudThreadMessage(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadId: string;
   messageId: string;
   nowMs?: number;
@@ -169,7 +169,7 @@ export async function deleteCloudThreadMessage(params: {
 }
 
 export async function archiveCloudThreadRecord(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadId: string;
   nowMs?: number;
 }): Promise<void> {
@@ -187,6 +187,25 @@ export async function archiveCloudThreadRecord(params: {
   await client.mutation("threads:archiveCloudThread" as any, {
     authSubject,
     threadId: internalThreadId,
+    nowMs: params.nowMs ?? Date.now(),
+  });
+}
+
+export async function cancelCloudRuntimeRunByThreadKey(params: {
+  session: AuthSessionLike;
+  threadId: string;
+  runId?: string | null;
+  nowMs?: number;
+}): Promise<void> {
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
+  if (!bootstrapped) return;
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadId ?? "").trim();
+  if (!threadKey) return;
+  await client.mutation("threads:cancelCloudRuntimeRunByThreadKey" as any, {
+    authSubject,
+    threadKey,
+    runId: String(params.runId ?? "").trim() || undefined,
     nowMs: params.nowMs ?? Date.now(),
   });
 }

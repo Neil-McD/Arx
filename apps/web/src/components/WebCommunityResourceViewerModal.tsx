@@ -1,5 +1,5 @@
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-import type { CommunityResource } from "../../../../src/components/communityResourcesContracts";
+import type { CommunityResource } from "./communityResourcesContracts";
 
 type WebCommunityResourceViewerModalProps = {
   resource: CommunityResource | null;

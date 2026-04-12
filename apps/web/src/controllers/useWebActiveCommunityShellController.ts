@@ -180,6 +180,7 @@ export function useWebActiveCommunityShellController<
   const canDeleteActiveCommunity = communitySettingsLayer === "owner";
   const canViewActiveCommunityPolynet = isActiveCommunityOwner || isActiveCommunityAdmin;
   const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
+  const canViewMembersActiveCommunity = communityNavVisibility.canViewMembers;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
@@ -230,6 +231,7 @@ export function useWebActiveCommunityShellController<
     canDeleteActiveCommunity,
     canViewActiveCommunityPolynet,
     canViewMemberPlanDetailsActiveCommunity,
+    canViewMembersActiveCommunity,
     canViewActiveCommunitySettings,
     canPostMessagesActiveCommunity,
     canManageResourcesActiveCommunity,

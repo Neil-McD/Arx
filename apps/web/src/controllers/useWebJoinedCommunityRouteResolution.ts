@@ -23,14 +23,13 @@ export function useWebJoinedCommunityRouteResolution<
 >(params: {
   publicRouteKind: PublicRoute["kind"];
   activePage: AppPage;
-  activeCommunityId: string | null;
   activeCommunitySlug: string | null;
   communities: TCommunity[];
-  cloudSession: SessionT | null;
+  session: SessionT | null;
   isAuthBootstrapComplete: boolean;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
   loadCommunities: (session: SessionT) => Promise<void>;
-  syncCommunitySelection: (opts: { communityId: string | null; communitySlug?: string | null }) => void;
+  syncCommunitySelection: (opts: { communityId?: string | null; communitySlug?: string | null }) => void;
   navigateTo: NavigateFn;
 }) {
   useEffect(() => {
@@ -41,22 +40,19 @@ export function useWebJoinedCommunityRouteResolution<
     const matchedCommunity =
       params.communities.find((community) => String(community.slug ?? "").trim() === slug) ?? null;
     if (matchedCommunity) {
-      if (params.activeCommunityId !== matchedCommunity.id) {
-        params.syncCommunitySelection({ communityId: matchedCommunity.id, communitySlug: slug });
-      }
       return;
     }
 
     let cancelled = false;
     void (async () => {
-      if (!params.cloudSession) {
+      if (!params.session) {
         if (!cancelled) {
           params.navigateTo(`/c/${encodeURIComponent(slug)}`, { replace: true });
         }
         return;
       }
 
-      const session = await params.ensureSession(params.cloudSession);
+      const session = await params.ensureSession(params.session);
       if (cancelled || !session) return;
       try {
         const access = await fetchCloudMyCommunityAccessBySlug<SessionT, TCommunityAccess>({
@@ -86,10 +82,9 @@ export function useWebJoinedCommunityRouteResolution<
       cancelled = true;
     };
   }, [
-    params.activeCommunityId,
     params.activeCommunitySlug,
     params.activePage,
-    params.cloudSession,
+    params.session,
     params.communities,
     params.ensureSession,
     params.isAuthBootstrapComplete,

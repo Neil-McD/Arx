@@ -1,11 +1,11 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 
 export function useWebGuestThreadLifecycle<
-  CloudSessionT,
+  SessionT,
   GuestStorageT extends { model_id: string },
   ThreadMessageT,
 >(params: {
-  session: CloudSessionT | null;
+  session: SessionT | null;
   publicRouteKind: string;
   activeThreadId: string | null;
   workspaceWantsNewChat: boolean;

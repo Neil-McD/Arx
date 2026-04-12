@@ -53,6 +53,26 @@ export type UseWebSendFlowControllerArgs<
   ensureSession?: EnsureSessionFn<SessionT>;
   openAuthGate: (intentInput?: unknown) => void;
   ensureWorkspaceThreadLensBeforeSend: (threadId: string, session: SessionT) => Promise<void>;
+  onWorkspaceRunStarted?: (params: {
+    threadId: string;
+    projectId: string | null;
+    communityId: string | null;
+    modelId: string;
+    requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
+    inferenceSource: "free" | "user_key" | "chatgpt";
+    startedInDraft: boolean;
+    hasAttachments: boolean;
+  }) => void;
+  onWorkspaceRunSucceeded?: (params: {
+    threadId: string;
+    projectId: string | null;
+    communityId: string | null;
+    modelId: string;
+    requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
+    inferenceSource: "free" | "user_key" | "chatgpt";
+    startedInDraft: boolean;
+    hasAttachments: boolean;
+  }) => void;
 
   createThread: (session: SessionT) => Promise<ThreadRecordT | null>;
   onThreadCreated?: (thread: ThreadRecordT) => void;
@@ -78,11 +98,17 @@ export type UseWebSendFlowControllerArgs<
       runIdHint: string;
       userMessageKey?: string;
       systemPrompt?: string | null;
-      inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
-      requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
+      inferenceSource?: "free" | "user_key" | "chatgpt";
+      requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
       requestedAgenticTools?: boolean;
       replyToId?: string;
       messages?: ThreadMessageT[];
+      internalFollowup?: {
+        kind: "preview_fit_repair";
+        content: string;
+        suppressAssistantMessage?: boolean;
+      };
+      suppressStreamingUi?: boolean;
     },
   ) => Promise<{ cancelled: boolean; error: string | null }>;
   createThreadMessage: (
@@ -95,8 +121,6 @@ export type UseWebSendFlowControllerArgs<
   extractTextFromContentJson: (value: unknown) => string;
   storeGuestThreadStorage: (next: GuestThreadStorageV1) => void;
 
-  messageInput: string;
-  workspaceAttachments: AttachmentT[];
   workspaceWantsNewChat: boolean;
   isSendingMessage: boolean;
   isThreadRunActive: (threadId: string | null) => boolean;
@@ -117,8 +141,8 @@ export type UseWebSendFlowControllerArgs<
   defaultActiveModelId: string;
   defaultGuestModelId: string;
 
-  workspaceAttachmentsRef: { current: AttachmentT[] };
-  autoScrollEnabledRef: { current: boolean };
+  clearWorkspaceComposer: () => void;
+  pinWorkspaceToBottom: () => void;
 
   setThreadError: (value: string | null | ((prev: string | null) => string | null)) => void;
   setThreadErrorForThread: (
@@ -127,15 +151,10 @@ export type UseWebSendFlowControllerArgs<
   ) => void;
   setIsSendingMessage: (value: boolean | ((prev: boolean) => boolean)) => void;
   setThreadRunSending: (threadId: string, sending: boolean) => void;
-  setIsWorkspaceAtBottom: (value: boolean | ((prev: boolean) => boolean)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setThreadMessages: (
     value: ThreadMessageT[] | ((prev: ThreadMessageT[]) => ThreadMessageT[]),
-  ) => void;
-  setMessageInput: (value: string | ((prev: string) => string)) => void;
-  setWorkspaceAttachments: (
-    value: AttachmentT[] | ((prev: AttachmentT[]) => AttachmentT[]),
   ) => void;
   setThreads: (value: ThreadRecordT[] | ((prev: ThreadRecordT[]) => ThreadRecordT[])) => void;
   setActiveModelId: (value: string | null | ((prev: string | null) => string | null)) => void;
@@ -194,6 +213,14 @@ export function resolvePreferredModelSelectionFromArgs<
     freeModelAllowlist: args.guestModelAllowlist,
     surface: "web",
   });
+}
+
+export function mapRequestedFundingSourceToInferenceSource(
+  fundingSource: "demo_public" | "user_key" | "user_chatgpt",
+): "free" | "user_key" | "chatgpt" {
+  if (fundingSource === "demo_public") return "free";
+  if (fundingSource === "user_key") return "user_key";
+  return "chatgpt";
 }
 
 export function persistGuestThreadStorageFromMessages<

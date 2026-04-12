@@ -1,8 +1,8 @@
 import {
   type CommunityAnalyticsActions,
   type CommunityAnalyticsState,
-} from "../../../../src/components/communityAnalyticsContracts";
-import { CommunityAnalyticsPanel } from "../../../../src/components/CommunityAnalyticsPanel";
+} from "./communityAnalyticsContracts";
+import { CommunityAnalyticsPanel } from "./CommunityAnalyticsPanel";
 
 type WebCommunityAnalyticsSectionProps = {
   hasActiveCommunity: boolean;

@@ -49,7 +49,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
 }> {
   const memberships = (await ctx.db
     .query("communityMemberships")
-    .withIndex("by_community", (q) => q.eq("communityId", community._id))
+    .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
     .collect()) as CommunityMembershipLike[];
   const activeMemberships = memberships.filter((row) => communityMembershipRowIsActive(row));
 
@@ -284,7 +284,7 @@ export const getMyJoinRequestBySlug = query({
     if (!community) return null;
     const rows = (await ctx.db
       .query("communityJoinRequests")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", args.userId))
+      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
       .collect()) as CommunityJoinRequestLike[];
     const row = pickMostRelevantCommunityJoinRequest(rows);
     if (!row) return null;

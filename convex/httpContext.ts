@@ -1,4 +1,5 @@
 import { api } from "./_generated/api";
+import type { PublicHttpAction } from "convex/server";
 import {
   loadPlatformModelMap,
   normalizePositiveInt,
@@ -20,15 +21,17 @@ type RuntimePersonalMemoryInput = {
   limit?: unknown;
 };
 
+type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
+
 type HttpRouterLike = {
   route: (config: {
     path: string;
-    method: string;
-    handler: unknown;
+    method: HttpRouteMethod;
+    handler: PublicHttpAction;
   }) => void;
 };
 
-type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => PublicHttpAction;
 
 type RequireAuthenticatedSubject = (
   ctx: unknown,

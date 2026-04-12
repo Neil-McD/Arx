@@ -1,8 +1,7 @@
 type MutableRef<T> = { current: T };
 
 type WebSessionResetDeps = {
-  clearPersistedCloudSession: () => void | Promise<void>;
-  setCloudSession: (value: null) => void;
+  beginBrowserSignedOutState: () => void | Promise<void>;
   setCommunities: (value: any[]) => void;
   setIsLoadingCommunities: (value: boolean) => void;
   setCommunityRoleById: (value: Record<string, string>) => void;
@@ -45,27 +44,11 @@ type WebSessionResetDeps = {
   setIsSavingCommunitySettings: (value: boolean) => void;
   setIsSettingsBannerDragOver: (value: boolean) => void;
   setIsSettingsAvatarDragOver: (value: boolean) => void;
-  setThreads: (value: any[]) => void;
-  setThreadError: (value: string | null) => void;
-  setThreadErrorById: (value: Record<string, string | null>) => void;
-  setWorkspaceWantsNewChatMode: (value: boolean) => void;
-  setActiveThreadId: (value: string | null) => void;
-  setThreadMessages: (value: any[]) => void;
-  setThreadSendingStateById: (value: Record<string, boolean>) => void;
-  setThreadStreamingStateById: (value: Record<string, any>) => void;
-  streamingAbortRef: MutableRef<{ abort?: () => void } | null>;
-  streamingRafRef: MutableRef<number | null>;
-  streamingContentRef: MutableRef<string | null>;
-  setStreamingContent: (value: string | null) => void;
-  setStreamingThreadId: (value: string | null) => void;
-  setStreamingRunId: (value: string | null) => void;
-  setStreamingMeta: (value: any | null) => void;
   setDiscoverCommunities: (value: any[]) => void;
 };
 
 export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps): Promise<void> {
-  await deps.clearPersistedCloudSession();
-  deps.setCloudSession(null);
+  await deps.beginBrowserSignedOutState();
   deps.setCommunities([]);
   deps.setIsLoadingCommunities(false);
   deps.setCommunityRoleById({});
@@ -108,24 +91,5 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setIsSavingCommunitySettings(false);
   deps.setIsSettingsBannerDragOver(false);
   deps.setIsSettingsAvatarDragOver(false);
-  deps.setThreads([]);
-  deps.setThreadErrorById({});
-  deps.setThreadError(null);
-  deps.setWorkspaceWantsNewChatMode(false);
-  deps.setActiveThreadId(null);
-  deps.setThreadMessages([]);
-  deps.setThreadSendingStateById({});
-  deps.setThreadStreamingStateById({});
-  deps.streamingAbortRef.current?.abort?.();
-  deps.streamingAbortRef.current = null;
-  if (deps.streamingRafRef.current) {
-    window.cancelAnimationFrame(deps.streamingRafRef.current);
-    deps.streamingRafRef.current = null;
-  }
-  deps.streamingContentRef.current = null;
-  deps.setStreamingContent(null);
-  deps.setStreamingThreadId(null);
-  deps.setStreamingRunId(null);
-  deps.setStreamingMeta(null);
   deps.setDiscoverCommunities([]);
 }

@@ -43,7 +43,7 @@ export function useWebPostAuthBillingLifecycle<
   setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
   setIsFinalizingBuilderReturn: Dispatch<SetStateAction<boolean>>;
   clearBuilderBillingReturn: () => void;
-  getCloudAuthUid: (session: TSession) => string | null;
+  getAuthUid: (session: TSession) => string | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
@@ -86,7 +86,7 @@ export function useWebPostAuthBillingLifecycle<
       return;
     }
 
-    const userId = params.getCloudAuthUid(session);
+    const userId = params.getAuthUid(session);
     if (!userId) return;
     if (params.lastAutoRedeemPendingPurchasesUserIdRef.current === userId) return;
     params.lastAutoRedeemPendingPurchasesUserIdRef.current = userId;

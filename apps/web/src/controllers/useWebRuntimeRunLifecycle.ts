@@ -16,7 +16,7 @@ export function useWebRuntimeRunLifecycle<
   HistoryUsedItemT,
   CommunityEvidenceUsedT,
 >(params: {
-  cloudSession: SessionT | null;
+  session: SessionT | null;
   activeThreadId: string | null;
   threadSendingStateById: Record<string, boolean>;
   threadStreamingStateById: Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>;
@@ -57,14 +57,14 @@ export function useWebRuntimeRunLifecycle<
   }, [params.loadThreadMessages]);
 
   useEffect(() => {
-    if (params.cloudSession) return;
+    if (params.session) return;
     params.setRuntimeEventsByRunId({});
     runtimeEventsLoadingByRunIdRef.current = {};
     activeRuntimeRunHydrationByThreadIdRef.current = {};
-  }, [params.cloudSession, params.setRuntimeEventsByRunId]);
+  }, [params.session, params.setRuntimeEventsByRunId]);
 
   useEffect(() => {
-    if (!params.cloudSession || !params.activeThreadId) return;
+    if (!params.session || !params.activeThreadId) return;
     if (params.threadSendingStateById[params.activeThreadId]) return;
     if (params.threadStreamingStateById[params.activeThreadId]) return;
     if (activeRuntimeRunHydrationByThreadIdRef.current[params.activeThreadId]) return;
@@ -72,7 +72,7 @@ export function useWebRuntimeRunLifecycle<
     let cancelled = false;
 
     void getConvexCloudRunningRuntimeRunByThreadKey({
-      session: params.cloudSession as any,
+      session: params.session as any,
       threadKey: params.activeThreadId,
     })
       .then((row) => {
@@ -90,12 +90,12 @@ export function useWebRuntimeRunLifecycle<
               runId: row.run_id,
               meta: null,
               content: "",
+              streamTransport: "recovery",
               runtimeEvents: existingEvents,
               lastRuntimeEventSeq,
             },
           };
         });
-        params.setThreadErrorForThread(params.activeThreadId, null);
       })
       .catch(() => null)
       .finally(() => {
@@ -108,7 +108,7 @@ export function useWebRuntimeRunLifecycle<
     };
   }, [
     params.activeThreadId,
-    params.cloudSession,
+    params.session,
     params.runtimeEventsByRunId,
     params.setThreadErrorForThread,
     params.setThreadStreamingStateById,
@@ -117,7 +117,7 @@ export function useWebRuntimeRunLifecycle<
   ]);
 
   useEffect(() => {
-    if (!params.cloudSession || !hasActiveStreamingRuns) return;
+    if (!params.session || !hasActiveStreamingRuns) return;
     let cancelled = false;
     let timeoutId: number | null = null;
 
@@ -125,7 +125,10 @@ export function useWebRuntimeRunLifecycle<
       if (cancelled) return;
       try {
         const activeEntries = Object.entries(threadStreamingStateByIdRef.current).filter(
-          ([, value]) => typeof value?.runId === "string" && value.runId.trim().length > 0,
+          ([, value]) =>
+            typeof value?.runId === "string" &&
+            value.runId.trim().length > 0 &&
+            value.streamTransport !== "sse",
         );
         for (const [threadId, state] of activeEntries) {
           const runId = String(state?.runId ?? "").trim();
@@ -136,7 +139,7 @@ export function useWebRuntimeRunLifecycle<
                 ? Math.max(0, Math.floor(state.lastRuntimeEventSeq))
                 : 0;
             const rows = await listConvexCloudRuntimeRunEvents({
-              session: params.cloudSession as any,
+              session: params.session as any,
               runId,
               afterSeq,
               limit: 200,
@@ -205,8 +208,10 @@ export function useWebRuntimeRunLifecycle<
                 delete next[threadId];
                 return next;
               });
-              void loadThreadMessagesRef.current?.(threadId, params.cloudSession).catch(() => null);
-              void loadThreadsRef.current?.(params.cloudSession).catch(() => null);
+              const session = params.session;
+              if (!session) return;
+              void loadThreadMessagesRef.current?.(threadId, session).catch(() => null);
+              void loadThreadsRef.current?.(session).catch(() => null);
             }
           } catch {
             // Keep polling alive after transient event-read failures.
@@ -225,7 +230,7 @@ export function useWebRuntimeRunLifecycle<
       if (timeoutId !== null) window.clearTimeout(timeoutId);
     };
   }, [
-    params.cloudSession,
+    params.session,
     hasActiveStreamingRuns,
     params.setRuntimeEventsByRunId,
     params.setThreadErrorForThread,
@@ -233,7 +238,7 @@ export function useWebRuntimeRunLifecycle<
   ]);
 
   useEffect(() => {
-    if (!params.cloudSession) return;
+    if (!params.session) return;
     const runIds = Array.from(
       new Set(
         params.threadMessages
@@ -246,7 +251,7 @@ export function useWebRuntimeRunLifecycle<
       if (runtimeEventsLoadingByRunIdRef.current[runId]) continue;
       runtimeEventsLoadingByRunIdRef.current[runId] = true;
       void listConvexCloudRuntimeRunEvents({
-        session: params.cloudSession as any,
+        session: params.session as any,
         runId,
         limit: 200,
       })
@@ -262,5 +267,5 @@ export function useWebRuntimeRunLifecycle<
           delete runtimeEventsLoadingByRunIdRef.current[runId];
         });
     }
-  }, [params.cloudSession, params.runtimeEventsByRunId, params.setRuntimeEventsByRunId, params.threadMessages]);
+  }, [params.runtimeEventsByRunId, params.session, params.setRuntimeEventsByRunId, params.threadMessages]);
 }

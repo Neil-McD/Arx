@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   buildAssistantToolCallMessage,
+  isComputerUseObservationMessage,
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol.ts";
 import { runSerialNativeToolLoop } from "../shared/nativeToolLoop.ts";
@@ -39,6 +40,28 @@ function expectToolFollowUpMessage(params: {
   assert.equal(parsed.tool_name, params.toolName);
   assert.equal(parsed.success, true);
   assert.equal(parsed.output, params.expectedOutput);
+}
+
+function expectLatestObservationMessage(params: {
+  messages: NativeToolAwareMessage[];
+  expectedSummary: string;
+  expectedImageUrl: string;
+}) {
+  const latestUserMessage = [...params.messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  assert.ok(latestUserMessage, "expected a follow-up observation user message");
+  assert.equal(latestUserMessage?.role, "user");
+  assert.ok(Array.isArray(latestUserMessage?.content), "expected observation content parts");
+  const parts = latestUserMessage?.content as Array<Record<string, unknown>>;
+  assert.equal(parts[0]?.type, "text");
+  assert.equal(parts[0]?.text, params.expectedSummary);
+  assert.equal(parts[1]?.type, "image");
+  assert.equal(parts[1]?.imageUrl, params.expectedImageUrl);
+}
+
+function countObservationMessages(messages: NativeToolAwareMessage[]): number {
+  return messages.filter((message) => isComputerUseObservationMessage(message)).length;
 }
 
 async function main() {
@@ -92,6 +115,12 @@ async function main() {
           toolName: "list_dir",
           expectedOutput: "file\talpha.txt",
         });
+        expectLatestObservationMessage({
+          messages,
+          expectedSummary: "The workspace tree is visible in the sandbox file browser.",
+          expectedImageUrl: "data:image/jpeg;base64,list123",
+        });
+        assert.equal(countObservationMessages(messages), 1);
         return {
           ok: true,
           type: "tool_call",
@@ -123,6 +152,12 @@ async function main() {
           toolName: "read",
           expectedOutput: "hello from alpha",
         });
+        assert.equal(countObservationMessages(messages), 1);
+        expectLatestObservationMessage({
+          messages,
+          expectedSummary: "Current file contents are visible in the editor.",
+          expectedImageUrl: "data:image/jpeg;base64,abc123",
+        });
         return {
           ok: true,
           type: "assistant",
@@ -150,6 +185,18 @@ async function main() {
           outputText: "file\talpha.txt",
           errorCode: null,
           errorMessage: null,
+          observationContent: [
+            {
+              type: "text",
+              text: "The workspace tree is visible in the sandbox file browser.",
+              source: "computer_use_observation",
+            },
+            {
+              type: "image",
+              imageUrl: "data:image/jpeg;base64,list123",
+              source: "computer_use_observation",
+            },
+          ],
         };
       }
       return {
@@ -158,6 +205,18 @@ async function main() {
         outputText: "hello from alpha",
         errorCode: null,
         errorMessage: null,
+        observationContent: [
+          {
+            type: "text",
+            text: "Current file contents are visible in the editor.",
+            source: "computer_use_observation",
+          },
+          {
+            type: "image",
+            imageUrl: "data:image/jpeg;base64,abc123",
+            source: "computer_use_observation",
+          },
+        ],
       };
     },
     onToolStepStart: ({ iteration, step }) => {
@@ -205,8 +264,16 @@ async function main() {
       toolName: "read",
     },
   ]);
-  assert.equal(providerRequests[1]?.length, 4, "expected second request to include first tool call and output");
-  assert.equal(providerRequests[2]?.length, 6, "expected third request to include second tool call and output");
+  assert.equal(
+    providerRequests[1]?.length,
+    5,
+    "expected second request to include the first tool call, output, and latest observation",
+  );
+  assert.equal(
+    providerRequests[2]?.length,
+    7,
+    "expected third request to replace the earlier observation instead of accumulating screenshots",
+  );
   assert.ok(result.ok, "expected final assistant result");
   if (result.ok) {
     assert.equal(result.assistantText, "alpha.txt says hello from alpha");

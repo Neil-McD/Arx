@@ -5,7 +5,7 @@ import {
   supportsModelFundingSource,
 } from "./modelCatalog";
 
-export type CloudInferenceLane = "chatgpt" | "public" | "platform" | "user_key";
+export type CloudInferenceLane = "chatgpt" | "public" | "user_key";
 
 export function resolveCloudInferenceLane(params: {
   modelId: string | null | undefined;
@@ -28,7 +28,13 @@ export function resolveCloudInferenceLane(params: {
     return "user_key";
   }
   void hasPaidAccess;
-  return "platform";
+  if (supportsModelFundingSource(params.modelId, "user_chatgpt")) {
+    return "chatgpt";
+  }
+  if (supportsModelFundingSource(params.modelId, "user_key")) {
+    return "user_key";
+  }
+  return "public";
 }
 
 function resolvePublicFallbackModelId(params: {
@@ -61,7 +67,7 @@ export type CloudModelSelectionResolution = {
   requestedModelId: string;
   modelId: string;
   lane: CloudInferenceLane;
-  fundingSource: "demo_public" | "user_key" | "user_chatgpt" | "platform";
+  fundingSource: "demo_public" | "user_key" | "user_chatgpt";
   usedFallback: boolean;
 };
 
@@ -107,10 +113,7 @@ export function resolveCloudModelSelection(params: {
     hasPaidAccess: params.hasPaidAccess,
   });
 
-  const modelId =
-    !params.hasPaidAccess && !hasUserKeyConnection && !hasChatgptAuth && candidateLane === "platform"
-      ? defaultGuestModelId
-      : candidateModelId;
+  const modelId = candidateModelId;
   const lane = resolveCloudInferenceLane({
     modelId,
     freeModelAllowlist: allowlist,
@@ -124,9 +127,7 @@ export function resolveCloudModelSelection(params: {
       ? ("demo_public" as const)
       : lane === "chatgpt"
         ? ("user_chatgpt" as const)
-        : lane === "user_key"
-          ? ("user_key" as const)
-          : ("platform" as const);
+        : ("user_key" as const);
 
   return {
     requestedModelId,

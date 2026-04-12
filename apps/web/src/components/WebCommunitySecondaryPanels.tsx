@@ -1,5 +1,7 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, MutableRefObject, ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
+import { communityInitials } from "../../../../shared/messageMetadataUi";
+import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import { CommunityAiFeedPanel } from "./CommunityAiFeedPanel";
 import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
@@ -13,16 +15,36 @@ import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
-  settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection>;
-  bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal>;
-  feedPanelProps: ComponentProps<typeof CommunityAiFeedPanel>;
-  polynetSectionProps: ComponentProps<typeof WebCommunityPolynetSection>;
-  aiAgentSectionProps: ComponentProps<typeof WebCommunityAiAgentSection>;
-  funnelSectionProps: ComponentProps<typeof WebCommunityFunnelSection>;
-  analyticsSectionProps: ComponentProps<typeof WebCommunityAnalyticsSection>;
-  resourcesSectionProps: ComponentProps<typeof WebCommunityResourcesSection>;
-  membersSectionProps: ComponentProps<typeof WebCommunityMembersSection>;
-  resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
+  settings: Omit<ComponentProps<typeof WebCommunitySettingsSection>, "state" | "actions"> & {
+    state: ComponentProps<typeof WebCommunitySettingsSection>["state"];
+    actions: Omit<
+      ComponentProps<typeof WebCommunitySettingsSection>["actions"],
+      | "openCommunityBannerFocusModal"
+      | "closeCommunityBannerFocusModal"
+      | "setCommunityPricingDirty"
+      | "communityInitials"
+      | "slugifyCommunityName"
+    > & {
+      communityPricingDirtyRef: MutableRefObject<boolean>;
+    };
+    setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
+  };
+  bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
+    isSettingsTabActive: boolean;
+    isCommunityBannerFocusModalOpen: boolean;
+    markCommunitySettingsDirty: () => void;
+    setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
+  };
+  feed: ComponentProps<typeof CommunityAiFeedPanel>;
+  polynet: ComponentProps<typeof WebCommunityPolynetSection>;
+  aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
+  funnel: ComponentProps<typeof WebCommunityFunnelSection>;
+  analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
+  resources: ComponentProps<typeof WebCommunityResourcesSection>;
+  members: Omit<ComponentProps<typeof WebCommunityMembersSection>, "actions"> & {
+    actions: Omit<ComponentProps<typeof WebCommunityMembersSection>["actions"], "communityInitials">;
+  };
+  resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
 function renderCenteredPane(children: ReactNode) {
@@ -34,47 +56,62 @@ function renderCenteredPane(children: ReactNode) {
 }
 
 export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsProps) {
-  const {
-    communityTab,
-    settingsSectionProps,
-    bannerEditorModalProps,
-    feedPanelProps,
-    polynetSectionProps,
-    aiAgentSectionProps,
-    funnelSectionProps,
-    analyticsSectionProps,
-    resourcesSectionProps,
-    membersSectionProps,
-    resourceModalProps,
-  } = props;
+  const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
+    ...props.settings,
+    actions: {
+      ...props.settings.actions,
+      openCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(true),
+      closeCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(false),
+      setCommunityPricingDirty: () => {
+        props.settings.actions.communityPricingDirtyRef.current = true;
+      },
+      communityInitials,
+      slugifyCommunityName,
+    },
+  };
+
+  const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal> = {
+    ...props.bannerEditor,
+    isOpen: props.bannerEditor.isSettingsTabActive && props.bannerEditor.isCommunityBannerFocusModalOpen,
+    onDirty: props.bannerEditor.markCommunitySettingsDirty,
+    onClose: () => props.bannerEditor.setIsCommunityBannerFocusModalOpen(false),
+  };
+
+  const membersSectionProps: ComponentProps<typeof WebCommunityMembersSection> = {
+    ...props.members,
+    actions: {
+      ...props.members.actions,
+      communityInitials,
+    },
+  };
 
   return (
     <>
-      {communityTab === "settings" &&
+      {props.communityTab === "settings" &&
         renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
       <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
 
-      {communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...feedPanelProps} />)}
+      {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}
 
-      {communityTab === "polynet" &&
-        renderCenteredPane(<WebCommunityPolynetSection {...polynetSectionProps} />)}
+      {props.communityTab === "polynet" &&
+        renderCenteredPane(<WebCommunityPolynetSection {...props.polynet} />)}
 
-      {communityTab === "ai_agent" &&
-        renderCenteredPane(<WebCommunityAiAgentSection {...aiAgentSectionProps} />)}
+      {props.communityTab === "ai_agent" &&
+        renderCenteredPane(<WebCommunityAiAgentSection {...props.aiAgent} />)}
 
-      {communityTab === "funnel" &&
-        renderCenteredPane(<WebCommunityFunnelSection {...funnelSectionProps} />)}
+      {props.communityTab === "funnel" &&
+        renderCenteredPane(<WebCommunityFunnelSection {...props.funnel} />)}
 
-      {communityTab === "analytics" &&
-        renderCenteredPane(<WebCommunityAnalyticsSection {...analyticsSectionProps} />)}
+      {props.communityTab === "analytics" &&
+        renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
 
-      {communityTab === "resources" &&
-        renderCenteredPane(<WebCommunityResourcesSection {...resourcesSectionProps} />)}
+      {props.communityTab === "resources" &&
+        renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
 
-      {communityTab === "members" &&
+      {props.communityTab === "members" &&
         renderCenteredPane(<WebCommunityMembersSection {...membersSectionProps} />)}
 
-      <WebCommunityResourceModal {...resourceModalProps} />
+      <WebCommunityResourceModal {...props.resourceModal} />
     </>
   );
 }

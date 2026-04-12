@@ -1,8 +1,8 @@
-import { type CloudAuthSession } from "./cloudAuthSession";
+import { type AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 
 export async function probeConvexAuthenticatedActorSession(
-  session: CloudAuthSession,
+  session: AuthSessionLike,
 ): Promise<boolean> {
   try {
     const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);

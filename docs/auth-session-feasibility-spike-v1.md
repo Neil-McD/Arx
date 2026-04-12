@@ -1,6 +1,6 @@
 # Auth Session Feasibility Spike (Gate 1)
 
-Status: active spike  
+Status: historical feasibility spike; superseded by the implemented auth gateway path  
 Scope: prove or reject server-owned session continuity for the Daytona worktree  
 Precondition: [`auth-session-target-architecture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-target-architecture-v1.md) is the active target document
 
@@ -182,8 +182,8 @@ Today the opposite is true:
 
 Ground truth:
 
-- [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/cloudAuthClient.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/cloudAuthClient.ts)
-- [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/cloudAuthCore.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/cloudAuthCore.ts)
+- [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebAppAuthController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebAppAuthController.ts)
+- [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/authCore.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/authCore.ts)
 - [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/httpAuth.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/httpAuth.ts)
 
 ## 6) Failure Mode Section

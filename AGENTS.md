@@ -126,6 +126,19 @@ Classification buckets for every candidate:
 
 ---
 
+## 6.5) Canonical Release Workflow
+
+- Active development worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`.
+- Canonical Git release branch: `origin/main`.
+- Canonical production app: Vercel project `polynet`.
+- Legacy Vercel project `arx` is not a production target.
+- Normal web releases should land on `main` and let `polynet` deploy from GitHub.
+- Convex production releases are explicit and should be run intentionally from the validated code state.
+- Do not use direct local Vercel production deploys as a release path.
+- Follow [/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/alpha-release-workflow.md](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/alpha-release-workflow.md) for the operational runbook.
+
+---
+
 ## 7) MVP Acceptance Checklist
 
 All must be demonstrably true:

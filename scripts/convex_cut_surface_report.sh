@@ -39,10 +39,6 @@ convex_export_refs="$(rg -n --pcre2 'export const [A-Za-z0-9_]+\s*=\s*(query|mut
 legacy_slug_inventory="$({
   (rg -n -o --pcre2 'slug:\s*"([a-z0-9_?=&-]+)"' "${TARGETS[@]}" "${EXCLUDES[@]}" || true) | sed -E 's/.*"([^"]+)"/\1/'
   (rg -n -o --pcre2 'buildCloudFunctionUrl\([^\n]+,\s*"([a-z0-9_?=&-]+)"' "${TARGETS[@]}" "${EXCLUDES[@]}" || true) | sed -E 's/.*"([^"]+)"/\1/'
-  (rg -n --pcre2 '_SLUGS\s*=\s*\[' shared/cloudAuthCore.ts 2>/dev/null || true) \
-    | sed -E 's/^[^:]+:[0-9]+://' \
-    | grep -oE '"[a-z0-9_?=&-]+"' \
-    | tr -d '"'
 } | sort -u)"
 legacy_slug_count="$(printf '%s\n' "$legacy_slug_inventory" | sed '/^$/d' | wc -l | tr -d ' ')"
 

@@ -2,11 +2,13 @@ import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
+import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
+import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 
 function readEnv(name: string): string {
   try {
@@ -59,11 +61,59 @@ function encodeSse(event: string, data: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-function sseResponse(req: Request, events: Array<{ event: string; data: Record<string, unknown> }>): Response {
+function sseResponse(
+  req: Request,
+  source:
+    | Array<{ event: string; data: Record<string, unknown> }>
+    | ((writer: {
+        send: (entry: { event: string; data: Record<string, unknown> }) => void;
+        close: () => void;
+      }) => Promise<void> | void),
+): Response {
   const headers = buildCorsHeaders(req);
   headers.set("Content-Type", "text/event-stream; charset=utf-8");
   headers.set("Connection", "keep-alive");
-  const body = events.map((entry) => encodeSse(entry.event, entry.data)).join("");
+  if (Array.isArray(source)) {
+    const body = source.map((entry) => encodeSse(entry.event, entry.data)).join("");
+    return new Response(body, { status: 200, headers });
+  }
+
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+      const writer = {
+        send(entry: { event: string; data: Record<string, unknown> }) {
+          if (closed) return;
+          controller.enqueue(encoder.encode(encodeSse(entry.event, entry.data)));
+        },
+        close() {
+          if (closed) return;
+          closed = true;
+          controller.close();
+        },
+      };
+      Promise.resolve(source(writer))
+        .then(() => {
+          writer.close();
+        })
+        .catch((error) => {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Stream failed.";
+          writer.send({
+            event: "error",
+            data: {
+              error: message || "Stream failed.",
+            },
+          });
+          writer.close();
+        });
+    },
+  });
   return new Response(body, { status: 200, headers });
 }
 
@@ -189,22 +239,23 @@ async function requireAuthenticatedSubject(
   return { ok: true, authSubject: auth.actor.authSubject };
 }
 
-async function requireAuthenticatedActor(
+const requireAuthenticatedActor: RequireAuthenticatedActor = async (
   ctx: any,
   req: Request,
 ): Promise<
   | {
       ok: true;
       actor: {
-        authSubject: string;
+        userId: string;
         dbUserId: any;
+        authSubject: string;
         email: string | null;
         displayName: string | null;
         avatarUrl: string | null;
       };
     }
   | { ok: false; response: Response }
-> {
+> => {
   const authIdentity = await requireVerifiedIdentity(ctx, req);
   if (!authIdentity.ok) return authIdentity;
   const { authSubject, email, displayName, avatarUrl } = authIdentity.identity;
@@ -241,6 +292,7 @@ async function requireAuthenticatedActor(
   return {
     ok: true,
     actor: {
+      userId: String(dbUserId),
       authSubject,
       dbUserId,
       email,
@@ -248,7 +300,7 @@ async function requireAuthenticatedActor(
       avatarUrl,
     },
   };
-}
+};
 
 const http = httpRouter();
 
@@ -260,6 +312,13 @@ registerRuntimeAuthRoutes({
   optionsResponse,
   parseOptionalString,
   parseBoolish,
+});
+registerRuntimeAuthBridgeRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+  parseOptionalString,
 });
 
 registerRuntimeBillingRoutes({

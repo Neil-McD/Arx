@@ -5,7 +5,6 @@ type ProfileDraftLike = {
   name: string;
   username: string;
   bio: string;
-  avatarUrl: string | null;
 };
 
 export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
@@ -15,7 +14,6 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   profileName: string;
   profileUsername: string;
   profileBio: string;
-  profileAvatarUrl: string | null;
   modelToggles: TModelToggles;
   activeModelId: string | null;
   guestModelId: string;
@@ -27,7 +25,6 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   setProfileName: Dispatch<SetStateAction<string>>;
   setProfileUsername: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
-  setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
 }) {
   useEffect(() => {
     try {
@@ -51,7 +48,6 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
     params.setProfileName(nextDraft.name);
     params.setProfileUsername(nextDraft.username);
     params.setProfileBio(nextDraft.bio);
-    params.setProfileAvatarUrl(nextDraft.avatarUrl);
   }, [params.profileStorageUserId]);
 
   useEffect(() => {
@@ -59,14 +55,12 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
       name: params.profileName,
       username: params.profileUsername,
       bio: params.profileBio,
-      avatarUrl: params.profileAvatarUrl,
     });
   }, [
     params.profileStorageUserId,
     params.profileName,
     params.profileUsername,
     params.profileBio,
-    params.profileAvatarUrl,
   ]);
 
   useEffect(() => {

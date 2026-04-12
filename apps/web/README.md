@@ -1,6 +1,6 @@
 # Polynet Web
 
-This is the canonical Polynet web app. It currently shares some shell styling with the legacy root `src` components while the web surface is being fully normalized.
+This is the canonical Polynet web app and primary release surface.
 
 ## Local dev
 
@@ -13,8 +13,8 @@ This is the canonical Polynet web app. It currently shares some shell styling wi
    - `VITE_CONVEX_PUBLIC_KEY` is optional
    - Set OAuth/OIDC vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for sign-in
    - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity
-   - Recommended default: `VITE_ENABLE_RUNTIME_TURN_V2=true`
-   - Set `ARX_SESSION_BRIDGE_SECRET` for the auth continuity bridge
+   - Set `ARX_AUTH_BRIDGE_SECRET` for the auth continuity bridge
+   - Optionally set `ARX_AUTH_SESSION_COOKIE_DOMAIN=.polynet.ai` for cross-subdomain continuity
     - Validate config: `npm run check:auth-runtime-readiness`
 3. Run:
    - `npm run dev`
@@ -38,8 +38,14 @@ Set the following Vercel env vars:
 - `ARX_AUTH_CLIENT_ID`
 - `ARX_AUTH_JWT_ISSUER`
 - `ARX_AUTH_JWT_JWKS_URL`
-- `ARX_SESSION_BRIDGE_SECRET`
-- `VITE_ENABLE_RUNTIME_TURN_V2=true`
+- `ARX_AUTH_BRIDGE_SECRET`
+- `ARX_AUTH_SESSION_COOKIE_DOMAIN` (recommended for `*.polynet.ai`)
+
+Workspace preview / live desktop depend on the preview proxy signing secret:
+
+- Set `ARX_PREVIEW_PROXY_SIGNING_SECRET` to the same value in both Convex/runtime and the main `polynet` deployment.
+- `VITE_DAYTONA_PREVIEW_ORIGIN` should point at the dedicated preview proxy origin for production preview transport.
+- `VITE_DAYTONA_LIVE_DESKTOP_PROXY_ORIGIN` should point at the WS-capable live desktop proxy when computer-use live desktop is enabled.
 
 Cloud Auth redirect allowlist:
 

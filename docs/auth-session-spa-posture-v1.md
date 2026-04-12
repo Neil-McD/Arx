@@ -1,8 +1,15 @@
 # Auth Session SPA Posture V1
 
-Status: active implementation posture  
+Status: historical pre-server-continuity posture; superseded by the current auth gateway implementation  
 Scope: Daytona web app browser-owned Polynet session continuity  
 Goal: one simple auth plane for web-native runtime access
+
+Migration note:
+
+1. This document describes the current live system.
+2. It is not the recommended end state.
+3. The migration plan toward server-owned continuity is:
+   - [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-server-continuity-implementation-plan-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-server-continuity-implementation-plan-v1.md)
 
 ## 0) Irreducible Posture
 
@@ -80,8 +87,8 @@ Provider credentials for external agent runtimes should remain separate from bro
 
 Implementation surface:
 
-1. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/cloudAuthCore.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/cloudAuthCore.ts)
-2. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/cloudAuthClient.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/cloudAuthClient.ts)
+1. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/authCore.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/authCore.ts)
+2. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebAppAuthController.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebAppAuthController.ts)
 3. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/App.tsx`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/App.tsx)
 
 Verification:

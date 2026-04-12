@@ -1,8 +1,8 @@
 import type {
   ChangeEventHandler,
   ComponentProps,
+  MutableRefObject,
   ReactNode,
-  RefObject,
   UIEventHandler,
 } from "react";
 import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
@@ -26,6 +26,7 @@ type UserProfile = SharedUserProfile;
 
 export type WebCommunityChatPanelProps = {
   activeCommunity: { name: string } | null;
+  isResolvingSelectedCommunity: boolean;
   hasSession: boolean;
   sessionUserId: string | null;
   canPostMessages: boolean;
@@ -38,12 +39,10 @@ export type WebCommunityChatPanelProps = {
   communityMessageById: Map<string, CommunityChatMessage>;
   messageReactions: MessageReaction[];
   profilesByUserId: Record<string, UserProfile>;
-  profileAvatarUrl: string | null;
-  sessionAvatarUrl: string | null;
   editingMessageId: string | null;
   editingMessageText: string;
   reactionPickerMessageId: string | null;
-  replyingToMessage: CommunityChatMessage | null;
+  replyingToMessage: Pick<CommunityChatMessage, "id" | "sender_id" | "body"> | null;
   communityAttachments: CommunityMessageAttachment[];
   communityMessageInput: string;
   isSendingCommunityMessage: boolean;
@@ -51,9 +50,9 @@ export type WebCommunityChatPanelProps = {
   isUserAtBottom: boolean;
   unreadCount: number;
   reactionEmojis: string[];
-  messageListRef: RefObject<HTMLDivElement | null>;
-  fileInputRef: RefObject<HTMLInputElement | null>;
-  chatInputRef: RefObject<HTMLTextAreaElement | null>;
+  messageListRef: MutableRefObject<HTMLDivElement | null>;
+  fileInputRef: MutableRefObject<HTMLInputElement | null>;
+  chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   onChatScroll: UIEventHandler<HTMLDivElement>;
   onOpenAuthGate: () => void;
   onScrollToBottom: () => void;
@@ -75,9 +74,9 @@ export type WebCommunityChatPanelProps = {
   onOpenCommunityChatLightbox: (images: CommunityChatMediaImage[], index: number) => void;
   onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
   onSetReactionPickerMessageId: (messageId: string | null) => void;
-  onStartReply: (message: CommunityChatMessage) => void;
+  onStartReply: (message: Pick<CommunityChatMessage, "id" | "sender_id" | "body">) => void;
   onCopyMessage: (body: string) => void | Promise<void>;
-  onStartEdit: (message: CommunityChatMessage) => void;
+  onStartEdit: (message: Pick<CommunityChatMessage, "id" | "body">) => void;
   onDeleteMessage: (messageId: string) => void | Promise<void>;
   onEditingMessageTextChange: (value: string) => void;
   onSaveEdit: () => void | Promise<void>;
@@ -89,6 +88,7 @@ export type WebCommunityChatPanelProps = {
 export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const {
     activeCommunity,
+    isResolvingSelectedCommunity,
     hasSession,
     sessionUserId,
     canPostMessages,
@@ -101,8 +101,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityMessageById,
     messageReactions,
     profilesByUserId,
-    profileAvatarUrl,
-    sessionAvatarUrl,
     editingMessageId,
     editingMessageText,
     reactionPickerMessageId,
@@ -149,123 +147,164 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     lightboxModalProps,
   } = props;
 
+  const showCommunityChatBootstrap =
+    hasSession &&
+    (isResolvingSelectedCommunity ||
+      (!!activeCommunity &&
+        communityMessages.length === 0 &&
+        !communityChatError &&
+        (isLoadingChat || !hasResolvedCommunityChat)));
+
+  if (showCommunityChatBootstrap) {
+    return (
+      <>
+        <div className="community-chat community-chat-bootstrap">
+          <div className="workspace-body chat-feed">
+            <div className="community-chat-page-loading-shell" aria-busy="true" aria-live="polite">
+              <div className="community-chat-page-loading-card">
+                <div className="community-chat-page-loading-title">
+                  {isResolvingSelectedCommunity ? "Opening community…" : "Loading chat…"}
+                </div>
+                <div className="community-chat-page-loading-copy">
+                  {isResolvingSelectedCommunity
+                    ? "Resolving the selected community and preparing chat."
+                    : "Preparing messages and member identity."}
+                </div>
+                <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <WebCommunityChatLightboxModal {...lightboxModalProps} />
+      </>
+    );
+  }
+
   return (
     <>
       <div className="community-chat">
         <div className="workspace-body chat-feed">
-          <div className="chat-messages" ref={messageListRef} onScroll={onChatScroll}>
-            {!hasSession && (
-              <div className="chat-empty">
-                <div>Sign in to access community chat.</div>
-                <button
-                  className="secondary"
-                  type="button"
-                  onClick={onOpenAuthGate}
-                  style={{ marginTop: 12 }}
-                >
-                  Sign in
-                </button>
-              </div>
-            )}
-            {hasSession && !activeCommunity && (
-              <div className="chat-empty">Select a community to start chatting.</div>
-            )}
-            {activeCommunity && (isLoadingChat || (!hasResolvedCommunityChat && communityMessages.length === 0)) && (
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Loading messages...</span>
-              </div>
-            )}
-            {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && communityChatError && (
-              <div className="chat-empty">
-                <div>{communityChatError}</div>
-              </div>
-            )}
-            {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && !communityChatError && (
-              <div className="chat-empty-state">
-                <div className="chat-empty-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
+          <div
+            className="chat-messages"
+            ref={(node) => {
+              messageListRef.current = node;
+            }}
+            onScroll={onChatScroll}
+          >
+            <div className="chat-messages-inner">
+              {!hasSession && (
+                <div className="chat-messages-state-shell">
+                  <div className="chat-empty">
+                    <div>Sign in to access community chat.</div>
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={onOpenAuthGate}
+                      style={{ marginTop: 12 }}
+                    >
+                      Sign in
+                    </button>
+                  </div>
                 </div>
-                <div className="chat-empty-title">
-                  Welcome to {activeCommunity.name}
+              )}
+              {hasSession && !isResolvingSelectedCommunity && !activeCommunity && (
+                <div className="chat-messages-state-shell">
+                  <div className="chat-empty">Select a community to start chatting.</div>
                 </div>
-                <div className="chat-empty-text">
-                  This is the beginning of your community chat. Say hello!
+              )}
+              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && communityChatError && (
+                <div className="chat-messages-state-shell">
+                  <div className="chat-empty">
+                    <div>{communityChatError}</div>
+                  </div>
                 </div>
-              </div>
-            )}
-            {activeCommunity && !isLoadingChat && isLoadingMoreChat && (
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Loading earlier messages...</span>
-              </div>
-            )}
-            {activeCommunity && !isLoadingChat && !communityChatHasMore && communityMessages.length > 0 && (
-              <div className="chat-date-separator">
-                <span>Start</span>
-              </div>
-            )}
-            {activeCommunity &&
-              !isLoadingChat &&
-              communityMessages.map((message, index) => {
-                const isOwn = message.sender_id === sessionUserId;
-                const isPending = message.id.startsWith("pending-");
-                const showMeta = shouldShowCommunitySenderMeta(communityMessages, index);
-                const dateSeparator = shouldShowDateSeparator(communityMessages, index);
-                const senderLabel = displayName(message.sender_id);
-                const avatarUrl = isOwn
-                  ? profileAvatarUrl ?? sessionAvatarUrl
-                  : profilesByUserId[message.sender_id]?.avatar_url ?? null;
-                const avatarColor = getAvatarColor(message.sender_id);
-                const shortTime = new Date(message.created_at).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                });
-                const replyToId = message.reply_to_id ?? null;
-                const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
-                return (
-                  <CommunityChatMessageRow
-                    key={message.id}
-                    message={message}
-                    dateSeparator={dateSeparator}
-                    isPending={isPending}
-                    showMeta={showMeta}
-                    isOwn={isOwn}
-                    canModerateContent={canModerateMessages}
-                    senderLabel={senderLabel}
-                    avatarUrl={avatarUrl}
-                    avatarColor={avatarColor}
-                    shortTime={shortTime}
-                    formattedTime={formatChatTime(message.created_at)}
-                    editingMessageId={editingMessageId}
-                    editingMessageText={editingMessageText}
-                    reactionPickerMessageId={reactionPickerMessageId}
-                    messageReactions={messageReactions}
-                    sessionUserId={sessionUserId}
-                    replyToId={replyToId}
-                    replyTarget={replyTarget}
-                    reactionEmojis={reactionEmojis}
-                    getInitials={getInitials}
-                    displayName={displayName}
-                    parseReplyPrefix={parseReplyPrefix}
-                    truncateReplyPreview={truncateReplyPreview}
-                    renderTextWithLinks={renderTextWithLinks}
-                    onScrollToReplyMessage={onScrollToReplyMessage}
-                    onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
-                    onToggleReaction={onToggleReaction}
-                    onSetReactionPickerMessageId={onSetReactionPickerMessageId}
-                    onStartReply={onStartReply}
-                    onCopyMessage={onCopyMessage}
-                    onStartEdit={onStartEdit}
-                    onDeleteMessage={onDeleteMessage}
-                    onEditingMessageTextChange={onEditingMessageTextChange}
-                    onSaveEdit={onSaveEdit}
-                    onCancelEdit={onCancelEdit}
-                  />
-                );
-              })}
+              )}
+              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && !communityChatError && (
+                <div className="chat-messages-state-shell">
+                  <div className="chat-empty-state">
+                    <div className="chat-empty-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <div className="chat-empty-title">
+                      Welcome to {activeCommunity.name}
+                    </div>
+                    <div className="chat-empty-text">
+                      This is the beginning of your community chat. Say hello!
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeCommunity && !isLoadingChat && isLoadingMoreChat && (
+                <div className="community-chat-history-loading" aria-live="polite">
+                  <span>Loading earlier messages...</span>
+                  <div className="community-chat-history-loading-progress web-skeleton-pill" aria-hidden="true" />
+                </div>
+              )}
+              {activeCommunity && !isLoadingChat && !communityChatHasMore && communityMessages.length > 0 && (
+                <div className="chat-date-separator">
+                  <span>Start</span>
+                </div>
+              )}
+              {activeCommunity &&
+                !isLoadingChat &&
+                communityMessages.map((message, index) => {
+                  const isOwn = message.sender_id === sessionUserId;
+                  const isPending = message.id.startsWith("pending-");
+                  const showMeta = shouldShowCommunitySenderMeta(communityMessages, index);
+                  const dateSeparator = shouldShowDateSeparator(communityMessages, index);
+                  const senderLabel = displayName(message.sender_id);
+                  const avatarUrl = profilesByUserId[message.sender_id]?.avatar_url ?? null;
+                  const avatarColor = getAvatarColor(message.sender_id);
+                  const shortTime = new Date(message.created_at).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
+                  const replyToId = message.reply_to_id ?? null;
+                  const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
+                  return (
+                    <CommunityChatMessageRow
+                      key={message.id}
+                      message={message}
+                      dateSeparator={dateSeparator}
+                      isPending={isPending}
+                      showMeta={showMeta}
+                      isOwn={isOwn}
+                      canModerateContent={canModerateMessages}
+                      senderLabel={senderLabel}
+                      avatarUrl={avatarUrl}
+                      avatarColor={avatarColor}
+                      shortTime={shortTime}
+                      formattedTime={formatChatTime(message.created_at)}
+                      editingMessageId={editingMessageId}
+                      editingMessageText={editingMessageText}
+                      reactionPickerMessageId={reactionPickerMessageId}
+                      messageReactions={messageReactions}
+                      sessionUserId={sessionUserId}
+                      replyToId={replyToId}
+                      replyTarget={replyTarget}
+                      reactionEmojis={reactionEmojis}
+                      getInitials={getInitials}
+                      displayName={displayName}
+                      parseReplyPrefix={parseReplyPrefix}
+                      truncateReplyPreview={truncateReplyPreview}
+                      renderTextWithLinks={renderTextWithLinks}
+                      onScrollToReplyMessage={onScrollToReplyMessage}
+                      onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
+                      onToggleReaction={onToggleReaction}
+                      onSetReactionPickerMessageId={onSetReactionPickerMessageId}
+                      onStartReply={onStartReply}
+                      onCopyMessage={onCopyMessage}
+                      onStartEdit={onStartEdit}
+                      onDeleteMessage={onDeleteMessage}
+                      onEditingMessageTextChange={onEditingMessageTextChange}
+                      onSaveEdit={onSaveEdit}
+                      onCancelEdit={onCancelEdit}
+                    />
+                  );
+                })}
+            </div>
           </div>
 
           {!isUserAtBottom && (
@@ -380,7 +419,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </svg>
           </button>
           <input
-            ref={fileInputRef}
+            ref={(node) => {
+              fileInputRef.current = node;
+            }}
             type="file"
             multiple
             accept="image/*,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf"
@@ -388,11 +429,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onChange={onCommunityFileInputChange}
           />
           <textarea
-            ref={chatInputRef}
+            ref={(node) => {
+              chatInputRef.current = node;
+            }}
             className="chat-input"
             placeholder={
               !hasSession
                 ? "Sign in to chat..."
+                : isResolvingSelectedCommunity
+                  ? "Loading community..."
                 : !activeCommunity
                   ? "Select a community to chat..."
                   : !canPostMessages

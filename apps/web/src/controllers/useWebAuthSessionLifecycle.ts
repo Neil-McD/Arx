@@ -1,10 +1,10 @@
 import { type MutableRefObject } from "react";
 import {
-  type CloudSessionLike,
-  useCloudAuthSessionLifecycle,
-} from "../../../../shared/useCloudSessionLifecycle";
+  type ExpiringSessionLike,
+  useAuthSessionLifecycle,
+} from "../../../../shared/useAuthSessionLifecycle";
 
-export function useWebAuthSessionLifecycle<TSession extends CloudSessionLike>(params: {
+export function useWebAuthSessionLifecycle<TSession extends ExpiringSessionLike>(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   refreshTimeoutRef: MutableRefObject<number | null>;
@@ -16,7 +16,7 @@ export function useWebAuthSessionLifecycle<TSession extends CloudSessionLike>(pa
   onSessionMissing: () => void;
   onFocusWithSession: (session: TSession) => void;
 }) {
-  useCloudAuthSessionLifecycle({
+  useAuthSessionLifecycle({
     session: params.session,
     sessionRef: params.sessionRef,
     refreshTimeoutRef: params.refreshTimeoutRef,

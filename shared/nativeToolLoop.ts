@@ -2,7 +2,17 @@ import type {
   NativeToolAssistantMessage,
   NativeToolAwareCompletionSuccess,
   NativeToolAwareMessage,
+  NativeToolInputContentPart,
 } from "./nativeToolProtocol";
+
+function isComputerUseObservationMessage(
+  message: NativeToolAwareMessage,
+): message is Extract<NativeToolAwareMessage, { role: "user" }> {
+  if (message.role !== "user" || !Array.isArray(message.content) || message.content.length === 0) {
+    return false;
+  }
+  return message.content.every((part) => part?.source === "computer_use_observation");
+}
 
 export type NativeToolExecutionResult = {
   status: "ok" | "error";
@@ -10,6 +20,8 @@ export type NativeToolExecutionResult = {
   outputText: string;
   errorCode: string | null;
   errorMessage: string | null;
+  details?: Record<string, unknown> | null;
+  observationContent?: NativeToolInputContentPart[] | null;
 };
 
 export type NativeToolResultEnvelope<TToolName extends string = string> = {
@@ -36,6 +48,7 @@ export type NativeToolLoopSuccess = {
   assistantText: string;
   promptTokens: number | null;
   completionTokens: number | null;
+  transcript: NativeToolAwareMessage[];
 };
 
 export type NativeToolLoopStep<TToolName extends string = string> =
@@ -55,6 +68,12 @@ export type NativeToolLoopStep<TToolName extends string = string> =
       promptTokens: number | null;
       completionTokens: number | null;
     };
+
+function isNativeToolLoopFailure<TToolName extends string>(
+  value: NativeToolLoopStep<TToolName> | NativeToolLoopFailure,
+): value is NativeToolLoopFailure {
+  return "ok" in value && value.ok === false;
+}
 
 export function buildToolResultEnvelope<TToolName extends string>(params: {
   toolName: TToolName;
@@ -186,7 +205,7 @@ export async function runSerialNativeToolLoop<TToolName extends string>(params: 
       completion,
       normalizeToolArguments: params.normalizeToolArguments,
     });
-    if ("ok" in step && step.ok === false) return step;
+    if (isNativeToolLoopFailure(step)) return step;
 
     if (step.kind === "assistant_final") {
       return {
@@ -194,6 +213,7 @@ export async function runSerialNativeToolLoop<TToolName extends string>(params: 
         assistantText: step.assistantText,
         promptTokens: lastPromptTokens,
         completionTokens: lastCompletionTokens,
+        transcript: [...transcript],
       };
     }
 
@@ -221,12 +241,36 @@ export async function runSerialNativeToolLoop<TToolName extends string>(params: 
       toolResultEnvelope,
     });
 
+    if (toolResult.errorCode === "user_cancelled") {
+      return {
+        ok: false,
+        status: 409,
+        code: "user_cancelled",
+        message: toolResult.errorMessage || "Run cancelled by user.",
+      };
+    }
+
     transcript.push(step.assistantToolCallMessage);
     transcript.push({
       role: "tool",
       tool_call_id: step.providerCallId,
       content: JSON.stringify(toolResultEnvelope),
     });
+    if (
+      Array.isArray(toolResult.observationContent) &&
+      toolResult.observationContent.length > 0
+    ) {
+      for (let index = transcript.length - 1; index >= 0; index -= 1) {
+        if (isComputerUseObservationMessage(transcript[index]!)) {
+          transcript.splice(index, 1);
+          break;
+        }
+      }
+      transcript.push({
+        role: "user",
+        content: toolResult.observationContent,
+      });
+    }
   }
 
   return {

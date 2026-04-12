@@ -2,5 +2,11 @@
   "installCommand": "npm install && npm --prefix apps/web install",
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "routes": [
+    { "src": "/api/preview(/.*)?", "status": 404 },
+    { "src": "/_preview/start(/.*)?", "status": 404 },
+    { "handle": "filesystem" },
+    { "src": "/(.*\\..*)", "status": 404 },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }

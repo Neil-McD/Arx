@@ -36,6 +36,7 @@ type UseCommunityMembersReviewControllerArgs<
   isSavingFreeAccessMode: boolean;
   loadUserProfiles: (userIds: string[], session: SessionT) => Promise<void> | void;
   loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void> | void;
+  onJoinRequestApproved?: (params: { communityId: string; requestId: string }) => void;
   setCommunities: Dispatch<SetStateAction<CommunityT[]>>;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
   setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
@@ -99,6 +100,10 @@ export function useCommunityMembersReviewController<
         current.loadCommunityMembers(communityId, session),
         loadCommunityJoinRequests(communityId, session),
       ]);
+      current.onJoinRequestApproved?.({
+        communityId,
+        requestId,
+      });
     } catch (error) {
       const message =
         typeof error === "string"

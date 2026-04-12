@@ -6,9 +6,9 @@ import {
   redeemPurchaseClaimRpc,
   type PendingPurchaseClaim,
 } from "../../../../shared/pay_first";
-import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
+import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import { loadBuilderBillingStatusCanonical } from "../../../../shared/builderBillingStatusGateway";
-import type { CloudSession } from "../cloudAuth";
+import type { AuthSession } from "../auth";
 
 type BuilderBillingStatus = {
   user_id: string;
@@ -17,11 +17,11 @@ type BuilderBillingStatus = {
 };
 
 type UseWebCommerceAffiliateActionsArgs = {
-  getSession: () => CloudSession | null;
-  ensureSession?: () => Promise<CloudSession | null>;
+  getSession: () => AuthSession | null;
+  ensureSession?: () => Promise<AuthSession | null>;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
   openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
-  loadCommunities: (session: CloudSession) => Promise<void>;
+  loadCommunities: (session: AuthSession) => Promise<void>;
   clearPendingPurchaseClaimToken: () => void;
   storePendingPurchaseClaimToken: (token: string) => void;
   setCheckoutClaimToken: Dispatch<SetStateAction<string | null>>;
@@ -101,7 +101,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   );
 
   const loadPendingPurchaseClaims = useCallback(
-    async (session: CloudSession): Promise<void> => {
+    async (session: AuthSession): Promise<void> => {
       args.setIsLoadingPendingPurchases(true);
       args.setPendingPurchasesError(null);
       try {
@@ -131,7 +131,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   );
 
   const loadBuilderBillingStatus = useCallback(
-    async (session: CloudSession): Promise<BuilderBillingStatus | null> => {
+    async (session: AuthSession): Promise<BuilderBillingStatus | null> => {
       const requestId = ++builderBillingLoadRequestIdRef.current;
       builderBillingLoadPendingCountRef.current += 1;
       args.setIsLoadingBuilderBilling(true);

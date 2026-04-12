@@ -44,6 +44,7 @@ import {
   reactToCommunityAiFeedPost as reactToCommunityAiFeedPostImpl,
 } from "./communityAiFeed";
 import {
+  cancelMyJoinRequestBySlug as cancelMyJoinRequestBySlugImpl,
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   countCommunityResources as countCommunityResourcesImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
@@ -105,6 +106,7 @@ export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
 export const getMyJoinRequestBySlug = getMyJoinRequestBySlugImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
 export const joinPublicCommunity = joinPublicCommunityImpl;
+export const cancelMyJoinRequestBySlug = cancelMyJoinRequestBySlugImpl;
 export const ensureCommunityChatThread = ensureCommunityChatThreadImpl;
 export const generateCommunityChatAttachmentUploadUrl = generateCommunityChatAttachmentUploadUrlImpl;
 export const listThreadMessages = listThreadMessagesImpl;
@@ -123,8 +125,10 @@ export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const deleteCommunity = deleteCommunityImpl;
 export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
 export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;
-export const processCommunityArchivePending = processCommunityArchivePendingImpl;
-export const retryCommunityArchiveFailures = retryCommunityArchiveFailuresImpl;
+export {
+  processCommunityArchivePendingImpl as processCommunityArchivePending,
+  retryCommunityArchiveFailuresImpl as retryCommunityArchiveFailures,
+};
 export const getCommunityAgentConfig = getCommunityAgentConfigImpl;
 export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;

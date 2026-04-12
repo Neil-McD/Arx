@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
-import { extractRuntimeWebSources } from "../../../../shared/runtimeToolTraceUi";
+import { extractRuntimeWebSources } from "../../../../shared/runtimeTimelineUi";
 
 export function RuntimeWebSources(props: {
   events: ThreadStreamingRuntimeEvent[];

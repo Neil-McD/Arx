@@ -1,6 +1,6 @@
 import type { DragEvent } from "react";
 
-type CloudSessionLike = {
+type SessionLike = {
   user: {
     id: string;
     email?: string | null;
@@ -8,7 +8,7 @@ type CloudSessionLike = {
 } | null;
 
 type WebProfileSettingsSectionProps = {
-  cloudSession: CloudSessionLike;
+  session: SessionLike;
   cloudProfile: unknown | null;
   profileAvatarUrl: string | null;
   profileName: string;
@@ -33,7 +33,7 @@ type WebProfileSettingsSectionProps = {
 
 export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps) {
   const {
-    cloudSession,
+    session,
     cloudProfile,
     profileAvatarUrl,
     profileName,
@@ -63,7 +63,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         Profile
       </div>
       <div className="settings-section-desc">
-        {cloudSession
+        {session
           ? "Profile details shown in communities. Save to sync across devices."
           : "Local profile details shown in communities on this device."}
       </div>
@@ -77,12 +77,12 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           onDragLeave={() => setIsProfileAvatarDragOver(false)}
           onDrop={handleProfileAvatarDrop}
         >
-          {cloudSession && profileAvatarUrl ? (
+          {session && profileAvatarUrl ? (
             <img src={profileAvatarUrl} alt="Profile avatar" draggable={false} />
-          ) : cloudSession ? (
+          ) : session ? (
             <span>
               {getInitials(
-                (profileName || profileUsername || cloudSession.user.email || "AR").replace(/^@/, ""),
+                (profileName || profileUsername || session.user.email || "AR").replace(/^@/, ""),
               )}
             </span>
           ) : (
@@ -103,7 +103,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
               onChange={(event) => void handleProfileAvatarUpload(event.target.files?.[0] ?? null)}
             />
           </label>
-          {cloudSession && profileAvatarUrl && (
+          {session && profileAvatarUrl && (
             <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
               Remove
             </button>
@@ -135,7 +135,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         <div className="account-identity">
           <span>Sync</span>
           <strong>
-            {cloudSession ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
+            {session ? (cloudProfile ? "Synced" : "Not synced yet") : "Sign in to sync"}
           </strong>
         </div>
         <div className="auth-actions">
@@ -143,7 +143,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
             className={profileNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
             type="button"
             onClick={() => void saveProfileToCloud()}
-            disabled={!cloudSession || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
+            disabled={!session || isSavingProfile || (!isProfileDirty && cloudProfile !== null)}
           >
             {isSavingProfile ? "Saving…" : "Save"}
           </button>

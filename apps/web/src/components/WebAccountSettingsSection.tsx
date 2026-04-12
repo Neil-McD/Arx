@@ -1,6 +1,6 @@
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
 
-type CloudSessionLike = {
+type SessionLike = {
   user: {
     id: string;
     email?: string | null;
@@ -39,7 +39,7 @@ type OwnedCommunity = {
 };
 
 type WebAccountSettingsSectionProps = {
-  cloudSession: CloudSessionLike;
+  session: SessionLike;
   authError: string | null;
   openAuthGate: () => void;
   handleSignOut: () => Promise<void> | void;
@@ -68,7 +68,7 @@ type WebAccountSettingsSectionProps = {
   communityRoleById: Record<string, string>;
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
-  openBuilderUpgrade: (context: "builder" | "architect") => void;
+  openBuilderUpgrade: (context: "builder") => void;
   builderBillingError: string | null;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
@@ -85,7 +85,7 @@ type WebAccountSettingsSectionProps = {
 
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
   const {
-    cloudSession,
+    session,
     authError,
     openAuthGate,
     handleSignOut,
@@ -139,11 +139,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         <div className="settings-section-desc">
           Sign in to join communities and sync your profile.
         </div>
-        {cloudSession ? (
+        {session ? (
           <div className="account-row">
             <div className="account-identity">
               <span>Signed in as</span>
-              <strong>{cloudSession.user.email ?? cloudSession.user.id}</strong>
+              <strong>{session.user.email ?? session.user.id}</strong>
             </div>
             <button className="secondary" type="button" onClick={() => void handleSignOut()}>
               Sign out
@@ -171,9 +171,9 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           Inference connections
         </div>
         <div className="settings-section-desc">
-          Authenticated free accounts can use ChatGPT auth or an OpenRouter key. Builder and Architect include some Polynet-hosted inference.
+          Bring your own inference with ChatGPT auth or an OpenRouter key. Builder and Architect unlock the private workbench and workspace tools.
         </div>
-        {!cloudSession ? (
+        {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
         ) : (
           <>
@@ -281,7 +281,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         )}
       </div>
 
-      {cloudSession && (
+      {session && (
         <div className="settings-section">
           {(() => {
             const status = builderBillingStatus;
@@ -311,10 +311,10 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                         className="secondary"
                         onClick={() => openBuilderUpgrade("builder")}
                       >
-                        Upgrade plan
+                        Upgrade to Builder ($24/mo)
                       </button>
                     ) : (
-                      <span className="auth-status">Billing management will appear here after live billing is enabled.</span>
+                      <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or OpenRouter to bring your own inference.</span>
                     )}
                   </div>
                 </div>
@@ -362,7 +362,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         </div>
       )}
 
-      {cloudSession && (
+      {session && (
         <div className="settings-section">
         <div className="settings-section-title">
           <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -411,7 +411,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         </div>
       )}
 
-      {cloudSession &&
+      {session &&
         (isLoadingPendingPurchases ||
           pendingPurchaseClaims.length > 0 ||
           pendingPurchasesError ||

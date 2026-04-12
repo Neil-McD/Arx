@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { StableAvatar } from "./StableAvatar";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 import { communityInitials } from "./messageMetadataUi";
 
@@ -64,7 +65,6 @@ export function DiscoverCommunityCard({
             className="discover-card-banner-img"
             src={bannerUrl}
             alt=""
-            loading="lazy"
             decoding="async"
             draggable={false}
             style={getCommunityBannerImageStyle({
@@ -77,11 +77,14 @@ export function DiscoverCommunityCard({
       </div>
       <div className="discover-card-body">
         <div className="discover-card-header">
-          {avatarUrl ? (
-            <img className="discover-card-avatar" src={avatarUrl} alt={name} loading="lazy" draggable={false} />
-          ) : (
-            <div className="discover-card-avatar fallback">{communityInitials(name)}</div>
-          )}
+          <StableAvatar
+            className="discover-card-avatar"
+            readyClassName="has-image"
+            fallbackClassName="fallback"
+            imageUrl={avatarUrl}
+            alt={name}
+            fallback={communityInitials(name)}
+          />
           <div className="discover-card-meta">
             <div className="discover-card-name-row">
               <div className="discover-card-name">{name}</div>

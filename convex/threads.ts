@@ -1,6 +1,16 @@
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import {
+  getDaytonaPreviewUrl,
+  getDaytonaSignedPreviewUrl,
+  loadDaytonaConfig,
+} from "./daytonaSandboxClient";
+import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
+import {
+  getDaytonaComputerUseStatus,
+} from "./daytonaComputerUseTransport";
 
 type ThreadLike = {
   _id: any;
@@ -39,6 +49,8 @@ type RuntimeRunLike = {
   threadId: any;
   runId: string;
   lane: string;
+  visibility?: "user_visible" | "internal_hidden";
+  internalFollowupKind?: string;
   projectId?: any;
   modelId?: string;
   engineId?: string;
@@ -89,6 +101,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+async function hydrateRuntimeEventPayload(ctx: any, payload: unknown): Promise<unknown> {
+  const payloadRecord = asRecord(payload);
+  if (!payloadRecord) return payload;
+  const detailsRecord = asRecord(payloadRecord.details);
+  const computerUseRecord = asRecord(detailsRecord?.computer_use);
+  const frameStorageId = String(computerUseRecord?.frame_storage_id ?? "").trim();
+  if (!frameStorageId) return payload;
+  const frameUrl = await ctx.storage.getUrl(frameStorageId as any);
+  return {
+    ...payloadRecord,
+    details: {
+      ...detailsRecord,
+      computer_use: {
+        ...computerUseRecord,
+        frame_url: frameUrl ?? null,
+      },
+    },
+  };
+}
+
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -103,10 +135,15 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
     ctx: args.ctx,
     authSubject: args.authSubject ?? null,
   });
-  const user = await args.ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-    .first();
+  const user =
+    args.ctx?.db?.query
+      ? await args.ctx.db
+          .query("users")
+          .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
+          .first()
+      : await args.ctx.runQuery(internal.threads.getUserByAuthSubjectInternal as any, {
+          authSubject,
+        });
   if (!user) throw new Error("user_not_found");
   const resolvedOwnerId = normalizeIdValue(user._id);
   if (ownerIdInput && ownerIdInput !== resolvedOwnerId) {
@@ -406,14 +443,18 @@ async function finalizeRuntimeRunRecord(args: {
   ownerId: any;
   thread: ThreadLike;
   run: RuntimeRunLike;
-  status: "ok" | "error" | "cancelled";
+  status: "running" | "ok" | "error" | "cancelled";
   reason?: string;
   errorCode?: string;
   errorMessage?: string;
   nowMs: number;
   finishedAt?: number;
 }): Promise<RuntimeRunLike> {
-  const status = normalizeRunStatus(args.status);
+  const normalizedStatus = normalizeRunStatus(args.status);
+  if (normalizedStatus === "running") {
+    throw new Error("runtime_run_finish_status_invalid");
+  }
+  const status = normalizedStatus;
   const run = args.run;
   if (run.threadId !== args.thread._id) throw new Error("run_thread_conflict");
   if (run.status !== "running") return run;
@@ -969,7 +1010,7 @@ export const deleteCloudThreadMessage = mutation({
     let message: CloudMessageLike | null = null;
     if (args.messageId) {
       const found = (await ctx.db.get(args.messageId)) as CloudMessageLike | null;
-      if (found?.ownerId === ownerId && found.threadId === thread._id) {
+      if (found && found.ownerId === ownerId && found.threadId === thread._id) {
         message = found;
       }
     } else {
@@ -1027,6 +1068,72 @@ export const getCloudRuntimeRunByOwnerRunId = query({
   },
 });
 
+export const listCloudRuntimeRunsByOwner = query({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const safeLimit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
+    const rows = (await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_owner_startedAt", (q) => q.eq("ownerId", ownerId))
+      .order("desc")
+      .take(safeLimit)) as RuntimeRunLike[];
+    return rows;
+  },
+});
+
+export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const runId = normalizeRunId(args.runId);
+    return await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+  },
+});
+
+export const getUserByAuthSubjectInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authSubject = String(args.authSubject ?? "").trim();
+    if (!authSubject) return null;
+    return await ctx.db
+      .query("users")
+      .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
+      .first();
+  },
+});
+
+export const listRuntimeRunEventsByOwnerRunIdInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const runId = normalizeRunId(args.runId);
+    const rows = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_seq", (q: any) => q.eq("ownerId", args.ownerId).eq("runId", runId))
+      .collect()) as RuntimeRunEventLike[];
+    return rows.sort((a, b) => a.seq - b.seq);
+  },
+});
+
 export const ensureCloudRuntimeRunStarted = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1034,6 +1141,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.optional(v.string()),
+    visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
+    internalFollowupKind: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
@@ -1100,6 +1209,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const startedAt =
       typeof args.startedAt === "number" && Number.isFinite(args.startedAt) ? Math.floor(args.startedAt) : nowMs;
     const lane = normalizeRunLane(args.lane);
+    const visibility = args.visibility === "internal_hidden" ? "internal_hidden" : "user_visible";
+    const internalFollowupKind = String(args.internalFollowupKind ?? "").trim() || undefined;
     const executionMode = String(args.executionMode ?? "").trim() || "chat";
     const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
@@ -1120,6 +1231,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
       threadId: thread._id,
       runId,
       lane,
+      visibility,
+      internalFollowupKind,
       projectId,
       modelId,
       engineId,
@@ -1147,6 +1260,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
       payload: {
         run_id: runId,
         lane,
+        visibility,
+        internal_followup_kind: internalFollowupKind ?? null,
         project_id: projectId ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
@@ -1285,6 +1400,120 @@ export const finishCloudRuntimeRun = mutation({
   },
 });
 
+export const reconcileOrphanedCloudRuntimeRunInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    providerSandboxId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+
+    const eventKey = `sandbox_orphan_reconciled:${String(args.providerSandboxId ?? "").trim()}`;
+    const existingEvent = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_eventKey", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
+      )
+      .first()) as RuntimeRunEventLike | null;
+    if (!existingEvent) {
+      const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+      await ctx.db.insert("runtimeRunEvents", {
+        ownerId: args.ownerId,
+        threadId: thread._id,
+        runId,
+        seq,
+        eventType: "sandbox_orphan_reconciled",
+        eventKey,
+        payload: {
+          run_id: runId,
+          sandbox_id: String(args.providerSandboxId ?? "").trim() || null,
+          reason: "sandbox_orphan_reconciled",
+        },
+        createdAt: nowMs,
+      });
+      await ctx.db.patch(run._id, {
+        lastEventSeq: seq,
+        updatedAt: nowMs,
+      });
+      const refreshedRun = (await ctx.db.get(run._id)) as RuntimeRunLike | null;
+      if (refreshedRun) {
+        return await finalizeRuntimeRunRecord({
+          ctx,
+          ownerId: args.ownerId,
+          thread,
+          run: refreshedRun,
+          status: "error",
+          reason: "sandbox_orphan_reconciled",
+          errorCode: "sandbox_orphan_reconciled",
+          errorMessage: "Workspace sandbox was reconciled after runtime cleanup was missed.",
+          nowMs,
+          finishedAt: nowMs,
+        });
+      }
+    }
+
+    return await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId: args.ownerId,
+      thread,
+      run,
+      status: "error",
+      reason: "sandbox_orphan_reconciled",
+      errorCode: "sandbox_orphan_reconciled",
+      errorMessage: "Workspace sandbox was reconciled after runtime cleanup was missed.",
+      nowMs,
+      finishedAt: nowMs,
+    });
+  },
+});
+
+export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+    await ctx.db.patch(run._id, {
+      updatedAt: nowMs,
+    });
+    return await ctx.db.get(run._id);
+  },
+});
+
 export const getCloudRunningRuntimeRunByThreadKey = query({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1311,7 +1540,62 @@ export const getCloudRunningRuntimeRunByThreadKey = query({
     });
     if (!run) return null;
     if (isRuntimeRunStale({ run, nowMs: Date.now() })) return null;
+    if (run.visibility === "internal_hidden") return null;
     return run;
+  },
+});
+
+export const cancelCloudRuntimeRunByThreadKey = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+    runId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    const threadKey = String(args.threadKey ?? "").trim();
+    if (!threadKey) throw new Error("thread_key_required");
+    const thread = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey,
+    });
+    if (!thread) return null;
+
+    const explicitRunId = String(args.runId ?? "").trim();
+    const run = explicitRunId
+      ? await getRuntimeRunByOwnerRunId({
+          ctx,
+          ownerId,
+          runId: normalizeRunId(explicitRunId),
+        })
+      : await getRunningRuntimeRunByThread({
+          ctx,
+          threadId: thread._id,
+        });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+
+    return await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId,
+      thread,
+      run,
+      status: "cancelled",
+      reason: "user_cancelled",
+      errorCode: "user_cancelled",
+      errorMessage: "Run cancelled by user.",
+      nowMs,
+      finishedAt: nowMs,
+    });
   },
 });
 
@@ -1349,7 +1633,241 @@ export const listCloudRuntimeRunEvents = query({
       )
       .take(safeLimit);
     const out = rows.sort((a: RuntimeRunEventLike, b: RuntimeRunEventLike) => a.seq - b.seq);
-    if (!args.threadId) return out;
-    return out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
+    const filtered = !args.threadId
+      ? out
+      : out.filter((row: RuntimeRunEventLike) => row.threadId === args.threadId);
+    return await Promise.all(
+      filtered.map(async (row: RuntimeRunEventLike) => ({
+        ...row,
+        payload: await hydrateRuntimeEventPayload(ctx, row.payload),
+      })),
+    );
+  },
+});
+
+export const getCloudRuntimeRunComputerUseLiveSession = action({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    runId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+        ctx,
+        ownerId: args.ownerId,
+        authSubject: args.authSubject ?? null,
+      });
+      const runId = normalizeRunId(args.runId);
+
+      const baseDebug: Record<string, unknown> = {
+        owner_id_present: Boolean(ownerId),
+        requested_run_id: runId,
+      };
+
+      const run = (await ctx.runQuery(internal.threads.getRuntimeRunByOwnerRunIdInternal as any, {
+        ownerId,
+        runId,
+      })) as RuntimeRunLike | null;
+      if (!run) {
+        return {
+          ok: false,
+          status: 404,
+          code: "runtime_run_not_found",
+          message: "Runtime run not found.",
+          debug: {
+            ...baseDebug,
+            stage: "run_lookup",
+            run_found: false,
+          },
+        };
+      }
+      if (run.status !== "running") {
+        return {
+          ok: false,
+          status: 409,
+          code: "live_desktop_inactive",
+          message: "Live desktop is only available while the runtime run is active.",
+          debug: {
+            ...baseDebug,
+            stage: "run_status",
+            run_found: true,
+            run_status: run.status,
+            run_thread_id: run.threadId ?? null,
+          },
+        };
+      }
+
+      const events = (await ctx.runQuery(internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any, {
+        ownerId,
+        runId,
+      })) as RuntimeRunEventLike[];
+      const sessionEvent = events
+        .filter((row) => row.eventType === "workspace_session_created")
+        .sort((a, b) => a.seq - b.seq)
+        .at(-1);
+      const payload = asRecord(sessionEvent?.payload);
+      const sandboxId = normalizeIdValue(payload?.sandbox_id);
+      const toolboxProxyUrl = String(payload?.toolbox_proxy_url ?? "").trim();
+      const sessionDebug = {
+        ...baseDebug,
+        stage: "workspace_session",
+        run_found: true,
+        run_status: run.status,
+        workspace_session_event_found: Boolean(sessionEvent),
+        workspace_session_event_seq: sessionEvent?.seq ?? null,
+        sandbox_id_present: Boolean(sandboxId),
+        toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
+      };
+      if (!sandboxId) {
+        return {
+          ok: false,
+          status: 409,
+          code: "live_desktop_unavailable",
+          message: "This runtime run does not have an active workspace desktop session.",
+          retryable: true,
+          debug: sessionDebug,
+        };
+      }
+      if (!toolboxProxyUrl) {
+        return {
+          ok: false,
+          status: 409,
+          code: "live_desktop_unavailable",
+          message: "This runtime run is missing the workspace toolbox proxy URL.",
+          retryable: true,
+          debug: sessionDebug,
+        };
+      }
+
+      const loadedConfig = loadDaytonaConfig();
+      if (!loadedConfig.ok) {
+        return {
+          ok: false,
+          status: 503,
+          code: loadedConfig.code,
+          message: loadedConfig.message,
+          retryable: true,
+          debug: {
+            ...sessionDebug,
+            stage: "config",
+          },
+        };
+      }
+
+      const computerUseStatus = await getDaytonaComputerUseStatus({
+        config: loadedConfig.config,
+        toolboxProxyUrl,
+        sandboxId,
+      });
+      if (!computerUseStatus.ok) {
+        return {
+          ok: false,
+          status: computerUseStatus.status,
+          code: computerUseStatus.code,
+          message: computerUseStatus.message,
+          retryable: true,
+          debug: {
+            ...sessionDebug,
+            stage: "computer_use_status",
+            computer_use_status_ok: false,
+          },
+        };
+      }
+      const normalizedComputerUseStatus = computerUseStatus.status;
+      if (!normalizedComputerUseStatus || normalizedComputerUseStatus === "stopped") {
+        return {
+          ok: false,
+          status: 409,
+          code: "computer_use_not_started",
+          message: "Computer use has not started for this runtime run yet.",
+          retryable: true,
+          debug: {
+            ...sessionDebug,
+            stage: "computer_use_status",
+            computer_use_status: normalizedComputerUseStatus || null,
+          },
+        };
+      }
+      if (normalizedComputerUseStatus !== "active" && normalizedComputerUseStatus !== "running") {
+        return {
+          ok: false,
+          status: 409,
+          code: "computer_use_starting",
+          message: "Computer use is starting.",
+          retryable: true,
+          debug: {
+            ...sessionDebug,
+            stage: "computer_use_status",
+            computer_use_status: normalizedComputerUseStatus,
+          },
+        };
+      }
+
+      const preview = await getDaytonaPreviewUrl({
+        config: loadedConfig.config,
+        sandboxId,
+        port: 6080,
+      });
+      if (!preview.ok) {
+        return {
+          ...preview,
+          retryable: true,
+          debug: {
+            ...sessionDebug,
+            stage: "preview_url",
+            computer_use_status: normalizedComputerUseStatus,
+            preview_url_ok: false,
+          },
+        };
+      }
+      const previewProxyToken = await mintPreviewProxySessionToken({
+        kind: "live_desktop",
+        previewUrl: preview.url,
+        previewToken: preview.token,
+        expiresAtMs: Date.now() + 300 * 1000,
+      });
+      if (!previewProxyToken.ok) {
+        return {
+          ok: false,
+          status: 503,
+          code: previewProxyToken.code,
+          message: previewProxyToken.message,
+          retryable: false,
+          debug: {
+            ...sessionDebug,
+            stage: "preview_proxy_token",
+            computer_use_status: normalizedComputerUseStatus,
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        run_id: runId,
+        sandbox_id: sandboxId,
+        preview_proxy_token: previewProxyToken.token,
+        expires_at: Date.now() + 300 * 1000,
+        debug: {
+          ...sessionDebug,
+          stage: "ready",
+          computer_use_status: normalizedComputerUseStatus,
+          preview_url_ok: true,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "unknown_error");
+      return {
+        ok: false,
+        status: 500,
+        code: "live_lookup_failed",
+        message: "Live desktop lookup failed before a session could be resolved.",
+        retryable: true,
+        debug: {
+          stage: "action_exception",
+          message,
+        },
+      };
+    }
   },
 });

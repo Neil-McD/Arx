@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=15
+TOTAL_STEPS=16
 CURRENT_STEP=1
 
 run_step() {
@@ -24,7 +24,7 @@ run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh
 run_step "Auth env contract guard" bash scripts/auth_env_contract_guard.sh
-run_step "No direct cloud-auth imports guard" bash scripts/no_direct_cloud_auth_imports_guard.sh
+run_step "No direct legacy-auth imports guard" bash scripts/no_direct_legacy_auth_imports_guard.sh
 run_step "Legacy function transport surface guard" bash scripts/legacy_function_transport_surface_guard.sh
 run_step "Convex client surface guard" bash scripts/convex_client_surface_guard.sh
 run_step "Convex verified identity guard" bash scripts/convex_verified_identity_guard.sh
@@ -32,6 +32,7 @@ run_step "Auth bootstrap public identity guard" bash scripts/auth_bootstrap_publ
 run_step "Auth and billing public identity guard" bash scripts/auth_billing_public_identity_guard.sh
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
+run_step "Daytona runtime sandbox contract guard" bash scripts/daytona_runtime_sandbox_contract_guard.sh
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh

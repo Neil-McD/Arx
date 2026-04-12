@@ -1,8 +1,8 @@
 import { api, internal } from "./_generated/api";
+import type { NativeToolAwareMessage } from "../shared/nativeToolProtocol";
 
 type InferenceRole = "user" | "assistant" | "system";
-type RuntimeSurface = "web" | "mobile";
-type GateModelClass = "free_model" | "paid_model";
+type RuntimeSurface = "web";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -46,6 +46,7 @@ type OpenRouterFailure = {
   code: string;
   message: string;
 };
+type OpenRouterStreamDeltaHandler = (delta: string) => void;
 
 function readEnv(name: string): string {
   try {
@@ -85,7 +86,6 @@ export function normalizeSurface(raw: unknown, fallback: RuntimeSurface): Runtim
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (value === "mobile") return "mobile";
   if (value === "web") return "web";
   return fallback;
 }
@@ -172,7 +172,6 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
   ctx: any;
   authSubject: string;
   surface: RuntimeSurface;
-  modelClass: GateModelClass;
   requestedFundingSource: RequestedFundingSource;
   hasUserKeyConnection?: boolean;
   hasUserChatgptConnection?: boolean;
@@ -182,7 +181,6 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
     authSubject: params.authSubject,
     surface: params.surface,
     executionMode: "cloud",
-    modelClass: params.modelClass,
     requestedFundingSource: params.requestedFundingSource,
     hasUserKeyConnection: Boolean(params.hasUserKeyConnection),
     hasUserChatGptConnection: Boolean(params.hasUserChatgptConnection),
@@ -244,9 +242,9 @@ export function gateDeniedResponse(
   if (params.decision.code === "tier_required" || params.decision.code === "plan_required") {
     return jsonResponse(req, 403, {
       ok: false,
-      code: "platform_inference_not_allowed",
-      error: "platform_inference_not_allowed",
-      message: "Paid tier required for platform inference.",
+      code: "plan_required",
+      error: "plan_required",
+      message: "This model requires a higher plan.",
       gate_code: params.decision.code,
       cta: params.decision.cta,
       lane: params.decision.lane,
@@ -316,13 +314,14 @@ export async function runOpenRouterCompletion(params: {
   messages: InferenceMessage[];
   maxTokens: number;
   apiKeyOverride?: string | null;
+  signal?: AbortSignal;
 }): Promise<OpenRouterSuccess | OpenRouterFailure> {
   const apiKey = String(params.apiKeyOverride ?? "").trim() || readEnv("OPENROUTER_API_KEY");
   if (!apiKey) {
     return {
       ok: false,
       status: 503,
-      code: "platform_inference_misconfigured",
+      code: "provider_inference_misconfigured",
       message: params.apiKeyOverride ? "User provider key is unavailable." : "OPENROUTER_API_KEY is not configured.",
     };
   }
@@ -348,13 +347,14 @@ export async function runOpenRouterCompletion(params: {
         "HTTP-Referer": referer,
         "X-Title": "Arx",
       },
+      signal: params.signal,
       body: JSON.stringify(requestBody),
     });
   } catch {
     return {
       ok: false,
       status: 503,
-      code: "platform_inference_unavailable",
+      code: "provider_inference_unavailable",
       message: "Inference provider is temporarily unavailable.",
     };
   }
@@ -364,7 +364,7 @@ export async function runOpenRouterCompletion(params: {
     const parsed = parseOpenRouterError(raw);
     const messageLower = String(parsed.message ?? "").toLowerCase();
     const isFreeModel = params.modelRef.toLowerCase().includes(":free");
-    let code = parsed.code || "platform_inference_error";
+    let code = parsed.code || "provider_inference_error";
     let message = parsed.message || `OpenRouter error (${response.status})`;
     if (response.status === 429) {
       code = "rate_limited";
@@ -379,7 +379,7 @@ export async function runOpenRouterCompletion(params: {
       messageLower.includes("gateway timeout") ||
       messageLower.includes("temporarily unavailable")
     ) {
-      code = "platform_inference_unavailable";
+      code = "provider_inference_unavailable";
       message = "Inference provider is temporarily unavailable.";
     } else if (
       response.status === 402 ||
@@ -387,9 +387,9 @@ export async function runOpenRouterCompletion(params: {
       messageLower.includes("credit") ||
       messageLower.includes("insufficient")
     ) {
-      code = "platform_inference_quota_exceeded";
+      code = "provider_inference_quota_exceeded";
     } else if (response.status === 401 || response.status === 403) {
-      code = "platform_inference_misconfigured";
+      code = "provider_inference_misconfigured";
     }
     return {
       ok: false,
@@ -416,10 +416,192 @@ export async function runOpenRouterCompletion(params: {
     return {
       ok: false,
       status: 502,
-      code: "platform_inference_error",
+      code: "provider_inference_error",
       message: "OpenRouter returned invalid JSON.",
     };
   }
+}
+
+export async function runOpenRouterStreamingCompletion(params: {
+  req: Request;
+  modelRef: string;
+  messages: Array<InferenceMessage | NativeToolAwareMessage>;
+  maxTokens: number;
+  apiKeyOverride?: string | null;
+  onDelta?: OpenRouterStreamDeltaHandler;
+  signal?: AbortSignal;
+}): Promise<OpenRouterSuccess | OpenRouterFailure> {
+  const apiKey = String(params.apiKeyOverride ?? "").trim() || readEnv("OPENROUTER_API_KEY");
+  if (!apiKey) {
+    return {
+      ok: false,
+      status: 503,
+      code: "provider_inference_misconfigured",
+      message: params.apiKeyOverride ? "User provider key is unavailable." : "OPENROUTER_API_KEY is not configured.",
+    };
+  }
+
+  const referer = readEnv("ARX_OPENROUTER_REFERER") || "https://arx.app";
+  const requestBody: Record<string, unknown> = {
+    model: params.modelRef,
+    messages: params.messages,
+    max_tokens: params.maxTokens,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  if (params.modelRef.toLowerCase().includes(":free")) {
+    requestBody.provider = { data_collection: "allow" };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": referer,
+        "X-Title": "Arx",
+        Accept: "text/event-stream",
+      },
+      signal: params.signal,
+      body: JSON.stringify(requestBody),
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      code: "provider_inference_unavailable",
+      message: "Inference provider is temporarily unavailable.",
+    };
+  }
+
+  if (!response.ok) {
+    const raw = await response.text();
+    const parsed = parseOpenRouterError(raw);
+    const messageLower = String(parsed.message ?? "").toLowerCase();
+    const isFreeModel = params.modelRef.toLowerCase().includes(":free");
+    let code = parsed.code || "provider_inference_error";
+    let message = parsed.message || `OpenRouter error (${response.status})`;
+    if (response.status === 429) {
+      code = "rate_limited";
+      message = isFreeModel
+        ? "Free model is temporarily saturated. Retry in a moment."
+        : "Provider is rate limiting requests. Retry in a moment.";
+    } else if (
+      response.status >= 500 ||
+      messageLower === "server error" ||
+      messageLower.includes("internal server error") ||
+      messageLower.includes("bad gateway") ||
+      messageLower.includes("gateway timeout") ||
+      messageLower.includes("temporarily unavailable")
+    ) {
+      code = "provider_inference_unavailable";
+      message = "Inference provider is temporarily unavailable.";
+    } else if (
+      response.status === 402 ||
+      messageLower.includes("quota") ||
+      messageLower.includes("credit") ||
+      messageLower.includes("insufficient")
+    ) {
+      code = "provider_inference_quota_exceeded";
+    } else if (response.status === 401 || response.status === 403) {
+      code = "provider_inference_misconfigured";
+    }
+    return {
+      ok: false,
+      status: response.status,
+      code,
+      message,
+    };
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return {
+      ok: false,
+      status: 502,
+      code: "provider_inference_error",
+      message: "OpenRouter returned no streaming body.",
+    };
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let dataBuffer = "";
+  let content = "";
+  let promptTokens: number | null = null;
+  let completionTokens: number | null = null;
+
+  const flushEvent = (): OpenRouterFailure | null => {
+    const raw = dataBuffer.trim();
+    dataBuffer = "";
+    if (!raw || raw === "[DONE]") return null;
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+        return {
+          ok: false,
+          status: 502,
+          code: "provider_inference_error",
+          message: "OpenRouter returned invalid streaming JSON.",
+        };
+    }
+    if (parsed?.error) {
+      const message =
+        (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) ||
+        (typeof parsed?.error === "string" && parsed.error.trim()) ||
+        "Inference provider is temporarily unavailable.";
+      return {
+        ok: false,
+        status: 502,
+        code: "provider_inference_error",
+        message,
+      };
+    }
+    const delta = typeof parsed?.choices?.[0]?.delta?.content === "string"
+      ? parsed.choices[0].delta.content
+      : "";
+    if (delta) {
+      content += delta;
+      params.onDelta?.(delta);
+    }
+    const prompt = Number(parsed?.usage?.prompt_tokens);
+    const completion = Number(parsed?.usage?.completion_tokens);
+    if (Number.isFinite(prompt)) promptTokens = Math.floor(prompt);
+    if (Number.isFinite(completion)) completionTokens = Math.floor(completion);
+    return null;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    while (true) {
+      const idx = buffer.indexOf("\n");
+      if (idx < 0) break;
+      let line = buffer.slice(0, idx);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      buffer = buffer.slice(idx + 1);
+      if (line.startsWith("data:")) {
+        dataBuffer += line.slice(5).trim();
+        continue;
+      }
+      if (line === "") {
+        const failure = flushEvent();
+        if (failure) return failure;
+      }
+    }
+  }
+
+  const trailingFailure = flushEvent();
+  if (trailingFailure) return trailingFailure;
+  return {
+    content,
+    promptTokens,
+    completionTokens,
+  };
 }
 
 export function asRuntimeMessages(input: RuntimeTurnInputLike): InferenceMessage[] {
@@ -442,14 +624,14 @@ export function extractTextFromContentJson(value: unknown): string {
 
 export function extractInferenceSourceFromContentJson(
   value: unknown,
-  fallback: "free" | "platform" | "user_key",
-): "free" | "platform" | "user_key" {
+  fallback: "free" | "platform" | "user_key" | "chatgpt",
+): "free" | "platform" | "user_key" | "chatgpt" {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
     const meta = record.meta;
     if (meta && typeof meta === "object" && !Array.isArray(meta)) {
       const raw = String((meta as Record<string, unknown>).inference_source ?? "").trim().toLowerCase();
-      if (raw === "free" || raw === "platform" || raw === "user_key") return raw;
+      if (raw === "free" || raw === "platform" || raw === "user_key" || raw === "chatgpt") return raw;
     }
   }
   return fallback;

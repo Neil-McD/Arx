@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { formatSendFlowErrorMessage } from "./appErrorMappings";
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveUsableSession } from "./ensureUsableSession";
 import {
@@ -6,11 +7,11 @@ import {
   type ThreadMessage,
   type UseWebSendFlowControllerArgs,
   getLastThreadMessageId,
+  mapRequestedFundingSourceToInferenceSource,
   persistGuestThreadStorageFromMessages,
   resolvePreferredModelSelectionFromArgs,
   showBuilderLimitUpgradeIfNeeded,
   syncThreadModelSelectionInState,
-  toErrorMessage,
 } from "./webSendFlowCore";
 
 function resolveAuthenticatedTurnRuntimeFlags(): {
@@ -21,6 +22,35 @@ function resolveAuthenticatedTurnRuntimeFlags(): {
   };
 }
 
+function buildPreviewFitRepairInstruction(params: {
+  mode: "inline" | "expanded";
+  previewLabel: string;
+  viewportWidth: number;
+  viewportHeight: number;
+  overflowX: boolean;
+  overflowY: boolean;
+}): string {
+  const surfaceLabel = params.mode === "expanded" ? "expanded desktop preview" : "inline preview";
+  const overflowNotes = [
+    params.overflowX ? "horizontal overflow is present" : null,
+    params.overflowY ? "vertical overflow is present" : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  return [
+    `Repair the app layout for the ${surfaceLabel} surface so the default screen fits without page-level overflow.`,
+    `Preview label: ${params.previewLabel || "App preview"}.`,
+    `Viewport: ${Math.max(0, Math.round(params.viewportWidth))}x${Math.max(0, Math.round(params.viewportHeight))}.`,
+    overflowNotes ? `Observed issue: ${overflowNotes}.` : null,
+    "Keep the existing behavior and visual intent intact. Make the smallest layout changes needed.",
+    "Use the Polynet preview contract already provided by the runtime. Return to the canonical shell: html, body, and the app root should fill the available height with no default margins; the initial screen should avoid document-level scrolling; the app should use one compact top bar plus one main content area sized with min-height: 0 or minmax(0, 1fr); and any necessary scrolling should live inside bounded panels rather than the whole page.",
+    "Reuse the existing preview server for this app. Do not start another preview server or duplicate background terminal for this repair. If a restart is absolutely necessary, stop the existing preview terminal first and then start a single replacement.",
+    "Do the repair silently. Do not explain the repair to the user unless the run cannot be completed.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function useWebSendFlowController<
   SessionT,
   AttachmentT,
@@ -28,6 +58,7 @@ export function useWebSendFlowController<
   ThreadMessageT extends ThreadMessage,
 >(args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>) {
   const argsRef = useRef(args);
+  const previewFitRepairInFlightByThreadIdRef = useRef<Record<string, boolean>>({});
   argsRef.current = args;
 
   const maybeShowBuilderLimitUpgrade = useCallback((message: string): void => {
@@ -47,14 +78,99 @@ export function useWebSendFlowController<
     [],
   );
 
-  const sendUserMessage = useCallback(async (opts?: { text?: string }) => {
+  const isThreadBusy = useCallback((threadId: string | null): boolean => {
+    const trimmedThreadId = String(threadId ?? "").trim();
+    if (!trimmedThreadId) return false;
+    return (
+      argsRef.current.isThreadRunActive(trimmedThreadId) ||
+      previewFitRepairInFlightByThreadIdRef.current[trimmedThreadId] === true
+    );
+  }, []);
+
+  const requestPreviewFitRepair = useCallback(
+    async (opts: {
+      mode: "inline" | "expanded";
+      previewLabel: string;
+      viewportWidth: number;
+      viewportHeight: number;
+      overflowX: boolean;
+      overflowY: boolean;
+    }): Promise<void> => {
+      const current = argsRef.current;
+      const session = current.getSession();
+      const threadId = String(current.activeThreadId ?? "").trim();
+      if (!session || !threadId) return;
+      if (isThreadBusy(threadId)) return;
+      previewFitRepairInFlightByThreadIdRef.current[threadId] = true;
+      const usableSession = await resolveUsableSession(session, current.ensureSession);
+      if (!usableSession) {
+        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
+        return;
+      }
+      const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
+      if (currentThreadMessages.length === 0) {
+        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
+        return;
+      }
+      const preferredModelSelection = resolvePreferredModelSelection();
+      const preferredModelId = preferredModelSelection.modelId;
+      const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
+      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
+        syncThreadModelSelection(threadId, preferredModelId, usableSession);
+      }
+      try {
+        const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
+        const repairInstruction = buildPreviewFitRepairInstruction(opts);
+        const turnResult = await current.runAgentTurn(usableSession, threadId, {
+          preferredModelId,
+          mode: "respond",
+          runIdHint: `agent_web_repair:${threadId}:${opts.mode}:${Date.now()}`,
+          systemPrompt: null,
+          inferenceSource: mapRequestedFundingSourceToInferenceSource(
+            preferredModelSelection.fundingSource,
+          ),
+          requestedFundingSource: preferredModelSelection.fundingSource,
+          requestedAgenticTools: runtimeFlags.requestedAgenticTools,
+          messages: currentThreadMessages,
+          suppressStreamingUi: true,
+          internalFollowup: {
+            kind: "preview_fit_repair",
+            content: repairInstruction,
+            suppressAssistantMessage: true,
+          },
+        });
+        if (turnResult.error) {
+          console.warn("preview_fit_repair_failed", { threadId, mode: opts.mode, error: turnResult.error });
+        }
+      } catch (error) {
+        console.warn("preview_fit_repair_failed", {
+          threadId,
+          mode: opts.mode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
+      }
+    },
+    [isThreadBusy, resolvePreferredModelSelection, syncThreadModelSelection],
+  );
+
+  const sendUserMessage = useCallback(async (opts?: {
+    text?: string;
+    attachments?: AttachmentT[];
+    clearComposer?: () => void;
+    pinToBottom?: () => void;
+  }) => {
     const current = argsRef.current;
     const setErrorForThread = (
       threadId: string | null,
       value: string | null | ((prev: string | null) => string | null),
     ) => current.setThreadErrorForThread(threadId, value);
-    const text = (opts?.text ?? current.messageInput).trim();
-    const hasAttachments = current.workspaceAttachments.length > 0;
+    const text = String(opts?.text ?? "").trim();
+    const attachmentsToSend = Array.isArray(opts?.attachments) ? [...opts.attachments] : [];
+    const hasAttachments = attachmentsToSend.length > 0;
+    const clearComposer = opts?.clearComposer ?? current.clearWorkspaceComposer;
+    const pinToBottom = opts?.pinToBottom ?? current.pinWorkspaceToBottom;
     if (!text && !hasAttachments) return;
 
     const session = current.getSession();
@@ -81,14 +197,13 @@ export function useWebSendFlowController<
 
       setErrorForThread(current.guestThreadId, null);
       current.setIsSendingMessage(true);
-      current.autoScrollEnabledRef.current = true;
-      current.setIsWorkspaceAtBottom(true);
+      current.setThreadRunSending(current.guestThreadId, true);
+      pinToBottom();
       try {
         current.setWorkspaceWantsNewChatMode(false);
         if (current.activeThreadId !== current.guestThreadId) current.setActiveThreadId(current.guestThreadId);
         current.setThreadMessages(baseMessages);
-        current.setMessageInput("");
-        current.setWorkspaceAttachments([]);
+        clearComposer();
         persistGuestFromMessages(baseMessages);
 
         const turnResult = await current.runPublicTurn({
@@ -117,8 +232,12 @@ export function useWebSendFlowController<
         current.setThreadMessages(nextMessages);
         persistGuestFromMessages(nextMessages);
       } catch (error) {
-        setErrorForThread(current.guestThreadId, toErrorMessage(error, "Failed to send message."));
+        setErrorForThread(
+          current.guestThreadId,
+          formatSendFlowErrorMessage(error, "Failed to send message."),
+        );
       } finally {
+        current.setThreadRunSending(current.guestThreadId, false);
         current.setIsSendingMessage(false);
       }
       return;
@@ -136,7 +255,7 @@ export function useWebSendFlowController<
       Boolean(
         current.activeThreadId && current.threads.some((thread) => thread.id === current.activeThreadId),
       );
-    if (hasActiveThreadInState && current.isThreadRunActive(current.activeThreadId)) {
+    if (hasActiveThreadInState && isThreadBusy(current.activeThreadId)) {
       setErrorForThread(current.activeThreadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
       return;
     }
@@ -149,8 +268,7 @@ export function useWebSendFlowController<
 
     setErrorForThread(current.activeThreadId ?? null, null);
     if (startedInDraft) current.setIsSendingMessage(true);
-    current.autoScrollEnabledRef.current = true;
-    current.setIsWorkspaceAtBottom(true);
+    pinToBottom();
     try {
       let threadId = hasActiveThreadInState ? current.activeThreadId : null;
       let createdThreadRecord: ThreadRecordT | null = null;
@@ -199,7 +317,6 @@ export function useWebSendFlowController<
       }
 
       const messageId = crypto.randomUUID();
-      const attachmentsToSend = [...current.workspaceAttachmentsRef.current];
       const usePublicModel = preferredModelSelection.lane === "public";
       if (usePublicModel && attachmentsToSend.length > 0) {
         throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
@@ -227,8 +344,7 @@ export function useWebSendFlowController<
         );
       }
 
-      current.setMessageInput("");
-      current.setWorkspaceAttachments([]);
+      clearComposer();
       const priorThreadMessages = current.threadMessages.filter((m) => m.thread_id === threadId);
       const syntheticUserMessage: ThreadMessageT = {
         id: messageId,
@@ -248,30 +364,47 @@ export function useWebSendFlowController<
       current.setThreadMessages(optimisticThreadMessages);
 
       const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
+      const inferenceSource = mapRequestedFundingSourceToInferenceSource(
+        preferredModelSelection.fundingSource,
+      );
+      const threadForAnalytics =
+        createdThreadRecord ?? current.threads.find((thread) => thread.id === threadId) ?? null;
+      current.onWorkspaceRunStarted?.({
+        threadId,
+        projectId: (threadForAnalytics?.project_id ?? "").trim() || null,
+        communityId: threadForAnalytics?.community_id ?? null,
+        modelId: preferredModelId,
+        requestedFundingSource: preferredModelSelection.fundingSource,
+        inferenceSource,
+        startedInDraft,
+        hasAttachments,
+      });
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "respond",
         runIdHint: `agent_web:${messageId}`,
         userMessageKey: messageId,
         systemPrompt: null,
-        inferenceSource:
-          preferredModelSelection.fundingSource === "demo_public"
-            ? "free"
-            : preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "chatgpt"
-                : "platform",
+        inferenceSource,
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: messageId,
         messages: optimisticThreadMessages,
       });
       if (turnResult.error) throw new Error(turnResult.error);
-
+      current.onWorkspaceRunSucceeded?.({
+        threadId,
+        projectId: (threadForAnalytics?.project_id ?? "").trim() || null,
+        communityId: threadForAnalytics?.community_id ?? null,
+        modelId: preferredModelId,
+        requestedFundingSource: preferredModelSelection.fundingSource,
+        inferenceSource,
+        startedInDraft,
+        hasAttachments,
+      });
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
-      const message = toErrorMessage(error, "Failed to send message.");
+      const message = formatSendFlowErrorMessage(error, "Failed to send message.");
       setErrorForThread(runThreadId ?? current.activeThreadId ?? null, message);
       if (startedInDraft && createdThreadId && !postedUserMessage) {
         current.setThreads((prev) => prev.filter((thread) => thread.id !== createdThreadId));
@@ -286,6 +419,7 @@ export function useWebSendFlowController<
       }
     }
   }, [
+    isThreadBusy,
     maybeShowBuilderLimitUpgrade,
     persistGuestFromMessages,
     resolvePreferredModelSelection,
@@ -312,7 +446,7 @@ export function useWebSendFlowController<
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
-    if (current.isThreadRunActive(threadId)) {
+    if (isThreadBusy(threadId)) {
       setErrorForThread(threadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
       return;
     }
@@ -323,8 +457,7 @@ export function useWebSendFlowController<
 
     setErrorForThread(threadId, null);
     current.setThreadRunSending(threadId, true);
-    current.autoScrollEnabledRef.current = true;
-    current.setIsWorkspaceAtBottom(true);
+    current.pinWorkspaceToBottom();
     try {
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
       const preferredModelSelection = resolvePreferredModelSelection();
@@ -344,14 +477,9 @@ export function useWebSendFlowController<
         runIdHint: `agent_web:${lastUserMessageId}`,
         userMessageKey: lastUserMessageId,
         systemPrompt: null,
-        inferenceSource:
-          preferredModelSelection.fundingSource === "demo_public"
-            ? "free"
-            : preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "chatgpt"
-                : "platform",
+        inferenceSource: mapRequestedFundingSourceToInferenceSource(
+          preferredModelSelection.fundingSource,
+        ),
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
@@ -360,13 +488,14 @@ export function useWebSendFlowController<
       if (turnResult.error) throw new Error(turnResult.error);
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
-      const message = toErrorMessage(error, "Failed to run model.");
+      const message = formatSendFlowErrorMessage(error, "Failed to run model.");
       setErrorForThread(threadId, message);
       maybeShowBuilderLimitUpgrade(message);
     } finally {
       current.setThreadRunSending(threadId, false);
     }
   }, [
+    isThreadBusy,
     maybeShowBuilderLimitUpgrade,
     resolvePreferredModelSelection,
     syncThreadModelSelection,
@@ -392,7 +521,7 @@ export function useWebSendFlowController<
 
     const threadId = current.activeThreadId;
     if (!threadId) return;
-    if (current.isThreadRunActive(threadId)) {
+    if (isThreadBusy(threadId)) {
       setErrorForThread(threadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
       return;
     }
@@ -401,8 +530,7 @@ export function useWebSendFlowController<
 
     setErrorForThread(threadId, null);
     current.setThreadRunSending(threadId, true);
-    current.autoScrollEnabledRef.current = true;
-    current.setIsWorkspaceAtBottom(true);
+    current.pinWorkspaceToBottom();
     try {
       const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
       const preferredModelSelection = resolvePreferredModelSelection();
@@ -443,14 +571,9 @@ export function useWebSendFlowController<
         runIdHint: `agent_web_regen:${lastUserMessageId}:${Date.now()}`,
         userMessageKey: lastUserMessageId,
         systemPrompt: null,
-        inferenceSource:
-          preferredModelSelection.fundingSource === "demo_public"
-            ? "free"
-            : preferredModelSelection.fundingSource === "user_key"
-              ? "user_key"
-              : preferredModelSelection.fundingSource === "user_chatgpt"
-                ? "chatgpt"
-                : "platform",
+        inferenceSource: mapRequestedFundingSourceToInferenceSource(
+          preferredModelSelection.fundingSource,
+        ),
         requestedFundingSource: preferredModelSelection.fundingSource,
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: lastUserMessageId,
@@ -459,13 +582,14 @@ export function useWebSendFlowController<
       if (turnResult.error) throw new Error(turnResult.error);
       await current.loadThreadMessages(threadId, usableSession);
     } catch (error) {
-      const message = toErrorMessage(error, "Failed to run model.");
+      const message = formatSendFlowErrorMessage(error, "Failed to run model.");
       setErrorForThread(threadId, message);
       maybeShowBuilderLimitUpgrade(message);
     } finally {
       current.setThreadRunSending(threadId, false);
     }
   }, [
+    isThreadBusy,
     maybeShowBuilderLimitUpgrade,
     resolvePreferredModelSelection,
     syncThreadModelSelection,
@@ -475,5 +599,6 @@ export function useWebSendFlowController<
     sendUserMessage,
     retryLastTurn,
     regenerateLastTurn,
+    requestPreviewFitRepair,
   };
 }

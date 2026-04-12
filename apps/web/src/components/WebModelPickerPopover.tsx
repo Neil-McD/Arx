@@ -34,7 +34,6 @@ type WebModelPickerPopoverProps = {
   visiblePickerModels: PickerModel[];
   selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
-  hasPaidAccess: boolean;
   hasUserKeyConnection: boolean;
   hasUserChatgptConnection: boolean;
   hasSession: boolean;
@@ -129,7 +128,6 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
     visiblePickerModels,
     selectedPickerModelId,
     modelToggles,
-    hasPaidAccess,
     hasUserKeyConnection,
     hasUserChatgptConnection,
     hasSession,
@@ -217,20 +215,14 @@ export function WebModelPickerPopover(props: WebModelPickerPopoverProps) {
                     const supportsUserChatgpt = model.supportedFundingSources.includes("user_chatgpt");
                     const requiresPaidPlan = !supportsDemo;
                     const showSoonBadge = requiresPaidPlan && !isModelEnabled;
-                    const showPremiumBadge =
-                      requiresPaidPlan &&
-                      !showSoonBadge &&
-                      !hasPaidAccess &&
-                      !(hasUserKeyConnection && supportsUserKey) &&
-                      !(hasUserChatgptConnection && supportsUserChatgpt);
+                    const showPremiumBadge = requiresPaidPlan && !showSoonBadge;
                     const lockedLabel = supportsDemo
                       ? "Free"
                       : !hasSession
                           ? "Sign in"
                           : showSoonBadge
                             ? "Soon"
-                            : !hasPaidAccess &&
-                                !(hasUserKeyConnection && supportsUserKey) &&
+                            : !(hasUserKeyConnection && supportsUserKey) &&
                                 !(hasUserChatgptConnection && supportsUserChatgpt)
                               ? supportsUserChatgpt && !supportsUserKey
                                 ? "Connect ChatGPT"

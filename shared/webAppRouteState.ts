@@ -9,11 +9,12 @@ export type PublicRoute =
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
 
+export type AppShellVariant = "standard" | "mobile";
+
 export type AppRouteState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
-  communityId: string | null;
   communitySlug: string | null;
   communityTab: CommunityTab;
   threadId: string | null;
@@ -29,6 +30,82 @@ export type AppRoutePathState = {
 };
 
 export const DEFAULT_POST_SIGN_IN_PATH = "/workspace";
+export const MOBILE_SHELL_PATH_PREFIX = "/m";
+export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
+export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";
+
+function joinPathWithQueryAndHash(pathname: string, search: string, hash: string): string {
+  return `${pathname || "/"}${search || ""}${hash || ""}` || "/";
+}
+
+function isPublicRoutePath(pathname: string): boolean {
+  const segments = splitPathSegments(pathname);
+  if (pathname === "/checkout/success" || pathname === "/claim") return true;
+  if (segments[0] !== "c") return false;
+  return segments.length === 2 || (segments.length === 3 && segments[2] === "preview");
+}
+
+export function readShellVariantFromPathname(pathname: string): AppShellVariant {
+  const segments = splitPathSegments(pathname);
+  return segments[0] === "m" ? "mobile" : "standard";
+}
+
+export function stripShellVariantFromPathname(pathname: string): string {
+  const parsed = new URL(String(pathname || "/"), "http://local.arx");
+  const segments = splitPathSegments(parsed.pathname);
+  if (segments[0] !== "m") {
+    return joinPathWithQueryAndHash(parsed.pathname || "/", parsed.search, parsed.hash);
+  }
+  const normalizedPathname = segments.length <= 1 ? "/" : `/${segments.slice(1).map(encodeURIComponent).join("/")}`;
+  return joinPathWithQueryAndHash(normalizedPathname, parsed.search, parsed.hash);
+}
+
+export function applyShellVariantToAppPath(path: string, shellVariant: AppShellVariant): string {
+  const raw = String(path ?? "").trim();
+  if (!raw.startsWith("/")) return raw;
+  const parsed = new URL(raw, "http://local.arx");
+  const stripped = stripShellVariantFromPathname(joinPathWithQueryAndHash(parsed.pathname, parsed.search, parsed.hash));
+  const strippedParsed = new URL(stripped, "http://local.arx");
+  const appPathState = parseAppRouteFromPathname(strippedParsed.pathname || "/");
+  if (!appPathState) {
+    return raw;
+  }
+  const normalizedBasePath = strippedParsed.pathname || "/";
+  const nextPathname =
+    shellVariant === "mobile"
+      ? normalizedBasePath === "/"
+        ? MOBILE_SHELL_PATH_PREFIX
+        : `${MOBILE_SHELL_PATH_PREFIX}${normalizedBasePath}`
+      : normalizedBasePath;
+  return joinPathWithQueryAndHash(nextPathname, strippedParsed.search, strippedParsed.hash);
+}
+
+export function applyShellVariantToPublicPath(path: string, shellVariant: AppShellVariant): string {
+  const raw = String(path ?? "").trim();
+  if (!raw.startsWith("/")) return raw;
+  const parsed = new URL(raw, "http://local.arx");
+  const stripped = stripShellVariantFromPathname(joinPathWithQueryAndHash(parsed.pathname, parsed.search, parsed.hash));
+  const strippedParsed = new URL(stripped, "http://local.arx");
+  const normalizedBasePath = strippedParsed.pathname || "/";
+  if (!isPublicRoutePath(normalizedBasePath)) {
+    return raw;
+  }
+  const nextPathname =
+    shellVariant === "mobile"
+      ? normalizedBasePath === "/"
+        ? MOBILE_SHELL_PATH_PREFIX
+        : `${MOBILE_SHELL_PATH_PREFIX}${normalizedBasePath}`
+      : normalizedBasePath;
+  return joinPathWithQueryAndHash(nextPathname, strippedParsed.search, strippedParsed.hash);
+}
+
+export function applyShellVariantToKnownPath(path: string, shellVariant: AppShellVariant): string {
+  const raw = String(path ?? "").trim();
+  if (!raw.startsWith("/")) return raw;
+  const appPath = applyShellVariantToAppPath(raw, shellVariant);
+  if (appPath !== raw) return appPath;
+  return applyShellVariantToPublicPath(raw, shellVariant);
+}
 
 export function buildWorkspaceDraftPath(): string {
   return "/workspace";
@@ -63,6 +140,12 @@ export function buildCommunityFunnelPreviewPath(communitySlug: string | null | u
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
   return `/c/${encodeURIComponent(slug)}/preview`;
+}
+
+export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/c/${encodeURIComponent(slug)}`;
 }
 
 export type CommunityFunnelPreviewRouteCommunity = {
@@ -278,7 +361,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
 }
 
 export function readPublicRouteFromLocation(): PublicRoute {
-  const path = window.location.pathname || "/";
+  const path = stripShellVariantFromPathname(window.location.pathname || "/");
   if (path === "/checkout/success") {
     const params = new URLSearchParams(window.location.search);
     const sessionId = (params.get("session_id") ?? "").trim();
@@ -304,13 +387,12 @@ export function readPublicRouteFromLocation(): PublicRoute {
 }
 
 export function readAppRouteFromLocation(): AppRouteState {
-  const fromPath = parseAppRouteFromPathname(window.location.pathname || "/");
+  const fromPath = parseAppRouteFromPathname(stripShellVariantFromPathname(window.location.pathname || "/"));
   if (fromPath) {
     return {
       page: fromPath.page,
       view: fromPath.view,
       settingsPage: fromPath.settingsPage,
-      communityId: null,
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
       threadId: fromPath.threadId,
@@ -321,7 +403,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     page: "workspace",
     view: "home",
     settingsPage: "agent",
-    communityId: null,
     communitySlug: null,
     communityTab: "chat",
     threadId: null,

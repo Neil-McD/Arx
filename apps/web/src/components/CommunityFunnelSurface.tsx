@@ -41,6 +41,7 @@ export type CommunityFunnelSurfaceAction = {
 };
 
 type CommunityFunnelSurfaceProps = {
+  isMobile?: boolean;
   title: string;
   heroMediaKind: CommunityFunnelHeroMediaKind;
   heroMediaUrl: string | null;
@@ -335,6 +336,7 @@ function CommunityFunnelActionModule(props: {
 
 export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
   const {
+    isMobile = false,
     title,
     heroMediaKind,
     heroMediaUrl,
@@ -357,8 +359,8 @@ export function CommunityFunnelSurface(props: CommunityFunnelSurfaceProps) {
   } = props;
 
   return (
-    <div className="public-funnel-page">
-      <div className="public-funnel-shell public-funnel-shell-split">
+    <div className={`public-funnel-page${isMobile ? " public-funnel-page-mobile" : ""}`}>
+      <div className={`public-funnel-shell public-funnel-shell-split${isMobile ? " public-funnel-shell-mobile" : ""}`}>
         <article className="public-funnel-main-column">
           <h1 className="public-funnel-title">{title}</h1>
 

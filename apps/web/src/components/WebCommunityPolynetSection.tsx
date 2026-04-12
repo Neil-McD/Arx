@@ -22,19 +22,6 @@ type WebCommunityPolynetSectionProps = {
   };
 };
 
-const statGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: 12,
-} as const;
-
-const statCardStyle = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 16,
-  padding: 14,
-  background: "rgba(255,255,255,0.03)",
-} as const;
-
 function formatPolynetNote(raw: string | null): string | null {
   const message = String(raw ?? "").trim();
   if (!message) return null;
@@ -84,28 +71,20 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const polynetNote = formatPolynetNote(state.error);
 
   return (
-    <div className="settings-panel community-settings-panel">
-      <div style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            color: "rgba(255,255,255,0.56)",
-            fontSize: 12,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}
-        >
+    <div className="settings-panel community-settings-panel community-polynet-panel">
+      <div className="community-polynet-header">
+        <div className="community-polynet-kicker">
           Polynet
         </div>
-        <div style={{ color: "rgba(255,255,255,0.74)", fontSize: 16, lineHeight: 1.4 }}>
+        <div className="community-polynet-title">
           Community archive and retrieval health for {activeCommunityName ?? "this community"}.
         </div>
-        <div style={{ color: "rgba(255,255,255,0.52)", fontSize: 13, lineHeight: 1.5, marginTop: 8 }}>
+        <div className="community-polynet-subtitle">
           Backfill and process pending documents here to make archive memory searchable.
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+      <div className="community-polynet-actions">
         <button className="secondary" type="button" onClick={actions.refresh} disabled={state.isLoading}>
           {state.isLoading ? "Refreshing…" : "Refresh"}
         </button>
@@ -136,16 +115,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
       </div>
 
       {polynetNote ? (
-        <div
-          style={{
-            marginBottom: 16,
-            color: "rgba(255,255,255,0.58)",
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          {polynetNote}
-        </div>
+        <div className="community-polynet-note">{polynetNote}</div>
       ) : null}
 
       {!health && state.isLoading ? (
@@ -154,50 +124,50 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
         <div className="chat-empty">No archive health is available yet. Run a backfill to start indexing this community.</div>
       ) : (
         <>
-          <div style={statGridStyle}>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Total docs</div>
-              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.total_documents}</div>
+          <div className="community-polynet-stat-grid">
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Total docs</div>
+              <div className="community-polynet-stat-value community-polynet-stat-value-lg">{health.total_documents}</div>
             </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Pending</div>
-              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.pending}</div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Pending</div>
+              <div className="community-polynet-stat-value community-polynet-stat-value-lg">{health.status_counts.pending}</div>
             </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Embedded</div>
-              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.embedded}</div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Embedded</div>
+              <div className="community-polynet-stat-value community-polynet-stat-value-lg">{health.status_counts.embedded}</div>
             </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Failed</div>
-              <div style={{ fontSize: 28, fontWeight: 650, marginTop: 6 }}>{health.status_counts.failed}</div>
-            </div>
-          </div>
-
-          <div style={{ ...statGridStyle, marginTop: 16 }}>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Chat docs</div>
-              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.chat}</div>
-            </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>AI Feed docs</div>
-              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.ai_feed}</div>
-            </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Resource docs</div>
-              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.source_counts.resource}</div>
-            </div>
-            <div style={statCardStyle}>
-              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>PDF docs</div>
-              <div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>{health.pdf_counts.pdf_documents}</div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Failed</div>
+              <div className="community-polynet-stat-value community-polynet-stat-value-lg">{health.status_counts.failed}</div>
             </div>
           </div>
 
-          <div style={{ marginTop: 18, color: "rgba(255,255,255,0.72)", fontSize: 14, lineHeight: 1.5 }}>
+          <div className="community-polynet-stat-grid community-polynet-stat-grid-secondary">
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Chat docs</div>
+              <div className="community-polynet-stat-value">{health.source_counts.chat}</div>
+            </div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">AI Feed docs</div>
+              <div className="community-polynet-stat-value">{health.source_counts.ai_feed}</div>
+            </div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">Resource docs</div>
+              <div className="community-polynet-stat-value">{health.source_counts.resource}</div>
+            </div>
+            <div className="community-polynet-stat-card">
+              <div className="community-polynet-stat-label">PDF docs</div>
+              <div className="community-polynet-stat-value">{health.pdf_counts.pdf_documents}</div>
+            </div>
+          </div>
+
+          <div className="community-polynet-meta">
             <div>
               Last embedded: {health.last_embedding_updated_at ? health.last_embedding_updated_at : "Never"}
             </div>
             {health.latest_failure_message ? (
-              <div style={{ marginTop: 8 }}>
+              <div className="community-polynet-meta-error">
                 Latest failure: {health.latest_failure_message}
               </div>
             ) : null}

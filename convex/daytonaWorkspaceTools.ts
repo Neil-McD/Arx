@@ -134,6 +134,7 @@ async function ensureDaytonaWorkspaceDirectoryExists(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   relPath: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolFailure | null> {
   const segments = String(params.relPath ?? "")
     .split("/")
@@ -150,6 +151,7 @@ async function ensureDaytonaWorkspaceDirectoryExists(params: {
       toolboxProxyUrl: params.toolboxProxyUrl,
       sandboxId: params.sandboxId,
       path: absolutePath,
+      signal: params.signal,
     });
     if (!info.ok) return info;
     if (info.value.exists) {
@@ -168,6 +170,7 @@ async function ensureDaytonaWorkspaceDirectoryExists(params: {
       toolboxProxyUrl: params.toolboxProxyUrl,
       sandboxId: params.sandboxId,
       path: absolutePath,
+      signal: params.signal,
     });
     if (!created.ok) return created;
   }
@@ -180,6 +183,7 @@ async function readDaytonaWorkspaceFileRaw(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   normalizedPath: string;
+  signal?: AbortSignal;
 }): Promise<
   | {
       ok: true;
@@ -192,6 +196,7 @@ async function readDaytonaWorkspaceFileRaw(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     path: resolveWorkspaceCwd(params.normalizedPath),
+    signal: params.signal,
   });
   if (!result.ok) return result;
   return {
@@ -205,6 +210,7 @@ async function listDaytonaWorkspaceSuggestions(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   basename: string;
+  signal?: AbortSignal;
 }): Promise<string[]> {
   const needle = String(params.basename ?? "").trim();
   if (!needle) return [];
@@ -221,6 +227,7 @@ async function listDaytonaWorkspaceSuggestions(params: {
     cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 10,
     allowNonZero: true,
+    signal: params.signal,
   });
   if (!result.ok || result.exitCode !== 0) return [];
   return String(result.stdout ?? "")
@@ -274,6 +281,7 @@ export async function listDaytonaWorkspaceDirectory(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   relPath: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   let normalizedPath: string;
   try {
@@ -311,6 +319,7 @@ export async function listDaytonaWorkspaceDirectory(params: {
     cwd: resolveWorkspaceCwd(normalizedPath),
     timeoutSeconds: 20,
     allowNonZero: true,
+    signal: params.signal,
   });
 
   return mapCommandResult({
@@ -328,6 +337,7 @@ export async function readDaytonaWorkspaceFile(params: {
   relPath: string;
   offset?: number;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   let normalizedPath: string;
   try {
@@ -351,6 +361,7 @@ export async function readDaytonaWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     path: absolutePath,
+    signal: params.signal,
   });
   if (!fileInfo.ok) return fileInfo;
   if (fileInfo.value.exists && fileInfo.value.isDirectory) {
@@ -375,6 +386,7 @@ export async function readDaytonaWorkspaceFile(params: {
       cwd: resolveWorkspaceCwd(normalizedPath),
       timeoutSeconds: 20,
       allowNonZero: true,
+      signal: params.signal,
     });
     return mapCommandResult({
       normalizedPath,
@@ -390,6 +402,7 @@ export async function readDaytonaWorkspaceFile(params: {
       toolboxProxyUrl: params.toolboxProxyUrl,
       sandboxId: params.sandboxId,
       basename: normalizedPath.split("/").filter(Boolean).pop() || normalizedPath,
+      signal: params.signal,
     });
     const suggestionText =
       suggestions.length > 0
@@ -418,6 +431,7 @@ export async function readDaytonaWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     normalizedPath,
+    signal: params.signal,
   });
   if (!raw.ok) return raw;
 
@@ -437,6 +451,7 @@ export async function globDaytonaWorkspacePaths(params: {
   sandboxId: string;
   pattern: string;
   relPath?: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   const normalizedPath = normalizeOptionalRelativeWorkspacePath(params.relPath);
   const pattern = String(params.pattern ?? "").trim();
@@ -453,6 +468,7 @@ export async function globDaytonaWorkspacePaths(params: {
     cwd: resolveWorkspaceCwd(normalizedPath),
     timeoutSeconds: 20,
     allowNonZero: true,
+    signal: params.signal,
   });
 
   return mapCommandResult({
@@ -469,6 +485,7 @@ export async function grepDaytonaWorkspaceFiles(params: {
   sandboxId: string;
   pattern: string;
   relPath?: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   const normalizedPath = normalizeOptionalRelativeWorkspacePath(params.relPath);
   const pattern = String(params.pattern ?? "").trim();
@@ -486,6 +503,7 @@ export async function grepDaytonaWorkspaceFiles(params: {
     cwd: resolveWorkspaceCwd(normalizedPath),
     timeoutSeconds: 20,
     allowNonZero: true,
+    signal: params.signal,
   });
   if (!result.ok) return result;
   if (result.exitCode === 1) {
@@ -509,6 +527,7 @@ export async function sha256DaytonaWorkspaceFile(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   relPath: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   let normalizedPath: string;
   try {
@@ -531,6 +550,7 @@ export async function sha256DaytonaWorkspaceFile(params: {
     cwd: DAYTONA_WORKSPACE_ROOT,
     timeoutSeconds: 20,
     allowNonZero: true,
+    signal: params.signal,
   });
 
   return mapCommandResult({
@@ -547,6 +567,7 @@ export async function writeDaytonaWorkspaceFile(params: {
   sandboxId: string;
   relPath: string;
   content: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   let normalizedPath: string;
   try {
@@ -576,6 +597,7 @@ export async function writeDaytonaWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     path: absolutePath,
+    signal: params.signal,
   });
   if (!existedBeforeInfo.ok) return existedBeforeInfo;
   if (existedBeforeInfo.value.exists && existedBeforeInfo.value.isDirectory) {
@@ -595,6 +617,7 @@ export async function writeDaytonaWorkspaceFile(params: {
       toolboxProxyUrl: params.toolboxProxyUrl,
       sandboxId: params.sandboxId,
       relPath: parentDir,
+      signal: params.signal,
     });
     if (ensuredParent) return ensuredParent;
   }
@@ -605,6 +628,7 @@ export async function writeDaytonaWorkspaceFile(params: {
     sandboxId: params.sandboxId,
     path: absolutePath,
     content: String(params.content ?? ""),
+    signal: params.signal,
   });
   if (!uploaded.ok) {
     return {
@@ -621,6 +645,7 @@ export async function writeDaytonaWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     path: absolutePath,
+    signal: params.signal,
   });
   if (!verified.ok) {
     return {
@@ -668,6 +693,7 @@ export async function editDaytonaWorkspaceFile(params: {
   oldText: string;
   newText: string;
   replaceAll?: boolean;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   let normalizedPath: string;
   try {
@@ -687,6 +713,7 @@ export async function editDaytonaWorkspaceFile(params: {
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     normalizedPath,
+    signal: params.signal,
   });
   if (!current.ok) return current;
 
@@ -748,6 +775,7 @@ export async function editDaytonaWorkspaceFile(params: {
     sandboxId: params.sandboxId,
     relPath: normalizedPath,
     content: next,
+    signal: params.signal,
   });
   if (!written.ok) return written;
   const matchStrategy = exactMatch ? "exact" : "trimmed";
@@ -765,6 +793,7 @@ export async function runDaytonaWorkspaceBash(params: {
   sandboxId: string;
   command: string;
   relPath?: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   const normalizedPath = normalizeOptionalRelativeWorkspacePath(params.relPath);
   const result = await executeDaytonaCommand({
@@ -775,6 +804,7 @@ export async function runDaytonaWorkspaceBash(params: {
     cwd: resolveWorkspaceCwd(normalizedPath),
     timeoutSeconds: 60,
     allowNonZero: true,
+    signal: params.signal,
   });
   if (!result.ok) return result;
   return {

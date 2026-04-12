@@ -1,5 +1,7 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import {
+  applyShellVariantToPublicPath,
+  readShellVariantFromPathname,
   clearPendingPublicJoin,
   classifyPublicCommunityJoinError,
   getErrorMessage,
@@ -7,14 +9,14 @@ import {
   readPendingPublicJoinBrandosAid,
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
-  type CloudSessionLike,
+  type SessionLike,
 } from "./pay_first";
 
 type OpenExternalUrlClient = {
   openExternalUrl: (url: string) => Promise<void>;
 };
 
-type UsePendingPublicCommunityJoinControllerArgs<SessionT extends CloudSessionLike> = {
+type UsePendingPublicCommunityJoinControllerArgs<SessionT extends SessionLike> = {
   shellClient: OpenExternalUrlClient;
   session: SessionT | null;
   loadCommunities: (session: SessionT) => Promise<void>;
@@ -30,7 +32,7 @@ type UsePendingPublicCommunityJoinControllerArgs<SessionT extends CloudSessionLi
   joinCommunityFailureMessage?: string;
 };
 
-export function usePendingPublicCommunityJoinController<SessionT extends CloudSessionLike>(
+export function usePendingPublicCommunityJoinController<SessionT extends SessionLike>(
   args: UsePendingPublicCommunityJoinControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
@@ -81,7 +83,9 @@ export function usePendingPublicCommunityJoinController<SessionT extends CloudSe
       current.setDiscoverError(current.missingCommunitySlugMessage ?? "Missing community slug.");
       return;
     }
-    const ok = await openExternalUrl(`${base}/c/${encodeURIComponent(slug)}`);
+    const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
+    const landingPath = applyShellVariantToPublicPath(`/c/${encodeURIComponent(slug)}`, shellVariant);
+    const ok = await openExternalUrl(`${base}${landingPath}`);
     if (!ok) {
       current.setDiscoverError(current.openJoinPageFailureMessage ?? "Failed to open the join page.");
     }

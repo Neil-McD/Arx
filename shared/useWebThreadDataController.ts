@@ -70,29 +70,6 @@ function compareThreadMessages(a: ThreadMessageRecord, b: ThreadMessageRecord): 
   return a.id.localeCompare(b.id);
 }
 
-function mergeThreadMessagesForThread<ThreadMessageT extends ThreadMessageRecord>(params: {
-  previous: ThreadMessageT[];
-  fetched: ThreadMessageT[];
-  threadId: string;
-}): ThreadMessageT[] {
-  const { previous, fetched, threadId } = params;
-  const otherThreads = previous.filter((message) => message.thread_id !== threadId);
-  const previousForThread = previous.filter((message) => message.thread_id === threadId);
-  const mergedById = new Map<string, ThreadMessageT>();
-
-  for (const message of fetched) {
-    mergedById.set(message.id, message);
-  }
-  for (const message of previousForThread) {
-    if (!mergedById.has(message.id)) {
-      mergedById.set(message.id, message);
-    }
-  }
-
-  const mergedForThread = Array.from(mergedById.values()).sort(compareThreadMessages);
-  return [...otherThreads, ...mergedForThread];
-}
-
 type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   fetchModelRegistryRows?: (session: SessionT) => Promise<unknown[] | null>;
   toEpochSeconds: (value: string) => number;
@@ -193,13 +170,17 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) {
-      current.setThreadMessages([]);
+      if (current.activeThreadId === threadId) {
+        current.setThreadMessages([]);
+      }
       return;
     }
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       current.setThreadError("Convex is required for cloud threads in this build.");
-      current.setThreadMessages([]);
+      if (current.activeThreadId === threadId) {
+        current.setThreadMessages([]);
+      }
       return;
     }
 
@@ -210,17 +191,16 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
         pageSize: 1000,
         maxScan: 4000,
       });
-      const fetchedRows = (convexRows ?? []) as ThreadMessageT[];
-      current.setThreadMessages((prev) =>
-        mergeThreadMessagesForThread({
-          previous: prev,
-          fetched: fetchedRows,
-          threadId,
-        }),
-      );
+      if (argsRef.current.activeThreadId !== threadId) return;
+      const fetchedRows = ((convexRows ?? []) as unknown as ThreadMessageT[])
+        .slice()
+        .sort(compareThreadMessages);
+      current.setThreadMessages(fetchedRows);
     } catch (error) {
       console.warn("Failed to load Convex thread messages:", error);
-      current.setThreadMessages([]);
+      if (argsRef.current.activeThreadId === threadId) {
+        current.setThreadMessages([]);
+      }
     }
   }, []);
 

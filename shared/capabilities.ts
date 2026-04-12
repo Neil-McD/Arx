@@ -1,8 +1,7 @@
 import {
-  evaluateCanonicalGate,
-  resolveEffectiveTierForGate,
-  resolveEntitledCapabilityFamiliesForGate,
+  resolveCanonicalGatePolicy,
 } from "./canonicalGateEngine";
+import { isCreatorDevTierOverrideEmail } from "./devTierOverride";
 
 export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
@@ -16,7 +15,6 @@ export type UserAccessPolicy = {
   isPaid: boolean;
   threadMode: ThreadMode;
   allowMultipleThreads: boolean;
-  allowPlatformInference: boolean;
   allowGuestInference: boolean;
   allowCommunityTools: boolean;
   allowWebResearch: boolean;
@@ -30,6 +28,7 @@ export function resolveUserAccessPolicy(input: {
   surface: "web";
   authState: AccessAuthState;
   builderTier?: string | null;
+  userEmail?: string | null;
   hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
   return resolveUserAccessPolicyViaCanonicalGate(input);
@@ -39,21 +38,17 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
   surface: "web";
   authState: AccessAuthState;
   builderTier?: string | null;
+  userEmail?: string | null;
   hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
-  const paidModelDecision = evaluateCanonicalGate({
+  const policy = resolveCanonicalGatePolicy({
     surface: input.surface,
+    authState: input.authState,
+    tier: input.builderTier ?? null,
     executionMode: "cloud",
-    requestedFundingSource: "platform",
-    authState: input.authState,
-    tier: input.builderTier ?? null,
-    hasUserChatGptConnection: Boolean(input.hasUserChatGptConnection),
+    requestedFundingSource: "demo_public",
   });
-
-  const effectiveTier = resolveEffectiveTierForGate({
-    authState: input.authState,
-    tier: input.builderTier ?? null,
-  });
+  const effectiveTier = policy.decision.effectiveTier;
 
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
@@ -66,10 +61,9 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
       : "free";
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
-  const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
-    authState: input.authState,
-    tier: input.builderTier ?? null,
-  });
+  const entitledCapabilityFamilies = policy.entitledCapabilityFamilies;
+  const canCreateCommunityInAlpha =
+    effectiveTier === "architect" && isCreatorDevTierOverrideEmail(input.userEmail ?? null);
 
   return {
     surface: input.surface,
@@ -78,16 +72,12 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     isPaid: hasWorkbenchAccess,
     threadMode,
     allowMultipleThreads: threadMode !== "single_guest",
-    allowPlatformInference:
-      paidModelDecision.allowed &&
-      paidModelDecision.lane === "platform" &&
-      paidModelDecision.fundingSource === "platform",
     allowGuestInference: true,
     allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
     allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
     allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
     allowCommunityJoin: isAuthenticated,
-    allowCommunityCreate: effectiveTier === "architect",
+    allowCommunityCreate: canCreateCommunityInAlpha,
     allowPersonalMemory: hasWorkbenchAccess,
   };
 }

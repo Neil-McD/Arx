@@ -1,4 +1,4 @@
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   DAYTONA_WORKSPACE_ROOT,
   createDaytonaSandbox,
@@ -11,6 +11,7 @@ import {
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
+import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 export type DaytonaProbeExecution =
   | {
@@ -37,6 +38,10 @@ export type WorkspaceSandboxSession = {
   providerSandboxId: string;
   toolboxProxyUrl: string;
   region: string | null;
+  sandboxCpu: number;
+  sandboxMemoryGiB: number;
+  sandboxDiskGiB: number;
+  startedAt: number;
   lifecycleMode: "native_stop_delete" | "manual_delete_fallback";
 };
 
@@ -50,16 +55,24 @@ function buildRunPinnedDaytonaConfig(config: DaytonaConfig): DaytonaConfig {
   };
 }
 
-export async function resolveWorkspaceProjectLabel(params: {
+export async function resolveWorkspaceProjectContext(params: {
   ctx: any;
   projectId?: string | null;
   authSubject?: string | null;
-}): Promise<string | null> {
-  if (!params.projectId || !params.authSubject) return null;
-  return await params.ctx.runQuery(api.projects.getCloudProjectDisplayLabel as any, {
+}): Promise<{ label: string | null; description: string | null }> {
+  if (!params.projectId || !params.authSubject) {
+    return { label: null, description: null };
+  }
+  const row = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
     projectId: params.projectId,
     authSubject: params.authSubject,
   });
+  if (!row) {
+    return { label: null, description: null };
+  }
+  const label = String(row.name ?? "").trim() || "Workspace";
+  const description = String(row.description ?? "").trim() || null;
+  return { label, description };
 }
 
 export async function executeDaytonaProbeToolCall(params: {
@@ -130,7 +143,7 @@ export async function executeDaytonaProbeToolCall(params: {
 
 export async function createWorkspaceSandboxSession(params: {
   ctx: any;
-  userId: string;
+  userId: any;
   authSubject: string;
   projectId: string;
   runId: string;
@@ -144,6 +157,84 @@ export async function createWorkspaceSandboxSession(params: {
       details?: Record<string, unknown>;
     }
 > {
+  const canonicalTier = await params.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
+    userId: params.userId,
+  });
+  if (canonicalTier !== "builder" && canonicalTier !== "architect") {
+    return {
+      ok: false,
+      status: 403,
+      code: "plan_required",
+      message: "Workspace tools require Builder access.",
+    };
+  }
+  const runtimeActor = await params.ctx.runQuery(
+    internal.authActor.resolveAuthenticatedActorInternal as any,
+    {
+      authSubject: params.authSubject,
+    },
+  );
+  const creatorDevCreditBypass = isCreatorDevTierOverrideEmail(runtimeActor?.email ?? null);
+  let creditBalance = await params.ctx.runQuery(
+    internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
+    {
+      userId: params.userId,
+    },
+  );
+  if (!creditBalance && canonicalTier === "builder") {
+    const latestBuilderBillingCycle = await params.ctx.runQuery(
+      internal.builderCommerce.getLatestBuilderBillingCycleForOwnerInternal as any,
+      {
+        ownerUserId: params.userId,
+      },
+    );
+    if (
+      latestBuilderBillingCycle?.currentPeriodStartAt &&
+      latestBuilderBillingCycle?.currentPeriodEndAt
+    ) {
+      await params.ctx.runMutation(internal.workspaceCredits.syncBuilderMonthlyCreditsInternal as any, {
+        userId: params.userId,
+        targetTier: "builder",
+        grantsAccess: true,
+        cycleStartedAt: latestBuilderBillingCycle.currentPeriodStartAt,
+        cycleEndsAt: latestBuilderBillingCycle.currentPeriodEndAt,
+      });
+      creditBalance = await params.ctx.runQuery(
+        internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
+        {
+          userId: params.userId,
+        },
+      );
+    }
+  }
+  if (!creditBalance && canonicalTier === "builder" && !creatorDevCreditBypass) {
+    return {
+      ok: false,
+      status: 503,
+      code: "workspace_credits_unavailable",
+      message: "Workspace compute credits are unavailable for this account.",
+    };
+  }
+  const remainingCredits =
+    Number(creditBalance?.includedCreditsBalance ?? 0) +
+    Number(creditBalance?.purchasedCreditsBalance ?? 0);
+  if (creatorDevCreditBypass) {
+    console.info("[workspace_tools] creator dev credit bypass active", {
+      userId: String(params.userId),
+      canonicalTier,
+      hasCreditBalance: Boolean(creditBalance),
+      remainingCredits,
+    });
+  }
+  if (creditBalance && remainingCredits <= 0 && !creatorDevCreditBypass) {
+    return {
+      ok: false,
+      status: 402,
+      code: "workspace_credits_exhausted",
+      message: "You've used your included workspace compute credits.",
+    };
+  }
+
   const runtimeProject = await params.ctx.runAction(api.projects.ensureCloudProjectVolume as any, {
     authSubject: params.authSubject,
     projectId: params.projectId,
@@ -176,12 +267,18 @@ export async function createWorkspaceSandboxSession(params: {
       providerSandboxId: probe.providerSandboxId,
       toolboxProxyUrl: probe.toolboxProxyUrl,
       region: probe.region,
+      sandboxCpu: runPinnedConfig.sandboxCpu,
+      sandboxMemoryGiB: runPinnedConfig.sandboxMemoryGiB,
+      sandboxDiskGiB: runPinnedConfig.sandboxDiskGiB,
+      startedAt: Date.now(),
       lifecycleMode: probe.lifecycleMode,
     },
   };
 }
 
 export async function cleanupWorkspaceSandboxSession(params: {
+  ctx: any;
+  userId: any;
   session: WorkspaceSandboxSession;
   runId: string;
   projectId: string;
@@ -242,4 +339,39 @@ export async function cleanupWorkspaceSandboxSession(params: {
       lifecycle_mode: "explicit_stop_then_delete",
     },
   });
+
+  const computeTerminated = stopSettled.ok || deleted.ok;
+  if (computeTerminated) {
+    const endedAt = Date.now();
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any, {
+        chargeKey: params.session.providerSandboxId,
+        userId: params.userId,
+        projectId: params.projectId,
+        runId: params.runId,
+        providerSandboxId: params.session.providerSandboxId,
+        startedAt: params.session.startedAt,
+        endedAt,
+        sandboxCpu: params.session.sandboxCpu,
+        sandboxMemoryGiB: params.session.sandboxMemoryGiB,
+        sandboxDiskGiB: params.session.sandboxDiskGiB,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await params.appendRunEvent({
+        eventType: "sandbox_charge_failed",
+        eventKey: `${params.runId}:workspace_sandbox_charge_failed:1`,
+        payload: {
+          run_id: params.runId,
+          sandbox_id: params.session.providerSandboxId,
+          error_message: message || "Failed to record workspace compute charge.",
+          cleanup_status: deleted.ok ? "sandbox_deleted" : "sandbox_delete_failed",
+        },
+      });
+    }
+  }
+
+  if (!deleted.ok) {
+    return;
+  }
 }

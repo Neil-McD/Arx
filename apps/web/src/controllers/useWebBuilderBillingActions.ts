@@ -1,17 +1,21 @@
 import { type Dispatch, type SetStateAction } from "react";
 import { buildBuilderCheckoutRequestPayload } from "../../../../shared/builderBilling";
-import type { PendingAuthIntentInput } from "../../../../shared/cloudAuthIntent";
-import type { CloudSession } from "../cloudAuth";
+import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
+import type { AuthSession } from "../auth";
 import {
   useBuilderBillingActionsCore,
-  type BuilderCheckoutTier,
+  type BuilderCheckoutRequestTier,
   type BuilderUpgradeContext,
 } from "../../../../shared/useBuilderBillingActionsCore";
 
 type UseWebBuilderBillingActionsArgs = {
-  getSession: () => CloudSession | null;
-  ensureSession?: () => Promise<CloudSession | null>;
+  getSession: () => AuthSession | null;
+  ensureSession?: () => Promise<AuthSession | null>;
   openAuthGate: (intent: PendingAuthIntentInput) => void;
+  onCheckoutStarted?: (details: {
+    tier: BuilderCheckoutRequestTier;
+    context: BuilderUpgradeContext;
+  }) => void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
   navigateToUrl: (url: string) => void;
@@ -24,7 +28,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     setBuilderBillingError: args.setBuilderBillingError,
     setIsStartingBuilderCheckout: args.setIsStartingBuilderCheckout,
     onMissingAuth: (kind, details) => {
-      const tier: BuilderCheckoutTier = details.tier ?? "builder";
+      const tier: BuilderCheckoutRequestTier = details.tier ?? "builder";
       const context: BuilderUpgradeContext = details.context ?? "builder";
       args.openAuthGate({ reason: "start_builder_checkout", payload: { tier, context } });
     },
@@ -32,7 +36,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
       tier,
       context,
     }: {
-      tier: BuilderCheckoutTier;
+      tier: BuilderCheckoutRequestTier;
       context: BuilderUpgradeContext;
     }) =>
       buildBuilderCheckoutRequestPayload({
@@ -41,6 +45,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
         context,
         tier,
       }),
+    onCheckoutStarted: args.onCheckoutStarted,
     openUrl: (_kind, url) => {
       args.navigateToUrl(url);
       return true;

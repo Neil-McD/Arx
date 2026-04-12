@@ -89,6 +89,7 @@ export function useCommunityChatRealtime<
   argsRef.current = args;
   const onLoadProfilesRef = useRef(args.onLoadProfiles);
   const liveClientRef = useRef<CloudCommunityChatLiveClient | null>(null);
+  const messageUpdateSeqRef = useRef(0);
 
   useEffect(() => {
     onLoadProfilesRef.current = args.onLoadProfiles;
@@ -152,36 +153,40 @@ export function useCommunityChatRealtime<
           threadId,
           limit: 100,
           onUpdate: (rowsDesc) => {
-            if (cancelled) return;
-            const mappedRows = rowsDesc
-              .map((row) => latestArgs.toCommunityChatMessage(row))
-              .filter(Boolean) as ChatMessageT[];
-            mappedRows.sort((a, b) => a.seq - b.seq);
+            const updateSeq = (messageUpdateSeqRef.current += 1);
+            void (async () => {
+              if (cancelled) return;
+              const mappedRows = rowsDesc
+                .map((row) => latestArgs.toCommunityChatMessage(row))
+                .filter(Boolean) as ChatMessageT[];
+              mappedRows.sort((a, b) => a.seq - b.seq);
 
-            const knownIds = latestArgs.communityMessageIdsRef.current;
-            const newMessages = mappedRows.filter((message) => !knownIds.has(message.id));
-            if (newMessages.length > 0) {
-              const uniqueSenders = Array.from(new Set(newMessages.map((message) => message.sender_id)));
-              if (uniqueSenders.length > 0) {
-                void onLoadProfilesRef.current?.(uniqueSenders, usableSession);
+              const knownIds = latestArgs.communityMessageIdsRef.current;
+              const newMessages = mappedRows.filter((message) => !knownIds.has(message.id));
+              if (newMessages.length > 0) {
+                const uniqueSenders = Array.from(new Set(newMessages.map((message) => message.sender_id)));
+                if (uniqueSenders.length > 0) {
+                  await onLoadProfilesRef.current?.(uniqueSenders, usableSession);
+                  if (cancelled || messageUpdateSeqRef.current !== updateSeq) return;
+                }
               }
-            }
 
-            let unreadDelta = 0;
-            if (!latestArgs.isUserAtBottomRef.current) {
-              for (const message of newMessages) {
-                if (message.sender_id === usableSession.user.id) continue;
-                unreadDelta += 1;
+              let unreadDelta = 0;
+              if (!latestArgs.isUserAtBottomRef.current) {
+                for (const message of newMessages) {
+                  if (message.sender_id === usableSession.user.id) continue;
+                  unreadDelta += 1;
+                }
               }
-            }
 
-            latestArgs.setCommunityMessages((prev) => reconcileLatestMessages(prev, mappedRows));
-            for (const message of mappedRows) knownIds.add(message.id);
-            if (unreadDelta > 0) {
-              latestArgs.setUnreadCount((prev) => prev + unreadDelta);
-            }
+              latestArgs.setCommunityMessages((prev) => reconcileLatestMessages(prev, mappedRows));
+              for (const message of mappedRows) knownIds.add(message.id);
+              if (unreadDelta > 0) {
+                latestArgs.setUnreadCount((prev) => prev + unreadDelta);
+              }
 
-            refreshReactionSubscription(mappedRows.map((message) => message.id));
+              refreshReactionSubscription(mappedRows.map((message) => message.id));
+            })();
           },
         });
       } catch {

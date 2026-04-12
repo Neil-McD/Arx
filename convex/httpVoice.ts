@@ -15,15 +15,17 @@ type VoiceTranscribeResult = {
   message?: string;
 };
 
+type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
+
 type HttpRouterLike = {
   route: (config: {
     path: string;
-    method: string;
-    handler: unknown;
+    method: HttpRouteMethod;
+    handler: PublicHttpAction;
   }) => void;
 };
 
-type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => PublicHttpAction;
 
 type RequireAuthenticatedActor = (
   ctx: unknown,
@@ -104,6 +106,10 @@ function extensionForMime(mimeType: string): string {
   if (mimeType.includes("mpeg")) return ".mp3";
   if (mimeType.includes("wav")) return ".wav";
   return ".webm";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 function decodeBase64Audio(input: string): Uint8Array {
@@ -200,7 +206,11 @@ async function transcribeWithOpenAi(params: {
 
   const form = new FormData();
   form.append("model", model);
-  form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
+  form.append(
+    "file",
+    new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
+    `voice${extensionForMime(params.mimeType)}`,
+  );
   if (params.language) form.append("language", params.language);
   if (params.prompt) form.append("prompt", params.prompt);
   form.append("temperature", "0");
@@ -263,7 +273,11 @@ async function transcribeWithGroqFallback(params: {
 
   const form = new FormData();
   form.append("model", model);
-  form.append("file", new Blob([params.bytes], { type: params.mimeType }), `voice${extensionForMime(params.mimeType)}`);
+  form.append(
+    "file",
+    new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
+    `voice${extensionForMime(params.mimeType)}`,
+  );
   if (params.language) form.append("language", params.language);
   if (params.prompt) form.append("prompt", params.prompt);
   form.append("temperature", "0");
@@ -450,3 +464,4 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
     }),
   });
 }
+import type { PublicHttpAction } from "convex/server";

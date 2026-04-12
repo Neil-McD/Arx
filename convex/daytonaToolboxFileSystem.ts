@@ -27,6 +27,11 @@ type DaytonaFileInfoDto = {
   size?: unknown;
 };
 
+function toBlobPart(content: string | ArrayBuffer | Uint8Array): string | ArrayBuffer {
+  if (!(content instanceof Uint8Array)) return content;
+  return content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+}
+
 function normalizeUrlPath(pathname: string): string {
   const cleaned = String(pathname ?? "").trim();
   if (!cleaned || cleaned === "/") return "/";
@@ -69,6 +74,7 @@ async function requestToolboxFile<T>(params: {
   json?: boolean;
   headers?: Record<string, string>;
   expectText?: boolean;
+  signal?: AbortSignal;
 }): Promise<DaytonaFsResult<T>> {
   const candidates = buildToolboxFileCandidates(params.toolboxProxyUrl, params.sandboxId);
   let lastFailure: DaytonaFsFailure | null = null;
@@ -96,6 +102,7 @@ async function requestToolboxFile<T>(params: {
       response = await fetch(url.toString(), {
         method: params.method,
         headers,
+        signal: params.signal,
         ...(params.body ? { body: params.body } : null),
       });
     } catch (error) {
@@ -165,6 +172,7 @@ export async function getDaytonaToolboxFileInfo(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   path: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaFsResult<{ exists: boolean; isDirectory: boolean; size: number | null }>> {
   const result = await requestToolboxFile<DaytonaFileInfoDto>({
     config: params.config,
@@ -173,6 +181,7 @@ export async function getDaytonaToolboxFileInfo(params: {
     pathSuffix: "info",
     query: { path: params.path },
     method: "GET",
+    signal: params.signal,
   });
   if (!result.ok) {
     if (result.status === 404 || result.code === "file_not_found") {
@@ -198,6 +207,7 @@ export async function createDaytonaToolboxFolder(params: {
   sandboxId: string;
   path: string;
   mode?: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaFsResult<null>> {
   return await requestToolboxFile<null>({
     config: params.config,
@@ -206,6 +216,7 @@ export async function createDaytonaToolboxFolder(params: {
     pathSuffix: "folder",
     query: { path: params.path, mode: params.mode ?? "755" },
     method: "POST",
+    signal: params.signal,
   });
 }
 
@@ -214,10 +225,19 @@ export async function uploadDaytonaToolboxFile(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   path: string;
-  content: string;
+  content: string | Blob | ArrayBuffer | Uint8Array;
+  mimeType?: string;
+  fileName?: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaFsResult<null>> {
   const form = new FormData();
-  form.set("file", new Blob([params.content], { type: "text/plain; charset=utf-8" }), "upload.txt");
+  const fileBlob =
+    params.content instanceof Blob
+      ? params.content
+      : new Blob([toBlobPart(params.content)], {
+          type: params.mimeType ?? "text/plain; charset=utf-8",
+        });
+  form.set("file", fileBlob, params.fileName ?? "upload.txt");
   return await requestToolboxFile<null>({
     config: params.config,
     toolboxProxyUrl: params.toolboxProxyUrl,
@@ -226,6 +246,7 @@ export async function uploadDaytonaToolboxFile(params: {
     query: { path: params.path },
     method: "POST",
     body: form,
+    signal: params.signal,
   });
 }
 
@@ -234,6 +255,7 @@ export async function downloadDaytonaToolboxFileText(params: {
   toolboxProxyUrl: string;
   sandboxId: string;
   path: string;
+  signal?: AbortSignal;
 }): Promise<DaytonaFsResult<string>> {
   return await requestToolboxFile<string>({
     config: params.config,
@@ -243,5 +265,6 @@ export async function downloadDaytonaToolboxFileText(params: {
     query: { path: params.path },
     method: "GET",
     expectText: true,
+    signal: params.signal,
   });
 }

@@ -95,13 +95,13 @@ async function ensureActorByResolvedSubject(args: {
   const nowMs = args.nowMs ?? Date.now();
   const requestedUserId = normalizeIdValue(args.userId);
   const email = normalizeOptionalString(args.email);
-  const displayName = normalizeOptionalString(args.displayName);
-  const avatarUrl = normalizeOptionalString(args.avatarUrl);
 
   const existing = await getUserByResolvedSubject(args.ctx, args.authSubject);
 
   let dbUserId = existing?._id ?? null;
   if (!existing) {
+    const displayName = normalizeOptionalString(args.displayName);
+    const avatarUrl = normalizeOptionalString(args.avatarUrl);
     dbUserId = await args.ctx.db.insert("users", {
       authSubject: args.authSubject,
       email,
@@ -117,13 +117,9 @@ async function ensureActorByResolvedSubject(args: {
     }
     const patch: {
       email?: string;
-      displayName?: string;
-      avatarUrl?: string;
       updatedAt?: number;
     } = {};
     if (email && email !== existing.email) patch.email = email;
-    if (displayName && displayName !== existing.displayName) patch.displayName = displayName;
-    if (avatarUrl && avatarUrl !== existing.avatarUrl) patch.avatarUrl = avatarUrl;
     if (Object.keys(patch).length > 0) {
       patch.updatedAt = nowMs;
       await args.ctx.db.patch(existing._id, patch);

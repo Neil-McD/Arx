@@ -1,4 +1,4 @@
-import { type CloudAuthSession } from "./cloudAuthSession";
+import { type AuthSessionLike } from "./authSession";
 import {
   bootstrapConvexAuthenticatedClient,
   hasConvexUrl,
@@ -38,6 +38,8 @@ type ConvexRuntimeRunRow = {
   runId?: string | null;
   threadId?: string | null;
   status?: string | null;
+  visibility?: string | null;
+  internalFollowupKind?: string | null;
   startedAt?: number | null;
   updatedAt?: number | null;
   lastEventSeq?: number | null;
@@ -95,11 +97,33 @@ export type DaytonaCloudRuntimeRunEventTransportRow = {
   created_at: string;
 };
 
+export type DaytonaCloudRuntimeComputerUseLiveSession = {
+  preview_proxy_token: string;
+  expires_at: string;
+};
+
+export type DaytonaCloudRuntimeComputerUseLiveSessionDebug = {
+  [key: string]: unknown;
+};
+
+export type DaytonaCloudRuntimeComputerUseLiveSessionLookup =
+  | {
+      ok: true;
+      session: DaytonaCloudRuntimeComputerUseLiveSession;
+      debug?: DaytonaCloudRuntimeComputerUseLiveSessionDebug | null;
+    }
+  | {
+      ok: false;
+      code: string;
+      retryable: boolean;
+      debug?: DaytonaCloudRuntimeComputerUseLiveSessionDebug | null;
+    };
+
 export function isConvexCloudThreadsEnabled(): boolean {
   return hasConvexUrl();
 }
 
-async function bootstrapConvexOwnerId(session: CloudAuthSession): Promise<{
+async function bootstrapConvexOwnerId(session: AuthSessionLike): Promise<{
   client: ConvexClient;
   authSubject: string;
 } | null> {
@@ -199,7 +223,7 @@ function mapConvexRuntimeRunEventRow(
 }
 
 export async function listConvexCloudThreadRows(
-  session: CloudAuthSession,
+  session: AuthSessionLike,
 ): Promise<DaytonaCloudThreadTransportRow[] | null> {
   const bootstrapped = await bootstrapConvexOwnerId(session);
   if (!bootstrapped) return null;
@@ -215,7 +239,7 @@ export async function listConvexCloudThreadRows(
 }
 
 export async function getConvexCloudThreadRowByThreadKey(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadKey: string;
 }): Promise<DaytonaCloudThreadTransportRow | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
@@ -232,7 +256,7 @@ export async function getConvexCloudThreadRowByThreadKey(params: {
 }
 
 export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadKey: string;
   pageSize: number;
   beforeSeq?: number;
@@ -272,7 +296,7 @@ export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
 }
 
 export async function listConvexCloudThreadMessagesByThreadKey(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadKey: string;
   limit?: number;
 }): Promise<DaytonaCloudMessageTransportRow[] | null> {
@@ -320,7 +344,7 @@ export async function listConvexCloudThreadMessagesByThreadKey(params: {
 }
 
 export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   threadKey: string;
 }): Promise<DaytonaCloudRuntimeRunTransportRow | null> {
   const bootstrapped = await bootstrapConvexOwnerId(params.session);
@@ -337,7 +361,7 @@ export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
 }
 
 export async function listConvexCloudRuntimeRunEvents(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   runId: string;
   threadId?: string;
   afterSeq?: number;
@@ -360,4 +384,72 @@ export async function listConvexCloudRuntimeRunEvents(params: {
   return (rows ?? [])
     .map((row) => mapConvexRuntimeRunEventRow(row))
     .filter((row): row is DaytonaCloudRuntimeRunEventTransportRow => Boolean(row));
+}
+
+export async function getConvexCloudRuntimeRunComputerUseLiveSession(params: {
+  session: AuthSessionLike;
+  runId: string;
+}): Promise<DaytonaCloudRuntimeComputerUseLiveSessionLookup> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) {
+    return {
+      ok: false,
+      code: "auth_unavailable",
+      retryable: false,
+    };
+  }
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  if (!runId) {
+    return {
+      ok: false,
+      code: "invalid_run_id",
+      retryable: false,
+    };
+  }
+  const payload = (await client.action("threads:getCloudRuntimeRunComputerUseLiveSession" as any, {
+    authSubject,
+    runId,
+  })) as Record<string, unknown> | null;
+  if (!payload || payload.ok !== true) {
+    const code = String(payload?.code ?? "live_desktop_unavailable").trim() || "live_desktop_unavailable";
+    const retryable =
+      typeof payload?.retryable === "boolean"
+        ? payload.retryable
+        : code !== "runtime_run_not_found" && code !== "live_desktop_inactive" && code !== "auth_unavailable";
+    const debug =
+      payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
+        ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+        : null;
+    return {
+      ok: false,
+      code,
+      retryable,
+      debug,
+    };
+  }
+  const previewProxyToken = String(payload.preview_proxy_token ?? "").trim();
+  const expiresAtMs = Number(payload.expires_at ?? 0);
+  if (!previewProxyToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= 0) {
+    return {
+      ok: false,
+      code: "live_desktop_unavailable",
+      retryable: true,
+      debug:
+        payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
+          ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+          : null,
+    };
+  }
+  return {
+    ok: true,
+    session: {
+      preview_proxy_token: previewProxyToken,
+      expires_at: toIsoStringFromMs(expiresAtMs),
+    },
+    debug:
+      payload?.debug && typeof payload.debug === "object" && !Array.isArray(payload.debug)
+        ? (payload.debug as DaytonaCloudRuntimeComputerUseLiveSessionDebug)
+        : null,
+  };
 }

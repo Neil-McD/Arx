@@ -17,14 +17,14 @@ function formatCommunityArchiveError(raw: unknown): string {
   return value;
 }
 
-type EnsureUsableCloudSessionFn<SessionT> = (session?: SessionT | null) => Promise<SessionT | null>;
+type EnsureSessionFn<SessionT> = (session?: SessionT | null) => Promise<SessionT | null>;
 
 type UseWebCommunityPolynetControllerArgs<SessionT> = {
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunityId: string | null;
   session: SessionT | null;
-  ensureUsableCloudSession: EnsureUsableCloudSessionFn<SessionT>;
+  ensureSession: EnsureSessionFn<SessionT>;
   openAuthGate: () => void;
   canManagePolynet: boolean;
 };
@@ -82,7 +82,7 @@ export function useWebCommunityPolynetController<SessionT>(
     setIsLoadingCommunityArchiveHealth(true);
     setCommunityArchiveHealthError(null);
     try {
-      const usableSession = await argsRef.current.ensureUsableCloudSession(
+      const usableSession = await argsRef.current.ensureSession(
         sessionInput ?? argsRef.current.session,
       );
       if (isStaleRequest(requestSeq, communityId)) return null;
@@ -115,7 +115,7 @@ export function useWebCommunityPolynetController<SessionT>(
     const current = argsRef.current;
     const activeCommunityId = current.activeCommunityId;
     if (!activeCommunityId) return;
-    const usableSession = await current.ensureUsableCloudSession();
+    const usableSession = await current.ensureSession();
     if (!usableSession) {
       current.openAuthGate();
       return;
@@ -127,7 +127,7 @@ export function useWebCommunityPolynetController<SessionT>(
     const current = argsRef.current;
     const activeCommunityId = current.activeCommunityId;
     if (!activeCommunityId) return;
-    const usableSession = await current.ensureUsableCloudSession();
+    const usableSession = await current.ensureSession();
     if (!usableSession) {
       current.openAuthGate();
       return;
@@ -155,7 +155,7 @@ export function useWebCommunityPolynetController<SessionT>(
     const current = argsRef.current;
     const activeCommunityId = current.activeCommunityId;
     if (!activeCommunityId) return;
-    const usableSession = await current.ensureUsableCloudSession();
+    const usableSession = await current.ensureSession();
     if (!usableSession) {
       current.openAuthGate();
       return;
@@ -186,7 +186,7 @@ export function useWebCommunityPolynetController<SessionT>(
     const current = argsRef.current;
     const activeCommunityId = current.activeCommunityId;
     if (!activeCommunityId) return;
-    const usableSession = await current.ensureUsableCloudSession();
+    const usableSession = await current.ensureSession();
     if (!usableSession) {
       current.openAuthGate();
       return;

@@ -1,8 +1,15 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 
-export type PlatformQuotaModalState = {
-  reason: "quota" | "plan" | "misconfigured" | "disabled" | "unavailable";
+export type InferenceIssueModalState = {
+  reason:
+    | "quota"
+    | "workspace_credits"
+    | "plan"
+    | "provider_connection_required"
+    | "misconfigured"
+    | "disabled"
+    | "unavailable";
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
@@ -30,6 +37,7 @@ export type ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvi
   runId: string | null;
   meta: WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null;
   content: string | null;
+  streamTransport?: "sse" | "recovery";
   runtimeEvents?: ThreadStreamingRuntimeEvent[];
   lastRuntimeEventSeq?: number;
 };
@@ -41,6 +49,8 @@ export type UseWebTurnRunnerControllerArgs<
   CommunityEvidenceUsedT,
 > = {
   activeThreadId: string | null;
+  session: SessionT | null;
+  threadStreamingStateById: Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>;
   getCloudRuntimeBaseUrl: () => string | null;
   getThreadById?: (threadId: string) => {
     id: string;
@@ -51,7 +61,7 @@ export type UseWebTurnRunnerControllerArgs<
     context_version?: number | null;
   } | null;
   fetchCloudPublic: (url: string, init?: RequestInit) => Promise<Response>;
-  fetchCloudAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
+  fetchAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
 
   extractTextFromContentJson: (value: unknown) => string;
   parseMemoryUsedArray: (value: unknown) => MemoryUsedItemT[];
@@ -66,23 +76,11 @@ export type UseWebTurnRunnerControllerArgs<
     value: string | null | ((prev: string | null) => string | null),
   ) => void;
 
-  setPlatformQuotaModal: Dispatch<SetStateAction<PlatformQuotaModalState | null>>;
-  setStreamingContent: Dispatch<SetStateAction<string | null>>;
-  setStreamingThreadId: Dispatch<SetStateAction<string | null>>;
-  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
-  setStreamingMeta: Dispatch<
-    SetStateAction<WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null>
-  >;
+  setInferenceIssueModal: Dispatch<SetStateAction<InferenceIssueModalState | null>>;
   setThreadSendingStateById: Dispatch<SetStateAction<Record<string, boolean>>>;
   setThreadStreamingStateById: Dispatch<
     SetStateAction<Record<string, ThreadStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>>>
   >;
-
-  streamingContentRef: MutableRefObject<string | null>;
-  streamingRafRef: MutableRefObject<number | null>;
-  streamingAbortRef: MutableRefObject<AbortController | null>;
-  streamingUserCancelledRef: MutableRefObject<boolean>;
-  runtimeTurnV2Enabled?: boolean;
 };
 
 export type PublicTurnThreadMessage = {
@@ -104,11 +102,17 @@ export type RunAgentTurnParams = {
   runIdHint: string;
   userMessageKey?: string;
   systemPrompt?: string | null;
-  inferenceSource?: "free" | "platform" | "user_key" | "chatgpt";
-  requestedFundingSource?: "demo_public" | "platform" | "user_key" | "user_chatgpt";
+  inferenceSource?: "free" | "user_key" | "chatgpt";
+  requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
   requestedAgenticTools?: boolean;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
+  internalFollowup?: {
+    kind: "preview_fit_repair";
+    content: string;
+    suppressAssistantMessage?: boolean;
+  };
+  suppressStreamingUi?: boolean;
 };
 
 export type CreateThreadMessageParams = {
@@ -176,11 +180,21 @@ export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadM
   return threadMessages;
 }
 
-export function mapPlatformFailureReason(
-  category: "quota" | "misconfigured" | "disabled" | "plan" | string,
-): PlatformQuotaModalState["reason"] {
+export function mapInferenceIssueReason(
+  category:
+    | "quota"
+    | "workspace_credits"
+    | "plan"
+    | "provider_connection_required"
+    | "misconfigured"
+    | "disabled"
+    | "unavailable"
+    | string,
+): InferenceIssueModalState["reason"] {
   if (category === "quota") return "quota";
+  if (category === "workspace_credits") return "workspace_credits";
   if (category === "plan") return "plan";
+  if (category === "provider_connection_required") return "provider_connection_required";
   if (category === "misconfigured") return "misconfigured";
   if (category === "disabled") return "disabled";
   return "unavailable";
@@ -225,33 +239,4 @@ export function buildAssistantTextMessagePayload(params: CreateAssistantMessageP
     model_id: modelId || null,
     run_id: (params.runId ?? "").trim() || null,
   };
-}
-
-type StreamingResetArgs<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
-  streamingRafRef: MutableRefObject<number | null>;
-  streamingAbortRef: MutableRefObject<AbortController | null>;
-  streamingContentRef: MutableRefObject<string | null>;
-  streamingUserCancelledRef: MutableRefObject<boolean>;
-  setStreamingContent: Dispatch<SetStateAction<string | null>>;
-  setStreamingThreadId: Dispatch<SetStateAction<string | null>>;
-  setStreamingRunId: Dispatch<SetStateAction<string | null>>;
-  setStreamingMeta: Dispatch<
-    SetStateAction<WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> | null>
-  >;
-};
-
-export function resetStreamingState<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>(
-  args: StreamingResetArgs<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT>,
-): void {
-  if (args.streamingRafRef.current) {
-    window.cancelAnimationFrame(args.streamingRafRef.current);
-    args.streamingRafRef.current = null;
-  }
-  args.streamingAbortRef.current = null;
-  args.streamingContentRef.current = null;
-  args.setStreamingContent(null);
-  args.setStreamingThreadId(null);
-  args.setStreamingRunId(null);
-  args.setStreamingMeta(null);
-  args.streamingUserCancelledRef.current = false;
 }

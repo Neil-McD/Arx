@@ -26,6 +26,10 @@ type UseBuilderBillingActionsCoreArgs<SessionT> = {
     successUrl: string;
     cancelUrl: string;
   };
+  onCheckoutStarted?: (details: {
+    tier: BuilderCheckoutTier;
+    context: BuilderUpgradeContext;
+  }) => void;
   openUrl: (kind: BillingActionKind, url: string) => Promise<boolean> | boolean;
 };
 
@@ -68,6 +72,7 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
           cancelUrl: payload.cancelUrl,
         });
         const checkoutUrl = readRequiredStringField(data, "checkout_url", "Missing checkout_url.");
+        current.onCheckoutStarted?.({ tier, context });
         const opened = await current.openUrl("checkout", checkoutUrl);
         if (!opened) throw new Error("Failed to open checkout.");
       } catch (error) {

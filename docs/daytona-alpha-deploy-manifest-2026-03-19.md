@@ -60,14 +60,13 @@ Set these for the deployed environment before alpha smoke testing:
 
 - `VITE_CONVEX_URL`
 - `ARX_DB_KEY`
-- `ARX_SESSION_BRIDGE_SECRET`
+- `ARX_AUTH_BRIDGE_SECRET`
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`
 - `ARX_AUTH_JWT_ISSUER`
 - `ARX_AUTH_JWT_JWKS_URL`
 - `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false`
-- `VITE_ENABLE_RUNTIME_TURN_V2=true`
 - `VITE_PUBLIC_APP_URL`
 
 Strongly recommended:

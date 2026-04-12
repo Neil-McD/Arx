@@ -44,7 +44,6 @@ function normalizeFundingSource(rawValue: unknown): ModelFundingSource | null {
   if (value === "demo_public") return "demo_public";
   if (value === "user_key") return "user_key";
   if (value === "user_chatgpt" || value === "chatgpt") return "user_chatgpt";
-  if (value === "platform") return "platform";
   return null;
 }
 

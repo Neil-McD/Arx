@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { AuthSession as CloudSession } from "./authSessionCore";
+import type { AuthSession } from "./authCore";
 import { createConvexClient } from "./convexAuthenticatedClient";
 
 export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
 type UseCheckoutFinalizeControllerArgs = {
   checkoutSuccessSessionId: string | null;
-  getSession: () => CloudSession | null;
+  getSession: () => AuthSession | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   persistClaimToken: (token: string) => void;
   setCheckoutStatus: Dispatch<SetStateAction<CheckoutFinalizeStatus>>;

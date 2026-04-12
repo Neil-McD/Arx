@@ -4,6 +4,11 @@ import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig"
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
+  resolveActiveCapabilityFamiliesFromEntitlements,
+  resolveHarnessProfileFromActiveCapabilities,
+  type CapabilityFamily,
+} from "../shared/canonicalGateEngine";
+import {
   asRuntimeMessages,
   gateDeniedResponse,
   hasChatgptConnectionForUser,
@@ -15,15 +20,12 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 
-export type RuntimeCapabilityFamily =
-  | "community_tools"
-  | "web_research"
-  | "workspace_tools";
+export type RuntimeCapabilityFamily = CapabilityFamily;
 
 export type RuntimeTurnInput = {
   thread_id?: string;
   model_id?: string | null;
-  surface?: "web" | "mobile";
+  surface?: "web";
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
     | "demo_public"
@@ -39,6 +41,11 @@ export type RuntimeTurnInput = {
     text?: string | null;
   } | null;
   messages?: Array<{ role?: string | null; content?: string | null }> | null;
+  internal_followup?: {
+    kind?: string | null;
+    content?: string | null;
+    suppress_assistant_message?: boolean | null;
+  } | null;
   max_tokens?: number | null;
 };
 
@@ -95,6 +102,13 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
+  internalFollowup:
+    | {
+        kind: "preview_fit_repair";
+        content: string;
+        suppressAssistantMessage: boolean;
+      }
+    | null;
 };
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
@@ -118,6 +132,25 @@ function stripSystemMessages(
     (message): message is { role: "user" | "assistant"; content: string } =>
       message.role === "user" || message.role === "assistant",
   );
+}
+
+function normalizeInternalFollowup(
+  raw: unknown,
+): {
+  kind: "preview_fit_repair";
+  content: string;
+  suppressAssistantMessage: boolean;
+} | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const kind = String(record.kind ?? "").trim().toLowerCase();
+  const content = String(record.content ?? "").trim();
+  if (kind !== "preview_fit_repair" || !content) return null;
+  return {
+    kind: "preview_fit_repair",
+    content,
+    suppressAssistantMessage: record.suppress_assistant_message === true,
+  };
 }
 
 function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | null {
@@ -152,6 +185,7 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
 
 export function resolveAllowedToolNames(params: {
   activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
 }): RetrievalToolName[] {
   const toolNames: RetrievalToolName[] = [];
   if (params.activeCapabilityFamilies.includes("community_tools")) {
@@ -161,39 +195,33 @@ export function resolveAllowedToolNames(params: {
     toolNames.push("web_research");
   }
   if (params.activeCapabilityFamilies.includes("workspace_tools")) {
-    toolNames.push("list_dir", "read", "glob", "grep", "sha256", "write", "edit", "bash");
+    toolNames.push(
+      "list_dir",
+      "read",
+      "glob",
+      "grep",
+      "sha256",
+      "write",
+      "edit",
+      "bash",
+      "terminal_start",
+      "terminal_read",
+      "terminal_write",
+      "terminal_stop",
+    );
+    if (params.inferenceSource === "chatgpt") {
+      toolNames.push(
+        "computer_open_url",
+        "computer_screenshot",
+        "computer_click",
+        "computer_type",
+        "computer_keypress",
+        "computer_scroll",
+        "computer_stop",
+      );
+    }
   }
   return toolNames.filter((value, index, list) => list.indexOf(value) === index);
-}
-
-export function resolveRuntimeCapabilityFamilies(params: {
-  entitledCapabilityFamilies: readonly RuntimeCapabilityFamily[];
-  hasProjectContext: boolean;
-  hasCommunityContext: boolean;
-}): RuntimeCapabilityFamily[] {
-  const active: RuntimeCapabilityFamily[] = [];
-  if (
-    params.hasCommunityContext &&
-    params.entitledCapabilityFamilies.includes("community_tools")
-  ) {
-    active.push("community_tools");
-  }
-  if (params.entitledCapabilityFamilies.includes("web_research")) {
-    active.push("web_research");
-  }
-  if (params.hasProjectContext && params.entitledCapabilityFamilies.includes("workspace_tools")) {
-    active.push("workspace_tools");
-  }
-  return active.filter((value, index, list) => list.indexOf(value) === index);
-}
-
-export function resolveRuntimeHarnessProfile(params: {
-  activeCapabilityFamilies: readonly RuntimeCapabilityFamily[];
-}): string {
-  if (params.activeCapabilityFamilies.length > 0) {
-    return "authenticated_cloud_tools";
-  }
-  return "authenticated_cloud_chat";
 }
 
 export async function resolveAuthenticatedRuntimeTurn(args: {
@@ -246,7 +274,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
 
   setStage("messages");
   const runtimeMessages = asRuntimeMessages(input);
-  const conversationMessages = stripSystemMessages(runtimeMessages);
+  const internalFollowup = normalizeInternalFollowup(input.internal_followup);
+  const conversationMessages = [
+    ...stripSystemMessages(runtimeMessages),
+    ...(internalFollowup ? [{ role: "user" as const, content: internalFollowup.content }] : []),
+  ];
   if (
     conversationMessages.length === 0 ||
     conversationMessages[conversationMessages.length - 1]?.role !== "user"
@@ -288,7 +320,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     ctx,
     authSubject: actor.authSubject,
     surface: normalizeSurface(input.surface, "web"),
-    modelClass: publicRef ? "free_model" : "paid_model",
     requestedFundingSource,
     hasUserKeyConnection,
     hasUserChatgptConnection,
@@ -423,13 +454,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
-  const resolvedRuntimeCapabilityFamilies = resolveRuntimeCapabilityFamilies({
+  const resolvedRuntimeCapabilityFamilies = resolveActiveCapabilityFamiliesFromEntitlements({
     entitledCapabilityFamilies: gateDecision.entitledCapabilityFamilies,
     hasProjectContext: Boolean(runtimeProjectId),
     hasCommunityContext: Boolean(runtimeCommunityId),
-  });
+  }) as RuntimeCapabilityFamily[];
   const allowedToolNames = resolveAllowedToolNames({
     activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
+    inferenceSource,
   });
   const runtimeExecutionMode: "agentic" | "chat" =
     requestedAgenticTools && allowedToolNames.length > 0
@@ -465,10 +497,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         : undefined,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
-      resolvedRuntimeHarnessProfile: resolveRuntimeHarnessProfile({
+      resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({
+        authState: "authenticated",
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
       runtimeExecutionMode,
+      internalFollowup,
     },
   };
 }

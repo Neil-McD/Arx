@@ -1,0 +1,62 @@
+import { useCallback, useRef, useState } from "react";
+
+import {
+  DEFAULT_EMPTY_THREAD_LANDING,
+  normalizeCommunityAgentLanding,
+  type CommunityAgentLanding,
+} from "../../../../shared/communityAgentLanding";
+
+type CommunityAgentConfigLike = {
+  landing_json: unknown;
+  system_prompt: string | null;
+} | null;
+
+export function useWebCommunityAgentConfigUiController() {
+  const [isLoadingCommunityAgentConfig, setIsLoadingCommunityAgentConfig] = useState(false);
+  const [communityAgentConfigError, setCommunityAgentConfigError] = useState<string | null>(null);
+  const communityAgentConfigLoadedCommunityIdRef = useRef<string | null>(null);
+
+  const [communityAgentConfigLanding, setCommunityAgentConfigLanding] = useState<CommunityAgentLanding>(
+    DEFAULT_EMPTY_THREAD_LANDING,
+  );
+  const [communityAgentConfigSystemPrompt, setCommunityAgentConfigSystemPrompt] = useState("");
+  const [isSavingCommunityAgentConfig, setIsSavingCommunityAgentConfig] = useState(false);
+  const [communityAgentConfigSaveError, setCommunityAgentConfigSaveError] = useState<string | null>(null);
+  const communityAgentConfigDirtyRef = useRef(false);
+
+  const markCommunityAgentConfigDirty = useCallback(() => {
+    communityAgentConfigDirtyRef.current = true;
+  }, []);
+
+  const hydrateCommunityAgentEditor = useCallback((row: CommunityAgentConfigLike) => {
+    const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
+    setCommunityAgentConfigLanding(landing);
+    setCommunityAgentConfigSystemPrompt(row?.system_prompt ?? "");
+    setCommunityAgentConfigSaveError(null);
+    communityAgentConfigDirtyRef.current = false;
+  }, []);
+
+  const handleResetCommunityAgentConfig = useCallback(() => {
+    hydrateCommunityAgentEditor(null);
+  }, [hydrateCommunityAgentEditor]);
+
+  return {
+    isLoadingCommunityAgentConfig,
+    setIsLoadingCommunityAgentConfig,
+    communityAgentConfigError,
+    setCommunityAgentConfigError,
+    communityAgentConfigLoadedCommunityIdRef,
+    communityAgentConfigLanding,
+    setCommunityAgentConfigLanding,
+    communityAgentConfigSystemPrompt,
+    setCommunityAgentConfigSystemPrompt,
+    isSavingCommunityAgentConfig,
+    setIsSavingCommunityAgentConfig,
+    communityAgentConfigSaveError,
+    setCommunityAgentConfigSaveError,
+    communityAgentConfigDirtyRef,
+    markCommunityAgentConfigDirty,
+    hydrateCommunityAgentEditor,
+    handleResetCommunityAgentConfig,
+  };
+}

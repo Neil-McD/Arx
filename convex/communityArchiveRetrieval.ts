@@ -26,8 +26,8 @@ export async function searchCommunityKnowledge(args: {
   authSubject?: string | null;
   communityId: any;
   query: string;
-}) {
-  const recent = await args.ctx.runQuery(api.community.readCommunityRecentContext as any, {
+}): Promise<unknown> {
+  const recent: any = await args.ctx.runQuery(api.community.readCommunityRecentContext as any, {
     userId: args.userId,
     authSubject: args.authSubject ?? undefined,
     communityId: args.communityId,

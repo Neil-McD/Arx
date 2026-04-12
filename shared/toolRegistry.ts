@@ -223,6 +223,193 @@ const BASH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const TERMINAL_START_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["command"],
+  properties: {
+    command: {
+      type: "string",
+      minLength: 1,
+      maxLength: 20000,
+    },
+    cwd: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+    },
+    preview_port: {
+      type: "integer",
+      minimum: 3000,
+      maximum: 9999,
+    },
+    preview_path: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+    },
+    preview_label: {
+      type: "string",
+      minLength: 1,
+      maxLength: 120,
+    },
+  },
+};
+
+const TERMINAL_SESSION_ID_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terminal_session_id"],
+  properties: {
+    terminal_session_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+  },
+};
+
+const TERMINAL_WRITE_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terminal_session_id", "input"],
+  properties: {
+    terminal_session_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    input: {
+      type: "string",
+      minLength: 1,
+      maxLength: 4000,
+    },
+  },
+};
+
+const TERMINAL_LIST_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+};
+
+const COMPUTER_OPEN_URL_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["url"],
+  properties: {
+    url: {
+      type: "string",
+      minLength: 1,
+      maxLength: 2048,
+    },
+  },
+};
+
+const COMPUTER_SCREENSHOT_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+};
+
+const COMPUTER_CLICK_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["x", "y"],
+  properties: {
+    x: {
+      type: "integer",
+      minimum: 0,
+      maximum: 10000,
+    },
+    y: {
+      type: "integer",
+      minimum: 0,
+      maximum: 10000,
+    },
+    button: {
+      type: "string",
+      enum: ["left", "right", "middle"],
+    },
+    double: {
+      type: "boolean",
+    },
+  },
+};
+
+const COMPUTER_TYPE_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["text"],
+  properties: {
+    text: {
+      type: "string",
+      minLength: 1,
+      maxLength: 4000,
+    },
+    delay_ms: {
+      type: "integer",
+      minimum: 0,
+      maximum: 1000,
+    },
+  },
+};
+
+const COMPUTER_KEYPRESS_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["key"],
+  properties: {
+    key: {
+      type: "string",
+      minLength: 1,
+      maxLength: 64,
+    },
+    modifiers: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: "string",
+        enum: ["ctrl", "alt", "meta", "shift"],
+      },
+    },
+  },
+};
+
+const COMPUTER_SCROLL_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["x", "y", "direction"],
+  properties: {
+    x: {
+      type: "integer",
+      minimum: 0,
+      maximum: 10000,
+    },
+    y: {
+      type: "integer",
+      minimum: 0,
+      maximum: 10000,
+    },
+    direction: {
+      type: "string",
+      enum: ["up", "down"],
+    },
+    amount: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20,
+    },
+  },
+};
+
+const COMPUTER_STOP_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+};
+
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   community_search: {
     name: "community_search",
@@ -278,6 +465,61 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "bash",
     description: "Run a shell command inside the bound project workspace.",
     inputSchema: BASH_TOOL_SCHEMA,
+  },
+  terminal_start: {
+    name: "terminal_start",
+    description: "Start a persistent background terminal command inside the bound project workspace.",
+    inputSchema: TERMINAL_START_TOOL_SCHEMA,
+  },
+  terminal_read: {
+    name: "terminal_read",
+    description: "Check the current status and recent output tail of a background terminal.",
+    inputSchema: TERMINAL_SESSION_ID_TOOL_SCHEMA,
+  },
+  terminal_write: {
+    name: "terminal_write",
+    description: "Send input to a running background terminal.",
+    inputSchema: TERMINAL_WRITE_TOOL_SCHEMA,
+  },
+  terminal_stop: {
+    name: "terminal_stop",
+    description: "Stop a background terminal and release it when no longer needed.",
+    inputSchema: TERMINAL_SESSION_ID_TOOL_SCHEMA,
+  },
+  computer_open_url: {
+    name: "computer_open_url",
+    description: "Open a URL in the sandbox desktop browser and return an updated visual observation.",
+    inputSchema: COMPUTER_OPEN_URL_TOOL_SCHEMA,
+  },
+  computer_screenshot: {
+    name: "computer_screenshot",
+    description: "Capture the current sandbox desktop as a visual observation for the next tool decision.",
+    inputSchema: COMPUTER_SCREENSHOT_TOOL_SCHEMA,
+  },
+  computer_click: {
+    name: "computer_click",
+    description: "Click inside the sandbox desktop at screen coordinates and return an updated visual observation.",
+    inputSchema: COMPUTER_CLICK_TOOL_SCHEMA,
+  },
+  computer_type: {
+    name: "computer_type",
+    description: "Type text into the focused sandbox desktop input and return an updated visual observation.",
+    inputSchema: COMPUTER_TYPE_TOOL_SCHEMA,
+  },
+  computer_keypress: {
+    name: "computer_keypress",
+    description: "Press a key with optional modifiers in the sandbox desktop and return an updated visual observation.",
+    inputSchema: COMPUTER_KEYPRESS_TOOL_SCHEMA,
+  },
+  computer_scroll: {
+    name: "computer_scroll",
+    description: "Scroll at screen coordinates in the sandbox desktop and return an updated visual observation.",
+    inputSchema: COMPUTER_SCROLL_TOOL_SCHEMA,
+  },
+  computer_stop: {
+    name: "computer_stop",
+    description: "Stop the sandbox desktop computer-use processes when they are no longer needed.",
+    inputSchema: COMPUTER_STOP_TOOL_SCHEMA,
   },
 };
 
@@ -387,6 +629,27 @@ function normalizePositiveInteger(
   if (!Number.isFinite(parsed)) throw new Error(`${fieldName} must be a number.`);
   const integer = Math.floor(parsed);
   if (integer < 1) throw new Error(`${fieldName} must be greater than or equal to 1.`);
+  return Math.min(integer, maxValue);
+}
+
+function normalizeBoundedInteger(
+  value: unknown,
+  fieldName: string,
+  minValue: number,
+  maxValue: number,
+): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN;
+  if (!Number.isFinite(parsed)) throw new Error(`${fieldName} must be a number.`);
+  const integer = Math.floor(parsed);
+  if (integer < minValue) {
+    throw new Error(`${fieldName} must be greater than or equal to ${minValue}.`);
+  }
   return Math.min(integer, maxValue);
 }
 
@@ -516,6 +779,117 @@ export function normalizeToolArguments(
     return {
       command: command.slice(0, 20000),
       ...(cwd ? { cwd: cwd.slice(0, 1024) } : null),
+    };
+  }
+  if (toolName === "terminal_start") {
+    const command = normalizeString(args.command);
+    if (!command) throw new Error("terminal_start requires command.");
+    const cwd = normalizeString(args.cwd);
+    const previewPort = normalizePositiveInteger(args.preview_port, "preview_port", 9999);
+    if (previewPort !== null && previewPort < 3000) {
+      throw new Error("preview_port must be between 3000 and 9999.");
+    }
+    const previewPath = normalizeString(args.preview_path);
+    if (previewPath && (previewPath.includes("://") || previewPath.startsWith("//"))) {
+      throw new Error("preview_path must be a path, not a full URL.");
+    }
+    const previewLabel = normalizeString(args.preview_label);
+    return {
+      command: command.slice(0, 20000),
+      ...(cwd ? { cwd: cwd.slice(0, 1024) } : null),
+      ...(previewPort ? { preview_port: previewPort } : null),
+      ...(previewPath ? { preview_path: previewPath.slice(0, 1024) } : null),
+      ...(previewLabel ? { preview_label: previewLabel.slice(0, 120) } : null),
+    };
+  }
+  if (toolName === "terminal_read" || toolName === "terminal_stop") {
+    const terminalSessionId = normalizeString(args.terminal_session_id);
+    if (!terminalSessionId) throw new Error(`${toolName} requires terminal_session_id.`);
+    return {
+      terminal_session_id: terminalSessionId.slice(0, 128),
+    };
+  }
+  if (toolName === "terminal_write") {
+    const terminalSessionId = normalizeString(args.terminal_session_id);
+    if (!terminalSessionId) throw new Error("terminal_write requires terminal_session_id.");
+    if (typeof args.input !== "string" || args.input.length === 0) {
+      throw new Error("terminal_write requires input.");
+    }
+    return {
+      terminal_session_id: terminalSessionId.slice(0, 128),
+      input: args.input.slice(0, 4000),
+    };
+  }
+  if (toolName === "computer_open_url") {
+    const url = normalizeString(args.url);
+    if (!url) throw new Error("computer_open_url requires url.");
+    return {
+      url: url.slice(0, 2048),
+    };
+  }
+  if (toolName === "computer_screenshot" || toolName === "computer_stop") {
+    return {};
+  }
+  if (toolName === "computer_click") {
+    const x = normalizeBoundedInteger(args.x, "x", 0, 10_000);
+    const y = normalizeBoundedInteger(args.y, "y", 0, 10_000);
+    if (x === null || y === null) {
+      throw new Error("computer_click requires x and y.");
+    }
+    const button = normalizeString(args.button)?.toLowerCase();
+    if (button && button !== "left" && button !== "right" && button !== "middle") {
+      throw new Error("computer_click button must be left, right, or middle.");
+    }
+    return {
+      x,
+      y,
+      ...(button ? { button } : null),
+      ...(args.double === true ? { double: true } : null),
+    };
+  }
+  if (toolName === "computer_type") {
+    const text = normalizeString(args.text);
+    if (!text) throw new Error("computer_type requires text.");
+    const delayMs = normalizeBoundedInteger(args.delay_ms, "delay_ms", 0, 1_000);
+    return {
+      text: text.slice(0, 4000),
+      ...(delayMs !== null ? { delay_ms: delayMs } : null),
+    };
+  }
+  if (toolName === "computer_keypress") {
+    const key = normalizeString(args.key);
+    if (!key) throw new Error("computer_keypress requires key.");
+    const modifiers = Array.isArray(args.modifiers)
+      ? args.modifiers
+          .map((value) => normalizeString(value)?.toLowerCase())
+          .filter(
+            (value): value is string =>
+              Boolean(value) &&
+              (value === "ctrl" || value === "alt" || value === "meta" || value === "shift"),
+          )
+          .slice(0, 4)
+      : [];
+    return {
+      key: key.slice(0, 64),
+      ...(modifiers.length > 0 ? { modifiers } : null),
+    };
+  }
+  if (toolName === "computer_scroll") {
+    const x = normalizeBoundedInteger(args.x, "x", 0, 10_000);
+    const y = normalizeBoundedInteger(args.y, "y", 0, 10_000);
+    if (x === null || y === null) {
+      throw new Error("computer_scroll requires x and y.");
+    }
+    const direction = normalizeString(args.direction)?.toLowerCase();
+    if (direction !== "up" && direction !== "down") {
+      throw new Error("computer_scroll direction must be up or down.");
+    }
+    const amount = normalizePositiveInteger(args.amount, "amount", 20);
+    return {
+      x,
+      y,
+      direction,
+      ...(amount !== null ? { amount } : null),
     };
   }
   return {};

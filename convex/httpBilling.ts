@@ -1,16 +1,26 @@
 import { internal } from "./_generated/api";
-import { getStripeClient, isBuilderStripePriceId, verifyStripeWebhookSignature } from "./stripeCore";
+import {
+  getStripeClient,
+  isBuilderStripePriceId,
+  verifyStripeWebhookSignature,
+} from "./stripeCore";
 import Stripe from "stripe";
+import type { PublicHttpAction } from "convex/server";
+import { logStructuredError } from "./errorLogging";
+
+type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
 type HttpRouterLike = {
   route: (config: {
     path: string;
-    method: string;
-    handler: unknown;
+    method: HttpRouteMethod;
+    handler: PublicHttpAction;
   }) => void;
 };
 
-type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+type HttpActionLike = (
+  handler: (ctx: unknown, req: Request) => Promise<Response>,
+) => PublicHttpAction;
 
 type RegisterRuntimeBillingRoutesArgs = {
   http: HttpRouterLike;
@@ -64,13 +74,26 @@ function parseOptionalBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") return true;
-  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") return false;
+  if (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "on"
+  )
+    return true;
+  if (
+    normalized === "false" ||
+    normalized === "0" ||
+    normalized === "no" ||
+    normalized === "off"
+  )
+    return false;
   return null;
 }
 
 function parseOptionalNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+  if (typeof value === "number" && Number.isFinite(value))
+    return Math.floor(value);
   if (typeof value !== "string") return null;
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? Math.floor(parsed) : null;
@@ -93,7 +116,9 @@ function readSyncSecret(req: Request): string | null {
     const token = bearer.slice(7).trim();
     if (token) return token;
   }
-  const headerSecret = String(req.headers.get("x-arx-billing-sync-secret") ?? "").trim();
+  const headerSecret = String(
+    req.headers.get("x-arx-billing-sync-secret") ?? "",
+  ).trim();
   return headerSecret || null;
 }
 
@@ -112,28 +137,70 @@ function readStripeMetadataString(
   return trimmed || null;
 }
 
-function readStripeLocalSessionIdFromCheckoutSession(session: Stripe.Checkout.Session): string | null {
+function readStripeLocalSessionIdFromCheckoutSession(
+  session: Stripe.Checkout.Session,
+): string | null {
   const clientReferenceId = String(session.client_reference_id ?? "").trim();
   if (clientReferenceId) return clientReferenceId;
   return readStripeMetadataString(session.metadata, "local_session_id");
 }
 
 function readStripeTargetTier(raw: unknown): "builder" | "architect" | null {
-  const value = String(raw ?? "").trim().toLowerCase();
+  const value = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   if (value === "builder") return "builder";
   if (value === "architect") return "architect";
   return null;
 }
 
 function normalizeStripeSubscriptionStatus(raw: unknown): string {
-  return String(raw ?? "").trim().toLowerCase();
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase();
 }
 
 function stripeSubscriptionGrantsBuilder(status: string): boolean {
   return status === "active" || status === "trialing";
 }
 
-export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesArgs): void {
+function toStripeTimestampMs(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
+    return null;
+  return Math.floor(value * 1000);
+}
+
+function readStripeSubscriptionCycle(subscription: Stripe.Subscription): {
+  cycleStartedAt: number | null;
+  cycleEndsAt: number | null;
+} {
+  const firstItem = subscription.items?.data?.[0] as
+    | {
+        current_period_start?: unknown;
+        current_period_end?: unknown;
+      }
+    | undefined;
+  const itemCycleStartedAt = toStripeTimestampMs(
+    firstItem?.current_period_start,
+  );
+  const itemCycleEndsAt = toStripeTimestampMs(firstItem?.current_period_end);
+  if (itemCycleStartedAt && itemCycleEndsAt) {
+    return {
+      cycleStartedAt: itemCycleStartedAt,
+      cycleEndsAt: itemCycleEndsAt,
+    };
+  }
+  return {
+    cycleStartedAt: toStripeTimestampMs(
+      (subscription as any)?.current_period_start,
+    ),
+    cycleEndsAt: toStripeTimestampMs((subscription as any)?.current_period_end),
+  };
+}
+
+export function registerRuntimeBillingRoutes(
+  args: RegisterRuntimeBillingRoutesArgs,
+): void {
   const { http, httpAction, jsonResponse, optionsResponse } = args;
 
   http.route({
@@ -146,6 +213,7 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
     path: "/billing/community_subscription_sync",
     method: "POST",
     handler: httpAction(async (ctx, req) => {
+      const requestPath = new URL(req.url).pathname;
       const configuredSecret = readEnv("ARX_BILLING_SYNC_SECRET");
       if (!configuredSecret) {
         return jsonResponse(req, 503, {
@@ -173,7 +241,10 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
         input = {};
       }
 
-      const communityId = parseOptionalString(input.community_id ?? input.communityId, 200);
+      const communityId = parseOptionalString(
+        input.community_id ?? input.communityId,
+        200,
+      );
       const userId = parseOptionalString(input.user_id ?? input.userId, 200);
       const status = parseOptionalString(input.status, 120);
       if (!communityId || !userId || !status) {
@@ -186,30 +257,63 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
       }
 
       try {
-        const result = await (ctx as any).runMutation(internal.billing.syncCommunitySubscriptionLifecycleInternal as any, {
-          communityId,
-          userId,
-          status,
-          pricePointId: parseOptionalString(input.price_point_id ?? input.pricePointId, 200) ?? undefined,
-          providerPriceId: parseOptionalString(input.provider_price_id ?? input.providerPriceId, 200) ?? undefined,
-          providerSubscriptionId:
-            parseOptionalString(input.provider_subscription_id ?? input.providerSubscriptionId, 300) ?? undefined,
-          providerCustomerId:
-            parseOptionalString(input.provider_customer_id ?? input.providerCustomerId, 300) ?? undefined,
-          currentPeriodStartIso:
-            parseOptionalString(input.current_period_start_at ?? input.currentPeriodStartAt, 120) ?? undefined,
-          currentPeriodEndIso:
-            parseOptionalString(input.current_period_end_at ?? input.currentPeriodEndAt, 120) ?? undefined,
-          cancelAtPeriodEnd:
-            parseOptionalBoolean(input.cancel_at_period_end ?? input.cancelAtPeriodEnd) ?? undefined,
-          nowMs: parseOptionalNumber(input.now_ms ?? input.nowMs) ?? undefined,
-        });
+        const result = await (ctx as any).runMutation(
+          internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+          {
+            communityId,
+            userId,
+            status,
+            pricePointId:
+              parseOptionalString(
+                input.price_point_id ?? input.pricePointId,
+                200,
+              ) ?? undefined,
+            providerPriceId:
+              parseOptionalString(
+                input.provider_price_id ?? input.providerPriceId,
+                200,
+              ) ?? undefined,
+            providerSubscriptionId:
+              parseOptionalString(
+                input.provider_subscription_id ?? input.providerSubscriptionId,
+                300,
+              ) ?? undefined,
+            providerCustomerId:
+              parseOptionalString(
+                input.provider_customer_id ?? input.providerCustomerId,
+                300,
+              ) ?? undefined,
+            currentPeriodStartIso:
+              parseOptionalString(
+                input.current_period_start_at ?? input.currentPeriodStartAt,
+                120,
+              ) ?? undefined,
+            currentPeriodEndIso:
+              parseOptionalString(
+                input.current_period_end_at ?? input.currentPeriodEndAt,
+                120,
+              ) ?? undefined,
+            cancelAtPeriodEnd:
+              parseOptionalBoolean(
+                input.cancel_at_period_end ?? input.cancelAtPeriodEnd,
+              ) ?? undefined,
+            nowMs:
+              parseOptionalNumber(input.now_ms ?? input.nowMs) ?? undefined,
+          },
+        );
         return jsonResponse(req, 200, {
           ok: true,
           result,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        logStructuredError("billing_sync_failed", {
+          error,
+          requestPath,
+          communityId,
+          userId,
+          subscriptionStatus: status,
+        });
         return jsonResponse(req, 400, {
           ok: false,
           code: message || "billing_sync_failed",
@@ -224,6 +328,7 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
     path: "/billing/stripe_webhook",
     method: "POST",
     handler: httpAction(async (ctx, req) => {
+      const requestPath = new URL(req.url).pathname;
       const signature = readStripeSignature(req);
       if (!signature) {
         return jsonResponse(req, 400, {
@@ -236,10 +341,19 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
 
       const payload = await req.text();
       let event: Stripe.Event;
+      let stripeEventType: string | null = null;
+      let stripeEventId: string | null = null;
       try {
         event = await verifyStripeWebhookSignature({ payload, signature });
+        stripeEventType = event.type;
+        stripeEventId = event.id;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        logStructuredError("stripe_webhook_signature_invalid", {
+          error,
+          requestPath,
+          hasSignature: true,
+        });
         return jsonResponse(req, 400, {
           ok: false,
           code: "stripe_signature_invalid",
@@ -249,9 +363,75 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
       }
 
       try {
+        if (
+          event.type === "checkout.session.completed" ||
+          event.type === "checkout.session.async_payment_succeeded"
+        ) {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const localSessionId =
+            readStripeLocalSessionIdFromCheckoutSession(session);
+          if (localSessionId) {
+            const topupCheckoutSession = await (ctx as any).runQuery(
+              internal.workspaceCredits
+                .getWorkspaceCreditTopupCheckoutSessionInternal as any,
+              {
+                sessionId: localSessionId,
+              },
+            );
+            if (topupCheckoutSession) {
+              const paymentStatus = String(session.payment_status ?? "")
+                .trim()
+                .toLowerCase();
+              if (
+                paymentStatus &&
+                paymentStatus !== "paid" &&
+                paymentStatus !== "no_payment_required"
+              ) {
+                return jsonResponse(req, 200, {
+                  ok: true,
+                  ignored: true,
+                  event: event.type,
+                  reason: "workspace_credit_topup_payment_pending",
+                });
+              }
+              const metadataCreditsAmount = parseOptionalNumber(
+                readStripeMetadataString(
+                  session.metadata,
+                  "workspace_credits_amount",
+                ),
+              );
+              const result = await (ctx as any).runMutation(
+                internal.workspaceCredits
+                  .completeWorkspaceCreditTopupCheckoutSessionInternal as any,
+                {
+                  localSessionId,
+                  providerCheckoutSessionId: session.id,
+                  providerCustomerId:
+                    typeof session.customer === "string"
+                      ? session.customer
+                      : null,
+                  providerPriceId: topupCheckoutSession.providerPriceId ?? null,
+                  workspaceCreditsAmount: metadataCreditsAmount ?? undefined,
+                  nowMs:
+                    Number(event.created ?? 0) > 0
+                      ? Number(event.created) * 1000
+                      : Date.now(),
+                },
+              );
+              return jsonResponse(req, 200, {
+                ok: true,
+                received: true,
+                event: event.type,
+                result,
+              });
+            }
+          }
+        }
+
         if (event.type === "checkout.session.completed") {
           const session = event.data.object as Stripe.Checkout.Session;
-          const localSessionId = readStripeLocalSessionIdFromCheckoutSession(session);
+          const localSessionId =
+            readStripeLocalSessionIdFromCheckoutSession(session);
           if (!localSessionId) {
             return jsonResponse(req, 200, {
               ok: true,
@@ -263,35 +443,108 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
           let providerCustomerId =
             typeof session.customer === "string" ? session.customer : null;
           let providerSubscriptionId =
-            typeof session.subscription === "string" ? session.subscription : null;
+            typeof session.subscription === "string"
+              ? session.subscription
+              : null;
           let providerPriceId: string | null = null;
           let subscriptionStatus = "checkout_completed";
           let grantsAccess: boolean | null = null;
-          const subscriptionId = typeof session.subscription === "string" ? session.subscription : null;
+          const subscriptionId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : null;
           if (subscriptionId) {
             const stripe = getStripeClient();
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            const subscription =
+              await stripe.subscriptions.retrieve(subscriptionId);
             providerCustomerId =
-              typeof subscription.customer === "string" ? subscription.customer : providerCustomerId;
+              typeof subscription.customer === "string"
+                ? subscription.customer
+                : providerCustomerId;
             providerSubscriptionId = subscription.id;
             providerPriceId = subscription.items.data[0]?.price?.id ?? null;
-            subscriptionStatus = normalizeStripeSubscriptionStatus(subscription.status);
+            subscriptionStatus = normalizeStripeSubscriptionStatus(
+              subscription.status,
+            );
             if (providerPriceId && isBuilderStripePriceId(providerPriceId)) {
-              grantsAccess = stripeSubscriptionGrantsBuilder(subscriptionStatus);
+              grantsAccess =
+                stripeSubscriptionGrantsBuilder(subscriptionStatus);
             }
+            const { cycleStartedAt, cycleEndsAt } =
+              readStripeSubscriptionCycle(subscription);
+            const syncResult = await (ctx as any).runMutation(
+              internal.builderCommerce
+                .syncBuilderStripeSubscriptionInternal as any,
+              {
+                localSessionId,
+                providerCheckoutSessionId: session.id,
+                providerCustomerId,
+                providerSubscriptionId,
+                providerPriceId,
+                targetTier: readStripeTargetTier(
+                  readStripeMetadataString(session.metadata, "target_tier"),
+                ),
+                subscriptionStatus,
+                grantsAccess,
+                currentPeriodStartAt: cycleStartedAt,
+                currentPeriodEndAt: cycleEndsAt,
+                markCheckoutComplete: true,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+            if (!cycleStartedAt || !cycleEndsAt) {
+              return jsonResponse(req, 200, {
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "builder_cycle_missing",
+              });
+            }
+            if (syncResult?.ownerUserId && grantsAccess === true) {
+              await (ctx as any).runMutation(
+                internal.workspaceCredits
+                  .syncBuilderMonthlyCreditsInternal as any,
+                {
+                  userId: syncResult.ownerUserId,
+                  targetTier: syncResult.targetTier,
+                  grantsAccess: true,
+                  cycleStartedAt,
+                  cycleEndsAt,
+                  nowMs:
+                    Number(event.created ?? 0) > 0
+                      ? Number(event.created) * 1000
+                      : Date.now(),
+                },
+              );
+            }
+          } else {
+            await (ctx as any).runMutation(
+              internal.builderCommerce
+                .syncBuilderStripeSubscriptionInternal as any,
+              {
+                localSessionId,
+                providerCheckoutSessionId: session.id,
+                providerCustomerId,
+                providerSubscriptionId,
+                providerPriceId,
+                targetTier: readStripeTargetTier(
+                  readStripeMetadataString(session.metadata, "target_tier"),
+                ),
+                subscriptionStatus,
+                grantsAccess,
+                currentPeriodStartAt: null,
+                currentPeriodEndAt: null,
+                markCheckoutComplete: true,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
           }
-          await (ctx as any).runMutation(internal.builderCommerce.syncBuilderStripeSubscriptionInternal as any, {
-            localSessionId,
-            providerCheckoutSessionId: session.id,
-            providerCustomerId,
-            providerSubscriptionId,
-            providerPriceId,
-            targetTier: readStripeTargetTier(readStripeMetadataString(session.metadata, "target_tier")),
-            subscriptionStatus,
-            grantsAccess,
-            markCheckoutComplete: true,
-            nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
-          });
           return jsonResponse(req, 200, {
             ok: true,
             received: true,
@@ -299,9 +552,29 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
           });
         }
 
-        if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-          const subscription = event.data.object as Stripe.Subscription;
-          const localSessionId = readStripeMetadataString(subscription.metadata, "local_session_id");
+        if (event.type === "invoice.paid") {
+          const invoice = event.data.object as Stripe.Invoice & {
+            subscription?: string | Stripe.Subscription | null;
+          };
+          const subscriptionId =
+            typeof invoice.subscription === "string"
+              ? invoice.subscription
+              : null;
+          if (!subscriptionId) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "invoice_subscription_missing",
+            });
+          }
+          const stripe = getStripeClient();
+          const subscription =
+            await stripe.subscriptions.retrieve(subscriptionId);
+          const localSessionId = readStripeMetadataString(
+            subscription.metadata,
+            "local_session_id",
+          );
           if (!localSessionId) {
             return jsonResponse(req, 200, {
               ok: true,
@@ -319,18 +592,125 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
               reason: "non_builder_price",
             });
           }
-          const subscriptionStatus = normalizeStripeSubscriptionStatus(subscription.status);
-          await (ctx as any).runMutation(internal.builderCommerce.syncBuilderStripeSubscriptionInternal as any, {
-            localSessionId,
-            providerCustomerId: typeof subscription.customer === "string" ? subscription.customer : null,
-            providerSubscriptionId: subscription.id,
-            providerPriceId,
-            targetTier: readStripeTargetTier(readStripeMetadataString(subscription.metadata, "target_tier")),
-            subscriptionStatus,
-            grantsAccess: stripeSubscriptionGrantsBuilder(subscriptionStatus),
-            markCheckoutComplete: true,
-            nowMs: Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now(),
+          const subscriptionStatus = normalizeStripeSubscriptionStatus(
+            subscription.status,
+          );
+          const { cycleStartedAt, cycleEndsAt } =
+            readStripeSubscriptionCycle(subscription);
+          const syncResult = await (ctx as any).runMutation(
+            internal.builderCommerce
+              .syncBuilderStripeSubscriptionInternal as any,
+            {
+              localSessionId,
+              providerCustomerId:
+                typeof subscription.customer === "string"
+                  ? subscription.customer
+                  : null,
+              providerSubscriptionId: subscription.id,
+              providerPriceId,
+              targetTier: readStripeTargetTier(
+                readStripeMetadataString(subscription.metadata, "target_tier"),
+              ),
+              subscriptionStatus,
+              grantsAccess: stripeSubscriptionGrantsBuilder(subscriptionStatus),
+              currentPeriodStartAt: cycleStartedAt,
+              currentPeriodEndAt: cycleEndsAt,
+              markCheckoutComplete: true,
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
+          if (!cycleStartedAt || !cycleEndsAt) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "builder_cycle_missing",
+            });
+          }
+          if (syncResult?.ownerUserId) {
+            await (ctx as any).runMutation(
+              internal.workspaceCredits
+                .syncBuilderMonthlyCreditsInternal as any,
+              {
+                userId: syncResult.ownerUserId,
+                targetTier: syncResult.targetTier,
+                grantsAccess:
+                  stripeSubscriptionGrantsBuilder(subscriptionStatus),
+                cycleStartedAt,
+                cycleEndsAt,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+          }
+          return jsonResponse(req, 200, {
+            ok: true,
+            received: true,
+            event: event.type,
           });
+        }
+
+        if (
+          event.type === "customer.subscription.updated" ||
+          event.type === "customer.subscription.deleted"
+        ) {
+          const subscription = event.data.object as Stripe.Subscription;
+          const localSessionId = readStripeMetadataString(
+            subscription.metadata,
+            "local_session_id",
+          );
+          if (!localSessionId) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "builder_local_session_id_missing",
+            });
+          }
+          const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+          if (!isBuilderStripePriceId(providerPriceId)) {
+            return jsonResponse(req, 200, {
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "non_builder_price",
+            });
+          }
+          const subscriptionStatus = normalizeStripeSubscriptionStatus(
+            subscription.status,
+          );
+          const { cycleStartedAt, cycleEndsAt } =
+            readStripeSubscriptionCycle(subscription);
+          await (ctx as any).runMutation(
+            internal.builderCommerce
+              .syncBuilderStripeSubscriptionInternal as any,
+            {
+              localSessionId,
+              providerCustomerId:
+                typeof subscription.customer === "string"
+                  ? subscription.customer
+                  : null,
+              providerSubscriptionId: subscription.id,
+              providerPriceId,
+              targetTier: readStripeTargetTier(
+                readStripeMetadataString(subscription.metadata, "target_tier"),
+              ),
+              subscriptionStatus,
+              grantsAccess: stripeSubscriptionGrantsBuilder(subscriptionStatus),
+              currentPeriodStartAt: cycleStartedAt,
+              currentPeriodEndAt: cycleEndsAt,
+              markCheckoutComplete: true,
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
           return jsonResponse(req, 200, {
             ok: true,
             received: true,
@@ -345,6 +725,12 @@ export function registerRuntimeBillingRoutes(args: RegisterRuntimeBillingRoutesA
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        logStructuredError("stripe_webhook_failed", {
+          error,
+          requestPath,
+          stripeEventType: stripeEventType ?? undefined,
+          stripeEventId: stripeEventId ?? undefined,
+        });
         return jsonResponse(req, 400, {
           ok: false,
           code: message || "stripe_webhook_failed",

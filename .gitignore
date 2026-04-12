@@ -11,5 +11,7 @@ references/git-secrets/
 references/gitleaks/
 references/noseyparker/
 references/trufflehog/
+references/repos/claude-code/
 
 .env.local
+.vercel

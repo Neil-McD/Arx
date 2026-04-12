@@ -1,13 +1,24 @@
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 type RuntimeLane = "public" | "platform" | "daytona" | "chatgpt";
 type RuntimeInferenceSource = "free" | "platform" | "user_key" | "chatgpt";
 
 type JsonResponseFn = (req: Request, status: number, payload: unknown) => Response;
-type SseResponseFn = (
-  req: Request,
-  events: Array<{ event: string; data: Record<string, unknown> }>,
-) => Response;
+export type SseResponseEvent = {
+  event: string;
+  data: Record<string, unknown>;
+};
+
+export type SseResponseStreamWriter = {
+  send: (entry: SseResponseEvent) => void;
+  close: () => void;
+};
+
+export type SseResponseSource =
+  | SseResponseEvent[]
+  | ((writer: SseResponseStreamWriter) => Promise<void> | void);
+
+export type SseResponseFn = (req: Request, source: SseResponseSource) => Response;
 
 type RuntimeSuccessPayload = {
   content: string;
@@ -132,20 +143,21 @@ export function buildRuntimeRunPersistenceHelpers(params: {
     eventType: string;
     eventKey?: string;
     payload: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   finishRunBestEffort: (params: {
     status: "ok" | "error" | "cancelled";
     reason?: string;
     errorCode?: string;
     errorMessage?: string;
   }) => Promise<void>;
+  touchRunHeartbeatBestEffort: () => Promise<void>;
 } {
   const appendRunEvent = async (event: {
     eventType: string;
     eventKey?: string;
     payload: Record<string, unknown>;
-  }): Promise<void> => {
-    await params.ctx.runMutation((api as any).threads.appendCloudRuntimeRunEvent as any, {
+  }): Promise<unknown> => {
+    return await params.ctx.runMutation((api as any).threads.appendCloudRuntimeRunEvent as any, {
       ownerId: params.userId,
       threadId: params.threadId,
       runId: params.runId,
@@ -178,8 +190,22 @@ export function buildRuntimeRunPersistenceHelpers(params: {
     }
   };
 
+  const touchRunHeartbeatBestEffort = async (): Promise<void> => {
+    try {
+      await params.ctx.runMutation((internal as any).threads.touchCloudRuntimeRunHeartbeatInternal as any, {
+        ownerId: params.userId,
+        threadId: params.threadId,
+        runId: params.runId,
+        nowMs: Date.now(),
+      });
+    } catch {
+      // Best-effort: liveness should not interrupt the active turn.
+    }
+  };
+
   return {
     appendRunEvent,
     finishRunBestEffort,
+    touchRunHeartbeatBestEffort,
   };
 }

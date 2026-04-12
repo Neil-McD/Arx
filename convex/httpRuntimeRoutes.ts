@@ -5,16 +5,19 @@ import {
   RequireAuthenticatedActor,
   SseResponseFn,
 } from "./runtimeTurnHandlers";
+import type { PublicHttpAction } from "convex/server";
+
+type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
 type HttpRouterLike = {
   route: (config: {
     path: string;
-    method: string;
-    handler: unknown;
+    method: HttpRouteMethod;
+    handler: PublicHttpAction;
   }) => void;
 };
 
-type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => unknown;
+type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response>) => PublicHttpAction;
 
 type RegisterRuntimeTurnRoutesArgs = {
   http: HttpRouterLike;

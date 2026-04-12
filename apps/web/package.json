@@ -5,16 +5,25 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
     "check:bundle-budget": "bash ../../scripts/web_bundle_budget_check.sh apps/web"
   },
   "dependencies": {
+    "@sentry/react": "^10.48.0",
+    "@sentry/vite-plugin": "^5.2.0",
     "convex": "^1.32.0",
     "highlight.js": "^11.11.1",
+    "katex": "^0.16.44",
     "lucide-react": "^0.577.0",
+    "posthog-js": "^1.367.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

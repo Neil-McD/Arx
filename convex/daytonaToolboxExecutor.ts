@@ -17,6 +17,14 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    return error.name === "AbortError";
+  }
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function wrapShellCommand(command: string): string {
   return `sh -lc ${shellQuote(command)}`;
 }
@@ -121,6 +129,7 @@ export async function executeDaytonaCommand(params: {
   cwd?: string;
   timeoutSeconds?: number;
   allowNonZero?: boolean;
+  signal?: AbortSignal;
 }): Promise<
   | { ok: true; stdout: string; exitCode: number }
   | {
@@ -134,16 +143,36 @@ export async function executeDaytonaCommand(params: {
   const timeout = typeof params.timeoutSeconds === "number" && Number.isFinite(params.timeoutSeconds)
     ? Math.max(1, Math.min(900, Math.floor(params.timeoutSeconds)))
     : null;
+  const fetchTimeoutMs = timeout !== null ? timeout * 1000 + 5000 : 65000;
   const baseCandidates = buildDaytonaToolboxBaseCandidates(params.toolboxProxyUrl, params.sandboxId);
   let lastFailure: { status: number; code: string; message: string; details?: Record<string, unknown> } | null = null;
   for (let index = 0; index < baseCandidates.length; index += 1) {
     const baseUrl = baseCandidates[index];
     const hasNext = index < baseCandidates.length - 1;
     let response: Response;
+    const abortController = new AbortController();
+    const relayAbortFromCaller = () => {
+      abortController.abort(
+        params.signal?.reason instanceof Error
+          ? params.signal.reason
+          : new Error("Daytona toolbox request aborted."),
+      );
+    };
+    if (params.signal?.aborted) {
+      relayAbortFromCaller();
+    } else if (params.signal) {
+      params.signal.addEventListener("abort", relayAbortFromCaller, { once: true });
+    }
+    const abortTimeout = setTimeout(() => {
+      abortController.abort(
+        new Error(`Daytona toolbox request timed out after ${fetchTimeoutMs}ms.`),
+      );
+    }, fetchTimeoutMs);
     try {
       response = await fetch(`${baseUrl}/process/execute`, {
         method: "POST",
         headers: daytonaHeaders(params.config, true),
+        signal: abortController.signal,
         body: JSON.stringify({
           command: wrapShellCommand(params.command),
           ...(params.cwd ? { cwd: params.cwd } : null),
@@ -151,12 +180,27 @@ export async function executeDaytonaCommand(params: {
         }),
       });
     } catch (error) {
+      const message =
+        isAbortError(error)
+          ? `Daytona toolbox request timed out after ${Math.floor(fetchTimeoutMs / 1000)}s.`
+          : error instanceof Error
+            ? error.message
+            : "Failed to call Daytona toolbox.";
       lastFailure = {
         status: 503,
-        code: "runner_unavailable",
-        message: error instanceof Error ? error.message : "Failed to call Daytona toolbox.",
+        code: isAbortError(error) ? "daytona_toolbox_timeout" : "runner_unavailable",
+        message,
+        details: {
+          base_url: baseUrl,
+          timeout_ms: fetchTimeoutMs,
+        },
       };
       continue;
+    } finally {
+      if (params.signal) {
+        params.signal.removeEventListener("abort", relayAbortFromCaller);
+      }
+      clearTimeout(abortTimeout);
     }
 
     const { text, json } = await parseDaytonaResponseBody(response);

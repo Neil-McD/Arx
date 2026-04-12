@@ -53,6 +53,9 @@ export async function appendWorkspaceToolCallFinished(params: {
   toolResultEnvelope: NativeToolResultEnvelope;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
+  const webSources = Array.isArray(params.toolResult.details?.web_sources)
+    ? params.toolResult.details?.web_sources
+    : null;
   await params.appendRunEvent({
     eventType: "tool_call_finished",
     eventKey: `${params.runId}:${params.harnessName}_tool_call_finished:${params.iteration}`,
@@ -60,11 +63,15 @@ export async function appendWorkspaceToolCallFinished(params: {
       run_id: params.runId,
       tool_call_id: toolCallId,
       provider_call_id: params.providerCallId,
-      tool_name: params.toolName,
       args: params.args,
       attempt: 1,
       ...params.toolResultEnvelope,
+      tool_name: params.toolName,
+      ...(params.toolResult.details && typeof params.toolResult.details === "object"
+        ? { details: params.toolResult.details }
+        : null),
       output_preview: params.toolResult.outputText.slice(0, 2000),
+      ...(webSources ? { web_sources: webSources } : null),
     },
   });
 }

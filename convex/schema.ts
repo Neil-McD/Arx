@@ -30,20 +30,61 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_startsAt", ["userId", "startsAt"]),
 
+  workspaceCreditBalances: defineTable({
+    userId: v.id("users"),
+    includedCreditsBalance: v.number(),
+    purchasedCreditsBalance: v.number(),
+    includedCycleCredits: v.number(),
+    includedCycleStartedAt: v.number(),
+    includedCycleEndsAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  workspaceComputeCharges: defineTable({
+    chargeKey: v.string(),
+    userId: v.id("users"),
+    projectId: v.id("cloudProjects"),
+    runId: v.string(),
+    providerSandboxId: v.string(),
+    startedAt: v.number(),
+    endedAt: v.number(),
+    durationSeconds: v.number(),
+    sandboxCpu: v.number(),
+    sandboxMemoryGiB: v.number(),
+    sandboxDiskGiB: v.number(),
+    computeCostUsd: v.number(),
+    creditsDebited: v.number(),
+    debitSource: v.union(v.literal("included"), v.literal("purchased"), v.literal("mixed")),
+    createdAt: v.number(),
+  })
+    .index("by_chargeKey", ["chargeKey"])
+    .index("by_user", ["userId"])
+    .index("by_run", ["runId"])
+    .index("by_providerSandboxId", ["providerSandboxId"]),
+
   checkoutSessions: defineTable({
     sessionId: v.string(),
-    mode: v.union(v.literal("community_join"), v.literal("builder_upgrade")),
+    mode: v.union(
+      v.literal("community_join"),
+      v.literal("builder_upgrade"),
+      v.literal("workspace_credit_topup"),
+    ),
     provider: v.optional(v.literal("stripe")),
     providerCheckoutSessionId: v.optional(v.string()),
     providerCustomerId: v.optional(v.string()),
     providerSubscriptionId: v.optional(v.string()),
     providerPriceId: v.optional(v.string()),
+    currentPeriodStartAt: v.optional(v.number()),
+    currentPeriodEndAt: v.optional(v.number()),
     communityId: v.optional(v.id("communities")),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
     amountBaseUnits: v.optional(v.number()),
     currency: v.optional(v.string()),
     currencyDecimals: v.optional(v.number()),
+    workspaceCreditsAmount: v.optional(v.number()),
+    workspaceCreditsGrantedAt: v.optional(v.number()),
     targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"))),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
@@ -120,6 +161,28 @@ export default defineSchema({
     .index("by_state", ["state"])
     .index("by_user_provider", ["userId", "provider"]),
 
+  authSessions: defineTable({
+    sessionId: v.string(),
+    authSubject: v.string(),
+    userId: v.id("users"),
+    provider: v.string(),
+    encryptedSecretHex: v.string(),
+    secretIvHex: v.string(),
+    secretVersion: v.number(),
+    accessTokenExpiresAt: v.optional(v.number()),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    lastRefreshAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sessionId", ["sessionId"])
+    .index("by_user", ["userId"])
+    .index("by_authSubject", ["authSubject"])
+    .index("by_authSubject_revokedAt", ["authSubject", "revokedAt"]),
+
   userProviderDeviceAuthStates: defineTable({
     userId: v.id("users"),
     provider: v.literal("chatgpt"),
@@ -168,10 +231,41 @@ export default defineSchema({
     providerVolumeName: v.optional(v.string()),
     providerVolumeState: v.optional(v.string()),
     providerVolumeLastSeenAt: v.optional(v.number()),
+    importLeaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"]),
+
+  workspaceTerminalSessions: defineTable({
+    ownerId: v.id("users"),
+    projectId: v.id("cloudProjects"),
+    threadId: v.optional(v.id("threads")),
+    runIdStartedBy: v.optional(v.string()),
+    providerSandboxId: v.string(),
+    providerSessionId: v.string(),
+    providerCommandId: v.string(),
+    command: v.string(),
+    cwd: v.optional(v.string()),
+    previewPort: v.optional(v.number()),
+    previewPath: v.optional(v.string()),
+    previewLabel: v.optional(v.string()),
+    status: v.union(
+      v.literal("starting"),
+      v.literal("running"),
+      v.literal("exited"),
+      v.literal("failed"),
+      v.literal("stopped"),
+    ),
+    startedAt: v.number(),
+    updatedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    exitCode: v.optional(v.number()),
+    lastOutputTail: v.optional(v.string()),
+  })
+    .index("by_owner_project", ["ownerId", "projectId"])
+    .index("by_providerSessionId", ["providerSessionId"])
+    .index("by_providerSandboxId", ["providerSandboxId"]),
 
   communities: defineTable({
     ownerId: v.id("users"),
@@ -346,7 +440,6 @@ export default defineSchema({
     type: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     title: v.optional(v.string()),
     body: v.string(),
-    whyNow: v.optional(v.string()),
     evidence: v.optional(v.array(v.string())),
     status: v.union(v.literal("live"), v.literal("hidden")),
     score: v.number(),
@@ -361,6 +454,7 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_status_score", ["communityId", "status", "score"])
+    .index("by_status_hiddenAt", ["status", "hiddenAt"])
     .index("by_community_noveltyKey", ["communityId", "noveltyKey"]),
 
   communityAiFeedReactions: defineTable({
@@ -494,6 +588,8 @@ export default defineSchema({
     threadId: v.id("threads"),
     runId: v.string(),
     lane: v.string(),
+    visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
+    internalFollowupKind: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),

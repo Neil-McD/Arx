@@ -1,4 +1,10 @@
 import { type ReactNode, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -127,278 +133,123 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   );
 }
 
-export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const elements: ReactNode[] = [];
-  let i = 0;
-  let key = 0;
+function normalizeMathMarkdown(text: string): string {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const lines = normalized.split("\n");
+  const nextLines: string[] = [];
+  let inFence = false;
 
-  while (i < lines.length) {
-    const line = lines[i] ?? "";
-    const trimmedLine = line.trim();
-
-    if (trimmedLine.startsWith("```")) {
-      const lang = trimmedLine.slice(3).trim();
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
-        codeLines.push(lines[i] ?? "");
-        i++;
-      }
-      elements.push(
-        <CodeBlock key={key++} code={codeLines.join("\n")} language={lang || undefined} onCopyCode={options?.onCopyCode} />
-      );
-      i++;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      nextLines.push(line);
       continue;
     }
 
-    if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmedLine)) {
-      elements.push(<hr key={key++} className="md-hr" />);
-      i++;
+    if (inFence) {
+      nextLines.push(line);
       continue;
     }
 
-    const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
-    if (headerMatch) {
-      const level = headerMatch[1]?.length ?? 1;
-      const content = headerMatch[2] ?? "";
-      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-      elements.push(
-        <Tag key={key++} className="md-header">
-          {renderInline(content)}
-        </Tag>
-      );
-      i++;
+    if (trimmed === "\\[" || trimmed === "\\]") {
+      nextLines.push("$$");
       continue;
     }
 
-    if (trimmedLine.startsWith(">")) {
-      const quoteLines: string[] = [];
-      while (i < lines.length) {
-        const raw = lines[i] ?? "";
-        const trimmed = raw.trim();
-        if (trimmed === "") {
-          quoteLines.push("");
-          i++;
-          continue;
-        }
-        if (!trimmed.startsWith(">")) break;
-        let inner = trimmed.slice(1);
-        if (inner.startsWith(" ")) inner = inner.slice(1);
-        quoteLines.push(inner);
-        i++;
-      }
-      elements.push(
-        <blockquote key={key++} className="md-blockquote">
-          {renderMarkdown(quoteLines.join("\n"), options)}
-        </blockquote>
-      );
-      continue;
-    }
-
-    if (/^\d+\.\s+/.test(trimmedLine)) {
-      const listItems: Array<{ kind: "text"; lines: string[] } | { kind: "code"; code: string; language?: string }> =
-        [];
-      while (i < lines.length) {
-        const rawLine = lines[i] ?? "";
-        const currentLine = rawLine.trim();
-        if (/^\d+\.\s+/.test(currentLine)) {
-          const content = currentLine.replace(/^\d+\.\s+/, "");
-          listItems.push({ kind: "text", lines: [content] });
-          i++;
-        } else if (currentLine.startsWith("```")) {
-          const lang = currentLine.slice(3).trim();
-          const codeLines: string[] = [];
-          i++;
-          while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
-            codeLines.push(lines[i] ?? "");
-            i++;
-          }
-          listItems.push({ kind: "code", code: codeLines.join("\n"), language: lang || undefined });
-          i++;
-        } else if (currentLine === "") {
-          i++;
-        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
-          const last = listItems[listItems.length - 1];
-          if (last && last.kind === "text") {
-            last.lines.push(currentLine);
-            i++;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-      elements.push(
-        <ol key={key++} className="md-list">
-          {listItems.map((item) =>
-            item.kind === "code" ? (
-              <li key={key++} className="md-list-code">
-                <CodeBlock code={item.code} language={item.language} onCopyCode={options?.onCopyCode} />
-              </li>
-            ) : (
-              <li key={key++}>{renderInline(item.lines.join("\n"))}</li>
-            )
-          )}
-        </ol>
-      );
-      continue;
-    }
-
-    if (/^[-*]\s+/.test(trimmedLine)) {
-      const listItems: Array<{ kind: "text"; lines: string[] } | { kind: "code"; code: string; language?: string }> =
-        [];
-      while (i < lines.length) {
-        const rawLine = lines[i] ?? "";
-        const currentLine = rawLine.trim();
-        if (/^[-*]\s+/.test(currentLine)) {
-          const content = currentLine.replace(/^[-*]\s+/, "");
-          listItems.push({ kind: "text", lines: [content] });
-          i++;
-        } else if (currentLine.startsWith("```")) {
-          const lang = currentLine.slice(3).trim();
-          const codeLines: string[] = [];
-          i++;
-          while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
-            codeLines.push(lines[i] ?? "");
-            i++;
-          }
-          listItems.push({ kind: "code", code: codeLines.join("\n"), language: lang || undefined });
-          i++;
-        } else if (currentLine === "") {
-          i++;
-        } else if (/^( {2,}|\t)/.test(rawLine) && listItems.length > 0) {
-          const last = listItems[listItems.length - 1];
-          if (last && last.kind === "text") {
-            last.lines.push(currentLine);
-            i++;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
-      }
-      elements.push(
-        <ul key={key++} className="md-list">
-          {listItems.map((item) =>
-            item.kind === "code" ? (
-              <li key={key++} className="md-list-code">
-                <CodeBlock code={item.code} language={item.language} onCopyCode={options?.onCopyCode} />
-              </li>
-            ) : (
-              <li key={key++}>{renderInline(item.lines.join("\n"))}</li>
-            )
-          )}
-        </ul>
-      );
-      continue;
-    }
-
-    if (trimmedLine === "") {
-      i++;
-      continue;
-    }
-
-    const paragraphLines: string[] = [];
-    while (i < lines.length) {
-      const raw = lines[i] ?? "";
-      const trimmed = raw.trim();
-      if (trimmed === "") break;
-      if (
-        trimmed.startsWith("```") ||
-        /^(-{3,}|_{3,}|\*{3,})$/.test(trimmed) ||
-        /^(#{1,6})\s+(.+)$/.test(trimmed) ||
-        trimmed.startsWith(">") ||
-        /^\d+\.\s+/.test(trimmed) ||
-        /^[-*]\s+/.test(trimmed)
-      ) {
-        break;
-      }
-      paragraphLines.push(raw);
-      i++;
-    }
-    elements.push(
-      <p key={key++} className="md-paragraph">
-        {renderInline(paragraphLines.join("\n"))}
-      </p>
+    const segments = line.split(/(`[^`]*`)/g);
+    nextLines.push(
+      segments
+        .map((segment) => {
+          if (segment.startsWith("`") && segment.endsWith("`")) return segment;
+          return segment
+            .replace(/\\\[(.+?)\\\]/g, (_, expression: string) => `$$${expression}$$`)
+            .replace(/\\\((.+?)\\\)/g, (_, expression: string) => `$${expression}$`);
+        })
+        .join(""),
     );
   }
 
-  return <>{elements}</>;
+  return nextLines.join("\n");
 }
 
-function renderInline(text: string): ReactNode {
-  const parts: ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    const codeMatch = remaining.match(/^`([^`]+)`/);
-    if (codeMatch) {
-      parts.push(
-        <code key={key++} className="md-inline-code">
-          {codeMatch[1]}
-        </code>
-      );
-      remaining = remaining.slice(codeMatch[0].length);
-      continue;
-    }
-
-    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch) {
-      const label = linkMatch[1] ?? "";
-      const href = (linkMatch[2] ?? "").trim();
+export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
+  const components: Components = {
+    a({ href, children }) {
       const safeHref =
-        href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:") ? href : null;
-      parts.push(
-        safeHref ? (
-          <a key={key++} className="md-link" href={safeHref} target="_blank" rel="noreferrer">
-            {label}
-          </a>
-        ) : (
-          label
-        )
+        typeof href === "string" &&
+        (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
+          ? href
+          : null;
+      if (!safeHref) return <>{children}</>;
+      return (
+        <a className="md-link" href={safeHref} target="_blank" rel="noreferrer">
+          {children}
+        </a>
       );
-      remaining = remaining.slice(linkMatch[0].length);
-      continue;
-    }
+    },
+    blockquote({ children }) {
+      return <blockquote className="md-blockquote">{children}</blockquote>;
+    },
+    code(props) {
+      const inline = Boolean((props as { inline?: boolean }).inline);
+      const className = String(props.className ?? "");
+      const raw = String(props.children ?? "").replace(/\n$/, "");
+      if (inline) {
+        return <code className="md-inline-code">{raw}</code>;
+      }
+      const match = className.match(/language-([\w-]+)/);
+      return (
+        <CodeBlock
+          code={raw}
+          language={match?.[1]}
+          onCopyCode={options?.onCopyCode}
+        />
+      );
+    },
+    h1({ children }) {
+      return <h1 className="md-header">{children}</h1>;
+    },
+    h2({ children }) {
+      return <h2 className="md-header">{children}</h2>;
+    },
+    h3({ children }) {
+      return <h3 className="md-header">{children}</h3>;
+    },
+    h4({ children }) {
+      return <h4 className="md-header">{children}</h4>;
+    },
+    h5({ children }) {
+      return <h5 className="md-header">{children}</h5>;
+    },
+    h6({ children }) {
+      return <h6 className="md-header">{children}</h6>;
+    },
+    hr() {
+      return <hr className="md-hr" />;
+    },
+    ol({ children }) {
+      return <ol className="md-list">{children}</ol>;
+    },
+    p({ children }) {
+      return <p className="md-paragraph">{children}</p>;
+    },
+    pre({ children }) {
+      return <>{children}</>;
+    },
+    ul({ children }) {
+      return <ul className="md-list">{children}</ul>;
+    },
+  };
 
-    const strikeMatch = remaining.match(/^~~([^~]+)~~/);
-    if (strikeMatch) {
-      parts.push(<s key={key++}>{strikeMatch[1]}</s>);
-      remaining = remaining.slice(strikeMatch[0].length);
-      continue;
-    }
-
-    const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) ?? remaining.match(/^__([^_]+)__/);
-    if (boldMatch) {
-      parts.push(<strong key={key++}>{boldMatch[1]}</strong>);
-      remaining = remaining.slice(boldMatch[0].length);
-      continue;
-    }
-
-    const italicMatch = remaining.match(/^\*([^*]+)\*/) ?? remaining.match(/^_([^_]+)_/);
-    if (italicMatch) {
-      parts.push(<em key={key++}>{italicMatch[1]}</em>);
-      remaining = remaining.slice(italicMatch[0].length);
-      continue;
-    }
-
-    const nextSpecial = remaining.search(/[`*_\[~]/);
-    if (nextSpecial === -1) {
-      parts.push(remaining);
-      break;
-    }
-    if (nextSpecial === 0) {
-      parts.push(remaining[0]);
-      remaining = remaining.slice(1);
-    } else {
-      parts.push(remaining.slice(0, nextSpecial));
-      remaining = remaining.slice(nextSpecial);
-    }
-  }
-
-  return <>{parts}</>;
+  return (
+    <ReactMarkdown
+      components={components}
+      rehypePlugins={[rehypeKatex]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      skipHtml
+    >
+      {normalizeMathMarkdown(text)}
+    </ReactMarkdown>
+  );
 }

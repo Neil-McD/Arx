@@ -2,84 +2,108 @@ import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetS
 
 type UseWorkspaceAutoScrollArgs = {
   workspaceMessageListRef: MutableRefObject<HTMLDivElement | null>;
+  workspaceMessageListContentRef: MutableRefObject<HTMLDivElement | null>;
   isLoadingThreadRef: MutableRefObject<boolean>;
-  autoScrollEnabledRef: MutableRefObject<boolean>;
-  lastWorkspaceScrollTopRef: MutableRefObject<number>;
+  workspacePinnedToBottomRef: MutableRefObject<boolean>;
   setIsWorkspaceAtBottom: Dispatch<SetStateAction<boolean>>;
-  autoScrollDependencies: readonly unknown[];
   scrollBehavior: ScrollBehavior;
 };
 
 export function useWorkspaceAutoScroll(args: UseWorkspaceAutoScrollArgs): {
   handleWorkspaceScroll: () => void;
 } {
-  useEffect(() => {
-    const isThreadLoad = args.isLoadingThreadRef.current;
-    if (!args.autoScrollEnabledRef.current && !isThreadLoad) return;
+  const syncPinnedState = useCallback(() => {
+    const el = args.workspaceMessageListRef.current;
+    if (!el) return;
+    if (args.isLoadingThreadRef.current) return;
 
+    const hasScrollableContent = el.scrollHeight > el.clientHeight + 1;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isPinnedToBottom = !hasScrollableContent || distanceFromBottom <= 48;
+
+    args.workspacePinnedToBottomRef.current = isPinnedToBottom;
+    args.setIsWorkspaceAtBottom(isPinnedToBottom);
+  }, [
+    args.workspaceMessageListRef,
+    args.isLoadingThreadRef,
+    args.workspacePinnedToBottomRef,
+    args.setIsWorkspaceAtBottom,
+  ]);
+
+  useEffect(() => {
+    const contentEl =
+      args.workspaceMessageListContentRef.current ??
+      (args.workspaceMessageListRef.current?.firstElementChild instanceof HTMLDivElement
+        ? args.workspaceMessageListRef.current.firstElementChild
+        : null);
+    if (!contentEl) return;
+
+    let raf = 0;
+    const scheduleFollow = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => {
+        const el = args.workspaceMessageListRef.current;
+        if (!el) return;
+        if (!args.workspacePinnedToBottomRef.current && !args.isLoadingThreadRef.current) return;
+
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: args.scrollBehavior,
+        });
+
+        if (args.isLoadingThreadRef.current) {
+          args.isLoadingThreadRef.current = false;
+        }
+        args.workspacePinnedToBottomRef.current = true;
+        args.setIsWorkspaceAtBottom(true);
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      scheduleFollow();
+    });
+    resizeObserver.observe(contentEl);
+
+    const mutationObserver = new MutationObserver(() => {
+      scheduleFollow();
+    });
+    mutationObserver.observe(contentEl, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    scheduleFollow();
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.cancelAnimationFrame(raf);
+    };
+  }, [
+    args.workspaceMessageListRef,
+    args.workspaceMessageListContentRef,
+    args.isLoadingThreadRef,
+    args.workspacePinnedToBottomRef,
+    args.setIsWorkspaceAtBottom,
+    args.scrollBehavior,
+  ]);
+
+  const handleWorkspaceScroll = useCallback(() => {
+    syncPinnedState();
+  }, [syncPinnedState]);
+
+  useEffect(() => {
     const raf = window.requestAnimationFrame(() => {
       const el = args.workspaceMessageListRef.current;
       if (!el) return;
-      if (!args.autoScrollEnabledRef.current && !args.isLoadingThreadRef.current) return;
-
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: args.scrollBehavior,
-      });
-
-      if (args.isLoadingThreadRef.current) {
-        args.lastWorkspaceScrollTopRef.current = el.scrollTop;
-        args.isLoadingThreadRef.current = false;
-        args.setIsWorkspaceAtBottom(true);
-        args.autoScrollEnabledRef.current = true;
-      }
+      syncPinnedState();
     });
 
     return () => window.cancelAnimationFrame(raf);
   }, [
     args.workspaceMessageListRef,
-    args.isLoadingThreadRef,
-    args.autoScrollEnabledRef,
-    args.lastWorkspaceScrollTopRef,
-    args.setIsWorkspaceAtBottom,
-    args.scrollBehavior,
-    ...args.autoScrollDependencies,
-  ]);
-
-  const handleWorkspaceScroll = useCallback(() => {
-    const el = args.workspaceMessageListRef.current;
-    if (!el) return;
-    if (args.isLoadingThreadRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const hasScrollableContent = scrollHeight > clientHeight + 1;
-
-    if (!hasScrollableContent) {
-      args.setIsWorkspaceAtBottom(true);
-      args.autoScrollEnabledRef.current = true;
-      return;
-    }
-
-    const atBottom = scrollHeight - scrollTop <= clientHeight + 24;
-
-    const prevScrollTop = args.lastWorkspaceScrollTopRef.current;
-    args.lastWorkspaceScrollTopRef.current = scrollTop;
-    const scrolledUp = scrollTop < prevScrollTop - 2;
-
-    if (scrolledUp) {
-      args.autoScrollEnabledRef.current = false;
-      args.setIsWorkspaceAtBottom(false);
-      return;
-    }
-
-    args.setIsWorkspaceAtBottom(atBottom);
-    args.autoScrollEnabledRef.current = atBottom;
-  }, [
-    args.workspaceMessageListRef,
-    args.isLoadingThreadRef,
-    args.setIsWorkspaceAtBottom,
-    args.autoScrollEnabledRef,
-    args.lastWorkspaceScrollTopRef,
+    syncPinnedState,
   ]);
 
   return { handleWorkspaceScroll };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
+import type { CloudCommunityMembershipAdminRow } from "../../../../shared/cloudCommunityMembershipGateway";
+import { StableAvatar } from "../../../../shared/StableAvatar";
 import { type CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 
 type CommunityMember = CloudCommunityMembershipAdminRow;
@@ -36,6 +37,8 @@ type WebCommunityMembersSectionProps = {
   state: {
     communityMembers: CommunityMember[];
     filteredCommunityMembers: CommunityMember[];
+    isLoadingCommunityMembers: boolean;
+    hasResolvedCommunityMembers: boolean;
     communityMembersRoleFilter: string;
     communityMembersPlanFilter: string;
     activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
@@ -53,8 +56,8 @@ type WebCommunityMembersSectionProps = {
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
     displayName: (userId: string) => string;
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
-    handleSetCommunityMemberRole: (userId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
-    handleRemoveCommunityMember: (userId: string) => Promise<void> | void;
+    handleSetCommunityMemberRole: (membershipId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
+    handleRemoveCommunityMember: (membershipId: string) => Promise<void> | void;
     handleApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     handleDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     copyTextToClipboard: (value: string) => Promise<void> | void;
@@ -91,6 +94,21 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   const selectedMember = selectedMemberId
     ? state.communityMembers.find((member) => member.id === selectedMemberId) ?? null
     : null;
+  const selectedMemberProfile = selectedMember ? state.profilesByUserId[selectedMember.user_id] ?? null : null;
+  const selectedMemberDisplayName = selectedMember
+    ? String(
+      selectedMemberProfile?.display_name
+      ?? actions.displayName(selectedMember.user_id)
+      ?? "",
+    ).trim() || actions.displayName(selectedMember.user_id)
+    : "";
+  const selectedMemberAvatarUrl = selectedMemberProfile?.avatar_url ?? null;
+  const selectedMemberInitials = selectedMemberDisplayName
+    ? actions.communityInitials(selectedMemberDisplayName)
+    : selectedMember
+      ? actions.getInitials(selectedMember.user_id)
+      : "";
+  const visibleMembers = canManageMembers ? state.filteredCommunityMembers : state.communityMembers;
 
   const handleCopyJoinPath = async () => {
     if (!joinUrl) return;
@@ -192,13 +210,11 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
           <section className="members-section">
             <div className="members-header-row">
               <div className="members-header">Members</div>
-              {canManageMembers ? (
-                <div className="members-count">
-                  {state.communityMembersRoleFilter !== "all"
-                    ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
-                    : state.communityMembers.length}
-                </div>
-              ) : null}
+              <div className="members-count">
+                {canManageMembers && state.communityMembersRoleFilter !== "all"
+                  ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
+                  : state.communityMembers.length}
+              </div>
             </div>
             {canManageMembers && (
               <div className="members-filter-row">
@@ -348,21 +364,37 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 {state.communityJoinRequestsError}
               </div>
             )}
+            {!canManageMembers ? (
+              <div className="members-readonly-note">
+                Only owners and admins can manage roles or remove members.
+              </div>
+            ) : null}
             <div className="members-list">
-              {!canManageMembers ? (
-                <div className="members-empty">
-                  Moderators can review join requests here. Member management is limited to owners and admins.
+              {!state.hasResolvedCommunityMembers && state.isLoadingCommunityMembers ? (
+                <div className="members-loading-shell" aria-hidden="true">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <div key={index} className="member-item-skeleton">
+                      <div className="member-avatar-skeleton web-skeleton-pill" />
+                      <div className="member-info-skeleton">
+                        <div className="member-line-skeleton member-line-skeleton-title web-skeleton-row" />
+                        <div className="member-line-skeleton member-line-skeleton-meta web-skeleton-row" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : state.communityMembers.length === 0 ? (
                 <div className="members-empty">No members yet.</div>
-              ) : state.filteredCommunityMembers.length === 0 ? (
+              ) : visibleMembers.length === 0 ? (
                 <div className="members-empty">No matching members.</div>
               ) : (
-                state.filteredCommunityMembers.map((member) => {
+                visibleMembers.map((member) => {
                   const profile = state.profilesByUserId[member.user_id] ?? null;
+                  const displayName =
+                    String(profile?.display_name ?? actions.displayName(member.user_id) ?? "").trim()
+                    || actions.displayName(member.user_id);
                   const avatarUrl = profile?.avatar_url ?? null;
-                  const initials = profile?.display_name
-                    ? actions.communityInitials(profile.display_name)
+                  const initials = displayName
+                    ? actions.communityInitials(displayName)
                     : actions.getInitials(member.user_id);
                   const memberIsOwner = Boolean(
                     activeCommunity && activeCommunity.owner_id === member.user_id,
@@ -385,15 +417,17 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                           : (["member"] as const);
                   return (
                     <div key={member.id} className="member-item">
-                      <div
-                        className={`member-avatar${avatarUrl ? " has-image" : ""}`}
-                        style={avatarUrl ? undefined : { backgroundColor: actions.getAvatarColor(member.user_id) }}
-                      >
-                        {avatarUrl ? <img src={avatarUrl} alt={actions.displayName(member.user_id)} draggable={false} /> : initials}
-                      </div>
+                      <StableAvatar
+                        className="member-avatar"
+                        readyClassName="has-image"
+                        imageUrl={avatarUrl}
+                        alt={displayName}
+                        fallback={initials}
+                        fallbackStyle={{ backgroundColor: actions.getAvatarColor(member.user_id) }}
+                      />
                       <div className="member-info">
                         <div className="member-name-row">
-                          <span className="member-name">{actions.displayName(member.user_id)}</span>
+                          <span className="member-name">{displayName}</span>
                           {memberPriceLabel ? (
                             <span className="member-price-label">{memberPriceLabel}</span>
                           ) : null}
@@ -406,7 +440,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                         <button
                           className="member-settings-trigger"
                           type="button"
-                          aria-label={`Open settings for ${actions.displayName(member.user_id)}`}
+                          aria-label={`Open settings for ${displayName}`}
                           title="Member settings"
                           onClick={() => openMemberSettings(member.id)}
                         >
@@ -511,29 +545,21 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
               {memberSettingsTab === "status" ? (
                 <div className="member-settings-section">
                   <div className="member-settings-summary">
-                    <div
-                      className={`member-avatar member-settings-avatar${(state.profilesByUserId[selectedMember.user_id]?.avatar_url ?? null) ? " has-image" : ""}`}
-                      style={
-                        state.profilesByUserId[selectedMember.user_id]?.avatar_url
+                    <StableAvatar
+                      className="member-avatar member-settings-avatar"
+                      readyClassName="has-image"
+                      imageUrl={selectedMemberAvatarUrl}
+                      alt={selectedMemberDisplayName}
+                      fallback={selectedMemberInitials}
+                      fallbackStyle={
+                        selectedMemberAvatarUrl
                           ? undefined
                           : { backgroundColor: actions.getAvatarColor(selectedMember.user_id) }
                       }
-                    >
-                      {state.profilesByUserId[selectedMember.user_id]?.avatar_url ? (
-                        <img
-                          src={state.profilesByUserId[selectedMember.user_id]?.avatar_url ?? undefined}
-                          alt={actions.displayName(selectedMember.user_id)}
-                          draggable={false}
-                        />
-                      ) : (
-                        state.profilesByUserId[selectedMember.user_id]?.display_name
-                          ? actions.communityInitials(state.profilesByUserId[selectedMember.user_id]?.display_name ?? "")
-                          : actions.getInitials(selectedMember.user_id)
-                      )}
-                    </div>
+                    />
                     <div className="member-settings-summary-copy">
                       <div className="member-settings-summary-name">
-                        {actions.displayName(selectedMember.user_id)}
+                        {selectedMemberDisplayName}
                       </div>
                       <div className="member-settings-summary-meta">
                         Joined {formatJoinedAt(selectedMember.created_at)}
@@ -556,12 +582,12 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <label className="member-settings-field member-settings-field-full">
                       <span>Role</span>
                       <select
-                        className="select-styled members-surface-select"
+                        className="select-styled members-surface-select member-settings-role-select"
                         value={selectedMember.role}
                         onChange={(event) => {
                           const next = event.target.value as "admin" | "moderator" | "member";
                           if (next === selectedMember.role) return;
-                          void actions.handleSetCommunityMemberRole(selectedMember.user_id, next);
+                          void actions.handleSetCommunityMemberRole(selectedMember.id, next);
                         }}
                       >
                         {(["member", "moderator", "admin"] as const).map((role) => (
@@ -576,7 +602,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                       type="button"
                       onClick={() => {
                         closeMemberSettings();
-                        void actions.handleRemoveCommunityMember(selectedMember.user_id);
+                        void actions.handleRemoveCommunityMember(selectedMember.id);
                       }}
                     >
                       Remove member

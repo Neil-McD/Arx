@@ -1,0 +1,222 @@
+import type { ReactNode, TouchEventHandler } from "react";
+import type { BuilderUpgradeContext } from "../../../../shared/authResumeState";
+import type { SettingsGroup } from "../../../../shared/appShellNavigation";
+import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
+import type { MobileOverlay } from "../components/webShellChromeShared";
+
+type CommunityLike = {
+  id: string;
+  slug?: string | null;
+  name: string;
+  avatar_url?: string | null;
+  banner_url?: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
+};
+
+export function buildWebShellChromeHostProps(params: {
+  showHeaderIslands: boolean;
+  isSessionsDrawerOpen: boolean;
+  showMobileAppShell: boolean;
+  showMobileSettingsShell: boolean;
+  showMobilePublicFunnel: boolean;
+  mobileOverlay: MobileOverlay;
+  showMobileShell: boolean;
+  mobileShellSwipeStartRef: { current: { x: number; y: number } | null };
+  handleMobileShellTouchStart: TouchEventHandler<HTMLDivElement>;
+  handleMobileShellTouchEnd: TouchEventHandler<HTMLDivElement>;
+  mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
+  mobileSecondaryMode: WebShellChromeHostProps["mobileTopBarProps"]["secondaryMode"];
+  showMobileSettingsIndex: boolean;
+  activePage: "workspace" | "community" | "discover";
+  hasSelectedCommunity: boolean;
+  activeCommunity: CommunityLike | null;
+  unreadCount: number;
+  openMobileDrawer: () => void;
+  handleExitMobileSettings: () => void;
+  handleStartNewWorkspaceThreadFromShell: () => void;
+  handleSelectMobileMode: WebShellChromeHostProps["mobileTopBarProps"]["onSelectMode"];
+  setMobileOverlay: (value: MobileOverlay) => void;
+  isPublicCommunityFunnel: boolean;
+  isPublicFunnelPreviewRoute: boolean;
+  hasBackTargetSnapshot: boolean;
+  backTargetLabel: string | null;
+  activeView: "home" | "settings";
+  userWantsSessions: boolean;
+  communityHomeButton: ReactNode;
+  handleExitPublicFunnelPreview: () => void;
+  handleTopbarBackFromPublicFunnel: () => void;
+  handleTopbarBackFromWorkspaceSettings: () => void;
+  setUserWantsSessions: (value: ((prev: boolean) => boolean) | boolean) => void;
+  handleTopbarBackToWorkspace: () => void;
+  workspaceShellPanels: ReactNode;
+  communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
+  canViewMembersActiveCommunity: boolean;
+  canViewActiveCommunitySettings: boolean;
+  canViewActiveCommunityPolynet: boolean;
+  canManageMembersActiveCommunity: boolean;
+  canViewActiveCommunityAnalytics: boolean;
+  handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
+  handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
+  openMobileAgentSettings: () => void;
+  handleOpenDiscover: () => void;
+  openMobileCreateCommunity: () => void;
+  communities: CommunityLike[];
+  railCommunities: CommunityLike[];
+  isLoadingCommunities: boolean;
+  selectedActiveCommunitySlug: string | null;
+  handleSelectActiveCommunity: (community: CommunityLike) => boolean;
+  openCommunityChat: (slug: string, options: { clearUnread: boolean }) => void;
+  communityInitials: (value: string) => string;
+  showDesktopCommunityRail: boolean;
+  showDesktopCommunityNav: boolean;
+  hasCommunityRailMiddleContent: boolean;
+  canReorderCommunities: boolean;
+  draggingCommunityId: string | null;
+  setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
+  getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
+  setBuilderUpgradeContext: (value: BuilderUpgradeContext) => void;
+  setIsBuilderUpgradeOpen: (value: boolean) => void;
+  handleToggleWorkspaceSettings: () => void;
+  settingsGroup: SettingsGroup;
+  setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
+  hasLeftPanel: boolean;
+  isWorkspaceSettings: boolean;
+  mainSurface: ReactNode;
+  globalOverlays: ReactNode;
+}): WebShellChromeHostProps {
+  return {
+    showHeaderIslands: params.showHeaderIslands,
+    isSessionsDrawerOpen: params.isSessionsDrawerOpen,
+    showMobileAppShell: params.showMobileAppShell,
+    showMobileSettingsShell: params.showMobileSettingsShell,
+    showMobilePublicFunnel: params.showMobilePublicFunnel,
+    mobileOverlay: params.mobileOverlay,
+    onTouchStart: params.showMobileShell
+      ? params.handleMobileShellTouchStart
+      : undefined,
+    onTouchEnd: params.showMobileShell
+      ? params.handleMobileShellTouchEnd
+      : undefined,
+    onTouchCancel: params.showMobileShell
+      ? () => {
+          params.mobileShellSwipeStartRef.current = null;
+        }
+      : undefined,
+    mobileTopBarProps: {
+      mode: params.showMobileSettingsShell ? "agent" : params.mobileShellMode,
+      secondaryMode: params.mobileSecondaryMode,
+      showBackButton: params.showMobileSettingsIndex,
+      showDrawerButton:
+        !params.showMobileSettingsShell && params.activePage !== "discover",
+      hasActiveCommunity: params.hasSelectedCommunity,
+      activeCommunityName: params.activeCommunity?.name ?? null,
+      activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
+      activeCommunityInitials: params.communityInitials(
+        params.activeCommunity?.name ?? "Community",
+      ),
+      unreadCount: params.unreadCount,
+      onOpenDrawer: params.openMobileDrawer,
+      onBack: params.showMobileSettingsIndex
+        ? params.handleExitMobileSettings
+        : null,
+      onStartNewThread:
+        !params.showMobileSettingsShell && params.mobileShellMode === "agent"
+          ? params.handleStartNewWorkspaceThreadFromShell
+          : null,
+      onSelectMode: params.handleSelectMobileMode,
+      onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
+    },
+    desktopHeader: {
+      isPublicCommunityFunnel: params.isPublicCommunityFunnel,
+      isPublicFunnelPreviewRoute: params.isPublicFunnelPreviewRoute,
+      hasBackTargetSnapshot: params.hasBackTargetSnapshot,
+      backTargetLabel: params.backTargetLabel,
+      activePage: params.activePage,
+      activeView: params.activeView,
+      userWantsSessions: params.userWantsSessions,
+      communityHomeButton: params.communityHomeButton,
+      onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
+      onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
+      onBackFromWorkspaceSettings: params.handleTopbarBackFromWorkspaceSettings,
+      onToggleSessions: () =>
+        params.setUserWantsSessions((prev: boolean) => !prev),
+      onStartNewThread: params.handleStartNewWorkspaceThreadFromShell,
+      onBackToWorkspace: params.handleTopbarBackToWorkspace,
+    },
+    workspaceShellPanels: params.workspaceShellPanels,
+    communityShell: {
+      showMobileShell: params.showMobileShell,
+      mobileOverlay: params.mobileOverlay,
+      setMobileOverlay: params.setMobileOverlay,
+      activeCommunity: params.activeCommunity
+        ? {
+            id: params.activeCommunity.id,
+            slug: params.activeCommunity.slug ?? null,
+            name: params.activeCommunity.name,
+            avatar_url: params.activeCommunity.avatar_url ?? null,
+            banner_url: params.activeCommunity.banner_url ?? null,
+            banner_focus_x: params.activeCommunity.banner_focus_x ?? null,
+            banner_focus_y: params.activeCommunity.banner_focus_y ?? null,
+            banner_zoom: params.activeCommunity.banner_zoom ?? null,
+          }
+        : null,
+      communityTab: params.communityTab,
+      canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
+      canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
+      canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
+      canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
+      canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
+      onSelectCommunityTab: params.handleSelectCommunityTab,
+      onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
+      onOpenMobileAgentSettings: params.openMobileAgentSettings,
+      onOpenDiscover: params.handleOpenDiscover,
+      onOpenMobileCreateCommunity: params.openMobileCreateCommunity,
+      communities: params.communities.map((community) => ({
+        id: community.id,
+        slug: community.slug ?? null,
+        name: community.name,
+        avatar_url: community.avatar_url ?? null,
+      })),
+      railCommunities: params.railCommunities.map((community) => ({
+        id: community.id,
+        slug: community.slug ?? null,
+        name: community.name,
+        avatar_url: community.avatar_url ?? null,
+      })),
+      isLoadingCommunities: params.isLoadingCommunities,
+      selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
+      activePage: params.activePage,
+      onSelectActiveCommunity: params.handleSelectActiveCommunity,
+      onOpenCommunityChat: (slug) =>
+        params.openCommunityChat(slug, { clearUnread: true }),
+      communityInitials: params.communityInitials,
+      showDesktopCommunityRail: params.showDesktopCommunityRail,
+      showDesktopCommunityNav: params.showDesktopCommunityNav,
+      hasCommunityRailMiddleContent: params.hasCommunityRailMiddleContent,
+      canReorderCommunities: params.canReorderCommunities,
+      draggingCommunityId: params.draggingCommunityId,
+      setCommunityRailListElement: params.setCommunityRailListElement,
+      getCommunityRailItemBindings: params.getCommunityRailItemBindings,
+      onOpenBuilderUpgrade: () => {
+        params.setBuilderUpgradeContext("builder");
+        params.setIsBuilderUpgradeOpen(true);
+      },
+      activeView: params.activeView,
+      onToggleWorkspaceSettings: params.handleToggleWorkspaceSettings,
+    },
+    settingsSidebar: {
+      showMobileSettingsShell: params.showMobileSettingsShell,
+      isWorkspaceSettings: params.isWorkspaceSettings,
+      settingsGroup: params.settingsGroup,
+      onSelectPage: params.setSettingsPage,
+    },
+    hasLeftPanel: params.hasLeftPanel,
+    showDesktopCommunityRail: params.showDesktopCommunityRail,
+    showDesktopCommunityNav: params.showDesktopCommunityNav,
+    isWorkspaceSettings: params.isWorkspaceSettings,
+    mainSurface: params.mainSurface,
+    globalOverlays: params.globalOverlays,
+  };
+}

@@ -4,6 +4,7 @@ export {
 } from "./communityAccessQueries";
 
 export {
+  cancelMyJoinRequestBySlug,
   heartbeatCommunityPresence,
   getCommunityPresenceSummary,
   resolvePublicFunnelBySlug,

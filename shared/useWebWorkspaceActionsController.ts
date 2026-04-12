@@ -39,14 +39,13 @@ type UseWebWorkspaceActionsControllerArgs<SessionT, AttachmentT, ThreadMessageT 
   downloadTextFile: (filename: string, content: string, mime?: string) => void;
   parseMessageText: (content: unknown) => string;
   storeGuestThreadStorage: (storage: GuestThreadStorageV1) => void;
+  resetWorkspaceComposer: () => void;
   focusWorkspaceInput: () => void;
 
   activeThreadId: string | null;
   guestModelId: string;
 
   setThreadError: Dispatch<SetStateAction<string | null>>;
-  setMessageInput: Dispatch<SetStateAction<string>>;
-  setWorkspaceAttachments: Dispatch<SetStateAction<AttachmentT[]>>;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
   setWorkspaceWantsNewChatMode: Dispatch<SetStateAction<boolean>>;
   setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
@@ -67,8 +66,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
   const resetGuestThread = useCallback(() => {
     const current = argsRef.current;
     current.setThreadError(null);
-    current.setMessageInput("");
-    current.setWorkspaceAttachments([]);
+    current.resetWorkspaceComposer();
     if (current.activeThreadId !== null) current.setActiveThreadId(null);
     current.setWorkspaceWantsNewChatMode(true);
     current.storeGuestThreadStorage({ v: 1, model_id: current.guestModelId, messages: [] });

@@ -24,6 +24,10 @@ type ProviderConnectionRow = {
   updatedAt: number;
 };
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 type PublicOpenRouterConnection = {
   provider: "openrouter";
   auth_kind: "api_key";
@@ -170,10 +174,10 @@ export async function decryptStoredSecret(row: {
   const plaintext = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv: hexToBytes(row.secretIvHex),
+      iv: toArrayBuffer(hexToBytes(row.secretIvHex)),
     },
     key,
-    hexToBytes(row.encryptedSecretHex),
+    toArrayBuffer(hexToBytes(row.encryptedSecretHex)),
   );
   return new TextDecoder().decode(plaintext).trim();
 }
@@ -687,7 +691,7 @@ export const upsertOpenRouterConnectionInternal = internalMutation({
       return { id };
     }
 
-    await ctx.db.patch(existing._id, patch);
+    await ctx.db.patch(existing._id as any, patch);
     return { id: existing._id };
   },
 });
@@ -734,7 +738,7 @@ export const upsertChatgptConnectionInternal = internalMutation({
       return { id };
     }
 
-    await ctx.db.patch(existing._id, patch);
+    await ctx.db.patch(existing._id as any, patch);
     return { id: existing._id };
   },
 });
@@ -746,7 +750,7 @@ export const deleteOpenRouterConnectionInternal = internalMutation({
   handler: async (ctx, args) => {
     const existing = await getProviderConnectionRow(ctx, args.userId, "openrouter");
     if (!existing) return { deleted: false };
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete(existing._id as any);
     return { deleted: true };
   },
 });
@@ -758,7 +762,7 @@ export const deleteChatgptConnectionInternal = internalMutation({
   handler: async (ctx, args) => {
     const existing = await getProviderConnectionRow(ctx, args.userId, "chatgpt");
     if (!existing) return { deleted: false };
-    await ctx.db.delete(existing._id);
+    await ctx.db.delete(existing._id as any);
     return { deleted: true };
   },
 });
@@ -912,7 +916,7 @@ export const connectOpenRouterApiKey = action({
     authSubject: v.optional(v.string()),
     apiKey: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -934,10 +938,10 @@ export const connectOpenRouterApiKey = action({
       nowMs: validatedAt,
     });
 
-    const row = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
+    const row: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
       userId,
     });
-    const chatgpt = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
+    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
       userId,
     });
     return {
@@ -951,7 +955,7 @@ export const disconnectOpenRouterApiKey = action({
   args: {
     authSubject: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -959,7 +963,7 @@ export const disconnectOpenRouterApiKey = action({
     await ctx.runMutation(internal.providerConnections.deleteOpenRouterConnectionInternal as any, {
       userId,
     });
-    const chatgpt = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
+    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
       userId,
     });
     return {
@@ -973,7 +977,7 @@ export const disconnectChatgpt = action({
   args: {
     authSubject: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -981,7 +985,7 @@ export const disconnectChatgpt = action({
     await ctx.runMutation(internal.providerConnections.deleteChatgptConnectionInternal as any, {
       userId,
     });
-    const openrouter = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
+    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
       userId,
     });
     return {
@@ -996,7 +1000,7 @@ export const beginChatgptConnect = action({
     authSubject: v.optional(v.string()),
     returnToPath: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     if (!isWebChatgptSpikeEnabled()) throw new Error("Web ChatGPT auth is disabled.");
     const { userId } = await resolveActionUser({
       ctx,
@@ -1005,7 +1009,7 @@ export const beginChatgptConnect = action({
     const returnToPath = normalizeReturnToPath(args.returnToPath) ?? "/";
     const deviceCode = await requestChatgptDeviceCode();
     const nowMs = Date.now();
-    const inserted = await ctx.runMutation(internal.providerConnections.upsertChatgptDeviceAuthStateInternal as any, {
+    const inserted: { id: unknown } = await ctx.runMutation(internal.providerConnections.upsertChatgptDeviceAuthStateInternal as any, {
       userId,
       deviceAuthId: deviceCode.deviceAuthId,
       userCode: deviceCode.userCode,
@@ -1064,7 +1068,7 @@ export const pollChatgptConnect = action({
     authSubject: v.optional(v.string()),
     loginId: v.id("userProviderDeviceAuthStates"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     if (!isWebChatgptSpikeEnabled()) throw new Error("Web ChatGPT auth is disabled.");
     const { userId } = await resolveActionUser({
       ctx,
@@ -1114,10 +1118,10 @@ export const pollChatgptConnect = action({
       id: args.loginId,
     });
 
-    const openrouter = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
+    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
       userId,
     });
-    const chatgpt = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
+    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
       userId,
     });
     return {
@@ -1133,7 +1137,7 @@ export const completeChatgptConnect = action({
     authSubject: v.optional(v.string()),
     callbackInput: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     if (!isWebChatgptSpikeEnabled()) throw new Error("Web ChatGPT auth is disabled.");
     const { userId } = await resolveActionUser({
       ctx,
@@ -1185,10 +1189,10 @@ export const completeChatgptConnect = action({
       state: normalizeString(stateRow.state),
     });
 
-    const openrouter = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
+    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
       userId,
     });
-    const chatgpt = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
+    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
       userId,
     });
     return {

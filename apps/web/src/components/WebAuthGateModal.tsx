@@ -27,9 +27,9 @@ export function WebAuthGateModal(props: WebAuthGateModalProps) {
         </div>
         <div className="modal-body">
           <ul className="auth-gate-bullets">
-            <li>Sync chats across devices</li>
-            <li>Unlock more models</li>
-            <li>Access gated communities</li>
+            <li>Save chats and continue across devices</li>
+            <li>Unlock more models and higher limits</li>
+            <li>Use your ChatGPT Plus / Pro or OpenRouter access</li>
           </ul>
           {authError && <div className="auth-error">{authError}</div>}
         </div>

@@ -1,7 +1,7 @@
 function formatInferenceSourceLabel(value: string | null | undefined): string | null {
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return null;
-  if (raw === "platform") return "Polynet-hosted";
+  if (raw === "platform") return "OpenRouter";
   if (raw === "user" || raw === "user_key") return "OpenRouter key";
   if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT auth";
   if (raw === "free" || raw === "demo_public") return "OpenRouter free";
@@ -22,7 +22,7 @@ function formatInferenceProviderLabel(value: string | null | undefined): string 
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return null;
   if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT";
-  if (raw === "platform") return "Polynet";
+  if (raw === "platform") return "OpenRouter";
   if (raw === "user" || raw === "user_key") return "OpenRouter key";
   if (raw === "free" || raw === "demo_public") return "OpenRouter free";
   return null;

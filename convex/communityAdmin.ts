@@ -10,6 +10,7 @@ import {
   type CommunitySubscriptionLike,
   type UserEntitlementLike,
   communityMembershipRowIsActive,
+  getCommunityAndMembership,
   isActiveEntitlementWindow,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
@@ -17,9 +18,11 @@ import {
   normalizeCommunityRoleForOutput,
   normalizeRoleAssignment,
   parseIsoMs,
+  pickMostRelevantCommunityMembership,
   requireCommunityChatAccess,
   requireCommunityModerator,
   requireCommunityManager,
+  resolveCommunityMembershipEntitlementState,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
   resolvePublicUserId,
@@ -28,6 +31,20 @@ import {
   tierHasArchitectAccess,
   toIsoString,
 } from "./communityCore";
+import { logStructuredError } from "./errorLogging";
+
+type CommunityMemberUserLike = {
+  displayName?: string;
+  avatarUrl?: string;
+};
+
+async function resolveCommunityMemberIdentity(ctx: any, userRowId: any) {
+  const user = (await ctx.db.get(userRowId)) as CommunityMemberUserLike | null;
+  return {
+    display_name: user?.displayName ?? null,
+    avatar_url: user?.avatarUrl ?? null,
+  };
+}
 
 async function endCommunitySubscriptionsForMembership(args: {
   ctx: any;
@@ -36,7 +53,9 @@ async function endCommunitySubscriptionsForMembership(args: {
 }): Promise<void> {
   const rows = await args.ctx.db
     .query("communitySubscriptions" as any)
-    .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))
+    .withIndex("by_membership", (q: any) =>
+      q.eq("membershipId", args.membershipId),
+    )
     .collect();
   for (const row of rows) {
     await args.ctx.db.patch(row._id, {
@@ -45,6 +64,43 @@ async function endCommunitySubscriptionsForMembership(args: {
       endedAt: args.nowMs,
       updatedAt: args.nowMs,
     });
+  }
+}
+
+async function runLoggedCommunityAdminMutation<T>(params: {
+  operation: string;
+  context: Record<string, unknown>;
+  handler: () => Promise<T>;
+}): Promise<T> {
+  try {
+    return await params.handler();
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error && typeof error.message === "string"
+        ? error.message.trim()
+        : "";
+    const expectedDomainErrors = new Set([
+      "join_request_not_found",
+      "community_membership_not_found",
+      "community_owner_role_fixed",
+      "community_owner_remove_forbidden",
+      "community_free_access_mode_invalid",
+      "community_not_found",
+      "community_owner_cannot_leave",
+      "community_revenue_not_available",
+      "community_forbidden",
+      "community_owner_required",
+      "community_entitlement_required",
+    ]);
+    if (expectedDomainErrors.has(errorMessage)) {
+      throw error;
+    }
+    logStructuredError("community_admin_mutation_failed", {
+      error,
+      operation: params.operation,
+      ...params.context,
+    });
+    throw error;
   }
 }
 
@@ -64,14 +120,28 @@ export const listCommunityMemberships = query({
     const selectMode = args.selectMode ?? "full";
     const membershipRows = (await ctx.db
       .query("communityMemberships")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect()) as CommunityMembershipLike[];
-    const activeRows = membershipRows
-      .filter((row) => communityMembershipRowIsActive(row))
+    const membershipRowsByCommunityId = new Map<
+      string,
+      CommunityMembershipLike[]
+    >();
+    for (const row of membershipRows) {
+      const key = String(row.communityId);
+      const existing = membershipRowsByCommunityId.get(key);
+      if (existing) {
+        existing.push(row);
+      } else {
+        membershipRowsByCommunityId.set(key, [row]);
+      }
+    }
+    const effectiveRows = Array.from(membershipRowsByCommunityId.values())
+      .map((rows) => pickMostRelevantCommunityMembership(rows))
+      .filter((row): row is CommunityMembershipLike => Boolean(row))
       .sort((a, b) => a.createdAt - b.createdAt);
     const ownedCommunities = (await ctx.db
       .query("communities")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.userId))
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
       .collect()) as CommunityLike[];
     const userIdCache = new Map<string, string | null>();
 
@@ -81,7 +151,9 @@ export const listCommunityMemberships = query({
         id: String(community._id),
         slug: community.slug,
         name: community.name,
-        owner_id: (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ?? String(community.ownerId),
+        owner_id:
+          (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
+          String(community.ownerId),
         created_at: toIsoString(community.createdAt),
       };
       return selectMode === "minimal"
@@ -109,7 +181,9 @@ export const listCommunityMemberships = query({
       role: string;
       communities: Record<string, unknown>;
     }> = [];
-    for (const community of ownedCommunities.slice().sort((a, b) => a.createdAt - b.createdAt)) {
+    for (const community of ownedCommunities
+      .slice()
+      .sort((a, b) => a.createdAt - b.createdAt)) {
       out.push({
         sort_ms: community.createdAt,
         community_id: String(community._id),
@@ -117,8 +191,10 @@ export const listCommunityMemberships = query({
         communities: await buildCommunityProjection(community),
       });
     }
-    for (const row of activeRows) {
-      const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
+    for (const row of effectiveRows) {
+      const community = (await ctx.db.get(
+        row.communityId,
+      )) as CommunityLike | null;
       if (!community) continue;
       if (String(community.ownerId) === String(row.userId)) continue;
       const entitlement = await resolveCommunityMembershipEntitlementState({
@@ -128,7 +204,8 @@ export const listCommunityMemberships = query({
         userId: row.userId,
       });
       if (!entitlement.isEntitled) continue;
-      if (out.some((entry) => entry.community_id === String(row.communityId))) continue;
+      if (out.some((entry) => entry.community_id === String(row.communityId)))
+        continue;
       out.push({
         sort_ms: row.createdAt,
         community_id: String(row.communityId),
@@ -151,17 +228,51 @@ export const listCommunityMembershipsAdmin = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const { community, rows } = await listCommunityMembershipRowsForManager({
+    const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
-      communityId: args.communityId,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
+    (args as { userId?: any }).userId = userId;
+    const { community, membership: viewerMembership } =
+      await getCommunityAndMembership({
+        ctx,
+        communityId: args.communityId,
+        userId: args.userId,
+      });
+    const viewerEntitlement = await resolveCommunityMembershipEntitlementState({
+      ctx,
+      community,
+      membership: viewerMembership,
+      userId: args.userId,
+    });
+    if (!viewerEntitlement.isEntitled) {
+      throw new Error("community_entitlement_required");
+    }
+    const viewerRole = normalizeCommunityRoleForOutput(viewerMembership?.role);
+    const viewerCanManageMembers =
+      String(community.ownerId) === String(args.userId) ||
+      viewerRole === "admin";
+    const rows = (
+      (await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+        .collect()) as CommunityMembershipLike[]
+    )
+      .filter(
+        (row) =>
+          communityMembershipRowIsActive(row) &&
+          String(row.userId) !== String(community.ownerId),
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
     const userIdCache = new Map<string, string | null>();
     const ownerRow = {
       id: `owner:${String(community._id)}`,
       community_id: String(community._id),
-      user_id: (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ?? String(community.ownerId),
+      user_id:
+        (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
+        String(community.ownerId),
+      ...(await resolveCommunityMemberIdentity(ctx, community.ownerId)),
       role: "owner",
       price_point_id: null,
       billing_period: null,
@@ -172,29 +283,49 @@ export const listCommunityMembershipsAdmin = query({
     };
     const memberRows = await Promise.all(
       rows.slice(0, Math.max(0, limit - 1)).map(async (row) => {
-        const subscription = ((await ctx.db
-          .query("communitySubscriptions" as any)
-          .withIndex("by_membership", (q: any) => q.eq("membershipId", row._id))
-          .collect()) as CommunitySubscriptionLike[])
-          .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-        const pricePointId = subscription?.pricePointId ?? row.pricePointId ?? null;
-        const pricePoint = pricePointId
-          ? ((await ctx.db.get(pricePointId)) as CommunityPricePointLike | null)
-          : null;
+        let pricePoint: CommunityPricePointLike | null = null;
+        const identity = await resolveCommunityMemberIdentity(ctx, row.userId);
+        if (viewerCanManageMembers) {
+          const subscription =
+            (
+              (await ctx.db
+                .query("communitySubscriptions" as any)
+                .withIndex("by_membership", (q: any) =>
+                  q.eq("membershipId", row._id),
+                )
+                .collect()) as CommunitySubscriptionLike[]
+            ).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+          const pricePointId =
+            subscription?.pricePointId ?? row.pricePointId ?? null;
+          pricePoint = pricePointId
+            ? ((await ctx.db.get(
+                pricePointId,
+              )) as CommunityPricePointLike | null)
+            : null;
+        }
         return {
           id: String(row._id),
           community_id: String(row.communityId),
-          user_id: (await resolvePublicUserId(ctx, row.userId, userIdCache)) ?? String(row.userId),
+          user_id:
+            (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
+            String(row.userId),
+          ...identity,
           role: normalizeCommunityRoleForOutput(row.role) || "member",
           price_point_id: pricePoint ? String(pricePoint._id) : null,
           billing_period: pricePoint
-            ? String(pricePoint.billingPeriod ?? "").trim().toLowerCase() === "annual"
+            ? String(pricePoint.billingPeriod ?? "")
+                .trim()
+                .toLowerCase() === "annual"
               ? "annual"
               : "monthly"
             : null,
-          amount_base_units: pricePoint ? Math.max(0, Math.floor(pricePoint.amountBaseUnits)) : null,
+          amount_base_units: pricePoint
+            ? Math.max(0, Math.floor(pricePoint.amountBaseUnits))
+            : null,
           currency: pricePoint?.currency ?? null,
-          currency_decimals: pricePoint ? Math.max(0, Math.floor(pricePoint.currencyDecimals)) : null,
+          currency_decimals: pricePoint
+            ? Math.max(0, Math.floor(pricePoint.currencyDecimals))
+            : null,
           created_at: toIsoString(row.createdAt),
         };
       }),
@@ -218,8 +349,16 @@ export const countCommunityMemberships = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const ownerIncluded = sinceMs === null || community.createdAt >= sinceMs ? 1 : 0;
-    return ownerIncluded + rows.reduce((count, row) => count + (sinceMs === null || row.createdAt >= sinceMs ? 1 : 0), 0);
+    const ownerIncluded =
+      sinceMs === null || community.createdAt >= sinceMs ? 1 : 0;
+    return (
+      ownerIncluded +
+      rows.reduce(
+        (count, row) =>
+          count + (sinceMs === null || row.createdAt >= sinceMs ? 1 : 0),
+        0,
+      )
+    );
   },
 });
 
@@ -273,7 +412,9 @@ export const communityOwnerHasArchitectAccess = query({
       .withIndex("by_user", (q: any) => q.eq("userId", community.ownerId))
       .collect()) as UserEntitlementLike[];
     const active = entitlements
-      .filter((row) => isActiveEntitlementWindow(nowMs, row.startsAt, row.endsAt))
+      .filter((row) =>
+        isActiveEntitlementWindow(nowMs, row.startsAt, row.endsAt),
+      )
       .sort((a, b) => b.startsAt - a.startsAt);
     return tierHasArchitectAccess(active[0]?.tier);
   },
@@ -300,24 +441,41 @@ export const listCommunityJoinRequests = query({
       userId: args.userId,
     });
     const statusSet = new Set(
-      (args.includeStatuses ?? ["pending"]).map((status) => String(status ?? "").trim().toLowerCase()),
+      (args.includeStatuses ?? ["pending"]).map((status) =>
+        String(status ?? "")
+          .trim()
+          .toLowerCase(),
+      ),
     );
     const rows = (await ctx.db
       .query("communityJoinRequests")
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .withIndex("by_community", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
       .collect()) as CommunityJoinRequestLike[];
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(
       rows
-        .filter((row) => statusSet.has(String(row.status ?? "").trim().toLowerCase()))
+        .filter((row) =>
+          statusSet.has(
+            String(row.status ?? "")
+              .trim()
+              .toLowerCase(),
+          ),
+        )
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit)
         .map(async (row) => ({
           id: String(row._id),
-          user_id: (await resolvePublicUserId(ctx, row.userId, userIdCache)) ?? String(row.userId),
+          user_id:
+            (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
+            String(row.userId),
           message: row.message ?? null,
-          status: String(row.status ?? "").trim().toLowerCase() || "pending",
+          status:
+            String(row.status ?? "")
+              .trim()
+              .toLowerCase() || "pending",
           created_at: toIsoString(row.createdAt),
           updated_at: toIsoString(row.updatedAt),
         })),
@@ -339,46 +497,70 @@ export const approveCommunityJoinRequest = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const request = (await ctx.db.get(args.requestId as any)) as CommunityJoinRequestLike | null;
-    if (!request) throw new Error("join_request_not_found");
-    await requireCommunityModerator({
-      ctx,
-      communityId: request.communityId,
-      userId: args.userId,
+    const logContext: Record<string, unknown> = {
+      actorUserId: args.userId,
+      requestId: args.requestId,
+    };
+    return await runLoggedCommunityAdminMutation({
+      operation: "approve_join_request",
+      context: logContext,
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const request = (await ctx.db.get(
+          args.requestId as any,
+        )) as CommunityJoinRequestLike | null;
+        if (!request) throw new Error("join_request_not_found");
+        logContext.communityId = String(request.communityId);
+        logContext.targetUserId = String(request.userId);
+        await requireCommunityModerator({
+          ctx,
+          communityId: request.communityId,
+          userId: args.userId,
+        });
+        const existingMembershipRows = (await ctx.db
+          .query("communityMemberships")
+          .withIndex("by_community_user", (q: any) =>
+            q
+              .eq("communityId", request.communityId)
+              .eq("userId", request.userId),
+          )
+          .collect()) as CommunityMembershipLike[];
+        const existingMembership = pickMostRelevantCommunityMembership(
+          existingMembershipRows,
+        );
+        if (!existingMembership) {
+          await ctx.db.insert("communityMemberships", {
+            communityId: request.communityId,
+            userId: request.userId,
+            role: "member",
+            accessSource: "free_grant",
+            active: true,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          });
+        } else if (!communityMembershipRowIsActive(existingMembership)) {
+          await ctx.db.patch(existingMembership._id as any, {
+            accessSource:
+              existingMembership.accessSource === "paid_subscription" ||
+              existingMembership.accessSource === "free_grant" ||
+              existingMembership.accessSource === "manual_grant"
+                ? existingMembership.accessSource
+                : "free_grant",
+            active: true,
+            revokedAt: undefined,
+            revokedReason: undefined,
+            updatedAt: nowMs,
+          });
+        }
+        await ctx.db.patch(request._id as any, {
+          status: "approved",
+          deniedAt: undefined,
+          reapplyAt: undefined,
+          updatedAt: nowMs,
+        });
+        return { ok: true };
+      },
     });
-    const existingMembership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", request.communityId).eq("userId", request.userId),
-      )
-      .first()) as CommunityMembershipLike | null;
-    if (!existingMembership) {
-      await ctx.db.insert("communityMemberships", {
-        communityId: request.communityId,
-        userId: request.userId,
-        role: "member",
-        accessSource: "free_grant",
-        active: true,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-    } else if (!communityMembershipRowIsActive(existingMembership)) {
-      await ctx.db.patch(existingMembership._id as any, {
-        accessSource: existingMembership.accessSource ?? "free_grant",
-        active: true,
-        revokedAt: undefined,
-        revokedReason: undefined,
-        updatedAt: nowMs,
-      });
-    }
-    await ctx.db.patch(request._id as any, {
-      status: "approved",
-      deniedAt: undefined,
-      reapplyAt: undefined,
-      updatedAt: nowMs,
-    });
-    return { ok: true };
   },
 });
 
@@ -396,21 +578,35 @@ export const denyCommunityJoinRequest = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const request = (await ctx.db.get(args.requestId as any)) as CommunityJoinRequestLike | null;
-    if (!request) throw new Error("join_request_not_found");
-    await requireCommunityModerator({
-      ctx,
-      communityId: request.communityId,
-      userId: args.userId,
+    const logContext: Record<string, unknown> = {
+      actorUserId: args.userId,
+      requestId: args.requestId,
+    };
+    return await runLoggedCommunityAdminMutation({
+      operation: "deny_join_request",
+      context: logContext,
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const request = (await ctx.db.get(
+          args.requestId as any,
+        )) as CommunityJoinRequestLike | null;
+        if (!request) throw new Error("join_request_not_found");
+        logContext.communityId = String(request.communityId);
+        logContext.targetUserId = String(request.userId);
+        await requireCommunityModerator({
+          ctx,
+          communityId: request.communityId,
+          userId: args.userId,
+        });
+        await ctx.db.patch(request._id as any, {
+          status: "denied",
+          deniedAt: nowMs,
+          reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+          updatedAt: nowMs,
+        });
+        return { ok: true };
+      },
     });
-    await ctx.db.patch(request._id as any, {
-      status: "denied",
-      deniedAt: nowMs,
-      reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-      updatedAt: nowMs,
-    });
-    return { ok: true };
   },
 });
 
@@ -419,8 +615,12 @@ export const setCommunityMemberRole = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    targetUserId: v.id("users"),
-    role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
+    targetMembershipId: v.id("communityMemberships"),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("moderator"),
+      v.literal("member"),
+    ),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -430,28 +630,39 @@ export const setCommunityMemberRole = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const role = normalizeRoleAssignment(args.role);
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
+    return await runLoggedCommunityAdminMutation({
+      operation: "set_member_role",
+      context: {
+        actorUserId: args.userId,
+        communityId: String(args.communityId),
+        targetMembershipId: String(args.targetMembershipId),
+        nextRole: args.role,
+      },
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const role = normalizeRoleAssignment(args.role);
+        const { community } = await requireCommunityManager({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
+        const membership = (await ctx.db.get(
+          args.targetMembershipId,
+        )) as CommunityMembershipLike | null;
+        if (!membership) throw new Error("community_membership_not_found");
+        if (String(membership.communityId) !== String(args.communityId)) {
+          throw new Error("community_membership_not_found");
+        }
+        if (String(community.ownerId) === String(membership.userId)) {
+          throw new Error("community_owner_role_fixed");
+        }
+        await ctx.db.patch(membership._id as any, {
+          role,
+          updatedAt: nowMs,
+        });
+        return { ok: true };
+      },
     });
-    if (String(community.ownerId) === String(args.targetUserId)) {
-      throw new Error("community_owner_role_fixed");
-    }
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
-      )
-      .first()) as CommunityMembershipLike | null;
-    if (!membership) throw new Error("community_membership_not_found");
-    await ctx.db.patch(membership._id as any, {
-      role,
-      updatedAt: nowMs,
-    });
-    return { ok: true };
   },
 });
 
@@ -460,7 +671,7 @@ export const removeCommunityMember = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    targetUserId: v.id("users"),
+    targetMembershipId: v.id("communityMemberships"),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -470,54 +681,68 @@ export const removeCommunityMember = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    if (String(community.ownerId) === String(args.targetUserId)) {
-      throw new Error("community_owner_remove_forbidden");
-    }
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
-      )
-      .first()) as CommunityMembershipLike | null;
-    if (!membership) return { ok: true };
-    await endCommunitySubscriptionsForMembership({
-      ctx,
-      membershipId: membership._id,
-      nowMs,
-    });
-    await ctx.db.delete(membership._id as any);
+    return await runLoggedCommunityAdminMutation({
+      operation: "remove_member",
+      context: {
+        actorUserId: args.userId,
+        communityId: String(args.communityId),
+        targetMembershipId: String(args.targetMembershipId),
+      },
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const { community } = await requireCommunityManager({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
+        const membership = (await ctx.db.get(
+          args.targetMembershipId,
+        )) as CommunityMembershipLike | null;
+        if (!membership) return { ok: true };
+        if (String(membership.communityId) !== String(args.communityId)) {
+          return { ok: true };
+        }
+        if (String(community.ownerId) === String(membership.userId)) {
+          throw new Error("community_owner_remove_forbidden");
+        }
+        await endCommunitySubscriptionsForMembership({
+          ctx,
+          membershipId: membership._id,
+          nowMs,
+        });
+        await ctx.db.delete(membership._id as any);
 
-    const memberSettings = (await ctx.db
-      .query("communityMemberSettings" as any)
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
-      )
-      .first()) as CommunityMemberSettingsLike | null;
-    if (memberSettings) {
-      await ctx.db.delete(memberSettings._id as any);
-    }
+        const memberSettings = (await ctx.db
+          .query("communityMemberSettings" as any)
+          .withIndex("by_community_user", (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("userId", membership.userId),
+          )
+          .first()) as CommunityMemberSettingsLike | null;
+        if (memberSettings) {
+          await ctx.db.delete(memberSettings._id as any);
+        }
 
-    const joinRequest = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
-      )
-      .first()) as CommunityJoinRequestLike | null;
-    if (joinRequest) {
-      await ctx.db.patch(joinRequest._id as any, {
-        status: "denied",
-        deniedAt: nowMs,
-        reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-        updatedAt: nowMs,
-      });
-    }
-    return { ok: true };
+        const joinRequest = (await ctx.db
+          .query("communityJoinRequests")
+          .withIndex("by_community_user", (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("userId", membership.userId),
+          )
+          .first()) as CommunityJoinRequestLike | null;
+        if (joinRequest) {
+          await ctx.db.patch(joinRequest._id as any, {
+            status: "denied",
+            deniedAt: nowMs,
+            reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+            updatedAt: nowMs,
+          });
+        }
+        return { ok: true };
+      },
+    });
   },
 });
 
@@ -551,7 +776,9 @@ export const getCommunityMemberSettings = query({
     }
     const row = (await ctx.db
       .query("communityMemberSettings" as any)
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", targetUserId))
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", targetUserId),
+      )
       .first()) as CommunityMemberSettingsLike | null;
     return row ? await mapCommunityMemberSettingsRow(ctx, row) : null;
   },
@@ -574,47 +801,65 @@ export const saveCommunityMemberSettings = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const targetUserId = args.targetUserId ?? args.userId;
-    if (String(targetUserId) === String(args.userId)) {
-      await requireCommunityChatAccess({
-        ctx,
-        communityId: args.communityId,
-        userId: args.userId,
-      });
-    } else {
-      await requireCommunityModerator({
-        ctx,
-        communityId: args.communityId,
-        userId: args.userId,
-      });
-    }
-    const mutedUntil = parseIsoMs(args.mutedUntilIso);
-    const existing = (await ctx.db
-      .query("communityMemberSettings" as any)
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", targetUserId))
-      .first()) as CommunityMemberSettingsLike | null;
-    if (existing) {
-      await ctx.db.patch(existing._id as any, {
+    return await runLoggedCommunityAdminMutation({
+      operation: "save_member_settings",
+      context: {
+        actorUserId: args.userId,
+        communityId: String(args.communityId),
+        targetUserId: String(args.targetUserId ?? args.userId),
         muted: Boolean(args.muted),
-        mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
-        updatedAt: nowMs,
-      });
-      const updated = (await ctx.db.get(existing._id as any)) as CommunityMemberSettingsLike | null;
-      if (!updated) throw new Error("community_member_settings_not_found");
-      return await mapCommunityMemberSettingsRow(ctx, updated);
-    }
-    const id = await ctx.db.insert("communityMemberSettings" as any, {
-      communityId: args.communityId,
-      userId: targetUserId,
-      muted: Boolean(args.muted),
-      mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      },
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const targetUserId = args.targetUserId ?? args.userId;
+        if (String(targetUserId) === String(args.userId)) {
+          await requireCommunityChatAccess({
+            ctx,
+            communityId: args.communityId,
+            userId: args.userId,
+          });
+        } else {
+          await requireCommunityModerator({
+            ctx,
+            communityId: args.communityId,
+            userId: args.userId,
+          });
+        }
+        const mutedUntil = parseIsoMs(args.mutedUntilIso);
+        const existing = (await ctx.db
+          .query("communityMemberSettings" as any)
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", targetUserId),
+          )
+          .first()) as CommunityMemberSettingsLike | null;
+        if (existing) {
+          await ctx.db.patch(existing._id as any, {
+            muted: Boolean(args.muted),
+            mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
+            updatedAt: nowMs,
+          });
+          const updated = (await ctx.db.get(
+            existing._id as any,
+          )) as CommunityMemberSettingsLike | null;
+          if (!updated) throw new Error("community_member_settings_not_found");
+          return await mapCommunityMemberSettingsRow(ctx, updated);
+        }
+        const id = await ctx.db.insert("communityMemberSettings" as any, {
+          communityId: args.communityId,
+          userId: targetUserId,
+          muted: Boolean(args.muted),
+          mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        const created = (await ctx.db.get(
+          id as any,
+        )) as CommunityMemberSettingsLike | null;
+        if (!created)
+          throw new Error("community_member_settings_create_failed");
+        return await mapCommunityMemberSettingsRow(ctx, created);
+      },
     });
-    const created = (await ctx.db.get(id as any)) as CommunityMemberSettingsLike | null;
-    if (!created) throw new Error("community_member_settings_create_failed");
-    return await mapCommunityMemberSettingsRow(ctx, created);
   },
 });
 
@@ -640,10 +885,14 @@ export const listCommunityPricePoints = query({
     const activeOnly = args.activeOnly ?? true;
     const rows = (await ctx.db
       .query("communityPricePoints" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .withIndex("by_community", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
       .collect()) as CommunityPricePointLike[];
     return rows
-      .filter((row) => (activeOnly ? Boolean(row.isCurrent) && !row.archivedAt : true))
+      .filter((row) =>
+        activeOnly ? Boolean(row.isCurrent) && !row.archivedAt : true,
+      )
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((row) => mapCommunityPricingRow(row));
   },
@@ -664,32 +913,49 @@ export const setCommunityFreeAccessMode = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
+    return await runLoggedCommunityAdminMutation({
+      operation: "set_free_access_mode",
+      context: {
+        actorUserId: args.userId,
+        communityId: String(args.communityId),
+        mode: String(args.mode ?? "")
+          .trim()
+          .toLowerCase(),
+      },
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const { community } = await requireCommunityManager({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
+        const nextMode = String(args.mode ?? "")
+          .trim()
+          .toLowerCase();
+        if (nextMode !== "open" && nextMode !== "approval") {
+          throw new Error("community_free_access_mode_invalid");
+        }
+        const currentEntryPolicy = resolveCommunityEntryPolicy(community);
+        const nextEntryPolicy =
+          currentEntryPolicy === "paid_subscription"
+            ? currentEntryPolicy
+            : nextMode;
+        await ctx.db.patch(community._id as any, {
+          entryPolicy: nextEntryPolicy,
+          updatedAt: nowMs,
+        });
+        const updated = (await ctx.db.get(
+          community._id as any,
+        )) as CommunityLike | null;
+        if (!updated) throw new Error("community_not_found");
+        const entryPolicy = resolveCommunityEntryPolicy(updated);
+        return {
+          community_id: String(updated._id),
+          entry_policy: entryPolicy,
+          updated_at: toIsoString(updated.updatedAt),
+        };
+      },
     });
-    const nextMode = String(args.mode ?? "")
-      .trim()
-      .toLowerCase();
-    if (nextMode !== "open" && nextMode !== "approval") {
-      throw new Error("community_free_access_mode_invalid");
-    }
-    const currentEntryPolicy = resolveCommunityEntryPolicy(community);
-    const nextEntryPolicy = currentEntryPolicy === "paid_subscription" ? currentEntryPolicy : nextMode;
-    await ctx.db.patch(community._id as any, {
-      entryPolicy: nextEntryPolicy,
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
-    if (!updated) throw new Error("community_not_found");
-    const entryPolicy = resolveCommunityEntryPolicy(updated);
-    return {
-      community_id: String(updated._id),
-      entry_policy: entryPolicy,
-      updated_at: toIsoString(updated.updatedAt),
-    };
   },
 });
 
@@ -707,39 +973,56 @@ export const leaveCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    if (String(community.ownerId) === String(args.userId)) {
-      throw new Error("community_owner_cannot_leave");
-    }
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
-    if (membership) {
-      await endCommunitySubscriptionsForMembership({
-        ctx,
-        membershipId: membership._id,
-        nowMs,
-      });
-      await ctx.db.delete(membership._id as any);
-    }
-    const memberSettings = (await ctx.db
-      .query("communityMemberSettings" as any)
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityMemberSettingsLike | null;
-    if (memberSettings) {
-      await ctx.db.delete(memberSettings._id as any);
-    }
-    const joinRequest = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityJoinRequestLike | null;
-    if (joinRequest) {
-      await ctx.db.delete(joinRequest._id as any);
-    }
-    return { ok: true };
+    return await runLoggedCommunityAdminMutation({
+      operation: "leave_community",
+      context: {
+        actorUserId: args.userId,
+        communityId: String(args.communityId),
+      },
+      handler: async () => {
+        const nowMs = args.nowMs ?? Date.now();
+        const community = (await ctx.db.get(
+          args.communityId,
+        )) as CommunityLike | null;
+        if (!community) throw new Error("community_not_found");
+        if (String(community.ownerId) === String(args.userId)) {
+          throw new Error("community_owner_cannot_leave");
+        }
+        const membership = (await ctx.db
+          .query("communityMemberships")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
+          )
+          .first()) as CommunityMembershipLike | null;
+        if (membership) {
+          await endCommunitySubscriptionsForMembership({
+            ctx,
+            membershipId: membership._id,
+            nowMs,
+          });
+          await ctx.db.delete(membership._id as any);
+        }
+        const memberSettings = (await ctx.db
+          .query("communityMemberSettings" as any)
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
+          )
+          .first()) as CommunityMemberSettingsLike | null;
+        if (memberSettings) {
+          await ctx.db.delete(memberSettings._id as any);
+        }
+        const joinRequest = (await ctx.db
+          .query("communityJoinRequests")
+          .withIndex("by_community_user", (q: any) =>
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
+          )
+          .first()) as CommunityJoinRequestLike | null;
+        if (joinRequest) {
+          await ctx.db.delete(joinRequest._id as any);
+        }
+        return { ok: true };
+      },
+    });
   },
 });
 

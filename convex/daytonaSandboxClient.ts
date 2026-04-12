@@ -1,9 +1,20 @@
+import {
+  DEFAULT_DAYTONA_SANDBOX_CPU,
+  DEFAULT_DAYTONA_SANDBOX_DISK_GIB,
+  DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB,
+  normalizePositiveInteger,
+} from "../shared/workspaceCredits";
+import { formatLogPreview, logStructuredError } from "./errorLogging";
+
 export type DaytonaConfig = {
   apiBaseUrl: string;
   apiKey: string;
   orgId: string | null;
   target: string | null;
   snapshot: string | null;
+  sandboxCpu: number;
+  sandboxMemoryGiB: number;
+  sandboxDiskGiB: number;
   autoStopInterval: number;
   autoDeleteInterval: number;
 };
@@ -12,10 +23,26 @@ export type DaytonaSandboxApiDto = {
   id?: string | null;
   state?: string | null;
   target?: string | null;
+  labels?: Record<string, unknown> | null;
+  cpu?: unknown;
+  memory?: unknown;
+  disk?: unknown;
+  createdAt?: unknown;
+  created_at?: unknown;
 };
 
 export type DaytonaToolboxProxyUrlDto = {
   url?: string | null;
+};
+
+type DaytonaSignedPreviewUrlDto = {
+  url?: string | null;
+  token?: string | null;
+};
+
+type DaytonaPreviewUrlDto = {
+  url?: string | null;
+  token?: string | null;
 };
 
 export const DAYTONA_WORKSPACE_ROOT = "/home/daytona/workspace";
@@ -36,9 +63,7 @@ function readEnv(name: string): string {
 function parseIntegerEnv(name: string, fallback: number): number {
   const raw = readEnv(name);
   if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return parsed;
+  return normalizePositiveInteger(raw, fallback, 0);
 }
 
 function normalizeDaytonaApiBaseUrl(rawUrl: string): string | null {
@@ -55,7 +80,9 @@ function normalizeDaytonaApiBaseUrl(rawUrl: string): string | null {
   return parsed.toString().replace(/\/+$/, "");
 }
 
-export function loadDaytonaConfig(): { ok: true; config: DaytonaConfig } | { ok: false; code: string; message: string } {
+export function loadDaytonaConfig():
+  | { ok: true; config: DaytonaConfig }
+  | { ok: false; code: string; message: string } {
   const apiKey = readEnv("DAYTONA_API_KEY");
   if (!apiKey) {
     return {
@@ -69,7 +96,8 @@ export function loadDaytonaConfig(): { ok: true; config: DaytonaConfig } | { ok:
     return {
       ok: false,
       code: "runner_unavailable",
-      message: "Daytona runner is unavailable. DAYTONA_API_URL is missing or invalid.",
+      message:
+        "Daytona runner is unavailable. DAYTONA_API_URL is missing or invalid.",
     };
   }
   return {
@@ -80,6 +108,18 @@ export function loadDaytonaConfig(): { ok: true; config: DaytonaConfig } | { ok:
       orgId: readEnv("DAYTONA_ORG_ID") || null,
       target: readEnv("DAYTONA_TARGET") || null,
       snapshot: readEnv("DAYTONA_SNAPSHOT") || null,
+      sandboxCpu: normalizePositiveInteger(
+        readEnv("DAYTONA_SANDBOX_CPU"),
+        DEFAULT_DAYTONA_SANDBOX_CPU,
+      ),
+      sandboxMemoryGiB: normalizePositiveInteger(
+        readEnv("DAYTONA_SANDBOX_MEMORY_GIB"),
+        DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB,
+      ),
+      sandboxDiskGiB: normalizePositiveInteger(
+        readEnv("DAYTONA_SANDBOX_DISK_GIB"),
+        DEFAULT_DAYTONA_SANDBOX_DISK_GIB,
+      ),
       autoStopInterval: parseIntegerEnv(
         "DAYTONA_AUTO_STOP_INTERVAL_MINUTES",
         DAYTONA_AUTO_STOP_INTERVAL_DEFAULT_MINUTES,
@@ -92,7 +132,10 @@ export function loadDaytonaConfig(): { ok: true; config: DaytonaConfig } | { ok:
   };
 }
 
-export function daytonaHeaders(config: DaytonaConfig, includeJsonContentType = true): Record<string, string> {
+export function daytonaHeaders(
+  config: DaytonaConfig,
+  includeJsonContentType = true,
+): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${config.apiKey}`,
   };
@@ -101,7 +144,9 @@ export function daytonaHeaders(config: DaytonaConfig, includeJsonContentType = t
   return headers;
 }
 
-async function parseDaytonaResponseBody(response: Response): Promise<{ text: string; json: unknown | null }> {
+async function parseDaytonaResponseBody(
+  response: Response,
+): Promise<{ text: string; json: unknown | null }> {
   const text = await response.text();
   if (!text.trim()) return { text, json: null };
   try {
@@ -138,7 +183,8 @@ async function daytonaApiRequest<T>(params: {
       ok: false,
       status: 503,
       code: "runner_unavailable",
-      message: error instanceof Error ? error.message : "Daytona API request failed.",
+      message:
+        error instanceof Error ? error.message : "Daytona API request failed.",
     };
   }
   const { text, json } = await parseDaytonaResponseBody(response);
@@ -164,27 +210,75 @@ async function daytonaApiRequest<T>(params: {
   return { ok: true, payload: json as T };
 }
 
-function isDaytonaStartedState(daytonaState: string | null | undefined): boolean {
-  return String(daytonaState ?? "").trim().toLowerCase() === "started";
+function normalizeDaytonaSandboxListPayload(
+  payload: unknown,
+): DaytonaSandboxApiDto[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (row): row is DaytonaSandboxApiDto => !!row && typeof row === "object",
+    );
+  }
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+  for (const key of ["sandboxes", "items", "data", "rows"]) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value.filter(
+        (row): row is DaytonaSandboxApiDto => !!row && typeof row === "object",
+      );
+    }
+  }
+  return [];
 }
 
-function isDaytonaStoppedState(daytonaState: string | null | undefined): boolean {
-  return String(daytonaState ?? "").trim().toLowerCase() === "stopped";
+function isDaytonaStartedState(
+  daytonaState: string | null | undefined,
+): boolean {
+  return (
+    String(daytonaState ?? "")
+      .trim()
+      .toLowerCase() === "started"
+  );
 }
 
-function isDaytonaTerminalErrorState(daytonaState: string | null | undefined): boolean {
-  const state = String(daytonaState ?? "").trim().toLowerCase();
-  return state === "error" || state === "build_failed" || state === "destroyed" || state === "destroying" || state === "unknown";
+function isDaytonaStoppedState(
+  daytonaState: string | null | undefined,
+): boolean {
+  return (
+    String(daytonaState ?? "")
+      .trim()
+      .toLowerCase() === "stopped"
+  );
+}
+
+function isDaytonaTerminalErrorState(
+  daytonaState: string | null | undefined,
+): boolean {
+  const state = String(daytonaState ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    state === "error" ||
+    state === "build_failed" ||
+    state === "destroyed" ||
+    state === "destroying" ||
+    state === "unknown"
+  );
 }
 
 export async function createDaytonaSandbox(params: {
   config: DaytonaConfig;
   userId: string;
   projectId: string;
-  runId: string;
+  runId?: string | null;
+  sourceLabel?: string | null;
   projectVolumeId?: string | null;
 }): Promise<
-  | { ok: true; sandbox: DaytonaSandboxApiDto; lifecycleMode: "native_stop_delete" | "manual_delete_fallback" }
+  | {
+      ok: true;
+      sandbox: DaytonaSandboxApiDto;
+      lifecycleMode: "native_stop_delete" | "manual_delete_fallback";
+    }
   | {
       ok: false;
       status: number;
@@ -193,19 +287,33 @@ export async function createDaytonaSandbox(params: {
       details?: Record<string, unknown>;
     }
 > {
+  // Runtime workspace sandboxes intentionally use Daytona's snapshot/default-snapshot
+  // creation path for alpha. The active runner rejects explicit Sandbox resources on
+  // this create contract, so plans should choose a sandbox profile upstream rather than
+  // leaking raw cpu/memory/disk knobs into every POST /sandbox request.
+  const labels: Record<string, unknown> = {
+    arx_user_id: params.userId,
+    arx_project_id: params.projectId,
+    arx_source:
+      String(params.sourceLabel ?? "").trim() || "convex_runtime_turn",
+  };
+  const runId = String(params.runId ?? "").trim();
+  if (runId) {
+    labels.arx_run_id = runId;
+  }
+  const requiredPayload: Record<string, unknown> = {
+    labels,
+  };
   const payloadBase: Record<string, unknown> = {
-    labels: {
-      arx_user_id: params.userId,
-      arx_project_id: params.projectId,
-      arx_run_id: params.runId,
-      arx_source: "convex_runtime_turn",
-    },
+    ...requiredPayload,
     ephemeral: true,
   };
   if (params.config.target) payloadBase.target = params.config.target;
   if (params.config.snapshot) payloadBase.snapshot = params.config.snapshot;
   if (params.projectVolumeId) {
-    payloadBase.volumes = [{ volumeId: params.projectVolumeId, mountPath: DAYTONA_WORKSPACE_ROOT }];
+    payloadBase.volumes = [
+      { volumeId: params.projectVolumeId, mountPath: DAYTONA_WORKSPACE_ROOT },
+    ];
   }
   const payloadWithLifecycle = {
     ...payloadBase,
@@ -225,8 +333,10 @@ export async function createDaytonaSandbox(params: {
       lifecycleMode: "native_stop_delete",
     };
   }
-  const detailsText = String(createPrimary.details?.response_text ?? "").toLowerCase();
-  const unsupportedLifecycleField =
+  const detailsText = String(
+    createPrimary.details?.response_text ?? "",
+  ).toLowerCase();
+  const unsupportedOptionalField =
     detailsText.includes("autostopinterval") ||
     detailsText.includes("autodeleteinterval") ||
     detailsText.includes("auto_stop_interval") ||
@@ -234,18 +344,70 @@ export async function createDaytonaSandbox(params: {
     detailsText.includes("ephemeral") ||
     detailsText.includes("unknown field") ||
     detailsText.includes("additional properties");
-  if (!unsupportedLifecycleField) return createPrimary;
+  if (!unsupportedOptionalField) {
+    logStructuredError("daytona_sandbox_create_failed", {
+      error: new Error(createPrimary.message),
+      status: createPrimary.status,
+      responseText: formatLogPreview(
+        createPrimary.details?.response_text,
+        4000,
+      ),
+      payloadKeys: Object.keys(payloadWithLifecycle),
+      hasVolume: Boolean(params.projectVolumeId),
+      hasTarget: Boolean(params.config.target),
+      snapshotConfigured: Boolean(params.config.snapshot),
+    });
+    return createPrimary;
+  }
   const fallbackCreate = await daytonaApiRequest<DaytonaSandboxApiDto>({
     config: params.config,
     path: "/sandbox",
     method: "POST",
-    body: payloadBase,
+    body: requiredPayload,
   });
-  if (!fallbackCreate.ok) return fallbackCreate;
+  if (!fallbackCreate.ok) {
+    logStructuredError("daytona_sandbox_create_fallback_failed", {
+      error: new Error(fallbackCreate.message),
+      status: fallbackCreate.status,
+      responseText: formatLogPreview(
+        fallbackCreate.details?.response_text,
+        4000,
+      ),
+      payloadKeys: Object.keys(requiredPayload),
+      hasVolume: false,
+      hasTarget: false,
+      snapshotConfigured: Boolean(params.config.snapshot),
+    });
+    return fallbackCreate;
+  }
   return {
     ok: true,
     sandbox: fallbackCreate.payload,
     lifecycleMode: "manual_delete_fallback",
+  };
+}
+
+export async function listDaytonaSandboxes(params: {
+  config: DaytonaConfig;
+}): Promise<
+  | { ok: true; sandboxes: DaytonaSandboxApiDto[] }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const res = await daytonaApiRequest<unknown>({
+    config: params.config,
+    path: "/sandbox",
+    method: "GET",
+  });
+  if (!res.ok) return res;
+  return {
+    ok: true,
+    sandboxes: normalizeDaytonaSandboxListPayload(res.payload),
   };
 }
 
@@ -322,7 +484,8 @@ export async function waitForDaytonaSandboxReady(params: {
       method: "GET",
     });
     if (!lookup.ok) return lookup;
-    if (isDaytonaStartedState(lookup.payload.state)) return { ok: true, sandbox: lookup.payload };
+    if (isDaytonaStartedState(lookup.payload.state))
+      return { ok: true, sandbox: lookup.payload };
     if (isDaytonaTerminalErrorState(lookup.payload.state)) {
       return {
         ok: false,
@@ -366,7 +529,9 @@ export async function waitForDaytonaSandboxStopped(params: {
       method: "GET",
     });
     if (!lookup.ok) {
-      const detailsText = String(lookup.details?.response_text ?? "").toLowerCase();
+      const detailsText = String(
+        lookup.details?.response_text ?? "",
+      ).toLowerCase();
       if (detailsText.includes("not found")) {
         return { ok: true, sandbox: null };
       }
@@ -432,4 +597,121 @@ export async function getDaytonaToolboxProxyUrl(params: {
       message: "Daytona toolbox proxy URL is invalid.",
     };
   }
+}
+
+export async function getDaytonaSignedPreviewUrl(params: {
+  config: DaytonaConfig;
+  sandboxId: string;
+  port: number;
+  expiresInSeconds?: number;
+}): Promise<
+  | { ok: true; url: string; token: string | null }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const sandboxId = String(params.sandboxId ?? "").trim();
+  const port = Math.floor(Number(params.port));
+  if (!sandboxId) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_preview_request",
+      message: "Preview request is missing sandbox ID.",
+    };
+  }
+  if (!Number.isFinite(port) || port < 3000 || port > 9999) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_preview_request",
+      message: "Preview port must be between 3000 and 9999.",
+    };
+  }
+  const expiresInSeconds = Math.max(
+    1,
+    Math.min(
+      86_400,
+      Math.floor(Number(params.expiresInSeconds ?? 3600) || 3600),
+    ),
+  );
+  const res = await daytonaApiRequest<DaytonaSignedPreviewUrlDto>({
+    config: params.config,
+    path: `/sandbox/${encodeURIComponent(sandboxId)}/ports/${port}/signed-preview-url?expiresInSeconds=${expiresInSeconds}`,
+    method: "GET",
+  });
+  if (!res.ok) return res;
+  const rawUrl = String(res.payload.url ?? "").trim();
+  if (!rawUrl) {
+    return {
+      ok: false,
+      status: 503,
+      code: "runner_unavailable",
+      message: "Daytona signed preview URL is missing.",
+    };
+  }
+  return {
+    ok: true,
+    url: rawUrl,
+    token: String(res.payload.token ?? "").trim() || null,
+  };
+}
+
+export async function getDaytonaPreviewUrl(params: {
+  config: DaytonaConfig;
+  sandboxId: string;
+  port: number;
+}): Promise<
+  | { ok: true; url: string; token: string }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const sandboxId = String(params.sandboxId ?? "").trim();
+  const port = Math.floor(Number(params.port));
+  if (!sandboxId) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_preview_request",
+      message: "Preview request is missing sandbox ID.",
+    };
+  }
+  if (!Number.isFinite(port) || port < 3000 || port > 9999) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_preview_request",
+      message: "Preview port must be between 3000 and 9999.",
+    };
+  }
+  const res = await daytonaApiRequest<DaytonaPreviewUrlDto>({
+    config: params.config,
+    path: `/sandbox/${encodeURIComponent(sandboxId)}/ports/${port}/preview-url`,
+    method: "GET",
+  });
+  if (!res.ok) return res;
+  const rawUrl = String(res.payload.url ?? "").trim();
+  const rawToken = String(res.payload.token ?? "").trim();
+  if (!rawUrl || !rawToken) {
+    return {
+      ok: false,
+      status: 503,
+      code: "runner_unavailable",
+      message: "Daytona preview URL is missing auth details.",
+    };
+  }
+  return {
+    ok: true,
+    url: rawUrl,
+    token: rawToken,
+  };
 }

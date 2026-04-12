@@ -2,9 +2,12 @@ export type CloudFunctionErrorCategory =
   | "auth"
   | "rate_limited"
   | "quota"
+  | "workspace_credits"
   | "plan"
+  | "provider_connection_required"
   | "misconfigured"
   | "disabled"
+  | "unavailable"
   | "model_not_allowed"
   | "conflict"
   | "unknown";
@@ -75,16 +78,30 @@ function classifyErrorCategory(input: { status: number; code: string | null; mes
 
   if (AUTH_CODES.has(code) || code === "auth_required" || includesAuthFailureText(message)) return "auth";
   if (code === "rate_limited") return "rate_limited";
-  if (code === "platform_inference_quota_exceeded") return "quota";
-  if (code === "platform_inference_not_allowed" || code === "tier_required" || code === "plan_required") return "plan";
+  if (code === "platform_inference_quota_exceeded" || code === "provider_inference_quota_exceeded") return "quota";
+  if (code === "workspace_credits_exhausted" || code === "workspace_credits_unavailable") return "workspace_credits";
+  if (
+    code === "platform_inference_not_allowed" ||
+    code === "tier_required" ||
+    code === "plan_required"
+  )
+    return "plan";
+  if (code === "provider_connection_required") return "provider_connection_required";
   if (
     code === "platform_inference_misconfigured" ||
+    code === "provider_inference_misconfigured" ||
     code === "auth_verifier_misconfigured" ||
     code === "auth_upstream_unavailable"
   )
     return "misconfigured";
   if (code === "community_contract_mismatch") return "misconfigured";
-  if (code === "platform_inference_disabled") return "disabled";
+  if (code === "platform_inference_disabled" || code === "provider_inference_disabled") return "disabled";
+  if (
+    code === "platform_inference_unavailable" ||
+    code === "provider_inference_unavailable" ||
+    code === "provider_error"
+  )
+    return "unavailable";
   if (code === "model_not_allowed") return "model_not_allowed";
   if (code === "thread_run_in_progress") return "conflict";
 
@@ -166,49 +183,15 @@ export function formatCloudFunctionErrorMessageCore(error: CloudFunctionError): 
 
 export function shouldFallbackFromPlatformErrorToPublicCore(error: CloudFunctionError): boolean {
   if (error.category === "quota") return true;
+  if (error.category === "workspace_credits") return false;
   if (error.category === "plan") return true;
+  if (error.category === "provider_connection_required") return true;
   if (error.category === "misconfigured") return true;
   if (error.category === "disabled") return true;
+  if (error.category === "unavailable") return true;
   if (error.category === "rate_limited") return true;
   if (error.category === "auth") return true;
   if (error.code === "model_not_allowed") return true;
   if (error.status >= 500) return true;
   return false;
-}
-
-export function shouldFallbackFromChatgptErrorToPlatformCore(message: string): boolean {
-  const lower = String(message ?? "").trim().toLowerCase();
-  if (!lower) return true;
-
-  if (
-    lower.includes("chatgpt session not available") ||
-    lower.includes("sign in again")
-  ) {
-    return true;
-  }
-
-  if (
-    lower.includes("chatgpt request failed") ||
-    lower.includes("chatgpt response read failed") ||
-    lower.includes("chatgpt returned invalid json") ||
-    lower.includes("chatgpt returned an empty response")
-  ) {
-    return true;
-  }
-
-  if (lower.includes("chatgpt inference failed")) return true;
-  if (lower.includes("http 4") || lower.includes("http 5")) return true;
-
-  if (
-    lower.includes("timeout") ||
-    lower.includes("timed out") ||
-    lower.includes("network error") ||
-    lower.includes("connection reset") ||
-    lower.includes("connection refused") ||
-    lower.includes("temporarily unavailable")
-  ) {
-    return true;
-  }
-
-  return true;
 }

@@ -133,7 +133,7 @@ Implementation targets:
 
 1. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/communityCore.ts`
 2. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useCommunityChatDataController.ts`
-3. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebThreadDiscoverChatLifecycle.ts`
+3. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts`
 4. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/App.tsx`
 
 Required outcome:
@@ -449,7 +449,7 @@ Implement in this order:
 13. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useCommunityChatDataController.ts`
 14. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useCommunityChatMutationController.ts`
 15. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/useCommunityChatRealtime.ts`
-16. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebThreadDiscoverChatLifecycle.ts`
+16. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts`
 17. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/App.tsx`
 18. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/components/WebCommunityChatPanel.tsx`
 19. `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web/src/components/WebCommunityMembersSection.tsx`

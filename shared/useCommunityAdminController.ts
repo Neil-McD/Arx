@@ -1,5 +1,6 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+import { resolveAuthSubject } from "./authSession";
 import {
   type AnalyticsPointLike, type AnalyticsRange, type AnalyticsSummaryLike, type CommunityMemberLike, type SessionLike, type UserProfileDetailLike, type UserProfileLike, analyticsBucketLabel, buildAnalyticsSeries, emptyAnalyticsSummary, resolveAnalyticsBucket, resolveAnalyticsWindowStart, trimProfileFields, } from "./communityAdminCore";
 
@@ -20,6 +21,7 @@ import {
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
 import { listCloudThreadUserMessageSenderIds } from "./cloudCommunityChatGateway";
+import { preloadImageUrls } from "./preloadImageUrls";
 
 type UseCommunityAdminControllerArgs<
   SessionT extends SessionLike,
@@ -49,6 +51,8 @@ type UseCommunityAdminControllerArgs<
   applyLoadedProfileToLocal?: (profile: UserProfileDetailT) => void;
 
   setCommunityMembers: Dispatch<SetStateAction<CommunityMemberT[]>>;
+  setIsLoadingCommunityMembers: Dispatch<SetStateAction<boolean>>;
+  setHasResolvedCommunityMembers: Dispatch<SetStateAction<boolean>>;
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
   setProfileName: Dispatch<SetStateAction<string>>;
@@ -77,8 +81,13 @@ export function useCommunityAdminController<
     UserProfileDetailT
   >,
 ) {
+  const resolveCanonicalProfileUserId = useCallback((sessionRaw: SessionT | null): string | null => {
+    return resolveAuthSubject(sessionRaw as any);
+  }, []);
+
   const argsRef = useRef(args);
   argsRef.current = args;
+  const communityMembersLoadSeqRef = useRef(0);
 
   const loadCommunityMembers = useCallback(async (
     communityId: string,
@@ -87,41 +96,75 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
-    let rows: CommunityMemberT[] | null = null;
+    const seq = (communityMembersLoadSeqRef.current += 1);
+    current.setIsLoadingCommunityMembers(true);
     try {
-      rows = (await listCloudCommunityMembershipAdminRows({
+      const rows = (await listCloudCommunityMembershipAdminRows({
         session: usableSession,
         communityId,
         limit: 200,
       })) as unknown as CommunityMemberT[];
-    } catch {
-      return;
-    }
+      await preloadImageUrls(
+        rows.map((row: any) => row?.avatar_url ?? null),
+        { maxUrls: rows.length, timeoutMs: 1200 },
+      );
 
-    current.setCommunityMembers(rows);
+      if (communityMembersLoadSeqRef.current !== seq) return;
 
-    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
-    if (userIds.length === 0) return;
-
-    if (current.loadUserProfiles) {
-      await current.loadUserProfiles(userIds, usableSession);
-      return;
-    }
-
-    try {
-      const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
-        session: usableSession,
-        userIds,
-      });
       current.setProfilesByUserId((prev) => {
+        let changed = false;
         const next = { ...prev };
-        for (const profile of profiles) {
-          next[profile.user_id] = profile;
+        for (const row of rows) {
+          const profileLike = row as unknown as UserProfileT & {
+            display_name?: string | null;
+            avatar_url?: string | null;
+          };
+          if (!profileLike.user_id) continue;
+          if (profileLike.display_name == null && profileLike.avatar_url == null) continue;
+          next[profileLike.user_id] = {
+            ...(next[profileLike.user_id] ?? ({} as UserProfileT)),
+            user_id: profileLike.user_id,
+            display_name: profileLike.display_name ?? null,
+            avatar_url: profileLike.avatar_url ?? null,
+          } as UserProfileT;
+          changed = true;
         }
-        return next;
+        return changed ? next : prev;
       });
+
+      const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+      if (userIds.length > 0) {
+        if (current.loadUserProfiles) {
+          await current.loadUserProfiles(userIds, usableSession);
+        } else {
+          try {
+            const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
+              session: usableSession,
+              userIds,
+            });
+            if (communityMembersLoadSeqRef.current !== seq) return;
+            current.setProfilesByUserId((prev) => {
+              const next = { ...prev };
+              for (const profile of profiles) {
+                next[profile.user_id] = profile;
+              }
+              return next;
+            });
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (communityMembersLoadSeqRef.current !== seq) return;
+      current.setCommunityMembers(rows);
     } catch {
       // ignore
+    } finally {
+      if (communityMembersLoadSeqRef.current === seq) {
+        current.setHasResolvedCommunityMembers(true);
+        current.setIsLoadingCommunityMembers(false);
+      }
     }
   }, []);
 
@@ -129,13 +172,16 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
+    const profileUserId = resolveCanonicalProfileUserId(usableSession);
+    if (!profileUserId) return;
     try {
       const row = await fetchCloudProfileDetailByUserId<SessionT, UserProfileDetailT>({
         session: usableSession,
-        userId: usableSession.user.id,
+        userId: profileUserId,
       });
       if (!row) return;
 
+      await preloadImageUrls([row.avatar_url ?? null], { maxUrls: 1, timeoutMs: 1200 });
       current.setCloudProfile(row);
       current.setProfilesByUserId((prev) => ({
         ...prev,
@@ -145,7 +191,7 @@ export function useCommunityAdminController<
     } catch {
       // ignore
     }
-  }, []);
+  }, [resolveCanonicalProfileUserId]);
 
   const saveProfileToCloud = useCallback(async () => {
     const current = argsRef.current;
@@ -169,9 +215,11 @@ export function useCommunityAdminController<
     current.setProfileSaveError(null);
     current.setProfileSaveSuccess(false);
     try {
+      const profileUserId = resolveCanonicalProfileUserId(session);
+      if (!profileUserId) throw new Error("profile_user_id_required");
       const saved = await upsertCloudProfileDetail<SessionT, UserProfileDetailT>({
         session,
-        userId: session.user.id,
+        userId: profileUserId,
         displayName: trimmedName || null,
         avatarUrl: current.profileAvatarUrl ?? null,
         bio: trimmedBio || null,
@@ -202,7 +250,7 @@ export function useCommunityAdminController<
     } finally {
       current.setIsSavingProfile(false);
     }
-  }, []);
+  }, [resolveCanonicalProfileUserId]);
 
   const loadCommunityAnalytics = useCallback(async (
     communityId: string,
@@ -332,7 +380,7 @@ export function useCommunityAdminController<
   }, [loadCommunityMembers]);
 
   const handleSetCommunityMemberRole = useCallback(async (
-    userId: string,
+    membershipId: string,
     role: "admin" | "moderator" | "member",
   ) => {
     const current = argsRef.current;
@@ -343,7 +391,7 @@ export function useCommunityAdminController<
       await setCloudCommunityMemberRole({
         session,
         communityId,
-        userId,
+        membershipId,
         role,
       });
     } catch (error) {
@@ -353,7 +401,7 @@ export function useCommunityAdminController<
     }
   }, [refreshCommunityMembershipViews]);
 
-  const handleRemoveCommunityMember = useCallback(async (userId: string) => {
+  const handleRemoveCommunityMember = useCallback(async (membershipId: string) => {
     const current = argsRef.current;
     const communityId = current.activeCommunityId;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -366,7 +414,7 @@ export function useCommunityAdminController<
       await removeCloudCommunityMember({
         session,
         communityId,
-        userId,
+        membershipId,
       });
     } catch (error) {
       console.warn("Failed to remove member:", error);

@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
+import { StableAvatar } from "./StableAvatar";
 import { partitionCommunityAttachments } from "./communityAttachmentUi";
 
 type CommunityMessageAttachment = {
@@ -135,17 +136,15 @@ export function CommunityChatMessageRow({
         className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
         data-time={shortTime}
       >
-        <div
+        <StableAvatar
           className="chat-avatar"
-          style={{ backgroundColor: avatarColor }}
+          readyClassName="has-image"
+          imageUrl={avatarUrl}
+          alt={senderLabel}
+          fallback={<span>{getInitials(senderLabel)}</span>}
+          fallbackStyle={{ backgroundColor: avatarColor }}
           title={senderLabel}
-        >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={senderLabel} draggable={false} />
-          ) : (
-            <span>{getInitials(senderLabel)}</span>
-          )}
-        </div>
+        />
         <div className="chat-content">
           <div className="chat-header">
             <span className="chat-sender">{senderLabel}</span>

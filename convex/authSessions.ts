@@ -1,0 +1,697 @@
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { v } from "convex/values";
+import { decryptStoredSecret, encryptSecret } from "./providerConnections";
+
+type StoredAuthSessionV1 = {
+  accessToken: string;
+  idToken: string | null;
+  refreshToken: string;
+  accessTokenExpiresAt: number | null;
+  user: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+};
+
+type AuthSessionRow = {
+  _id?: unknown;
+  sessionId: string;
+  authSubject: string;
+  userId: unknown;
+  provider: string;
+  encryptedSecretHex: string;
+  secretIvHex: string;
+  secretVersion: number;
+  accessTokenExpiresAt?: number | null;
+  email?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  lastRefreshAt?: number | null;
+  revokedAt?: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+const DEFAULT_OAUTH_SCOPE = "openid profile email offline_access";
+const WORKOS_AUTHENTICATE_UPSTREAM_URL = "https://api.workos.com/user_management/authenticate";
+
+function normalizeString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function readString(value: unknown): string | null {
+  const normalized = normalizeString(value);
+  return normalized || null;
+}
+
+function readObjectString(record: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = readString(record[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function readEpochSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric) && numeric > 0) return Math.floor(numeric);
+    const parsedMs = Date.parse(trimmed);
+    if (Number.isFinite(parsedMs) && parsedMs > 0) return Math.floor(parsedMs / 1000);
+  }
+  return null;
+}
+
+function decodeJwtPayload(token: string): unknown | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const json = atob(padded);
+    return JSON.parse(json) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function readJwtExp(accessToken: string): number | null {
+  const payload = decodeJwtPayload(accessToken);
+  if (!payload || typeof payload !== "object") return null;
+  return readEpochSeconds((payload as Record<string, unknown>).exp);
+}
+
+function coerceDisplayNameFromRecord(record: Record<string, unknown>): string | null {
+  const direct = readObjectString(record, ["name", "display_name", "displayName", "full_name", "fullName"]);
+  if (direct) return direct;
+  const first = readObjectString(record, ["given_name", "givenName", "first_name", "firstName"]);
+  const last = readObjectString(record, ["family_name", "familyName", "last_name", "lastName"]);
+  const combined = [first, last].filter((value): value is string => Boolean(value)).join(" ").trim();
+  return combined || null;
+}
+
+function coerceAvatarUrlFromRecord(record: Record<string, unknown>): string | null {
+  return readObjectString(record, [
+    "picture",
+    "picture_url",
+    "pictureUrl",
+    "profile_picture_url",
+    "profilePictureUrl",
+    "avatar_url",
+    "avatarUrl",
+    "image_url",
+    "imageUrl",
+  ]);
+}
+
+function decodeUserFromIdentityToken(token: string): StoredAuthSessionV1["user"] | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const id = readString(record.sub);
+  if (!id) return null;
+  return {
+    id,
+    email: readString(record.email),
+    displayName: coerceDisplayNameFromRecord(record),
+    avatarUrl: coerceAvatarUrlFromRecord(record),
+  };
+}
+
+function coerceUser(value: unknown): StoredAuthSessionV1["user"] | null {
+  const record = asObject(value);
+  if (!record) return null;
+  const id = readString(record.id) ?? readString(record.user_id) ?? readString(record.sub);
+  if (!id) return null;
+  return {
+    id,
+    email: readString(record.email),
+    displayName: coerceDisplayNameFromRecord(record),
+    avatarUrl: coerceAvatarUrlFromRecord(record),
+  };
+}
+
+function findNestedObjectCandidate(
+  payload: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const nested = asObject(payload[key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function findSessionPayload(payload: unknown, requireRefreshToken = true): Record<string, unknown> | null {
+  const initial = asObject(payload);
+  if (!initial) return null;
+  const queue: Record<string, unknown>[] = [initial];
+  const visited = new Set<Record<string, unknown>>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const accessToken = readObjectString(current, ["access_token", "accessToken"]);
+    const refreshToken = readObjectString(current, ["refresh_token", "refreshToken"]);
+    if (accessToken && (!requireRefreshToken || refreshToken)) return current;
+
+    const nested = findNestedObjectCandidate(current, ["session", "data", "result", "payload"]);
+    if (nested) queue.push(nested);
+  }
+  return null;
+}
+
+function coerceSessionExpiresAt(
+  sessionPayload: Record<string, unknown>,
+  accessToken: string,
+): number | null {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const direct = readEpochSeconds(sessionPayload.expires_at ?? sessionPayload.expiresAt);
+  if (direct) return direct;
+  const expiresIn = readEpochSeconds(sessionPayload.expires_in ?? sessionPayload.expiresIn);
+  if (expiresIn) return nowSec + Math.max(1, expiresIn);
+  return readJwtExp(accessToken);
+}
+
+function normalizeStoredState(
+  payload: unknown,
+  options: {
+    requireRefreshToken?: boolean;
+    fallback?: StoredAuthSessionV1 | null;
+  } = {},
+): StoredAuthSessionV1 | null {
+  const requireRefreshToken = options.requireRefreshToken !== false;
+  const sessionPayload = findSessionPayload(payload, requireRefreshToken);
+  if (!sessionPayload) return null;
+
+  const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
+  const refreshToken = readObjectString(sessionPayload, ["refresh_token", "refreshToken"]) ?? options.fallback?.refreshToken ?? null;
+  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]) ?? options.fallback?.idToken ?? null;
+  if (!accessToken || (requireRefreshToken && !refreshToken)) return null;
+
+  const accessTokenExpiresAt = coerceSessionExpiresAt(sessionPayload, accessToken) ?? options.fallback?.accessTokenExpiresAt ?? null;
+  const user =
+    coerceUser(sessionPayload.user) ??
+    decodeUserFromIdentityToken(idToken ?? accessToken) ??
+    options.fallback?.user ??
+    null;
+  if (!user?.id) return null;
+
+  return {
+    accessToken,
+    idToken,
+    refreshToken: refreshToken ?? "",
+    accessTokenExpiresAt,
+    user,
+  };
+}
+
+function encodeStoredState(value: StoredAuthSessionV1): string {
+  return JSON.stringify(value);
+}
+
+async function decodeStoredState(row: Pick<AuthSessionRow, "encryptedSecretHex" | "secretIvHex">): Promise<StoredAuthSessionV1 | null> {
+  try {
+    const plaintext = await decryptStoredSecret({
+      encryptedSecretHex: String(row.encryptedSecretHex),
+      secretIvHex: String(row.secretIvHex),
+    });
+    const payload = JSON.parse(plaintext) as unknown;
+    const record = asObject(payload);
+    if (!record) return null;
+    const accessToken = readString(record.accessToken);
+    const refreshToken = readString(record.refreshToken);
+    const user = coerceUser(record.user);
+    if (!accessToken || !refreshToken || !user?.id) return null;
+    return {
+      accessToken,
+      idToken: readString(record.idToken),
+      refreshToken,
+      accessTokenExpiresAt: readEpochSeconds(record.accessTokenExpiresAt),
+      user,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function resolveOAuthAuthorizeUrl(): string {
+  return readEnv("ARX_AUTH_AUTHORIZE_URL");
+}
+
+function resolveOAuthTokenUrl(): string {
+  return readEnv("ARX_AUTH_TOKEN_URL");
+}
+
+function resolveOAuthLogoutUrl(): string {
+  return readEnv("ARX_AUTH_LOGOUT_URL");
+}
+
+function resolveOAuthClientId(): string {
+  return readEnv("ARX_AUTH_CLIENT_ID");
+}
+
+function resolveOAuthClientSecret(): string {
+  return readEnv("ARX_AUTH_CLIENT_SECRET");
+}
+
+function resolveOAuthScope(): string {
+  return readEnv("ARX_AUTH_SCOPE") || DEFAULT_OAUTH_SCOPE;
+}
+
+function resolveOAuthAudience(): string {
+  return readEnv("ARX_AUTH_AUDIENCE");
+}
+
+function isLikelyWorkOsAuthUrl(value: string): boolean {
+  const raw = normalizeString(value);
+  if (!raw) return false;
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.trim().toLowerCase();
+    const path = parsed.pathname.trim().toLowerCase();
+    if (host === "api.workos.com" && path.startsWith("/user_management/")) return true;
+    if (host.endsWith(".authkit.app")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isLikelyWorkOsAuthConfiguration(params: {
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  issuer?: string;
+  jwksUrl?: string;
+}): boolean {
+  const clientId = normalizeString(params.clientId);
+  if (!clientId.startsWith("client_")) return false;
+  const candidates = [params.authorizeUrl, params.tokenUrl, params.issuer, params.jwksUrl];
+  return candidates.some((value) => isLikelyWorkOsAuthUrl(String(value ?? "")));
+}
+
+async function refreshUpstreamSession(existing: StoredAuthSessionV1): Promise<StoredAuthSessionV1> {
+  const tokenUrlRaw = resolveOAuthTokenUrl();
+  const clientId = resolveOAuthClientId();
+  if (!tokenUrlRaw) throw new Error("auth_verifier_misconfigured: missing token URL");
+  if (!clientId) throw new Error("auth_verifier_misconfigured: missing client id");
+
+  const isWorkOsAuth = isLikelyWorkOsAuthConfiguration({
+    authorizeUrl: resolveOAuthAuthorizeUrl(),
+    tokenUrl: tokenUrlRaw,
+    clientId,
+    issuer: readEnv("ARX_AUTH_JWT_ISSUER"),
+    jwksUrl: readEnv("ARX_AUTH_JWT_JWKS_URL"),
+  });
+
+  const form = new URLSearchParams();
+  form.set("grant_type", "refresh_token");
+  form.set("refresh_token", existing.refreshToken);
+  form.set("client_id", clientId);
+  if (!isWorkOsAuth) {
+    const clientSecret = resolveOAuthClientSecret();
+    if (clientSecret) form.set("client_secret", clientSecret);
+    const audience = resolveOAuthAudience();
+    if (audience) form.set("audience", audience);
+  } else {
+    const scope = resolveOAuthScope();
+    if (scope) form.set("scope", scope);
+  }
+
+  const upstreamUrl = isWorkOsAuth ? WORKOS_AUTHENTICATE_UPSTREAM_URL : tokenUrlRaw;
+  const response = await fetch(upstreamUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  if (!response.ok) {
+    const text = (await response.text()).trim();
+    throw new Error(text || `auth_refresh_failed_${response.status}`);
+  }
+  const payload = (await response.json()) as unknown;
+  const refreshed = normalizeStoredState(payload, {
+    requireRefreshToken: false,
+    fallback: existing,
+  });
+  if (!refreshed?.refreshToken) {
+    throw new Error("invalid_refresh_payload");
+  }
+  return refreshed;
+}
+
+async function logoutUpstream(accessToken: string): Promise<void> {
+  const logoutUrl = resolveOAuthLogoutUrl();
+  if (!logoutUrl || !normalizeString(accessToken)) return;
+  try {
+    await fetch(logoutUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        scope: "local",
+        access_token: accessToken,
+      }),
+    });
+  } catch {
+    // best effort only
+  }
+}
+
+function toPublicSession(stored: StoredAuthSessionV1) {
+  return {
+    access_token: stored.accessToken,
+    ...(stored.idToken ? { id_token: stored.idToken } : null),
+    expires_at: stored.accessTokenExpiresAt ?? Math.floor(Date.now() / 1000) + 60,
+    user: {
+      id: stored.user.id,
+      ...(stored.user.email ? { email: stored.user.email } : null),
+      ...(stored.user.displayName ? { displayName: stored.user.displayName } : null),
+      ...(stored.user.avatarUrl ? { avatarUrl: stored.user.avatarUrl } : null),
+    },
+  };
+}
+
+async function getAuthSessionRowBySessionId(ctx: any, sessionId: string): Promise<AuthSessionRow | null> {
+  const row = await ctx.db
+    .query("authSessions")
+    .withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId))
+    .first();
+  return (row as AuthSessionRow | null) ?? null;
+}
+
+export const getAuthSessionBySessionIdInternal = internalQuery({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await getAuthSessionRowBySessionId(ctx, args.sessionId);
+  },
+});
+
+export const createAuthSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    authSubject: v.string(),
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    idToken: v.optional(v.string()),
+    refreshToken: v.string(),
+    accessTokenExpiresAt: v.optional(v.number()),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    externalUserId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const encrypted = await encryptSecret(
+      encodeStoredState({
+        accessToken: args.accessToken,
+        idToken: normalizeString(args.idToken) || null,
+        refreshToken: args.refreshToken,
+        accessTokenExpiresAt:
+          typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+            ? Math.floor(args.accessTokenExpiresAt)
+            : null,
+        user: {
+          id: args.externalUserId,
+          email: normalizeString(args.email) || null,
+          displayName: normalizeString(args.displayName) || null,
+          avatarUrl: normalizeString(args.avatarUrl) || null,
+        },
+      }),
+    );
+
+    const existing = await getAuthSessionRowBySessionId(ctx, args.sessionId);
+    const patch = {
+      authSubject: args.authSubject,
+      userId: args.userId,
+      provider: args.provider,
+      encryptedSecretHex: encrypted.encryptedSecretHex,
+      secretIvHex: encrypted.secretIvHex,
+      secretVersion: encrypted.secretVersion,
+      accessTokenExpiresAt:
+        typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+          ? Math.floor(args.accessTokenExpiresAt)
+          : undefined,
+      email: normalizeString(args.email) || undefined,
+      displayName: normalizeString(args.displayName) || undefined,
+      avatarUrl: normalizeString(args.avatarUrl) || undefined,
+      lastRefreshAt: args.nowMs,
+      revokedAt: undefined,
+      updatedAt: args.nowMs,
+    };
+
+    if (!existing) {
+      const id = await ctx.db.insert("authSessions", {
+        sessionId: args.sessionId,
+        createdAt: args.nowMs,
+        ...patch,
+      });
+      return { id };
+    }
+
+    await ctx.db.patch(existing._id as any, patch);
+    return { id: existing._id };
+  },
+});
+
+export const updateAuthSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    accessToken: v.string(),
+    idToken: v.optional(v.string()),
+    refreshToken: v.string(),
+    accessTokenExpiresAt: v.optional(v.number()),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    externalUserId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await getAuthSessionRowBySessionId(ctx, args.sessionId);
+    if (!existing) return { updated: false };
+
+    const encrypted = await encryptSecret(
+      encodeStoredState({
+        accessToken: args.accessToken,
+        idToken: normalizeString(args.idToken) || null,
+        refreshToken: args.refreshToken,
+        accessTokenExpiresAt:
+          typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+            ? Math.floor(args.accessTokenExpiresAt)
+            : null,
+        user: {
+          id: args.externalUserId,
+          email: normalizeString(args.email) || null,
+          displayName: normalizeString(args.displayName) || null,
+          avatarUrl: normalizeString(args.avatarUrl) || null,
+        },
+      }),
+    );
+
+    await ctx.db.patch(existing._id as any, {
+      encryptedSecretHex: encrypted.encryptedSecretHex,
+      secretIvHex: encrypted.secretIvHex,
+      secretVersion: encrypted.secretVersion,
+      accessTokenExpiresAt:
+        typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+          ? Math.floor(args.accessTokenExpiresAt)
+          : undefined,
+      email: normalizeString(args.email) || undefined,
+      displayName: normalizeString(args.displayName) || undefined,
+      avatarUrl: normalizeString(args.avatarUrl) || undefined,
+      lastRefreshAt: args.nowMs,
+      revokedAt: undefined,
+      updatedAt: args.nowMs,
+    });
+    return { updated: true };
+  },
+});
+
+export const revokeAuthSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await getAuthSessionRowBySessionId(ctx, args.sessionId);
+    if (!existing) return { revoked: false };
+    await ctx.db.patch(existing._id as any, {
+      revokedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    return { revoked: true };
+  },
+});
+
+export const bootstrapAuthSessionInternal = internalAction({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
+      sessionId: args.sessionId,
+    })) as AuthSessionRow | null;
+    if (!row || typeof row.revokedAt === "number") {
+      return { status: "terminal_failure" as const, reason: "auth_session_missing" };
+    }
+    const stored = await decodeStoredState(row);
+    if (!stored?.refreshToken) {
+      await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+        sessionId: args.sessionId,
+        nowMs: Date.now(),
+      });
+      return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (typeof stored.accessTokenExpiresAt === "number" && stored.accessTokenExpiresAt > nowSec + 60) {
+      return { status: "ready" as const, session: toPublicSession(stored) };
+    }
+    try {
+      const refreshed = await refreshUpstreamSession(stored);
+      await ctx.runMutation(internal.authSessions.updateAuthSessionInternal as any, {
+        sessionId: args.sessionId,
+        accessToken: refreshed.accessToken,
+        ...(refreshed.idToken ? { idToken: refreshed.idToken } : null),
+        refreshToken: refreshed.refreshToken,
+        ...(typeof refreshed.accessTokenExpiresAt === "number" ? { accessTokenExpiresAt: refreshed.accessTokenExpiresAt } : null),
+        externalUserId: refreshed.user.id,
+        ...(refreshed.user.email ? { email: refreshed.user.email } : null),
+        ...(refreshed.user.displayName ? { displayName: refreshed.user.displayName } : null),
+        ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
+        nowMs: Date.now(),
+      });
+      return { status: "ready" as const, session: toPublicSession(refreshed) };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error ?? "");
+      if (
+        reason.includes("invalid_grant") ||
+        reason.includes("invalid refresh token") ||
+        reason.includes("missing refresh token") ||
+        reason.includes("auth_refresh_failed_400") ||
+        reason.includes("auth_refresh_failed_401") ||
+        reason.includes("auth_refresh_failed_403")
+      ) {
+        await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+          sessionId: args.sessionId,
+          nowMs: Date.now(),
+        });
+        return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
+      }
+      return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
+    }
+  },
+});
+
+export const refreshAuthSessionInternal = internalAction({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
+      sessionId: args.sessionId,
+    })) as AuthSessionRow | null;
+    if (!row || typeof row.revokedAt === "number") {
+      return { status: "terminal_failure" as const, reason: "auth_session_missing" };
+    }
+    const stored = await decodeStoredState(row);
+    if (!stored?.refreshToken) {
+      await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+        sessionId: args.sessionId,
+        nowMs: Date.now(),
+      });
+      return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
+    }
+    try {
+      const refreshed = await refreshUpstreamSession(stored);
+      await ctx.runMutation(internal.authSessions.updateAuthSessionInternal as any, {
+        sessionId: args.sessionId,
+        accessToken: refreshed.accessToken,
+        ...(refreshed.idToken ? { idToken: refreshed.idToken } : null),
+        refreshToken: refreshed.refreshToken,
+        ...(typeof refreshed.accessTokenExpiresAt === "number" ? { accessTokenExpiresAt: refreshed.accessTokenExpiresAt } : null),
+        externalUserId: refreshed.user.id,
+        ...(refreshed.user.email ? { email: refreshed.user.email } : null),
+        ...(refreshed.user.displayName ? { displayName: refreshed.user.displayName } : null),
+        ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
+        nowMs: Date.now(),
+      });
+      return { status: "refreshed" as const, session: toPublicSession(refreshed) };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error ?? "");
+      if (
+        reason.includes("invalid_grant") ||
+        reason.includes("invalid refresh token") ||
+        reason.includes("missing refresh token") ||
+        reason.includes("auth_refresh_failed_400") ||
+        reason.includes("auth_refresh_failed_401") ||
+        reason.includes("auth_refresh_failed_403")
+      ) {
+        await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+          sessionId: args.sessionId,
+          nowMs: Date.now(),
+        });
+        return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
+      }
+      return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
+    }
+  },
+});
+
+export const logoutAuthSessionInternal = internalAction({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
+      sessionId: args.sessionId,
+    })) as AuthSessionRow | null;
+    if (!row || typeof row.revokedAt === "number") {
+      return { status: "ok" as const };
+    }
+    const stored = await decodeStoredState(row);
+    if (stored?.accessToken) {
+      await logoutUpstream(stored.accessToken);
+    }
+    await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+      sessionId: args.sessionId,
+      nowMs: Date.now(),
+    });
+    return { status: "ok" as const };
+  },
+});
+
+export { normalizeStoredState };

@@ -13,8 +13,8 @@ type UseWebWorkspaceRouteControllerArgs = {
   setActiveView: (value: AppView | ((prev: AppView) => AppView)) => void;
   setActiveThreadId: (value: string | null | ((prev: string | null) => string | null)) => void;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
-  setActiveCloudProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
-  syncCommunitySelection?: (opts: { communityId: string | null; communitySlug?: string | null }) => void;
+  setActiveProjectId?: (value: string | null | ((prev: string | null) => string | null)) => void;
+  syncCommunitySelection?: (opts: { communityId?: string | null; communitySlug?: string | null }) => void;
 };
 
 export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControllerArgs) {
@@ -69,7 +69,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     }) => {
       const current = argsRef.current;
       if (opts?.projectId !== undefined) {
-        current.setActiveCloudProjectId?.(opts.projectId);
+        current.setActiveProjectId?.(opts.projectId);
       }
       current.setActivePage("workspace");
       current.setActiveView("home");
@@ -89,7 +89,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     }) => {
       const current = argsRef.current;
       if (opts.projectId !== undefined) {
-        current.setActiveCloudProjectId?.(opts.projectId);
+        current.setActiveProjectId?.(opts.projectId);
       }
       current.setActivePage("workspace");
       current.setActiveView("home");

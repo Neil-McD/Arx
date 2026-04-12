@@ -12,7 +12,7 @@ import type {
   CommunityResourcesActions,
   CommunityResourcesCapabilities,
   CommunityResourcesState,
-} from "../../../../src/components/communityResourcesContracts";
+} from "./communityResourcesContracts";
 import { WebCommunityResourceViewerModal } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
 
@@ -313,9 +313,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
         {state.isLoadingResources ? (
           <div className="community-panel-state-shell">
-            <div className="chat-loading">
-              <div className="loading-spinner" />
-              <span>Loading resources...</span>
+            <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
+              <div className="community-chat-page-loading-title">Loading resources…</div>
+              <div className="community-chat-page-loading-copy">
+                {`Preparing links, videos, and notes for ${capabilities.activeCommunityName ?? "this community"}.`}
+              </div>
+              <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
         ) : state.resources.length === 0 ? (

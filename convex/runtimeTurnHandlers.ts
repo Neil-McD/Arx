@@ -1,17 +1,30 @@
-import { runChatgptCompletion } from "./httpChatgpt";
+import {
+  runChatgptCompletion,
+  runChatgptStreamingCompletion,
+} from "./httpChatgpt";
 import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
   normalizeMaxTokens,
   normalizeMessages,
   runOpenRouterCompletion,
+  runOpenRouterStreamingCompletion,
 } from "./httpRuntimeSupport";
 import {
   buildRuntimeRunPersistenceHelpers,
+  type SseResponseEvent,
   buildRuntimeTurnSuccessResponder,
+  type SseResponseFn,
+  type SseResponseSource,
+  type SseResponseStreamWriter,
 } from "./httpRuntimeTurnState";
 import { executeChatToolsAgentLoop } from "./httpDaytona";
-import { shouldFallbackFromChatgptErrorToPlatformCore } from "../shared/cloudFunctionErrorCore";
-import { composeCloudScopedSystemPrompt } from "../shared/runtimePrompt";
+import {
+  USER_CANCELLED_RUNTIME_CODE,
+  isRuntimeRunCancelledError,
+  runAbortableWithRuntimeCancellation,
+  throwIfRuntimeRunCancelled,
+} from "./runtimeCancellation";
+import { composeCloudScopedRuntimeSystemPrompt } from "../shared/runtimePrompt";
 import {
   PublicTurnInput,
   RequireAuthenticatedActor,
@@ -24,6 +37,35 @@ import {
   persistRuntimeAssistantMessage,
   persistRuntimeUserMessage,
 } from "./runtimeTurnPersistence";
+import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
+import { logStructuredError } from "./errorLogging";
+
+export type {
+  SseResponseEvent,
+  SseResponseFn,
+  SseResponseSource,
+  SseResponseStreamWriter,
+} from "./httpRuntimeTurnState";
+export type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
+
+type RuntimeCompletionSuccess = {
+  content: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+};
+
+type RuntimeCompletionFailure = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+};
+
+function isRuntimeCompletionFailure(
+  completion: RuntimeCompletionSuccess | RuntimeCompletionFailure,
+): completion is RuntimeCompletionFailure {
+  return "ok" in completion && completion.ok === false;
+}
 
 export type JsonResponseFn = (
   req: Request,
@@ -31,10 +73,36 @@ export type JsonResponseFn = (
   payload: unknown,
 ) => Response;
 
-export type SseResponseFn = (
-  req: Request,
-  events: Array<{ event: string; data: Record<string, unknown> }>,
-) => Response;
+function mapPersistedRuntimeEventRow(value: unknown): {
+  id: string;
+  run_id: string;
+  seq: number;
+  event_type: string;
+  payload: unknown;
+  created_at: string;
+} | null {
+  const row =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  if (!row) return null;
+  const id = String(row._id ?? "").trim();
+  const runId = String(row.runId ?? "").trim();
+  const eventType = String(row.eventType ?? "").trim();
+  if (!id || !runId || !eventType) return null;
+  const seq = Number(row.seq);
+  const createdAtMs = Number(row.createdAt);
+  return {
+    id,
+    run_id: runId,
+    seq: Number.isFinite(seq) ? Math.max(0, Math.floor(seq)) : 0,
+    event_type: eventType,
+    payload: row.payload ?? null,
+    created_at: new Date(
+      Number.isFinite(createdAtMs) ? Math.floor(createdAtMs) : Date.now(),
+    ).toISOString(),
+  };
+}
 
 export async function handlePublicTurnRequest(args: {
   req: Request;
@@ -71,10 +139,7 @@ export async function handlePublicTurnRequest(args: {
   }
 
   const messages = normalizeMessages(input.messages);
-  if (
-    messages.length === 0 ||
-    messages[messages.length - 1]?.role !== "user"
-  ) {
+  if (messages.length === 0 || messages[messages.length - 1]?.role !== "user") {
     return jsonResponse(req, 400, {
       ok: false,
       code: "no_user_message",
@@ -85,15 +150,69 @@ export async function handlePublicTurnRequest(args: {
 
   const maxTokens = normalizeMaxTokens(input.max_tokens, 2048);
   const runId =
-    String((input as { idempotency_key?: unknown }).idempotency_key ?? "")
-      .trim() || `convex_runtime:${crypto.randomUUID()}`;
+    String(
+      (input as { idempotency_key?: unknown }).idempotency_key ?? "",
+    ).trim() || `convex_runtime:${crypto.randomUUID()}`;
+  const stream = input.stream !== false;
+  if (stream) {
+    return sseResponse(req, async (writer) => {
+      writer.send({
+        event: "start",
+        data: {
+          run_id: runId,
+          lane: "public",
+          engine_id: "public_convex",
+          model_id: modelId,
+          inference_source: "free",
+        },
+      });
+      const completion = await runOpenRouterStreamingCompletion({
+        req,
+        modelRef,
+        messages,
+        maxTokens,
+        onDelta: (delta) => {
+          writer.send({
+            event: "delta",
+            data: {
+              delta,
+            },
+          });
+        },
+      });
+      if (isRuntimeCompletionFailure(completion)) {
+        writer.send({
+          event: "error",
+          data: {
+            error: completion.message,
+          },
+        });
+        writer.close();
+        return;
+      }
+      writer.send({
+        event: "done",
+        data: {
+          run_id: runId,
+          lane: "public",
+          engine_id: "public_convex",
+          model_id: modelId,
+          inference_source: "free",
+          full_content: completion.content,
+          prompt_tokens: completion.promptTokens,
+          completion_tokens: completion.completionTokens,
+        },
+      });
+    });
+  }
+
   const completion = await runOpenRouterCompletion({
     req,
     modelRef,
     messages,
     maxTokens,
   });
-  if ("ok" in completion && completion.ok === false) {
+  if (isRuntimeCompletionFailure(completion)) {
     return jsonResponse(req, completion.status, {
       ok: false,
       code: completion.code,
@@ -105,57 +224,17 @@ export async function handlePublicTurnRequest(args: {
   const content = completion.content;
   const promptTokens = completion.promptTokens;
   const completionTokens = completion.completionTokens;
-  const stream = input.stream !== false;
-  if (!stream) {
-    return jsonResponse(req, 200, {
-      ok: true,
-      run_id: runId,
-      lane: "public",
-      engine_id: "public_convex",
-      model_id: modelId,
-      inference_source: "free",
-      content,
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-    });
-  }
-
-  return sseResponse(req, [
-    {
-      event: "start",
-      data: {
-        run_id: runId,
-        lane: "public",
-        engine_id: "public_convex",
-        model_id: modelId,
-        inference_source: "free",
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-      },
-    },
-    {
-      event: "delta",
-      data: {
-        delta: content,
-        full_content: content,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-      },
-    },
-    {
-      event: "done",
-      data: {
-        run_id: runId,
-        lane: "public",
-        engine_id: "public_convex",
-        model_id: modelId,
-        inference_source: "free",
-        full_content: content,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-      },
-    },
-  ]);
+  return jsonResponse(req, 200, {
+    ok: true,
+    run_id: runId,
+    lane: "public",
+    engine_id: "public_convex",
+    model_id: modelId,
+    inference_source: "free",
+    content,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+  });
 }
 
 export async function handleRuntimeTurnRequest(args: {
@@ -185,41 +264,49 @@ export async function handleRuntimeTurnRequest(args: {
         ...payload,
       }),
     );
-  const runtimeSseResponse = (
-    events: Array<{ event: string; data: Record<string, unknown> }>,
-  ): Response =>
+  const mapRuntimeSseEvent = (entry: SseResponseEvent): SseResponseEvent => ({
+    event: entry.event,
+    data: {
+      request_id: requestId,
+      stage:
+        typeof entry.data?.stage === "string" && entry.data.stage.trim()
+          ? entry.data.stage
+          : entry.event === "start"
+            ? "start"
+            : entry.event === "delta"
+              ? "streaming"
+              : entry.event === "done"
+                ? "done"
+                : runtimeTurnStage,
+      ...entry.data,
+    },
+  });
+  const runtimeSseResponse = (source: SseResponseSource): Response =>
     withRuntimeHeaders(
       sseResponse(
         req,
-        events.map((entry) => ({
-          event: entry.event,
-          data: {
-            request_id: requestId,
-            stage:
-              typeof entry.data?.stage === "string" && entry.data.stage.trim()
-                ? entry.data.stage
-                : entry.event === "start"
-                  ? "start"
-                  : entry.event === "delta"
-                    ? "streaming"
-                    : entry.event === "done"
-                      ? "done"
-                      : runtimeTurnStage,
-            ...entry.data,
-          },
-        })),
+        Array.isArray(source)
+          ? source.map(mapRuntimeSseEvent)
+          : (writer: SseResponseStreamWriter) =>
+              source({
+                send(entry) {
+                  writer.send(mapRuntimeSseEvent(entry));
+                },
+                close() {
+                  writer.close();
+                },
+              }),
       ),
     );
   let startedRunId: string | null = null;
+  let runtimeTurnLogContext: Record<string, unknown> = {};
   let finishRunBestEffort:
-    | ((
-        params: {
-          status: "ok" | "error" | "cancelled";
-          reason?: string;
-          errorCode?: string;
-          errorMessage?: string;
-        },
-      ) => Promise<void>)
+    | ((params: {
+        status: "ok" | "error" | "cancelled";
+        reason?: string;
+        errorCode?: string;
+        errorMessage?: string;
+      }) => Promise<void>)
     | null = null;
 
   let input: RuntimeTurnInput;
@@ -272,6 +359,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode,
+      internalFollowup,
     } = resolved.value;
     const runId =
       String(input.idempotency_key ?? "").trim() ||
@@ -285,12 +373,33 @@ export async function handleRuntimeTurnRequest(args: {
     const latestUserText = String(
       conversationMessages[conversationMessages.length - 1]?.content ?? "",
     ).trim();
+    const persistVisibleUserMessage = internalFollowup === null;
+    const persistVisibleAssistantMessage =
+      internalFollowup?.suppressAssistantMessage !== true;
+    const runVisibility = internalFollowup ? "internal_hidden" : "user_visible";
     const runStartedAt = Date.now();
+    runtimeTurnLogContext = {
+      runId,
+      threadId: String(ownedThread._id),
+      threadKey,
+      userId: actor.dbUserId,
+      projectId: runtimeProjectId ?? undefined,
+      communityId: runtimeCommunityId ?? undefined,
+      requestedModelId,
+      lane,
+      inferenceSource,
+      executionMode: runtimeExecutionMode,
+      capabilityFamilies: resolvedRuntimeCapabilityFamilies,
+      harnessProfile: resolvedRuntimeHarnessProfile,
+      internalFollowupKind: internalFollowup?.kind ?? undefined,
+    };
     const runStartArgs: Record<string, unknown> = {
       ownerId: actor.dbUserId,
       threadId: ownedThread._id,
       runId,
       lane,
+      visibility: runVisibility,
+      internalFollowupKind: internalFollowup?.kind ?? undefined,
       projectId: runtimeProjectId ?? undefined,
       modelId: requestedModelId,
       engineId: "runtime_turn",
@@ -316,15 +425,32 @@ export async function handleRuntimeTurnRequest(args: {
     });
     if (!runStart.ok) return runStart.response;
 
-    const { appendRunEvent, finishRunBestEffort: finishRunBestEffortForRun } =
-      buildRuntimeRunPersistenceHelpers({
+    const {
+      appendRunEvent,
+      finishRunBestEffort: finishRunBestEffortForRun,
+      touchRunHeartbeatBestEffort,
+    } = buildRuntimeRunPersistenceHelpers({
+      ctx,
+      userId: actor.dbUserId,
+      threadId: String(ownedThread._id),
+      runId,
+    });
+    finishRunBestEffort = finishRunBestEffortForRun;
+    const finishCancelledRun = async (): Promise<void> => {
+      await finishRunBestEffortForRun({
+        status: "cancelled",
+        reason: USER_CANCELLED_RUNTIME_CODE,
+        errorCode: USER_CANCELLED_RUNTIME_CODE,
+        errorMessage: "Run cancelled by user.",
+      });
+    };
+    const throwIfRunCancelled = async (): Promise<void> => {
+      await throwIfRuntimeRunCancelled({
         ctx,
-        userId: actor.dbUserId,
-        threadId: String(ownedThread._id),
+        ownerId: actor.dbUserId,
         runId,
       });
-    finishRunBestEffort = finishRunBestEffortForRun;
-
+    };
     const successResponse = buildRuntimeTurnSuccessResponder({
       req,
       stream,
@@ -338,80 +464,329 @@ export async function handleRuntimeTurnRequest(args: {
     });
 
     runtimeTurnStage = "idempotency_lookup";
-    const existingReplay = await lookupExistingRuntimeReplay({
-      ctx,
-      ownerId: actor.dbUserId,
-      threadId: ownedThread._id,
-      assistantMessageKeyForRun,
-      userMessageKeyForRun,
-      inferenceSource,
-    });
-    if (existingReplay) {
-      await finishRunBestEffortForRun({
-        status: "ok",
-        reason: "idempotent_replay",
+    if (persistVisibleUserMessage && persistVisibleAssistantMessage) {
+      const existingReplay = await lookupExistingRuntimeReplay({
+        ctx,
+        ownerId: actor.dbUserId,
+        threadId: ownedThread._id,
+        assistantMessageKeyForRun,
+        userMessageKeyForRun,
+        inferenceSource,
       });
-      return successResponse(existingReplay);
+      if (existingReplay) {
+        await finishRunBestEffortForRun({
+          status: "ok",
+          reason: "idempotent_replay",
+        });
+        return successResponse(existingReplay);
+      }
     }
 
     let userMessageId: string | null = null;
     let userMessageKey: string | null = null;
     let userMessageSeq: number | null = null;
-    try {
-      ({ userMessageId, userMessageKey, userMessageSeq } =
-        await persistRuntimeUserMessage({
-          ctx,
-          ownerId: actor.dbUserId,
-          threadId: ownedThread._id,
-          messageKey: userMessageKeyForRun,
-          requestedModelId,
-          runId,
-          latestUserText,
-        }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await finishRunBestEffortForRun({
-        status: "error",
-        reason: "user_message_persist_failed",
-        errorCode: "user_message_persist_failed",
-        errorMessage: message || "Failed to persist user message.",
-      });
-      return jsonResponse(req, 500, {
-        ok: false,
-        code: "user_message_persist_failed",
-        error: "user_message_persist_failed",
-        message: message || "Failed to persist user message.",
-        run_id: runId,
-      });
+    if (persistVisibleUserMessage) {
+      try {
+        ({ userMessageId, userMessageKey, userMessageSeq } =
+          await persistRuntimeUserMessage({
+            ctx,
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
+            messageKey: userMessageKeyForRun,
+            requestedModelId,
+            runId,
+            latestUserText,
+          }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: "user_message_persist_failed",
+          errorCode: "user_message_persist_failed",
+          errorMessage: message || "Failed to persist user message.",
+        });
+        return jsonResponse(req, 500, {
+          ok: false,
+          code: "user_message_persist_failed",
+          error: "user_message_persist_failed",
+          message: message || "Failed to persist user message.",
+          run_id: runId,
+        });
+      }
     }
 
     let content = "";
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
     let resolvedInferenceSource = inferenceSource;
-    let inferenceLaneFallbacks:
-      | Array<{
-          from: "chatgpt" | "platform" | "public";
-          to: "chatgpt" | "platform" | "public";
-          reason: string;
-        }>
-      | null = null;
+    let inferenceLaneFallbacks: Array<{
+      from: "chatgpt" | "platform" | "public";
+      to: "chatgpt" | "platform" | "public";
+      reason: string;
+    }> | null = null;
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,
-        payload: {
-          run_id: runId,
-          allowed_tool_names: allowedToolNames,
-          capability_families: resolvedRuntimeCapabilityFamilies,
-          harness_profile: resolvedRuntimeHarnessProfile,
+      payload: {
+        run_id: runId,
+        allowed_tool_names: allowedToolNames,
+        capability_families: resolvedRuntimeCapabilityFamilies,
+        harness_profile: resolvedRuntimeHarnessProfile,
       },
     });
     if (runtimeExecutionMode === "agentic") {
+      if (stream) {
+        return runtimeSseResponse(async (writer) => {
+          let streamedContent = "";
+          let streamedPromptTokens: number | null = null;
+          let streamedCompletionTokens: number | null = null;
+          let streamedInferenceSource = resolvedInferenceSource;
+          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+          let assistantMessageId: string | null = null;
+          let assistantMessageKey: string | null = null;
+          let assistantMessageSeq: number | null = null;
+
+          const emitDelta = (delta: string) => {
+            if (!delta) return;
+            streamedContent += delta;
+            writer.send({
+              event: "delta",
+              data: {
+                delta,
+              },
+            });
+          };
+
+          const streamAppendRunEvent = async (event: {
+            eventType: string;
+            eventKey?: string;
+            payload: Record<string, unknown>;
+          }): Promise<void> => {
+            const created = await appendRunEvent(event);
+            const mapped = mapPersistedRuntimeEventRow(created);
+            if (!mapped) return;
+            writer.send({
+              event: "runtime_event",
+              data: mapped,
+            });
+          };
+          const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
+            runId,
+            summaryStreamId: `${runId}:assistant_completion:0`,
+            appendRunEvent: streamAppendRunEvent,
+          });
+
+          writer.send({
+            event: "start",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: "runtime_convex",
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            },
+          });
+          runtimeTurnStage = "agent_loop";
+          const loopResult = await executeChatToolsAgentLoop({
+            ctx,
+            req,
+            userId: actor.dbUserId,
+            threadId: String(ownedThread._id),
+            authSubject: actor.authSubject,
+            projectId: runtimeProjectId,
+            requestedModelId,
+            inferenceSource,
+            modelRef,
+            messages: conversationMessages,
+            maxTokens,
+            runId,
+            communityId: runtimeCommunityId,
+            communityName: runtimeCommunityName,
+            communitySlug: runtimeCommunitySlug,
+            communityOneLiner: runtimeCommunityOneLiner,
+            communityAbout: runtimeCommunityAbout,
+            communitySystemPrompt: runtimeCommunitySystemPrompt,
+            threadWorkingState: ownedThread.workingState ?? null,
+            allowedToolNames,
+            apiKeyOverride: openRouterApiKeyOverride,
+            appendRunEvent: streamAppendRunEvent,
+            touchRunHeartbeat: touchRunHeartbeatBestEffort,
+          });
+          if (!loopResult.ok) {
+            if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+              await finishCancelledRun();
+              return;
+            }
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: loopResult.code,
+              errorCode: loopResult.code,
+              errorMessage: loopResult.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: loopResult.message,
+              },
+            });
+            return;
+          }
+
+          let completion:
+            | Awaited<ReturnType<typeof runChatgptStreamingCompletion>>
+            | Awaited<ReturnType<typeof runOpenRouterStreamingCompletion>>;
+          try {
+            if (inferenceSource === "chatgpt") {
+              runtimeTurnStage = "chatgpt_completion";
+              completion = await runAbortableWithRuntimeCancellation({
+                ctx,
+                ownerId: actor.dbUserId,
+                runId,
+                operation: async (signal) =>
+                  await runChatgptStreamingCompletion({
+                    ctx,
+                    userId: actor.dbUserId,
+                    modelId: requestedModelId,
+                    messages: loopResult.transcript,
+                    maxTokens,
+                    onDelta: emitDelta,
+                    onReasoningSummaryPartAdded: ({ summaryIndex }) =>
+                      reasoningSummaryEmitter.onPartAdded(summaryIndex),
+                    onReasoningSummaryTextDelta: ({ delta, summaryIndex }) =>
+                      reasoningSummaryEmitter.onTextDelta(delta, summaryIndex),
+                    signal,
+                  }),
+              });
+            } else {
+              runtimeTurnStage = "openrouter_completion";
+              completion = await runAbortableWithRuntimeCancellation({
+                ctx,
+                ownerId: actor.dbUserId,
+                runId,
+                operation: async (signal) =>
+                  await runOpenRouterStreamingCompletion({
+                    req,
+                    modelRef,
+                    messages: loopResult.transcript,
+                    maxTokens,
+                    apiKeyOverride: openRouterApiKeyOverride,
+                    onDelta: emitDelta,
+                    signal,
+                  }),
+              });
+            }
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await finishCancelledRun();
+              return;
+            }
+            throw error;
+          }
+
+          if (isRuntimeCompletionFailure(completion)) {
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: completion.code,
+              errorCode: completion.code,
+              errorMessage: completion.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: completion.message,
+              },
+            });
+            return;
+          }
+
+          streamedContent = completion.content;
+          streamedPromptTokens = completion.promptTokens;
+          streamedCompletionTokens = completion.completionTokens;
+
+          runtimeTurnStage = "assistant_persist";
+          if (persistVisibleAssistantMessage) {
+            try {
+              await throwIfRunCancelled();
+              ({
+                assistantMessageId,
+                assistantMessageKey,
+                assistantMessageSeq,
+              } = await persistRuntimeAssistantMessage({
+                ctx,
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                messageKey: assistantMessageKeyForRun,
+                requestedModelId,
+                inferenceSource: streamedInferenceSource,
+                lane,
+                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+                runId,
+                content: streamedContent,
+              }));
+            } catch (error) {
+              if (isRuntimeRunCancelledError(error)) {
+                await finishCancelledRun();
+                return;
+              }
+              const message =
+                error instanceof Error ? error.message : String(error);
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: "assistant_message_persist_failed",
+                errorCode: "assistant_message_persist_failed",
+                errorMessage: message || "Failed to persist assistant message.",
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  error: message || "Failed to persist assistant message.",
+                },
+              });
+              return;
+            }
+          }
+
+          try {
+            await throwIfRunCancelled();
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await finishCancelledRun();
+              return;
+            }
+            throw error;
+          }
+          await finishRunBestEffortForRun({
+            status: "ok",
+          });
+          writer.send({
+            event: "done",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: "runtime_convex",
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+              full_content: streamedContent,
+              prompt_tokens: streamedPromptTokens,
+              completion_tokens: streamedCompletionTokens,
+              user_message_id: userMessageId,
+              user_message_key: userMessageKey,
+              user_message_seq: userMessageSeq,
+              assistant_message_id: assistantMessageId,
+              assistant_message_key: assistantMessageKey,
+              assistant_message_seq: assistantMessageSeq,
+            },
+          });
+        });
+      }
       runtimeTurnStage = "agent_loop";
       const loopResult = await executeChatToolsAgentLoop({
         ctx,
         req,
         userId: actor.dbUserId,
+        threadId: String(ownedThread._id),
         authSubject: actor.authSubject,
         projectId: runtimeProjectId,
         requestedModelId,
@@ -429,9 +804,22 @@ export async function handleRuntimeTurnRequest(args: {
         threadWorkingState: ownedThread.workingState ?? null,
         allowedToolNames,
         apiKeyOverride: openRouterApiKeyOverride,
-        appendRunEvent,
+        appendRunEvent: async (event): Promise<void> => {
+          await appendRunEvent(event);
+        },
+        touchRunHeartbeat: touchRunHeartbeatBestEffort,
       });
       if (!loopResult.ok) {
+        if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+          await finishCancelledRun();
+          return runtimeJsonResponse(409, {
+            ok: false,
+            code: USER_CANCELLED_RUNTIME_CODE,
+            error: USER_CANCELLED_RUNTIME_CODE,
+            message: "Run cancelled by user.",
+            run_id: runId,
+          });
+        }
         await finishRunBestEffortForRun({
           status: "error",
           reason: loopResult.code,
@@ -450,80 +838,279 @@ export async function handleRuntimeTurnRequest(args: {
       promptTokens = loopResult.promptTokens;
       completionTokens = loopResult.completionTokens;
     } else {
-      const authenticatedScopedSystemPrompt = composeCloudScopedSystemPrompt({
-        communityId: runtimeCommunityId,
-        communityName: runtimeCommunityName,
-        communitySlug: runtimeCommunitySlug,
-        communityOneLiner: runtimeCommunityOneLiner,
-        communityAbout: runtimeCommunityAbout,
-        customCommunitySystemPrompt: runtimeCommunitySystemPrompt,
-      });
+      const now = new Date();
+      const runtimeTimeZone = "UTC";
+      const authenticatedScopedSystemPrompt =
+        composeCloudScopedRuntimeSystemPrompt({
+          communityId: runtimeCommunityId,
+          communityName: runtimeCommunityName,
+          communitySlug: runtimeCommunitySlug,
+          communityOneLiner: runtimeCommunityOneLiner,
+          communityAbout: runtimeCommunityAbout,
+          customCommunitySystemPrompt: runtimeCommunitySystemPrompt,
+          currentDateTimeIso: now.toISOString(),
+          currentDateLabel: new Intl.DateTimeFormat("en-US", {
+            dateStyle: "full",
+            timeStyle: "long",
+            timeZone: runtimeTimeZone,
+          }).format(now),
+          currentTimeZone: runtimeTimeZone,
+        });
       const chatMessages = [
         { role: "system" as const, content: authenticatedScopedSystemPrompt },
         ...conversationMessages,
       ];
+      if (stream) {
+        return runtimeSseResponse(async (writer) => {
+          let streamedContent = "";
+          let streamedPromptTokens: number | null = null;
+          let streamedCompletionTokens: number | null = null;
+          let streamedInferenceSource = resolvedInferenceSource;
+          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+          let assistantMessageId: string | null = null;
+          let assistantMessageKey: string | null = null;
+          let assistantMessageSeq: number | null = null;
+
+          const emitDelta = (delta: string) => {
+            if (!delta) return;
+            streamedContent += delta;
+            writer.send({
+              event: "delta",
+              data: {
+                delta,
+              },
+            });
+          };
+
+          writer.send({
+            event: "start",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: "runtime_convex",
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            },
+          });
+          const streamAppendRunEvent = async (event: {
+            eventType: string;
+            eventKey?: string;
+            payload: Record<string, unknown>;
+          }): Promise<void> => {
+            const created = await appendRunEvent(event);
+            const mapped = mapPersistedRuntimeEventRow(created);
+            if (!mapped) return;
+            writer.send({
+              event: "runtime_event",
+              data: mapped,
+            });
+          };
+          const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
+            runId,
+            summaryStreamId: `${runId}:assistant_completion:0`,
+            appendRunEvent: streamAppendRunEvent,
+          });
+
+          let completion:
+            | Awaited<ReturnType<typeof runChatgptStreamingCompletion>>
+            | Awaited<ReturnType<typeof runOpenRouterStreamingCompletion>>;
+          try {
+            if (inferenceSource === "chatgpt") {
+              runtimeTurnStage = "chatgpt_completion";
+              completion = await runAbortableWithRuntimeCancellation({
+                ctx,
+                ownerId: actor.dbUserId,
+                runId,
+                operation: async (signal) =>
+                  await runChatgptStreamingCompletion({
+                    ctx,
+                    userId: actor.dbUserId,
+                    modelId: requestedModelId,
+                    messages: chatMessages,
+                    maxTokens,
+                    onDelta: emitDelta,
+                    onReasoningSummaryPartAdded: ({ summaryIndex }) =>
+                      reasoningSummaryEmitter.onPartAdded(summaryIndex),
+                    onReasoningSummaryTextDelta: ({ delta, summaryIndex }) =>
+                      reasoningSummaryEmitter.onTextDelta(delta, summaryIndex),
+                    signal,
+                  }),
+              });
+            } else {
+              runtimeTurnStage = "openrouter_completion";
+              completion = await runAbortableWithRuntimeCancellation({
+                ctx,
+                ownerId: actor.dbUserId,
+                runId,
+                operation: async (signal) =>
+                  await runOpenRouterStreamingCompletion({
+                    req,
+                    modelRef,
+                    messages: chatMessages,
+                    maxTokens,
+                    apiKeyOverride: openRouterApiKeyOverride,
+                    onDelta: emitDelta,
+                    signal,
+                  }),
+              });
+            }
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await finishCancelledRun();
+              return;
+            }
+            throw error;
+          }
+
+          if (isRuntimeCompletionFailure(completion)) {
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: completion.code,
+              errorCode: completion.code,
+              errorMessage: completion.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: completion.message,
+              },
+            });
+            return;
+          }
+
+          streamedContent = completion.content;
+          streamedPromptTokens = completion.promptTokens;
+          streamedCompletionTokens = completion.completionTokens;
+
+          runtimeTurnStage = "assistant_persist";
+          if (persistVisibleAssistantMessage) {
+            try {
+              await throwIfRunCancelled();
+              ({
+                assistantMessageId,
+                assistantMessageKey,
+                assistantMessageSeq,
+              } = await persistRuntimeAssistantMessage({
+                ctx,
+                ownerId: actor.dbUserId,
+                threadId: ownedThread._id,
+                messageKey: assistantMessageKeyForRun,
+                requestedModelId,
+                inferenceSource: streamedInferenceSource,
+                lane,
+                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+                runId,
+                content: streamedContent,
+              }));
+            } catch (error) {
+              if (isRuntimeRunCancelledError(error)) {
+                await finishCancelledRun();
+                return;
+              }
+              const message =
+                error instanceof Error ? error.message : String(error);
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: "assistant_message_persist_failed",
+                errorCode: "assistant_message_persist_failed",
+                errorMessage: message || "Failed to persist assistant message.",
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  error: message || "Failed to persist assistant message.",
+                },
+              });
+              return;
+            }
+          }
+
+          try {
+            await throwIfRunCancelled();
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await finishCancelledRun();
+              return;
+            }
+            throw error;
+          }
+          await finishRunBestEffortForRun({
+            status: "ok",
+          });
+          writer.send({
+            event: "done",
+            data: {
+              run_id: runId,
+              lane,
+              engine_id: "runtime_convex",
+              model_id: requestedModelId,
+              inference_source: streamedInferenceSource,
+              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+              full_content: streamedContent,
+              prompt_tokens: streamedPromptTokens,
+              completion_tokens: streamedCompletionTokens,
+              user_message_id: userMessageId,
+              user_message_key: userMessageKey,
+              user_message_seq: userMessageSeq,
+              assistant_message_id: assistantMessageId,
+              assistant_message_key: assistantMessageKey,
+              assistant_message_seq: assistantMessageSeq,
+            },
+          });
+        });
+      }
       let completion:
         | Awaited<ReturnType<typeof runChatgptCompletion>>
         | Awaited<ReturnType<typeof runOpenRouterCompletion>>;
-      if (inferenceSource === "chatgpt") {
-        runtimeTurnStage = "chatgpt_completion";
-        const chatgptCompletion = await runChatgptCompletion({
-          ctx,
-          userId: actor.dbUserId,
-          modelId: requestedModelId,
-          messages: chatMessages,
-          maxTokens,
-        });
-        if (
-          "ok" in chatgptCompletion &&
-          chatgptCompletion.ok === false &&
-          shouldFallbackFromChatgptErrorToPlatformCore(chatgptCompletion.message)
-        ) {
-          inferenceLaneFallbacks = [
-            {
-              from: "chatgpt",
-              to: "platform",
-              reason: chatgptCompletion.message.trim() || chatgptCompletion.code || "chatgpt_failed",
-            },
-          ];
-          await appendRunEvent({
-            eventType: "inference_lane_fallback",
-            eventKey: `${runId}:inference_lane_fallback:chatgpt_to_platform:1`,
-            payload: {
-              run_id: runId,
-              from: "chatgpt",
-              to: "platform",
-              reason: chatgptCompletion.message,
-              code: chatgptCompletion.code,
-              status: chatgptCompletion.status,
-            },
+      try {
+        if (inferenceSource === "chatgpt") {
+          runtimeTurnStage = "chatgpt_completion";
+          completion = await runAbortableWithRuntimeCancellation({
+            ctx,
+            ownerId: actor.dbUserId,
+            runId,
+            operation: async (signal) =>
+              await runChatgptCompletion({
+                ctx,
+                userId: actor.dbUserId,
+                modelId: requestedModelId,
+                messages: chatMessages,
+                maxTokens,
+                signal,
+              }),
           });
-          runtimeTurnStage = "chatgpt_fallback_openrouter_completion";
-          const fallbackCompletion = await runOpenRouterCompletion({
-            req,
-            modelRef,
-            messages: chatMessages,
-            maxTokens,
-            apiKeyOverride: openRouterApiKeyOverride,
-          });
-          if (!("ok" in fallbackCompletion) || fallbackCompletion.ok !== false) {
-            resolvedInferenceSource = "platform";
-          }
-          completion = fallbackCompletion;
         } else {
-          completion = chatgptCompletion;
+          runtimeTurnStage = "openrouter_completion";
+          completion = await runAbortableWithRuntimeCancellation({
+            ctx,
+            ownerId: actor.dbUserId,
+            runId,
+            operation: async (signal) =>
+              await runOpenRouterCompletion({
+                req,
+                modelRef,
+                messages: chatMessages,
+                maxTokens,
+                apiKeyOverride: openRouterApiKeyOverride,
+                signal,
+              }),
+          });
         }
-      } else {
-        runtimeTurnStage = "openrouter_completion";
-        completion = await runOpenRouterCompletion({
-          req,
-          modelRef,
-          messages: chatMessages,
-          maxTokens,
-          apiKeyOverride: openRouterApiKeyOverride,
-        });
+      } catch (error) {
+        if (isRuntimeRunCancelledError(error)) {
+          await finishCancelledRun();
+          return runtimeJsonResponse(409, {
+            ok: false,
+            code: USER_CANCELLED_RUNTIME_CODE,
+            error: USER_CANCELLED_RUNTIME_CODE,
+            message: "Run cancelled by user.",
+            run_id: runId,
+          });
+        }
+        throw error;
       }
-      if ("ok" in completion && completion.ok === false) {
+      if (isRuntimeCompletionFailure(completion)) {
         await finishRunBestEffortForRun({
           status: "error",
           reason: completion.code,
@@ -546,35 +1133,64 @@ export async function handleRuntimeTurnRequest(args: {
     let assistantMessageId: string | null = null;
     let assistantMessageKey: string | null = null;
     let assistantMessageSeq: number | null = null;
+    if (persistVisibleAssistantMessage) {
+      try {
+        await throwIfRunCancelled();
+        ({ assistantMessageId, assistantMessageKey, assistantMessageSeq } =
+          await persistRuntimeAssistantMessage({
+            ctx,
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
+            messageKey: assistantMessageKeyForRun,
+            requestedModelId,
+            inferenceSource: resolvedInferenceSource,
+            lane,
+            inferenceLaneFallbacks,
+            runId,
+            content,
+          }));
+      } catch (error) {
+        if (isRuntimeRunCancelledError(error)) {
+          await finishCancelledRun();
+          return runtimeJsonResponse(409, {
+            ok: false,
+            code: USER_CANCELLED_RUNTIME_CODE,
+            error: USER_CANCELLED_RUNTIME_CODE,
+            message: "Run cancelled by user.",
+            run_id: runId,
+          });
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: "assistant_message_persist_failed",
+          errorCode: "assistant_message_persist_failed",
+          errorMessage: message || "Failed to persist assistant message.",
+        });
+        return runtimeJsonResponse(500, {
+          ok: false,
+          code: "assistant_message_persist_failed",
+          error: "assistant_message_persist_failed",
+          message: message || "Failed to persist assistant message.",
+          run_id: runId,
+        });
+      }
+    }
+
     try {
-      ({ assistantMessageId, assistantMessageKey, assistantMessageSeq } =
-        await persistRuntimeAssistantMessage({
-          ctx,
-          ownerId: actor.dbUserId,
-          threadId: ownedThread._id,
-          messageKey: assistantMessageKeyForRun,
-          requestedModelId,
-          inferenceSource: resolvedInferenceSource,
-          lane,
-          inferenceLaneFallbacks,
-          runId,
-          content,
-        }));
+      await throwIfRunCancelled();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await finishRunBestEffortForRun({
-        status: "error",
-        reason: "assistant_message_persist_failed",
-        errorCode: "assistant_message_persist_failed",
-        errorMessage: message || "Failed to persist assistant message.",
-      });
-      return runtimeJsonResponse(500, {
-        ok: false,
-        code: "assistant_message_persist_failed",
-        error: "assistant_message_persist_failed",
-        message: message || "Failed to persist assistant message.",
-        run_id: runId,
-      });
+      if (isRuntimeRunCancelledError(error)) {
+        await finishCancelledRun();
+        return runtimeJsonResponse(409, {
+          ok: false,
+          code: USER_CANCELLED_RUNTIME_CODE,
+          error: USER_CANCELLED_RUNTIME_CODE,
+          message: "Run cancelled by user.",
+          run_id: runId,
+        });
+      }
+      throw error;
     }
 
     await finishRunBestEffortForRun({
@@ -594,6 +1210,23 @@ export async function handleRuntimeTurnRequest(args: {
       assistantMessageSeq,
     });
   } catch (error) {
+    if (isRuntimeRunCancelledError(error)) {
+      if (finishRunBestEffort) {
+        await finishRunBestEffort({
+          status: "cancelled",
+          reason: USER_CANCELLED_RUNTIME_CODE,
+          errorCode: USER_CANCELLED_RUNTIME_CODE,
+          errorMessage: "Run cancelled by user.",
+        });
+      }
+      return runtimeJsonResponse(409, {
+        ok: false,
+        code: USER_CANCELLED_RUNTIME_CODE,
+        error: USER_CANCELLED_RUNTIME_CODE,
+        message: "Run cancelled by user.",
+        ...(startedRunId ? { run_id: startedRunId } : null),
+      });
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (finishRunBestEffort) {
       await finishRunBestEffort({
@@ -603,10 +1236,11 @@ export async function handleRuntimeTurnRequest(args: {
         errorMessage: message || "Runtime turn failed unexpectedly.",
       });
     }
-    console.error("runtime_turn_unhandled", {
+    logStructuredError("runtime_turn_unhandled", {
+      error,
       requestId,
       stage: runtimeTurnStage,
-      message,
+      ...runtimeTurnLogContext,
     });
     return runtimeJsonResponse(500, {
       ok: false,

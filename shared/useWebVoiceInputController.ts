@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { blobToBase64 } from "./imageTransforms";
-import { transcribeVoice as transcribeCloudVoice } from "./authSessionCore";
+import { transcribeVoice } from "./authCore";
 import { resolveUsableSession } from "./ensureUsableSession";
 import {
   createWavBlobFromInt16Chunks,
@@ -27,23 +27,23 @@ type VoiceInputIntent = {
   title: string;
 };
 
-type UseWebVoiceInputControllerArgs<CloudSessionT> = {
-  session: CloudSessionT | null;
-  sessionRef: MutableRefObject<CloudSessionT | null>;
-  ensureSession?: (session: CloudSessionT | null) => Promise<CloudSessionT | null>;
+type UseWebVoiceInputControllerArgs<SessionT> = {
+  session: SessionT | null;
+  sessionRef: MutableRefObject<SessionT | null>;
+  ensureSession?: (session: SessionT | null) => Promise<SessionT | null>;
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
   normalizedBuilderTier: "free" | "builder" | "architect";
   openAuthGate: () => void;
   showAppToastMessage: (message: string) => void;
-  setWorkspaceInput: Dispatch<SetStateAction<string>>;
-  workspaceInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  appendWorkspaceTranscript: (transcript: string) => void;
+  focusWorkspaceInput: () => void;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
 };
 
-export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInputControllerArgs<CloudSessionT>) {
+export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputControllerArgs<SessionT>) {
   const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
   const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
@@ -143,9 +143,9 @@ export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInput
   function applyVoiceTranscript(surface: VoiceSurface, transcript: string) {
     if (!transcript) return;
     if (surface === "workspace") {
-      args.setWorkspaceInput((prev) => mergeVoiceTranscript(prev, transcript));
+      args.appendWorkspaceTranscript(transcript);
       window.setTimeout(() => {
-        args.workspaceInputRef.current?.focus();
+        args.focusWorkspaceInput();
       }, 0);
       return;
     }
@@ -162,7 +162,7 @@ export function useWebVoiceInputController<CloudSessionT>(args: UseWebVoiceInput
   async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
     const session = await resolveUsableSession(args.sessionRef.current ?? args.session, args.ensureSession);
     if (!session) throw new Error("Sign in to use voice input.");
-    return await transcribeCloudVoice({
+    return await transcribeVoice({
       session: session as unknown as { access_token: string },
       audioBase64: await blobToBase64(blob),
       mimeType: blob.type || "audio/webm",

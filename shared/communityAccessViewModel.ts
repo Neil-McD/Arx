@@ -3,6 +3,7 @@ import type { CommunityAccess } from "./communityTypes";
 export type CommunityAccessCapabilities = {
   canViewCommunity: boolean;
   isOwner: boolean;
+  canViewMembers: boolean;
   canViewSettings: boolean;
   canPostMessages: boolean;
   canManageResources: boolean;
@@ -12,6 +13,7 @@ export type CommunityAccessCapabilities = {
 };
 
 export type CommunityNavVisibility = {
+  canViewMembers: boolean;
   canViewSettings: boolean;
   canManageMembers: boolean;
   canViewAnalytics: boolean;
@@ -36,6 +38,7 @@ export function deriveCommunityAccessCapabilities(
   return {
     canViewCommunity: canEnterCommunity,
     isOwner,
+    canViewMembers: canEnterCommunity,
     canViewSettings: canEnterCommunity,
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
     canManageResources: Boolean(access?.can_manage_resources),
@@ -55,9 +58,13 @@ export function deriveCommunitySettingsLayer(
 }
 
 export function deriveCommunityNavVisibility(
-  capabilities: Pick<CommunityAccessCapabilities, "canViewSettings" | "canManageMembers" | "canViewAnalytics">,
+  capabilities: Pick<
+    CommunityAccessCapabilities,
+    "canViewMembers" | "canViewSettings" | "canManageMembers" | "canViewAnalytics"
+  >,
 ): CommunityNavVisibility {
   return {
+    canViewMembers: capabilities.canViewMembers,
     canViewSettings: capabilities.canViewSettings,
     canManageMembers: capabilities.canManageMembers,
     canViewAnalytics: capabilities.canViewAnalytics,

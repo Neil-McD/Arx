@@ -4,6 +4,7 @@ import {
 
 import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
+import { preloadImageUrls } from "./preloadImageUrls";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT> = {
@@ -12,11 +13,12 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
     fallback?: "published" | "unlisted",
   ) => "published" | "unlisted";
 
-  activeCommunityId: string | null;
+  activeCommunitySlug: string | null;
   setIsLoadingCommunities: Dispatch<SetStateAction<boolean>>;
+  setHasResolvedCommunities: Dispatch<SetStateAction<boolean>>;
   setCommunityRoleById: Dispatch<SetStateAction<Record<string, string>>>;
   setCommunities: Dispatch<SetStateAction<CommunityRecordT[]>>;
-  setActiveCommunityId: Dispatch<SetStateAction<string | null>>;
+  applyCommunityShellState: (opts: { communitySlug?: string | null }) => void;
 
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   ensureSession?: EnsureSessionFn<SessionT>;
@@ -24,7 +26,7 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
 
 export function useWebCommunityAccessController<
   SessionT,
-  CommunityRecordT extends { id: string; visibility: string },
+  CommunityRecordT extends { id: string; slug?: string | null; visibility: string },
   UserProfileT extends { user_id: string },
 >(args: UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT>) {
   const argsRef = useRef(args);
@@ -67,12 +69,20 @@ export function useWebCommunityAccessController<
           visibility: current.toCanonicalCommunityVisibility(community.visibility, "unlisted"),
         }));
       current.setCommunities(list);
-      if (!current.activeCommunityId) {
-        if (list.length > 0) current.setActiveCommunityId(list[0].id);
+      void preloadImageUrls(
+        list.flatMap((community: any) => [community?.avatar_url ?? null, community?.banner_url ?? null]),
+        { maxUrls: 12, timeoutMs: 1500 },
+      ).catch(() => {
+        // Ignore image warmup failures; community access state should not wait on them.
+      });
+      if (!current.activeCommunitySlug) {
+        const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
+        if (nextCommunitySlug) current.applyCommunityShellState({ communitySlug: nextCommunitySlug });
         return;
       }
-      if (!list.some((item) => item.id === current.activeCommunityId) && list.length > 0) {
-        current.setActiveCommunityId(list[0].id);
+      if (!list.some((item) => String(item.slug ?? "").trim() === current.activeCommunitySlug) && list.length > 0) {
+        const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
+        if (nextCommunitySlug) current.applyCommunityShellState({ communitySlug: nextCommunitySlug });
       }
     } catch (error) {
       if (isAbortError(error)) return;
@@ -85,6 +95,7 @@ export function useWebCommunityAccessController<
       });
       if (loadCommunitiesSeqRef.current === seq) {
         current.setIsLoadingCommunities(false);
+        current.setHasResolvedCommunities(true);
       }
     }
   }, []);
@@ -101,6 +112,10 @@ export function useWebCommunityAccessController<
         userIds: unique,
       })) as unknown as UserProfileT[];
       if (profiles.length === 0) return;
+      await preloadImageUrls(
+        profiles.map((profile: any) => profile?.avatar_url ?? null),
+        { maxUrls: unique.length, timeoutMs: 1200 },
+      );
       current.setProfilesByUserId((prev) => {
         const next = { ...prev };
         for (const profile of profiles) {

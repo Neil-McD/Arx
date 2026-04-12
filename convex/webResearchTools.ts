@@ -1,25 +1,10 @@
+import { decodeHtmlEntities, searchWithFallbackHtml } from "./fallbackHtmlSearchTransport";
+import { searchWithOpenAiWebSearch } from "./openAiWebSearchTransport";
+import { searchWithXAi } from "./xAiSearchTransport";
+import type { NormalizedSearchResult, StructuredWebSource } from "./webSearchTypes";
+
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-      String.fromCodePoint(parseInt(hex, 16)),
-    )
-    .replace(/&#([0-9]+);/g, (_, dec) =>
-      String.fromCodePoint(parseInt(dec, 10)),
-    );
-}
-
-function stripHtml(value: string): string {
-  return collapseWhitespace(decodeHtmlEntities(value.replace(/<[^>]+>/g, " ")));
 }
 
 function normalizeUrl(rawUrl: string): string | null {
@@ -42,11 +27,143 @@ function normalizeUrl(rawUrl: string): string | null {
   }
 }
 
+function isTimeSensitiveSearchQuery(query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return false;
+  return /\b(latest|current|recent|today|yesterday|this week|this month|breaking|news|update|updates|development|developments)\b/.test(
+    normalized,
+  );
+}
+
+function isCanonicalSearchQuery(query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return false;
+  return /\b(doc|docs|documentation|api|sdk|github|repo|repository|readme|reference|guide|spec|specification|official|manual|changelog)\b/.test(
+    normalized,
+  );
+}
+
+function isFrontierSearchQuery(query: string): boolean {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return false;
+  return /\b(alpha|signal|sentiment|reaction|buzz|chatter|discourse|on x|on twitter|what people are saying|what x is saying)\b/.test(
+    normalized,
+  );
+}
+
+type SearchBackendMode = "canonical" | "hybrid";
+
+function routeSearchBackend(query: string): SearchBackendMode {
+  const canonical = isCanonicalSearchQuery(query);
+  const frontier = isFrontierSearchQuery(query);
+  const timeSensitive = isTimeSensitiveSearchQuery(query);
+  if (canonical && !timeSensitive && !frontier) return "canonical";
+  return "hybrid";
+}
+
+function formatNormalizedResults(query: string, results: NormalizedSearchResult[], backendLabels: string[]): string {
+  if (results.length === 0) return `Query: ${query}\nNo results found.`;
+  const backendLabel = backendLabels.length > 0 ? `\nBackends: ${backendLabels.join(", ")}` : "";
+  return [
+    `Query: ${query}${backendLabel}`,
+    ...results.map((result, index) =>
+      [
+        `${index + 1}. ${result.title}`,
+        `URL: ${result.url}`,
+        `Snippet: ${result.snippet ?? "(none)"}`,
+      ].join("\n"),
+    ),
+  ].join("\n\n");
+}
+
+function dedupeResults(results: NormalizedSearchResult[]): NormalizedSearchResult[] {
+  const seen = new Set<string>();
+  const deduped: NormalizedSearchResult[] = [];
+  for (const result of results) {
+    const key = normalizeUrl(result.url);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(result);
+  }
+  return deduped;
+}
+
+function inferUrlLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    const pathSegments = parsed.pathname.split("/").filter(Boolean).slice(0, 2);
+    const path = pathSegments.length > 0 ? `/${pathSegments.join("/")}` : "";
+    return host + path || url;
+  } catch {
+    return url;
+  }
+}
+
+function hostForUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function buildStructuredSearchSources(results: NormalizedSearchResult[]): StructuredWebSource[] {
+  return results.map((result) => ({
+    url: result.url,
+    host: hostForUrl(result.url),
+    label: result.title || inferUrlLabel(result.url),
+    snippet: result.snippet,
+    backend: result.backend,
+    kind: "search",
+  }));
+}
+
+function buildStructuredOpenedSource(url: string): StructuredWebSource {
+  return {
+    url,
+    host: hostForUrl(url),
+    label: inferUrlLabel(url),
+    snippet: null,
+    backend: "page",
+    kind: "opened",
+  };
+}
+
+function mergeResultsWithDiversity(
+  batches: NormalizedSearchResult[][],
+  maxResults: number,
+): NormalizedSearchResult[] {
+  const indexes = batches.map(() => 0);
+  const seen = new Set<string>();
+  const merged: NormalizedSearchResult[] = [];
+
+  while (merged.length < maxResults) {
+    let progressed = false;
+    for (let batchIndex = 0; batchIndex < batches.length && merged.length < maxResults; batchIndex += 1) {
+      const batch = batches[batchIndex] ?? [];
+      while (indexes[batchIndex] < batch.length) {
+        const candidate = batch[indexes[batchIndex]++];
+        const key = normalizeUrl(candidate?.url ?? "");
+        if (!candidate || !key || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(candidate);
+        progressed = true;
+        break;
+      }
+    }
+    if (!progressed) break;
+  }
+
+  return merged;
+}
+
 type WebResearchResult =
   | {
       ok: true;
       outputText: string;
       exitCode: number;
+      webSources?: StructuredWebSource[];
     }
   | {
       ok: false;
@@ -77,80 +194,61 @@ export async function searchWeb(params: {
     };
   }
 
-  let response: Response;
-  try {
-    response = await fetch(
-      `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-      {
-      headers: {
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "en-US,en;q=0.9",
-        referer: "https://duckduckgo.com/",
-        "user-agent": "Mozilla/5.0",
-      },
-      },
-    );
-  } catch (error) {
-    return {
-      ok: false,
-      code: "web_research_unavailable",
-      message:
-        error instanceof Error ? error.message : "web_research search request failed.",
-    };
+  const mode = routeSearchBackend(query);
+  const backendLabels: string[] = [];
+  const openAiResults: NormalizedSearchResult[] = [];
+  const xAiResults: NormalizedSearchResult[] = [];
+  const fallbackResults: NormalizedSearchResult[] = [];
+  let needsCanonicalFallback = false;
+
+  const openAiResult = await searchWithOpenAiWebSearch({ query });
+  if (openAiResult.ok && openAiResult.quality === "strong") {
+    backendLabels.push("openai");
+    openAiResults.push(...openAiResult.results);
+  } else {
+    needsCanonicalFallback = true;
   }
 
-  const html = await response.text();
-  if (!response.ok) {
-    return {
-      ok: false,
-      code: "web_research_unavailable",
-      message: `web_research search failed (${response.status}).`,
-      outputPreview: html.slice(0, 500),
-    };
+  const shouldUseXAi = mode === "hybrid";
+  if (shouldUseXAi) {
+    const xAiResult = await searchWithXAi({ query });
+    if (xAiResult.ok) {
+      backendLabels.push("xai");
+      xAiResults.push(...xAiResult.results);
+    } else if (!openAiResult.ok) {
+      return {
+        ok: false,
+        code: xAiResult.code,
+        message: xAiResult.message,
+        outputPreview: xAiResult.outputPreview,
+      };
+    }
   }
 
-  const anchorRegex =
-    /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-  const results: Array<{ title: string; url: string; snippet: string | null }> =
-    [];
-  let match: RegExpExecArray | null = null;
-  while ((match = anchorRegex.exec(html)) && results.length < 5) {
-    const url = normalizeUrl(decodeHtmlEntities(match[1] ?? ""));
-    const title = stripHtml(match[2] ?? "");
-    if (!url || !title) continue;
-    const snippetWindow = html.slice(match.index, match.index + 1600);
-    const snippetMatch = snippetWindow.match(
-      /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/div>/,
-    );
-    const snippet = stripHtml(snippetMatch?.[1] ?? snippetMatch?.[2] ?? "");
-    results.push({
-      title,
-      url,
-      snippet: snippet || null,
-    });
+  if (needsCanonicalFallback) {
+    const fallbackResult = await searchWithFallbackHtml({ query });
+    if (!fallbackResult.ok) {
+      return {
+        ok: false,
+        code: fallbackResult.code,
+        message: fallbackResult.message,
+        outputPreview: fallbackResult.outputPreview,
+      };
+    }
+    fallbackResults.push(...fallbackResult.results);
+    backendLabels.push("fallback");
   }
 
-  if (results.length === 0) {
-    return {
-      ok: true,
-      exitCode: 0,
-      outputText: `Query: ${query}\nNo results found.`,
-    };
-  }
+  const results =
+    mode === "canonical"
+      ? dedupeResults([...openAiResults, ...fallbackResults]).slice(0, 8)
+      : mergeResultsWithDiversity([openAiResults, xAiResults, fallbackResults], 8);
 
   return {
     ok: true,
     exitCode: 0,
-    outputText: [
-      `Query: ${query}`,
-      ...results.map((result, index) =>
-        [
-          `${index + 1}. ${result.title}`,
-          `URL: ${result.url}`,
-          `Snippet: ${result.snippet ?? "(none)"}`,
-        ].join("\n"),
-      ),
-    ].join("\n\n"),
+    outputText: formatNormalizedResults(query, results, backendLabels),
+    webSources: buildStructuredSearchSources(results),
   };
 }
 
@@ -197,6 +295,7 @@ export async function fetchWebPage(params: {
     ok: true,
     exitCode: 0,
     outputText: normalizedText || `Fetched URL: ${url}\n(no readable content)`,
+    webSources: [buildStructuredOpenedSource(url)],
   };
 }
 
@@ -246,6 +345,7 @@ export async function executeWebResearch(params: {
               "Matches: 0",
               "Preview: (none)",
             ].join("\n"),
+      webSources: [buildStructuredOpenedSource(url)],
     };
   }
   return {

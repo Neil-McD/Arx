@@ -53,12 +53,10 @@ export function BuilderUpgradeModal({
           <div className="upgrade-copy">
             <div className="upgrade-kicker">Alpha access</div>
             <div className="upgrade-lead">
-              Tap into Polynet&apos;s community intelligence or put it to work in your private AI
-              workspace.
+              Unlock the private Polynet workbench and bring your own inference into it.
             </div>
             <div className="upgrade-footnote">
-              During alpha, community creation stays internal while we harden the platform.
-              Builder is the paid path we&apos;re opening first.
+              Builder is the paid path we&apos;re opening first. Community creation stays internal during alpha while we harden the platform.
             </div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
@@ -86,16 +84,16 @@ export function BuilderUpgradeModal({
                 {builderIsCurrent && <div className="plan-badge">Current</div>}
               </div>
               <div className="plan-price">
-                <span className="plan-price-amount">$20</span>
+                <span className="plan-price-amount">$24</span>
                 <span className="plan-price-period">/mo</span>
               </div>
               <div className="plan-subtitle">
-                For turning community intelligence into real execution.
+                For private AI workbenches built for longer-running, multi-step work.
               </div>
               <ul className="plan-points">
-                <li>Bring community intelligence directly into your private build loop.</li>
-                <li>Work with a dedicated AI workspace and cloud computer.</li>
-                <li>Move faster with deeper context, continuity, and execution.</li>
+                <li>Run agents that carry out multi-step tasks over longer time horizons, not just one-off chats.</li>
+                <li>Give the agent a private, sandboxed environment to work safely and independently.</li>
+                <li>Includes monthly execution credits for running real agent workflows inside your workbench.</li>
               </ul>
               {!builderIsCurrent ? (
                 <button

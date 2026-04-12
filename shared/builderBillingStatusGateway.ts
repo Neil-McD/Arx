@@ -1,4 +1,4 @@
-import { type CloudAuthSession } from "./cloudAuthSession";
+import { type AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 
 export type BuilderBillingStatus = {
@@ -16,7 +16,7 @@ function normalizeBuilderTier(raw: unknown): BuilderBillingStatus["builder_tier"
   return "free";
 }
 
-async function loadBuilderBillingStatusViaConvex(session: CloudAuthSession): Promise<BuilderBillingStatus | null> {
+async function loadBuilderBillingStatusViaConvex(session: AuthSessionLike): Promise<BuilderBillingStatus | null> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
 
@@ -31,7 +31,7 @@ async function loadBuilderBillingStatusViaConvex(session: CloudAuthSession): Pro
   };
 }
 
-async function setDevBuilderTierViaConvex(session: CloudAuthSession, tier: DevBuilderTier): Promise<void> {
+async function setDevBuilderTierViaConvex(session: AuthSessionLike, tier: DevBuilderTier): Promise<void> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
   await client.mutation("auth:setDevTierOverride" as any, {
@@ -41,13 +41,13 @@ async function setDevBuilderTierViaConvex(session: CloudAuthSession, tier: DevBu
 }
 
 export async function loadBuilderBillingStatusCanonical(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
 }): Promise<BuilderBillingStatus | null> {
   return await loadBuilderBillingStatusViaConvex(params.session);
 }
 
 export async function setDevBuilderTierCanonical(params: {
-  session: CloudAuthSession;
+  session: AuthSessionLike;
   tier: DevBuilderTier;
 }): Promise<void> {
   await setDevBuilderTierViaConvex(params.session, params.tier);

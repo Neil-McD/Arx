@@ -122,7 +122,7 @@ export type PendingPurchaseClaim = {
   expires_at: string;
 };
 
-export type CloudSessionLike = {
+export type SessionLike = {
   access_token: string;
 };
 
@@ -192,7 +192,7 @@ export function classifyPublicCommunityJoinError(error: unknown): PublicCommunit
   return null;
 }
 
-export async function redeemPurchaseClaimRpc<S extends CloudSessionLike>(opts: {
+export async function redeemPurchaseClaimRpc<S extends SessionLike>(opts: {
   session: S;
   token: string;
 }): Promise<{ community_id: string; community_slug: string | null }> {
@@ -212,7 +212,7 @@ export async function redeemPurchaseClaimRpc<S extends CloudSessionLike>(opts: {
   };
 }
 
-export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
+export async function listPendingPurchaseClaimsRpc<S extends SessionLike>(opts: {
   session: S;
 }): Promise<PendingPurchaseClaim[]> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
@@ -223,7 +223,7 @@ export async function listPendingPurchaseClaimsRpc<S extends CloudSessionLike>(o
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function redeemPendingPurchaseClaimsRpc<S extends CloudSessionLike>(opts: {
+export async function redeemPendingPurchaseClaimsRpc<S extends SessionLike>(opts: {
   session: S;
 }): Promise<Array<{ community_id: string; community_slug: string | null }>> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
@@ -231,10 +231,15 @@ export async function redeemPendingPurchaseClaimsRpc<S extends CloudSessionLike>
     authSubject,
     nowMs: Date.now(),
   })) as Array<{ community_id: string; community_slug?: string | null }> | null;
-  return Array.isArray(rows) ? rows : [];
+  return Array.isArray(rows)
+    ? rows.map((row) => ({
+        community_id: row.community_id,
+        community_slug: row.community_slug ?? null,
+      }))
+    : [];
 }
 
-export async function joinPublicCommunityRpc<S extends CloudSessionLike>(opts: {
+export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   session: S;
   communityId?: string;
   communitySlug?: string;

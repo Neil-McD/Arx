@@ -16,7 +16,6 @@ export type FeedPostRow = {
   type: ArchivePostType;
   title?: string;
   body: string;
-  whyNow?: string;
   evidence?: string[];
   status: "live" | "hidden";
   createdAt: number;
@@ -184,7 +183,6 @@ function buildAiFeedArchiveDoc(post: FeedPostRow): Omit<
   const sourceText = buildArchiveText([
     title,
     post.body,
-    post.whyNow ?? "",
     ...(Array.isArray(post.evidence) ? post.evidence : []),
   ]);
   if (!sourceText) return null;

@@ -65,12 +65,16 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
 ];
 
 type SettingsNavListProps = {
-  settingsGroup: SettingsGroup;
+  settingsGroup: SettingsGroup | null;
   onSelectPage: (page: SettingsPage) => void;
   buttonType?: "button" | "submit" | "reset";
 };
 
-export function SettingsNavList({ settingsGroup, onSelectPage, buttonType = "button" }: SettingsNavListProps) {
+export function SettingsNavList({
+  settingsGroup,
+  onSelectPage,
+  buttonType = "button",
+}: SettingsNavListProps) {
   return (
     <>
       {SETTINGS_NAV_ITEMS.map((item) => (
@@ -79,6 +83,8 @@ export function SettingsNavList({ settingsGroup, onSelectPage, buttonType = "but
           className={settingsGroup === item.id ? "nav-item active" : "nav-item"}
           onClick={() => onSelectPage(item.page)}
           type={buttonType}
+          aria-label={settingsGroupLabel(item.id)}
+          title={settingsGroupLabel(item.id)}
         >
           {item.icon}
           {settingsGroupLabel(item.id)}

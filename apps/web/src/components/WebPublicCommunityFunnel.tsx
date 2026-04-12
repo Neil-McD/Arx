@@ -12,6 +12,8 @@ type FunnelMode = "enter" | "join_free" | "join_approval" | "checkout" | "privat
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
+import { applyShellVariantToPublicPath, type AppShellVariant } from "../../../../shared/webAppRouteState";
+
 export type PublicCommunityFunnelCommunityLike = {
   slug?: string;
   name: string;
@@ -36,6 +38,8 @@ export type PublicCommunityFunnelCommunityLike = {
 type WebPublicCommunityFunnelProps = {
   publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
+  isMobile?: boolean;
+  shellVariant?: AppShellVariant;
   isPreviewMode?: boolean;
   publicVisibilityLabel: string;
   selectedPublicCommunityPlanLabel: string | null;
@@ -99,6 +103,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const {
     publicCommunity,
     publicRouteSlug,
+    isMobile = false,
+    shellVariant = "standard",
     isPreviewMode = false,
     publicVisibilityLabel,
     selectedPublicCommunityPlanLabel,
@@ -177,7 +183,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const action = {
     communityName,
     communityLinkLabel: publicCommunity?.slug ? `c/${publicCommunity.slug}` : null,
-    communityLinkHref: publicCommunity?.slug ? `/c/${publicCommunity.slug}` : null,
+    communityLinkHref: publicCommunity?.slug ? applyShellVariantToPublicPath(`/c/${publicCommunity.slug}`, shellVariant) : null,
     avatarUrl: publicCommunity?.avatar_url ?? null,
     cardBlurb,
     memberCount,
@@ -253,6 +259,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   return (
     <CommunityFunnelSurface
+      isMobile={isMobile}
       title={communityName}
       heroMediaKind={funnel?.hero_media_kind ?? "image"}
       heroMediaUrl={funnel?.hero_media_url ?? null}

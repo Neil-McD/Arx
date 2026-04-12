@@ -1,10 +1,11 @@
 import { internal } from "./_generated/api";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   newOpaqueToken,
   normalizeBuilderTier,
 } from "./billingCore";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getStripeClient, readStripeBuilderPriceId } from "./stripeCore";
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
@@ -95,6 +96,8 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
     targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"), v.null())),
     subscriptionStatus: v.string(),
     grantsAccess: v.optional(v.union(v.boolean(), v.null())),
+    currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
+    currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
     markCheckoutComplete: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
@@ -108,6 +111,9 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
     if (row.mode !== "builder_upgrade") throw new Error("builder_checkout_session_invalid");
     if (!row.ownerUserId) throw new Error("builder_checkout_owner_missing");
 
+    const ownerUserId = row.ownerUserId;
+    if (!ownerUserId) throw new Error("builder_checkout_owner_missing");
+
     const targetTier = normalizeBuilderTier(args.targetTier ?? row.targetTier ?? "builder");
     await ctx.db.patch(row._id, {
       provider: "stripe",
@@ -115,6 +121,14 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
       providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
       providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
       providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      currentPeriodStartAt:
+        typeof args.currentPeriodStartAt === "number"
+          ? args.currentPeriodStartAt
+          : row.currentPeriodStartAt,
+      currentPeriodEndAt:
+        typeof args.currentPeriodEndAt === "number"
+          ? args.currentPeriodEndAt
+          : row.currentPeriodEndAt,
       targetTier,
       status: args.markCheckoutComplete ? "complete" : row.status,
       updatedAt: nowMs,
@@ -122,7 +136,7 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
 
     const entitlementRows = await ctx.db
       .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", row.ownerUserId))
+      .withIndex("by_user", (q) => q.eq("userId", ownerUserId))
       .collect();
     const activeStripeRows = entitlementRows.filter(
       (entry) =>
@@ -166,6 +180,36 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
       ownerUserId: String(row.ownerUserId),
       targetTier,
       subscriptionStatus: String(args.subscriptionStatus ?? "").trim().toLowerCase(),
+    };
+  },
+});
+
+export const getLatestBuilderBillingCycleForOwnerInternal = internalQuery({
+  args: {
+    ownerUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_owner_status", (q) => q.eq("ownerUserId", args.ownerUserId).eq("status", "complete"))
+      .collect();
+    const candidate = rows
+      .filter(
+        (row) =>
+          row.mode === "builder_upgrade" &&
+          row.targetTier === "builder" &&
+          typeof row.currentPeriodStartAt === "number" &&
+          typeof row.currentPeriodEndAt === "number",
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (!candidate) return null;
+    return {
+      ownerUserId: candidate.ownerUserId,
+      currentPeriodStartAt: candidate.currentPeriodStartAt ?? null,
+      currentPeriodEndAt: candidate.currentPeriodEndAt ?? null,
+      providerSubscriptionId: candidate.providerSubscriptionId ?? null,
+      providerPriceId: candidate.providerPriceId ?? null,
+      updatedAt: candidate.updatedAt,
     };
   },
 });

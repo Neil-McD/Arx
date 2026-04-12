@@ -37,78 +37,10 @@
       }
     },
     {
-      "id": "auth_paid_chat_platform_cloud",
+      "id": "auth_builder_platform_legacy_requires_connection",
       "input": {
         "authState": "authenticated",
         "tier": "builder",
-        "executionMode": "cloud",
-        "requestedFundingSource": "platform"
-      },
-      "expected": {
-        "allowed": true,
-        "code": "ok",
-        "cta": "none",
-        "lane": "platform",
-        "fundingSource": "platform",
-        "effectiveTier": "builder"
-      }
-    },
-    {
-      "id": "auth_architect_chat_platform_cloud",
-      "input": {
-        "authState": "authenticated",
-        "tier": "architect",
-        "executionMode": "cloud",
-        "requestedFundingSource": "platform"
-      },
-      "expected": {
-        "allowed": true,
-        "code": "ok",
-        "cta": "none",
-        "lane": "platform",
-        "fundingSource": "platform",
-        "effectiveTier": "architect"
-      }
-    },
-    {
-      "id": "auth_builder_platform_cloud_duplicate",
-      "input": {
-        "authState": "authenticated",
-        "tier": "builder",
-        "executionMode": "cloud",
-        "requestedFundingSource": "platform"
-      },
-      "expected": {
-        "allowed": true,
-        "code": "ok",
-        "cta": "none",
-        "lane": "platform",
-        "fundingSource": "platform",
-        "effectiveTier": "builder"
-      }
-    },
-    {
-      "id": "auth_architect_platform_cloud_duplicate",
-      "input": {
-        "authState": "authenticated",
-        "tier": "architect",
-        "executionMode": "cloud",
-        "requestedFundingSource": "platform"
-      },
-      "expected": {
-        "allowed": true,
-        "code": "ok",
-        "cta": "none",
-        "lane": "platform",
-        "fundingSource": "platform",
-        "effectiveTier": "architect"
-      }
-    },
-    {
-      "id": "auth_free_platform_requires_connection",
-      "input": {
-        "authState": "authenticated",
-        "tier": "free",
         "executionMode": "cloud",
         "requestedFundingSource": "platform"
       },
@@ -118,7 +50,24 @@
         "cta": "connect_provider",
         "lane": null,
         "fundingSource": null,
-        "effectiveTier": "auth_free"
+        "effectiveTier": "builder"
+      }
+    },
+    {
+      "id": "auth_architect_platform_legacy_requires_connection",
+      "input": {
+        "authState": "authenticated",
+        "tier": "architect",
+        "executionMode": "cloud",
+        "requestedFundingSource": "platform"
+      },
+      "expected": {
+        "allowed": false,
+        "code": "provider_connection_required",
+        "cta": "connect_provider",
+        "lane": null,
+        "fundingSource": null,
+        "effectiveTier": "architect"
       }
     },
     {
@@ -158,7 +107,43 @@
       }
     },
     {
-      "id": "auth_free_platform_chatgpt_fallback",
+      "id": "auth_free_user_chatgpt_requires_connection",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "requestedFundingSource": "user_chatgpt",
+        "hasUserChatGptConnection": false
+      },
+      "expected": {
+        "allowed": false,
+        "code": "provider_connection_required",
+        "cta": "connect_provider",
+        "lane": null,
+        "fundingSource": null,
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_free_user_chatgpt_allowed_with_connection",
+      "input": {
+        "authState": "authenticated",
+        "tier": "free",
+        "executionMode": "cloud",
+        "requestedFundingSource": "user_chatgpt",
+        "hasUserChatGptConnection": true
+      },
+      "expected": {
+        "allowed": true,
+        "code": "ok",
+        "cta": "none",
+        "lane": "chatgpt",
+        "fundingSource": "user_chatgpt",
+        "effectiveTier": "auth_free"
+      }
+    },
+    {
+      "id": "auth_free_platform_legacy_chatgpt_fallback",
       "input": {
         "surface": "web",
         "authState": "authenticated",
@@ -177,7 +162,7 @@
       }
     },
     {
-      "id": "auth_free_platform_user_key_fallback",
+      "id": "auth_free_platform_legacy_user_key_fallback",
       "input": {
         "surface": "web",
         "authState": "authenticated",

@@ -12,6 +12,7 @@ import {
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import {
   addCloudThreadMessage,
+  cancelCloudRuntimeRunByThreadKey,
   deleteCloudThreadMessage,
   ensureCloudThreadRecord,
 } from "./cloudThreadsGateway";
@@ -19,7 +20,6 @@ import { listConvexCloudRuntimeRunEvents } from "./daytonaCloudThreadsRead";
 import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
-  type PlatformQuotaModalState,
   type PublicTurnThreadMessage,
   type RunAgentTurnParams,
   type RunPublicTurnParams,
@@ -28,9 +28,8 @@ import {
   buildAssistantTextMessagePayload,
   buildPublicTurnMessages,
   isAbortError,
-  mapPlatformFailureReason,
+  mapInferenceIssueReason,
   normalizeGuestInferenceError,
-  resetStreamingState,
 } from "./webTurnRunnerCore";
 
 export function useWebTurnRunnerController<
@@ -141,32 +140,60 @@ export function useWebTurnRunnerController<
   );
 
   const stopStreamingTurn = useCallback((threadId?: string): void => {
+    const resolvedThreadId = (threadId ?? argsRef.current.activeThreadId ?? "").trim();
+    if (!resolvedThreadId) return;
     const current = argsRef.current;
-    const resolvedThreadId = (threadId ?? current.activeThreadId ?? "").trim();
-    if (resolvedThreadId) {
-      const threadAbort = threadStreamingAbortRefById.current[resolvedThreadId] ?? null;
-      if (threadAbort) {
-        threadStreamingUserCancelledRefById.current[resolvedThreadId] = true;
-        threadAbort.abort();
-        return;
+    const session = current.session;
+    const streamingState = current.threadStreamingStateById[resolvedThreadId] ?? null;
+    const activeRunId = String(streamingState?.runId ?? "").trim() || null;
+    const threadAbort = threadStreamingAbortRefById.current[resolvedThreadId] ?? null;
+    threadStreamingUserCancelledRefById.current[resolvedThreadId] = true;
+    if (threadAbort) {
+      if (session) {
+        void cancelCloudRuntimeRunByThreadKey({
+          session: session as any,
+          threadId: resolvedThreadId,
+          runId: activeRunId,
+        }).catch(() => null);
       }
+      threadAbort.abort();
+      return;
     }
-    if (!current.streamingAbortRef.current) return;
-    current.streamingUserCancelledRef.current = true;
-    current.streamingAbortRef.current.abort();
-  }, []);
+    if (session && activeRunId) {
+      void cancelCloudRuntimeRunByThreadKey({
+        session: session as any,
+        threadId: resolvedThreadId,
+        runId: activeRunId,
+      })
+        .catch(() => null)
+        .finally(() => {
+          resetThreadStreamingState(resolvedThreadId);
+          current.setThreadErrorForThread(resolvedThreadId, null);
+          void current.loadThreadMessages(resolvedThreadId, session).catch(() => null);
+          void current.loadThreads(session).catch(() => null);
+        });
+      return;
+    }
+    resetThreadStreamingState(resolvedThreadId);
+    current.setThreadErrorForThread(resolvedThreadId, null);
+  }, [resetThreadStreamingState]);
 
   const stopAllStreamingTurns = useCallback((): void => {
+    const current = argsRef.current;
+    const session = current.session;
     for (const threadId of Object.keys(threadStreamingAbortRefById.current)) {
       const abort = threadStreamingAbortRefById.current[threadId] ?? null;
-      if (!abort) continue;
       threadStreamingUserCancelledRefById.current[threadId] = true;
-      abort.abort();
-    }
-    const current = argsRef.current;
-    if (current.streamingAbortRef.current) {
-      current.streamingUserCancelledRef.current = true;
-      current.streamingAbortRef.current.abort();
+      if (session) {
+        const streamingState = current.threadStreamingStateById[threadId] ?? null;
+        const activeRunId = String(streamingState?.runId ?? "").trim() || null;
+        void cancelCloudRuntimeRunByThreadKey({
+          session: session as any,
+          threadId,
+          runId: activeRunId,
+        }).catch(() => null);
+      }
+      abort?.abort();
     }
   }, []);
 
@@ -184,36 +211,47 @@ export function useWebTurnRunnerController<
       const transport: CloudRuntimeTransport<SessionT> = {
         baseUrl,
         fetchPublic: current.fetchCloudPublic,
-        fetchAuth: current.fetchCloudAuth,
+        fetchAuth: current.fetchAuth,
       };
 
-      current.streamingAbortRef.current?.abort();
+      threadStreamingAbortRefById.current[params.threadId]?.abort();
       const abort = new AbortController();
-      current.streamingAbortRef.current = abort;
-      current.streamingUserCancelledRef.current = false;
-      current.streamingContentRef.current = "";
-      current.setStreamingContent("");
-      current.setStreamingThreadId(params.threadId);
-      current.setStreamingRunId(params.runIdHint);
-      current.setStreamingMeta({
-        engine_id: "public_web",
-        model_id: params.modelId,
-        inference_source: "platform",
-        memory_used: [],
-        history_used: [],
-        community_evidence_used: null,
-      });
+      threadStreamingAbortRefById.current[params.threadId] = abort;
+      threadStreamingUserCancelledRefById.current[params.threadId] = false;
+      threadStreamingContentRefById.current[params.threadId] = "";
+      setThreadStreamingState(params.threadId, () => ({
+        runId: params.runIdHint,
+        meta: {
+          engine_id: "public_web",
+          model_id: params.modelId,
+          inference_source: "free",
+          memory_used: [],
+          history_used: [],
+          community_evidence_used: null,
+        },
+        content: "",
+        streamTransport: "sse",
+        runtimeEvents: [],
+        lastRuntimeEventSeq: 0,
+      }));
 
       const scheduleStreamingFlush = () => {
-        if (current.streamingRafRef.current) return;
-        current.streamingRafRef.current = window.requestAnimationFrame(() => {
-          current.streamingRafRef.current = null;
-          const raw = current.streamingContentRef.current ?? "";
-          current.setStreamingContent(
-            sanitizeUserFacingAssistantText({
-              text: raw,
-              blockedIds: [params.threadId, runIdFromServer],
-            }),
+        if (threadStreamingRafRefById.current[params.threadId]) return;
+        threadStreamingRafRefById.current[params.threadId] = window.requestAnimationFrame(() => {
+          threadStreamingRafRefById.current[params.threadId] = null;
+          const raw = threadStreamingContentRefById.current[params.threadId] ?? "";
+          const nextContent = sanitizeUserFacingAssistantText({
+            text: raw,
+            blockedIds: [params.threadId, runIdFromServer],
+          });
+          setThreadStreamingState(params.threadId, (entry) =>
+            entry
+              ? {
+                  ...entry,
+                  content: nextContent,
+                  streamTransport: "sse",
+                }
+              : null,
           );
         });
       };
@@ -247,13 +285,13 @@ export function useWebTurnRunnerController<
               error: formatCloudFunctionErrorMessage({
                 ...failure,
                 message:
-                  "Guest chat is hitting the free model limit right now. Sign in for ChatGPT Plus/Pro rate limits or connect your own key.",
+                  "Guest chat is hitting the free model limit right now. Sign in to save chats, unlock more models, and use your ChatGPT Plus / Pro or your own provider.",
               }),
               content: "",
               runId: null,
             };
           }
-          if (failure.category === "misconfigured") {
+          if (failure.category === "misconfigured" || failure.category === "unavailable") {
             const errorMessage = failure.message.trim()
               ? normalizeGuestInferenceError(failure.message)
               : "Guest chat is temporarily unavailable.";
@@ -300,33 +338,49 @@ export function useWebTurnRunnerController<
           if (eventName === "start") {
             if (typeof parsed?.run_id === "string") {
               runIdFromServer = parsed.run_id;
-              current.setStreamingRunId(parsed.run_id);
+              setThreadStreamingState(params.threadId, (entry) =>
+                entry
+                  ? {
+                      ...entry,
+                      runId: parsed.run_id,
+                      streamTransport: "sse",
+                    }
+                  : null,
+              );
             }
             if (typeof parsed?.engine_id === "string") {
-              current.setStreamingMeta({
-                engine_id: parsed.engine_id,
-                model_id: typeof parsed?.model_id === "string" ? parsed.model_id : params.modelId,
-                inference_source: "platform",
-                memory_used: [],
-                history_used: [],
-                community_evidence_used: null,
-              });
+              setThreadStreamingState(params.threadId, (entry) =>
+                entry
+                  ? {
+                      ...entry,
+                      meta: {
+                        engine_id: parsed.engine_id,
+                        model_id: typeof parsed?.model_id === "string" ? parsed.model_id : params.modelId,
+                        inference_source: "free",
+                        memory_used: [],
+                        history_used: [],
+                        community_evidence_used: null,
+                      },
+                      streamTransport: "sse",
+                    }
+                  : null,
+              );
             }
           } else if (eventName === "delta") {
             const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
             const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
             if (full !== null) {
               finalContent = full;
-              current.streamingContentRef.current = full;
+              threadStreamingContentRefById.current[params.threadId] = full;
             } else if (delta) {
               finalContent += delta;
-              current.streamingContentRef.current = finalContent;
+              threadStreamingContentRefById.current[params.threadId] = finalContent;
             }
             scheduleStreamingFlush();
           } else if (eventName === "done") {
             if (typeof parsed?.full_content === "string") {
               finalContent = parsed.full_content;
-              current.streamingContentRef.current = parsed.full_content;
+              threadStreamingContentRefById.current[params.threadId] = parsed.full_content;
               scheduleStreamingFlush();
             }
             seenDone = true;
@@ -373,21 +427,22 @@ export function useWebTurnRunnerController<
         return { cancelled: false, error: null, content: sanitizedFinalContent, runId: runIdFromServer };
       } catch (error) {
         const cancelled =
-          threadStreamingUserCancelledRefById.current[threadId] === true || abort.signal.aborted || isAbortError(error);
+          threadStreamingUserCancelledRefById.current[params.threadId] === true || abort.signal.aborted || isAbortError(error);
         if (cancelled) return { cancelled: true, error: null, content: "", runId: null };
         const rawMessage =
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
         return { cancelled: false, error: normalizeGuestInferenceError(rawMessage), content: "", runId: null };
       } finally {
-        resetStreamingState(current);
+        resetThreadStreamingState(params.threadId);
       }
     },
-    [],
+    [resetThreadStreamingState, setThreadStreamingState],
   );
 
   const runAgentTurn = useCallback(
     async (session: SessionT, threadId: string, params: RunAgentTurnParams): Promise<{ cancelled: boolean; error: string | null }> => {
       const current = argsRef.current;
+      const exposeStreamingUi = params.suppressStreamingUi !== true;
       let baseUrl: string;
       try {
         baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
@@ -397,7 +452,7 @@ export function useWebTurnRunnerController<
       const transport: CloudRuntimeTransport<SessionT> = {
         baseUrl,
         fetchPublic: current.fetchCloudPublic,
-        fetchAuth: current.fetchCloudAuth,
+        fetchAuth: current.fetchAuth,
       };
       try {
         await ensureCloudThreadRecordForRuntime(session, threadId);
@@ -410,20 +465,23 @@ export function useWebTurnRunnerController<
       threadStreamingAbortRefById.current[threadId] = abort;
       threadStreamingUserCancelledRefById.current[threadId] = false;
       threadStreamingContentRefById.current[threadId] = "";
-      setThreadStreamingState(threadId, () => ({
-        runId: params.runIdHint,
-        meta: {
-          engine_id: "agent_web",
-          model_id: params.preferredModelId,
-          inference_source: params.inferenceSource ?? null,
-          memory_used: [],
-          history_used: [],
-          community_evidence_used: null,
-        },
-        content: "",
-        runtimeEvents: [],
-        lastRuntimeEventSeq: 0,
-      }));
+      if (exposeStreamingUi) {
+        setThreadStreamingState(threadId, () => ({
+          runId: params.runIdHint,
+          meta: {
+            engine_id: "agent_web",
+            model_id: params.preferredModelId,
+            inference_source: params.inferenceSource ?? null,
+            memory_used: [],
+            history_used: [],
+            community_evidence_used: null,
+          },
+          content: "",
+          streamTransport: "sse",
+          runtimeEvents: [],
+          lastRuntimeEventSeq: 0,
+        }));
+      }
       let runIdFromServer: string | null = null;
       let runtimeRequestId: string | null = null;
       let runtimeStage: string | null = null;
@@ -445,6 +503,7 @@ export function useWebTurnRunnerController<
               ? {
                   ...entry,
                   content: nextContent,
+                  streamTransport: "sse",
                 }
               : null,
           );
@@ -469,10 +528,19 @@ export function useWebTurnRunnerController<
               stream: streamRuntimeTurn,
               surface: "web",
               model_id: params.preferredModelId,
-              requested_funding_source: params.requestedFundingSource ?? "platform",
+              requested_funding_source: params.requestedFundingSource,
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,
               requested_agentic_tools: params.requestedAgenticTools === true,
+              ...(params.internalFollowup
+                ? {
+                    internal_followup: {
+                      kind: params.internalFollowup.kind,
+                      content: params.internalFollowup.content,
+                      suppress_assistant_message: params.internalFollowup.suppressAssistantMessage === true,
+                    },
+                  }
+                : null),
               ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,
@@ -519,12 +587,15 @@ export function useWebTurnRunnerController<
           }
           if (
             failure.category === "quota" ||
+            failure.category === "workspace_credits" ||
+            failure.category === "plan" ||
+            failure.category === "provider_connection_required" ||
             failure.category === "misconfigured" ||
             failure.category === "disabled" ||
-            failure.category === "plan"
+            failure.category === "unavailable"
           ) {
-            current.setPlatformQuotaModal({
-              reason: mapPlatformFailureReason(failure.category),
+            current.setInferenceIssueModal({
+              reason: mapInferenceIssueReason(failure.category),
               threadId,
               mode: params.mode === "regenerate" ? "regenerate" : "respond",
               message: failure.message.trim() || null,
@@ -569,16 +640,23 @@ export function useWebTurnRunnerController<
           if (eventName === "start") {
             if (typeof parsed?.run_id === "string") {
               runIdFromServer = parsed.run_id;
-              setThreadStreamingState(threadId, (entry) =>
-                entry
-                  ? {
-                      ...entry,
-                      runId: parsed.run_id,
-                    }
-                  : null,
-              );
+              if (exposeStreamingUi) {
+                setThreadStreamingState(threadId, (entry) =>
+                  entry
+                    ? {
+                        ...entry,
+                        runId: parsed.run_id,
+                        streamTransport: "sse",
+                      }
+                    : null,
+                );
+              }
             }
           } else if (eventName === "delta") {
+            if (params.suppressStreamingUi) {
+              eventName = "message";
+              return;
+            }
             const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
             const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
             if (full !== null) {
@@ -590,7 +668,7 @@ export function useWebTurnRunnerController<
             }
             scheduleStreamingFlush();
           } else if (eventName === "done") {
-            if (typeof parsed?.full_content === "string") {
+            if (!params.suppressStreamingUi && typeof parsed?.full_content === "string") {
               finalContent = parsed.full_content;
               threadStreamingContentRefById.current[threadId] = parsed.full_content;
               scheduleStreamingFlush();
@@ -600,6 +678,47 @@ export function useWebTurnRunnerController<
               persistedAssistantMessageId = parsed.assistant_message_id.trim();
             }
             seenDone = true;
+          } else if (eventName === "runtime_event") {
+            const runtimeEventId = typeof parsed?.id === "string" ? parsed.id.trim() : "";
+            const runtimeEventRunId = typeof parsed?.run_id === "string" ? parsed.run_id.trim() : "";
+            const runtimeEventType =
+              typeof parsed?.event_type === "string" ? parsed.event_type.trim() : "";
+            const runtimeEventCreatedAt =
+              typeof parsed?.created_at === "string" ? parsed.created_at.trim() : "";
+            const runtimeEventSeqRaw = Number(parsed?.seq);
+            if (runtimeEventId && runtimeEventRunId && runtimeEventType && runtimeEventCreatedAt) {
+              const runtimeEvent = {
+                id: runtimeEventId,
+                run_id: runtimeEventRunId,
+                seq: Number.isFinite(runtimeEventSeqRaw)
+                  ? Math.max(0, Math.floor(runtimeEventSeqRaw))
+                  : 0,
+                event_type: runtimeEventType,
+                payload: parsed?.payload ?? null,
+                created_at: runtimeEventCreatedAt,
+              };
+              if (exposeStreamingUi) {
+                setThreadStreamingState(threadId, (entry) => {
+                  if (!entry) return entry;
+                  if (Array.isArray(entry.runtimeEvents) && entry.runtimeEvents.some((row) => row.id === runtimeEvent.id)) {
+                    return entry;
+                  }
+                  const nextRuntimeEvents = [...(entry.runtimeEvents ?? []), runtimeEvent].sort(
+                    (a, b) => a.seq - b.seq,
+                  );
+                  return {
+                    ...entry,
+                    runId: entry.runId ?? runtimeEventRunId,
+                    streamTransport: "sse",
+                    runtimeEvents: nextRuntimeEvents,
+                    lastRuntimeEventSeq: Math.max(
+                      Math.max(0, Math.floor(entry.lastRuntimeEventSeq ?? 0)),
+                      runtimeEvent.seq,
+                    ),
+                  };
+                });
+              }
+            }
           } else if (eventName === "error") {
             const msg =
               (typeof parsed?.error === "string" && parsed.error.trim()) ||
@@ -640,21 +759,28 @@ export function useWebTurnRunnerController<
           }
           flushEvent();
 
-          const safeAssistantText = sanitizeUserFacingAssistantText({
-            text: finalContent,
-            blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
-          }).trim();
-          if (!safeAssistantText) {
-            throw new Error("Failed to run model.");
+          if (params.internalFollowup?.suppressAssistantMessage !== true) {
+            const safeAssistantText = sanitizeUserFacingAssistantText({
+              text: finalContent,
+              blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
+            }).trim();
+            if (!safeAssistantText) {
+              throw new Error("Failed to run model.");
+            }
           }
-          if (!persistedAssistantMessageId) {
+          if (params.internalFollowup?.suppressAssistantMessage !== true && !persistedAssistantMessageId) {
             throw new Error("Runtime turn did not persist assistant message.");
           }
-          await current.loadThreadMessages(threadId, session);
-          await current.loadThreads(session);
+          if (params.internalFollowup?.suppressAssistantMessage !== true) {
+            await current.loadThreadMessages(threadId, session);
+            await current.loadThreads(session);
+          }
         return { cancelled: false, error: null };
       } catch (error) {
-        const cancelled = current.streamingUserCancelledRef.current || abort.signal.aborted || isAbortError(error);
+        const cancelled =
+          Boolean(threadStreamingUserCancelledRefById.current[threadId]) ||
+          abort.signal.aborted ||
+          isAbortError(error);
         if (cancelled) {
           window.setTimeout(() => {
             void current.loadThreadMessages(threadId, session).catch(() => null);

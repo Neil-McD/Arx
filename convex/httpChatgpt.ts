@@ -14,7 +14,10 @@ import {
   type StoredChatgptAuthV1,
 } from "./chatgptAuth";
 import {
+  DEFAULT_CHATGPT_REASONING_EFFORT,
+  DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
   runChatgptResponsesRequest,
+  runChatgptResponsesStreamingRequest,
   type ChatgptCompletionFailure,
   type ChatgptFunctionTool,
   type ChatgptResponsesParseResult,
@@ -37,9 +40,52 @@ export async function runChatgptCompletion(params: {
   modelId: string;
   messages: RuntimeChatgptMessage[];
   maxTokens: number;
+  signal?: AbortSignal;
 }): Promise<ChatgptCompletionSuccess | ChatgptCompletionFailure> {
   const response = await runChatgptResponsesRequest(params);
   if (!("ok" in response) || response.ok === false) return response;
+  const text = response.parsed.text.trim();
+  if (!text) {
+    return {
+      ok: false,
+      status: 502,
+      code: "provider_empty_response",
+      message: "ChatGPT returned an empty response.",
+    };
+  }
+  return {
+    content: text,
+    promptTokens: response.promptTokens,
+    completionTokens: response.completionTokens,
+    resolvedModelId: response.parsed.modelId,
+  };
+}
+
+export async function runChatgptStreamingCompletion(params: {
+  ctx: any;
+  userId: string;
+  modelId: string;
+  messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
+  maxTokens: number;
+  onDelta?: (delta: string) => void;
+  onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
+  onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
+  signal?: AbortSignal;
+}): Promise<ChatgptCompletionSuccess | ChatgptCompletionFailure> {
+  const response = await runChatgptResponsesStreamingRequest({
+    ...params,
+    reasoningEffort: DEFAULT_CHATGPT_REASONING_EFFORT,
+    reasoningSummary: DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
+  });
+  if (!("ok" in response) || response.ok === false) return response;
+  if (response.parsed.functionCall) {
+    return {
+      ok: false,
+      status: 502,
+      code: "invalid_model_output",
+      message: "ChatGPT returned an unexpected tool call.",
+    };
+  }
   const text = response.parsed.text.trim();
   if (!text) {
     return {
@@ -64,8 +110,15 @@ export async function runChatgptNativeToolCompletion(params: {
   messages: ChatgptToolAwareMessage[];
   maxTokens: number;
   tools: ChatgptFunctionTool[];
+  onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
+  onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
+  signal?: AbortSignal;
 }): Promise<ChatgptNativeToolCompletionSuccess | ChatgptCompletionFailure> {
-  const response = await runChatgptResponsesRequest(params);
+  const response = await runChatgptResponsesStreamingRequest({
+    ...params,
+    reasoningEffort: DEFAULT_CHATGPT_REASONING_EFFORT,
+    reasoningSummary: DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
+  });
   if (!("ok" in response) || response.ok === false) return response;
 
   if (response.parsed.functionCall) {

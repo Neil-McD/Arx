@@ -16,7 +16,7 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
 10. `personalMemory.ts`
 11. `modelRegistry.ts`
 12. `settings.ts`
-13. `http.ts` (runtime compatibility routes: turn, lane inference, voice, community context)
+13. `httpRuntimeRoutes.ts` (canonical runtime HTTP routes: public turn, authenticated runtime turn, voice, community context)
 14. `probe.ts` (`probe:health` query for boot verification)
 15. `../convex.json` (Convex functions root)
 

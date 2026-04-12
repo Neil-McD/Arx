@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShellNavigation";
 import { deriveOpenCommunityTabTransition } from "../../../../shared/appNavTransitions";
@@ -45,33 +45,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     return paramsRef.current.communities.find((candidate) => String(candidate.slug ?? "").trim() === slug) ?? null;
   }, []);
 
-  useEffect(() => {
-    const current = paramsRef.current;
-    const slug = resolveCommunitySlugById(current.activeCommunityId);
-    if (!slug || slug === current.activeCommunitySlug) return;
-    current.applyCommunityShellState({ communitySlug: slug });
-  }, [params.activeCommunityId, params.communities, params.activeCommunitySlug, resolveCommunitySlugById]);
-
-  useEffect(() => {
-    const current = paramsRef.current;
-    if (current.activePage !== "community") return;
-    const slug = String(current.activeCommunitySlug ?? "").trim();
-    if (!slug) return;
-    const activeSlug = resolveCommunitySlugById(current.activeCommunityId);
-    if (activeSlug === slug) return;
-    const match = resolveCommunityBySlug(slug);
-    if (match && current.activeCommunityId !== match.id) {
-      current.applyCommunityShellState({ communityId: match.id });
-    }
-  }, [
-    params.activePage,
-    params.activeCommunityId,
-    params.activeCommunitySlug,
-    params.communities,
-    resolveCommunityBySlug,
-    resolveCommunitySlugById,
-  ]);
-
   const openPublicCommunityFunnel = useCallback((communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
     const current = paramsRef.current;
     const slug = String(communitySlug ?? "").trim();
@@ -82,15 +55,17 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
 
   const syncCommunitySelection = useCallback(
     (opts: {
-      communityId: string | null;
+      communityId?: string | null;
       communitySlug?: string | null;
     }) => {
       const current = paramsRef.current;
+      const requestedSlug =
+        opts.communitySlug !== undefined ? String(opts.communitySlug ?? "").trim() || null : undefined;
       const resolvedSlug =
-        opts.communitySlug !== undefined ? String(opts.communitySlug ?? "").trim() || null : resolveCommunitySlugById(opts.communityId);
+        requestedSlug !== undefined ? requestedSlug : resolveCommunitySlugById(opts.communityId ?? null);
       current.applyCommunityShellState({
-        communityId: opts.communityId,
         communitySlug: resolvedSlug,
+        communityId: opts.communityId ?? null,
       });
     },
     [resolveCommunitySlugById],
@@ -101,8 +76,17 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
   }, [syncCommunitySelection]);
 
   const openCommunityTab = useCallback(
-    (nextCommunityId: string, nextCommunityTab: CommunityTab, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+    (nextCommunitySlug: string, nextCommunityTab: CommunityTab, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
       const current = paramsRef.current;
+      const normalizedSlug = String(nextCommunitySlug ?? "").trim();
+      if (!normalizedSlug) return;
+      const matchedCommunity = resolveCommunityBySlug(normalizedSlug);
+      if (!matchedCommunity) {
+        if (nextCommunityTab === "chat") {
+          openPublicCommunityFunnel(normalizedSlug, opts);
+        }
+        return;
+      }
       const transition = deriveOpenCommunityTabTransition(
         {
           activePage: current.activePage,
@@ -110,24 +94,24 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
           communityTab: current.communityTab,
           activeCommunityId: current.activeCommunityId ?? null,
         },
-        nextCommunityId,
+        matchedCommunity.id,
         nextCommunityTab,
       );
       if ((opts?.pushSnapshot ?? true) && transition.shouldPushSnapshot) current.pushNavSnapshot();
       current.setActiveView(transition.nextView);
       current.setActivePage(transition.nextPage);
       current.applyCommunityShellState({
-        communityId: transition.nextCommunityId,
+        communitySlug: matchedCommunity.slug,
         communityTab: transition.nextCommunityTab,
       });
       if (opts?.clearUnread) current.setUnreadCount?.(0);
     },
-    [],
+    [openPublicCommunityFunnel, resolveCommunityBySlug],
   );
 
   const openCommunityChat = useCallback(
-    (nextCommunityId: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
-      openCommunityTab(nextCommunityId, "chat", opts);
+    (nextCommunitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+      openCommunityTab(nextCommunitySlug, "chat", opts);
     },
     [openCommunityTab],
   );
@@ -138,7 +122,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
       if (!slug) return;
       const matchedCommunity = resolveCommunityBySlug(slug);
       if (matchedCommunity) {
-        openCommunityChat(matchedCommunity.id, opts);
+        openCommunityChat(matchedCommunity.slug, opts);
         return;
       }
       openPublicCommunityFunnel(slug, opts);

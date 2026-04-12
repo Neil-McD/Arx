@@ -157,6 +157,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     showSignIn: false,
     approvalPending: false,
     approvalDenied: false,
+    canRequestAgain: false,
     isPreviewMode: true,
   };
 

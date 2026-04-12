@@ -118,7 +118,7 @@ export const createCommunity = mutation({
       userId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const owner = await ctx.db.get(ownerId);
+    const owner = (await ctx.db.get(ownerId)) as { email?: string | null } | null;
     if (!isCreatorDevTierOverrideEmail(owner?.email ?? null)) {
       throw new Error("community_creation_disabled_for_alpha");
     }

@@ -1,5 +1,8 @@
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
-import type { NativeToolAwareMessage } from "../shared/nativeToolProtocol";
+import type {
+  NativeToolAwareMessage,
+  NativeToolInputContentPart,
+} from "../shared/nativeToolProtocol";
 
 const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 
@@ -41,8 +44,25 @@ export type ChatgptResponsesParseResult = {
     | null;
 };
 
+type ChatgptReasoningSummaryLevel = "auto" | "concise" | "detailed";
+type ChatgptReasoningEffort = "low" | "medium" | "high";
+const DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL: ChatgptReasoningSummaryLevel = "auto";
+const DEFAULT_CHATGPT_REASONING_EFFORT: ChatgptReasoningEffort = "medium";
+
 function normalizeHeaderValue(value: string | null): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getHeaderValue(response: Response | null | undefined, name: string): string | null {
+  const headers = (response as { headers?: unknown } | null | undefined)?.headers as
+    | { get?: (name: string) => string | null }
+    | undefined;
+  if (!headers || typeof headers.get !== "function") return null;
+  try {
+    return headers.get(name);
+  } catch {
+    return null;
+  }
 }
 
 function buildBodyPreview(bytes: Uint8Array): string | null {
@@ -139,6 +159,7 @@ function normalizeChatgptResponsesRequest(params: {
   modelId: string;
   messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
 }): { instructions: string | null; inputItems: unknown[] } {
+  const MAX_REQUEST_CONTENT_CHARS = 250_000;
   const modelId = String(params.modelId ?? "").trim();
   if (!modelId) throw new Error("model_id_required");
   if (modelId.length > 128) throw new Error("model_id_too_long");
@@ -149,26 +170,65 @@ function normalizeChatgptResponsesRequest(params: {
   const inputItems: unknown[] = [];
   let totalChars = 0;
 
+  const addToBudget = (value: string) => {
+    totalChars += value.length;
+    if (totalChars > MAX_REQUEST_CONTENT_CHARS) {
+      throw new Error("messages_exceed_size_budget");
+    }
+  };
+
+  const mapUserContentParts = (parts: NativeToolInputContentPart[]): unknown[] => {
+    const mapped: unknown[] = [];
+    for (const part of parts) {
+      if (!part || typeof part !== "object") continue;
+      if (part.type === "text") {
+        const text = String(part.text ?? "").trim();
+        if (!text) continue;
+        addToBudget(text);
+        mapped.push({
+          type: "input_text",
+          text,
+        });
+        continue;
+      }
+      if (part.type === "image") {
+        const imageUrl = String(part.imageUrl ?? "").trim();
+        if (!imageUrl) continue;
+        addToBudget(imageUrl);
+        mapped.push({
+          type: "input_image",
+          image_url: imageUrl,
+        });
+      }
+    }
+    return mapped;
+  };
+
   for (const message of params.messages) {
     const role = String(message.role ?? "").trim().toLowerCase();
 
     if (role === "system") {
       const content = String((message as RuntimeChatgptMessage).content ?? "").trim();
       if (!content) continue;
-      totalChars += content.length;
-      if (totalChars > 250_000) throw new Error("messages_exceed_size_budget");
+      addToBudget(content);
       instructionsParts.push(content);
       continue;
     }
     if (role === "user") {
-      const content = String((message as RuntimeChatgptMessage).content ?? "").trim();
-      if (!content) continue;
-      totalChars += content.length;
-      if (totalChars > 250_000) throw new Error("messages_exceed_size_budget");
+      const rawContent = (message as Extract<ChatgptToolAwareMessage, { role: "user" }>).content;
+      const contentParts = Array.isArray(rawContent)
+        ? mapUserContentParts(rawContent)
+        : (() => {
+            const text = String(rawContent ?? "").trim();
+            if (!text) return [];
+            addToBudget(text);
+            return [{ type: "input_text", text }];
+          })();
+      if (contentParts.length === 0) continue;
       inputItems.push({
         type: "message",
         role: "user",
-        content: [{ type: "input_text", text: content }],
+        content: contentParts,
       });
       continue;
     }
@@ -176,8 +236,7 @@ function normalizeChatgptResponsesRequest(params: {
       const assistantMessage = message as Extract<ChatgptToolAwareMessage, { role: "assistant" }>;
       const content = String(assistantMessage.content ?? "").trim();
       if (content) {
-        totalChars += content.length;
-        if (totalChars > 250_000) throw new Error("messages_exceed_size_budget");
+        addToBudget(content);
         inputItems.push({
           type: "message",
           role: "assistant",
@@ -192,8 +251,7 @@ function normalizeChatgptResponsesRequest(params: {
           if (!callId || !toolName || !toolArguments) {
             throw new Error("assistant_tool_call_incomplete");
           }
-          totalChars += toolArguments.length;
-          if (totalChars > 250_000) throw new Error("messages_exceed_size_budget");
+          addToBudget(toolArguments);
           inputItems.push({
             type: "function_call",
             call_id: callId,
@@ -209,8 +267,7 @@ function normalizeChatgptResponsesRequest(params: {
       const callId = String(toolMessage.tool_call_id ?? "").trim();
       const content = String(toolMessage.content ?? "").trim();
       if (!callId || !content) throw new Error("tool_result_incomplete");
-      totalChars += content.length;
-      if (totalChars > 250_000) throw new Error("messages_exceed_size_budget");
+      addToBudget(content);
       inputItems.push({
         type: "function_call_output",
         call_id: callId,
@@ -367,6 +424,9 @@ export async function runChatgptResponsesRequest(params: {
   messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
+  signal?: AbortSignal;
+  reasoningSummary?: ChatgptReasoningSummaryLevel | null;
+  reasoningEffort?: ChatgptReasoningEffort | null;
 }): Promise<
   | {
       ok: true;
@@ -376,7 +436,7 @@ export async function runChatgptResponsesRequest(params: {
     }
   | ChatgptCompletionFailure
 > {
-  let requestBytes: Uint8Array;
+  let requestBodyText: string;
   try {
     const normalized = normalizeChatgptResponsesRequest({
       modelId: params.modelId,
@@ -394,7 +454,13 @@ export async function runChatgptResponsesRequest(params: {
       requestBody.parallel_tool_calls = false;
       requestBody.tool_choice = "auto";
     }
-    requestBytes = new TextEncoder().encode(JSON.stringify(requestBody));
+    if (params.reasoningSummary) {
+      requestBody.reasoning = {
+        effort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
+        summary: params.reasoningSummary,
+      };
+    }
+    requestBodyText = JSON.stringify(requestBody);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -432,7 +498,8 @@ export async function runChatgptResponsesRequest(params: {
       response = await fetch(CHATGPT_CODEX_RESPONSES_URL, {
         method: "POST",
         headers,
-        body: requestBytes,
+        body: requestBodyText,
+        signal: params.signal,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -448,13 +515,13 @@ export async function runChatgptResponsesRequest(params: {
       };
     }
 
-    const contentType = String(response.headers.get("content-type") ?? "");
+    const contentType = String(getHeaderValue(response, "content-type") ?? "");
     const body = new Uint8Array(await response.arrayBuffer());
     const upstreamRequestId =
-      normalizeHeaderValue(response.headers.get("x-request-id")) ||
-      normalizeHeaderValue(response.headers.get("openai-request-id")) ||
-      normalizeHeaderValue(response.headers.get("x-openai-request-id"));
-    const cfRay = normalizeHeaderValue(response.headers.get("cf-ray"));
+      normalizeHeaderValue(getHeaderValue(response, "x-request-id")) ||
+      normalizeHeaderValue(getHeaderValue(response, "openai-request-id")) ||
+      normalizeHeaderValue(getHeaderValue(response, "x-openai-request-id"));
+    const cfRay = normalizeHeaderValue(getHeaderValue(response, "cf-ray"));
     const bodyPreview = buildBodyPreview(body);
     if (!response.ok) {
       const detail = bodyPreview ?? "";
@@ -514,3 +581,325 @@ export async function runChatgptResponsesRequest(params: {
     cfRay: null,
   };
 }
+
+export async function runChatgptResponsesStreamingRequest(params: {
+  ctx: any;
+  userId: string;
+  modelId: string;
+  messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
+  maxTokens: number;
+  tools?: ChatgptFunctionTool[];
+  onDelta?: (delta: string) => void;
+  onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
+  onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
+  signal?: AbortSignal;
+  reasoningSummary?: ChatgptReasoningSummaryLevel | null;
+  reasoningEffort?: ChatgptReasoningEffort | null;
+}): Promise<
+  | {
+      ok: true;
+      parsed: ChatgptResponsesParseResult;
+      promptTokens: number | null;
+      completionTokens: number | null;
+    }
+  | ChatgptCompletionFailure
+> {
+  let requestBodyText: string;
+  try {
+    const normalized = normalizeChatgptResponsesRequest({
+      modelId: params.modelId,
+      messages: params.messages,
+    });
+    const requestBody: Record<string, unknown> = {
+      model: params.modelId,
+      store: false,
+      stream: true,
+      input: normalized.inputItems,
+    };
+    if (normalized.instructions) requestBody.instructions = normalized.instructions;
+    if (Array.isArray(params.tools) && params.tools.length > 0) {
+      requestBody.tools = params.tools;
+      requestBody.parallel_tool_calls = false;
+      requestBody.tool_choice = "auto";
+    }
+    if (params.reasoningSummary) {
+      requestBody.reasoning = {
+        effort: params.reasoningEffort ?? DEFAULT_CHATGPT_REASONING_EFFORT,
+        summary: params.reasoningSummary,
+      };
+    }
+    requestBodyText = JSON.stringify(requestBody);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_chatgpt_request",
+      message: message || "Invalid ChatGPT request.",
+    };
+  }
+
+  let firstFailure: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const auth = await getFreshChatgptAuthForUser({
+      ctx: params.ctx,
+      userId: params.userId,
+      forceRefresh: attempt > 0,
+    });
+    if (!auth) {
+      return {
+        ok: false,
+        status: 403,
+        code: "provider_connection_required",
+        message: "Reconnect ChatGPT and retry.",
+      };
+    }
+
+    let response: Response;
+    try {
+      const headers = new Headers();
+      headers.set("Authorization", `Bearer ${auth.accessToken}`);
+      headers.set("User-Agent", "codex-cli");
+      headers.set("Content-Type", "application/json");
+      headers.set("Accept", "text/event-stream");
+      if (auth.accountId) headers.set("ChatGPT-Account-Id", auth.accountId);
+      response = await fetch(CHATGPT_CODEX_RESPONSES_URL, {
+        method: "POST",
+        headers,
+        body: requestBodyText,
+        signal: params.signal,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        status: 503,
+        code: "provider_unavailable",
+        message: message || "ChatGPT request failed.",
+        contentType: null,
+        bodyPreview: null,
+        upstreamRequestId: null,
+        cfRay: null,
+      };
+    }
+
+    const contentType = String(getHeaderValue(response, "content-type") ?? "");
+    const upstreamRequestId =
+      normalizeHeaderValue(getHeaderValue(response, "x-request-id")) ||
+      normalizeHeaderValue(getHeaderValue(response, "openai-request-id")) ||
+      normalizeHeaderValue(getHeaderValue(response, "x-openai-request-id"));
+    const cfRay = normalizeHeaderValue(getHeaderValue(response, "cf-ray"));
+
+    if (!response.ok) {
+      const body = new Uint8Array(await response.arrayBuffer());
+      const bodyPreview = buildBodyPreview(body);
+      const detail = bodyPreview ?? "";
+      const failure = detail
+        ? `ChatGPT inference failed (HTTP ${response.status}): ${detail}`
+        : `ChatGPT inference failed (HTTP ${response.status}).`;
+      if (attempt === 0) {
+        firstFailure = failure;
+        continue;
+      }
+      return {
+        ok: false,
+        status: response.status >= 400 && response.status < 600 ? response.status : 502,
+        code: response.status === 401 || response.status === 403 ? "provider_connection_required" : "provider_error",
+        message: firstFailure || failure,
+        contentType: contentType || null,
+        bodyPreview,
+        upstreamRequestId,
+        cfRay,
+      };
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return {
+        ok: false,
+        status: 502,
+        code: "provider_invalid_response",
+        message: "ChatGPT returned no streaming body.",
+        contentType: contentType || null,
+        bodyPreview: null,
+        upstreamRequestId,
+        cfRay,
+      };
+    }
+
+    let emittedAnyDelta = false;
+    try {
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let dataBuffer = "";
+      let text = "";
+      let sawDelta = false;
+      let sawDoneText = false;
+      let modelId: string | null = null;
+      let functionCall: ChatgptResponsesParseResult["functionCall"] = null;
+      let doneSeen = false;
+      const flushEvent = async (): Promise<Error | null> => {
+        const raw = dataBuffer.trim();
+        dataBuffer = "";
+        if (!raw) return null;
+        if (raw === "[DONE]") {
+          doneSeen = true;
+          return null;
+        }
+
+        let parsed: Record<string, any>;
+        try {
+          parsed = JSON.parse(raw) as Record<string, any>;
+        } catch {
+          return new Error("ChatGPT returned invalid JSON");
+        }
+
+        if (!modelId) {
+          modelId =
+            (typeof parsed?.response?.model === "string" && parsed.response.model.trim()) ||
+            (typeof parsed?.model === "string" && parsed.model.trim()) ||
+            null;
+        }
+
+        const kind = typeof parsed?.type === "string" ? parsed.type : "";
+        if (kind === "error") {
+          const message =
+            (typeof parsed?.message === "string" && parsed.message.trim()) ||
+            (typeof parsed?.error?.message === "string" && parsed.error.message.trim()) ||
+            "ChatGPT inference failed.";
+          return new Error(message);
+        }
+
+        if (kind === "response.output_text.delta") {
+          const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
+          if (delta) {
+            emittedAnyDelta = true;
+            sawDelta = true;
+            text += delta;
+            params.onDelta?.(delta);
+          }
+          return null;
+        }
+
+        if (kind === "response.reasoning_summary_part.added") {
+          const summaryIndex = Number(parsed?.summary_index);
+          if (Number.isFinite(summaryIndex)) {
+            await params.onReasoningSummaryPartAdded?.({
+              summaryIndex: Math.max(0, Math.floor(summaryIndex)),
+            });
+          }
+          return null;
+        }
+
+        if (kind === "response.reasoning_summary_text.delta") {
+          const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
+          const summaryIndex = Number(parsed?.summary_index);
+          if (delta && Number.isFinite(summaryIndex)) {
+            await params.onReasoningSummaryTextDelta?.({
+              delta,
+              summaryIndex: Math.max(0, Math.floor(summaryIndex)),
+            });
+          }
+          return null;
+        }
+
+        if (kind === "response.output_text.done" && !sawDelta && !sawDoneText) {
+          const doneText = typeof parsed?.text === "string" ? parsed.text : "";
+          if (doneText.trim()) {
+            emittedAnyDelta = true;
+            sawDoneText = true;
+            text += doneText;
+            params.onDelta?.(doneText);
+          }
+          return null;
+        }
+
+        if (kind === "response.output_item.done") {
+          const item = parsed?.item;
+          if (!item || typeof item !== "object") return null;
+          if (item.type === "function_call") {
+            const callId = typeof item.call_id === "string" ? item.call_id.trim() : "";
+            const name = typeof item.name === "string" ? item.name.trim() : "";
+            const argumentsText = typeof item.arguments === "string" ? item.arguments.trim() : "";
+            if (callId && name && argumentsText) {
+              functionCall = {
+                callId,
+                name,
+                arguments: argumentsText,
+              };
+            }
+            return null;
+          }
+          if (!sawDelta && !sawDoneText && item.type === "message") {
+            const doneText = extractMessageTextFromOutputItem(item);
+            if (doneText.trim()) {
+              emittedAnyDelta = true;
+              sawDoneText = true;
+              text += doneText;
+              params.onDelta?.(doneText);
+            }
+          }
+        }
+        return null;
+      };
+
+      while (!doneSeen) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        while (true) {
+          const idx = buffer.indexOf("\n");
+          if (idx < 0) break;
+          let line = buffer.slice(0, idx);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          buffer = buffer.slice(idx + 1);
+          if (line.startsWith("data:")) {
+            dataBuffer += line.slice(5).trim();
+            continue;
+          }
+          if (line === "") {
+            const error = await flushEvent();
+            if (error) throw error;
+          }
+        }
+      }
+      const trailingError = await flushEvent();
+      if (trailingError) throw trailingError;
+      return {
+        ok: true,
+        parsed: { text, modelId, functionCall },
+        promptTokens: null,
+        completionTokens: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt === 0 && !emittedAnyDelta) {
+        firstFailure = message || "ChatGPT inference failed.";
+        continue;
+      }
+      return {
+        ok: false,
+        status: 502,
+        code: "provider_invalid_response",
+        message: firstFailure || message || "ChatGPT inference failed.",
+        contentType: contentType || null,
+        bodyPreview: null,
+        upstreamRequestId,
+        cfRay,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    status: 502,
+    code: "provider_error",
+    message: "ChatGPT inference failed.",
+    contentType: null,
+    bodyPreview: null,
+    upstreamRequestId: null,
+    cfRay: null,
+  };
+}
+
+export { DEFAULT_CHATGPT_REASONING_EFFORT, DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL };

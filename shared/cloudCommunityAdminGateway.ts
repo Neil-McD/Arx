@@ -236,7 +236,7 @@ export async function fetchCloudCommunityEntitledMemberCount<SessionT>(
 export async function setCloudCommunityMemberRole<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    userId: string;
+    membershipId: string;
     role: "admin" | "moderator" | "member";
   },
 ): Promise<void> {
@@ -244,7 +244,7 @@ export async function setCloudCommunityMemberRole<SessionT>(
   await client.mutation("community:setCommunityMemberRole" as any, {
     authSubject,
     communityId: params.communityId,
-    targetUserId: params.userId,
+    targetMembershipId: params.membershipId,
     role: params.role,
   });
 }
@@ -252,14 +252,14 @@ export async function setCloudCommunityMemberRole<SessionT>(
 export async function removeCloudCommunityMember<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    userId: string;
+    membershipId: string;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("community:removeCommunityMember" as any, {
     authSubject,
     communityId: params.communityId,
-    targetUserId: params.userId,
+    targetMembershipId: params.membershipId,
   });
 }
 

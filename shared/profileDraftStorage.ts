@@ -2,11 +2,10 @@ export type LocalProfileDraft = {
   name: string;
   username: string;
   bio: string;
-  avatarUrl: string | null;
 };
 
 function emptyDraft(): LocalProfileDraft {
-  return { name: "", username: "", bio: "", avatarUrl: null };
+  return { name: "", username: "", bio: "" };
 }
 
 function profileStorageScopeForUser(userId: string | null | undefined): {
@@ -42,12 +41,10 @@ export function readProfileDraftForUser(userId: string | null | undefined): Loca
     const name = localStorage.getItem(keys.name) ?? "";
     const username = localStorage.getItem(keys.username) ?? "";
     const bio = localStorage.getItem(keys.bio) ?? "";
-    const avatarRaw = localStorage.getItem(keys.avatar);
     const scopedDraft: LocalProfileDraft = {
       name,
       username,
       bio,
-      avatarUrl: isGuest ? null : avatarRaw && avatarRaw.trim() ? avatarRaw : null,
     };
     return scopedDraft;
   } catch {
@@ -71,7 +68,6 @@ export function writeProfileDraftForUser(userId: string | null | undefined, draf
   const name = draft.name.trim();
   const username = draft.username.trim();
   const bio = draft.bio.trim();
-  const avatar = (draft.avatarUrl ?? "").trim();
   try {
     if (name) localStorage.setItem(keys.name, name);
     else localStorage.removeItem(keys.name);
@@ -79,8 +75,7 @@ export function writeProfileDraftForUser(userId: string | null | undefined, draf
     else localStorage.removeItem(keys.username);
     if (bio) localStorage.setItem(keys.bio, bio);
     else localStorage.removeItem(keys.bio);
-    if (!isGuest && avatar) localStorage.setItem(keys.avatar, avatar);
-    else localStorage.removeItem(keys.avatar);
+    localStorage.removeItem(keys.avatar);
   } catch {
     // ignore
   }

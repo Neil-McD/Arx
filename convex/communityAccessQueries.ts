@@ -3,8 +3,10 @@ import { v } from "convex/values";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
+  getCommunityAndMembership,
   mapCommunityAccessRow,
   normalizeSlug,
+  pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
@@ -21,12 +23,11 @@ export const getMyCommunityAccess = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) return null;
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
+    const { community, membership } = await getCommunityAndMembership({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     return await mapCommunityAccessRow({
       ctx,
       community,
@@ -55,15 +56,16 @@ export const getMyCommunityAccessBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return null;
-    const membership = (await ctx.db
+    const membershipRows = (await ctx.db
       .query("communityMemberships")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
+      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
+      .collect()) as CommunityMembershipLike[];
+    const membership = pickMostRelevantCommunityMembership(membershipRows);
     return await mapCommunityAccessRow({
       ctx,
       community,
       membership,
-      userId: args.userId,
+      userId,
     });
   },
 });

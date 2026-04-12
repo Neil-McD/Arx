@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,9 +31,45 @@ export default defineConfig(({ mode }) => {
     }
   }
   const runtimeProxyTarget = deriveRuntimeProxyTarget(env);
+  const sentryOrg = String(env.SENTRY_ORG ?? process.env.SENTRY_ORG ?? "").trim();
+  const sentryProject = String(env.SENTRY_PROJECT ?? process.env.SENTRY_PROJECT ?? "").trim();
+  const sentryAuthToken = String(env.SENTRY_AUTH_TOKEN ?? process.env.SENTRY_AUTH_TOKEN ?? "").trim();
+  const sentryRelease = String(
+    env.VITE_SENTRY_RELEASE ??
+      process.env.SENTRY_RELEASE ??
+      process.env.VERCEL_GIT_COMMIT_SHA ??
+      process.env.GIT_COMMIT_SHA ??
+      "",
+  ).trim();
+  const sentryEnvironment = String(
+    env.VITE_SENTRY_ENVIRONMENT ?? process.env.VERCEL_ENV ?? mode,
+  ).trim();
+  const sentryBuildEnabled = Boolean(sentryOrg && sentryProject && sentryAuthToken);
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      ...(sentryBuildEnabled
+        ? [
+            ...sentryVitePlugin({
+              org: sentryOrg,
+              project: sentryProject,
+              authToken: sentryAuthToken,
+              telemetry: false,
+              release: {
+                name: sentryRelease || undefined,
+              },
+              sourcemaps: {
+                assets: "./dist/**",
+              },
+            }),
+          ]
+        : []),
+    ],
+    define: {
+      __SENTRY_RELEASE__: JSON.stringify(sentryRelease || null),
+      __SENTRY_ENVIRONMENT__: JSON.stringify(sentryEnvironment || null),
+    },
     resolve: {
       dedupe: ["react", "react-dom", "convex"],
       alias: {
@@ -74,15 +111,27 @@ export default defineConfig(({ mode }) => {
         : null),
     },
     build: {
+      sourcemap: sentryBuildEnabled ? "hidden" : false,
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (!id.includes("node_modules")) return undefined;
-            if (id.includes("react") || id.includes("react-dom") || id.includes("scheduler")) {
+            const normalizedId = id.replace(/\\/g, "/");
+            if (!normalizedId.includes("/node_modules/")) return undefined;
+            if (
+              normalizedId.includes("/node_modules/react/") ||
+              normalizedId.includes("/node_modules/react-dom/") ||
+              normalizedId.includes("/node_modules/scheduler/")
+            ) {
               return "react-vendor";
             }
-            if (id.includes("highlight.js")) {
+            if (normalizedId.includes("/node_modules/convex/")) {
+              return "convex-vendor";
+            }
+            if (normalizedId.includes("/node_modules/highlight.js/")) {
               return "highlight-vendor";
+            }
+            if (normalizedId.includes("/node_modules/lucide-react/")) {
+              return "ui-vendor";
             }
             return "vendor";
           }

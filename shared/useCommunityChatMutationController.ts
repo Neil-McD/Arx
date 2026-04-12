@@ -7,6 +7,7 @@ import {
   deleteCloudOwnMessage,
   patchCloudOwnMessageContent,
 } from "./cloudCommunityChatGateway";
+import { resolveAuthSubject } from "./authSession";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type SessionLike = {
@@ -43,6 +44,7 @@ type UseCommunityChatMutationControllerArgs<
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
+  sessionUserId: string | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   missingPayloadMessage: string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
@@ -58,6 +60,12 @@ type UseCommunityChatMutationControllerArgs<
   ) => Promise<AttachmentT[]>;
   serializeAttachmentsForWrite?: (attachments: AttachmentT[]) => unknown[];
   onOptimisticSendScrollIntent: () => void;
+  onCommunityMessageSent?: (params: {
+    communityId: string;
+    messageId: string;
+    hasAttachments: boolean;
+    hasReply: boolean;
+  }) => void;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
@@ -105,14 +113,22 @@ export function useCommunityChatMutationController<
   const argsRef = useRef(args);
   argsRef.current = args;
 
+  const resolveRuntimeSessionUserId = useCallback((session: SessionT): string | null => {
+    const explicit = String(argsRef.current.sessionUserId ?? "").trim();
+    if (explicit) return explicit;
+    return resolveAuthSubject(session as any);
+  }, []);
+
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session) return;
+    const sessionUserId = resolveRuntimeSessionUserId(session);
+    if (!sessionUserId) return;
     const existingReaction = current.messageReactions.find(
       (reaction) => (
         reaction.message_id === messageId
-        && reaction.user_id === session.user.id
+        && reaction.user_id === sessionUserId
         && reaction.emoji === emoji
       ),
     );
@@ -132,7 +148,7 @@ export function useCommunityChatMutationController<
       const optimisticReaction = {
         id: optimisticId,
         message_id: messageId,
-        user_id: session.user.id,
+        user_id: sessionUserId,
         emoji,
         created_at: new Date().toISOString(),
       } as ReactionT;
@@ -243,6 +259,8 @@ export function useCommunityChatMutationController<
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
+    const sessionUserId = resolveRuntimeSessionUserId(session);
+    if (!sessionUserId) return;
 
     const rawText = current.communityMessageInput.trim();
     const attachmentsToSend = [...current.communityAttachmentsRef.current];
@@ -264,7 +282,7 @@ export function useCommunityChatMutationController<
     const optimisticMessage = {
       id: optimisticId,
       community_id: current.activeCommunityId,
-      sender_id: session.user.id,
+      sender_id: sessionUserId,
       body: bodyToSend,
       attachments: attachmentsToSend,
       reply_to_id: replyToId,
@@ -319,6 +337,12 @@ export function useCommunityChatMutationController<
         const next = [...withoutOptimistic, record];
         next.sort((left, right) => left.seq - right.seq);
         return next;
+      });
+      current.onCommunityMessageSent?.({
+        communityId: current.activeCommunityId,
+        messageId: record.id,
+        hasAttachments: preparedAttachments.length > 0,
+        hasReply: Boolean(replyToId),
       });
     } catch (error) {
       const message = typeof error === "string"

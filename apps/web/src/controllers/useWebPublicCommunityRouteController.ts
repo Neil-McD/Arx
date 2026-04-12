@@ -131,8 +131,8 @@ export function useWebPublicCommunityRouteController<
   const myJoinRequestStatus = isPublicFunnelPreviewRoute
     ? ""
     : String(params.myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
-  const approvalPending = myJoinRequestStatus === "pending";
-  const approvalDenied = myJoinRequestStatus === "denied";
+  const approvalPending = !canEnterPublicCommunity && myJoinRequestStatus === "pending";
+  const approvalDenied = !canEnterPublicCommunity && myJoinRequestStatus === "denied";
   const approvalReapplyAtIso = !approvalDenied
     ? null
     : String(

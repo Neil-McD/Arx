@@ -310,15 +310,18 @@ export function useCommunityChatDataController<
           const mappedDesc = rowsDesc.map(toCommunityChatMessage).filter(Boolean) as MessageT[];
           const hasMore = mappedDesc.length >= argsRef.current.pageSize;
           const rows = [...mappedDesc].reverse();
+          const userIds = rows.length > 0
+            ? Array.from(new Set(rows.map((row) => row.sender_id)))
+            : [];
+
+          if (userIds.length > 0) {
+            await argsRef.current.onHydrateProfiles?.(userIds, usableSession);
+            if (isStale(communityId, generation)) return;
+          }
 
           setCommunityChatHasMoreTracked(hasMore);
           argsRef.current.setCommunityMessages(rows);
           communityChatOldestSeqRef.current = rows[0]?.seq ?? null;
-
-          if (rows.length > 0) {
-            const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-            void argsRef.current.onHydrateProfiles?.(userIds, usableSession);
-          }
 
           argsRef.current.setUnreadCount(0);
           argsRef.current.setIsUserAtBottom(true);
@@ -409,12 +412,18 @@ export function useCommunityChatDataController<
 
           const hasMore = mappedDesc.length >= argsRef.current.pageSize;
           const rows = [...mappedDesc].reverse();
+          const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
+
+          if (userIds.length > 0) {
+            await argsRef.current.onHydrateProfiles?.(userIds, usableSession);
+            if (isStale(communityId, generation)) {
+              argsRef.current.clearPendingPrependAnchor();
+              return "noop";
+            }
+          }
 
           setCommunityChatHasMoreTracked(hasMore);
           communityChatOldestSeqRef.current = rows[0]?.seq ?? cursor;
-
-          const userIds = Array.from(new Set(rows.map((row) => row.sender_id)));
-          void argsRef.current.onHydrateProfiles?.(userIds, usableSession);
 
           let appended = false;
           argsRef.current.setCommunityMessages((prev) => {

@@ -61,17 +61,17 @@ function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boole
 }
 
 async function getCanonicalTierByUserIdInternal(
-  ctx: Parameters<(typeof query)["handler"]>[0],
+  ctx: any,
   userId: any,
   nowMs: number,
 ): Promise<CanonicalTier> {
   const rows = await ctx.db
     .query("userEntitlements")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect();
   const activeRows = rows
-    .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-    .sort((a, b) => b.startsAt - a.startsAt);
+    .filter((row: any) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
+    .sort((a: any, b: any) => b.startsAt - a.startsAt);
   return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
 }
 

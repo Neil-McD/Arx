@@ -1,6 +1,12 @@
 import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
+import {
+  WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
+  WORKSPACE_CREDIT_TOPUP_CREDITS,
+  WORKSPACE_CREDIT_TOPUP_PRICE_USD,
+} from "../../../../shared/workspaceCredits";
+import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 
-type CloudSessionLike = {
+type SessionLike = {
   user: {
     id: string;
     email?: string | null;
@@ -22,7 +28,7 @@ type BuilderBillingStatus = {
 } | null;
 
 type WebAgentSettingsSectionProps = {
-  cloudSession: CloudSessionLike;
+  session: SessionLike;
   exportError: string | null;
   exportThreadsCsv: () => Promise<void> | void;
   exportMessagesCsv: () => Promise<void> | void;
@@ -30,7 +36,7 @@ type WebAgentSettingsSectionProps = {
   isExporting: boolean;
   personalMemoryError: string | null;
   builderBillingStatus: BuilderBillingStatus;
-  openBuilderUpgrade: (context: "builder" | "architect") => void;
+  openBuilderUpgrade: (context: "builder") => void;
   isLoadingPersonalMemory: boolean;
   personalMemoryItems: PersonalMemoryItem[];
   personalMemoryQuery: string;
@@ -45,11 +51,22 @@ type WebAgentSettingsSectionProps = {
   setNewPersonalMemoryContent: (value: string) => void;
   setNewPersonalMemoryPinned: (value: boolean) => void;
   handleCreatePersonalMemoryItem: () => Promise<void> | void;
+  workspaceCreditBalance: WorkspaceCreditBalance | null;
+  isLoadingWorkspaceCreditBalance: boolean;
+  workspaceCreditBalanceError: string | null;
+  isStartingWorkspaceCreditTopupCheckout: boolean;
+  workspaceCreditTopupError: string | null;
+  startWorkspaceCreditTopupCheckout: () => Promise<void> | void;
 };
+
+function formatCredits(value: number): string {
+  const normalized = Math.max(0, Number(value) || 0);
+  return normalized % 1 === 0 ? String(normalized) : normalized.toFixed(2);
+}
 
 export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
   const {
-    cloudSession,
+    session,
     exportError,
     exportThreadsCsv,
     exportMessagesCsv,
@@ -72,11 +89,17 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned,
     handleCreatePersonalMemoryItem,
+    workspaceCreditBalance,
+    isLoadingWorkspaceCreditBalance,
+    workspaceCreditBalanceError,
+    isStartingWorkspaceCreditTopupCheckout,
+    workspaceCreditTopupError,
+    startWorkspaceCreditTopupCheckout,
   } = props;
 
   return (
     <>
-      <div className="panel-title">Memory</div>
+      <div className="panel-title">Agent</div>
       <div className="memory-panel">
         {personalMemoryError &&
           !hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free") && (
@@ -97,7 +120,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
               className="secondary"
               type="button"
               onClick={() => void exportThreadsCsv()}
-              disabled={!cloudSession || isExporting}
+              disabled={!session || isExporting}
             >
               Threads CSV
             </button>
@@ -105,7 +128,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
               className="secondary"
               type="button"
               onClick={() => void exportMessagesCsv()}
-              disabled={!cloudSession || isExporting}
+              disabled={!session || isExporting}
             >
               Messages CSV
             </button>
@@ -113,7 +136,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
               className="secondary"
               type="button"
               onClick={() => void exportMemoryCsv()}
-              disabled={!cloudSession || isExporting}
+              disabled={!session || isExporting}
             >
               Memory CSV
             </button>
@@ -123,28 +146,97 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
         {(() => {
           const tier = builderBillingStatus?.builder_tier ?? "free";
           const hasPersonalMemoryAccess = hasBuilderTierPaidAccess(tier);
-          if (!cloudSession) return null;
-          if (!hasPersonalMemoryAccess) {
-            return (
-              <div className="settings-section">
-                <div className="settings-section-title">
-                  <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z" /><path d="M20 2a10 10 0 0 1 0 10" /></svg>
-                  Personal memory
-                </div>
-                <div className="settings-section-desc">
-                  Personal memory is included with Builder and Architect.
-                </div>
-                <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                  <button type="button" onClick={() => openBuilderUpgrade("builder")}>
-                    Upgrade plan
-                  </button>
-                </div>
-              </div>
-            );
-          }
+          if (!session) return null;
 
           return (
             <>
+              <div className="settings-section">
+                <div className="settings-section-title">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /><path d="M18 4v16" /></svg>
+                  Workspace credits
+                </div>
+                <div className="settings-section-desc">
+                  Credits are only used when Builder tools spin up a Daytona sandbox. Community tools and web research do not consume them.
+                </div>
+                {!hasPersonalMemoryAccess ? (
+                  <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                    <button type="button" onClick={() => openBuilderUpgrade("builder")}>
+                      Upgrade to Builder
+                    </button>
+                  </div>
+                ) : isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
+                  <div className="model-note">Checking workspace credits…</div>
+                ) : workspaceCreditBalance ? (
+                  <>
+                    {workspaceCreditBalance.includedCreditsBalance +
+                      workspaceCreditBalance.purchasedCreditsBalance <=
+                    WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
+                      <div className="auth-error" style={{ marginBottom: 12 }}>
+                        You&apos;re running low on workspace credits. Buy another{" "}
+                        {formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits to keep Builder tools available.
+                      </div>
+                    ) : null}
+                    <div className="account-row">
+                      <div className="account-identity">
+                        <span>Remaining</span>
+                        <strong>
+                          {formatCredits(
+                            workspaceCreditBalance.includedCreditsBalance +
+                              workspaceCreditBalance.purchasedCreditsBalance,
+                          )}{" "}
+                          credits
+                        </strong>
+                      </div>
+                      <div className="auth-status">
+                        {formatCredits(workspaceCreditBalance.includedCycleCredits)} included this cycle
+                      </div>
+                    </div>
+                    <div className="settings-section-desc">
+                      {workspaceCreditBalance.purchasedCreditsBalance > 0
+                        ? `${formatCredits(workspaceCreditBalance.purchasedCreditsBalance)} purchased credits are available in addition to your monthly Builder credits. `
+                        : ""}
+                      {workspaceCreditBalance.includedCycleEndsAt > 0
+                        ? `Your included credits reset ${formatRelativeTime(new Date(workspaceCreditBalance.includedCycleEndsAt).toISOString())}.`
+                        : "Your included Builder credits reset each paid billing cycle."}
+                    </div>
+                    <div className="auth-actions" style={{ paddingLeft: 0, marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={() => void startWorkspaceCreditTopupCheckout()}
+                        disabled={isStartingWorkspaceCreditTopupCheckout}
+                      >
+                        {isStartingWorkspaceCreditTopupCheckout
+                          ? "Starting…"
+                          : `Buy ${formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits ($${WORKSPACE_CREDIT_TOPUP_PRICE_USD})`}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="model-note">
+                    Workspace credits will appear here after your Builder billing cycle is available.
+                  </div>
+                )}
+                {workspaceCreditBalanceError && <div className="auth-error">{workspaceCreditBalanceError}</div>}
+                {workspaceCreditTopupError && <div className="auth-error">{workspaceCreditTopupError}</div>}
+              </div>
+
+              {!hasPersonalMemoryAccess ? (
+                <div className="settings-section">
+                  <div className="settings-section-title">
+                    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z" /><path d="M20 2a10 10 0 0 1 0 10" /></svg>
+                    Personal memory
+                  </div>
+                  <div className="settings-section-desc">
+                    Personal memory is included with Builder and Architect.
+                  </div>
+                  <div className="auth-actions" style={{ paddingLeft: 0 }}>
+                    <button type="button" onClick={() => openBuilderUpgrade("builder")}>
+                      Upgrade plan
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="memory-editor">
                 <div className="memory-editor-header">
                   <div className="memory-editor-title">Personal memory</div>
@@ -255,6 +347,8 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                   </button>
                 </div>
               </div>
+                </>
+              )}
             </>
           );
         })()}

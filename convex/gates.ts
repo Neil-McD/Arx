@@ -1,12 +1,11 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 import {
-  evaluateCanonicalGate,
   normalizeTierForGate,
-  resolveEffectiveTierForGate,
-  resolveEntitledCapabilityFamiliesForGate,
-} from "../shared/canonicalGateEngine.mjs";
+  resolveCanonicalGatePolicy,
+} from "../shared/canonicalGateEngine";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -43,12 +42,12 @@ async function getCanonicalTierBySubject(params: {
   ctx: any;
   authSubject: string;
   nowMs: number;
-}): Promise<{ userId: string | null; canonicalTier: CanonicalTier }> {
+}): Promise<{ userId: string | null; canonicalTier: CanonicalTier; email: string | null }> {
   const user = await params.ctx.db
     .query("users")
     .withIndex("by_authSubject", (q: any) => q.eq("authSubject", params.authSubject))
     .first();
-  if (!user) return { userId: null, canonicalTier: "free" };
+  if (!user) return { userId: null, canonicalTier: "free", email: null };
   const rows = await params.ctx.db
     .query("userEntitlements")
     .withIndex("by_user", (q: any) => q.eq("userId", user._id))
@@ -59,19 +58,20 @@ async function getCanonicalTierBySubject(params: {
   return {
     userId: user._id,
     canonicalTier: normalizeTierForGate(activeRows[0]?.tier ?? "free"),
+    email: user.email ?? null,
   };
 }
 
 function evaluateDecision(input: {
   authState: "anonymous" | "authenticated";
-  surface: "web" | "mobile";
+  surface: "web";
   executionMode: "cloud";
   requestedFundingSource: RequestedFundingSource;
   canonicalTier: CanonicalTier;
   hasUserKeyConnection: boolean;
   hasUserChatGptConnection: boolean;
 }): GateDecision & { effectiveTier: EffectiveTier } {
-  const decision = evaluateCanonicalGate({
+  const policy = resolveCanonicalGatePolicy({
     authState: input.authState,
     surface: input.surface,
     executionMode: input.executionMode,
@@ -80,6 +80,7 @@ function evaluateDecision(input: {
     hasUserKeyConnection: input.hasUserKeyConnection,
     hasUserChatGptConnection: input.hasUserChatGptConnection,
   });
+  const decision = policy.decision;
   return {
     allowed: Boolean(decision.allowed),
     code: decision.code as GateCode,
@@ -100,13 +101,19 @@ export const resolveGateContext = query({
     const nowMs = args.nowMs ?? Date.now();
     const authSubjectInput = String(args.authSubject ?? "").trim();
     if (args.authState === "anonymous") {
+      const anonymousPolicy = resolveCanonicalGatePolicy({
+        authState: "anonymous",
+        surface: "web",
+        executionMode: "cloud",
+        requestedFundingSource: "demo_public",
+      });
       return {
         authState: "anonymous" as const,
         authSubject: authSubjectInput || null,
         userId: null,
         canonicalTier: "free" as const,
-        effectiveTier: "anon_free" as const,
-        entitledCapabilityFamilies: [] as CapabilityFamily[],
+        effectiveTier: anonymousPolicy.decision.effectiveTier as EffectiveTier,
+        entitledCapabilityFamilies: anonymousPolicy.entitledCapabilityFamilies as CapabilityFamily[],
       };
     }
     const authSubject = await resolveAuthenticatedSubject({
@@ -114,20 +121,21 @@ export const resolveGateContext = query({
       authSubject: authSubjectInput || null,
     });
     const resolved = await getCanonicalTierBySubject({ ctx, authSubject, nowMs });
-    const effectiveTier = resolveEffectiveTierForGate({
+    const policy = resolveCanonicalGatePolicy({
       authState: "authenticated",
+      surface: "web",
+      executionMode: "cloud",
+      requestedFundingSource: "demo_public",
       tier: resolved.canonicalTier,
-    }) as EffectiveTier;
+    });
     return {
       authState: "authenticated" as const,
       authSubject,
       userId: resolved.userId,
       canonicalTier: resolved.canonicalTier,
-      effectiveTier,
-      entitledCapabilityFamilies: resolveEntitledCapabilityFamiliesForGate({
-        authState: "authenticated",
-        tier: resolved.canonicalTier,
-      }) as CapabilityFamily[],
+      effectiveTier: policy.decision.effectiveTier as EffectiveTier,
+      email: resolved.email,
+      entitledCapabilityFamilies: policy.entitledCapabilityFamilies as CapabilityFamily[],
     };
   },
 });
@@ -136,16 +144,13 @@ export const resolveGateDecision = query({
   args: {
     authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
     authSubject: v.optional(v.string()),
-    surface: v.union(v.literal("web"), v.literal("mobile")),
+    surface: v.literal("web"),
     executionMode: v.literal("cloud"),
-    modelClass: v.optional(v.union(v.literal("free_model"), v.literal("paid_model"))),
-    requestedFundingSource: v.optional(
-      v.union(
-        v.literal("demo_public"),
-        v.literal("user_key"),
-        v.literal("user_chatgpt"),
-        v.literal("platform"),
-      ),
+    requestedFundingSource: v.union(
+      v.literal("demo_public"),
+      v.literal("user_key"),
+      v.literal("user_chatgpt"),
+      v.literal("platform"),
     ),
     hasUserKeyConnection: v.optional(v.boolean()),
     hasUserChatGptConnection: v.optional(v.boolean()),
@@ -156,6 +161,7 @@ export const resolveGateDecision = query({
     const authSubjectInput = String(args.authSubject ?? "").trim();
     const authState = args.authState;
     let userId: string | null = null;
+    let userEmail: string | null = null;
     let canonicalTier: CanonicalTier = "free";
     let authSubject: string | null = authSubjectInput || null;
 
@@ -167,36 +173,33 @@ export const resolveGateDecision = query({
       const resolved = await getCanonicalTierBySubject({ ctx, authSubject, nowMs });
       userId = resolved.userId;
       canonicalTier = resolved.canonicalTier;
+      userEmail = resolved.email;
     }
 
-    const effectiveTier = resolveEffectiveTierForGate({
-      authState,
-      tier: canonicalTier,
-    }) as EffectiveTier;
-    const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
-      authState,
-      tier: canonicalTier,
-    }) as CapabilityFamily[];
-    const decision = evaluateDecision({
+    const policy = resolveCanonicalGatePolicy({
       authState,
       surface: args.surface,
       executionMode: args.executionMode,
-      requestedFundingSource:
-        args.requestedFundingSource ??
-        (args.modelClass === "free_model" ? "demo_public" : "platform"),
-      canonicalTier,
+      requestedFundingSource: args.requestedFundingSource,
+      tier: canonicalTier,
       hasUserKeyConnection: Boolean(args.hasUserKeyConnection),
       hasUserChatGptConnection: Boolean(args.hasUserChatGptConnection),
     });
+    const decision = policy.decision;
 
     return {
-      ...decision,
+      allowed: Boolean(decision.allowed),
+      code: decision.code as GateCode,
+      cta: decision.cta as GateCta,
+      lane: (decision.lane ?? null) as GateLane | null,
+      fundingSource: (decision.fundingSource ?? null) as RequestedFundingSource | null,
       authState,
       authSubject,
       userId,
+      email: userEmail,
       canonicalTier,
-      effectiveTier,
-      entitledCapabilityFamilies,
+      effectiveTier: policy.decision.effectiveTier as EffectiveTier,
+      entitledCapabilityFamilies: policy.entitledCapabilityFamilies as CapabilityFamily[],
     };
   },
 });
@@ -205,7 +208,7 @@ export const resolveGateBundle = query({
   args: {
     authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
     authSubject: v.optional(v.string()),
-    surface: v.union(v.literal("web"), v.literal("mobile")),
+    surface: v.literal("web"),
     hasUserKeyConnection: v.optional(v.boolean()),
     hasUserChatGptConnection: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
@@ -215,6 +218,7 @@ export const resolveGateBundle = query({
     const authSubjectInput = String(args.authSubject ?? "").trim();
     const authState = args.authState;
     let userId: string | null = null;
+    let userEmail: string | null = null;
     let canonicalTier: CanonicalTier = "free";
     let authSubject: string | null = authSubjectInput || null;
 
@@ -225,17 +229,19 @@ export const resolveGateBundle = query({
       });
       const resolved = await getCanonicalTierBySubject({ ctx, authSubject, nowMs });
       userId = resolved.userId;
+      userEmail = resolved.email;
       canonicalTier = resolved.canonicalTier;
     }
 
-    const effectiveTier = resolveEffectiveTierForGate({
+    const basePolicy = resolveCanonicalGatePolicy({
       authState,
+      surface: args.surface,
+      executionMode: "cloud",
+      requestedFundingSource: "demo_public",
       tier: canonicalTier,
-    }) as EffectiveTier;
-    const entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
-      authState,
-      tier: canonicalTier,
-    }) as CapabilityFamily[];
+    });
+    const effectiveTier = basePolicy.decision.effectiveTier as EffectiveTier;
+    const entitledCapabilityFamilies = basePolicy.entitledCapabilityFamilies as CapabilityFamily[];
     const hasUserKeyConnection = Boolean(args.hasUserKeyConnection);
     const hasUserChatGptConnection = Boolean(args.hasUserChatGptConnection);
     const chatDemoPublic = evaluateDecision({
@@ -302,10 +308,6 @@ export const resolveGateBundle = query({
         toolsCloud: toolsPlatform,
       },
       policy: {
-        allowPlatformInference:
-          chatPlatform.allowed &&
-          chatPlatform.lane === "platform" &&
-          chatPlatform.fundingSource === "platform",
         allowUserFundedInference:
           (chatUserKey.allowed && chatUserKey.fundingSource === "user_key") ||
           (chatUserChatgpt.allowed && chatUserChatgpt.fundingSource === "user_chatgpt"),
@@ -313,7 +315,8 @@ export const resolveGateBundle = query({
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
-        allowCommunityCreate: effectiveTier === "architect",
+        allowCommunityCreate:
+          effectiveTier === "architect" && isCreatorDevTierOverrideEmail(userEmail),
         allowPersonalMemory: effectiveTier === "builder" || effectiveTier === "architect",
       },
     };

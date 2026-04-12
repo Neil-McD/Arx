@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 MATRIX_PATH="$ROOT_DIR/shared/contracts/gate_parity_matrix_v1.json"
-ENGINE_PATH="$ROOT_DIR/shared/canonicalGateEngine.mjs"
+ENGINE_PATH="$ROOT_DIR/shared/canonicalGateEngine.ts"
 
 echo "== Gate parity contract check =="
 
@@ -24,6 +24,7 @@ echo "[3/4] Intentional divergence scenarios must match expected outputs..."
 MATRIX_PATH="$MATRIX_PATH" ENGINE_PATH="$ENGINE_PATH" node --input-type=module <<'NODE'
 import fs from "node:fs";
 import path from "node:path";
+import tsModule from "typescript";
 
 const matrixPath = process.env.MATRIX_PATH;
 const enginePath = process.env.ENGINE_PATH;
@@ -35,7 +36,17 @@ if (!matrixPath || !enginePath) {
 
 const matrixRaw = fs.readFileSync(matrixPath, "utf8");
 const matrix = JSON.parse(matrixRaw);
-const engine = await import(`file://${path.resolve(enginePath)}`);
+const ts = tsModule?.default ?? tsModule;
+const engineSource = fs.readFileSync(path.resolve(enginePath), "utf8");
+const transpiled = ts.transpileModule(engineSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+  },
+}).outputText;
+const engine = await import(
+  `data:text/javascript;base64,${Buffer.from(transpiled).toString("base64")}`,
+);
 
 if (typeof engine.evaluateCanonicalGate !== "function") {
   console.error("FAIL: canonical gate engine missing evaluateCanonicalGate export.");

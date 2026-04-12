@@ -1,12 +1,12 @@
 import { ConvexHttpClient } from "convex/browser";
 import {
-  resolveCloudAuthSubject,
-  resolveCloudIdentityToken,
-  resolveCloudSessionAvatarUrl,
-  resolveCloudSessionDisplayName,
-  resolveCloudSessionEmail,
-  type CloudAuthSession,
-} from "./cloudAuthSession";
+  resolveAuthSubject,
+  resolveAuthIdentityToken,
+  resolveAuthSessionAvatarUrl,
+  resolveAuthSessionDisplayName,
+  resolveAuthSessionEmail,
+  type AuthSessionLike,
+} from "./authSession";
 import { readConvexUrl } from "./convexRuntime";
 
 export type ConvexAuthenticatedClientContext = {
@@ -87,14 +87,14 @@ export async function bootstrapConvexAuthenticatedClient(
   sessionRaw: unknown,
 ): Promise<ConvexAuthenticatedClientContext> {
   const convexUrl = requireConvexUrl();
-  const session = sessionRaw as CloudAuthSession;
-  const authSubject = resolveCloudAuthSubject(session);
+  const session = sessionRaw as AuthSessionLike;
+  const authSubject = resolveAuthSubject(session);
   if (!authSubject) {
     throw new Error("convex_auth_subject_required");
   }
 
   const client = createConvexClientForUrl(convexUrl);
-  const identityToken = resolveCloudIdentityToken(session);
+  const identityToken = resolveAuthIdentityToken(session);
   if (identityToken) {
     client.setAuth(identityToken);
   }
@@ -104,9 +104,9 @@ export async function bootstrapConvexAuthenticatedClient(
     actor = (await client.mutation("auth:bootstrapActor" as any, {
       authState: "authenticated",
       authSubject,
-      email: resolveCloudSessionEmail(session),
-      displayName: resolveCloudSessionDisplayName(session),
-      avatarUrl: resolveCloudSessionAvatarUrl(session),
+      email: resolveAuthSessionEmail(session),
+      displayName: resolveAuthSessionDisplayName(session),
+      avatarUrl: resolveAuthSessionAvatarUrl(session),
     })) as { authSubject?: string | null };
   } catch (error) {
     rethrowBootstrapActorError(error);
