@@ -6308,39 +6308,18 @@ button.chat-reply-quote:hover {
 }
 
 .community-ai-agent-tablist {
-  display: inline-flex;
-  flex-wrap: wrap;
   align-self: flex-start;
   width: fit-content;
   max-width: 100%;
   margin: 0 0 16px;
-  padding: 3px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-card-alt) 68%, transparent);
-  gap: 4px;
 }
 
 .community-ai-agent-tab {
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.community-ai-agent-tab:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  color: var(--text-primary);
+  min-width: 78px;
 }
 
 .community-ai-agent-tab.is-active {
-  background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-card));
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 26%, var(--border-default));
 }
 
 .member-settings-section {

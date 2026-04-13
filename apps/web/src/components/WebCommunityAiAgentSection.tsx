@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
   WebCommunityAiAgentCapabilityEditor,
   type WebCommunityAiAgentCapabilityEditorProps,
@@ -45,6 +46,8 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     appsEditorProps,
   } = props;
   const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("workspace");
+  const activeTabIndex = COMMUNITY_AI_AGENT_TABS.findIndex((tab) => tab.id === activeTab);
+  const tabSwitcherStyle = buildPlatformSwitcherStyle(COMMUNITY_AI_AGENT_TABS.length, activeTabIndex);
   const canRenderTabbedEditor =
     Boolean(activeCommunity) &&
     hasSession &&
@@ -87,13 +90,18 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     <div className="settings-panel community-settings-panel">
       <div className="settings-section-title">AI Agent</div>
       {canRenderTabbedEditor ? (
-        <div className="community-ai-agent-tablist" role="tablist" aria-label="AI agent configuration sections">
+        <div
+          className="platform-switcher platform-switcher-compact community-ai-agent-tablist"
+          role="tablist"
+          aria-label="AI agent configuration sections"
+          style={tabSwitcherStyle}
+        >
           {COMMUNITY_AI_AGENT_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
-              className={`community-ai-agent-tab${activeTab === tab.id ? " is-active" : ""}`}
+              className={`platform-switcher-btn community-ai-agent-tab${activeTab === tab.id ? " is-active" : ""}`}
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
             >
