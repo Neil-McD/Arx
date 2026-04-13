@@ -72,6 +72,8 @@ export type CommunityAgentConfigLike = {
   communityId: any;
   landingJson?: unknown;
   systemPrompt: string;
+  skillsJson?: unknown;
+  appsJson?: unknown;
   createdAt: number;
   updatedAt: number;
 };

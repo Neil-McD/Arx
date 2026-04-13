@@ -427,6 +427,8 @@ export default defineSchema({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
+    skillsJson: v.optional(v.any()),
+    appsJson: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),

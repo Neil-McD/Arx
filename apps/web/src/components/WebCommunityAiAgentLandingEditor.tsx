@@ -83,9 +83,8 @@ export function WebCommunityAiAgentLandingEditor(props: WebCommunityAiAgentLandi
 
   return (
     <div className="settings-section">
-      <div className="settings-section-title">AI Agent</div>
       <div className="model-note agent-editor-intro">
-        Edit the actual onboarding surface directly. Click into Agent Soul or any starter action and type in place.
+        Configure the community-wide behavior and the first-run landing surface directly. Click into Agent Soul or any starter action and type in place.
       </div>
 
       <div className="agent-preview-actions">

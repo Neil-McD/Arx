@@ -39,6 +39,12 @@ import {
 } from "../../../shared/createCommunityIntent";
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
+import {
+  normalizeCommunityAgentAppsForSave,
+  normalizeCommunityAgentSkillsForSave,
+  type CommunityAgentApp,
+  type CommunityAgentSkill,
+} from "../../../shared/communityAgentCapabilities";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
@@ -405,7 +411,11 @@ type MessageAttachment = CommunityMessageAttachment & {
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type ChatLightboxImage = SharedChatLightboxImage;
-type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
+type CommunityAgentConfig = SharedCommunityAgentConfig<
+  CommunityAgentLanding,
+  CommunityAgentSkill,
+  CommunityAgentApp
+>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
@@ -1372,6 +1382,10 @@ export default function App() {
     setCommunityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
     setCommunityAgentConfigSystemPrompt,
+    communityAgentConfigSkills,
+    setCommunityAgentConfigSkills,
+    communityAgentConfigApps,
+    setCommunityAgentConfigApps,
     isSavingCommunityAgentConfig,
     setIsSavingCommunityAgentConfig,
     communityAgentConfigSaveError,
@@ -1886,7 +1900,11 @@ export default function App() {
     ...authenticatedSessionArg,
     communityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
+    communityAgentConfigSkills,
+    communityAgentConfigApps,
     normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
+    normalizeSkillsForSave: normalizeCommunityAgentSkillsForSave,
+    normalizeAppsForSave: normalizeCommunityAgentAppsForSave,
     hydrateConfigEditor: hydrateCommunityAgentEditor,
     setLoadedCommunityId: (communityId) => {
       communityAgentConfigLoadedCommunityIdRef.current = communityId;
@@ -4454,7 +4472,7 @@ export default function App() {
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
       isActiveCommunityOwner,
-      aiAgentLandingEditorProps: {
+      aiAgentWorkspaceEditorProps: {
         communityAgentConfigDirtyRef,
         handleSaveCommunityAgentConfig,
         handleResetCommunityAgentConfig,
@@ -4467,6 +4485,42 @@ export default function App() {
         setCommunityAgentConfigSystemPrompt,
         previewCommunityName: activeCommunity?.name ?? "Community",
         previewProjectName: workspace.derived.resolvedActiveProjectName,
+      },
+      aiAgentSkillsEditorProps: {
+        capabilityLabel: "skill",
+        intro: "Define the operating procedures and standing instructions this community agent should follow.",
+        emptyState: "Add the standard operating procedures, playbooks, or recurring instructions that shape how the agent should work for this community.",
+        addButtonLabel: "Add skill",
+        nameLabel: "Skill name",
+        descriptionLabel: "Instructions",
+        namePlaceholder: "Founder research workflow",
+        descriptionPlaceholder: "Describe the steps, heuristics, or standards the agent should follow for this skill.",
+        communityAgentConfigDirtyRef,
+        handleSaveCommunityAgentConfig,
+        handleResetCommunityAgentConfig,
+        isSavingCommunityAgentConfig,
+        communityAgentConfigSaveError,
+        entries: communityAgentConfigSkills,
+        setEntries: setCommunityAgentConfigSkills,
+        markCommunityAgentConfigDirty,
+      },
+      aiAgentAppsEditorProps: {
+        capabilityLabel: "app",
+        intro: "List the MCP servers, CLI adapters, and custom app capabilities this community can mount onto the platform harness.",
+        emptyState: "Add the app adapters this community exposes so admins can manage them from one canonical surface.",
+        addButtonLabel: "Add app",
+        nameLabel: "App name",
+        descriptionLabel: "Usage notes",
+        namePlaceholder: "GitHub MCP server",
+        descriptionPlaceholder: "Describe what this app does, how it should be used, and any scope or entitlement notes.",
+        communityAgentConfigDirtyRef,
+        handleSaveCommunityAgentConfig,
+        handleResetCommunityAgentConfig,
+        isSavingCommunityAgentConfig,
+        communityAgentConfigSaveError,
+        entries: communityAgentConfigApps,
+        setEntries: setCommunityAgentConfigApps,
+        markCommunityAgentConfigDirty,
       },
       isLoadingCommunityFunnel,
       communityFunnelError,

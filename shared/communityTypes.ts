@@ -87,13 +87,29 @@ export type CommunityAccess = {
   can_review_join_requests?: boolean;
 };
 
-export type CommunityAgentConfig<TLanding = unknown> = {
+export type CommunityAgentConfig<
+  TLanding = unknown,
+  TSkill = CommunityAgentSkill,
+  TApp = CommunityAgentApp,
+> = {
   id: string;
   community_id: string;
   landing_json: TLanding | null;
   system_prompt: string;
+  skills_json: TSkill[];
+  apps_json: TApp[];
   updated_at: string;
 };
+
+export type CommunityAgentCapabilityEntry = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+export type CommunityAgentSkill = CommunityAgentCapabilityEntry;
+
+export type CommunityAgentApp = CommunityAgentCapabilityEntry;
 
 export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
 

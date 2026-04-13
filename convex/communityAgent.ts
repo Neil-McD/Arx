@@ -1,6 +1,10 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  normalizeCommunityAgentAppsForSave,
+  normalizeCommunityAgentSkillsForSave,
+} from "../shared/communityAgentCapabilities";
+import {
   type CommunityAgentConfigLike,
   requireCommunityChatAccess,
   requireCommunityManager,
@@ -19,6 +23,8 @@ function mapCommunityAgentConfigRow(row: CommunityAgentConfigLike) {
     community_id: String(row.communityId),
     landing_json: row.landingJson ?? null,
     system_prompt: row.systemPrompt,
+    skills_json: normalizeCommunityAgentSkillsForSave(row.skillsJson),
+    apps_json: normalizeCommunityAgentAppsForSave(row.appsJson),
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -76,6 +82,8 @@ export const saveCommunityAgentConfig = mutation({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
+    skillsJson: v.optional(v.any()),
+    appsJson: v.optional(v.any()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -88,6 +96,8 @@ export const saveCommunityAgentConfig = mutation({
     const nowMs = args.nowMs ?? Date.now();
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
     const nextSystemPrompt = normalizeSystemPrompt(args.systemPrompt);
+    const nextSkills = normalizeCommunityAgentSkillsForSave(args.skillsJson);
+    const nextApps = normalizeCommunityAgentAppsForSave(args.appsJson);
     const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
     const existing = selectPrimaryCommunityAgentConfigRow(rows);
 
@@ -95,6 +105,8 @@ export const saveCommunityAgentConfig = mutation({
       await ctx.db.patch(existing._id as any, {
         landingJson: args.landingJson ?? null,
         systemPrompt: nextSystemPrompt,
+        skillsJson: nextSkills,
+        appsJson: nextApps,
         updatedAt: nowMs,
       });
       await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
@@ -107,6 +119,8 @@ export const saveCommunityAgentConfig = mutation({
       communityId: args.communityId,
       landingJson: args.landingJson ?? null,
       systemPrompt: nextSystemPrompt,
+      skillsJson: nextSkills,
+      appsJson: nextApps,
       createdAt: nowMs,
       updatedAt: nowMs,
     });

@@ -6307,6 +6307,42 @@ button.chat-reply-quote:hover {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 26%, var(--border-default));
 }
 
+.community-ai-agent-tablist {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 16px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--bg-card-alt) 68%, transparent);
+  gap: 4px;
+}
+
+.community-ai-agent-tab {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.community-ai-agent-tab:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  color: var(--text-primary);
+}
+
+.community-ai-agent-tab.is-active {
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-card));
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 26%, var(--border-default));
+}
+
 .member-settings-section {
   display: grid;
   gap: 18px;
@@ -16333,14 +16369,76 @@ button.message-citation-chip:hover {
   color: var(--text-faint);
 }
 
+.agent-capability-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.agent-capability-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-capability-empty,
+.agent-capability-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-muted);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+}
+
+.agent-capability-empty {
+  margin-top: 16px;
+}
+
+.agent-capability-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-capability-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.agent-capability-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-capability-field {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-capability-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 700px) {
 
   .agent-preview-actions,
-  .agent-onboarding-header {
+  .agent-onboarding-header,
+  .agent-capability-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .agent-capability-toolbar-actions,
   .agent-onboarding-reset {
     width: 100%;
   }

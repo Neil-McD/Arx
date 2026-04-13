@@ -1,4 +1,15 @@
-import { WebCommunityAiAgentLandingEditor, type WebCommunityAiAgentLandingEditorProps } from "./WebCommunityAiAgentLandingEditor";
+import { useState, type ReactNode } from "react";
+
+import {
+  WebCommunityAiAgentCapabilityEditor,
+  type WebCommunityAiAgentCapabilityEditorProps,
+} from "./WebCommunityAiAgentCapabilityEditor";
+import {
+  WebCommunityAiAgentLandingEditor,
+  type WebCommunityAiAgentLandingEditorProps,
+} from "./WebCommunityAiAgentLandingEditor";
+
+type CommunityAiAgentTab = "workspace" | "skills" | "apps";
 
 type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
@@ -7,8 +18,19 @@ type WebCommunityAiAgentSectionProps = {
   isLoadingCommunityAgentConfig: boolean;
   communityAgentConfigError: string | null;
   onOpenAuthGate: () => void;
-  landingEditorProps: WebCommunityAiAgentLandingEditorProps;
+  workspaceEditorProps: WebCommunityAiAgentLandingEditorProps;
+  skillsEditorProps: WebCommunityAiAgentCapabilityEditorProps;
+  appsEditorProps: WebCommunityAiAgentCapabilityEditorProps;
 };
+
+const COMMUNITY_AI_AGENT_TABS: Array<{
+  id: CommunityAiAgentTab;
+  label: string;
+}> = [
+  { id: "workspace", label: "Workspace" },
+  { id: "skills", label: "Skills" },
+  { id: "apps", label: "Apps" },
+];
 
 export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProps) {
   const {
@@ -18,36 +40,69 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     isLoadingCommunityAgentConfig,
     communityAgentConfigError,
     onOpenAuthGate,
-    landingEditorProps,
+    workspaceEditorProps,
+    skillsEditorProps,
+    appsEditorProps,
   } = props;
+  const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("workspace");
+  const canRenderTabbedEditor =
+    Boolean(activeCommunity) &&
+    hasSession &&
+    canManageMembersActiveCommunity &&
+    !isLoadingCommunityAgentConfig &&
+    !communityAgentConfigError;
+
+  let content: ReactNode = null;
+  if (!activeCommunity) {
+    content = <div className="chat-empty">Select a community to configure the AI agent.</div>;
+  } else if (!hasSession) {
+    content = (
+      <div className="chat-empty">
+        <div>Sign in to configure the AI agent.</div>
+        <button
+          className="secondary"
+          type="button"
+          onClick={onOpenAuthGate}
+          style={{ marginTop: 12 }}
+        >
+          Sign in
+        </button>
+      </div>
+    );
+  } else if (!canManageMembersActiveCommunity) {
+    content = <div className="chat-empty">Only owners and admins can configure the AI agent.</div>;
+  } else if (isLoadingCommunityAgentConfig) {
+    content = <div className="chat-empty">Loading…</div>;
+  } else if (communityAgentConfigError) {
+    content = <div className="auth-error">{communityAgentConfigError}</div>;
+  } else if (activeTab === "workspace") {
+    content = <WebCommunityAiAgentLandingEditor {...workspaceEditorProps} />;
+  } else if (activeTab === "skills") {
+    content = <WebCommunityAiAgentCapabilityEditor {...skillsEditorProps} />;
+  } else {
+    content = <WebCommunityAiAgentCapabilityEditor {...appsEditorProps} />;
+  }
 
   return (
     <div className="settings-panel community-settings-panel">
-      {!activeCommunity ? (
-        <div className="chat-empty">Select a community to configure the AI agent.</div>
-      ) : !hasSession ? (
-        <div className="chat-empty">
-          <div>Sign in to configure the AI agent.</div>
-          <button
-            className="secondary"
-            type="button"
-            onClick={onOpenAuthGate}
-            style={{ marginTop: 12 }}
-          >
-            Sign in
-          </button>
+      <div className="settings-section-title">AI Agent</div>
+      {canRenderTabbedEditor ? (
+        <div className="community-ai-agent-tablist" role="tablist" aria-label="AI agent configuration sections">
+          {COMMUNITY_AI_AGENT_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              className={`community-ai-agent-tab${activeTab === tab.id ? " is-active" : ""}`}
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
-      ) : !canManageMembersActiveCommunity ? (
-        <div className="chat-empty">Only owners and admins can configure the AI agent.</div>
-      ) : isLoadingCommunityAgentConfig ? (
-        <div className="chat-empty">Loading…</div>
-      ) : communityAgentConfigError ? (
-        <div className="auth-error">{communityAgentConfigError}</div>
-      ) : (
-        <>
-          <WebCommunityAiAgentLandingEditor {...landingEditorProps} />
-        </>
-      )}
+      ) : null}
+      {canRenderTabbedEditor ? <div role="tabpanel">{content}</div> : content}
     </div>
   );
 }

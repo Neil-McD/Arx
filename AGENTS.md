@@ -132,6 +132,8 @@ Classification buckets for every candidate:
 - Canonical Git release branch: `origin/main`.
 - Canonical production app: Vercel project `polynet`.
 - Legacy Vercel project `arx` is not a production target.
+- For this repo, direct local Vercel release commands are forbidden.
+- Do not run `vercel deploy`, `vercel --prod`, `vercel promote`, `vercel alias`, or `vercel rollback` as a release path for `polynet`.
 - Normal web releases should land on `main` and let `polynet` deploy from GitHub.
 - Convex production releases are explicit and should be run intentionally from the validated code state.
 - Do not use direct local Vercel production deploys as a release path.
