@@ -4,7 +4,7 @@ import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherU
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 
-type DiscoverTab = "communities" | "apps";
+type DiscoverTab = "communities" | "apps" | "skills";
 
 type DiscoverAppCatalogEntry = {
   id: string;
@@ -17,9 +17,21 @@ type DiscoverAppCatalogEntry = {
   icon: "github" | "supabase" | "vercel" | "custom";
 };
 
+type DiscoverSkillCatalogEntry = {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  invocation: string;
+  surface: string;
+  category: string;
+  icon: "research" | "summary" | "workflow" | "custom";
+};
+
 const DISCOVER_TABS: Array<{ id: DiscoverTab; label: string }> = [
   { id: "communities", label: "Communities" },
   { id: "apps", label: "Apps" },
+  { id: "skills", label: "Skills" },
 ];
 
 const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
@@ -69,6 +81,53 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
   },
 ];
 
+const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
+  {
+    id: "weekly-research",
+    name: "Weekly Research",
+    tagline: "Scan, synthesize, and surface signal",
+    description:
+      "Reusable research behavior for scouting trends, extracting signal, and organizing follow-up questions.",
+    invocation: "$weekly-research",
+    surface: "Community first",
+    category: "Curated",
+    icon: "research",
+  },
+  {
+    id: "board-summary",
+    name: "Board Summary",
+    tagline: "Executive compression for updates",
+    description:
+      "Turns long discussions into concise executive bullets with decisions, risks, and next actions.",
+    invocation: "$board-summary",
+    surface: "Community first",
+    category: "Curated",
+    icon: "summary",
+  },
+  {
+    id: "workflow-builder",
+    name: "Workflow Builder",
+    tagline: "Compose repeatable operating patterns",
+    description:
+      "A reusable skill package for turning goals into step-based execution workflows.",
+    invocation: "$workflow-builder",
+    surface: "Personal or community",
+    category: "Curated",
+    icon: "workflow",
+  },
+  {
+    id: "custom-skill",
+    name: "Custom Skill",
+    tagline: "Author your own reusable behavior package",
+    description:
+      "Fallback path for creating and attaching your own skills when the curated set does not fit the workflow.",
+    invocation: "Name-derived",
+    surface: "Advanced",
+    category: "Manual",
+    icon: "custom",
+  },
+];
+
 type WebDiscoverPanelProps = {
   showMobileShell: boolean;
   discoverQuery: string;
@@ -112,13 +171,33 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         .includes(normalizedQuery),
     );
   }, [normalizedQuery]);
+  const filteredSkills = useMemo(() => {
+    if (!normalizedQuery) return DISCOVER_SKILL_CATALOG;
+    return DISCOVER_SKILL_CATALOG.filter((entry) =>
+      [entry.name, entry.tagline, entry.description, entry.invocation, entry.surface, entry.category]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [normalizedQuery]);
 
   const isAppsTab = activeTab === "apps";
-  const heroTitle = isAppsTab ? "Discover apps" : "Discover communities";
+  const isSkillsTab = activeTab === "skills";
+  const heroTitle = isAppsTab
+    ? "Discover apps"
+    : isSkillsTab
+      ? "Discover skills"
+      : "Discover communities";
   const heroSubtitle = isAppsTab
-    ? "Browse the app catalog here. Community mounting still happens in AI Agent → Apps while we keep the control plane simple."
-    : "Find focused crews to build, learn, and ship faster.";
-  const searchPlaceholder = isAppsTab ? "Search apps…" : "Search communities…";
+    ? "Browse the app catalog here."
+    : isSkillsTab
+      ? "Browse reusable skill packages here. Community attachment still happens in AI Agent → Skills."
+      : "Find focused crews to build, learn, and ship faster.";
+  const searchPlaceholder = isAppsTab
+    ? "Search apps…"
+    : isSkillsTab
+      ? "Search skills…"
+      : "Search communities…";
 
   const renderAppIcon = (icon: DiscoverAppCatalogEntry["icon"]) => {
     if (icon === "github") {
@@ -163,6 +242,59 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     );
   };
 
+  const renderSkillIcon = (icon: DiscoverSkillCatalogEntry["icon"]) => {
+    if (icon === "research") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M10 5a7 7 0 1 0 4.4 12.45L19 22m-9-7V9m0 0V7m0 2h6m-6 0H8"
+          />
+        </svg>
+      );
+    }
+    if (icon === "summary") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M7 6h10M7 10h10M7 14h6M6 3h12a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2Z"
+          />
+        </svg>
+      );
+    }
+    if (icon === "workflow") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M7 7h4v4H7zM13 13h4v4h-4zM11 9h2m0 0v2m0-2 2 2M9 13H7a2 2 0 0 0-2 2v2m8-8h2a2 2 0 0 1 2 2v0"
+          />
+        </svg>
+      );
+    }
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="7" cy="7" r="2.5" fill="currentColor" />
+        <circle cx="17" cy="7" r="2.5" fill="currentColor" />
+        <circle cx="7" cy="17" r="2.5" fill="currentColor" />
+        <circle cx="17" cy="17" r="2.5" fill="currentColor" />
+      </svg>
+    );
+  };
+
   return (
     <div className="community-panel discover-panel">
       <div className="discover-hero">
@@ -190,33 +322,35 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               </button>
             ))}
           </div>
-          {!showMobileShell ? (
-            <div className="discover-controls">
-              <input
-                className="discover-search"
-                type="text"
-                placeholder={searchPlaceholder}
-                value={discoverQuery}
-                onChange={(event) => onChangeDiscoverQuery(event.target.value)}
-              />
-              {!isAppsTab ? (
-                <button
-                  className="discover-refresh"
-                  type="button"
-                  disabled={isLoadingDiscover}
-                  onClick={onRefreshDiscover}
-                >
-                  {isLoadingDiscover ? "Refreshing…" : "Refresh"}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
+      {!showMobileShell ? (
+        <div className="discover-toolbar">
+          <div className="discover-controls">
+            <input
+              className="discover-search"
+              type="text"
+              placeholder={searchPlaceholder}
+              value={discoverQuery}
+              onChange={(event) => onChangeDiscoverQuery(event.target.value)}
+            />
+            {!isAppsTab && !isSkillsTab ? (
+              <button
+                className="discover-refresh"
+                type="button"
+                disabled={isLoadingDiscover}
+                onClick={onRefreshDiscover}
+              >
+                {isLoadingDiscover ? "Refreshing…" : "Refresh"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="workspace-body chat-feed">
         <div className="chat-messages discover-scroll">
           <div className="discover-grid">
-            {!isAppsTab && isLoadingDiscover && discoverCommunitiesCount === 0 ? (
+            {!isAppsTab && !isSkillsTab && isLoadingDiscover && discoverCommunitiesCount === 0 ? (
               <>
                 {Array.from({ length: 6 }).map((_, idx) => (
                   <div
@@ -244,14 +378,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 ))}
               </>
             ) : null}
-            {!isAppsTab && !isLoadingDiscover && discoverError ? <div className="auth-error">{discoverError}</div> : null}
-            {!isAppsTab && !isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 ? (
+            {!isAppsTab && !isSkillsTab && !isLoadingDiscover && discoverError ? <div className="auth-error">{discoverError}</div> : null}
+            {!isAppsTab && !isSkillsTab && !isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 ? (
               <div className="discover-empty">
                 <div className="discover-empty-title">No communities yet.</div>
                 <div className="discover-empty-text">Create one to make discovery meaningful.</div>
               </div>
             ) : null}
-            {!isAppsTab
+            {!isAppsTab && !isSkillsTab
               ? filteredDiscoverCommunities.map((community) => {
                   const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
                   const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
@@ -293,6 +427,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               </div>
             ) : null}
+            {isSkillsTab && filteredSkills.length === 0 ? (
+              <div className="discover-empty">
+                <div className="discover-empty-title">No skills match that search.</div>
+                <div className="discover-empty-text">
+                  This is the catalog surface only for now. Community attachment logic stays in AI Agent → Skills.
+                </div>
+              </div>
+            ) : null}
             {isAppsTab
               ? filteredApps.map((app) => (
                   <div key={app.id} className="discover-card discover-app-card">
@@ -329,6 +471,42 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   </div>
                 ))
               : null}
+            {isSkillsTab
+              ? filteredSkills.map((skill) => (
+                  <div key={skill.id} className="discover-card discover-app-card">
+                    <div className="discover-app-card-body">
+                      <div className="discover-app-card-header">
+                        <div className={`discover-app-icon discover-app-icon-${skill.icon}`}>
+                          {renderSkillIcon(skill.icon)}
+                        </div>
+                        <div className="discover-app-meta">
+                          <div className="discover-card-name-row">
+                            <div className="discover-card-name">{skill.name}</div>
+                            <span className="discover-tag">{skill.category}</span>
+                          </div>
+                          <div className="discover-app-tagline">{skill.tagline}</div>
+                        </div>
+                      </div>
+                      <div className="discover-card-desc">{skill.description}</div>
+                      <div className="discover-app-detail-grid">
+                        <div className="discover-app-detail">
+                          <span className="discover-app-detail-label">Invoke</span>
+                          <span>{skill.invocation}</span>
+                        </div>
+                        <div className="discover-app-detail">
+                          <span className="discover-app-detail-label">Surface</span>
+                          <span>{skill.surface}</span>
+                        </div>
+                      </div>
+                      <div className="discover-app-card-foot">
+                        <div className="discover-app-route-note">
+                          Community setup continues in AI Agent → Skills.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              : null}
           </div>
         </div>
       </div>
@@ -342,7 +520,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               value={discoverQuery}
               onChange={(event) => onChangeDiscoverQuery(event.target.value)}
             />
-            {!isAppsTab ? (
+            {!isAppsTab && !isSkillsTab ? (
               <button
                 className="discover-refresh"
                 type="button"

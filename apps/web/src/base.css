@@ -1134,14 +1134,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 0;
   flex: 1;
   min-width: 0;
 }
 
 .discover-tablist {
-  width: min(100%, 280px);
+  width: min(100%, 408px);
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .discover-title {
@@ -1164,9 +1165,18 @@ body {
   min-width: 0;
 }
 
+.discover-toolbar {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 48px 8px;
+  box-sizing: border-box;
+}
+
 .discover-search {
-  width: 220px;
-  max-width: 28vw;
+  width: 168px;
+  max-width: 20vw;
   border: 1px solid var(--border-muted);
   border-radius: 10px;
   padding: 8px 12px;
@@ -1261,6 +1271,18 @@ body {
 
 .discover-app-icon-custom {
   background: linear-gradient(135deg, rgba(201, 169, 98, 0.22), rgba(110, 212, 216, 0.08));
+}
+
+.discover-app-icon-research {
+  background: linear-gradient(135deg, rgba(110, 212, 216, 0.2), rgba(110, 212, 216, 0.06));
+}
+
+.discover-app-icon-summary {
+  background: linear-gradient(135deg, rgba(201, 169, 98, 0.2), rgba(201, 169, 98, 0.06));
+}
+
+.discover-app-icon-workflow {
+  background: linear-gradient(135deg, rgba(244, 106, 147, 0.16), rgba(244, 106, 147, 0.06));
 }
 
 .discover-app-meta {
@@ -17091,6 +17113,10 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .discover-controls {
   width: 100%;
   gap: 8px;
+}
+
+.app-root.mobile-shell .discover-toolbar {
+  display: none;
 }
 
 .app-root.mobile-shell .discover-bottom-bar {
