@@ -16334,6 +16334,14 @@ button.message-citation-chip:hover {
   resize: vertical;
 }
 
+.community-skill-description-input {
+  min-height: 88px;
+}
+
+.community-skill-instructions-input {
+  min-height: 220px;
+}
+
 .agent-preview-composer-shell {
   min-height: 68px;
   border: 1px solid var(--border-muted);

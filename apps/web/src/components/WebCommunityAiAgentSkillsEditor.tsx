@@ -108,14 +108,14 @@ export function WebCommunityAiAgentSkillsEditor(
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, name: event.target.value }))
               }
-              placeholder="weekly-research"
+              placeholder="Weekly research"
             />
           </label>
 
           <label className="agent-capability-field">
             <span className="agent-capability-field-label">Optional description</span>
             <textarea
-              className="agent-onboarding-textarea"
+              className="agent-editor-inline-prompt-input community-skill-description-input"
               rows={3}
               value={draft.description ?? ""}
               onChange={(event) =>
@@ -128,7 +128,7 @@ export function WebCommunityAiAgentSkillsEditor(
           <label className="agent-capability-field">
             <span className="agent-capability-field-label">Skill instructions</span>
             <textarea
-              className="agent-onboarding-textarea"
+              className="agent-editor-inline-prompt-input community-skill-instructions-input"
               rows={10}
               value={draft.instructions_md}
               onChange={(event) =>
