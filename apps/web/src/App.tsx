@@ -2184,6 +2184,12 @@ export default function App() {
             : community,
         ),
       );
+      if (activeCommunityId === result.community_id) {
+        applyCommunityShellState({
+          communityId: result.community_id,
+          communitySlug: result.slug,
+        });
+      }
       communitySettingsDirtyRef.current = false;
       communityPricingDirtyRef.current = false;
     },

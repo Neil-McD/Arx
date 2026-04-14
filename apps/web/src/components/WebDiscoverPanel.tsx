@@ -5,7 +5,6 @@ import type { DiscoverCommunitySnapshot } from "../../../../shared/communityType
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 
 type DiscoverTab = "communities" | "apps" | "skills";
-type DiscoverAppSupportTone = "ready" | "template" | "oauth";
 
 type DiscoverAppCatalogEntry = {
   id: string;
@@ -15,14 +14,10 @@ type DiscoverAppCatalogEntry = {
   auth: string;
   surface: string;
   category: string;
-  supportLabel: string;
-  supportTone: DiscoverAppSupportTone;
   heroNote: string;
   capabilities: [string, string, string];
   websiteUrl: string;
   docsUrl: string;
-  personalConnect: string;
-  communityConnect: string;
   icon: "github" | "supabase" | "vercel" | "linear" | "notion" | "slack" | "asana";
 };
 
@@ -53,8 +48,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "Bearer token",
     surface: "Community first",
     category: "Curated",
-    supportLabel: "Verification pending",
-    supportTone: "template",
     heroNote: "Best for triaging repos, pull requests, issues, and CI workflows.",
     capabilities: [
       "Inspect repos, issues, pull requests, and checks.",
@@ -63,9 +56,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://github.com",
     docsUrl: "https://github.com/github/github-mcp-server",
-    personalConnect: "Personal GitHub connection is planned, but the direct path is not wired yet.",
-    communityConnect:
-      "Community setup should stay template-driven until the GitHub MCP path is explicitly verified for PolyNet.",
     icon: "github",
   },
   {
@@ -77,8 +67,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "None or bearer",
     surface: "Community first",
     category: "Curated",
-    supportLabel: "Ready now",
-    supportTone: "ready",
     heroNote: "Best current example of a hosted MCP app that already fits the alpha connector contract.",
     capabilities: [
       "Connect a real hosted remote MCP endpoint over HTTPS.",
@@ -87,9 +75,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://supabase.com",
     docsUrl: "https://supabase.com/docs/guides/getting-started/mcp",
-    personalConnect: "Personal harness support is the next mount model to add.",
-    communityConnect:
-      "Community setup can use the existing manual MCP flow when the hosted endpoint is known.",
     icon: "supabase",
   },
   {
@@ -101,8 +86,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "Bearer token",
     surface: "Community first",
     category: "Curated",
-    supportLabel: "OAuth later",
-    supportTone: "oauth",
     heroNote: "Best for deployments, environment state, logs, and project operations.",
     capabilities: [
       "Inspect deployments, projects, logs, and environment state.",
@@ -111,9 +94,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://vercel.com",
     docsUrl: "https://vercel.com/docs/agent-resources/vercel-mcp",
-    personalConnect: "Personal Vercel connect should wait for a fuller auth flow.",
-    communityConnect:
-      "Community Vercel setup is better treated as a known-app template once OAuth is supported.",
     icon: "vercel",
   },
   {
@@ -125,8 +105,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "Bearer token",
     surface: "Personal or community",
     category: "Curated",
-    supportLabel: "Near-term ready",
-    supportTone: "ready",
     heroNote: "Best for issue planning, cycles, execution, and product operating rhythms.",
     capabilities: [
       "Find issues, cycles, and project planning context.",
@@ -135,9 +113,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://linear.app",
     docsUrl: "https://linear.app/docs/mcp",
-    personalConnect: "Linear is a strong candidate for the first personal-harness app flow.",
-    communityConnect:
-      "Linear is a strong near-term template for community operating systems and execution workflows.",
     icon: "linear",
   },
   {
@@ -149,8 +124,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "OAuth or bearer",
     surface: "Personal or community",
     category: "Curated",
-    supportLabel: "OAuth required",
-    supportTone: "oauth",
     heroNote: "Best for shared workspace context, docs, pages, and structured databases.",
     capabilities: [
       "Read workspace docs, pages, and structured knowledge.",
@@ -159,9 +132,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://www.notion.com",
     docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
-    personalConnect: "Personal Notion connect should wait for a proper OAuth flow.",
-    communityConnect:
-      "Community Notion connection is a later known-app flow, not a truthful alpha connect path today.",
     icon: "notion",
   },
   {
@@ -173,8 +143,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "OAuth",
     surface: "Personal or community",
     category: "Curated",
-    supportLabel: "OAuth required",
-    supportTone: "oauth",
     heroNote: "Best for channel context, team communication, and operational signal.",
     capabilities: [
       "Read channels, threads, and collaboration context.",
@@ -183,9 +151,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://slack.com",
     docsUrl: "https://slack.com/help/articles/48855576908307-Guide-to-the-Slack-MCP-server",
-    personalConnect: "Personal Slack connection should wait for a proper OAuth flow.",
-    communityConnect:
-      "Community Slack connection belongs in a later known-app flow with real auth handling.",
     icon: "slack",
   },
   {
@@ -197,8 +162,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "OAuth",
     surface: "Personal or community",
     category: "Curated",
-    supportLabel: "OAuth required",
-    supportTone: "oauth",
     heroNote: "Best for tasks, projects, goals, and execution tracking across teams.",
     capabilities: [
       "Read task state, project progress, and planning context.",
@@ -207,9 +170,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     ],
     websiteUrl: "https://asana.com",
     docsUrl: "https://developers.asana.com/docs/using-asanas-mcp-server",
-    personalConnect: "Personal Asana connection should wait for a fuller auth flow.",
-    communityConnect:
-      "Community Asana setup is a later known-app flow, not a truthful alpha one-click path today.",
     icon: "asana",
   },
 ];
@@ -464,10 +424,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     );
   };
 
-  const renderSupportPill = (app: DiscoverAppCatalogEntry) => (
-    <span className={`discover-support-pill is-${app.supportTone}`}>{app.supportLabel}</span>
-  );
-
   const renderInfoLink = (href: string, label: string) => (
     <a
       className="discover-info-link"
@@ -532,7 +488,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="discover-app-detail-meta">
                   <div className="discover-app-detail-name-row">
                     <div className="discover-app-detail-name">{selectedApp.name}</div>
-                    {renderSupportPill(selectedApp)}
                   </div>
                   <div className="discover-app-detail-tagline">{selectedApp.tagline}</div>
                   <div className="discover-card-desc">{selectedApp.description}</div>
@@ -541,30 +496,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
               <div className="discover-app-spotlight">{selectedApp.heroNote}</div>
 
-              <div className="discover-app-detail-columns">
-                <section className="discover-card discover-app-detail-section">
-                  <div className="discover-detail-section-title">What you can do</div>
-                  <ul className="discover-detail-list">
-                    {selectedApp.capabilities.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </section>
-
-                <section className="discover-card discover-app-detail-section">
-                  <div className="discover-detail-section-title">Connection</div>
-                  <div className="discover-info-grid">
-                    <div className="discover-info-row">
-                      <div className="discover-info-label">Personal</div>
-                      <div className="discover-info-value">{selectedApp.personalConnect}</div>
-                    </div>
-                    <div className="discover-info-row">
-                      <div className="discover-info-label">Community</div>
-                      <div className="discover-info-value">{selectedApp.communityConnect}</div>
-                    </div>
-                  </div>
-                </section>
-              </div>
+              <section className="discover-card discover-app-detail-section">
+                <div className="discover-detail-section-title">What you can do</div>
+                <ul className="discover-detail-list">
+                  {selectedApp.capabilities.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
 
               <section className="discover-card discover-app-detail-section">
                 <div className="discover-detail-section-title">Information</div>
@@ -576,10 +515,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   <div className="discover-info-row">
                     <div className="discover-info-label">Surface</div>
                     <div className="discover-info-value">{selectedApp.surface}</div>
-                  </div>
-                  <div className="discover-info-row">
-                    <div className="discover-info-label">Status</div>
-                    <div className="discover-info-value">{selectedApp.supportLabel}</div>
                   </div>
                   <div className="discover-info-row">
                     <div className="discover-info-label">Website</div>
