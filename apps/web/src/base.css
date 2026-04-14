@@ -1115,11 +1115,12 @@ body {
 }
 
 .discover-hero {
-  padding: 18px 48px 8px;
+  padding: 28px 48px 14px;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
   width: min(100%, 1080px);
   margin: 0 auto;
 }
@@ -1130,14 +1131,28 @@ body {
   gap: 4px;
 }
 
+.discover-hero-copy-centered {
+  align-items: center;
+  text-align: center;
+}
+
+.discover-hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 720px);
+}
+
 .discover-tablist {
-  width: min(100%, 320px);
+  width: min(100%, 420px);
   flex-shrink: 0;
 }
 
 .discover-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
   color: var(--text-primary);
 }
 
@@ -1147,26 +1162,45 @@ body {
   max-width: 520px;
 }
 
+.discover-subtitle-centered {
+  max-width: 560px;
+  font-size: 14px;
+}
+
+.discover-section-intro {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 620px;
+}
+
 .discover-controls {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .discover-search {
-  width: 260px;
-  max-width: 38vw;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 13px;
-  background: var(--bg-card-alt);
+  width: min(100%, 560px);
+  max-width: none;
+  min-height: 48px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
+  border-radius: 16px;
+  padding: 12px 16px;
+  font-size: 14px;
+  background: color-mix(in srgb, var(--bg-card-alt) 94%, transparent);
   color: var(--text-primary);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
 }
 
 .discover-search:focus {
   outline: none;
   border-color: var(--accent-gold);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 45%, transparent),
+    0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
 .discover-refresh {
@@ -1192,6 +1226,10 @@ body {
   align-content: start;
   justify-items: stretch;
   padding-bottom: 30px;
+}
+
+.discover-grid-catalog {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .discover-grid>.chat-loading,
@@ -1250,6 +1288,18 @@ body {
 
 .discover-app-icon-custom {
   background: linear-gradient(135deg, rgba(201, 169, 98, 0.22), rgba(110, 212, 216, 0.08));
+}
+
+.discover-app-icon-research {
+  background: linear-gradient(135deg, rgba(110, 212, 216, 0.2), rgba(110, 212, 216, 0.06));
+}
+
+.discover-app-icon-summary {
+  background: linear-gradient(135deg, rgba(201, 169, 98, 0.2), rgba(201, 169, 98, 0.06));
+}
+
+.discover-app-icon-workflow {
+  background: linear-gradient(135deg, rgba(244, 106, 147, 0.16), rgba(244, 106, 147, 0.06));
 }
 
 .discover-app-meta {
@@ -1373,6 +1423,10 @@ body {
 
 @media (max-width: 720px) {
   .discover-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .discover-grid-catalog {
     grid-template-columns: 1fr;
   }
 }
@@ -17049,14 +17103,24 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .discover-hero {
   width: 100%;
   margin: 0;
-  padding: calc(var(--mobile-topbar-clearance) + 6px) 14px 8px;
+  padding: calc(var(--mobile-topbar-clearance) + 8px) 14px 10px;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: 12px;
 }
 
 .app-root.mobile-shell .discover-hero-copy {
   gap: 3px;
+}
+
+.app-root.mobile-shell .discover-hero-copy-centered {
+  align-items: center;
+  text-align: center;
+}
+
+.app-root.mobile-shell .discover-hero-actions {
+  width: 100%;
+  gap: 10px;
 }
 
 .app-root.mobile-shell .discover-tablist {
@@ -17064,7 +17128,7 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .discover-title {
-  font-size: 17px;
+  font-size: 30px;
 }
 
 .app-root.mobile-shell .discover-subtitle {
@@ -17073,9 +17137,15 @@ button.message-citation-chip:hover {
   line-height: 1.45;
 }
 
+.app-root.mobile-shell .discover-section-intro {
+  max-width: none;
+  font-size: 12px;
+}
+
 .app-root.mobile-shell .discover-controls {
   width: 100%;
   gap: 8px;
+  flex-direction: column;
 }
 
 .app-root.mobile-shell .discover-bottom-bar {
@@ -17086,18 +17156,19 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .discover-search {
-  flex: 1;
-  width: auto;
+  flex: none;
+  width: 100%;
   max-width: none;
   min-width: 0;
-  min-height: 42px;
-  border-radius: 14px;
+  min-height: 46px;
+  border-radius: 16px;
 }
 
 .app-root.mobile-shell .discover-refresh {
   flex-shrink: 0;
   min-height: 42px;
   border-radius: 14px;
+  width: 100%;
 }
 
 .app-root.mobile-shell .chat-messages.discover-scroll {
@@ -17110,6 +17181,10 @@ button.message-citation-chip:hover {
   grid-template-columns: 1fr;
   gap: 14px;
   padding-bottom: 18px;
+}
+
+.app-root.mobile-shell .discover-grid-catalog {
+  grid-template-columns: 1fr;
 }
 
 .app-root.mobile-shell .discover-card {
