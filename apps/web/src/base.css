@@ -1157,53 +1157,6 @@ body {
   max-width: 520px;
 }
 
-.discover-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.discover-toolbar {
-  width: min(100%, 1080px);
-  margin: 0 auto;
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 48px 8px;
-  box-sizing: border-box;
-}
-
-.discover-search {
-  width: 168px;
-  max-width: 20vw;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 13px;
-  background: var(--bg-card-alt);
-  color: var(--text-primary);
-}
-
-.discover-search:focus {
-  outline: none;
-  border-color: var(--accent-gold);
-}
-
-.discover-refresh {
-  border: 1px solid var(--border-default);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.discover-refresh:hover {
-  background: var(--bg-card-hover);
-}
-
 .discover-grid {
   width: min(100%, 1080px);
   margin: 0 auto;
@@ -1226,23 +1179,23 @@ body {
 }
 
 .discover-app-card-body {
-  padding: 18px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   flex: 1;
 }
 
 .discover-app-card-header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
 }
 
 .discover-app-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -1252,8 +1205,8 @@ body {
 }
 
 .discover-app-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .discover-app-icon-github {
@@ -1288,48 +1241,13 @@ body {
 .discover-app-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .discover-app-tagline {
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.discover-app-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.discover-app-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-card-alt) 92%, transparent);
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.discover-app-detail-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-
-.discover-app-card-foot {
-  margin-top: auto;
-  padding-top: 6px;
-}
-
-.discover-app-route-note {
-  font-size: 11px;
-  color: var(--text-faint);
 }
 
 .discover-empty {
@@ -1375,7 +1293,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 220px;
+  min-height: 0;
   width: 100%;
   position: relative;
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 140ms ease;
@@ -17110,39 +17028,8 @@ button.message-citation-chip:hover {
   line-height: 1.45;
 }
 
-.app-root.mobile-shell .discover-controls {
-  width: 100%;
-  gap: 8px;
-}
-
-.app-root.mobile-shell .discover-toolbar {
-  display: none;
-}
-
-.app-root.mobile-shell .discover-bottom-bar {
-  padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 14px);
-  background: color-mix(in srgb, var(--surface-header, var(--surface-workspace)) 92%, transparent);
-  backdrop-filter: blur(18px);
-  border-top: 1px solid color-mix(in srgb, var(--border-muted) 66%, transparent);
-}
-
-.app-root.mobile-shell .discover-search {
-  flex: 1;
-  width: auto;
-  max-width: none;
-  min-width: 0;
-  min-height: 42px;
-  border-radius: 14px;
-}
-
-.app-root.mobile-shell .discover-refresh {
-  flex-shrink: 0;
-  min-height: 42px;
-  border-radius: 14px;
-}
-
 .app-root.mobile-shell .chat-messages.discover-scroll {
-  padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 96px);
+  padding: 0 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
 }
 
 .app-root.mobile-shell .discover-grid {

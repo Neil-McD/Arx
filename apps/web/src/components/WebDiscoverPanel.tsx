@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
@@ -145,11 +145,9 @@ type WebDiscoverPanelProps = {
 
 export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const {
-    showMobileShell,
     discoverQuery,
     onChangeDiscoverQuery,
     isLoadingDiscover,
-    onRefreshDiscover,
     discoverCommunitiesCount,
     discoverError,
     filteredDiscoverCommunities,
@@ -161,25 +159,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const [activeTab, setActiveTab] = useState<DiscoverTab>("communities");
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(DISCOVER_TABS.length, activeTabIndex);
-  const normalizedQuery = discoverQuery.trim().toLowerCase();
-  const filteredApps = useMemo(() => {
-    if (!normalizedQuery) return DISCOVER_APP_CATALOG;
-    return DISCOVER_APP_CATALOG.filter((entry) =>
-      [entry.name, entry.tagline, entry.description, entry.auth, entry.surface, entry.category]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [normalizedQuery]);
-  const filteredSkills = useMemo(() => {
-    if (!normalizedQuery) return DISCOVER_SKILL_CATALOG;
-    return DISCOVER_SKILL_CATALOG.filter((entry) =>
-      [entry.name, entry.tagline, entry.description, entry.invocation, entry.surface, entry.category]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [normalizedQuery]);
+  const filteredApps = DISCOVER_APP_CATALOG;
+  const filteredSkills = DISCOVER_SKILL_CATALOG;
+
+  useEffect(() => {
+    if (discoverQuery) {
+      onChangeDiscoverQuery("");
+    }
+  }, [discoverQuery, onChangeDiscoverQuery]);
 
   const isAppsTab = activeTab === "apps";
   const isSkillsTab = activeTab === "skills";
@@ -193,11 +180,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     : isSkillsTab
       ? "Browse reusable skill packages here. Community attachment still happens in AI Agent → Skills."
       : "Find focused crews to build, learn, and ship faster.";
-  const searchPlaceholder = isAppsTab
-    ? "Search apps…"
-    : isSkillsTab
-      ? "Search skills…"
-      : "Search communities…";
 
   const renderAppIcon = (icon: DiscoverAppCatalogEntry["icon"]) => {
     if (icon === "github") {
@@ -324,29 +306,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           </div>
         </div>
       </div>
-      {!showMobileShell ? (
-        <div className="discover-toolbar">
-          <div className="discover-controls">
-            <input
-              className="discover-search"
-              type="text"
-              placeholder={searchPlaceholder}
-              value={discoverQuery}
-              onChange={(event) => onChangeDiscoverQuery(event.target.value)}
-            />
-            {!isAppsTab && !isSkillsTab ? (
-              <button
-                className="discover-refresh"
-                type="button"
-                disabled={isLoadingDiscover}
-                onClick={onRefreshDiscover}
-              >
-                {isLoadingDiscover ? "Refreshing…" : "Refresh"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
       <div className="workspace-body chat-feed">
         <div className="chat-messages discover-scroll">
           <div className="discover-grid">
@@ -421,7 +380,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               : null}
             {isAppsTab && filteredApps.length === 0 ? (
               <div className="discover-empty">
-                <div className="discover-empty-title">No apps match that search.</div>
+                <div className="discover-empty-title">No apps in the catalog yet.</div>
                 <div className="discover-empty-text">
                   This is the catalog surface only for now. Community connection logic stays in AI Agent → Apps.
                 </div>
@@ -429,7 +388,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             ) : null}
             {isSkillsTab && filteredSkills.length === 0 ? (
               <div className="discover-empty">
-                <div className="discover-empty-title">No skills match that search.</div>
+                <div className="discover-empty-title">No skills in the catalog yet.</div>
                 <div className="discover-empty-text">
                   This is the catalog surface only for now. Community attachment logic stays in AI Agent → Skills.
                 </div>
@@ -446,27 +405,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         <div className="discover-app-meta">
                           <div className="discover-card-name-row">
                             <div className="discover-card-name">{app.name}</div>
-                            <span className="discover-tag">{app.category}</span>
                           </div>
                           <div className="discover-app-tagline">{app.tagline}</div>
                         </div>
                       </div>
                       <div className="discover-card-desc">{app.description}</div>
-                      <div className="discover-app-detail-grid">
-                        <div className="discover-app-detail">
-                          <span className="discover-app-detail-label">Auth</span>
-                          <span>{app.auth}</span>
-                        </div>
-                        <div className="discover-app-detail">
-                          <span className="discover-app-detail-label">Surface</span>
-                          <span>{app.surface}</span>
-                        </div>
-                      </div>
-                      <div className="discover-app-card-foot">
-                        <div className="discover-app-route-note">
-                          Community setup continues in AI Agent → Apps.
-                        </div>
-                      </div>
                     </div>
                   </div>
                 ))
@@ -482,27 +425,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         <div className="discover-app-meta">
                           <div className="discover-card-name-row">
                             <div className="discover-card-name">{skill.name}</div>
-                            <span className="discover-tag">{skill.category}</span>
                           </div>
                           <div className="discover-app-tagline">{skill.tagline}</div>
                         </div>
                       </div>
                       <div className="discover-card-desc">{skill.description}</div>
-                      <div className="discover-app-detail-grid">
-                        <div className="discover-app-detail">
-                          <span className="discover-app-detail-label">Invoke</span>
-                          <span>{skill.invocation}</span>
-                        </div>
-                        <div className="discover-app-detail">
-                          <span className="discover-app-detail-label">Surface</span>
-                          <span>{skill.surface}</span>
-                        </div>
-                      </div>
-                      <div className="discover-app-card-foot">
-                        <div className="discover-app-route-note">
-                          Community setup continues in AI Agent → Skills.
-                        </div>
-                      </div>
                     </div>
                   </div>
                 ))
@@ -510,29 +437,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           </div>
         </div>
       </div>
-      {showMobileShell ? (
-        <div className="discover-bottom-bar">
-          <div className="discover-controls">
-            <input
-              className="discover-search"
-              type="text"
-              placeholder={searchPlaceholder}
-              value={discoverQuery}
-              onChange={(event) => onChangeDiscoverQuery(event.target.value)}
-            />
-            {!isAppsTab && !isSkillsTab ? (
-              <button
-                className="discover-refresh"
-                type="button"
-                disabled={isLoadingDiscover}
-                onClick={onRefreshDiscover}
-              >
-                {isLoadingDiscover ? "Refreshing…" : "Refresh"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
