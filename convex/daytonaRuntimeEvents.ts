@@ -2,7 +2,6 @@ import {
   type NativeToolExecutionResult,
   type NativeToolResultEnvelope,
 } from "../shared/nativeToolLoop";
-import { type RetrievalToolName } from "../shared/retrievalTools";
 
 export async function appendWorkspaceToolCallStarted(params: {
   appendRunEvent: (params: {
@@ -15,7 +14,7 @@ export async function appendWorkspaceToolCallStarted(params: {
   communityId?: string | null;
   iteration: number;
   providerCallId: string;
-  toolName: RetrievalToolName;
+  toolName: string;
   args: Record<string, unknown>;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
@@ -47,7 +46,7 @@ export async function appendWorkspaceToolCallFinished(params: {
   harnessName: "chat_tools";
   iteration: number;
   providerCallId: string;
-  toolName: RetrievalToolName;
+  toolName: string;
   args: Record<string, unknown>;
   toolResult: NativeToolExecutionResult;
   toolResultEnvelope: NativeToolResultEnvelope;

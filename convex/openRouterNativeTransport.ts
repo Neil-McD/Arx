@@ -4,7 +4,6 @@ import {
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol";
-import type { RetrievalToolName } from "../shared/retrievalTools";
 import { parseOpenRouterError } from "./httpRuntimeSupport";
 
 type OpenAiCompatibleFunctionTool = {
@@ -27,10 +26,9 @@ function readEnv(name: string): string {
   return "";
 }
 
-function normalizeOpenAiToolCallName(raw: unknown): RetrievalToolName | null {
+function normalizeOpenAiToolCallName(raw: unknown): string | null {
   const normalized = String(raw ?? "").trim().toLowerCase();
-  if (normalized === "list_dir" || normalized === "read") return normalized;
-  return null;
+  return normalized || null;
 }
 
 export async function runOpenRouterNativeToolCompletion(params: {
@@ -41,7 +39,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
   apiKeyOverride?: string | null;
   signal?: AbortSignal;
 }): Promise<
-  | NativeToolAwareCompletionSuccess<RetrievalToolName>
+  | NativeToolAwareCompletionSuccess<string>
   | {
       ok: false;
       status: number;

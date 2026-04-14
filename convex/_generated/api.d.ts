@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as appConnections from "../appConnections.js";
+import type * as appCore from "../appCore.js";
+import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
 import type * as authIdentity from "../authIdentity.js";
@@ -22,6 +25,7 @@ import type * as communityAccessQueries from "../communityAccessQueries.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
 import type * as communityAiFeed from "../communityAiFeed.js";
+import type * as communityAppMounts from "../communityAppMounts.js";
 import type * as communityArchive from "../communityArchive.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityArchiveEmbeddingPipeline from "../communityArchiveEmbeddingPipeline.js";
@@ -36,6 +40,7 @@ import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityResources from "../communityResources.js";
+import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as crons from "../crons.js";
 import type * as daytonaBrowserNavigation from "../daytonaBrowserNavigation.js";
 import type * as daytonaComputerUse from "../daytonaComputerUse.js";
@@ -48,6 +53,7 @@ import type * as daytonaToolboxExecutor from "../daytonaToolboxExecutor.js";
 import type * as daytonaToolboxFileSystem from "../daytonaToolboxFileSystem.js";
 import type * as daytonaWorkspaceSession from "../daytonaWorkspaceSession.js";
 import type * as daytonaWorkspaceTools from "../daytonaWorkspaceTools.js";
+import type * as developerApps from "../developerApps.js";
 import type * as entitlements from "../entitlements.js";
 import type * as errorLogging from "../errorLogging.js";
 import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTransport.js";
@@ -64,6 +70,7 @@ import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
+import type * as mcpHttpClient from "../mcpHttpClient.js";
 import type * as modelRegistry from "../modelRegistry.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
@@ -81,6 +88,8 @@ import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
 import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
 import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
 import type * as settings from "../settings.js";
+import type * as skillCore from "../skillCore.js";
+import type * as skillPackages from "../skillPackages.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as threads from "../threads.js";
 import type * as webResearchTools from "../webResearchTools.js";
@@ -96,6 +105,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  appConnections: typeof appConnections;
+  appCore: typeof appCore;
+  appValidation: typeof appValidation;
   auth: typeof auth;
   authActor: typeof authActor;
   authIdentity: typeof authIdentity;
@@ -110,6 +122,7 @@ declare const fullApi: ApiFromModules<{
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
   communityAiFeed: typeof communityAiFeed;
+  communityAppMounts: typeof communityAppMounts;
   communityArchive: typeof communityArchive;
   communityArchiveDocuments: typeof communityArchiveDocuments;
   communityArchiveEmbeddingPipeline: typeof communityArchiveEmbeddingPipeline;
@@ -124,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   communityPublic: typeof communityPublic;
   communityRecentContext: typeof communityRecentContext;
   communityResources: typeof communityResources;
+  communitySkillAttachments: typeof communitySkillAttachments;
   crons: typeof crons;
   daytonaBrowserNavigation: typeof daytonaBrowserNavigation;
   daytonaComputerUse: typeof daytonaComputerUse;
@@ -136,6 +150,7 @@ declare const fullApi: ApiFromModules<{
   daytonaToolboxFileSystem: typeof daytonaToolboxFileSystem;
   daytonaWorkspaceSession: typeof daytonaWorkspaceSession;
   daytonaWorkspaceTools: typeof daytonaWorkspaceTools;
+  developerApps: typeof developerApps;
   entitlements: typeof entitlements;
   errorLogging: typeof errorLogging;
   fallbackHtmlSearchTransport: typeof fallbackHtmlSearchTransport;
@@ -152,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
+  mcpHttpClient: typeof mcpHttpClient;
   modelRegistry: typeof modelRegistry;
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
@@ -169,6 +185,8 @@ declare const fullApi: ApiFromModules<{
   runtimeTurnPersistence: typeof runtimeTurnPersistence;
   runtimeTurnResolution: typeof runtimeTurnResolution;
   settings: typeof settings;
+  skillCore: typeof skillCore;
+  skillPackages: typeof skillPackages;
   stripeCore: typeof stripeCore;
   threads: typeof threads;
   webResearchTools: typeof webResearchTools;

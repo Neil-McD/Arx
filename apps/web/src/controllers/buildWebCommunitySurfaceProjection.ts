@@ -47,8 +47,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   isActiveCommunityOwner: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["isActiveCommunityOwner"];
   aiAgentWorkspaceEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["workspaceEditorProps"];
-  aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
   aiAgentAppsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["appsEditorProps"];
+  aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
   isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
   communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
   funnelEditorProps: WebCommunitySecondaryPanelsProps["funnel"]["editorProps"];
@@ -177,8 +177,8 @@ export function buildWebCommunitySurfaceProjection(
       communityAgentConfigError: params.communityAgentConfigError,
       onOpenAuthGate: params.openAuthGate,
       workspaceEditorProps: params.aiAgentWorkspaceEditorProps,
-      skillsEditorProps: params.aiAgentSkillsEditorProps,
       appsEditorProps: params.aiAgentAppsEditorProps,
+      skillsEditorProps: params.aiAgentSkillsEditorProps,
     },
     funnel: {
       activeCommunity: params.activeCommunity,

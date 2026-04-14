@@ -427,11 +427,93 @@ export default defineSchema({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
     systemPrompt: v.string(),
-    skillsJson: v.optional(v.any()),
-    appsJson: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
+
+  developerApps: defineTable({
+    ownerUserId: v.id("users"),
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    endpointUrl: v.string(),
+    authType: v.union(v.literal("api_key"), v.literal("bearer"), v.literal("none")),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("valid"),
+      v.literal("invalid"),
+    ),
+    activeSnapshotId: v.optional(v.id("appToolSnapshots")),
+    lastValidatedAt: v.optional(v.number()),
+    lastValidationError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerUserId"])
+    .index("by_owner_slug", ["ownerUserId", "slug"])
+    .index("by_owner_status", ["ownerUserId", "status"]),
+
+  appConnections: defineTable({
+    developerAppId: v.id("developerApps"),
+    connectionStatus: v.union(v.literal("connected"), v.literal("error")),
+    encryptedSecretHex: v.optional(v.string()),
+    secretIvHex: v.optional(v.string()),
+    secretVersion: v.optional(v.number()),
+    lastValidatedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_app", ["developerAppId"]),
+
+  appToolSnapshots: defineTable({
+    developerAppId: v.id("developerApps"),
+    snapshotVersion: v.string(),
+    endpointUrl: v.string(),
+    validationStatus: v.union(v.literal("ok"), v.literal("error")),
+    validationError: v.optional(v.string()),
+    toolsJson: v.any(),
+    fetchedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_app", ["developerAppId"])
+    .index("by_app_fetchedAt", ["developerAppId", "fetchedAt"]),
+
+  communityAppMounts: defineTable({
+    communityId: v.id("communities"),
+    developerAppId: v.id("developerApps"),
+    toolSnapshotId: v.id("appToolSnapshots"),
+    mountedByUserId: v.id("users"),
+    enabled: v.boolean(),
+    enabledTools: v.optional(v.array(v.string())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_app", ["communityId", "developerAppId"])
+    .index("by_app", ["developerAppId"]),
+
+  skillPackages: defineTable({
+    ownerUserId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    instructionsMd: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerUserId"]),
+
+  communitySkillAttachments: defineTable({
+    communityId: v.id("communities"),
+    skillPackageId: v.id("skillPackages"),
+    attachedByUserId: v.id("users"),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_skill", ["communityId", "skillPackageId"])
+    .index("by_skill", ["skillPackageId"]),
 
   communityAiFeedPosts: defineTable({
     communityId: v.id("communities"),

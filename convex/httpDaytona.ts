@@ -49,9 +49,17 @@ import {
   type NativeToolExecutionResult,
 } from "../shared/nativeToolLoop";
 import {
+  buildCommunityOverlayRuntimeState,
+  type CommunityOverlayMountedTool,
+  type CommunityOverlaySelectedSkill,
+  type CommunityOverlaySkillInventory,
+} from "../shared/communityOverlayRuntime";
+import { extractExplicitSkillMentions } from "../shared/communitySkillRuntime";
+import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
   normalizeToolArguments,
+  type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import {
   buildWorkspaceRuntimeSystemPrompt,
@@ -94,6 +102,217 @@ type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
 
+type RuntimeMountedCommunityAppTool = {
+  community_app_mount_id: string;
+  developer_app_id: string;
+  app_name: string;
+  endpoint_url: string;
+  auth_type: string;
+  tool_name: string;
+  namespaced_tool_name: string;
+  description: string | null;
+  input_schema: unknown;
+  risk_level: "read" | "write" | "sensitive";
+};
+
+type RuntimeCommunitySkillInventory = {
+  community_skill_attachment_id: string;
+  skill_package_id: string;
+  name: string;
+  mention_token: string;
+  description: string | null;
+};
+
+type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
+  instructions_md: string;
+};
+
+function normalizeMountedToolSchema(
+  value: unknown,
+): Record<string, unknown> | boolean {
+  if (typeof value === "boolean") return value;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {
+    type: "object",
+    additionalProperties: true,
+    properties: {},
+  };
+}
+
+function normalizeRuntimeMountedCommunityAppTools(
+  value: unknown,
+): RuntimeMountedCommunityAppTool[] {
+  if (!Array.isArray(value)) return [];
+  const tools: RuntimeMountedCommunityAppTool[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const namespacedToolName = String(
+      record.namespaced_tool_name ?? "",
+    ).trim();
+    const toolName = String(record.tool_name ?? "").trim();
+    if (!namespacedToolName || !toolName || seen.has(namespacedToolName)) {
+      continue;
+    }
+    seen.add(namespacedToolName);
+    const riskLevel =
+      record.risk_level === "write" || record.risk_level === "sensitive"
+        ? record.risk_level
+        : "read";
+    tools.push({
+      community_app_mount_id: String(record.community_app_mount_id ?? "").trim(),
+      developer_app_id: String(record.developer_app_id ?? "").trim(),
+      app_name: String(record.app_name ?? "").trim() || "Community app",
+      endpoint_url: String(record.endpoint_url ?? "").trim(),
+      auth_type: String(record.auth_type ?? "").trim(),
+      tool_name: toolName,
+      namespaced_tool_name: namespacedToolName,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+      input_schema: normalizeMountedToolSchema(record.input_schema),
+      risk_level: riskLevel,
+    });
+  }
+  return tools;
+}
+
+function normalizeRuntimeCommunitySkillInventory(
+  value: unknown,
+): RuntimeCommunitySkillInventory[] {
+  if (!Array.isArray(value)) return [];
+  const skills: RuntimeCommunitySkillInventory[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const mentionToken = String(record.mention_token ?? "").trim().toLowerCase();
+    if (!mentionToken || seen.has(mentionToken)) continue;
+    seen.add(mentionToken);
+    skills.push({
+      community_skill_attachment_id: String(
+        record.community_skill_attachment_id ?? "",
+      ).trim(),
+      skill_package_id: String(record.skill_package_id ?? "").trim(),
+      name: String(record.name ?? "").trim() || mentionToken,
+      mention_token: mentionToken,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+    });
+  }
+  return skills;
+}
+
+function normalizeRuntimeSelectedCommunitySkills(
+  value: unknown,
+): RuntimeSelectedCommunitySkill[] {
+  if (!Array.isArray(value)) return [];
+  const skills: RuntimeSelectedCommunitySkill[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const mentionToken = String(record.mention_token ?? "").trim().toLowerCase();
+    const instructionsMd =
+      typeof record.instructions_md === "string"
+        ? record.instructions_md.trim()
+        : "";
+    if (!mentionToken || !instructionsMd || seen.has(mentionToken)) continue;
+    seen.add(mentionToken);
+    skills.push({
+      community_skill_attachment_id: String(
+        record.community_skill_attachment_id ?? "",
+      ).trim(),
+      skill_package_id: String(record.skill_package_id ?? "").trim(),
+      name: String(record.name ?? "").trim() || mentionToken,
+      mention_token: mentionToken,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+      instructions_md: instructionsMd,
+    });
+  }
+  return skills;
+}
+
+function buildMountedAppOpenAiTools(
+  mountedTools: RuntimeMountedCommunityAppTool[],
+): OpenAiCompatibleFunctionTool[] {
+  return mountedTools.map((tool) => ({
+    type: "function",
+    function: {
+      name: tool.namespaced_tool_name,
+      description:
+        tool.description ||
+        `Run ${tool.tool_name} on the ${tool.app_name} community app.`,
+      parameters: normalizeMountedToolSchema(tool.input_schema),
+      strict: true,
+    },
+  }));
+}
+
+function buildMountedAppResponsesTools(
+  mountedTools: RuntimeMountedCommunityAppTool[],
+): ResponsesApiFunctionTool[] {
+  return mountedTools.map((tool) => ({
+    type: "function",
+    name: tool.namespaced_tool_name,
+    description:
+      tool.description ||
+      `Run ${tool.tool_name} on the ${tool.app_name} community app.`,
+    parameters: normalizeMountedToolSchema(tool.input_schema),
+    strict: true,
+  }));
+}
+
+function mapMountedToolsToOverlayRuntime(
+  mountedTools: RuntimeMountedCommunityAppTool[],
+): CommunityOverlayMountedTool[] {
+  return mountedTools.map((tool) => ({
+    namespacedToolName: tool.namespaced_tool_name,
+    toolName: tool.tool_name,
+    appName: tool.app_name,
+    description: tool.description,
+  }));
+}
+
+function mapCommunitySkillsToOverlayRuntime(
+  attachedSkills: RuntimeCommunitySkillInventory[],
+): CommunityOverlaySkillInventory[] {
+  return attachedSkills.map((skill) => ({
+    name: skill.name,
+    mentionToken: skill.mention_token,
+    description: skill.description,
+  }));
+}
+
+function mapSelectedCommunitySkillsToOverlayRuntime(
+  selectedSkills: RuntimeSelectedCommunitySkill[],
+): CommunityOverlaySelectedSkill[] {
+  return selectedSkills.map((skill) => ({
+    name: skill.name,
+    mentionToken: skill.mention_token,
+    description: skill.description,
+    instructionsMd: skill.instructions_md,
+  }));
+}
+
 function formatJsonToolOutput(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
@@ -123,7 +342,7 @@ function formatTerminalStartToolOutput(value: unknown): string {
   ].join("\n");
 }
 
-function formatToolOutput(toolName: RetrievalToolName, value: unknown): string {
+function formatToolOutput(toolName: string, value: unknown): string {
   if (toolName === "terminal_start")
     return formatTerminalStartToolOutput(value);
   return formatJsonToolOutput(value);
@@ -143,7 +362,7 @@ function readFailureOutputPreview(details: unknown): string {
 }
 
 function summarizeToolArgsForLog(
-  toolName: RetrievalToolName,
+  toolName: string,
   normalizedArgs: unknown,
 ): Record<string, unknown> {
   const record =
@@ -954,7 +1173,62 @@ async function executeRetrievalAgentLoop(
         )
       : { active: [] };
 
-  const systemPrompt = buildWorkspaceRuntimeSystemPrompt({
+  const mountedCommunityAppTools = params.communityId
+    ? normalizeRuntimeMountedCommunityAppTools(
+        await params.ctx.runQuery(
+          internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal,
+          {
+            userId: params.userId as any,
+            communityId: params.communityId as any,
+          },
+        ),
+      )
+    : [];
+  const explicitCommunitySkillMentions = new Set(
+    extractExplicitSkillMentions(params.messages),
+  );
+  const attachedCommunitySkills = params.communityId
+    ? normalizeRuntimeCommunitySkillInventory(
+        await params.ctx.runQuery(
+          internal.communitySkillAttachments
+            .listRuntimeCommunitySkillInventoryInternal,
+          {
+            userId: params.userId as any,
+            authSubject: params.authSubject ?? undefined,
+            communityId: params.communityId as any,
+          },
+        ),
+      )
+    : [];
+  const selectedCommunitySkills =
+    params.communityId && explicitCommunitySkillMentions.size > 0
+      ? normalizeRuntimeSelectedCommunitySkills(
+          await params.ctx.runQuery(
+            internal.communitySkillAttachments
+              .listRuntimeSelectedCommunitySkillsInternal,
+            {
+              userId: params.userId as any,
+              authSubject: params.authSubject ?? undefined,
+              communityId: params.communityId as any,
+              requestedMentionTokens: Array.from(explicitCommunitySkillMentions),
+            },
+          ),
+        )
+      : [];
+  const mountedToolByName = new Map(
+    mountedCommunityAppTools.map((tool) => [tool.namespaced_tool_name, tool]),
+  );
+  const overlayRuntimeState = buildCommunityOverlayRuntimeState({
+    allowedToolNames: params.allowedToolNames,
+    mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
+    attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
+    selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
+      selectedCommunitySkills,
+    ),
+  });
+  const activeToolNames = overlayRuntimeState.activeToolNames;
+
+  const baseSystemPrompt = buildWorkspaceRuntimeSystemPrompt({
     maxIterations: params.maxIterations,
     allowedToolNames: params.allowedToolNames,
     harnessName: params.harnessName,
@@ -985,6 +1259,7 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
   });
+  const systemPrompt = `${baseSystemPrompt}${overlayRuntimeState.systemPromptSuffix}`;
   const nativeTranscript: NativeToolAwareMessage[] = [
     {
       role: "system",
@@ -995,13 +1270,58 @@ async function executeRetrievalAgentLoop(
       content: message.content,
     })),
   ];
-  const nativeTools = buildOpenAiFunctionTools(params.allowedToolNames);
-  const responsesApiNativeTools = buildResponsesApiFunctionTools(
-    params.allowedToolNames,
-  );
+  const nativeTools = [
+    ...buildOpenAiFunctionTools(params.allowedToolNames),
+    ...buildMountedAppOpenAiTools(mountedCommunityAppTools),
+  ];
+  const responsesApiNativeTools = [
+    ...buildResponsesApiFunctionTools(params.allowedToolNames),
+    ...buildMountedAppResponsesTools(mountedCommunityAppTools),
+  ];
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
+  if (mountedCommunityAppTools.length > 0) {
+    try {
+      await params.appendRunEvent({
+        eventType: "community_app_tools_resolved",
+        eventKey: `${params.runId}:community_app_tools_resolved:1`,
+        payload: {
+          run_id: params.runId,
+          community_scope_id: params.communityId ?? null,
+          tools: mountedCommunityAppTools.map((tool) => ({
+            app_name: tool.app_name,
+            tool_name: tool.tool_name,
+            namespaced_tool_name: tool.namespaced_tool_name,
+            risk_level: tool.risk_level,
+          })),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  }
+  if (attachedCommunitySkills.length > 0) {
+    try {
+      await params.appendRunEvent({
+        eventType: "community_skills_resolved",
+        eventKey: `${params.runId}:community_skills_resolved:1`,
+        payload: {
+          run_id: params.runId,
+          community_scope_id: params.communityId ?? null,
+          skills: attachedCommunitySkills.map((skill) => ({
+            skill_name: skill.name,
+            skill_mention_token: skill.mention_token,
+          })),
+          selected_skill_mention_tokens: selectedCommunitySkills.map(
+            (skill) => skill.mention_token,
+          ),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  }
   try {
     const throwIfCancelled = async (): Promise<void> => {
       await throwIfRuntimeRunCancelled({
@@ -1010,7 +1330,7 @@ async function executeRetrievalAgentLoop(
         runId: params.runId,
       });
     };
-    const loopResult = await runSerialNativeToolLoop<RetrievalToolName>({
+    const loopResult = await runSerialNativeToolLoop<string>({
       messages: nativeTranscript,
       maxIterations: params.maxIterations,
       runCompletion: async (messages) => {
@@ -1098,9 +1418,7 @@ async function executeRetrievalAgentLoop(
         if (!completion.ok) return completion;
         if (
           completion.type === "tool_call" &&
-          !params.allowedToolNames.includes(
-            completion.toolName as RetrievalToolName,
-          )
+          !activeToolNames.includes(completion.toolName)
         ) {
           return {
             ok: false,
@@ -1111,9 +1429,16 @@ async function executeRetrievalAgentLoop(
             pendingToolName: completion.toolName,
           };
         }
-        return completion as NativeToolAwareCompletionSuccess<RetrievalToolName>;
+        return completion as NativeToolAwareCompletionSuccess<string>;
       },
-      normalizeToolArguments,
+      normalizeToolArguments: (toolName, rawArgs) => {
+        if (params.allowedToolNames.includes(toolName as RetrievalToolName)) {
+          return normalizeToolArguments(toolName as RetrievalToolName, rawArgs);
+        }
+        return rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+          ? rawArgs
+          : {};
+      },
       executeTool: async ({ toolName, normalizedArgs }) => {
         try {
           await throwIfCancelled();
@@ -1129,7 +1454,72 @@ async function executeRetrievalAgentLoop(
           }
           throw error;
         }
-        const needsWorkspaceSession = requiresWorkspaceSandbox(toolName);
+        const isFixedTool = params.allowedToolNames.includes(
+          toolName as RetrievalToolName,
+        );
+        if (!isFixedTool) {
+          const mountedTool = mountedToolByName.get(toolName);
+          if (!mountedTool || !params.communityId) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "community_app_tool_not_found",
+              errorMessage: `${toolName} is not active for this community lens.`,
+            };
+          }
+          try {
+            const toolResult = await runAbortableWithRuntimeCancellation({
+              ctx: params.ctx,
+              ownerId: params.userId,
+              runId: params.runId,
+              operation: async () =>
+                await params.ctx.runAction(
+                  internal.communityAppMounts
+                    .executeCommunityMountedAppToolInternal,
+                  {
+                    userId: params.userId as any,
+                    communityId: params.communityId as any,
+                    namespacedToolName: mountedTool.namespaced_tool_name,
+                    argsJson: normalizedArgs,
+                  },
+                ),
+            });
+            await throwIfCancelled();
+            return toolResult as NativeToolExecutionResult;
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              return {
+                status: "error",
+                exitCode: null,
+                outputText: "",
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: error.message,
+              };
+            }
+            const summary = summarizeErrorForLog(error);
+            logStructuredError("agent_loop_community_app_tool_execution_crashed", {
+              error,
+              runId: params.runId,
+              threadId: params.threadId ?? undefined,
+              communityId: params.communityId ?? undefined,
+              developerAppId: mountedTool.developer_app_id,
+              toolName,
+              ...summarizeToolArgsForLog(toolName, normalizedArgs),
+            });
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "community_app_tool_execute_failed",
+              errorMessage: `Community app tool execution failed: ${summary.message}`,
+            };
+          }
+        }
+
+        const needsWorkspaceSession = requiresWorkspaceSandbox(
+          toolName as RetrievalToolName,
+        );
 
         if (needsWorkspaceSession && !lazyWorkspaceSession) {
           const projectId = String(params.projectId ?? "").trim();
@@ -1270,7 +1660,7 @@ async function executeRetrievalAgentLoop(
                 authSubject: params.authSubject,
                 projectId: params.projectId,
                 runId: params.runId,
-                toolName,
+                toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
                 workspaceSession: lazyWorkspaceSession,
                 signal,

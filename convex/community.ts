@@ -26,6 +26,24 @@ import {
   getCommunityFunnelConfig as getCommunityFunnelConfigImpl,
 } from "./communityFunnel";
 import {
+  connectCommunityApp as connectCommunityAppImpl,
+  listCommunityAppMounts as listCommunityAppMountsImpl,
+  reconnectCommunityApp as reconnectCommunityAppImpl,
+  refreshCommunityApp as refreshCommunityAppImpl,
+  unmountCommunityApp as unmountCommunityAppImpl,
+  updateCommunityAppMount as updateCommunityAppMountImpl,
+} from "./communityAppMounts";
+import {
+  attachSkillPackageToCommunity as attachSkillPackageToCommunityImpl,
+  detachCommunitySkill as detachCommunitySkillImpl,
+  listCommunitySkillAttachments as listCommunitySkillAttachmentsImpl,
+  updateCommunitySkillAttachment as updateCommunitySkillAttachmentImpl,
+} from "./communitySkillAttachments";
+import {
+  createSkillPackage as createSkillPackageImpl,
+  listOwnedSkillPackages as listOwnedSkillPackagesImpl,
+} from "./skillPackages";
+import {
   createMessageReaction as createMessageReactionImpl,
   createThreadUserMessage as createThreadUserMessageImpl,
   deleteMessageReactionById as deleteMessageReactionByIdImpl,
@@ -133,5 +151,17 @@ export const getCommunityAgentConfig = getCommunityAgentConfigImpl;
 export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;
 export const getActiveCommunityAgentLanding = getActiveCommunityAgentLandingImpl;
+export const listCommunityAppMounts = listCommunityAppMountsImpl;
+export const connectCommunityApp = connectCommunityAppImpl;
+export const refreshCommunityApp = refreshCommunityAppImpl;
+export const reconnectCommunityApp = reconnectCommunityAppImpl;
+export const updateCommunityAppMount = updateCommunityAppMountImpl;
+export const unmountCommunityApp = unmountCommunityAppImpl;
+export const listCommunitySkillAttachments = listCommunitySkillAttachmentsImpl;
+export const listOwnedSkillPackages = listOwnedSkillPackagesImpl;
+export const createSkillPackage = createSkillPackageImpl;
+export const attachSkillPackageToCommunity = attachSkillPackageToCommunityImpl;
+export const updateCommunitySkillAttachment = updateCommunitySkillAttachmentImpl;
+export const detachCommunitySkill = detachCommunitySkillImpl;
 export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
 export const saveCommunityPublicPresentation = saveCommunityPublicPresentationImpl;

@@ -39,12 +39,6 @@ import {
 } from "../../../shared/createCommunityIntent";
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
-import {
-  normalizeCommunityAgentAppsForSave,
-  normalizeCommunityAgentSkillsForSave,
-  type CommunityAgentApp,
-  type CommunityAgentSkill,
-} from "../../../shared/communityAgentCapabilities";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
@@ -59,6 +53,8 @@ import {
 import { useWebWorkspaceCoreController } from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
+import { useWebCommunityAppMountsController } from "./controllers/useWebCommunityAppMountsController";
+import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
 import { useWebCommunityResourceUiController } from "./controllers/useWebCommunityResourceUiController";
@@ -131,6 +127,8 @@ import type {
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
+import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
+import type { CreateSkillPackageInput } from "../../../shared/communitySkillTypes";
 import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
@@ -411,11 +409,7 @@ type MessageAttachment = CommunityMessageAttachment & {
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
 type ChatLightboxImage = SharedChatLightboxImage;
-type CommunityAgentConfig = SharedCommunityAgentConfig<
-  CommunityAgentLanding,
-  CommunityAgentSkill,
-  CommunityAgentApp
->;
+type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
@@ -1382,10 +1376,6 @@ export default function App() {
     setCommunityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
     setCommunityAgentConfigSystemPrompt,
-    communityAgentConfigSkills,
-    setCommunityAgentConfigSkills,
-    communityAgentConfigApps,
-    setCommunityAgentConfigApps,
     isSavingCommunityAgentConfig,
     setIsSavingCommunityAgentConfig,
     communityAgentConfigSaveError,
@@ -1395,6 +1385,55 @@ export default function App() {
     hydrateCommunityAgentEditor,
     handleResetCommunityAgentConfig,
   } = communityAgentConfigUi;
+  const {
+    communityAppMounts,
+    isLoadingCommunityAppMounts,
+    communityAppMountError,
+    isConnectingCommunityApp,
+    communityAppMutationError,
+    updatingCommunityAppMountId,
+    refreshingCommunityAppMountId,
+    reconnectingCommunityAppMountId,
+    removingCommunityAppMountId,
+    communityAppMountsLoadedCommunityIdRef,
+    clearCommunityAppMounts,
+    loadCommunityAppMounts,
+    connectCommunityApp,
+    updateCommunityAppMount,
+    refreshCommunityApp,
+    reconnectCommunityApp,
+    unmountCommunityApp,
+  } = useWebCommunityAppMountsController<AuthSession>({
+    activeCommunityId,
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
+  const {
+    communitySkillAttachments,
+    ownedSkillPackages,
+    isLoadingCommunitySkillAttachments,
+    isLoadingOwnedSkillPackages,
+    communitySkillAttachmentError,
+    ownedSkillPackagesError,
+    isCreatingSkillPackage,
+    communitySkillMutationError,
+    updatingCommunitySkillAttachmentId,
+    removingCommunitySkillAttachmentId,
+    attachingSkillPackageId,
+    communitySkillAttachmentsLoadedCommunityIdRef,
+    ownedSkillPackagesLoadedRef,
+    clearCommunitySkillAttachments,
+    loadCommunitySkillAttachments,
+    loadOwnedSkillPackages,
+    createSkillPackage,
+    attachSkillPackageToCommunity,
+    updateCommunitySkillAttachment,
+    detachCommunitySkill,
+  } = useWebCommunitySkillAttachmentsController<AuthSession>({
+    activeCommunityId,
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
 
   const communityAdminUi = useWebCommunityAdminUiController();
   const {
@@ -1900,11 +1939,7 @@ export default function App() {
     ...authenticatedSessionArg,
     communityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
-    communityAgentConfigSkills,
-    communityAgentConfigApps,
     normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
-    normalizeSkillsForSave: normalizeCommunityAgentSkillsForSave,
-    normalizeAppsForSave: normalizeCommunityAgentAppsForSave,
     hydrateConfigEditor: hydrateCommunityAgentEditor,
     setLoadedCommunityId: (communityId) => {
       communityAgentConfigLoadedCommunityIdRef.current = communityId;
@@ -1920,6 +1955,83 @@ export default function App() {
     loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
+
+  const handleConnectCommunityApp = useCallback(
+    async (input: ConnectCommunityAppInput) => {
+      return await connectCommunityApp(input);
+    },
+    [connectCommunityApp],
+  );
+
+  const handleUpdateCommunityAppMount = useCallback(
+    async (
+      communityAppMountId: string,
+      patch: {
+        enabled?: boolean;
+        enabledTools?: string[];
+      },
+    ) => {
+      return await updateCommunityAppMount(communityAppMountId, patch);
+    },
+    [updateCommunityAppMount],
+  );
+
+  const handleUnmountCommunityApp = useCallback(
+    async (communityAppMountId: string) => {
+      return await unmountCommunityApp(communityAppMountId);
+    },
+    [unmountCommunityApp],
+  );
+
+  const handleRefreshCommunityApp = useCallback(
+    async (communityAppMountId: string) => {
+      return await refreshCommunityApp(communityAppMountId);
+    },
+    [refreshCommunityApp],
+  );
+
+  const handleReconnectCommunityApp = useCallback(
+    async (communityAppMountId: string, secret: string) => {
+      return await reconnectCommunityApp(communityAppMountId, secret);
+    },
+    [reconnectCommunityApp],
+  );
+
+  const handleCreateSkillPackage = useCallback(
+    async (input: CreateSkillPackageInput) => {
+      return await createSkillPackage(input);
+    },
+    [createSkillPackage],
+  );
+
+  const handleAttachSkillPackageToCommunity = useCallback(
+    async (skillPackageId: string) => {
+      return await attachSkillPackageToCommunity(skillPackageId);
+    },
+    [attachSkillPackageToCommunity],
+  );
+
+  const handleUpdateCommunitySkillAttachment = useCallback(
+    async (
+      communitySkillAttachmentId: string,
+      patch: {
+        enabled?: boolean;
+      },
+    ) => {
+      return await updateCommunitySkillAttachment(
+        communitySkillAttachmentId,
+        patch,
+      );
+    },
+    [updateCommunitySkillAttachment],
+  );
+
+  const handleDetachCommunitySkill = useCallback(
+    async (communitySkillAttachmentId: string) => {
+      return await detachCommunitySkill(communitySkillAttachmentId);
+    },
+    [detachCommunitySkill],
+  );
 
   const {
     loadCommunityFunnelConfig,
@@ -2681,6 +2793,62 @@ export default function App() {
     communityAgentConfigLoadedCommunityIdRef,
     setCommunityAgentConfigError,
   });
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
+      clearCommunityAppMounts();
+      return;
+    }
+    if (communityAppMountsLoadedCommunityIdRef.current === activeCommunityId) return;
+    void loadCommunityAppMounts(activeCommunityId, session);
+  }, [
+    activePage,
+    communityTab,
+    session,
+    activeCommunityId,
+    canManageMembersActiveCommunity,
+    clearCommunityAppMounts,
+    loadCommunityAppMounts,
+    communityAppMountsLoadedCommunityIdRef,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
+      clearCommunitySkillAttachments();
+      return;
+    }
+    if (communitySkillAttachmentsLoadedCommunityIdRef.current === activeCommunityId) return;
+    void loadCommunitySkillAttachments(activeCommunityId, session);
+  }, [
+    activePage,
+    communityTab,
+    session,
+    activeCommunityId,
+    canManageMembersActiveCommunity,
+    clearCommunitySkillAttachments,
+    loadCommunitySkillAttachments,
+    communitySkillAttachmentsLoadedCommunityIdRef,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    if (!session || !canManageMembersActiveCommunity) {
+      clearCommunitySkillAttachments();
+      return;
+    }
+    if (ownedSkillPackagesLoadedRef.current) return;
+    void loadOwnedSkillPackages(session);
+  }, [
+    activePage,
+    communityTab,
+    session,
+    canManageMembersActiveCommunity,
+    clearCommunitySkillAttachments,
+    loadOwnedSkillPackages,
+    ownedSkillPackagesLoadedRef,
+  ]);
 
   useCommunityMemberRosterLifecycle<AuthSession>({
     activePage,
@@ -4486,41 +4654,44 @@ export default function App() {
         previewCommunityName: activeCommunity?.name ?? "Community",
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
-      aiAgentSkillsEditorProps: {
-        capabilityLabel: "skill",
-        intro: "Define the operating procedures and standing instructions this community agent should follow.",
-        emptyState: "Add the standard operating procedures, playbooks, or recurring instructions that shape how the agent should work for this community.",
-        addButtonLabel: "Add skill",
-        nameLabel: "Skill name",
-        descriptionLabel: "Instructions",
-        namePlaceholder: "Founder research workflow",
-        descriptionPlaceholder: "Describe the steps, heuristics, or standards the agent should follow for this skill.",
-        communityAgentConfigDirtyRef,
-        handleSaveCommunityAgentConfig,
-        handleResetCommunityAgentConfig,
-        isSavingCommunityAgentConfig,
-        communityAgentConfigSaveError,
-        entries: communityAgentConfigSkills,
-        setEntries: setCommunityAgentConfigSkills,
-        markCommunityAgentConfigDirty,
-      },
       aiAgentAppsEditorProps: {
-        capabilityLabel: "app",
-        intro: "List the MCP servers, CLI adapters, and custom app capabilities this community can mount onto the platform harness.",
-        emptyState: "Add the app adapters this community exposes so admins can manage them from one canonical surface.",
-        addButtonLabel: "Add app",
-        nameLabel: "App name",
-        descriptionLabel: "Usage notes",
-        namePlaceholder: "GitHub MCP server",
-        descriptionPlaceholder: "Describe what this app does, how it should be used, and any scope or entitlement notes.",
-        communityAgentConfigDirtyRef,
-        handleSaveCommunityAgentConfig,
-        handleResetCommunityAgentConfig,
-        isSavingCommunityAgentConfig,
-        communityAgentConfigSaveError,
-        entries: communityAgentConfigApps,
-        setEntries: setCommunityAgentConfigApps,
-        markCommunityAgentConfigDirty,
+        intro: "Connect hosted MCP apps here so this community lens loads real capabilities into the platform harness.",
+        emptyState: "Connect the first hosted MCP app to this community. Once mounted here, it becomes part of the community context whenever members switch into this lens.",
+        addButtonLabel: "Connect MCP app",
+        mounts: communityAppMounts,
+        isLoading: isLoadingCommunityAppMounts,
+        error: communityAppMountError,
+        mutationError: communityAppMutationError,
+        isConnecting: isConnectingCommunityApp,
+        updatingMountId: updatingCommunityAppMountId,
+        refreshingMountId: refreshingCommunityAppMountId,
+        reconnectingMountId: reconnectingCommunityAppMountId,
+        removingMountId: removingCommunityAppMountId,
+        onConnectApp: handleConnectCommunityApp,
+        onUpdateMount: handleUpdateCommunityAppMount,
+        onRefreshApp: handleRefreshCommunityApp,
+        onReconnectApp: handleReconnectCommunityApp,
+        onUnmountApp: handleUnmountCommunityApp,
+      },
+      aiAgentSkillsEditorProps: {
+        intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
+        emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
+        addButtonLabel: "Create package",
+        skills: communitySkillAttachments,
+        packages: ownedSkillPackages,
+        isLoading: isLoadingCommunitySkillAttachments,
+        isLoadingPackages: isLoadingOwnedSkillPackages,
+        error: communitySkillAttachmentError,
+        packagesError: ownedSkillPackagesError,
+        mutationError: communitySkillMutationError,
+        isCreatingPackage: isCreatingSkillPackage,
+        attachingPackageId: attachingSkillPackageId,
+        updatingSkillId: updatingCommunitySkillAttachmentId,
+        removingSkillId: removingCommunitySkillAttachmentId,
+        onCreatePackage: handleCreateSkillPackage,
+        onAttachPackage: handleAttachSkillPackageToCommunity,
+        onUpdateSkill: handleUpdateCommunitySkillAttachment,
+        onDetachSkill: handleDetachCommunitySkill,
       },
       isLoadingCommunityFunnel,
       communityFunnelError,

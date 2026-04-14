@@ -16300,7 +16300,8 @@ button.message-citation-chip:hover {
 }
 
 .agent-editor-inline-label-input,
-.agent-editor-inline-prompt-input {
+.agent-editor-inline-prompt-input,
+.agent-capability-select {
   width: 100%;
   border: 1px solid var(--border-muted);
   border-radius: 12px;
@@ -16317,7 +16318,8 @@ button.message-citation-chip:hover {
 }
 
 .agent-editor-inline-label-input:focus,
-.agent-editor-inline-prompt-input:focus {
+.agent-editor-inline-prompt-input:focus,
+.agent-capability-select:focus {
   outline: none;
   border-color: var(--accent-gold);
 }
@@ -16402,10 +16404,132 @@ button.message-citation-chip:hover {
   gap: 8px;
 }
 
+.agent-capability-field-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .agent-capability-field-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.agent-capability-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.community-app-connect-card {
+  margin-top: 16px;
+}
+
+.community-app-connect-summary {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 72%, transparent);
+}
+
+.community-app-connect-summary-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.community-app-connect-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.community-app-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 36%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-gold) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.community-app-status-badge.is-muted {
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+  color: var(--text-faint);
+}
+
+.community-app-metadata-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.community-app-metadata-item {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.community-app-tool-list {
+  display: grid;
+  gap: 10px;
+}
+
+.community-app-tool-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
+}
+
+.community-app-tool-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.community-app-tool-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.community-app-tool-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.community-app-tool-risk {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 @media (max-width: 700px) {
@@ -16420,6 +16544,14 @@ button.message-citation-chip:hover {
   .agent-capability-toolbar-actions,
   .agent-onboarding-reset {
     width: 100%;
+  }
+
+  .agent-capability-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-app-metadata-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

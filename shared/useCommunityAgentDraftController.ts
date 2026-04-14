@@ -17,8 +17,6 @@ type CommunityAgentConfigLike<LandingT> = {
   community_id: string;
   landing_json: LandingT | null;
   system_prompt: string | null;
-  skills_json: unknown;
-  apps_json: unknown;
   updated_at: string;
 };
 
@@ -32,11 +30,7 @@ type UseCommunityAgentConfigControllerArgs<
   ensureSession?: EnsureSessionFn<SessionT>;
   communityAgentConfigLanding: LandingT;
   communityAgentConfigSystemPrompt: string;
-  communityAgentConfigSkills: unknown;
-  communityAgentConfigApps: unknown;
   normalizeConfigForSave: (config: LandingT) => LandingT | null;
-  normalizeSkillsForSave: (skills: unknown) => unknown;
-  normalizeAppsForSave: (apps: unknown) => unknown;
   hydrateConfigEditor: (config: ConfigT | null) => void;
   setLoadedCommunityId: (communityId: string | null) => void;
   markConfigClean: () => void;
@@ -102,8 +96,6 @@ export function useCommunityAgentConfigController<
       current.setCommunityAgentConfigSaveError(current.saveValidationErrorMessage);
       return false;
     }
-    const normalizedSkills = current.normalizeSkillsForSave(current.communityAgentConfigSkills);
-    const normalizedApps = current.normalizeAppsForSave(current.communityAgentConfigApps);
 
     current.setIsSavingCommunityAgentConfig(true);
     current.setCommunityAgentConfigSaveError(null);
@@ -113,8 +105,6 @@ export function useCommunityAgentConfigController<
         communityId,
         landingJson: normalized,
         systemPrompt: current.communityAgentConfigSystemPrompt,
-        skillsJson: normalizedSkills,
-        appsJson: normalizedApps,
       })) as UpsertConfigResponseRow | null;
       if (!row) return false;
       current.hydrateConfigEditor({
@@ -122,8 +112,6 @@ export function useCommunityAgentConfigController<
         community_id: communityId,
         landing_json: normalized,
         system_prompt: current.communityAgentConfigSystemPrompt,
-        skills_json: normalizedSkills,
-        apps_json: normalizedApps,
         updated_at: row.updated_at,
       } as ConfigT);
       current.markConfigClean();

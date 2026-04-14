@@ -116,8 +116,6 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
     communityId: string;
     landingJson: unknown;
     systemPrompt: string;
-    skillsJson: unknown;
-    appsJson: unknown;
   },
 ): Promise<CloudCommunityAgentConfigMutationResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -126,8 +124,6 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
     communityId: params.communityId,
     landingJson: params.landingJson,
     systemPrompt: params.systemPrompt,
-    skillsJson: params.skillsJson,
-    appsJson: params.appsJson,
   });
   return parseConfigMutationResult(payload);
 }

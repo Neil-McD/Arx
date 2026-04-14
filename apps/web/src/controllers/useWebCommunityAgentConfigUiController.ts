@@ -5,18 +5,10 @@ import {
   normalizeCommunityAgentLanding,
   type CommunityAgentLanding,
 } from "../../../../shared/communityAgentLanding";
-import {
-  normalizeCommunityAgentApps,
-  normalizeCommunityAgentSkills,
-  type CommunityAgentApp,
-  type CommunityAgentSkill,
-} from "../../../../shared/communityAgentCapabilities";
 
 type CommunityAgentConfigLike = {
   landing_json: unknown;
   system_prompt: string | null;
-  skills_json: unknown;
-  apps_json: unknown;
 } | null;
 
 export function useWebCommunityAgentConfigUiController() {
@@ -29,8 +21,6 @@ export function useWebCommunityAgentConfigUiController() {
     DEFAULT_EMPTY_THREAD_LANDING,
   );
   const [communityAgentConfigSystemPrompt, setCommunityAgentConfigSystemPrompt] = useState("");
-  const [communityAgentConfigSkills, setCommunityAgentConfigSkills] = useState<CommunityAgentSkill[]>([]);
-  const [communityAgentConfigApps, setCommunityAgentConfigApps] = useState<CommunityAgentApp[]>([]);
   const [isSavingCommunityAgentConfig, setIsSavingCommunityAgentConfig] = useState(false);
   const [communityAgentConfigSaveError, setCommunityAgentConfigSaveError] = useState<string | null>(null);
   const communityAgentConfigDirtyRef = useRef(false);
@@ -44,8 +34,6 @@ export function useWebCommunityAgentConfigUiController() {
     const landing = normalizeCommunityAgentLanding(row?.landing_json) ?? DEFAULT_EMPTY_THREAD_LANDING;
     setCommunityAgentConfigLanding(landing);
     setCommunityAgentConfigSystemPrompt(row?.system_prompt ?? "");
-    setCommunityAgentConfigSkills(normalizeCommunityAgentSkills(row?.skills_json));
-    setCommunityAgentConfigApps(normalizeCommunityAgentApps(row?.apps_json));
     setCommunityAgentConfigSaveError(null);
     communityAgentConfigDirtyRef.current = false;
   }, []);
@@ -64,10 +52,6 @@ export function useWebCommunityAgentConfigUiController() {
     setCommunityAgentConfigLanding,
     communityAgentConfigSystemPrompt,
     setCommunityAgentConfigSystemPrompt,
-    communityAgentConfigSkills,
-    setCommunityAgentConfigSkills,
-    communityAgentConfigApps,
-    setCommunityAgentConfigApps,
     isSavingCommunityAgentConfig,
     setIsSavingCommunityAgentConfig,
     communityAgentConfigSaveError,
