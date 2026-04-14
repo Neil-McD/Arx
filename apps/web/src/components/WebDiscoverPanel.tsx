@@ -14,7 +14,7 @@ type DiscoverAppCatalogEntry = {
   auth: string;
   surface: string;
   category: string;
-  icon: "github" | "supabase" | "vercel" | "custom";
+  icon: "github" | "supabase" | "vercel";
 };
 
 type DiscoverSkillCatalogEntry = {
@@ -67,17 +67,6 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     surface: "Community first",
     category: "Curated",
     icon: "vercel",
-  },
-  {
-    id: "custom-mcp",
-    name: "Custom MCP",
-    tagline: "Direct hosted endpoint for advanced builders",
-    description:
-      "Fallback path for builders who already have a real public HTTPS MCP endpoint. This stays the advanced manual path.",
-    auth: "None, API key, or bearer",
-    surface: "Advanced",
-    category: "Manual",
-    icon: "custom",
   },
 ];
 
@@ -178,7 +167,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const heroSubtitle = isAppsTab
     ? "Browse the app catalog here."
     : isSkillsTab
-      ? "Browse reusable skill packages here. Community attachment still happens in AI Agent → Skills."
+      ? "Browse reusable skill packages here."
       : "Find focused crews to build, learn, and ship faster.";
 
   const renderAppIcon = (icon: DiscoverAppCatalogEntry["icon"]) => {
