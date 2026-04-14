@@ -1130,6 +1130,11 @@ body {
   gap: 4px;
 }
 
+.discover-tablist {
+  width: min(100%, 320px);
+  flex-shrink: 0;
+}
+
 .discover-title {
   font-size: 18px;
   font-weight: 600;
@@ -1193,6 +1198,105 @@ body {
 .discover-grid>.auth-error,
 .discover-grid>.discover-empty {
   grid-column: 1 / -1;
+}
+
+.discover-app-card {
+  min-height: 0;
+}
+
+.discover-app-card-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.discover-app-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.discover-app-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  color: var(--text-primary);
+}
+
+.discover-app-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.discover-app-icon-github {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.discover-app-icon-supabase {
+  background: linear-gradient(135deg, rgba(62, 207, 142, 0.22), rgba(62, 207, 142, 0.08));
+  color: #8ff0bf;
+}
+
+.discover-app-icon-vercel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+}
+
+.discover-app-icon-custom {
+  background: linear-gradient(135deg, rgba(201, 169, 98, 0.22), rgba(110, 212, 216, 0.08));
+}
+
+.discover-app-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.discover-app-tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.discover-app-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.discover-app-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card-alt) 92%, transparent);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.discover-app-detail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.discover-app-card-foot {
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.discover-app-route-note {
+  font-size: 11px;
+  color: var(--text-faint);
 }
 
 .discover-empty {
@@ -16955,6 +17059,10 @@ button.message-citation-chip:hover {
   gap: 3px;
 }
 
+.app-root.mobile-shell .discover-tablist {
+  width: 100%;
+}
+
 .app-root.mobile-shell .discover-title {
   font-size: 17px;
 }
@@ -17024,6 +17132,15 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-shell .discover-card-desc {
   -webkit-line-clamp: 3;
+}
+
+.app-root.mobile-shell .discover-app-card-body {
+  padding: 16px;
+  gap: 12px;
+}
+
+.app-root.mobile-shell .discover-app-detail-grid {
+  grid-template-columns: 1fr;
 }
 
 .app-root.mobile-shell .community-tab-scroll {
