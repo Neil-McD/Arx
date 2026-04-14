@@ -5,6 +5,7 @@ import type { DiscoverCommunitySnapshot } from "../../../../shared/communityType
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 
 type DiscoverTab = "communities" | "apps" | "skills";
+type DiscoverAppSupportTone = "ready" | "template" | "oauth";
 
 type DiscoverAppCatalogEntry = {
   id: string;
@@ -14,7 +15,15 @@ type DiscoverAppCatalogEntry = {
   auth: string;
   surface: string;
   category: string;
-  icon: "github" | "supabase" | "vercel";
+  supportLabel: string;
+  supportTone: DiscoverAppSupportTone;
+  heroNote: string;
+  capabilities: [string, string, string];
+  websiteUrl: string;
+  docsUrl: string;
+  personalConnect: string;
+  communityConnect: string;
+  icon: "github" | "supabase" | "vercel" | "linear" | "notion" | "slack" | "asana";
 };
 
 type DiscoverSkillCatalogEntry = {
@@ -44,6 +53,19 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "Bearer token",
     surface: "Community first",
     category: "Curated",
+    supportLabel: "Verification pending",
+    supportTone: "template",
+    heroNote: "Best for triaging repos, pull requests, issues, and CI workflows.",
+    capabilities: [
+      "Inspect repos, issues, pull requests, and checks.",
+      "Give agents shared software project context.",
+      "Later support both personal and community software workflows.",
+    ],
+    websiteUrl: "https://github.com",
+    docsUrl: "https://github.com/github/github-mcp-server",
+    personalConnect: "Personal GitHub connection is planned, but the direct path is not wired yet.",
+    communityConnect:
+      "Community setup should stay template-driven until the GitHub MCP path is explicitly verified for PolyNet.",
     icon: "github",
   },
   {
@@ -55,6 +77,19 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "None or bearer",
     surface: "Community first",
     category: "Curated",
+    supportLabel: "Ready now",
+    supportTone: "ready",
+    heroNote: "Best current example of a hosted MCP app that already fits the alpha connector contract.",
+    capabilities: [
+      "Connect a real hosted remote MCP endpoint over HTTPS.",
+      "Query Supabase-backed tools and data surfaces.",
+      "Use as the clearest current reference for a truthful manual connect path.",
+    ],
+    websiteUrl: "https://supabase.com",
+    docsUrl: "https://supabase.com/docs/guides/getting-started/mcp",
+    personalConnect: "Personal harness support is the next mount model to add.",
+    communityConnect:
+      "Community setup can use the existing manual MCP flow when the hosted endpoint is known.",
     icon: "supabase",
   },
   {
@@ -66,7 +101,116 @@ const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     auth: "Bearer token",
     surface: "Community first",
     category: "Curated",
+    supportLabel: "OAuth later",
+    supportTone: "oauth",
+    heroNote: "Best for deployments, environment state, logs, and project operations.",
+    capabilities: [
+      "Inspect deployments, projects, logs, and environment state.",
+      "Support platform and builder workflows once auth is handled cleanly.",
+      "Hide MCP mechanics behind a real known-app template later.",
+    ],
+    websiteUrl: "https://vercel.com",
+    docsUrl: "https://vercel.com/docs/agent-resources/vercel-mcp",
+    personalConnect: "Personal Vercel connect should wait for a fuller auth flow.",
+    communityConnect:
+      "Community Vercel setup is better treated as a known-app template once OAuth is supported.",
     icon: "vercel",
+  },
+  {
+    id: "linear",
+    name: "Linear",
+    tagline: "Issues, projects, cycles, and team planning",
+    description:
+      "Strong near-term MCP candidate for product and execution workflows. Good fit for personal agents and community operating systems.",
+    auth: "Bearer token",
+    surface: "Personal or community",
+    category: "Curated",
+    supportLabel: "Near-term ready",
+    supportTone: "ready",
+    heroNote: "Best for issue planning, cycles, execution, and product operating rhythms.",
+    capabilities: [
+      "Find issues, cycles, and project planning context.",
+      "Give teams and personal agents a clean execution surface.",
+      "Likely one of the easiest next real app templates under the current auth contract.",
+    ],
+    websiteUrl: "https://linear.app",
+    docsUrl: "https://linear.app/docs/mcp",
+    personalConnect: "Linear is a strong candidate for the first personal-harness app flow.",
+    communityConnect:
+      "Linear is a strong near-term template for community operating systems and execution workflows.",
+    icon: "linear",
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    tagline: "Pages, docs, databases, and workspace context",
+    description:
+      "High-value knowledge surface for teams, but likely OAuth-heavy. Good catalog candidate even before the full connect path is wired.",
+    auth: "OAuth or bearer",
+    surface: "Personal or community",
+    category: "Curated",
+    supportLabel: "OAuth required",
+    supportTone: "oauth",
+    heroNote: "Best for shared workspace context, docs, pages, and structured databases.",
+    capabilities: [
+      "Read workspace docs, pages, and structured knowledge.",
+      "Give personal and community agents richer memory context.",
+      "Stay as a catalog-first app until the auth path is fully honest.",
+    ],
+    websiteUrl: "https://www.notion.com",
+    docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
+    personalConnect: "Personal Notion connect should wait for a proper OAuth flow.",
+    communityConnect:
+      "Community Notion connection is a later known-app flow, not a truthful alpha connect path today.",
+    icon: "notion",
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    tagline: "Channels, threads, messages, and workspace signal",
+    description:
+      "Excellent collaboration surface for later workflows. Keep it in the catalog now, but treat connection as a later auth-heavy path.",
+    auth: "OAuth",
+    surface: "Personal or community",
+    category: "Curated",
+    supportLabel: "OAuth required",
+    supportTone: "oauth",
+    heroNote: "Best for channel context, team communication, and operational signal.",
+    capabilities: [
+      "Read channels, threads, and collaboration context.",
+      "Power later workflow triggers around team communication.",
+      "Stay catalog-only until a safe auth path is in place.",
+    ],
+    websiteUrl: "https://slack.com",
+    docsUrl: "https://slack.com/help/articles/48855576908307-Guide-to-the-Slack-MCP-server",
+    personalConnect: "Personal Slack connection should wait for a proper OAuth flow.",
+    communityConnect:
+      "Community Slack connection belongs in a later known-app flow with real auth handling.",
+    icon: "slack",
+  },
+  {
+    id: "asana",
+    name: "Asana",
+    tagline: "Projects, tasks, goals, and work tracking",
+    description:
+      "Strong planning and execution surface for teams. Good catalog candidate now, but likely needs a fuller auth flow before direct PolyNet connection is honest.",
+    auth: "OAuth",
+    surface: "Personal or community",
+    category: "Curated",
+    supportLabel: "OAuth required",
+    supportTone: "oauth",
+    heroNote: "Best for tasks, projects, goals, and execution tracking across teams.",
+    capabilities: [
+      "Read task state, project progress, and planning context.",
+      "Support personal and community execution workflows later.",
+      "Stay catalog-first until the connection path can be made honest.",
+    ],
+    websiteUrl: "https://asana.com",
+    docsUrl: "https://developers.asana.com/docs/using-asanas-mcp-server",
+    personalConnect: "Personal Asana connection should wait for a fuller auth flow.",
+    communityConnect:
+      "Community Asana setup is a later known-app flow, not a truthful alpha one-click path today.",
+    icon: "asana",
   },
 ];
 
@@ -146,10 +290,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onActivateCommunity,
   } = props;
   const [activeTab, setActiveTab] = useState<DiscoverTab>("communities");
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(DISCOVER_TABS.length, activeTabIndex);
   const filteredApps = DISCOVER_APP_CATALOG;
   const filteredSkills = DISCOVER_SKILL_CATALOG;
+  const selectedApp = selectedAppId
+    ? DISCOVER_APP_CATALOG.find((entry) => entry.id === selectedAppId) ?? null
+    : null;
 
   useEffect(() => {
     if (discoverQuery) {
@@ -159,16 +307,26 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const isAppsTab = activeTab === "apps";
   const isSkillsTab = activeTab === "skills";
-  const heroTitle = isAppsTab
-    ? "Discover apps"
-    : isSkillsTab
-      ? "Discover skills"
-      : "Discover communities";
-  const heroSubtitle = isAppsTab
-    ? "Browse the app catalog here."
-    : isSkillsTab
-      ? "Browse reusable skill packages here."
-      : "Find focused crews to build, learn, and ship faster.";
+  useEffect(() => {
+    if (!isAppsTab && selectedAppId) {
+      setSelectedAppId(null);
+    }
+  }, [isAppsTab, selectedAppId]);
+
+  const heroTitle = selectedApp
+    ? selectedApp.name
+    : isAppsTab
+      ? "Discover apps"
+      : isSkillsTab
+        ? "Discover skills"
+        : "Discover communities";
+  const heroSubtitle = selectedApp
+    ? selectedApp.tagline
+    : isAppsTab
+      ? "Browse the app catalog here."
+      : isSkillsTab
+        ? "Browse reusable skill packages here."
+        : "Find focused crews to build, learn, and ship faster.";
 
   const renderAppIcon = (icon: DiscoverAppCatalogEntry["icon"]) => {
     if (icon === "github") {
@@ -200,6 +358,46 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path fill="currentColor" d="M12 4 21 20H3L12 4Z" />
+        </svg>
+      );
+    }
+    if (icon === "linear") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path fill="currentColor" d="M12 4a8 8 0 0 1 8 8h-8V4Z" />
+        </svg>
+      );
+    }
+    if (icon === "notion") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+            d="M5 6.5 15.7 5l3.3 2.2v10.3L8.3 19 5 16.8V6.5Zm3.3 1.7v8.1m0-8.1 7.4-1.1m-7.4 1.1 7.4 8.5m0-9.6v8.5"
+          />
+        </svg>
+      );
+    }
+    if (icon === "slack") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#E01E5A" d="M9.1 3.8A2.1 2.1 0 1 1 4.9 3.8a2.1 2.1 0 0 1 4.2 0v5.3H9A2.1 2.1 0 1 1 9 13.3H3.8a2.1 2.1 0 1 1 0-4.2h5.3V3.8Z" />
+          <path fill="#36C5F0" d="M20.2 9.1a2.1 2.1 0 1 1 0 4.2h-5.3V13A2.1 2.1 0 1 1 10.7 13V7.8a2.1 2.1 0 1 1 4.2 0v5.3h5.3Z" />
+          <path fill="#2EB67D" d="M14.9 20.2a2.1 2.1 0 1 1 4.2 0 2.1 2.1 0 0 1-4.2 0v-5.3h.1a2.1 2.1 0 1 1 0-4.2h5.2a2.1 2.1 0 1 1 0 4.2h-5.3v5.3Z" />
+          <path fill="#ECB22E" d="M3.8 14.9a2.1 2.1 0 1 1 0-4.2 2.1 2.1 0 0 1 0 4.2h5.3v.1a2.1 2.1 0 1 1 4.2 0v5.2a2.1 2.1 0 1 1-4.2 0v-5.3H3.8Z" />
+        </svg>
+      );
+    }
+    if (icon === "asana") {
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="8" cy="9" r="3" fill="#F06A6A" />
+          <circle cx="16" cy="9" r="3" fill="#F8C15A" />
+          <circle cx="12" cy="15.5" r="3" fill="#8A7CFF" />
         </svg>
       );
     }
@@ -266,6 +464,22 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     );
   };
 
+  const renderSupportPill = (app: DiscoverAppCatalogEntry) => (
+    <span className={`discover-support-pill is-${app.supportTone}`}>{app.supportLabel}</span>
+  );
+
+  const renderInfoLink = (href: string, label: string) => (
+    <a
+      className="discover-info-link"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {label}
+      <span aria-hidden="true">↗</span>
+    </a>
+  );
+
   return (
     <div className="community-panel discover-panel">
       <div className="discover-hero">
@@ -297,133 +511,226 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       </div>
       <div className="workspace-body chat-feed">
         <div className="chat-messages discover-scroll">
-          <div className="discover-grid">
-            {!isAppsTab && !isSkillsTab && isLoadingDiscover && discoverCommunitiesCount === 0 ? (
-              <>
-                {Array.from({ length: 6 }).map((_, idx) => (
-                  <div
-                    key={`discover-skeleton-${idx}`}
-                    className="discover-card discover-card-skeleton"
-                    aria-hidden="true"
-                  >
-                    <div className="discover-card-banner web-skeleton-block" />
-                    <div className="discover-card-body">
-                      <div className="discover-card-header">
-                        <div className="discover-card-avatar web-skeleton-block" />
-                        <div className="discover-card-meta">
-                          <div className="discover-card-name-row">
-                            <div className="web-skeleton-row discover-skeleton-name" />
-                            <div className="web-skeleton-pill discover-skeleton-price" />
-                            <div className="discover-visibility-icon discover-skeleton-visibility web-skeleton-block" />
-                          </div>
-                          <div className="web-skeleton-row discover-skeleton-slug" />
-                        </div>
-                      </div>
-                      <div className="web-skeleton-row discover-skeleton-desc" />
-                      <div className="web-skeleton-row discover-skeleton-desc discover-skeleton-desc-short" />
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : null}
-            {!isAppsTab && !isSkillsTab && !isLoadingDiscover && discoverError ? <div className="auth-error">{discoverError}</div> : null}
-            {!isAppsTab && !isSkillsTab && !isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 ? (
-              <div className="discover-empty">
-                <div className="discover-empty-title">No communities yet.</div>
-                <div className="discover-empty-text">Create one to make discovery meaningful.</div>
+          {isAppsTab && selectedApp ? (
+            <div className="discover-app-detail-page">
+              <div className="discover-breadcrumb">
+                <button
+                  type="button"
+                  className="discover-breadcrumb-button"
+                  onClick={() => setSelectedAppId(null)}
+                >
+                  Apps
+                </button>
+                <span className="discover-breadcrumb-separator">›</span>
+                <span>{selectedApp.name}</span>
               </div>
-            ) : null}
-            {!isAppsTab && !isSkillsTab
-              ? filteredDiscoverCommunities.map((community) => {
-                  const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
-                  const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
-                  const visibilityClass = isPublishedCommunityVisibility(community.visibility)
-                    ? "published"
-                    : "unlisted";
-                  const oneLiner =
-                    community.one_liner && community.one_liner.trim().length > 0
-                      ? community.one_liner
-                      : "No one-liner yet.";
-                  const canActivate = Boolean(community.slug);
-                  return (
-                    <DiscoverCommunityCard
-                      key={community.slug}
-                      name={community.name}
-                      slug={community.slug}
-                      oneLiner={oneLiner}
-                      avatarUrl={community.avatar_url}
-                      bannerUrl={community.banner_url}
-                      bannerFocusX={community.banner_focus_x}
-                      bannerFocusY={community.banner_focus_y}
-                      bannerZoom={community.banner_zoom}
-                      priceLabel={priceLabel}
-                      visibilityClass={visibilityClass}
-                      visibilityLabel={visibilityLabel}
-                      isPublishedVisibility={isPublishedCommunityVisibility(community.visibility)}
-                      clickable={canActivate}
-                      ariaLabel={canActivate ? `View ${community.name}` : undefined}
-                      onActivate={canActivate ? () => onActivateCommunity(community.slug) : undefined}
-                    />
-                  );
-                })
-              : null}
-            {isAppsTab && filteredApps.length === 0 ? (
-              <div className="discover-empty">
-                <div className="discover-empty-title">No apps in the catalog yet.</div>
-                <div className="discover-empty-text">
-                  This is the catalog surface only for now. Community connection logic stays in AI Agent → Apps.
+
+              <div className="discover-app-detail-header">
+                <div className={`discover-app-icon discover-app-icon-${selectedApp.icon} discover-app-detail-icon`}>
+                  {renderAppIcon(selectedApp.icon)}
+                </div>
+                <div className="discover-app-detail-meta">
+                  <div className="discover-app-detail-name-row">
+                    <div className="discover-app-detail-name">{selectedApp.name}</div>
+                    {renderSupportPill(selectedApp)}
+                  </div>
+                  <div className="discover-app-detail-tagline">{selectedApp.tagline}</div>
+                  <div className="discover-card-desc">{selectedApp.description}</div>
                 </div>
               </div>
-            ) : null}
-            {isSkillsTab && filteredSkills.length === 0 ? (
-              <div className="discover-empty">
-                <div className="discover-empty-title">No skills in the catalog yet.</div>
-                <div className="discover-empty-text">
-                  This is the catalog surface only for now. Community attachment logic stays in AI Agent → Skills.
-                </div>
+
+              <div className="discover-app-spotlight">{selectedApp.heroNote}</div>
+
+              <div className="discover-app-detail-columns">
+                <section className="discover-card discover-app-detail-section">
+                  <div className="discover-detail-section-title">What you can do</div>
+                  <ul className="discover-detail-list">
+                    {selectedApp.capabilities.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section className="discover-card discover-app-detail-section">
+                  <div className="discover-detail-section-title">Connection</div>
+                  <div className="discover-info-grid">
+                    <div className="discover-info-row">
+                      <div className="discover-info-label">Personal</div>
+                      <div className="discover-info-value">{selectedApp.personalConnect}</div>
+                    </div>
+                    <div className="discover-info-row">
+                      <div className="discover-info-label">Community</div>
+                      <div className="discover-info-value">{selectedApp.communityConnect}</div>
+                    </div>
+                  </div>
+                </section>
               </div>
-            ) : null}
-            {isAppsTab
-              ? filteredApps.map((app) => (
-                  <div key={app.id} className="discover-card discover-app-card">
-                    <div className="discover-app-card-body">
-                      <div className="discover-app-card-header">
-                        <div className={`discover-app-icon discover-app-icon-${app.icon}`}>
-                          {renderAppIcon(app.icon)}
-                        </div>
-                        <div className="discover-app-meta">
-                          <div className="discover-card-name-row">
-                            <div className="discover-card-name">{app.name}</div>
-                          </div>
-                          <div className="discover-app-tagline">{app.tagline}</div>
-                        </div>
-                      </div>
-                      <div className="discover-card-desc">{app.description}</div>
+
+              <section className="discover-card discover-app-detail-section">
+                <div className="discover-detail-section-title">Information</div>
+                <div className="discover-info-grid">
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Auth</div>
+                    <div className="discover-info-value">{selectedApp.auth}</div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Surface</div>
+                    <div className="discover-info-value">{selectedApp.surface}</div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Status</div>
+                    <div className="discover-info-value">{selectedApp.supportLabel}</div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Website</div>
+                    <div className="discover-info-value">
+                      {renderInfoLink(selectedApp.websiteUrl, "Open website")}
                     </div>
                   </div>
-                ))
-              : null}
-            {isSkillsTab
-              ? filteredSkills.map((skill) => (
-                  <div key={skill.id} className="discover-card discover-app-card">
-                    <div className="discover-app-card-body">
-                      <div className="discover-app-card-header">
-                        <div className={`discover-app-icon discover-app-icon-${skill.icon}`}>
-                          {renderSkillIcon(skill.icon)}
-                        </div>
-                        <div className="discover-app-meta">
-                          <div className="discover-card-name-row">
-                            <div className="discover-card-name">{skill.name}</div>
-                          </div>
-                          <div className="discover-app-tagline">{skill.tagline}</div>
-                        </div>
-                      </div>
-                      <div className="discover-card-desc">{skill.description}</div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Docs</div>
+                    <div className="discover-info-value">
+                      {renderInfoLink(selectedApp.docsUrl, "Open docs")}
                     </div>
                   </div>
-                ))
-              : null}
-          </div>
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="discover-grid">
+              {!isAppsTab && !isSkillsTab && isLoadingDiscover && discoverCommunitiesCount === 0 ? (
+                <>
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <div
+                      key={`discover-skeleton-${idx}`}
+                      className="discover-card discover-card-skeleton"
+                      aria-hidden="true"
+                    >
+                      <div className="discover-card-banner web-skeleton-block" />
+                      <div className="discover-card-body">
+                        <div className="discover-card-header">
+                          <div className="discover-card-avatar web-skeleton-block" />
+                          <div className="discover-card-meta">
+                            <div className="discover-card-name-row">
+                              <div className="web-skeleton-row discover-skeleton-name" />
+                              <div className="web-skeleton-pill discover-skeleton-price" />
+                              <div className="discover-visibility-icon discover-skeleton-visibility web-skeleton-block" />
+                            </div>
+                            <div className="web-skeleton-row discover-skeleton-slug" />
+                          </div>
+                        </div>
+                        <div className="web-skeleton-row discover-skeleton-desc" />
+                        <div className="web-skeleton-row discover-skeleton-desc discover-skeleton-desc-short" />
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : null}
+              {!isAppsTab && !isSkillsTab && !isLoadingDiscover && discoverError ? <div className="auth-error">{discoverError}</div> : null}
+              {!isAppsTab && !isSkillsTab && !isLoadingDiscover && !discoverError && filteredDiscoverCommunities.length === 0 ? (
+                <div className="discover-empty">
+                  <div className="discover-empty-title">No communities yet.</div>
+                  <div className="discover-empty-text">Create one to make discovery meaningful.</div>
+                </div>
+              ) : null}
+              {!isAppsTab && !isSkillsTab
+                ? filteredDiscoverCommunities.map((community) => {
+                    const priceLabel = community.active_plan ? formatPlanPrice(community.active_plan) : "Free";
+                    const visibilityLabel = formatCommunityVisibilityLabel(community.visibility);
+                    const visibilityClass = isPublishedCommunityVisibility(community.visibility)
+                      ? "published"
+                      : "unlisted";
+                    const oneLiner =
+                      community.one_liner && community.one_liner.trim().length > 0
+                        ? community.one_liner
+                        : "No one-liner yet.";
+                    const canActivate = Boolean(community.slug);
+                    return (
+                      <DiscoverCommunityCard
+                        key={community.slug}
+                        name={community.name}
+                        slug={community.slug}
+                        oneLiner={oneLiner}
+                        avatarUrl={community.avatar_url}
+                        bannerUrl={community.banner_url}
+                        bannerFocusX={community.banner_focus_x}
+                        bannerFocusY={community.banner_focus_y}
+                        bannerZoom={community.banner_zoom}
+                        priceLabel={priceLabel}
+                        visibilityClass={visibilityClass}
+                        visibilityLabel={visibilityLabel}
+                        isPublishedVisibility={isPublishedCommunityVisibility(community.visibility)}
+                        clickable={canActivate}
+                        ariaLabel={canActivate ? `View ${community.name}` : undefined}
+                        onActivate={canActivate ? () => onActivateCommunity(community.slug) : undefined}
+                      />
+                    );
+                  })
+                : null}
+              {isAppsTab && filteredApps.length === 0 ? (
+                <div className="discover-empty">
+                  <div className="discover-empty-title">No apps in the catalog yet.</div>
+                  <div className="discover-empty-text">
+                    This is the catalog surface only for now. Community connection logic stays in AI Agent → Apps.
+                  </div>
+                </div>
+              ) : null}
+              {isSkillsTab && filteredSkills.length === 0 ? (
+                <div className="discover-empty">
+                  <div className="discover-empty-title">No skills in the catalog yet.</div>
+                  <div className="discover-empty-text">
+                    This is the catalog surface only for now. Community attachment logic stays in AI Agent → Skills.
+                  </div>
+                </div>
+              ) : null}
+              {isAppsTab
+                ? filteredApps.map((app) => (
+                    <button
+                      key={app.id}
+                      type="button"
+                      className="discover-card discover-app-card discover-card-button"
+                      onClick={() => setSelectedAppId(app.id)}
+                      aria-label={`Open ${app.name}`}
+                    >
+                      <div className="discover-app-card-body">
+                        <div className="discover-app-card-header">
+                          <div className={`discover-app-icon discover-app-icon-${app.icon}`}>
+                            {renderAppIcon(app.icon)}
+                          </div>
+                          <div className="discover-app-meta">
+                            <div className="discover-card-name-row">
+                              <div className="discover-card-name">{app.name}</div>
+                            </div>
+                            <div className="discover-app-tagline">{app.tagline}</div>
+                          </div>
+                        </div>
+                        <div className="discover-card-desc">{app.description}</div>
+                      </div>
+                    </button>
+                  ))
+                : null}
+              {isSkillsTab
+                ? filteredSkills.map((skill) => (
+                    <div key={skill.id} className="discover-card discover-app-card">
+                      <div className="discover-app-card-body">
+                        <div className="discover-app-card-header">
+                          <div className={`discover-app-icon discover-app-icon-${skill.icon}`}>
+                            {renderSkillIcon(skill.icon)}
+                          </div>
+                          <div className="discover-app-meta">
+                            <div className="discover-card-name-row">
+                              <div className="discover-card-name">{skill.name}</div>
+                            </div>
+                            <div className="discover-app-tagline">{skill.tagline}</div>
+                          </div>
+                        </div>
+                        <div className="discover-card-desc">{skill.description}</div>
+                      </div>
+                    </div>
+                  ))
+                : null}
+            </div>
+          )}
         </div>
       </div>
     </div>

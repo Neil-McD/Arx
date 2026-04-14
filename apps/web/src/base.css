@@ -1222,6 +1222,22 @@ body {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
 }
 
+.discover-app-icon-linear {
+  background: linear-gradient(135deg, rgba(147, 112, 255, 0.18), rgba(147, 112, 255, 0.05));
+}
+
+.discover-app-icon-notion {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.discover-app-icon-slack {
+  background: linear-gradient(135deg, rgba(244, 106, 147, 0.12), rgba(110, 212, 216, 0.08));
+}
+
+.discover-app-icon-asana {
+  background: linear-gradient(135deg, rgba(240, 106, 106, 0.14), rgba(138, 124, 255, 0.08));
+}
+
 .discover-app-icon-custom {
   background: linear-gradient(135deg, rgba(201, 169, 98, 0.22), rgba(110, 212, 216, 0.08));
 }
@@ -1304,6 +1320,14 @@ body {
   cursor: pointer;
 }
 
+.discover-card-button {
+  appearance: none;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
 .discover-card:hover {
   border-color: var(--border-strong);
   background: var(--bg-card-hover);
@@ -1322,9 +1346,222 @@ body {
   outline-offset: 2px;
 }
 
+.discover-card-button:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 2px;
+}
+
+.discover-app-detail-page {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 24px;
+}
+
+.discover-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.discover-breadcrumb-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.discover-breadcrumb-button:hover {
+  color: var(--text-primary);
+}
+
+.discover-breadcrumb-separator {
+  color: var(--text-faint);
+}
+
+.discover-app-detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.discover-app-detail-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+}
+
+.discover-app-detail-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.discover-app-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.discover-app-detail-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.discover-app-detail-name {
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.discover-app-detail-tagline {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.discover-support-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-alt) 92%, transparent);
+  color: var(--text-muted);
+}
+
+.discover-support-pill.is-ready {
+  color: #8ff0bf;
+  border-color: rgba(62, 207, 142, 0.36);
+  background: linear-gradient(135deg, rgba(62, 207, 142, 0.14), rgba(62, 207, 142, 0.04));
+}
+
+.discover-support-pill.is-template {
+  color: #c9a962;
+  border-color: rgba(201, 169, 98, 0.34);
+  background: linear-gradient(135deg, rgba(201, 169, 98, 0.14), rgba(201, 169, 98, 0.04));
+}
+
+.discover-support-pill.is-oauth {
+  color: #f46a93;
+  border-color: rgba(244, 106, 147, 0.34);
+  background: linear-gradient(135deg, rgba(244, 106, 147, 0.14), rgba(244, 106, 147, 0.04));
+}
+
+.discover-app-spotlight {
+  border: 1px solid rgba(110, 212, 216, 0.18);
+  border-radius: 18px;
+  padding: 18px 20px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.12), transparent 38%),
+    linear-gradient(135deg, rgba(44, 56, 125, 0.9), rgba(78, 56, 140, 0.8), rgba(83, 89, 147, 0.72));
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.discover-app-detail-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+}
+
+.discover-app-detail-section {
+  padding: 18px;
+  gap: 14px;
+}
+
+.discover-detail-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.discover-detail-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.discover-info-grid {
+  display: grid;
+  gap: 0;
+}
+
+.discover-info-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.discover-info-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.discover-info-label {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.discover-info-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+
+.discover-info-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-cyan);
+  text-decoration: none;
+}
+
+.discover-info-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 720px) {
   .discover-grid {
     grid-template-columns: 1fr;
+  }
+
+  .discover-app-detail-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .discover-app-detail-name {
+    font-size: 26px;
+  }
+
+  .discover-app-detail-tagline {
+    font-size: 16px;
+  }
+
+  .discover-info-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 }
 
