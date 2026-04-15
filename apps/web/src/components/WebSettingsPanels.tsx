@@ -4,6 +4,10 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
+import type {
+  ConnectUserPlatformAppInput,
+  UserPlatformMountedApp,
+} from "../../../../shared/userPlatformAppMountTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
@@ -11,6 +15,7 @@ import type { UseWebBillingUiControllerResult } from "../controllers/useWebBilli
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
 import { WebAgentSettingsSection } from "./WebAgentSettingsSection";
 import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
+import { WebIntegrationsSettingsSection } from "./WebIntegrationsSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 
 type SessionLike = {
@@ -95,6 +100,18 @@ export type WebSettingsPanelsProps = {
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<BuilderBillingStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };
+  integrations: {
+    session: SessionLike;
+    openAuthGate: () => void;
+    userPlatformAppMounts: UserPlatformMountedApp[];
+    isLoadingUserPlatformAppMounts: boolean;
+    userPlatformAppMountError: string | null;
+    userPlatformAppMutationError: string | null;
+    isConnectingUserPlatformApp: boolean;
+    onConnectUserPlatformApp: (
+      input: ConnectUserPlatformAppInput,
+    ) => Promise<boolean> | boolean;
+  };
   appearance: {
     appTheme: AppTheme;
     setAppTheme: (value: AppTheme) => void;
@@ -102,7 +119,8 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, appearance } = props;
+  const { settingsGroup, profile, account, agent, integrations, appearance } =
+    props;
 
   const profileSectionProps = {
     session: profile.session,
@@ -214,11 +232,25 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setAppTheme: appearance.setAppTheme,
   };
 
+  const integrationsSectionProps = {
+    session: integrations.session,
+    openAuthGate: integrations.openAuthGate,
+    userPlatformAppMounts: integrations.userPlatformAppMounts,
+    isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
+    userPlatformAppMountError: integrations.userPlatformAppMountError,
+    userPlatformAppMutationError: integrations.userPlatformAppMutationError,
+    isConnectingUserPlatformApp: integrations.isConnectingUserPlatformApp,
+    onConnectUserPlatformApp: integrations.onConnectUserPlatformApp,
+  };
+
   return (
     <>
       {settingsGroup === "profile" ? <WebProfileSettingsSection {...profileSectionProps} /> : null}
       {settingsGroup === "account" ? <WebAccountSettingsSection {...accountSectionProps} /> : null}
       {settingsGroup === "agent" ? <WebAgentSettingsSection {...agentSectionProps} /> : null}
+      {settingsGroup === "integrations" ? (
+        <WebIntegrationsSettingsSection {...integrationsSectionProps} />
+      ) : null}
       {settingsGroup === "appearance" ? <WebAppearanceSettingsSection {...appearanceSectionProps} /> : null}
     </>
   );

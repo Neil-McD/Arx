@@ -2255,7 +2255,6 @@ export default function App() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  const [discoverQuery, setDiscoverQuery] = useState("");
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
@@ -2848,7 +2847,12 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (activePage !== "discover") return;
+    const shouldLoadUserPlatformApps =
+      activePage === "discover" ||
+      (activePage === "workspace" &&
+        activeView === "settings" &&
+        settingsPage === "integrations");
+    if (!shouldLoadUserPlatformApps) return;
     if (!session) {
       clearUserPlatformAppMounts();
       return;
@@ -2857,7 +2861,9 @@ export default function App() {
     void loadUserPlatformAppMounts(session);
   }, [
     activePage,
+    activeView,
     session,
+    settingsPage,
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     userPlatformAppMountsLoadedUserIdRef,
@@ -4147,17 +4153,6 @@ export default function App() {
       workspace.derived.projectById,
     ],
   );
-	  const filteredDiscoverCommunities = useMemo(() => {
-	    const q = discoverQuery.trim().toLowerCase();
-	    if (!q) return discoverCommunities;
-	    return discoverCommunities.filter((community) => {
-      const name = (community.name ?? "").toLowerCase();
-      const slug = (community.slug ?? "").toLowerCase();
-      const desc = (community.one_liner ?? "").toLowerCase();
-      return name.includes(q) || slug.includes(q) || desc.includes(q);
-    });
-  }, [discoverCommunities, discoverQuery]);
-
 	  const isAnonymousWorkspace = !session && shellPublicRoute.kind === "app";
 	  const guestThreadMessages = useMemo(() => {
 	    if (!isAnonymousWorkspace) return [] as ThreadMessage[];
@@ -5037,6 +5032,16 @@ export default function App() {
       personalMemoryUi,
       billingUi,
     },
+    integrations: {
+      session: session,
+      openAuthGate,
+      userPlatformAppMounts,
+      isLoadingUserPlatformAppMounts,
+      userPlatformAppMountError,
+      userPlatformAppMutationError,
+      isConnectingUserPlatformApp,
+      onConnectUserPlatformApp: handleConnectUserPlatformApp,
+    },
     appearance: {
       appTheme,
       setAppTheme,
@@ -5462,14 +5467,12 @@ export default function App() {
     discoverPanelProps: {
       showMobileShell,
       hasSession: Boolean(session),
-      discoverQuery,
-      onChangeDiscoverQuery: setDiscoverQuery,
       onRequireAuth: () => openAuthGate(),
       isLoadingDiscover,
       onRefreshDiscover: () => void loadDiscoverCommunities(),
       discoverCommunitiesCount: discoverCommunities.length,
       discoverError,
-      filteredDiscoverCommunities,
+      discoverCommunities,
       formatPlanPrice: (plan) => (plan ? formatPlanPrice(plan) : "Free"),
       formatCommunityVisibilityLabel,
       isPublishedCommunityVisibility,

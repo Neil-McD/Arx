@@ -52,6 +52,20 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     ),
   },
   {
+    id: "integrations",
+    page: "integrations",
+    icon: (
+      <span className="nav-icon nav-icon-emphasis">
+        <svg viewBox="0 0 24 24">
+          <rect x="4" y="4" width="6" height="6" rx="1.5" />
+          <rect x="14" y="4" width="6" height="6" rx="1.5" />
+          <rect x="4" y="14" width="6" height="6" rx="1.5" />
+          <rect x="14" y="14" width="6" height="6" rx="1.5" />
+        </svg>
+      </span>
+    ),
+  },
+  {
     id: "appearance",
     page: "appearance",
     icon: (

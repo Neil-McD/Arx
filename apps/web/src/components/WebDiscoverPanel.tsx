@@ -82,14 +82,12 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
 type WebDiscoverPanelProps = {
   showMobileShell: boolean;
   hasSession: boolean;
-  discoverQuery: string;
-  onChangeDiscoverQuery: (value: string) => void;
   onRequireAuth: () => void;
   isLoadingDiscover: boolean;
   onRefreshDiscover: () => void;
   discoverCommunitiesCount: number;
   discoverError: string | null;
-  filteredDiscoverCommunities: DiscoverCommunitySnapshot[];
+  discoverCommunities: DiscoverCommunitySnapshot[];
   formatPlanPrice: (plan: DiscoverCommunitySnapshot["active_plan"]) => string;
   formatCommunityVisibilityLabel: (
     visibility: DiscoverCommunitySnapshot["visibility"],
@@ -177,14 +175,12 @@ function buildDiscoverCommunityCardProps(args: {
 
 export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const {
-    discoverQuery,
-    onChangeDiscoverQuery,
     onRequireAuth,
     hasSession,
     isLoadingDiscover,
     discoverCommunitiesCount,
     discoverError,
-    filteredDiscoverCommunities,
+    discoverCommunities,
     formatPlanPrice,
     formatCommunityVisibilityLabel,
     isPublishedCommunityVisibility,
@@ -213,6 +209,16 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const selectedApp = selectedAppId
     ? DISCOVER_APP_CATALOG.find((entry) => entry.id === selectedAppId) ?? null
     : null;
+  const isReadyForPersonalConnection =
+    selectedApp?.personalConnect.availability === "ready";
+  const personalConnectLoadError =
+    isReadyForPersonalConnection && userPlatformAppMountError
+      ? "Couldn't load your personal apps right now. Try refreshing the page."
+      : null;
+  const personalConnectMutationError =
+    isReadyForPersonalConnection && userPlatformAppMutationError
+      ? "Couldn't update your personal apps right now. Try again."
+      : null;
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
@@ -221,12 +227,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       null
     );
   }, [selectedApp, userPlatformAppMounts]);
-
-  useEffect(() => {
-    if (discoverQuery) {
-      onChangeDiscoverQuery("");
-    }
-  }, [discoverQuery, onChangeDiscoverQuery]);
 
   const isAppsTab = activeTab === "apps";
   const isSkillsTab = activeTab === "skills";
@@ -423,11 +423,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="model-note discover-connect-note">
                   {selectedApp.personalConnect.note}
                 </div>
-                {userPlatformAppMountError ? (
-                  <div className="auth-error">{userPlatformAppMountError}</div>
+                {personalConnectLoadError ? (
+                  <div className="auth-error">{personalConnectLoadError}</div>
                 ) : null}
-                {userPlatformAppMutationError ? (
-                  <div className="auth-error">{userPlatformAppMutationError}</div>
+                {personalConnectMutationError ? (
+                  <div className="auth-error">
+                    {personalConnectMutationError}
+                  </div>
                 ) : null}
                 {selectedPersonalMount ? (
                   <div className="discover-connect-status">
@@ -568,7 +570,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="auth-error">{discoverError}</div>
               ) : null}
               {!isAppsTab && !isSkillsTab
-                ? filteredDiscoverCommunities.map((community) => {
+                ? discoverCommunities.map((community) => {
                     const cardProps = buildDiscoverCommunityCardProps({
                       community,
                       formatPlanPrice,
@@ -586,7 +588,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 : null}
               {!isAppsTab && !isSkillsTab && !isLoadingDiscover && !discoverError
                 ? (
-                    filteredDiscoverCommunities.length === 0 ? (
+                    discoverCommunities.length === 0 ? (
                       <div className="discover-empty">
                         <div className="discover-empty-title">
                           No communities yet

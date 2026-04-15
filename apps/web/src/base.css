@@ -12006,6 +12006,129 @@ button.message-citation-chip:hover {
   margin-bottom: 4px;
 }
 
+.integrations-app-list,
+.integrations-ready-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.integration-mounted-row,
+.integration-ready-card {
+  border: 1px solid var(--border-muted);
+  background: var(--bg-card);
+  border-radius: 14px;
+}
+
+.integration-mounted-row {
+  padding: 14px 16px;
+}
+
+.integration-mounted-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.integration-mounted-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.integration-mounted-title-row strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.integration-mounted-meta,
+.integration-ready-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.integration-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card-alt);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.integration-ready-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.integration-ready-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.integration-ready-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.integration-ready-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.integration-ready-tagline {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.integration-ready-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.integration-secret-input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 12px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.integration-secret-input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+  background: var(--bg-card-alt);
+}
+
+.integration-secret-input::placeholder {
+  color: var(--text-faint);
+}
+
+.integration-ready-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 /* Settings CTA button */
 .settings-cta {
   display: inline-flex;

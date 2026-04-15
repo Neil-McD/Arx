@@ -7,10 +7,6 @@ import type {
 import {
   connectCloudUserPlatformApp,
   listCloudUserPlatformAppMounts,
-  reconnectCloudUserPlatformApp,
-  refreshCloudUserPlatformApp,
-  unmountCloudUserPlatformApp,
-  updateCloudUserPlatformAppMount,
 } from "../../../../shared/cloudUserPlatformAppMountGateway";
 import {
   resolveUsableSession,
@@ -51,16 +47,6 @@ export function useWebUserPlatformAppMountsController<
   const [isConnectingUserPlatformApp, setIsConnectingUserPlatformApp] =
     useState(false);
   const [userPlatformAppMutationError, setUserPlatformAppMutationError] =
-    useState<string | null>(null);
-  const [updatingUserPlatformAppMountId, setUpdatingUserPlatformAppMountId] =
-    useState<string | null>(null);
-  const [refreshingUserPlatformAppMountId, setRefreshingUserPlatformAppMountId] =
-    useState<string | null>(null);
-  const [
-    reconnectingUserPlatformAppMountId,
-    setReconnectingUserPlatformAppMountId,
-  ] = useState<string | null>(null);
-  const [removingUserPlatformAppMountId, setRemovingUserPlatformAppMountId] =
     useState<string | null>(null);
   const userPlatformAppMountsLoadedUserIdRef = useRef<string | null>(null);
 
@@ -130,143 +116,6 @@ export function useWebUserPlatformAppMountsController<
     [],
   );
 
-  const updateUserPlatformAppMount = useCallback(
-    async (
-      userPlatformAppMountId: string,
-      patch: { enabled?: boolean; enabledTools?: string[] },
-    ): Promise<boolean> => {
-      const current = argsRef.current;
-      const usableSession = await resolveUsableSession(
-        current.session,
-        current.ensureSession,
-      );
-      if (!usableSession) return false;
-      setUpdatingUserPlatformAppMountId(userPlatformAppMountId);
-      setUserPlatformAppMutationError(null);
-      try {
-        const mounted = await updateCloudUserPlatformAppMount({
-          session: usableSession,
-          userPlatformAppMountId,
-          enabled: patch.enabled,
-          enabledTools: patch.enabledTools,
-        });
-        if (!mounted) return false;
-        setUserPlatformAppMounts((prev) =>
-          prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
-        );
-        return true;
-      } catch (error) {
-        setUserPlatformAppMutationError(
-          toErrorMessage(error, "Failed to update app."),
-        );
-        return false;
-      } finally {
-        setUpdatingUserPlatformAppMountId(null);
-      }
-    },
-    [],
-  );
-
-  const refreshUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string): Promise<boolean> => {
-      const current = argsRef.current;
-      const usableSession = await resolveUsableSession(
-        current.session,
-        current.ensureSession,
-      );
-      if (!usableSession) return false;
-      setRefreshingUserPlatformAppMountId(userPlatformAppMountId);
-      setUserPlatformAppMutationError(null);
-      try {
-        const mounted = await refreshCloudUserPlatformApp({
-          session: usableSession,
-          userPlatformAppMountId,
-        });
-        if (!mounted) return false;
-        setUserPlatformAppMounts((prev) =>
-          prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
-        );
-        return true;
-      } catch (error) {
-        setUserPlatformAppMutationError(
-          toErrorMessage(error, "Failed to refresh app."),
-        );
-        return false;
-      } finally {
-        setRefreshingUserPlatformAppMountId(null);
-      }
-    },
-    [],
-  );
-
-  const reconnectUserPlatformApp = useCallback(
-    async (
-      userPlatformAppMountId: string,
-      secret: string,
-    ): Promise<boolean> => {
-      const current = argsRef.current;
-      const usableSession = await resolveUsableSession(
-        current.session,
-        current.ensureSession,
-      );
-      if (!usableSession) return false;
-      setReconnectingUserPlatformAppMountId(userPlatformAppMountId);
-      setUserPlatformAppMutationError(null);
-      try {
-        const mounted = await reconnectCloudUserPlatformApp({
-          session: usableSession,
-          userPlatformAppMountId,
-          secret,
-        });
-        if (!mounted) return false;
-        setUserPlatformAppMounts((prev) =>
-          prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
-        );
-        return true;
-      } catch (error) {
-        setUserPlatformAppMutationError(
-          toErrorMessage(error, "Failed to reconnect app."),
-        );
-        return false;
-      } finally {
-        setReconnectingUserPlatformAppMountId(null);
-      }
-    },
-    [],
-  );
-
-  const unmountUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string): Promise<boolean> => {
-      const current = argsRef.current;
-      const usableSession = await resolveUsableSession(
-        current.session,
-        current.ensureSession,
-      );
-      if (!usableSession) return false;
-      setRemovingUserPlatformAppMountId(userPlatformAppMountId);
-      setUserPlatformAppMutationError(null);
-      try {
-        const removed = await unmountCloudUserPlatformApp({
-          session: usableSession,
-          userPlatformAppMountId,
-        });
-        if (!removed) return false;
-        setUserPlatformAppMounts((prev) =>
-          prev.filter((entry) => entry.id !== userPlatformAppMountId),
-        );
-        return true;
-      } catch (error) {
-        setUserPlatformAppMutationError(
-          toErrorMessage(error, "Failed to remove app."),
-        );
-        return false;
-      } finally {
-        setRemovingUserPlatformAppMountId(null);
-      }
-    },
-    [],
-  );
-
   return {
     userPlatformAppMounts,
     setUserPlatformAppMounts,
@@ -274,17 +123,9 @@ export function useWebUserPlatformAppMountsController<
     userPlatformAppMountError,
     isConnectingUserPlatformApp,
     userPlatformAppMutationError,
-    updatingUserPlatformAppMountId,
-    refreshingUserPlatformAppMountId,
-    reconnectingUserPlatformAppMountId,
-    removingUserPlatformAppMountId,
     userPlatformAppMountsLoadedUserIdRef,
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     connectUserPlatformApp,
-    updateUserPlatformAppMount,
-    refreshUserPlatformApp,
-    reconnectUserPlatformApp,
-    unmountUserPlatformApp,
   };
 }

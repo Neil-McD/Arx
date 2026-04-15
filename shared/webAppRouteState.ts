@@ -267,6 +267,8 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
       return "profile";
     case "account":
       return "account";
+    case "integrations":
+      return "integrations";
     case "appearance":
       return "appearance";
     default:

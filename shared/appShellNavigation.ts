@@ -1,6 +1,16 @@
-export type SettingsPage = "profile" | "account" | "agent" | "appearance";
+export type SettingsPage =
+  | "profile"
+  | "account"
+  | "agent"
+  | "integrations"
+  | "appearance";
 
-export type SettingsGroup = "profile" | "account" | "agent" | "appearance";
+export type SettingsGroup =
+  | "profile"
+  | "account"
+  | "agent"
+  | "integrations"
+  | "appearance";
 
 export type AppPage = "workspace" | "community" | "discover";
 
@@ -63,8 +73,9 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
   if (page === "profile") return "profile";
-  if (page === "appearance") return "appearance";
   if (page === "account") return "account";
+  if (page === "integrations") return "integrations";
+  if (page === "appearance") return "appearance";
   return "agent";
 }
 
@@ -76,6 +87,8 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Account";
     case "agent":
       return "Agent";
+    case "integrations":
+      return "Integrations";
     case "appearance":
       return "Appearance";
   }
