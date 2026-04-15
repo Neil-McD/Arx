@@ -12035,6 +12035,12 @@ button.message-citation-chip:hover {
   gap: 6px;
 }
 
+.integration-mounted-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .integration-mounted-title-row {
   display: flex;
   align-items: center;
@@ -12051,6 +12057,41 @@ button.message-citation-chip:hover {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.integration-mounted-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.integration-action-button.is-danger {
+  color: color-mix(in srgb, var(--accent-red) 78%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-red) 26%, var(--border-muted));
+}
+
+.integration-action-button.is-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-card-hover));
+}
+
+.integration-reconnect-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.integration-reconnect-field {
+  display: grid;
+  gap: 8px;
+}
+
+.integration-reconnect-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .integration-status-pill {
@@ -17796,6 +17837,21 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .settings-section {
   gap: 10px;
   padding-bottom: 18px;
+}
+
+.app-root.mobile-shell .integration-mounted-title-row {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.app-root.mobile-shell .integration-mounted-actions,
+.app-root.mobile-shell .integration-reconnect-actions {
+  width: 100%;
+}
+
+.app-root.mobile-shell .integration-mounted-actions .integration-action-button,
+.app-root.mobile-shell .integration-reconnect-actions .settings-cta {
+  width: 100%;
 }
 
 .app-root.mobile-shell .create-community-banner-media,

@@ -104,6 +104,28 @@ export type WebSettingsPanelsProps = {
     userPlatformAppMounts: UserPlatformMountedApp[];
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
+    userPlatformAppMutationError: string | null;
+    updatingUserPlatformAppMountId: string | null;
+    refreshingUserPlatformAppMountId: string | null;
+    reconnectingUserPlatformAppMountId: string | null;
+    removingUserPlatformAppMountId: string | null;
+    onUpdateUserPlatformAppMount: (
+      userPlatformAppMountId: string,
+      patch: {
+        enabled?: boolean;
+        enabledTools?: string[];
+      },
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onRefreshUserPlatformApp: (
+      userPlatformAppMountId: string,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onReconnectUserPlatformApp: (
+      userPlatformAppMountId: string,
+      secret: string,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onUnmountUserPlatformApp: (
+      userPlatformAppMountId: string,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
   };
   appearance: {
     appTheme: AppTheme;
@@ -232,6 +254,17 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     userPlatformAppMounts: integrations.userPlatformAppMounts,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
+    userPlatformAppMutationError: integrations.userPlatformAppMutationError,
+    updatingUserPlatformAppMountId: integrations.updatingUserPlatformAppMountId,
+    refreshingUserPlatformAppMountId:
+      integrations.refreshingUserPlatformAppMountId,
+    reconnectingUserPlatformAppMountId:
+      integrations.reconnectingUserPlatformAppMountId,
+    removingUserPlatformAppMountId: integrations.removingUserPlatformAppMountId,
+    onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
+    onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
+    onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
+    onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
   };
 
   return (

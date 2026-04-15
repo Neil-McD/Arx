@@ -14,6 +14,7 @@ import {
   type DeveloperAppRow,
   mapAppConnectionReadModel,
   mapDeveloperAppReadModel,
+  normalizeDeveloperAppEndpointUrl,
   normalizeString,
 } from "./appCore";
 import {
@@ -234,6 +235,39 @@ async function listUserPlatformAppMountRows(
     .collect()) as UserPlatformAppMountRow[];
 }
 
+async function findExistingUserPlatformMountByEndpoint(args: {
+  ctx: any;
+  userId: any;
+  endpointUrl: string;
+  authType: string;
+}): Promise<{
+  mount: UserPlatformAppMountRow;
+  app: DeveloperAppRow;
+  connection: AppConnectionRow | null;
+} | null> {
+  const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+  if (!normalizedEndpointUrl) return null;
+  const mounts = await listUserPlatformAppMountRows(args.ctx, args.userId);
+  mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+  for (const mount of mounts) {
+    const app = await getDeveloperAppById(args.ctx, mount.developerAppId);
+    if (!app) continue;
+    if (app.endpointUrl !== normalizedEndpointUrl || app.authType !== args.authType) {
+      continue;
+    }
+    const connection = await getAppConnectionByDeveloperAppId(
+      args.ctx,
+      mount.developerAppId,
+    );
+    return {
+      mount,
+      app,
+      connection,
+    };
+  }
+  return null;
+}
+
 async function requireExistingUserPlatformMount(args: {
   ctx: any;
   userId: any;
@@ -430,6 +464,31 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
       };
     }
 
+    if (mountedTool.risk_level !== "read") {
+      const message =
+        "Personal write and sensitive app tools still require the upcoming approval flow. This tool was not executed.";
+      return {
+        status: "error" as const,
+        exitCode: null,
+        outputText: message,
+        errorCode: "user_platform_app_tool_approval_required",
+        errorMessage: message,
+        details: {
+          approval_required: true,
+          user_platform_app: {
+            user_platform_app_mount_id: String(
+              mountedTool.user_platform_app_mount_id,
+            ),
+            developer_app_id: String(mountedTool.developer_app_id),
+            app_name: mountedTool.app_name,
+            tool_name: mountedTool.tool_name,
+            namespaced_tool_name: mountedTool.namespaced_tool_name,
+            risk_level: mountedTool.risk_level,
+          },
+        },
+      };
+    }
+
     const connectionBundle = (await ctx.runQuery(
       internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
       {
@@ -590,6 +649,76 @@ export const connectUserPlatformApp = action({
     });
 
     const nowMs = Date.now();
+    const normalizedSecret = normalizeString(args.secret, 10_000);
+    const existingMount = await findExistingUserPlatformMountByEndpoint({
+      ctx,
+      userId,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (existingMount) {
+      if (args.authType !== "none") {
+        if (normalizedSecret) {
+          const encryptedSecret = await encryptSecret(normalizedSecret);
+          await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
+            developerAppId: existingMount.app._id,
+            connectionStatus: "connected",
+            encryptedSecretHex: encryptedSecret.encryptedSecretHex,
+            secretIvHex: encryptedSecret.secretIvHex,
+            secretVersion: encryptedSecret.secretVersion,
+            nowMs,
+          });
+        } else if (existingMount.connection?.connectionStatus !== "connected") {
+          throw new Error("developer_app_connection_secret_required");
+        }
+      }
+
+      const validation = (await ctx.runAction(
+        internal.appValidation.validateDeveloperAppInternal,
+        {
+          developerAppId: existingMount.app._id,
+        },
+      )) as {
+        validation_status?: unknown;
+        validation_error?: unknown;
+      };
+      if (String(validation.validation_status ?? "") !== "ok") {
+        throw new Error(
+          normalizeString(validation.validation_error, 2_000) ||
+            "developer_app_validation_failed",
+        );
+      }
+
+      const refreshedApp = (await ctx.runQuery(
+        internal.developerApps.getDeveloperAppByIdInternal,
+        {
+          developerAppId: existingMount.app._id,
+        },
+      )) as DeveloperAppRow | null;
+      if (!refreshedApp?.activeSnapshotId) {
+        throw new Error("developer_app_snapshot_missing");
+      }
+      await ctx.runMutation(
+        internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+        {
+          userId,
+          developerAppId: existingMount.app._id,
+          toolSnapshotId: refreshedApp.activeSnapshotId,
+          enabled: true,
+          enabledTools: existingMount.mount.enabledTools,
+          nowMs,
+        },
+      );
+
+      return await ctx.runQuery(
+        internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+        {
+          userId,
+          userPlatformAppMountId: existingMount.mount._id,
+        },
+      );
+    }
+
     let developerAppId: any = null;
     try {
       developerAppId = (await ctx.runMutation(
@@ -606,11 +735,10 @@ export const connectUserPlatformApp = action({
       )) as any;
 
       if (args.authType !== "none") {
-        const secret = normalizeString(args.secret, 10_000);
-        if (!secret) {
+        if (!normalizedSecret) {
           throw new Error("developer_app_connection_secret_required");
         }
-        const encryptedSecret = await encryptSecret(secret);
+        const encryptedSecret = await encryptSecret(normalizedSecret);
         await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
           developerAppId,
           connectionStatus: "connected",

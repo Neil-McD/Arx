@@ -1418,10 +1418,18 @@ export default function App() {
     userPlatformAppMountError,
     isConnectingUserPlatformApp,
     userPlatformAppMutationError,
+    updatingUserPlatformAppMountId,
+    refreshingUserPlatformAppMountId,
+    reconnectingUserPlatformAppMountId,
+    removingUserPlatformAppMountId,
     userPlatformAppMountsLoadedUserIdRef,
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     connectUserPlatformApp,
+    updateUserPlatformAppMount,
+    refreshUserPlatformApp,
+    reconnectUserPlatformApp,
+    unmountUserPlatformApp,
   } = useWebUserPlatformAppMountsController<AuthSession>({
     session,
     ensureSession: ensureUsableAuthSession,
@@ -1992,6 +2000,40 @@ export default function App() {
       return await connectUserPlatformApp(input);
     },
     [connectUserPlatformApp],
+  );
+
+  const handleUpdateUserPlatformAppMount = useCallback(
+    async (
+      userPlatformAppMountId: string,
+      patch: {
+        enabled?: boolean;
+        enabledTools?: string[];
+      },
+    ) => {
+      return await updateUserPlatformAppMount(userPlatformAppMountId, patch);
+    },
+    [updateUserPlatformAppMount],
+  );
+
+  const handleRefreshUserPlatformApp = useCallback(
+    async (userPlatformAppMountId: string) => {
+      return await refreshUserPlatformApp(userPlatformAppMountId);
+    },
+    [refreshUserPlatformApp],
+  );
+
+  const handleReconnectUserPlatformApp = useCallback(
+    async (userPlatformAppMountId: string, secret: string) => {
+      return await reconnectUserPlatformApp(userPlatformAppMountId, secret);
+    },
+    [reconnectUserPlatformApp],
+  );
+
+  const handleUnmountUserPlatformApp = useCallback(
+    async (userPlatformAppMountId: string) => {
+      return await unmountUserPlatformApp(userPlatformAppMountId);
+    },
+    [unmountUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
@@ -5050,6 +5092,15 @@ export default function App() {
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
+      userPlatformAppMutationError,
+      updatingUserPlatformAppMountId,
+      refreshingUserPlatformAppMountId,
+      reconnectingUserPlatformAppMountId,
+      removingUserPlatformAppMountId,
+      onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
+      onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
+      onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
+      onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
     },
     appearance: {
       appTheme,

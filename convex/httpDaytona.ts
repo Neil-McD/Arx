@@ -331,11 +331,7 @@ function buildMountedAppOpenAiTools(
     type: "function",
     function: {
       name: tool.runtime_tool_name,
-      description:
-        tool.description ||
-        `Run ${tool.tool_name} on ${
-          tool.scope === "user" ? "your" : "the active community"
-        } ${tool.app_name} app.`,
+      description: buildMountedAppToolDescription(tool),
       parameters: normalizeMountedToolSchema(tool.input_schema),
       strict: true,
     },
@@ -348,14 +344,22 @@ function buildMountedAppResponsesTools(
   return mountedTools.map((tool) => ({
     type: "function",
     name: tool.runtime_tool_name,
-    description:
-      tool.description ||
-      `Run ${tool.tool_name} on ${
-        tool.scope === "user" ? "your" : "the active community"
-      } ${tool.app_name} app.`,
+    description: buildMountedAppToolDescription(tool),
     parameters: normalizeMountedToolSchema(tool.input_schema),
     strict: true,
   }));
+}
+
+function buildMountedAppToolDescription(tool: RuntimeMountedMcpTool): string {
+  const baseDescription =
+    tool.description ||
+    `Run ${tool.tool_name} on ${
+      tool.scope === "user" ? "your" : "the active community"
+    } ${tool.app_name} app.`;
+  if (tool.scope === "user" && tool.risk_level !== "read") {
+    return `[Approval required for write or sensitive actions] ${baseDescription}`;
+  }
+  return baseDescription;
 }
 
 function buildUserPlatformMountedAppsPromptBlock(
@@ -367,6 +371,7 @@ function buildUserPlatformMountedAppsPromptBlock(
     "Your connected app tools are part of your baseline platform harness.",
     "These baseline app tools use the `me__` prefix when they are exposed to the model.",
     "These tools stay available across communities. Use the provided structured tool definitions directly.",
+    "Personal app tools that are marked write or sensitive require an approval flow and will refuse execution until that flow ships. Read tools can run directly.",
   ].join("\n");
 }
 

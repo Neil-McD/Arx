@@ -225,10 +225,20 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
-    return (
-      userPlatformAppMounts.find((mount) => mount.app.slug === selectedApp.id) ??
-      null
-    );
+    if (
+      selectedApp.personalConnect.availability === "ready" &&
+      selectedApp.personalConnect.endpointUrl &&
+      selectedApp.personalConnect.authType
+    ) {
+      return (
+        userPlatformAppMounts.find(
+          (mount) =>
+            mount.app.endpoint_url === selectedApp.personalConnect.endpointUrl &&
+            mount.app.auth_type === selectedApp.personalConnect.authType,
+        ) ?? null
+      );
+    }
+    return null;
   }, [selectedApp, userPlatformAppMounts]);
 
   const isAppsTab = activeTab === "apps";
