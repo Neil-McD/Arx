@@ -1,16 +1,25 @@
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 
 export type DiscoverAppConnectionKind = "known" | "custom";
-export type DiscoverAppAuthMethod = "token" | "oauth" | "none" | "custom";
+export type DiscoverAppConnectionMode = "token" | "oauth" | "none" | "custom";
+export type DiscoverAppAuthMethod = DiscoverAppConnectionMode;
+
+type DiscoverAppConnectionStrategy = {
+  defaultMode: DiscoverAppConnectionMode;
+  supportedModes: DiscoverAppConnectionMode[];
+};
 
 type DiscoverAppReadyTokenConnectTemplate = {
   connectionKind: "known";
   availability: "ready";
   authMethod: "token";
+  connectionStrategy: DiscoverAppConnectionStrategy;
   endpointUrl: string;
   authType: Exclude<DeveloperAppAuthType, "none">;
   authLabel: string;
   secretLabel: string;
+  tokenHelpUrl: string;
+  tokenHelpLabel: string;
   note: string;
 };
 
@@ -18,6 +27,7 @@ type DiscoverAppReadyNoAuthConnectTemplate = {
   connectionKind: "known";
   availability: "ready";
   authMethod: "none";
+  connectionStrategy: DiscoverAppConnectionStrategy;
   endpointUrl: string;
   authType: "none";
   authLabel: string;
@@ -34,6 +44,7 @@ type DiscoverAppReadyCustomConnectTemplate = {
   connectionKind: "custom";
   availability: "ready";
   authMethod: "custom";
+  connectionStrategy: DiscoverAppConnectionStrategy;
   endpointUrl: null;
   authType: null;
   authLabel: string;
@@ -46,6 +57,7 @@ type DiscoverAppLaterConnectTemplate = {
   connectionKind: DiscoverAppConnectionKind;
   availability: "later";
   authMethod: DiscoverAppAuthMethod;
+  connectionStrategy: DiscoverAppConnectionStrategy;
   endpointUrl: string | null;
   authType: DeveloperAppAuthType | null;
   authLabel: string;
@@ -103,12 +115,64 @@ export type DiscoverAppCatalogEntry = {
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
 
+export function formatDiscoverAppConnectionModeLabel(
+  mode: DiscoverAppConnectionMode,
+): string {
+  switch (mode) {
+    case "token":
+      return "Token";
+    case "oauth":
+      return "OAuth";
+    case "none":
+      return "No auth";
+    case "custom":
+      return "Custom endpoint";
+    default:
+      return "Connection";
+  }
+}
+
+export function buildDiscoverAppConnectionStrategyLabel(
+  app: DiscoverAppCatalogEntry,
+): string {
+  const { defaultMode, supportedModes } = app.personalConnect.connectionStrategy;
+  if (app.personalConnect.connectionKind === "custom") {
+    return "Custom endpoint";
+  }
+  const liveMode =
+    app.personalConnect.availability === "ready" ? app.personalConnect.authMethod : null;
+  if (liveMode && liveMode !== defaultMode) {
+    return `${formatDiscoverAppConnectionModeLabel(liveMode)} now · ${formatDiscoverAppConnectionModeLabel(defaultMode)} later`;
+  }
+  if (supportedModes.length === 1) {
+    return formatDiscoverAppConnectionModeLabel(defaultMode);
+  }
+  if (defaultMode === "oauth" && supportedModes.includes("token")) {
+    return "OAuth first · token fallback";
+  }
+  if (defaultMode === "token" && supportedModes.includes("oauth")) {
+    return "Token first · OAuth also supported";
+  }
+  return supportedModes
+    .map((mode) => formatDiscoverAppConnectionModeLabel(mode))
+    .join(" · ");
+}
+
+export function buildDiscoverAppSupportedModesLabel(
+  app: DiscoverAppCatalogEntry,
+): string {
+  return app.personalConnect.connectionStrategy.supportedModes
+    .map((mode) => formatDiscoverAppConnectionModeLabel(mode))
+    .join(" · ");
+}
+
 export function isDiscoverAppPersonallyConnectable(
   app: DiscoverAppCatalogEntry,
 ): app is DiscoverAppCatalogEntry & {
   personalConnect:
     | DiscoverAppReadyTokenConnectTemplate
-    | DiscoverAppReadyNoAuthConnectTemplate;
+    | DiscoverAppReadyNoAuthConnectTemplate
+    | DiscoverAppReadyCustomConnectTemplate;
 } {
   return app.personalConnect.availability === "ready";
 }
@@ -240,6 +304,9 @@ export function buildDiscoverAppPersonalConnectModalCopy(
     return "Enter a remote MCP endpoint and auth details to connect it to your personal platform tools.";
   }
   if (app.personalConnect.authMethod === "token") {
+    if (app.personalConnect.connectionStrategy.defaultMode === "oauth") {
+      return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} now. OAuth support will come later.`;
+    }
     return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} to your personal platform tools.`;
   }
   return `Review the connection requirements, then connect ${app.name} to your personal platform tools.`;
@@ -269,6 +336,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "custom",
       availability: "ready",
       authMethod: "custom",
+      connectionStrategy: {
+        defaultMode: "custom",
+        supportedModes: ["custom"],
+      },
       endpointUrl: null,
       authType: null,
       authLabel: "Choose auth",
@@ -316,6 +387,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "later",
       authMethod: "token",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth", "token"],
+      },
       endpointUrl: null,
       authType: null,
       authLabel: "Bearer token",
@@ -347,10 +422,16 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "ready",
       authMethod: "token",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth", "token"],
+      },
       endpointUrl: "https://mcp.supabase.com/mcp",
       authType: "bearer",
       authLabel: "Bearer token",
-      secretLabel: "Supabase token",
+      secretLabel: "Supabase access token",
+      tokenHelpUrl: "https://supabase.com/dashboard/account/tokens",
+      tokenHelpLabel: "Get access token",
       note:
         "Connects into your baseline platform tools and stays available even when no community lens is active.",
     },
@@ -378,6 +459,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "later",
       authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
       endpointUrl: "https://mcp.vercel.com",
       authType: null,
       authLabel: "OAuth or managed auth",
@@ -408,10 +493,16 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "ready",
       authMethod: "token",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth", "token"],
+      },
       endpointUrl: "https://mcp.linear.app/mcp",
       authType: "bearer",
       authLabel: "Bearer token",
-      secretLabel: "Linear token",
+      secretLabel: "Linear personal API key",
+      tokenHelpUrl: "https://linear.app/settings/account/security",
+      tokenHelpLabel: "Get API key",
       note:
         "Connects into your baseline platform tools so it stays active with or without a community lens.",
     },
@@ -439,6 +530,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "later",
       authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
       endpointUrl: "https://mcp.notion.com/mcp",
       authType: null,
       authLabel: "OAuth or managed auth",
@@ -469,6 +564,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "later",
       authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
       endpointUrl: null,
       authType: null,
       authLabel: "OAuth",
@@ -499,6 +598,10 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       connectionKind: "known",
       availability: "later",
       authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
       endpointUrl: "https://mcp.asana.com/v2/mcp",
       authType: null,
       authLabel: "OAuth",

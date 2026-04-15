@@ -9,9 +9,11 @@ import type {
 } from "../../../../shared/userPlatformAppMountTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
+  buildDiscoverAppConnectionStrategyLabel,
   buildDiscoverAppPersonalConnectInput,
   buildDiscoverAppPersonalConnectModalCopy,
   buildDiscoverAppPersonalConnectRequirements,
+  buildDiscoverAppSupportedModesLabel,
   DISCOVER_APP_CATALOG,
   isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
@@ -603,7 +605,19 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     </div>
                   </div>
                   <div className="discover-info-row">
-                    <div className="discover-info-label">Auth</div>
+                    <div className="discover-info-label">Connection</div>
+                    <div className="discover-info-value">
+                      {buildDiscoverAppConnectionStrategyLabel(selectedApp)}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Supports</div>
+                    <div className="discover-info-value">
+                      {buildDiscoverAppSupportedModesLabel(selectedApp)}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Auth now</div>
                     <div className="discover-info-value">
                       {selectedApp.personalConnect.authLabel}
                     </div>
@@ -890,6 +904,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                             }}
                             placeholder={requirement.placeholder}
                           />
+                          {selectedApp.personalConnect.connectionKind === "known" &&
+                          selectedApp.personalConnect.authMethod === "token" ? (
+                            <a
+                              className="discover-connect-help-link"
+                              href={selectedApp.personalConnect.tokenHelpUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {selectedApp.personalConnect.tokenHelpLabel}
+                              <span aria-hidden="true">↗</span>
+                            </a>
+                          ) : null}
                         </label>
                       ),
                     )}
