@@ -19,7 +19,7 @@ import {
   type AuthSession,
 } from "./auth";
 import {
-  captureBrandosAidFromLocation, clearPendingPurchaseClaimToken, getBrandosAidForCommunitySlug, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
+  clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../../../shared/pay_first";
 import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
@@ -30,8 +30,6 @@ import { StableAvatar } from "../../../shared/StableAvatar";
 import {
   formatProviderConnectionErrorMessage,
 } from "../../../shared/appErrorMappings";
-import {
-  isUuid, } from "../../../shared/appIdentity";
 import {
   isLikelyImageFile, isLikelyTextFile, isSupportedChatRasterImage, readChatImageAsDataUrl, readTextAttachmentPreview, } from "../../../shared/attachmentHelpers";
 import {
@@ -2679,10 +2677,6 @@ export default function App() {
     canManagePolynet: canViewActiveCommunityPolynet,
   });
 
-  useEffect(() => {
-    captureBrandosAidFromLocation();
-  }, []);
-
   useWebPathRouteLifecycle({
     publicRouteKind: publicRoute.kind,
     activePage,
@@ -3314,7 +3308,6 @@ export default function App() {
         surface: "public_funnel",
       });
     },
-    isUuid,
     setIsJoiningPublicCommunity: publicCommunityUi.setIsJoiningPublicCommunity,
     setIsCancellingPublicCommunityJoinRequest: publicCommunityUi.setIsCancellingPublicCommunityJoinRequest,
     setPublicJoinError: publicCommunityUi.setPublicJoinError,

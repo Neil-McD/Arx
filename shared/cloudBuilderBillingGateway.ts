@@ -31,7 +31,7 @@ export async function openCloudBuilderBillingPortal<SessionT>(
   },
 ): Promise<{ url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.query("billing:openBuilderBillingPortal" as any, {
+  return (await client.action("billing:openBuilderBillingPortal" as any, {
     authSubject,
     returnUrl: params.returnUrl,
   })) as {

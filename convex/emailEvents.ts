@@ -45,7 +45,7 @@ function buildAppUrl(path: string): string {
 }
 
 function normalizeBuilderPlanTier(value: unknown): BuilderPlanTier {
-  return normalizeBuilderTierForUi(value);
+  return normalizeBuilderTierForUi(typeof value === "string" ? value : null);
 }
 
 function readBuilderPlanRank(value: BuilderPlanTier): number {

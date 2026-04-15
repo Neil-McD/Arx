@@ -30,6 +30,7 @@ import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
+  sessionId: string;
   mode: string;
   communityId?: any;
   billingPeriod?: string;
@@ -173,15 +174,29 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       status === "canceled" || status === "ended"
         ? nowMs
         : undefined;
+    const nextProviderSubscriptionId =
+      String(args.providerSubscriptionId ?? "").trim() ||
+      String(current?.providerSubscriptionId ?? "").trim() ||
+      undefined;
+    const nextProviderCustomerId =
+      String(args.providerCustomerId ?? "").trim() ||
+      String(current?.providerCustomerId ?? "").trim() ||
+      undefined;
 
     const patch = {
       source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
       pricePointId,
       status,
-      providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
-      providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
-      currentPeriodStartAt: typeof currentPeriodStartAt === "number" ? currentPeriodStartAt : undefined,
-      currentPeriodEndAt: typeof currentPeriodEndAt === "number" ? currentPeriodEndAt : undefined,
+      providerSubscriptionId: nextProviderSubscriptionId,
+      providerCustomerId: nextProviderCustomerId,
+      currentPeriodStartAt:
+        typeof currentPeriodStartAt === "number"
+          ? currentPeriodStartAt
+          : current?.currentPeriodStartAt,
+      currentPeriodEndAt:
+        typeof currentPeriodEndAt === "number"
+          ? currentPeriodEndAt
+          : current?.currentPeriodEndAt,
       cancelAtPeriodEnd,
       endedAt,
       updatedAt: nowMs,
@@ -282,12 +297,38 @@ export const attachCommunityPricePointProviderPriceInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const pricePoint = await ctx.db.get(args.pricePointId);
+    const providerPriceId = String(args.providerPriceId).trim();
+    if (!providerPriceId) throw new Error("provider_price_id_required");
+    const pricePoint = (await ctx.db.get(args.pricePointId)) as CommunityPricePointLike | null;
     if (!pricePoint) throw new Error("community_price_point_not_found");
+    const existingProviderPriceId = String(pricePoint.providerPriceId ?? "").trim();
+    if (existingProviderPriceId) {
+      return {
+        providerPriceId: existingProviderPriceId,
+        attached: false,
+      };
+    }
     await ctx.db.patch(args.pricePointId, {
-      providerPriceId: String(args.providerPriceId).trim(),
+      providerPriceId,
       updatedAt: nowMs,
     });
+    return {
+      providerPriceId,
+      attached: true,
+    };
+  },
+});
+
+export const getCommunityPricePointProviderPriceInternal = internalQuery({
+  args: {
+    pricePointId: v.id("communityPricePoints"),
+  },
+  handler: async (ctx, args) => {
+    const pricePoint = (await ctx.db.get(args.pricePointId)) as CommunityPricePointLike | null;
+    if (!pricePoint) throw new Error("community_price_point_not_found");
+    return {
+      providerPriceId: String(pricePoint.providerPriceId ?? "").trim() || null,
+    };
   },
 });
 
@@ -501,10 +542,12 @@ export const startPublicCommunityCheckout = action({
     cancelUrl: v.string(),
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    brandosAid: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
     const nowMs = args.nowMs ?? Date.now();
     const cancelUrl = String(args.cancelUrl ?? "").trim();
     if (!cancelUrl) throw new Error("checkout_cancel_url_required");
@@ -528,23 +571,34 @@ export const startPublicCommunityCheckout = action({
       providerPriceId: string | null;
       oneLiner: string | null;
     };
-    void args.brandosAid;
     const sessionId = newOpaqueToken("chk");
     const claimToken = newOpaqueToken("claim");
     const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-    const actor = args.authSubject
+    const actor: { dbUserId?: unknown; email?: string | null } | null = args.authSubject
       ? ((await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
           authSubject: args.authSubject,
         })) as { dbUserId?: unknown; email?: string | null } | null)
       : null;
-    const ownerUserId = actor?.dbUserId;
-    const ownerEmail = actor?.email ?? null;
+    const ownerUserId: unknown = actor?.dbUserId;
+    const ownerEmail: string | null = actor?.email ?? null;
     if (!args.authSubject && args.userId) {
       throw new Error("auth_subject_required");
     }
     let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
     if (!providerPriceId) {
+      const existingProviderPrice = (await ctx.runQuery(
+        internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
+        {
+          pricePointId: checkoutConfig.pricePointId,
+        },
+      )) as { providerPriceId?: string | null } | null;
+      providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
+    }
+    if (!providerPriceId) {
       const stripe = getStripeClient();
+      const pricePointId = String(checkoutConfig.pricePointId);
+      const productIdempotencyKey = `community-price-product:${pricePointId}`;
+      const priceIdempotencyKey = `community-price:${pricePointId}`;
       const product = await stripe.products.create({
         name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
         description: checkoutConfig.oneLiner ?? undefined,
@@ -554,6 +608,8 @@ export const startPublicCommunityCheckout = action({
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: checkoutConfig.billingPeriod,
         },
+      }, {
+        idempotencyKey: productIdempotencyKey,
       });
       const price = await stripe.prices.create({
         currency: checkoutConfig.currency,
@@ -568,16 +624,19 @@ export const startPublicCommunityCheckout = action({
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: checkoutConfig.billingPeriod,
         },
+      }, {
+        idempotencyKey: priceIdempotencyKey,
       });
-      providerPriceId = price.id;
-      await ctx.runMutation(
+      const attachResult = (await ctx.runMutation(
         internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
         {
           pricePointId: checkoutConfig.pricePointId,
-          providerPriceId,
+          providerPriceId: price.id,
           nowMs,
         },
-      );
+      )) as { providerPriceId?: string | null } | null;
+      providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
+      if (!providerPriceId) throw new Error("provider_price_id_required");
     }
     await ctx.runMutation(
       internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
@@ -599,7 +658,7 @@ export const startPublicCommunityCheckout = action({
 
     try {
       const stripe = getStripeClient();
-      const checkoutSession = await stripe.checkout.sessions.create({
+      const checkoutSession: any = await stripe.checkout.sessions.create({
         mode: "subscription",
         success_url: buildCheckoutSuccessUrl(args.successUrl, sessionId),
         cancel_url: cancelUrl,
@@ -632,7 +691,7 @@ export const startPublicCommunityCheckout = action({
           ? { customer_email: ownerEmail.trim() }
           : null),
       });
-      const checkoutUrl = String(checkoutSession.url ?? "").trim();
+      const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
       await ctx.runMutation(
         internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,

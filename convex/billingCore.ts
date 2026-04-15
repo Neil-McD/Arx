@@ -11,6 +11,7 @@ export type CommunityLike = {
   _id: any;
   slug: string;
   name: string;
+  oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
 };
 

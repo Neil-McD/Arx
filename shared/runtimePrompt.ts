@@ -335,6 +335,22 @@ function buildExplanationContractPrompt(): string {
   ].join("\n");
 }
 
+function buildAnswerFormatContractPrompt(): string {
+  return [
+    "ANSWER_FORMAT_CONTRACT",
+    "When the answer includes analysis, critique, review, debugging, planning, design feedback, or recommendations, use a scan-first structure.",
+    "Start with **Verdict**: one direct sentence that names the main conclusion.",
+    "Then use **Top Fixes** or **Findings** for the highest-signal items only. Keep this to 3-5 flat bullets unless the user asks for more depth.",
+    "When priorities matter, prefix actionable bullets with P1, P2, or P3. Include impact and fix in the same bullet when possible.",
+    "Use **Recommended Change** for the concrete direction or implementation shape.",
+    "End with **Next Step** when a next action would help the user move.",
+    "Keep observations separate from recommendations. Avoid mixing raw symptoms, impact, and fixes across unrelated bullets.",
+    "Avoid nested bullets unless hierarchy is truly needed. Prefer short paragraphs or flat bullets.",
+    "Use numbered lists only for ordered steps. Do not use repeated `1.` numbering for unordered recommendations.",
+    "For simple factual answers, do not force this template; answer directly.",
+  ].join("\n");
+}
+
 function buildCommunityFeedContextPrompt(params: {
   allowedToolNames: readonly RetrievalToolName[];
 }): string | null {
@@ -590,6 +606,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
       currentTimeZone: params.currentTimeZone,
     }),
     buildExplanationContractPrompt(),
+    buildAnswerFormatContractPrompt(),
     buildWorkspaceOperatingPolicyPrompt({
       loopBudget: params.loopBudget,
       allowedToolNames: params.allowedToolNames,
@@ -617,6 +634,7 @@ export function composeCloudScopedRuntimeSystemPrompt(
       currentDateLabel: params.currentDateLabel,
       currentTimeZone: params.currentTimeZone,
     }),
+    buildAnswerFormatContractPrompt(),
     buildChatOperatingPolicyPrompt(),
   ]);
 }
@@ -634,6 +652,7 @@ export function composeCloudScopedSystemPrompt(params: RuntimeCommunityPromptFie
       customCommunitySystemPrompt: params.customCommunitySystemPrompt,
     }),
     buildPlatformChatContextPrompt(),
+    buildAnswerFormatContractPrompt(),
     buildChatOperatingPolicyPrompt(),
   ]);
 }

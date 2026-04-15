@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { isValidElement, type ReactNode, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -54,6 +54,22 @@ const PLAIN_TEXT_LANGUAGES = new Set([
   "plain",
   "plaintext",
 ]);
+
+const ANSWER_SECTION_LABELS = new Map(
+  [
+    "Verdict",
+    "Top Fixes",
+    "Findings",
+    "Why It Matters",
+    "Recommended Change",
+    "Next Step",
+    "What Changed",
+    "Verification",
+    "Risks",
+    "Blind Spots",
+    "Open Questions",
+  ].map((label) => [label.toLowerCase(), label]),
+);
 
 export type MarkdownRenderOptions = {
   onCopyCode?: (text: string) => Promise<void> | void;
@@ -131,6 +147,29 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
       </pre>
     </div>
   );
+}
+
+function extractPlainText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractPlainText).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return extractPlainText(node.props.children);
+  return "";
+}
+
+function normalizeInlineText(node: ReactNode): string {
+  return extractPlainText(node).replace(/\s+/g, " ").trim();
+}
+
+function resolveAnswerSectionLabel(children: ReactNode): string | null {
+  const text = normalizeInlineText(children).replace(/:$/, "");
+  if (!text) return null;
+  return ANSWER_SECTION_LABELS.get(text.toLowerCase()) ?? null;
+}
+
+function resolvePriorityClass(children: ReactNode): string | null {
+  const text = normalizeInlineText(children);
+  const match = text.match(/^\[?(P[0-3])\]?\b/i);
+  return match ? `md-priority-${match[1].toLowerCase()}` : null;
 }
 
 function normalizeMathMarkdown(text: string): string {
@@ -231,7 +270,15 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     ol({ children }) {
       return <ol className="md-list">{children}</ol>;
     },
+    li({ children }) {
+      const priorityClass = resolvePriorityClass(children);
+      return <li className={priorityClass ?? undefined}>{children}</li>;
+    },
     p({ children }) {
+      const sectionLabel = resolveAnswerSectionLabel(children);
+      if (sectionLabel) {
+        return <p className="md-paragraph md-section-label">{children}</p>;
+      }
       return <p className="md-paragraph">{children}</p>;
     },
     pre({ children }) {

@@ -28,7 +28,7 @@ export type PendingAuthIntent =
     }
   | {
       reason: "join_public_community";
-      payload: { community_id: string | null; community_slug: string | null; brandos_aid: string | null };
+      payload: { community_id: string | null; community_slug: string | null };
     }
   | {
       reason: "start_builder_checkout";
@@ -93,9 +93,8 @@ function normalizePendingAuthIntent(
   if (reason === "join_public_community") {
     const community_id = typeof payload.community_id === "string" ? payload.community_id.trim() || null : null;
     const community_slug = typeof payload.community_slug === "string" ? payload.community_slug.trim() || null : null;
-    const brandos_aid = typeof payload.brandos_aid === "string" ? payload.brandos_aid.trim() || null : null;
     if (!community_id && !community_slug) return null;
-    return { reason, payload: { community_id, community_slug, brandos_aid } };
+    return { reason, payload: { community_id, community_slug } };
   }
 
   if (reason === "start_builder_checkout") {

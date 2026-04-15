@@ -465,7 +465,6 @@ async function joinPublicCommunityInternal(args: {
 export const joinPublicCommunityBySlug = mutation({
   args: {
     communitySlug: v.string(),
-    brandosAid: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -477,7 +476,6 @@ export const joinPublicCommunityBySlug = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
-    void args.brandosAid;
     return await joinPublicCommunityInternal({
       ctx,
       community,
@@ -490,7 +488,6 @@ export const joinPublicCommunityBySlug = mutation({
 export const joinPublicCommunity = mutation({
   args: {
     communityId: v.id("communities"),
-    brandosAid: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -498,7 +495,6 @@ export const joinPublicCommunity = mutation({
     const nowMs = args.nowMs ?? Date.now();
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
-    void args.brandosAid;
     return await joinPublicCommunityInternal({
       ctx,
       community,

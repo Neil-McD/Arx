@@ -32,6 +32,60 @@ function readEffectiveBuilderTier(rows: Array<{ tier: string }>): "free" | "buil
   return "free";
 }
 
+const PUBLIC_APP_URL_ENV_KEYS = [
+  "ARX_PUBLIC_APP_URL",
+  "PUBLIC_APP_URL",
+  "VITE_PUBLIC_APP_URL",
+  "VITE_APP_URL",
+] as const;
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function readAllowedBillingPortalReturnOrigins(): Set<string> {
+  const origins = new Set<string>();
+  for (const key of PUBLIC_APP_URL_ENV_KEYS) {
+    const value = readEnv(key).replace(/\/+$/, "");
+    if (!value) continue;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        origins.add(parsed.origin);
+      }
+    } catch {
+      // Ignore malformed fallback envs; fail below if none are usable.
+    }
+  }
+  if (origins.size === 0) throw new Error("public_app_url_missing");
+  return origins;
+}
+
+function normalizeBillingPortalReturnUrl(raw: unknown): string {
+  const value = String(raw ?? "").trim();
+  if (!value) throw new Error("builder_billing_return_url_required");
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("builder_billing_return_url_invalid");
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("builder_billing_return_url_invalid");
+  }
+  const allowedOrigins = readAllowedBillingPortalReturnOrigins();
+  if (!allowedOrigins.has(parsed.origin)) {
+    throw new Error("builder_billing_return_url_invalid");
+  }
+  return parsed.toString();
+}
+
 export const createPendingBuilderCheckoutSessionInternal = internalMutation({
   args: {
     sessionId: v.string(),
@@ -252,6 +306,33 @@ export const getLatestBuilderBillingCycleForOwnerInternal = internalQuery({
   },
 });
 
+export const getLatestBuilderBillingCustomerForOwnerInternal = internalQuery({
+  args: {
+    ownerUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_owner_status", (q) => q.eq("ownerUserId", args.ownerUserId).eq("status", "complete"))
+      .collect();
+    const candidate = rows
+      .filter((row) => {
+        const providerCustomerId = String(row.providerCustomerId ?? "").trim();
+        return row.mode === "builder_upgrade" && row.provider === "stripe" && Boolean(providerCustomerId);
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (!candidate) return null;
+    return {
+      ownerUserId: candidate.ownerUserId,
+      providerCustomerId: candidate.providerCustomerId ?? null,
+      providerSubscriptionId: candidate.providerSubscriptionId ?? null,
+      providerPriceId: candidate.providerPriceId ?? null,
+      targetTier: candidate.targetTier ?? null,
+      updatedAt: candidate.updatedAt,
+    };
+  },
+});
+
 export const startBuilderCheckout = action({
   args: {
     userId: v.optional(v.id("users")),
@@ -338,20 +419,42 @@ export const startBuilderCheckout = action({
   },
 });
 
-export const openBuilderBillingPortal = query({
+export const openBuilderBillingPortal = action({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     returnUrl: v.string(),
   },
   handler: async (ctx, args) => {
-    await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
+    const returnUrl = normalizeBillingPortalReturnUrl(args.returnUrl);
+    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject ?? null,
-    });
-    void args.returnUrl;
-    throw new Error("builder_billing_portal_unavailable");
+    })) as { dbUserId?: unknown };
+    const userId = actor?.dbUserId;
+    if (!userId) throw new Error("user_not_found");
+    if (args.userId && String(args.userId) !== String(userId)) {
+      throw new Error("user_id_mismatch");
+    }
+    const customer = (await ctx.runQuery(
+      internal.builderCommerce.getLatestBuilderBillingCustomerForOwnerInternal as any,
+      { ownerUserId: userId },
+    )) as { providerCustomerId?: unknown } | null;
+    const providerCustomerId = String(customer?.providerCustomerId ?? "").trim();
+    if (!providerCustomerId) throw new Error("builder_billing_customer_missing");
+
+    try {
+      const stripe = getStripeClient();
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: providerCustomerId,
+        return_url: returnUrl,
+      });
+      const portalUrl = String(portalSession.url ?? "").trim();
+      if (!portalUrl) throw new Error("builder_billing_portal_url_missing");
+      return { url: portalUrl };
+    } catch (error) {
+      console.error("builder_billing_portal_unavailable", error);
+      throw new Error("builder_billing_portal_unavailable");
+    }
   },
 });
 

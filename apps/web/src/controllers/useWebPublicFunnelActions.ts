@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
-  classifyPublicCommunityJoinError, clearPendingPublicJoin, getBrandosAidForCommunitySlug, getErrorMessage, joinPublicCommunityRpc, readPendingPublicJoinBrandosAid, storePendingPublicJoin, } from "../../../../shared/pay_first";
+  classifyPublicCommunityJoinError, clearPendingPublicJoin, getErrorMessage, joinPublicCommunityRpc, storePendingPublicJoin, } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 
@@ -34,7 +34,6 @@ type UseWebPublicFunnelActionsArgs<
   loadCommunities: (session: AuthSession) => Promise<void>;
   openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
   onJoinRequestSent?: (params: { communityId: string | null; communitySlug: string | null }) => void;
-  isUuid: (value: string) => boolean;
 
   setIsJoiningPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setIsCancellingPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
@@ -207,19 +206,16 @@ export function useWebPublicFunnelActions<
       const trimmedSlug = (opts.communitySlug ?? "").trim();
       if (!trimmedId && !trimmedSlug) return;
 
-      const brandosAid = trimmedSlug ? getBrandosAidForCommunitySlug(trimmedSlug) : null;
-
       const current = argsRef.current;
       const rawSession = current.getSession();
       const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) {
-        storePendingPublicJoin(trimmedSlug || trimmedId, brandosAid);
+        storePendingPublicJoin(trimmedSlug || trimmedId);
         current.openAuthGate({
           reason: "join_public_community",
           payload: {
             community_id: trimmedId || null,
             community_slug: trimmedSlug || null,
-            brandos_aid: brandosAid,
           },
         });
         return;
@@ -228,16 +224,10 @@ export function useWebPublicFunnelActions<
       current.setIsJoiningPublicCommunity(true);
       current.setPublicJoinError(null);
       try {
-        const pendingBrandosAid = readPendingPublicJoinBrandosAid();
-        const resolvedBrandosAid =
-          (brandosAid && current.isUuid(brandosAid) ? brandosAid : null) ||
-          (pendingBrandosAid && current.isUuid(pendingBrandosAid) ? pendingBrandosAid : null);
-
         const joinResult = await joinPublicCommunityRpc({
           session,
           communityId: trimmedId || undefined,
           communitySlug: trimmedSlug || undefined,
-          brandosAid: resolvedBrandosAid,
         });
         clearPendingPublicJoin();
 
@@ -439,7 +429,6 @@ export function useWebPublicFunnelActions<
         );
         const successUrl = `${origin}${successPath}`;
         const cancelUrl = `${origin}${cancelPath}`;
-        const brandosAid = getBrandosAidForCommunitySlug(communitySlug);
         const rawSession = current.getSession();
         const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
         const data = await startCloudPublicFunnelCheckout<AuthSession>({
@@ -448,7 +437,6 @@ export function useWebPublicFunnelActions<
           billingPeriod,
           successUrl,
           cancelUrl,
-          brandosAid,
         });
         const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
         if (!checkoutUrl) throw new Error("Missing checkout_url.");

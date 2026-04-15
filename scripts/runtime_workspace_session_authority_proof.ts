@@ -27,14 +27,14 @@ async function proveWorkspaceSessionAuthorityModel() {
     /const hasAuthoritativeSessionState = persistedSessionState\.length > 0;/,
     "expected live desktop lookup to treat runtime-run workspace state as authoritative",
   );
-  assert.match(
+  assert.doesNotMatch(
     threadsSource,
-    /if \(!hasAuthoritativeSessionState\) \{/,
-    "expected runtime-event fallback to remain legacy-only",
+    /runtime_event_fallback|workspace_session_created[\s\S]*sandbox_id/,
+    "expected live desktop lookup not to fall back to runtime events for workspace authority",
   );
   assert.match(
     threadsSource,
-    /persistedSessionState !== "active"/,
+    /!hasAuthoritativeSessionState \|\| persistedSessionState !== "active"/,
     "expected non-active persisted session states to fail closed",
   );
 

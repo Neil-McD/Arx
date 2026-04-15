@@ -21,6 +21,9 @@ async function proveLazyWorkspaceCreationRules() {
   const executionSessionSource = await readRepoFile(
     "convex/runtimeExecutionSession.ts",
   );
+  const workspaceTerminalsSource = await readRepoFile(
+    "convex/workspaceTerminals.ts",
+  );
 
   const mountedToolBranchIndex = daytonaSource.indexOf(
     "const mountedTool = executionSession.getMountedTool(toolName);",
@@ -55,13 +58,72 @@ async function proveLazyWorkspaceCreationRules() {
   );
   assert.equal(
     terminalBlock.includes("ensureWorkspaceForTool"),
-    false,
-    "expected terminal tools not to create the interactive workspace session",
+    true,
+    "expected terminal_start to lazily create the execution-session workspace",
   );
   assert.equal(
-    terminalBlock.includes("createWorkspaceSession"),
+    terminalBlock.includes("startWorkspaceTerminalInternal"),
     false,
-    "expected terminal tools to stay on the background-terminal Daytona path",
+    "expected terminal tools not to use the project background-terminal Daytona path",
+  );
+  assert.equal(
+    terminalBlock.includes("createDaytonaProcessSession"),
+    true,
+    "expected terminal tools to create Daytona process sessions inside the execution session workspace",
+  );
+  assert.equal(
+    terminalBlock.includes("runIdStartedBy: params.runId"),
+    true,
+    "expected runtime terminal rows to be tied back to the owning runtime run",
+  );
+  assert.equal(
+    terminalBlock.includes("runtimeTerminalSessionIds.add"),
+    true,
+    "expected execution sessions to track owned terminal sessions for cleanup",
+  );
+  assert.equal(
+    terminalBlock.includes("requireSessionOwnedTerminalRow"),
+    true,
+    "expected terminal read/write/stop to require a run-owned terminal row",
+  );
+
+  const previewBlock = extractFunctionBlock(
+    executionSessionSource,
+    "async getTerminalPreview(",
+    "async executeComputerTool(",
+  );
+  assert.equal(
+    previewBlock.includes("requireSessionOwnedTerminalRow"),
+    true,
+    "expected runtime preview lookup to require a run-owned terminal row",
+  );
+  assert.equal(
+    previewBlock.includes("getDaytonaSignedPreviewUrl"),
+    true,
+    "expected runtime preview lookup to mint Daytona preview URLs from the execution-session sandbox",
+  );
+  assert.equal(
+    previewBlock.includes("workspace_session_mismatch"),
+    true,
+    "expected runtime preview lookup to fail closed when terminal and workspace sandbox differ",
+  );
+
+  assert.equal(
+    workspaceTerminalsSource.includes("isRuntimeSessionOwnedTerminalRow"),
+    true,
+    "expected shared terminal actions to detect runtime-session-owned terminal rows",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes(
+      'lifecycleOwner: runtimeSessionOwned ? "runtime_session" : "project_background"',
+    ),
+    true,
+    "expected shared terminal reconciliation to preserve runtime-session ownership",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes("touchProjectBackground: !runtimeSessionOwned"),
+    true,
+    "expected shared terminal preview/read/write paths not to touch project background state for runtime terminals",
   );
 
   const computerBlock = extractFunctionBlock(

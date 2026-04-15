@@ -1,16 +1,10 @@
 import { Resend } from "resend";
 
 export const EMAIL_TEMPLATE_KEYS = [
-  "community_invite",
   "community_access_granted",
-  "community_access_approved",
-  "community_join_success",
   "builder_plan_upgraded",
   "builder_plan_downgraded",
-  "upgrade_confirmation",
-  "downgrade_confirmation",
   "billing_issue",
-  "payout_issue",
   "weekly_member_digest",
   "weekly_founder_digest",
   "event_reminder",
@@ -213,17 +207,7 @@ export function renderEmailTemplate(params: {
     }));
 
   switch (templateKey) {
-    case "community_invite":
-      return renderTransactionalTemplate(
-        `You're invited to ${communityName}`,
-        payload,
-        `You're invited to ${communityName}`,
-        `You have been invited to join ${communityName} on Polynet.`,
-        "Join community",
-      );
     case "community_access_granted":
-    case "community_access_approved":
-    case "community_join_success":
       return renderTransactionalTemplate(
         `Your access to ${communityName} is ready`,
         payload,
@@ -232,7 +216,6 @@ export function renderEmailTemplate(params: {
         "Open community",
       );
     case "builder_plan_upgraded":
-    case "upgrade_confirmation":
       return renderTransactionalTemplate(
         `Your ${planName} plan is active`,
         payload,
@@ -241,7 +224,6 @@ export function renderEmailTemplate(params: {
         "Open account",
       );
     case "builder_plan_downgraded":
-    case "downgrade_confirmation":
       return renderTransactionalTemplate(
         `Your plan changed to ${planName}`,
         payload,
@@ -256,14 +238,6 @@ export function renderEmailTemplate(params: {
         "Billing needs attention",
         "There is a billing issue that needs your attention.",
         "Fix billing",
-      );
-    case "payout_issue":
-      return renderTransactionalTemplate(
-        "Payout setup needs attention",
-        payload,
-        "Payout setup needs attention",
-        "There is a payout issue preventing normal payout flow.",
-        "Complete payouts",
       );
     case "weekly_member_digest": {
       const renderedItems = renderDigestItems(items);

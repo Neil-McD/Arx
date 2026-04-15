@@ -3,9 +3,6 @@ import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexA
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
 const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
-const PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY = "arx_pending_public_join_brandos_aid";
-const BRANDOS_AID_LAST_KEY = "arx_brandos_aid_last";
-const BRANDOS_AID_SLUG_PREFIX = "arx_brandos_aid_slug:";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-fA-F-]{36}$/.test(value);
@@ -49,7 +46,7 @@ export function clearPendingPurchaseClaimToken(): void {
   safeLocalStorageRemove(PENDING_PURCHASE_CLAIM_TOKEN_KEY);
 }
 
-export function storePendingPublicJoin(communityId: string, brandosAid?: string | null): void {
+export function storePendingPublicJoin(communityId: string): void {
   const trimmed = communityId.trim();
   if (trimmed) {
     if (isUuid(trimmed)) {
@@ -60,8 +57,6 @@ export function storePendingPublicJoin(communityId: string, brandosAid?: string 
       safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
     }
   }
-  const aid = (brandosAid ?? "").trim();
-  if (aid) safeLocalStorageSet(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY, aid);
 }
 
 export function readPendingPublicJoinCommunityId(): string {
@@ -72,47 +67,9 @@ export function readPendingPublicJoinCommunitySlug(): string {
   return safeLocalStorageGet(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
 }
 
-export function readPendingPublicJoinBrandosAid(): string {
-  return safeLocalStorageGet(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
-}
-
 export function clearPendingPublicJoin(): void {
   safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
   safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
-  safeLocalStorageRemove(PENDING_PUBLIC_JOIN_BRANDOS_AID_KEY);
-}
-
-export function captureBrandosAidFromLocation(): void {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const raw = (params.get("bid") ?? params.get("brandos_aid") ?? params.get("aid") ?? "").trim();
-    if (!raw || !isUuid(raw)) return;
-
-    safeLocalStorageSet(BRANDOS_AID_LAST_KEY, raw);
-
-    const path = window.location.pathname || "/";
-    if (path.startsWith("/c/")) {
-      const slug = decodeURIComponent(path.slice(3).split("/")[0] ?? "").trim();
-      if (slug) safeLocalStorageSet(`${BRANDOS_AID_SLUG_PREFIX}${slug}`, raw);
-    }
-  } catch {
-    // ignore
-  }
-}
-
-export function getBrandosAidForCommunitySlug(slug: string | null): string | null {
-  try {
-    if (slug) {
-      const scoped = safeLocalStorageGet(`${BRANDOS_AID_SLUG_PREFIX}${slug}`);
-      if (scoped && isUuid(scoped)) return scoped;
-      return null;
-    }
-    const last = safeLocalStorageGet(BRANDOS_AID_LAST_KEY);
-    if (last && isUuid(last)) return last;
-  } catch {
-    // ignore
-  }
-  return null;
 }
 
 export type PendingPurchaseClaim = {
@@ -243,7 +200,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   session: S;
   communityId?: string;
   communitySlug?: string;
-  brandosAid?: string | null;
 }): Promise<{
   outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
   community_id: string;
@@ -252,7 +208,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   const { client } = await bootstrapConvexUserForPayFirst(opts.session);
   const slug = (opts.communitySlug ?? "").trim();
   const id = (opts.communityId ?? "").trim();
-  const aid = (opts.brandosAid ?? "").trim() || null;
   let result:
     | {
         outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
@@ -263,7 +218,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   if (slug) {
     result = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
       communitySlug: slug,
-      brandosAid: aid,
       nowMs: Date.now(),
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
@@ -273,7 +227,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   } else if (id) {
     result = ((await client.mutation("community:joinPublicCommunity" as any, {
       communityId: id,
-      brandosAid: aid,
       nowMs: Date.now(),
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";

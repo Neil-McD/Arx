@@ -6,7 +6,6 @@ import {
   classifyPublicCommunityJoinError,
   getErrorMessage,
   joinPublicCommunityRpc,
-  readPendingPublicJoinBrandosAid,
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
   type SessionLike,
@@ -21,8 +20,6 @@ type UsePendingPublicCommunityJoinControllerArgs<SessionT extends SessionLike> =
   session: SessionT | null;
   loadCommunities: (session: SessionT) => Promise<void>;
   autoJoinPublicCommunitiesAttemptedRef: MutableRefObject<Set<string>>;
-  getBrandosAidForCommunitySlug: (slug: string | null) => string | null;
-  isUuid: (value: string) => boolean;
   onJoinSuccess: (communityId: string) => void;
   setJoiningDiscoverCommunityId: Dispatch<SetStateAction<string | null>>;
   setDiscoverError: Dispatch<SetStateAction<string | null>>;
@@ -95,7 +92,6 @@ export function usePendingPublicCommunityJoinController<SessionT extends Session
     const current = argsRef.current;
     const slug = readPendingPublicJoinCommunitySlug();
     const id = readPendingPublicJoinCommunityId();
-    const brandosAid = readPendingPublicJoinBrandosAid();
     const attemptKey = (slug || id).trim();
     if (!attemptKey) return;
     if (current.autoJoinPublicCommunitiesAttemptedRef.current.has(attemptKey)) return;
@@ -104,16 +100,10 @@ export function usePendingPublicCommunityJoinController<SessionT extends Session
     current.setJoiningDiscoverCommunityId(attemptKey);
     current.setDiscoverError(null);
     try {
-      const resolvedBrandosAid = (() => {
-        const candidate = (brandosAid ?? "").trim();
-        if (candidate && current.isUuid(candidate)) return candidate;
-        return null;
-      })();
       const joinResult = await joinPublicCommunityRpc({
         session,
         communityId: id || undefined,
         communitySlug: slug || undefined,
-        brandosAid: resolvedBrandosAid,
       });
       clearPendingPublicJoin();
 
@@ -159,12 +149,9 @@ export function usePendingPublicCommunityJoinController<SessionT extends Session
 
     current.setJoiningDiscoverCommunityId(community.slug);
     try {
-      const brandosAid = current.getBrandosAidForCommunitySlug(community.slug ?? null);
-      const resolvedBrandosAid = brandosAid && current.isUuid(brandosAid) ? brandosAid : null;
       const joinResult = await joinPublicCommunityRpc({
         session: current.session,
         communitySlug: community.slug,
-        brandosAid: resolvedBrandosAid,
       });
       clearPendingPublicJoin();
 

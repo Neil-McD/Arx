@@ -1784,30 +1784,11 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
 
       const persistedSessionState = String(run.workspaceSessionState ?? "").trim();
       const hasAuthoritativeSessionState = persistedSessionState.length > 0;
-      let sessionSource: "runtime_run" | "runtime_event_fallback" =
-        "runtime_run";
-      let sandboxId = normalizeIdValue(run.workspaceProviderSandboxId);
-      let toolboxProxyUrl = String(
+      const sandboxId = normalizeIdValue(run.workspaceProviderSandboxId);
+      const toolboxProxyUrl = String(
         run.workspaceToolboxProxyUrl ?? "",
       ).trim();
-      let sessionEvent: RuntimeRunEventLike | null = null;
-      if (!hasAuthoritativeSessionState) {
-        const events = (await ctx.runQuery(
-          internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
-          {
-            ownerId,
-            runId,
-          },
-        )) as RuntimeRunEventLike[];
-        sessionEvent = events
-          .filter((row) => row.eventType === "workspace_session_created")
-          .sort((a, b) => a.seq - b.seq)
-          .at(-1) ?? null;
-        const payload = asRecord(sessionEvent?.payload);
-        sandboxId = normalizeIdValue(payload?.sandbox_id);
-        toolboxProxyUrl = String(payload?.toolbox_proxy_url ?? "").trim();
-        sessionSource = "runtime_event_fallback";
-      } else if (persistedSessionState !== "active") {
+      if (!hasAuthoritativeSessionState || persistedSessionState !== "active") {
         return {
           ok: false,
           status: 409,
@@ -1820,7 +1801,7 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
             run_found: true,
             run_status: run.status,
             workspace_session_source: "runtime_run",
-            workspace_session_state: persistedSessionState,
+            workspace_session_state: persistedSessionState || null,
             sandbox_id_present: Boolean(sandboxId),
             toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
           },
@@ -1831,10 +1812,8 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
         stage: "workspace_session",
         run_found: true,
         run_status: run.status,
-        workspace_session_source: sessionSource,
+        workspace_session_source: "runtime_run",
         workspace_session_state: persistedSessionState || null,
-        workspace_session_event_found: Boolean(sessionEvent),
-        workspace_session_event_seq: sessionEvent?.seq ?? null,
         sandbox_id_present: Boolean(sandboxId),
         toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
       };

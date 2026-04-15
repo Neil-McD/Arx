@@ -1,12 +1,11 @@
 import { internal } from "./_generated/api";
-import { action, internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   EMAIL_TEMPLATE_KEYS,
   type EmailTemplateKey,
   sendRenderedEmail,
 } from "./emailCore";
-import { ensureAuthenticatedActor } from "./authActor";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -399,47 +398,5 @@ export const processPendingEmailOutboxInternal = internalAction({
       sent,
       failed,
     };
-  },
-});
-
-export const processPendingEmailOutbox = action({
-  args: {
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.runAction((internal as any).email.processPendingEmailOutboxInternal, {
-      limit: args.limit ?? 10,
-      nowMs: Date.now(),
-    });
-  },
-});
-
-export const listMyEmailOutboxPreview = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await ensureAuthenticatedActor({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const rows = await ctx.db
-      .query("emailOutbox")
-      .withIndex("by_recipientUserId", (q: any) => q.eq("recipientUserId", actor.dbUserId))
-      .collect();
-    return rows
-      .slice()
-      .sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))
-      .slice(0, Math.max(1, Math.min(50, Math.floor(args.limit ?? 20))))
-      .map((row) => ({
-        id: String(row._id),
-        kind: row.kind,
-        template_key: row.templateKey,
-        status: row.status,
-        scheduled_at: row.scheduledAt,
-        sent_at: row.sentAt ?? null,
-        failure_reason: row.failureReason ?? null,
-      }));
   },
 });

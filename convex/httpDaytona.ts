@@ -1166,7 +1166,7 @@ async function executeRetrievalAgentLoop(
             runtimeMountedUserPlatformAppTools.some(
               (tool) => tool.runtime_tool_name === toolName,
             ) ||
-            mountedCommunityAppTools.some(
+            runtimeMountedCommunityAppTools.some(
               (tool) => tool.runtime_tool_name === toolName,
             ),
         ).length,

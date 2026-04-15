@@ -560,6 +560,7 @@ async function resolveTerminalSandboxContext(params: {
   ctx: any;
   projectId: string;
   providerSandboxId: string;
+  touchProjectBackground?: boolean;
 }): Promise<
   | { ok: true; config: DaytonaConfig; toolboxProxyUrl: string }
   | {
@@ -595,17 +596,40 @@ async function resolveTerminalSandboxContext(params: {
     sandboxId: params.providerSandboxId,
   });
   if (!toolbox.ok) return toolbox;
-  await params.ctx.runMutation(internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any, {
-    projectId: params.projectId,
-    providerSandboxId: params.providerSandboxId,
-    providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
-    providerSandboxLastSeenAt: Date.now(),
-  });
+  if (params.touchProjectBackground !== false) {
+    await params.ctx.runMutation(
+      internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+      {
+        projectId: params.projectId,
+        providerSandboxId: params.providerSandboxId,
+        providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
+        providerSandboxLastSeenAt: Date.now(),
+      },
+    );
+  }
   return {
     ok: true,
     config,
     toolboxProxyUrl: toolbox.toolboxProxyUrl,
   };
+}
+
+async function isRuntimeSessionOwnedTerminalRow(params: {
+  ctx: any;
+  row: any;
+}): Promise<boolean> {
+  const runIdStartedBy = normalizeOptionalString(params.row?.runIdStartedBy);
+  if (!runIdStartedBy) return false;
+  const rowSandboxId = normalizeOptionalString(params.row?.providerSandboxId);
+  if (!rowSandboxId) return false;
+  const project = await params.ctx.runQuery(
+    internal.projects.getCloudProjectByIdInternal as any,
+    {
+      projectId: String(params.row?.projectId ?? "").trim(),
+    },
+  );
+  const projectSandboxId = normalizeOptionalString(project?.providerSandboxId);
+  return !projectSandboxId || projectSandboxId !== rowSandboxId;
 }
 
 async function releaseProjectBackgroundSandboxIfIdle(params: {
@@ -621,7 +645,13 @@ async function releaseProjectBackgroundSandboxIfIdle(params: {
       projectId: params.projectId,
     },
   )) as any[];
-  if (activeRows.some((row) => isTerminalActiveStatus(row.status))) {
+  if (
+    activeRows.some(
+      (row) =>
+        isTerminalActiveStatus(row.status) &&
+        String(row.providerSandboxId ?? "").trim() === params.providerSandboxId,
+    )
+  ) {
     return;
   }
 
@@ -713,8 +743,10 @@ async function reconcileWorkspaceTerminalRow(params: {
   ctx: any;
   ownerId: any;
   row: any;
+  lifecycleOwner?: "project_background" | "runtime_session";
 }): Promise<WorkspaceTerminalSummary> {
   const row = params.row;
+  const lifecycleOwner = params.lifecycleOwner ?? "project_background";
   if (!isTerminalActiveStatus(row.status)) {
     return summarizeTerminalRow(row);
   }
@@ -735,12 +767,14 @@ async function reconcileWorkspaceTerminalRow(params: {
         updatedAt: nowMs,
       },
     );
-    await releaseProjectBackgroundSandboxIfIdle({
-      ctx: params.ctx,
-      ownerId: params.ownerId,
-      projectId,
-      providerSandboxId,
-    });
+    if (lifecycleOwner === "project_background") {
+      await releaseProjectBackgroundSandboxIfIdle({
+        ctx: params.ctx,
+        ownerId: params.ownerId,
+        projectId,
+        providerSandboxId,
+      });
+    }
     return summarizeTerminalRow(patched ?? row);
   };
 
@@ -748,6 +782,7 @@ async function reconcileWorkspaceTerminalRow(params: {
     ctx: params.ctx,
     projectId,
     providerSandboxId,
+    touchProjectBackground: lifecycleOwner === "project_background",
   });
   if (!sandbox.ok) {
     if (isConfirmedSandboxGoneFailure(sandbox)) {
@@ -807,12 +842,14 @@ async function reconcileWorkspaceTerminalRow(params: {
       sandboxId: providerSandboxId,
       sessionId: providerSessionId,
     });
-    await releaseProjectBackgroundSandboxIfIdle({
-      ctx: params.ctx,
-      ownerId: params.ownerId,
-      projectId,
-      providerSandboxId,
-    });
+    if (lifecycleOwner === "project_background") {
+      await releaseProjectBackgroundSandboxIfIdle({
+        ctx: params.ctx,
+        ownerId: params.ownerId,
+        projectId,
+        providerSandboxId,
+      });
+    }
   }
 
   return summarizeTerminalRow(patched ?? row);
@@ -955,7 +992,7 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
     projectId: v.id("cloudProjects"),
   },
   handler: async (ctx, args) => {
-    const rows = (await ctx.runQuery(
+    let rows = (await ctx.runQuery(
       internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
       {
         ownerId: args.ownerId,
@@ -963,7 +1000,7 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
       },
     )) as any[];
     const nowMs = Date.now();
-    const activeRows = rows.filter((row) => isTerminalActiveStatus(row.status));
+    let activeRows = rows.filter((row) => isTerminalActiveStatus(row.status));
     if (activeRows.length === 0) {
       return buildTerminalSnapshot(rows);
     }
@@ -971,6 +1008,47 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
     const project = await ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
       projectId: args.projectId,
     });
+    const projectProviderSandboxId = normalizeOptionalString(project?.providerSandboxId);
+    const runtimeSessionRows = activeRows.filter((row) => {
+      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
+      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
+      return Boolean(
+        runIdStartedBy &&
+          rowSandboxId &&
+          (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId),
+      );
+    });
+    for (const row of runtimeSessionRows) {
+      await reconcileWorkspaceTerminalRow({
+        ctx,
+        ownerId: args.ownerId,
+        row,
+        lifecycleOwner: "runtime_session",
+      });
+    }
+    if (runtimeSessionRows.length > 0) {
+      rows = (await ctx.runQuery(
+        internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
+        {
+          ownerId: args.ownerId,
+          projectId: args.projectId,
+        },
+      )) as any[];
+      activeRows = rows.filter((row) => isTerminalActiveStatus(row.status));
+    }
+    activeRows = activeRows.filter((row) => {
+      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
+      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
+      return !(
+        runIdStartedBy &&
+        rowSandboxId &&
+        (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId)
+      );
+    });
+    if (activeRows.length === 0) {
+      return buildTerminalSnapshot(rows);
+    }
+
     const projectLastSeenAt = Number(project?.providerSandboxLastSeenAt ?? 0);
     if (
       Number.isFinite(projectLastSeenAt) &&
@@ -1102,7 +1180,17 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
         projectId: args.projectId,
       },
     )) as any[];
-    if (!nextRows.some((row) => isTerminalActiveStatus(row.status))) {
+    const hasActiveProjectBackgroundRows = nextRows.some((row) => {
+      if (!isTerminalActiveStatus(row.status)) return false;
+      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
+      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
+      return !(
+        runIdStartedBy &&
+        rowSandboxId &&
+        (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId)
+      );
+    });
+    if (!hasActiveProjectBackgroundRows) {
       await releaseProjectBackgroundSandboxIfIdle({
         ctx,
         ownerId: args.ownerId,
@@ -1368,10 +1456,15 @@ export const readWorkspaceTerminalInternal = internalAction({
       authSubject: args.authSubject ?? null,
       terminalSessionId: args.terminalSessionId,
     });
+    const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
+      ctx,
+      row,
+    });
     const summary = await reconcileWorkspaceTerminalRow({
       ctx,
       ownerId: actor.dbUserId,
       row,
+      lifecycleOwner: runtimeSessionOwned ? "runtime_session" : "project_background",
     });
 
     return {
@@ -1402,10 +1495,15 @@ export const writeWorkspaceTerminalInternal = internalAction({
         message: "Terminal is not running.",
       };
     }
+    const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
+      ctx,
+      row,
+    });
     const sandbox = await resolveTerminalSandboxContext({
       ctx,
       projectId: String(row.projectId ?? "").trim(),
       providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+      touchProjectBackground: !runtimeSessionOwned,
     });
     if (!sandbox.ok) return sandbox;
     const sent = await sendDaytonaProcessSessionCommandInput({
@@ -1443,12 +1541,17 @@ export const stopWorkspaceTerminalInternal = internalAction({
       authSubject: args.authSubject ?? null,
       terminalSessionId: args.terminalSessionId,
     });
+    const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
+      ctx,
+      row,
+    });
 
     if (isTerminalActiveStatus(row.status)) {
       const sandbox = await resolveTerminalSandboxContext({
         ctx,
         projectId: String(row.projectId ?? "").trim(),
         providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+        touchProjectBackground: !runtimeSessionOwned,
       });
       if (sandbox.ok) {
         await deleteDaytonaProcessSession({
@@ -1470,12 +1573,14 @@ export const stopWorkspaceTerminalInternal = internalAction({
       },
     );
 
-    await releaseProjectBackgroundSandboxIfIdle({
-      ctx,
-      ownerId: actor.dbUserId,
-      projectId: String(row.projectId ?? "").trim(),
-      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-    });
+    if (!runtimeSessionOwned) {
+      await releaseProjectBackgroundSandboxIfIdle({
+        ctx,
+        ownerId: actor.dbUserId,
+        projectId: String(row.projectId ?? "").trim(),
+        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+      });
+    }
 
     return {
       ok: true,
@@ -1502,13 +1607,18 @@ export const getWorkspaceTerminalPreviewUrl = action({
         ok: false,
         status: 409,
         code: "preview_not_enabled",
-        message: "This background terminal does not expose an app preview.",
+        message: "This terminal does not expose an app preview.",
       };
     }
+    const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
+      ctx,
+      row,
+    });
     const sandbox = await resolveTerminalSandboxContext({
       ctx,
       projectId: String(row.projectId ?? "").trim(),
       providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+      touchProjectBackground: !runtimeSessionOwned,
     });
     if (!sandbox.ok) return sandbox;
     const signed = await getDaytonaSignedPreviewUrl({

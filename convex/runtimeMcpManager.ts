@@ -417,8 +417,9 @@ export function createRuntimeMcpManager(params: {
             : null;
         const isError = record?.isError === true;
         const outputText = transport.formatToolResultOutput(callResult);
+        const status: "error" | "ok" = isError ? "error" : "ok";
         const result = {
-          status: (isError ? "error" : "ok") as const,
+          status,
           exitCode: isError ? null : 0,
           outputText,
           errorCode: isError ? buildToolFailedCode(tool) : null,
